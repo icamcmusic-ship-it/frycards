@@ -112,7 +112,9 @@ const TutorialOverlay: React.FC = () => {
             style={
               current.position !== 'center' && targetRect
                 ? {
-                    top: current.position === 'bottom' ? targetRect.bottom + 12 : targetRect.top - 150,
+                    top: current.position === 'bottom' 
+                      ? Math.min(targetRect.bottom + 12, window.innerHeight - 200) 
+                      : Math.max(targetRect.top - 180, 16),
                     left: Math.min(Math.max(targetRect.left - 40, 16), window.innerWidth - 336),
                   }
                 : {}

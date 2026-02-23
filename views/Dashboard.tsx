@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
 
 const Dashboard: React.FC = () => {
-  const { dashboard, refreshDashboard, user, error } = useGame();
+  const { dashboard, refreshDashboard, user, error, showToast } = useGame();
   const [showRewardModal, setShowRewardModal] = useState(false);
 
   const handleCompleteMission = async (missionId: string) => {
@@ -17,7 +17,7 @@ const Dashboard: React.FC = () => {
       await callEdge('claim-mission-reward', { mission_id: missionId });
       await refreshDashboard();
     } catch (e: any) {
-      alert(e.message);
+      showToast(e.message, 'error');
     }
   };
 

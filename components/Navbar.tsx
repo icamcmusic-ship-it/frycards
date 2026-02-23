@@ -34,7 +34,7 @@ const SECONDARY: NavItem[] = [
 ];
 
 const Navbar: React.FC = () => {
-  const { user, dashboard, supabase: _s } = useGame() as any;
+  const { user, dashboard } = useGame() as any;
   const { showToast } = useGame();
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

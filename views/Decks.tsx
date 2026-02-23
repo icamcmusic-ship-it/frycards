@@ -70,8 +70,13 @@ const Decks: React.FC = () => {
 
     try {
         if (editingDeck?.id === 'new') {
-            const { data, error } = await supabase.from('decks').insert([payload]).select().single();
+            const { data, error } = await supabase.rpc('create_deck', { 
+                p_name: deckName, 
+                p_card_ids: cardIds, 
+                p_leader_id: builderLeader.id 
+            });
             if (error) throw error;
+            // The RPC returns the created deck
             setDecks(prev => [...prev, data]);
         } else if (editingDeck?.id) {
             const { error } = await supabase.from('decks').update(payload).eq('id', editingDeck.id);
@@ -99,7 +104,10 @@ const Decks: React.FC = () => {
   const toggleCardInDeck = (card: Card) => {
       if (card.card_type === 'Leader') {
           setBuilderLeader(card);
+          // Ensure it's not in the main deck if it was there (though it shouldn't be)
+          setBuilderCards(prev => prev.filter(c => c.id !== card.id));
       } else {
+          // Guard: Only leaders can be in the leader slot, and only non-leaders in main deck
           if (builderCards.find(c => c.id === card.id)) {
               setBuilderCards(prev => prev.filter(c => c.id !== card.id));
           } else {

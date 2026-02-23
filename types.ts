@@ -209,7 +209,7 @@ export interface MarketListing {
   seller_username: string;
   card_id: string;
   card: Card;
-  listing_type: 'fixed' | 'auction' | 'fixed_price';
+  listing_type: 'fixed_price' | 'auction';
   price: number;
   current_bid?: number;
   min_bid_increment?: number;

@@ -16,6 +16,8 @@ const EnergyBar: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
 
   const fetchEnergy = useCallback(async () => {
     if (!user) return;
+    // NOTE: Security concern - p_user_id is passed without server-side validation against auth.uid()
+    // Ideally the RPC should be hardened to use auth.uid() directly.
     const { data, error } = await supabase.rpc('get_current_energy', { p_user_id: user.id });
     if (!error && data && data.length > 0) setState(data[0]);
   }, [user]);

@@ -119,7 +119,7 @@ const BattleArena: React.FC = () => {
                                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white py-4 rounded-xl font-heading font-black text-xl shadow-[0_0_30px_rgba(220,38,38,0.4)] transition-all active:scale-95 flex items-center justify-center gap-3"
                                >
                                    {findingMatch ? <Loader2 className="animate-spin" /> : <Swords size={24} />}
-                                   {findingMatch ? "SEARCHING..." : "FIND MATCH"}
+                                   {findingMatch ? "SEARCHING..." : "FIND MATCH (COMING SOON)"}
                                </button>
                            </div>
                            {/* Background FX */}

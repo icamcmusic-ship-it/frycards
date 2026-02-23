@@ -58,8 +58,9 @@ const CollectionMissions: React.FC = () => {
     if (!user || refreshing) return;
     setRefreshing(true);
     try {
-      await supabase.rpc('assign_daily_quests', { p_user_id: user.id });
-      fetchData();
+      await supabase.rpc('ensure_and_get_daily_missions');
+      await fetchDailyMissions();
+      refreshDashboard();
     } catch (e: any) {
       console.error(e.message);
     } finally {
