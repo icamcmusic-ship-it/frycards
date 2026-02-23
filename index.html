@@ -1,0 +1,219 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FryCards TCG | Retro Digital Collection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              // Remap Slate to Deep Purple Palette
+              slate: {
+                50: '#f5f3ff',
+                100: '#ede9fe',
+                200: '#ddd6fe',
+                300: '#c4b5fd',
+                400: '#a78bfa',
+                500: '#8b5cf6',
+                600: '#7c3aed',
+                700: '#6d28d9',
+                800: '#5b21b6', // Lighter purple for cards
+                900: '#2e1065', // Deep purple background
+                950: '#170536', // Darker purple
+              },
+              // Remap Indigo to Hot Pink (Miami Vibe)
+              indigo: {
+                400: '#f472b6',
+                500: '#ec4899',
+                600: '#db2777',
+              },
+              // Cyan stays Cyan for that blue/pink contrast
+              cyan: {
+                400: '#22d3ee',
+                500: '#06b6d4',
+              }
+            },
+            fontFamily: {
+              heading: ['"Press Start 2P"', 'cursive'],
+              sans: ['"Roboto Mono"', 'monospace'],
+              mono: ['"Roboto Mono"', 'monospace'],
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --color-bg: #2e1065;
+        --color-card-bg: #4c1d95;
+        --rarity-common: #94a3b8;      /* Gray */
+        --rarity-uncommon: #34d399;    /* Green */
+        --rarity-rare: #60a5fa;        /* Blue */
+        --rarity-super-rare: #e879f9;  /* Purple */
+        --rarity-mythic: #facc15;      /* Gold */
+        --rarity-divine: #f43f5e;      /* Red */
+      }
+
+      body {
+        font-family: 'Roboto Mono', monospace;
+        background-color: var(--color-bg);
+        color: white;
+        overflow-x: hidden;
+        -webkit-font-smoothing: none; /* Retro feel */
+      }
+
+      /* Scanline Effect */
+      body::after {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0),
+          rgba(255, 255, 255, 0) 50%,
+          rgba(0, 0, 0, 0.2) 50%,
+          rgba(0, 0, 0, 0.2)
+        );
+        background-size: 100% 4px;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0.6;
+      }
+
+      /* CRT Flicker */
+      @keyframes flicker {
+        0% { opacity: 0.97; }
+        5% { opacity: 0.95; }
+        10% { opacity: 0.9; }
+        15% { opacity: 0.95; }
+        20% { opacity: 0.99; }
+        50% { opacity: 0.95; }
+        80% { opacity: 0.9; }
+        100% { opacity: 0.97; }
+      }
+
+      #root {
+        animation: flicker 4s infinite;
+      }
+
+      /* Retro Grid Background */
+      .bg-space {
+        background: 
+          linear-gradient(transparent 95%, rgba(236, 72, 153, 0.3) 95%),
+          linear-gradient(90deg, transparent 95%, rgba(6, 182, 212, 0.3) 95%),
+          radial-gradient(circle at 50% 0%, #4c1d95 0%, #2e1065 60%);
+        background-size: 40px 40px, 40px 40px, 100% 100%;
+        background-attachment: fixed;
+      }
+
+      h1, h2, h3, h4, h5, h6, .font-heading {
+        font-family: 'Press Start 2P', cursive;
+        text-transform: uppercase;
+        letter-spacing: -1px;
+        text-shadow: 2px 2px 0px #ec4899;
+      }
+
+      ::-webkit-scrollbar { width: 10px; }
+      ::-webkit-scrollbar-track { background: #2e1065; border-left: 1px solid #ec4899; }
+      ::-webkit-scrollbar-thumb { background: #ec4899; border: 2px solid #2e1065; }
+      ::-webkit-scrollbar-thumb:hover { background: #db2777; }
+
+      .rarity-common { border-color: var(--rarity-common); }
+      .rarity-uncommon { border-color: var(--rarity-uncommon); box-shadow: 0 0 10px rgba(52, 211, 153, 0.3); }
+      .rarity-rare { border-color: var(--rarity-rare); box-shadow: 0 0 15px rgba(96, 165, 250, 0.4); }
+      .rarity-super-rare { border-color: var(--rarity-super-rare); box-shadow: 0 0 20px rgba(232, 121, 249, 0.5); }
+      .rarity-mythic { border-color: var(--rarity-mythic); box-shadow: 0 0 25px rgba(250, 204, 21, 0.6); }
+      .rarity-divine { 
+        border-color: var(--rarity-divine); 
+        box-shadow: 0 0 40px rgba(244, 63, 94, 0.8);
+        animation: divine-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes divine-pulse {
+        0% { box-shadow: 0 0 20px rgba(244, 63, 94, 0.5); border-color: #f43f5e; }
+        50% { box-shadow: 0 0 50px rgba(244, 63, 94, 0.9); border-color: #fb7185; }
+        100% { box-shadow: 0 0 20px rgba(244, 63, 94, 0.5); border-color: #f43f5e; }
+      }
+
+      /* Distinct Foil Animation - Rainbow */
+      .animate-hologram {
+        background: linear-gradient(
+          115deg,
+          transparent 20%,
+          rgba(255, 0, 0, 0.3) 30%,
+          rgba(255, 255, 0, 0.3) 40%,
+          rgba(0, 255, 0, 0.3) 50%,
+          rgba(0, 255, 255, 0.3) 60%,
+          rgba(0, 0, 255, 0.3) 70%,
+          rgba(255, 0, 255, 0.3) 80%,
+          transparent 90%
+        );
+        background-size: 300% 300%;
+        animation: hologram 3s linear infinite;
+        mix-blend-mode: color-dodge;
+      }
+
+      @keyframes hologram {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      .glass {
+        background: rgba(46, 16, 101, 0.8);
+        backdrop-filter: blur(8px);
+        border: 2px solid rgba(236, 72, 153, 0.3);
+        box-shadow: 4px 4px 0px rgba(6, 182, 212, 0.2);
+      }
+
+      .animate-fade-in {
+        animation: fade-in 0.4s steps(5) forwards;
+      }
+
+      /* Glitch Effect on hover for cards */
+      .glitch-hover:hover {
+        animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
+      }
+
+      @keyframes glitch {
+        0% { transform: translate(0) }
+        20% { transform: translate(-2px, 2px) }
+        40% { transform: translate(-2px, -2px) }
+        60% { transform: translate(2px, 2px) }
+        80% { transform: translate(2px, -2px) }
+        100% { transform: translate(0) }
+      }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@6.22.3?deps=react@18.2.0,react-dom@18.2.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.363.0?deps=react@18.2.0",
+    "react-confetti": "https://esm.sh/react-confetti@6.1.0?deps=react@18.2.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.39.8",
+    "framer-motion": "https://esm.sh/framer-motion@10.16.4?deps=react@18.2.0,react-dom@18.2.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-space text-slate-200">
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
