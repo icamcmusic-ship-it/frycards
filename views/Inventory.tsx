@@ -4,6 +4,7 @@ import { useGame } from '../context/GameContext';
 import { Archive, Package, Sparkles, AlertTriangle, ChevronDown, Box } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PackOpener from '../components/PackOpener';
+import EmptyState from '../components/EmptyState';
 import { PackResult } from '../types';
 
 interface InventoryPack {
@@ -83,23 +84,21 @@ const Inventory: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+        <div className="card-grid">
           {[1,2,3].map(i => (
             <div key={i} className="h-56 bg-slate-900 rounded-2xl animate-pulse border border-slate-800" />
           ))}
         </div>
       ) : packs.length === 0 ? (
-        <div className="text-center py-24 border-2 border-dashed border-slate-800 rounded-2xl">
-          <Box size={48} className="mx-auto mb-4 text-slate-700" />
-          <h3 className="font-heading font-bold text-slate-500 text-lg mb-2">INVENTORY EMPTY</h3>
-          <p className="text-slate-600 text-sm mb-6">Buy packs from the shop and choose "Save to Inventory"</p>
-          <a href="#/shop"
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold text-sm transition-all">
-            <Package size={15} /> Visit Shop
-          </a>
-        </div>
+        <EmptyState 
+          icon={Box} 
+          title="INVENTORY EMPTY" 
+          description="Buy packs from the shop and choose 'Save to Inventory'" 
+          actionLabel="Visit Shop"
+          onAction={() => window.location.hash = '#/shop'}
+        />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+        <div className="card-grid">
           {packs.map(pack => {
             const isOpening = openingId === pack.pack_type_id;
             return (

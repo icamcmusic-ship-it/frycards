@@ -15,8 +15,10 @@ const Collection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [rarityFilter, setRarityFilter] = useState<string>('all');
   
-  // Inspection State
+  // Inspection & Compare State
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareCards, setCompareCards] = useState<Card[]>([]);
   
   const mountedRef = useRef(true);
 
@@ -104,6 +106,16 @@ const Collection: React.FC = () => {
                <option value="Divine">Divine</option>
              </select>
            </div>
+           
+           <button 
+             onClick={() => {
+               setCompareMode(!compareMode);
+               setCompareCards([]);
+             }}
+             className={`px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors text-sm ${compareMode ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50' : 'bg-slate-900 border border-slate-700 text-slate-400 hover:text-white'}`}
+           >
+             <Swords size={16} /> {compareMode ? 'Cancel Compare' : 'Compare'}
+           </button>
         </div>
       </div>
 
@@ -117,7 +129,7 @@ const Collection: React.FC = () => {
            </button>
         </div>
       ) : loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        <div className="card-grid">
            {Array.from({ length: 10 }).map((_, i) => (
              <div key={i} className="aspect-[240/340] bg-slate-900 rounded-xl animate-pulse border border-slate-800" />
            ))}
@@ -129,15 +141,25 @@ const Collection: React.FC = () => {
            <p className="text-sm">Try adjusting your filters or open some packs!</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        <div className="card-grid">
            {filteredCards.map((card) => (
              <motion.div 
                key={card.id}
                layout
                initial={{ opacity: 0, scale: 0.9 }}
                animate={{ opacity: 1, scale: 1 }}
-               className="relative group cursor-pointer"
-               onClick={() => setSelectedCard(card)}
+               className={`relative group cursor-pointer ${compareMode && compareCards.find(c => c.id === card.id) ? 'ring-4 ring-indigo-500 rounded-xl' : ''}`}
+               onClick={() => {
+                 if (compareMode) {
+                   if (compareCards.find(c => c.id === card.id)) {
+                     setCompareCards(prev => prev.filter(c => c.id !== card.id));
+                   } else if (compareCards.length < 2) {
+                     setCompareCards(prev => [...prev, card]);
+                   }
+                 } else {
+                   setSelectedCard(card);
+                 }
+               }}
              >
                <div className="relative transform transition-transform group-hover:-translate-y-2">
                  <CardDisplay card={card} size="md" />
@@ -252,6 +274,80 @@ const Collection: React.FC = () => {
                       <div>Owned: {selectedCard.quantity || 0}</div>
                       <div>ID: {selectedCard.id.split('-')[0]}</div>
                    </div>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Compare View Modal */}
+      <AnimatePresence>
+        {compareMode && compareCards.length === 2 && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto" onClick={() => setCompareCards([])}>
+             <motion.div 
+               initial={{ scale: 0.9, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.9, opacity: 0 }}
+               onClick={(e) => e.stopPropagation()}
+               className="w-full max-w-6xl relative"
+             >
+                <button 
+                  onClick={() => setCompareCards([])} 
+                  className="absolute -top-12 right-0 p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors z-10"
+                >
+                  <X size={20} />
+                </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-16">
+                   {compareCards.map((card, idx) => (
+                      <div key={`${card.id}-${idx}`} className="flex flex-col items-center">
+                         <div className="w-[280px] h-[390px] md:w-[360px] md:h-[500px] mb-8 relative">
+                            <CardDisplay card={card} size="xl" viewMode="3d" />
+                         </div>
+                         <div className="w-full bg-slate-900/90 border border-slate-700/50 rounded-3xl p-6 shadow-2xl">
+                            <h2 className="text-2xl font-heading font-black text-white mb-2 text-center">{card.name}</h2>
+                            <div className="flex justify-center gap-2 mb-6">
+                               <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-800 border border-slate-600 text-slate-300`}>
+                                  {card.rarity}
+                               </span>
+                               <span className="text-slate-500 text-[10px] font-bold tracking-widest uppercase">{card.card_type}</span>
+                            </div>
+                            
+                            {!['Location', 'Event'].includes(card.card_type) && (
+                              <div className="grid grid-cols-3 gap-2 mb-6">
+                                 <div className="bg-red-950/20 border border-red-900/40 p-3 rounded-xl text-center">
+                                    <div className="text-2xl font-heading font-black text-white">{card.strength || card.attack || 0}</div>
+                                    <div className="text-[9px] text-red-400 font-bold uppercase tracking-widest">STR</div>
+                                 </div>
+                                 <div className="bg-blue-950/20 border border-blue-900/40 p-3 rounded-xl text-center">
+                                    <div className="text-2xl font-heading font-black text-white">{card.durability || card.hp || card.defense || 0}</div>
+                                    <div className="text-[9px] text-blue-400 font-bold uppercase tracking-widest">DUR</div>
+                                 </div>
+                                 <div className="bg-slate-950/50 border border-slate-800 p-3 rounded-xl text-center">
+                                    <div className="text-2xl font-heading font-black text-white">{card.dice_cost || 0}</div>
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">COST</div>
+                                 </div>
+                              </div>
+                            )}
+
+                            <div className="bg-slate-950/50 p-4 rounded-xl border border-slate-800 text-sm h-32 overflow-y-auto custom-scrollbar">
+                               {card.keywords && card.keywords.length > 0 && (
+                                  <div className="flex gap-1.5 mb-2 flex-wrap">
+                                     {card.keywords.map(k => (
+                                        <span key={k} className="text-[9px] bg-indigo-900/30 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded uppercase font-bold tracking-wide">{k}</span>
+                                     ))}
+                                  </div>
+                               )}
+                               {card.ability_text ? (
+                                  <p className="text-slate-300 leading-snug">
+                                     {card.ability_type && <span className="text-indigo-400 font-black uppercase mr-1.5">{card.ability_type}:</span>}
+                                     {card.ability_text}
+                                  </p>
+                               ) : (
+                                  <p className="text-slate-500 italic">No special abilities.</p>
+                               )}
+                            </div>
+                         </div>
+                      </div>
+                   ))}
                 </div>
              </motion.div>
           </div>

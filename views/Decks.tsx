@@ -3,7 +3,8 @@ import { useGame } from '../context/GameContext';
 import { supabase } from '../supabaseClient';
 import { Deck, Card } from '../types';
 import CardDisplay from '../components/CardDisplay';
-import { Plus, Trash2, Save, Edit2, AlertCircle, LayoutGrid } from 'lucide-react';
+import SkeletonCard from '../components/SkeletonCard';
+import { Plus, Trash2, Save, Edit2, AlertCircle, LayoutGrid, Search, Filter, X, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Decks: React.FC = () => {
@@ -18,6 +19,15 @@ const Decks: React.FC = () => {
   const [builderLeader, setBuilderLeader] = useState<Card | null>(null);
   const [builderCards, setBuilderCards] = useState<Card[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
+  
+  // Filters
+  const [rarityFilter, setRarityFilter] = useState<string>('All');
+  const [elementFilter, setElementFilter] = useState<string>('All');
+  const [costFilter, setCostFilter] = useState<string>('All');
+
+  // DnD State
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedCard, setDraggedCard] = useState<Card | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -117,76 +127,186 @@ const Decks: React.FC = () => {
       }
   };
 
+  // DnD Handlers
+  const handleDragStart = (e: React.DragEvent, card: Card) => {
+      e.dataTransfer.setData('cardId', card.id);
+      setDraggedCard(card);
+      setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+      setIsDragging(false);
+      setDraggedCard(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const cardId = e.dataTransfer.getData('cardId');
+      if (!cardId) return;
+      
+      const card = collection.find(c => c.id === cardId);
+      if (card) toggleCardInDeck(card);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault(); // Allow drop
+  };
+
   // Filter available cards for builder
-  const filteredCollection = collection.filter(c => c.name.toLowerCase().includes(filterQuery.toLowerCase()));
+  const filteredCollection = collection.filter(c => {
+      const matchesSearch = c.name.toLowerCase().includes(filterQuery.toLowerCase());
+      const matchesRarity = rarityFilter === 'All' || c.rarity === rarityFilter;
+      const matchesElement = elementFilter === 'All' || c.element === elementFilter;
+      const matchesCost = costFilter === 'All' || (c.dice_cost || 0).toString() === costFilter;
+      return matchesSearch && matchesRarity && matchesElement && matchesCost;
+  });
+
+  const deckCount = builderCards.length;
+  const isDeckFull = deckCount >= 30;
+  const isDeckValid = deckCount >= 5 && deckCount <= 30 && builderLeader;
 
   return (
     <div className="container mx-auto pb-24">
       {editingDeck ? (
           <div className="h-[calc(100vh-100px)] flex flex-col">
               {/* Builder Header */}
-              <div className="flex items-center justify-between mb-4 bg-slate-900 p-4 rounded-xl border border-slate-800">
-                  <input 
-                    value={deckName} 
-                    onChange={e => setDeckName(e.target.value)}
-                    className="bg-transparent text-2xl font-black text-white focus:outline-none placeholder-slate-600"
-                    placeholder="Deck Name"
-                  />
-                  <div className="flex gap-2">
-                      <button onClick={() => setEditingDeck(null)} className="px-4 py-2 text-slate-400 font-bold hover:text-white">Cancel</button>
-                      <button onClick={handleSave} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg">
-                          <Save size={16} /> Save Deck
+              <div className="flex items-center justify-between mb-4 bg-slate-900 p-4 rounded-xl border border-slate-800 sticky top-0 z-30 shadow-xl">
+                  <div className="flex items-center gap-4">
+                      <button onClick={() => setEditingDeck(null)} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+                          <X size={20} className="text-slate-400" />
+                      </button>
+                      <input 
+                        value={deckName} 
+                        onChange={e => setDeckName(e.target.value)}
+                        className="bg-transparent text-2xl font-black text-white focus:outline-none placeholder-slate-600 w-full max-w-md"
+                        placeholder="Deck Name"
+                      />
+                  </div>
+                  
+                  <div className="flex items-center gap-6">
+                      <div className={`flex flex-col items-end ${isDeckFull ? 'text-red-500' : deckCount < 5 ? 'text-amber-500' : 'text-indigo-400'}`}>
+                          <span className="text-2xl font-heading font-black leading-none">{deckCount}/30</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest">Cards</span>
+                      </div>
+                      
+                      <button 
+                        onClick={handleSave} 
+                        disabled={!isDeckValid}
+                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                      >
+                          <Save size={18} /> SAVE DECK
                       </button>
                   </div>
               </div>
 
-              <div className="flex flex-1 gap-4 overflow-hidden">
-                  {/* Card Picker */}
-                  <div className="w-1/2 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
-                      <div className="p-4 border-b border-slate-800">
-                          <input 
-                            placeholder="Search cards..." 
-                            value={filterQuery}
-                            onChange={e => setFilterQuery(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
-                          />
+              <div className="flex flex-1 gap-6 overflow-hidden">
+                  {/* Card Picker (Source) */}
+                  <div className="w-1/2 flex flex-col bg-slate-900/50 rounded-2xl border border-slate-800 overflow-hidden shadow-inner">
+                      <div className="p-4 border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm z-20 space-y-3">
+                          <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                              <input 
+                                placeholder="Search collection..." 
+                                value={filterQuery}
+                                onChange={e => setFilterQuery(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                              />
+                          </div>
+                          <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                              <select value={rarityFilter} onChange={e => setRarityFilter(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+                                  <option value="All">Rarity</option>
+                                  <option value="Common">Common</option>
+                                  <option value="Uncommon">Uncommon</option>
+                                  <option value="Rare">Rare</option>
+                                  <option value="Super-Rare">Super Rare</option>
+                                  <option value="Mythic">Mythic</option>
+                              </select>
+                              <select value={elementFilter} onChange={e => setElementFilter(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+                                  <option value="All">Element</option>
+                                  <option value="fire">Fire</option>
+                                  <option value="ice">Ice</option>
+                                  <option value="nature">Nature</option>
+                                  <option value="tech">Tech</option>
+                                  <option value="void">Void</option>
+                              </select>
+                              <select value={costFilter} onChange={e => setCostFilter(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+                                  <option value="All">Cost</option>
+                                  {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={n.toString()}>{n}</option>)}
+                              </select>
+                          </div>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 gap-3 custom-scrollbar">
+                      
+                      <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 custom-scrollbar content-start">
                           {filteredCollection.map(card => {
                               const inDeck = builderCards.some(c => c.id === card.id) || builderLeader?.id === card.id;
                               return (
-                                  <div key={card.id} onClick={() => toggleCardInDeck(card)} className={`relative cursor-pointer transition-all ${inDeck ? 'opacity-50 grayscale' : 'hover:scale-105'}`}>
+                                  <div 
+                                    key={card.id} 
+                                    draggable={!inDeck}
+                                    onDragStart={(e) => handleDragStart(e, card)}
+                                    onDragEnd={handleDragEnd}
+                                    onClick={() => toggleCardInDeck(card)} 
+                                    className={`relative cursor-pointer transition-all ${inDeck ? 'opacity-40 grayscale pointer-events-none' : 'hover:scale-105 active:scale-95'}`}
+                                  >
                                       <CardDisplay card={card} size="sm" />
-                                      {inDeck && <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl"><div className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded font-bold">IN DECK</div></div>}
+                                      {inDeck && (
+                                          <div className="absolute inset-0 flex items-center justify-center">
+                                              <div className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded font-bold shadow-lg">IN DECK</div>
+                                          </div>
+                                      )}
                                   </div>
                               );
                           })}
                       </div>
                   </div>
 
-                  {/* Deck Preview */}
-                  <div className="w-1/2 flex flex-col bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden p-4">
-                      <div className="mb-4">
-                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Leader</h3>
+                  {/* Deck Preview (Target) */}
+                  <div 
+                    className={`w-1/2 flex flex-col bg-slate-900/50 rounded-2xl border transition-colors overflow-hidden p-4 relative ${isDragging ? 'border-indigo-500 bg-indigo-900/10' : 'border-slate-800'}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                  >
+                      {isDragging && (
+                          <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                              <div className="bg-indigo-600/90 text-white px-6 py-3 rounded-xl font-black text-xl shadow-2xl animate-bounce">
+                                  DROP TO ADD
+                              </div>
+                          </div>
+                      )}
+
+                      <div className="mb-6 flex-shrink-0">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><Target size={14} /> Leader Unit</h3>
                           {builderLeader ? (
-                              <div className="w-32 cursor-pointer" onClick={() => setBuilderLeader(null)}>
+                              <div className="w-32 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setBuilderLeader(null)}>
                                   <CardDisplay card={builderLeader} size="sm" />
                               </div>
                           ) : (
-                              <div className="w-32 h-44 border-2 border-dashed border-slate-700 rounded-xl flex items-center justify-center text-slate-600 text-xs font-bold bg-slate-950">
-                                  Select Leader
+                              <div className="w-32 h-44 border-2 border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-600 gap-2 bg-slate-950/50 hover:border-indigo-500/50 transition-colors">
+                                  <AlertCircle size={24} />
+                                  <span className="text-xs font-bold">Select Leader</span>
                               </div>
                           )}
                       </div>
-                      <div className="flex-1 overflow-y-auto">
-                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Main Deck ({builderCards.length})</h3>
-                          <div className="grid grid-cols-3 gap-2">
-                              {builderCards.map(card => (
-                                  <div key={card.id} onClick={() => toggleCardInDeck(card)} className="cursor-pointer hover:opacity-80">
-                                      <CardDisplay card={card} size="sm" />
-                                  </div>
-                              ))}
-                          </div>
+                      
+                      <div className="flex-1 overflow-y-auto custom-scrollbar">
+                          <h3 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><LayoutGrid size={14} /> Main Deck</h3>
+                          {builderCards.length === 0 ? (
+                              <div className="h-40 flex items-center justify-center text-slate-600 border-2 border-dashed border-slate-800 rounded-xl">
+                                  <p className="text-sm font-bold">Drag cards here or click to add</p>
+                              </div>
+                          ) : (
+                              <div className="grid grid-cols-3 lg:grid-cols-4 gap-2">
+                                  {builderCards.map(card => (
+                                      <div key={card.id} onClick={() => toggleCardInDeck(card)} className="cursor-pointer hover:opacity-80 hover:scale-105 transition-transform relative group">
+                                          <CardDisplay card={card} size="sm" />
+                                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 text-white rounded-full p-1 shadow-lg">
+                                              <X size={12} />
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
                       </div>
                   </div>
               </div>
@@ -216,11 +336,11 @@ const Decks: React.FC = () => {
               ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {decks.map(deck => (
-                          <div key={deck.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-indigo-500/50 transition-all group relative">
+                          <div key={deck.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-indigo-500/50 transition-all group relative hover:shadow-2xl hover:-translate-y-1">
                               <h3 className="text-xl font-bold text-white mb-1">{deck.name}</h3>
                               <p className="text-slate-500 text-xs mb-4">{deck.card_ids.length} Cards • Created {new Date(deck.created_at).toLocaleDateString()}</p>
                               <div className="flex gap-2 mt-4">
-                                  <button onClick={() => handleEdit(deck)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                                  <button onClick={() => handleEdit(deck)} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
                                       <Edit2 size={14} /> Edit
                                   </button>
                                   <button onClick={() => handleDelete(deck.id)} className="px-3 py-2 bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 rounded-lg transition-colors">

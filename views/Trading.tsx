@@ -137,9 +137,11 @@ const Trading: React.FC = () => {
                   {loading ? (
                       <div className="animate-pulse text-slate-500">Loading trades...</div>
                   ) : activeTrades.length === 0 ? (
-                      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-8 text-center text-slate-500">
-                          No active trades found.
-                      </div>
+                      <EmptyState 
+                        icon={ArrowLeftRight} 
+                        title="NO ACTIVE TRADES" 
+                        description="You don't have any pending trade offers. Start a new trade with a friend!" 
+                      />
                   ) : (
                       <div className="grid gap-4">
                           {activeTrades.map(trade => {

@@ -145,11 +145,11 @@ const Marketplace: React.FC = () => {
       </div>
 
       {loading ? (
-         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+         <div className="card-grid">
             {Array.from({length: 10}).map((_, i) => <div key={i} className="h-64 bg-slate-900 rounded-xl animate-pulse" />)}
          </div>
       ) : activeTab === 'buy' ? (
-         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+         <div className="card-grid">
             {filteredListings.length === 0 ? (
                <div className="col-span-full text-center py-20 text-slate-500">No listings found.</div>
             ) : filteredListings.map(listing => (
@@ -194,7 +194,7 @@ const Marketplace: React.FC = () => {
             ))}
          </div>
       ) : (
-         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+         <div className="card-grid">
             {filteredUserCards.length === 0 ? (
                <div className="col-span-full text-center py-20 text-slate-500">You have no tradeable cards.</div>
             ) : filteredUserCards.map(card => (

@@ -14,12 +14,6 @@ const Friends: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!user) return;
-    if (activeTab === 'my_friends') fetchFriends();
-    if (activeTab === 'pending') fetchPending();
-  }, [user, activeTab]);
-
   const fetchFriends = async () => {
     setLoading(true);
     const { data, error } = await supabase.rpc('get_friends', { p_user_id: user?.id });
@@ -33,6 +27,12 @@ const Friends: React.FC = () => {
     if (!error) setPending(data || []);
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!user) return;
+    if (activeTab === 'my_friends') fetchFriends();
+    if (activeTab === 'pending') fetchPending();
+  }, [user, activeTab]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;

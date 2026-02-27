@@ -4,7 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 interface ConfirmModalProps {
   isOpen: boolean;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
@@ -17,11 +17,19 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmLabel = 'Confirm', cancelLabel = 'Cancel',
   isDestructive = false
 }) => {
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) onCancel();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onCancel]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={onCancel}>
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in" onClick={onCancel}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden transform transition-all scale-100" onClick={e => e.stopPropagation()}>
         <div className="flex flex-col items-center text-center">
           <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-700">
              <AlertTriangle className={isDestructive ? "text-red-500" : "text-indigo-500"} size={24} />

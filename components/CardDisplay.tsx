@@ -82,9 +82,31 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
       }
     };
 
-    if (window.DeviceOrientationEvent && typeof (window.DeviceOrientationEvent as any).requestPermission !== 'function') {
-         window.addEventListener('deviceorientation', handleOrientation);
+    if (window.DeviceOrientationEvent) {
+      if (typeof (window.DeviceOrientationEvent as any).requestPermission === 'function') {
+        const requestPermission = async () => {
+          try {
+            const permissionState = await (window.DeviceOrientationEvent as any).requestPermission();
+            if (permissionState === 'granted') {
+              window.addEventListener('deviceorientation', handleOrientation);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        };
+        // Request on first interaction
+        const handleInteraction = () => {
+          requestPermission();
+          window.removeEventListener('click', handleInteraction);
+          window.removeEventListener('touchstart', handleInteraction);
+        };
+        window.addEventListener('click', handleInteraction);
+        window.addEventListener('touchstart', handleInteraction);
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
     }
+
     return () => {
       window.removeEventListener('deviceorientation', handleOrientation);
     };
@@ -113,10 +135,10 @@ const CardDisplay: React.FC<CardDisplayProps> = ({
   const style = RARITY_STYLES[card.rarity] || RARITY_STYLES['Common'];
   
   const sizeClasses = {
-    sm: 'w-[135px] h-[190px]', 
-    md: 'w-[240px] h-[340px]', 
-    lg: 'w-[300px] h-[420px]',
-    xl: 'w-[360px] h-[500px]',
+    sm: 'w-full max-w-[135px] aspect-[135/190]', 
+    md: 'w-full max-w-[240px] aspect-[240/340]', 
+    lg: 'w-full max-w-[300px] aspect-[300/420]',
+    xl: 'w-full max-w-[360px] aspect-[360/500]',
   };
 
   const getElementIcon = () => {

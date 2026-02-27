@@ -83,6 +83,51 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Hero Section - Primary Actions */}
+        <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+           <motion.a 
+             href="#/battle"
+             whileHover={{ scale: 1.03, y: -4 }}
+             whileTap={{ scale: 0.98 }}
+             className="relative group overflow-hidden rounded-3xl bg-gradient-to-br from-red-900 via-red-950 to-slate-950 border-2 border-red-500/40 p-10 flex flex-col justify-center min-h-[260px] shadow-[0_20px_50px_rgba(239,68,68,0.2)] transition-all"
+           >
+              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80')] opacity-30 bg-cover bg-center group-hover:scale-110 transition-transform duration-1000 mix-blend-overlay"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-red-950/80 via-transparent to-transparent"></div>
+              <div className="relative z-10">
+                 <div className="flex items-center gap-4 mb-4">
+                    <div className="p-3 bg-red-500 rounded-2xl text-white shadow-lg shadow-red-500/40 ring-4 ring-red-500/20"><Trophy size={32} /></div>
+                    <span className="text-red-400 font-black tracking-[0.3em] text-sm uppercase">Competitive Arena</span>
+                 </div>
+                 <h2 className="text-5xl font-heading font-black text-white mb-4 italic tracking-tighter drop-shadow-2xl">ENTER BATTLE</h2>
+                 <p className="text-slate-300 max-w-md mb-8 text-lg leading-relaxed font-medium">Test your ultimate deck against rivals and dominate the global rankings.</p>
+                 <span className="inline-flex items-center gap-3 bg-white text-red-900 px-10 py-4 rounded-2xl font-black text-base uppercase tracking-widest group-hover:bg-red-500 group-hover:text-white transition-all shadow-2xl">
+                    Find Match <Target size={20} className="animate-pulse" />
+                 </span>
+              </div>
+           </motion.a>
+
+           <motion.a 
+             href="#/shop"
+             whileHover={{ scale: 1.03, y: -4 }}
+             whileTap={{ scale: 0.98 }}
+             className="relative group overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 border-2 border-indigo-500/40 p-10 flex flex-col justify-center min-h-[260px] shadow-[0_20px_50px_rgba(99,102,241,0.2)] transition-all"
+           >
+              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1614726365723-49cfae967b0b?auto=format&fit=crop&q=80')] opacity-30 bg-cover bg-center group-hover:scale-110 transition-transform duration-1000 mix-blend-overlay"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-indigo-950/80 via-transparent to-transparent"></div>
+              <div className="relative z-10">
+                 <div className="flex items-center gap-4 mb-4">
+                    <div className="p-3 bg-indigo-500 rounded-2xl text-white shadow-lg shadow-indigo-500/40 ring-4 ring-indigo-500/20"><Gift size={32} /></div>
+                    <span className="text-indigo-400 font-black tracking-[0.3em] text-sm uppercase">Booster Shop</span>
+                 </div>
+                 <h2 className="text-5xl font-heading font-black text-white mb-4 italic tracking-tighter drop-shadow-2xl">OPEN PACKS</h2>
+                 <p className="text-slate-300 max-w-md mb-8 text-lg leading-relaxed font-medium">Unleash rare powers. Guaranteed Super-Rare in every 10th booster pack.</p>
+                 <span className="inline-flex items-center gap-3 bg-white text-indigo-900 px-10 py-4 rounded-2xl font-black text-base uppercase tracking-widest group-hover:bg-indigo-500 group-hover:text-white transition-all shadow-2xl">
+                    Go to Shop <Sparkles size={20} className="animate-bounce" />
+                 </span>
+              </div>
+           </motion.a>
+        </div>
+
         <div className="md:col-span-2 glass p-8 rounded-lg relative overflow-hidden">
           <div className="relative z-10">
             <div className="flex items-center gap-6 mb-8">

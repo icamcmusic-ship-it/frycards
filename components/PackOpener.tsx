@@ -31,6 +31,7 @@ const PackOpener: React.FC<PackOpenerProps> = ({ packResult, onClose, packImage 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [sortedCards, setSortedCards] = useState<Card[]>([]);
+  const [skipAnimation, setSkipAnimation] = useState(false);
 
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
@@ -100,6 +101,11 @@ const PackOpener: React.FC<PackOpenerProps> = ({ packResult, onClose, packImage 
     triggerHaptic([50, 50, 50, 50]);
 
     const t1 = setTimeout(() => {
+      if (skipAnimation) {
+        setStage('summary');
+        sfx.success?.play().catch(() => {});
+        return;
+      }
       setStage('opening');
       if (sfx.open) {
         sfx.open.volume = 0.6;
@@ -166,6 +172,19 @@ const PackOpener: React.FC<PackOpenerProps> = ({ packResult, onClose, packImage 
       <button onClick={onClose} className="absolute top-8 right-8 p-3 text-slate-500 hover:text-white bg-slate-900/80 rounded-full z-50 border border-slate-700 hover:bg-slate-800 transition-colors">
         <X size={24} />
       </button>
+
+      {stage !== 'summary' && (
+        <div className="absolute top-8 left-8 z-50 flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-full border border-slate-700">
+          <input 
+            type="checkbox" 
+            id="skip-anim" 
+            checked={skipAnimation} 
+            onChange={(e) => setSkipAnimation(e.target.checked)}
+            className="w-4 h-4 accent-indigo-500"
+          />
+          <label htmlFor="skip-anim" className="text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer">Skip Animation</label>
+        </div>
+      )}
 
       {/* STAGE: SHAKING / OPENING ANIMATION */}
       {(stage === 'shaking' || stage === 'opening') && (

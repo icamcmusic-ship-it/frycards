@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import { supabase } from '../supabaseClient';
 import { Deck, Card } from '../types';
@@ -67,7 +68,7 @@ const BattleArena: React.FC = () => {
                <AlertTriangle size={48} className="mx-auto mb-4 text-amber-500" />
                <h3 className="text-xl font-bold text-white mb-2">No Decks Ready</h3>
                <p className="text-slate-400 mb-6">You need to assemble a deck before you can enter the arena.</p>
-               <a href="#/decks" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold inline-block">Go to Decks</a>
+               <Link to="/decks" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold inline-block">Go to Decks</Link>
            </div>
        ) : (
            <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">

@@ -183,6 +183,24 @@
         animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
       }
 
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem;
+      }
+      
+      @media (min-width: 640px) {
+        .card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      }
+      
+      @media (min-width: 768px) {
+        .card-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      
+      @media (min-width: 1024px) {
+        .card-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      }
+
       @keyframes glitch {
         0% { transform: translate(0) }
         20% { transform: translate(-2px, 2px) }
@@ -209,11 +227,9 @@
   }
 }
 </script>
-  <link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-space text-slate-200">
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>
