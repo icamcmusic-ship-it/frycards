@@ -7,6 +7,7 @@ import { useSound } from '../context/SoundContext';
 import { supabase } from '../supabaseClient';
 import { useGame } from '../context/GameContext';
 import { UserSettings } from '../types';
+import ResetAccountModal from './ResetAccountModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const { sfxVolume, musicVolume, isMuted, lowPerformanceMode, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode } = useSound();
   const { user, dashboard, refreshDashboard, showToast } = useGame();
   const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   
   // Settings sync
   useEffect(() => {
@@ -72,6 +74,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -178,10 +181,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </section>
             )}
+
+            {/* DANGER ZONE */}
+            <section className="pt-6 border-t border-red-900/30 mt-8">
+              <h3 className="text-xs font-bold text-red-700 uppercase tracking-widest mb-4 font-mono">
+                Danger Zone
+              </h3>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold text-slate-300">Restart Account</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Wipe all progress and start fresh. Cannot be undone.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setResetOpen(true)}
+                  className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black text-red-400 border border-red-800/50 bg-red-950/20 hover:bg-red-900/40 hover:text-red-200 hover:border-red-700 transition-all"
+                >
+                  RESET
+                </button>
+              </div>
+            </section>
           </motion.div>
         </div>
       )}
     </AnimatePresence>
+    <ResetAccountModal isOpen={resetOpen} onClose={() => setResetOpen(false)} />
+    </>
   );
 };
 
