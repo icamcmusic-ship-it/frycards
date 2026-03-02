@@ -1,7 +1,6 @@
-
-
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Volume2, VolumeX, Cpu, Eye, EyeOff, Music } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Settings, Volume2, VolumeX, Cpu, Eye, EyeOff, Music, ShieldAlert, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSound } from '../context/SoundContext';
 import { supabase } from '../supabaseClient';
@@ -29,7 +28,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             const s: UserSettings = data[0];
             setSfxVolume(s.sfx_volume);
             setMusicVolume(s.music_volume);
-            setMuted(!s.sfx_enabled); // Mapping generalized mute to sfx switch for simple UI
+            setMuted(!s.sfx_enabled);
             setLowPerformanceMode(s.low_perf_mode);
         }
     };
@@ -53,13 +52,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
       await supabase.rpc('upsert_user_settings', { p_settings: settingsPayload });
   };
 
-  // Auto-save on change with debounce could be better, but doing on close or effect for now
   useEffect(() => {
       if(user) saveSettings();
   }, [sfxVolume, musicVolume, isMuted, lowPerformanceMode]);
 
   const togglePrivacy = async () => {
-    if (!user || !dashboard) return;
+    if (!user || !dashboard || !dashboard.profile) return;
     setSavingPrivacy(true);
     try {
       const { error } = await supabase.from('profiles').update({ is_public: !dashboard.profile.is_public }).eq('id', user.id);
@@ -73,16 +71,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  return (
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.hash = '#/login';
+    onClose();
+  };
+
+  console.log("SettingsModal render, isOpen:", isOpen);
+
+  return createPortal(
     <>
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <motion.div
+          key="settings-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-full max-w-md shadow-2xl relative"
+            className="bg-slate-900 border border-slate-700 rounded-2xl p-8 w-full max-w-md shadow-2xl relative max-h-[90vh] overflow-y-auto"
           >
             <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors">
               <X size={20} />
@@ -97,7 +109,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             <section className="mb-8">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 font-mono">Audio</h3>
               <div className="space-y-5">
-                {/* Global mute */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {isMuted ? <VolumeX size={16} className="text-slate-500" /> : <Volume2 size={16} className="text-white" />}
@@ -111,7 +122,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   </button>
                 </div>
 
-                {/* SFX Volume */}
                 <div>
                   <div className="flex justify-between mb-2">
                     <span className="text-sm text-slate-300 font-bold flex items-center gap-2"><Volume2 size={14} /> Sound FX</span>
@@ -124,7 +134,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   />
                 </div>
 
-                {/* Music Volume */}
                 <div>
                   <div className="flex justify-between mb-2">
                     <span className="text-sm text-slate-300 font-bold flex items-center gap-2"><Music size={14} /> Music</span>
@@ -161,12 +170,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
             {/* PRIVACY */}
             {user && dashboard && (
-              <section>
+              <section className="mb-8">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 font-mono">Privacy</h3>
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      {dashboard.profile.is_public ? <Eye size={16} className="text-green-400" /> : <EyeOff size={16} className="text-slate-500" />}
+                      {dashboard?.profile?.is_public ? <Eye size={16} className="text-green-400" /> : <EyeOff size={16} className="text-slate-500" />}
                       <span className="text-sm text-white font-bold">Public Profile</span>
                     </div>
                     <p className="text-xs text-slate-500 ml-6">Others can view your collection & stats</p>
@@ -174,16 +183,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                   <button
                     onClick={togglePrivacy}
                     disabled={savingPrivacy}
-                    className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 disabled:opacity-50 ${dashboard.profile.is_public ? 'bg-green-600' : 'bg-slate-700'}`}
+                    className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 disabled:opacity-50 ${dashboard?.profile?.is_public ? 'bg-green-600' : 'bg-slate-700'}`}
                   >
-                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${dashboard.profile.is_public ? 'left-6.5' : 'left-0.5'}`} />
+                    <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${dashboard?.profile?.is_public ? 'left-6.5' : 'left-0.5'}`} />
                   </button>
                 </div>
               </section>
             )}
 
             {/* DANGER ZONE */}
-            <section className="pt-6 border-t border-red-900/30 mt-8">
+            <section className="pt-6 border-t border-red-900/30">
               <h3 className="text-xs font-bold text-red-700 uppercase tracking-widest mb-4 font-mono">
                 Danger Zone
               </h3>
@@ -202,12 +211,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 </button>
               </div>
             </section>
+
+            <div className="mt-8 pt-6 border-t border-slate-800">
+              <button 
+                onClick={handleLogout}
+                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all flex items-center justify-center gap-2 border border-slate-700"
+              >
+                <LogOut size={16} /> Sign Out
+              </button>
+            </div>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
     <ResetAccountModal isOpen={resetOpen} onClose={() => setResetOpen(false)} />
-    </>
+    </>,
+    document.body
   );
 };
 

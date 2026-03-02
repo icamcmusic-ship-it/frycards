@@ -23,6 +23,7 @@ const Friends            = lazy(() => import('./views/Friends'));
 const UserProfile        = lazy(() => import('./views/UserProfile'));
 const SeasonPass         = lazy(() => import('./views/SeasonPass'));
 const CollectionMissions = lazy(() => import('./views/CollectionMissions'));
+const Settings           = lazy(() => import('./views/Settings'));
 
 const LoadingScreen = () => (
   <div className="min-h-screen flex items-center justify-center bg-slate-950">
@@ -61,6 +62,7 @@ const RouterRoutes: React.FC = () => (
     <Route path="/missions"      element={<CollectionMissions />} />
     <Route path="/leaderboard"   element={<Leaderboard />} />
     <Route path="/season-pass"   element={<SeasonPass />} />
+    <Route path="/settings"      element={<Settings />} />
     {/* Legacy redirects */}
     <Route path="/quests"        element={<Navigate to="/missions" replace />} />
     <Route path="/item-shop"     element={<Navigate to="/shop" replace />} />

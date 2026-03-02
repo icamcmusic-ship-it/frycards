@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import EnergyBar from './EnergyBar';
+import SettingsModal from './SettingsModal';
 
 interface NavItem { to: string; label: string; icon: React.FC<any>; navId: string; }
 
@@ -61,6 +62,7 @@ const Navbar: React.FC = () => {
   };
 
   return (
+    <>
     <nav className="bg-slate-950/95 backdrop-blur-sm border-b border-slate-800/80 sticky top-0 z-[1000]">
       <div className="container mx-auto px-3 md:px-4">
         <div className="flex items-center h-14 gap-2">
@@ -175,6 +177,10 @@ const Navbar: React.FC = () => {
                         <link.icon size={15} /> {link.label}
                       </NavLink>
                     ))}
+                    <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
+                      <Settings size={15} /> Settings
+                    </button>
                   </div>
 
                   {/* Sign out */}
@@ -191,6 +197,8 @@ const Navbar: React.FC = () => {
         </div>
       </div>
     </nav>
+    <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
   );
 };
 
