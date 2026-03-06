@@ -10,6 +10,23 @@ import BidHistoryModal from '../components/BidHistoryModal';
 import ConfirmModal from '../components/ConfirmModal';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+const getQuicksellValue = (rarity: string) => {
+  switch(rarity) {
+    case 'Common': return 10;
+    case 'Uncommon': return 25;
+    case 'Rare': return 100;
+    case 'Super-Rare': return 500;
+    case 'Mythic': return 2000;
+    case 'Divine': return 5000;
+    default: return 10;
+  }
+};
+
+const QUICKSELL_VALUES: Record<string, number> = {
+  Common: 10, Uncommon: 25, Rare: 100,
+  'Super-Rare': 250, Mythic: 500, Divine: 1000,
+};
+
 const Marketplace: React.FC = () => {
   const { user, showToast, refreshDashboard } = useGame();
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
@@ -24,6 +41,9 @@ const Marketplace: React.FC = () => {
   const [selectedCardToSell, setSelectedCardToSell] = useState<Card | null>(null);
   const [sellPrice, setSellPrice] = useState<number>(100);
   const [sellCurrency, setSellCurrency] = useState<'gold' | 'gems'>('gold');
+  
+  // Quicksell State
+  const [quicksellCard, setQuicksellCard] = useState<Card | null>(null);
 
   // Bid History Modal
   const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null);
@@ -59,8 +79,47 @@ const Marketplace: React.FC = () => {
         }
     } catch (e) {
         console.error(e);
+        showToast('Failed to load your cards', 'error');
     } finally {
         setLoading(false);
+    }
+  };
+
+  const handleQuicksell = async (card: Card) => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      const result = await callEdge('quicksell-card', {
+        card_id: card.id,
+        is_foil: false,
+        quantity: 1,
+      });
+      showToast(`💰 Quicksold ${card.name} for ${result.gold_earned} gold!`, 'success');
+      await loadUserCards();
+      await refreshDashboard();
+    } catch (e: any) {
+      showToast(e.message || 'Quicksell failed', 'error');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleQuicksell = async (card: Card) => {
+    if (processing) return;
+    setProcessing(true);
+    try {
+      const result = await callEdge('quicksell-card', {
+        card_id: card.id,
+        is_foil: false,
+        quantity: 1,
+      });
+      showToast(`💰 Quicksold ${card.name} for ${result.gold_earned} gold!`, 'success');
+      await loadUserCards();
+      await refreshDashboard();
+    } catch (e: any) {
+      showToast(e.message || 'Quicksell failed', 'error');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -91,8 +150,20 @@ const Marketplace: React.FC = () => {
     if (!selectedCardToSell || !user || processing) return;
     setProcessing(true);
     try {
+       const { data: userCardData, error: userCardError } = await supabase
+         .from('user_cards')
+         .select('id')
+         .eq('user_id', user.id)
+         .eq('card_id', selectedCardToSell.id)
+         .limit(1)
+         .single();
+         
+       if (userCardError || !userCardData) {
+         throw new Error('Could not find this card in your collection.');
+       }
+
        await callEdge('create-market-listing', {
-         card_id: selectedCardToSell.id,
+         card_id: userCardData.id,
          price: sellPrice,
          currency: sellCurrency,
          listing_type: 'fixed_price',
@@ -101,10 +172,48 @@ const Marketplace: React.FC = () => {
        showToast('Listing created successfully!', 'success');
        setSelectedCardToSell(null);
        setActiveTab('buy');
+       loadUserCards();
+       refreshDashboard();
     } catch (e: any) {
        showToast(e.message, 'error');
     } finally {
        setProcessing(false);
+    }
+  };
+
+  const executeQuicksell = async () => {
+    if (!quicksellCard || !user || processing) return;
+    setProcessing(true);
+    try {
+      const { data: userCardData, error: userCardError } = await supabase
+        .from('user_cards')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('card_id', quicksellCard.id)
+        .limit(1)
+        .single();
+        
+      if (userCardError || !userCardData) {
+        throw new Error('Could not find this card in your collection.');
+      }
+
+      const { error } = await supabase.rpc('quicksell_card', {
+        p_user_card_id: userCardData.id
+      });
+
+      if (error) throw error;
+
+      showToast(`Quicksold ${quicksellCard.name} for ${getQuicksellValue(quicksellCard.rarity)} Gold!`, 'success');
+      loadUserCards();
+      refreshDashboard();
+      if (selectedCardToSell?.id === quicksellCard.id) {
+        setSelectedCardToSell(null);
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to quicksell card', 'error');
+    } finally {
+      setProcessing(false);
+      setQuicksellCard(null);
     }
   };
 

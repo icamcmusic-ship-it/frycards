@@ -4,11 +4,24 @@ import { useGame } from '../context/GameContext';
 import { supabase } from '../supabaseClient';
 import { Card } from '../types';
 import CardDisplay from '../components/CardDisplay';
-import { Search, Filter, RefreshCw, AlertCircle, Layers, X, Swords, Shield, Box, Zap } from 'lucide-react';
+import { Search, Filter, RefreshCw, AlertCircle, Layers, X, Swords, Shield, Box, Zap, Coins } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ConfirmModal from '../components/ConfirmModal';
+
+const getQuicksellValue = (rarity: string) => {
+  switch(rarity) {
+    case 'Common': return 10;
+    case 'Uncommon': return 25;
+    case 'Rare': return 100;
+    case 'Super-Rare': return 500;
+    case 'Mythic': return 2000;
+    case 'Divine': return 5000;
+    default: return 10;
+  }
+};
 
 const Collection: React.FC = () => {
-  const { user } = useGame();
+  const { user, showToast, refreshDashboard } = useGame();
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +33,10 @@ const Collection: React.FC = () => {
   const [compareMode, setCompareMode] = useState(false);
   const [compareCards, setCompareCards] = useState<Card[]>([]);
   
+  // Quicksell State
+  const [quicksellCard, setQuicksellCard] = useState<Card | null>(null);
+  const [processing, setProcessing] = useState(false);
+
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -58,6 +75,42 @@ const Collection: React.FC = () => {
       if (mountedRef.current) setLoading(false); 
     }
   }, [user]);
+
+  const executeQuicksell = async () => {
+    if (!quicksellCard || !user || processing) return;
+    setProcessing(true);
+    try {
+      const { data: userCardData, error: userCardError } = await supabase
+        .from('user_cards')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('card_id', quicksellCard.id)
+        .limit(1)
+        .single();
+        
+      if (userCardError || !userCardData) {
+        throw new Error('Could not find this card in your collection.');
+      }
+
+      const { error } = await supabase.rpc('quicksell_card', {
+        p_user_card_id: userCardData.id
+      });
+
+      if (error) throw error;
+
+      showToast(`Quicksold ${quicksellCard.name} for ${getQuicksellValue(quicksellCard.rarity)} Gold!`, 'success');
+      loadCards();
+      refreshDashboard();
+      if (selectedCard?.id === quicksellCard.id && (quicksellCard.quantity || 1) <= 1) {
+        setSelectedCard(null);
+      }
+    } catch (e: any) {
+      showToast(e.message || 'Failed to quicksell card', 'error');
+    } finally {
+      setProcessing(false);
+      setQuicksellCard(null);
+    }
+  };
 
   useEffect(() => {
     loadCards();
@@ -274,6 +327,16 @@ const Collection: React.FC = () => {
                       <div>Owned: {selectedCard.quantity || 0}</div>
                       <div>ID: {selectedCard.id.split('-')[0]}</div>
                    </div>
+
+                   {/* Actions */}
+                   <div className="mt-6 pt-6 border-t border-slate-800 flex justify-end">
+                      <button
+                        onClick={() => setQuicksellCard(selectedCard)}
+                        className="flex items-center gap-2 px-6 py-3 bg-red-900/40 hover:bg-red-900/60 text-red-400 border border-red-900/50 rounded-xl font-bold transition-colors"
+                      >
+                        <Coins size={16} /> Quicksell for {getQuicksellValue(selectedCard.rarity)} Gold
+                      </button>
+                   </div>
                 </div>
              </motion.div>
           </div>
@@ -282,8 +345,7 @@ const Collection: React.FC = () => {
       {/* Compare View Modal */}
       <AnimatePresence>
         {compareMode && compareCards.length === 2 && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto" onClick={() => setCompareCards([])}>
-             <motion.div 
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 overflow-y-auto" onClick={() => setCompareCards([])}><motion.div 
                initial={{ scale: 0.9, opacity: 0 }}
                animate={{ scale: 1, opacity: 1 }}
                exit={{ scale: 0.9, opacity: 0 }}
@@ -353,6 +415,16 @@ const Collection: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={!!quicksellCard}
+        title="Confirm Quicksell"
+        message={`Are you sure you want to quicksell ${quicksellCard?.name} for ${quicksellCard ? getQuicksellValue(quicksellCard.rarity) : 0} Gold? This action cannot be undone.`}
+        confirmLabel="Quicksell"
+        cancelLabel="Cancel"
+        onConfirm={executeQuicksell}
+        onCancel={() => setQuicksellCard(null)}
+      />
     </div>
   );
 };

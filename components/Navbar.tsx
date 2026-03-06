@@ -20,18 +20,18 @@ const PRIMARY: NavItem[] = [
   { to: '/battle',     label: 'Battle',     icon: Swords,    navId: 'battle'    },
   { to: '/marketplace',label: 'Market',     icon: BarChart2, navId: 'market'    },
   { to: '/inventory',  label: 'Inventory',  icon: Archive,   navId: 'inventory' },
-  { to: '/settings',   label: 'Settings',   icon: Settings,  navId: 'settings'  },
 ];
 
 // Burger menu — secondary
 const SECONDARY: NavItem[] = [
+  { to: '/settings',     label: 'Settings',           icon: Settings, navId: 'settings' },
+  { to: '/profile',      label: 'Profile',            icon: User,     navId: 'profile'  },
   { to: '/decks',        label: 'Decks',              icon: Package,  navId: 'decks'    },
   { to: '/trading',      label: 'Trading',            icon: Repeat,   navId: 'trading'  },
   { to: '/friends',      label: 'Friends',            icon: Users,    navId: 'friends'  },
   { to: '/season-pass',  label: 'Season Pass',        icon: Trophy,   navId: 'season-pass'},
   { to: '/missions',     label: 'Collection Missions',icon: Target,   navId: 'missions' },
   { to: '/leaderboard',  label: 'Leaderboard',        icon: BarChart2,navId: 'leaderboard'},
-  { to: '/profile',      label: 'Profile',            icon: User,     navId: 'profile'  },
 ];
 
 const Navbar: React.FC = () => {
@@ -112,6 +112,14 @@ const Navbar: React.FC = () => {
 
             {/* Notification bell */}
             <NotificationBell />
+
+            {/* Settings quick link */}
+            <NavLink to="/settings"
+              className={({ isActive }) =>
+                `hidden md:flex items-center justify-center w-8 h-8 rounded-lg transition-all ${isActive ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`
+              }>
+              <Settings size={16} />
+            </NavLink>
 
             {/* Profile quick link */}
             <NavLink to="/profile"
