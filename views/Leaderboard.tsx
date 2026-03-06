@@ -5,6 +5,8 @@ import { LeaderboardEntry } from '../types';
 import { Crown, Layers, Zap, Package, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import LoadingSpinner from '../components/LoadingSpinner';
+
 const Leaderboard: React.FC = () => {
   const [type, setType] = useState<'collection' | 'level' | 'packs_opened'>('collection');
   const [data, setData] = useState<LeaderboardEntry[]>([]);
@@ -89,12 +91,7 @@ const Leaderboard: React.FC = () => {
 
       <div className="glass rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-2xl">
         {loading ? (
-             <div className="p-12 text-center text-slate-500">
-               <div className="flex justify-center mb-4">
-                 <div className="animate-spin h-8 w-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
-               </div>
-               LOADING DATA STREAM...
-             </div>
+             <LoadingSpinner message="LOADING DATA STREAM..." />
         ) : data.length === 0 ? (
            <div className="p-12 text-center text-slate-500">No data found for this category.</div>
         ) : (

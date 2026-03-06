@@ -7,6 +7,7 @@ import CardDisplay from '../components/CardDisplay';
 import { ArrowLeftRight, Plus, Search, User, Check, X, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Trading: React.FC = () => {
   const { user, showToast } = useGame();
@@ -135,7 +136,7 @@ const Trading: React.FC = () => {
               <div className="mb-10">
                   <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Pending Offers</h3>
                   {loading ? (
-                      <div className="animate-pulse text-slate-500">Loading trades...</div>
+                      <LoadingSpinner message="LOADING TRADES..." />
                   ) : activeTrades.length === 0 ? (
                       <EmptyState 
                         icon={ArrowLeftRight} 
@@ -202,7 +203,7 @@ const Trading: React.FC = () => {
               </div>
 
               {isLoadingInventory ? (
-                  <div className="flex-1 flex items-center justify-center text-slate-500 animate-pulse">LOADING INVENTORIES...</div>
+                  <LoadingSpinner message="LOADING INVENTORIES..." />
               ) : (
                   <div className="flex-1 flex gap-4 overflow-hidden">
                       {/* My Side */}

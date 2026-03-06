@@ -25,6 +25,8 @@ interface UserPass {
   claimed_tiers: number[];
 }
 
+import LoadingSpinner from '../components/LoadingSpinner';
+
 const REWARD_ICON: Record<string, React.ReactNode> = {
   gold:  <Coins size={15} className="text-yellow-400" />,
   gems:  <Diamond size={15} className="text-cyan-400" />,
@@ -100,7 +102,7 @@ const SeasonPass: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="text-indigo-400 font-mono animate-pulse">LOADING SEASON DATA...</div>
+        <LoadingSpinner message="LOADING SEASON DATA..." />
       </div>
     );
   }

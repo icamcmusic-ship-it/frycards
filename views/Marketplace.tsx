@@ -7,6 +7,8 @@ import { ShoppingCart, Tag, Search, Filter, Plus, DollarSign, Coins, Diamond } f
 import { motion, AnimatePresence } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
 import BidHistoryModal from '../components/BidHistoryModal';
+import ConfirmModal from '../components/ConfirmModal';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Marketplace: React.FC = () => {
   const { user, showToast, refreshDashboard } = useGame();
@@ -16,6 +18,7 @@ const Marketplace: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [confirmListing, setConfirmListing] = useState<MarketListing | null>(null);
 
   // Sell Modal State
   const [selectedCardToSell, setSelectedCardToSell] = useState<Card | null>(null);
@@ -65,11 +68,14 @@ const Marketplace: React.FC = () => {
     if (!user || processing) return;
     if (listing.seller_id === user.id) return showToast("You cannot buy your own listing", "error");
     
-    if (!confirm(`Buy ${listing.card.name} for ${listing.price} ${listing.currency}?`)) return;
+    setConfirmListing(listing);
+  };
 
+  const executeBuy = async () => {
+    if (!confirmListing) return;
     setProcessing(true);
     try {
-      await callEdge('buy-market-item', { listing_id: listing.id });
+      await callEdge('buy-market-item', { listing_id: confirmListing.id });
       showToast('Purchase successful!', 'success');
       refreshDashboard();
       loadListings();
@@ -77,6 +83,7 @@ const Marketplace: React.FC = () => {
       showToast(e.message, 'error');
     } finally {
       setProcessing(false);
+      setConfirmListing(null);
     }
   };
 
@@ -145,9 +152,7 @@ const Marketplace: React.FC = () => {
       </div>
 
       {loading ? (
-         <div className="card-grid">
-            {Array.from({length: 10}).map((_, i) => <div key={i} className="h-64 bg-slate-900 rounded-xl animate-pulse" />)}
-         </div>
+         <LoadingSpinner message="LOADING MARKETPLACE..." />
       ) : activeTab === 'buy' ? (
          <div className="card-grid">
             {filteredListings.length === 0 ? (
@@ -261,6 +266,15 @@ const Marketplace: React.FC = () => {
       </AnimatePresence>
 
       <BidHistoryModal listingId={viewingHistoryId} currency={historyCurrency} onClose={() => setViewingHistoryId(null)} />
+      
+      <ConfirmModal
+        isOpen={!!confirmListing}
+        title="Confirm Purchase"
+        message={`Are you sure you want to buy ${confirmListing?.card?.name} for ${confirmListing?.price} ${confirmListing?.currency}?`}
+        confirmLabel="Buy Now"
+        onConfirm={executeBuy}
+        onCancel={() => setConfirmListing(null)}
+      />
     </div>
   );
 };

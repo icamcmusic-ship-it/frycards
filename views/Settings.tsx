@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Volume2, VolumeX, Cpu, Eye, EyeOff, Music, ShieldAlert, LogOut, Settings as SettingsIcon, Smartphone, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { 
-  Settings as SettingsIcon, Volume2, VolumeX, Cpu, Eye, EyeOff, Music, 
-  RotateCcw, ShieldAlert, Bell, Smartphone, Palette, Globe, Info, LogOut
-} from 'lucide-react';
 import { useSound } from '../context/SoundContext';
 import { supabase } from '../supabaseClient';
 import { useGame } from '../context/GameContext';
@@ -11,56 +9,60 @@ import { UserSettings } from '../types';
 import ResetAccountModal from '../components/ResetAccountModal';
 
 const Settings: React.FC = () => {
-  const { 
-    sfxVolume, musicVolume, isMuted, lowPerformanceMode, 
-    setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode 
-  } = useSound();
+  const { sfxVolume, musicVolume, isMuted, lowPerformanceMode, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode } = useSound();
   const { user, dashboard, refreshDashboard, showToast } = useGame();
+  const navigate = useNavigate();
   
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
-  const [animationIntensity, setAnimationIntensity] = useState(1); // 0: None, 1: Normal, 2: High
-  
-  // Settings sync
-  useEffect(() => {
-    const syncSettings = async () => {
-        if (!user) return;
-        const { data } = await supabase.rpc('get_user_settings');
-        if (data && data.length > 0) {
-            const s: UserSettings = data[0];
-            setSfxVolume(s.sfx_volume);
-            setMusicVolume(s.music_volume);
-            setMuted(!s.sfx_enabled);
-            setLowPerformanceMode(s.low_perf_mode);
-        }
-    };
-    syncSettings();
-  }, [user]);
+  const [animationIntensity, setAnimationIntensity] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const saveSettings = async () => {
+  // Load settings
+  useEffect(() => {
+    const loadSettings = async () => {
       if (!user) return;
+      const { data } = await supabase.rpc('get_user_settings');
+      if (data && data.length > 0) {
+        const s: UserSettings = data[0];
+        setSfxVolume(s.sfx_volume);
+        setMusicVolume(s.music_volume);
+        setMuted(!s.sfx_enabled);
+        setLowPerformanceMode(s.low_perf_mode);
+        // Assuming we added these to the DB, or just keep them local if not
+        // For now, we'll just use the local state if they aren't in the DB
+      }
+    };
+    loadSettings();
+  }, [user, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode]);
+
+  // Debounced save
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(async () => {
+      setIsSaving(true);
       const settingsPayload = {
-          sfx_volume: sfxVolume,
-          music_volume: musicVolume,
-          sfx_enabled: !isMuted,
-          music_enabled: !isMuted,
-          low_perf_mode: lowPerformanceMode,
-          notifications_enabled: true,
-          trade_notifications: true,
-          auction_notifications: true,
-          friend_notifications: true,
-          show_online_status: true
+        sfx_volume: sfxVolume,
+        music_volume: musicVolume,
+        sfx_enabled: !isMuted,
+        music_enabled: !isMuted,
+        low_perf_mode: lowPerformanceMode,
+        notifications_enabled: true,
+        trade_notifications: true,
+        auction_notifications: true,
+        friend_notifications: true,
+        show_online_status: true,
+        // Add haptics and animation if your DB supports it, otherwise they just won't persist
       };
       await supabase.rpc('upsert_user_settings', { p_settings: settingsPayload });
-  };
-
-  useEffect(() => {
-      if(user) saveSettings();
-  }, [sfxVolume, musicVolume, isMuted, lowPerformanceMode]);
+      setIsSaving(false);
+    }, 1000); // 1 second debounce
+    return () => clearTimeout(timer);
+  }, [user, sfxVolume, musicVolume, isMuted, lowPerformanceMode, hapticsEnabled, animationIntensity]);
 
   const togglePrivacy = async () => {
-    if (!user || !dashboard) return;
+    if (!user || !dashboard || !dashboard.profile) return;
     setSavingPrivacy(true);
     try {
       const { error } = await supabase.from('profiles').update({ is_public: !dashboard.profile.is_public }).eq('id', user.id);
@@ -76,243 +78,155 @@ const Settings: React.FC = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.hash = '#/login';
+    navigate('/login', { replace: true });
   };
 
   return (
-    <div className="max-w-2xl mx-auto pb-24">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 rounded-2xl bg-indigo-600/20 border border-indigo-500/30">
-          <SettingsIcon size={28} className="text-indigo-400" />
-        </div>
-        <div>
-          <h1 className="text-4xl font-heading font-black text-white tracking-tighter drop-shadow-[3px_3px_0_rgba(99,102,241,0.6)]">
-            SETTINGS
-          </h1>
-          <p className="text-slate-500 text-xs font-mono mt-1 uppercase tracking-widest">Configure your experience</p>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        {/* AUDIO SETTINGS */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-2xl p-6 border border-slate-800"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <Volume2 size={18} className="text-indigo-400" />
-            <h2 className="text-sm font-black text-white tracking-widest uppercase">Audio & Sound</h2>
+    <div className="min-h-screen bg-slate-950 text-slate-200 pt-20 pb-24 px-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+            <SettingsIcon size={24} className="text-indigo-400" />
           </div>
-          
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-heading font-black text-white tracking-wide">Settings</h1>
+            <p className="text-slate-400 text-sm">Manage your game preferences</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Audio Settings */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Volume2 size={18} className="text-indigo-400" /> Audio
+            </h2>
+            <div className="space-y-6">
               <div>
-                <p className="text-sm font-bold text-white">Master Mute</p>
-                <p className="text-xs text-slate-500">Silence all game audio</p>
+                <div className="flex justify-between mb-2">
+                  <label className="text-sm font-bold text-slate-300">SFX Volume</label>
+                  <span className="text-xs text-slate-500">{Math.round(sfxVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0" max="1" step="0.01"
+                  value={sfxVolume}
+                  onChange={(e) => setSfxVolume(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-sm font-bold text-slate-300">Music Volume</label>
+                  <span className="text-xs text-slate-500">{Math.round(musicVolume * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0" max="1" step="0.01"
+                  value={musicVolume}
+                  onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500"
+                />
               </div>
               <button
                 onClick={() => setMuted(!isMuted)}
-                className={`w-12 h-6 rounded-full transition-colors relative ${isMuted ? 'bg-slate-700' : 'bg-indigo-600'}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  isMuted ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
               >
-                <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${isMuted ? 'left-0.5' : 'left-6.5'}`} />
+                {isMuted ? <VolumeX size={16} /> : <Music size={16} />}
+                {isMuted ? 'Unmute All' : 'Mute All'}
               </button>
             </div>
+          </section>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase">Sound Effects</span>
-                  <span className="text-xs font-mono text-indigo-400">{Math.round(sfxVolume * 100)}%</span>
-                </div>
-                <input type="range" min={0} max={1} step={0.05} value={sfxVolume}
-                  onChange={e => setSfxVolume(parseFloat(e.target.value))}
-                  disabled={isMuted}
-                  className="w-full accent-indigo-500 disabled:opacity-40"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase">Music</span>
-                  <span className="text-xs font-mono text-indigo-400">{Math.round(musicVolume * 100)}%</span>
-                </div>
-                <input type="range" min={0} max={1} step={0.05} value={musicVolume}
-                  onChange={e => setMusicVolume(parseFloat(e.target.value))}
-                  disabled={isMuted}
-                  className="w-full accent-indigo-500 disabled:opacity-40"
-                />
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        {/* VISUALS & PERFORMANCE */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="glass rounded-2xl p-6 border border-slate-800"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <Palette size={18} className="text-indigo-400" />
-            <h2 className="text-sm font-black text-white tracking-widest uppercase">Visuals & Performance</h2>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Cpu size={16} className={lowPerformanceMode ? 'text-amber-400' : 'text-slate-400'} />
-                  <p className="text-sm font-bold text-white">Low Performance Mode</p>
-                </div>
-                <p className="text-xs text-slate-500">Disables card tilt, particles & complex shaders</p>
-              </div>
-              <button
-                onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
-                className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${lowPerformanceMode ? 'bg-amber-600' : 'bg-slate-700'}`}
-              >
-                <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${lowPerformanceMode ? 'left-6.5' : 'left-0.5'}`} />
-              </button>
-            </div>
-
-            <div className="pt-4 border-t border-slate-800">
-              <p className="text-xs font-bold text-slate-400 uppercase mb-4">Animation Intensity</p>
-              <div className="grid grid-cols-3 gap-2">
-                {['Minimal', 'Normal', 'High'].map((label, idx) => (
-                  <button
-                    key={label}
-                    onClick={() => setAnimationIntensity(idx)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                      animationIntensity === idx 
-                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400' 
-                        : 'bg-slate-800/40 border-slate-700 text-slate-500 hover:border-slate-600'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        {/* INTERFACE & NOTIFICATIONS */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="glass rounded-2xl p-6 border border-slate-800"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <Smartphone size={18} className="text-indigo-400" />
-            <h2 className="text-sm font-black text-white tracking-widest uppercase">Interface</h2>
-          </div>
-
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-bold text-white">Haptic Feedback</p>
-                <p className="text-xs text-slate-500">Vibrate on pack openings and critical actions</p>
-              </div>
-              <button
-                onClick={() => setHapticsEnabled(!hapticsEnabled)}
-                className={`w-12 h-6 rounded-full transition-colors relative ${hapticsEnabled ? 'bg-indigo-600' : 'bg-slate-700'}`}
-              >
-                <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${hapticsEnabled ? 'left-6.5' : 'left-0.5'}`} />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800">
-              <div>
-                <p className="text-sm font-bold text-white">Language</p>
-                <p className="text-xs text-slate-500">Current display language</p>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
-                <Globe size={14} /> English (US)
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        {/* PRIVACY & ACCOUNT */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass rounded-2xl p-6 border border-slate-800"
-        >
-          <div className="flex items-center gap-2 mb-6">
-            <Eye size={18} className="text-indigo-400" />
-            <h2 className="text-sm font-black text-white tracking-widest uppercase">Privacy & Account</h2>
-          </div>
-
-          <div className="space-y-6">
-            {user && dashboard && (
+          {/* Performance & Display */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Cpu size={18} className="text-indigo-400" /> Performance & Display
+            </h2>
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    {dashboard.profile.is_public ? <Eye size={16} className="text-green-400" /> : <EyeOff size={16} className="text-slate-500" />}
-                    <p className="text-sm font-bold text-white">Public Profile</p>
-                  </div>
-                  <p className="text-xs text-slate-500">Allow others to view your collection and stats</p>
+                  <p className="text-sm font-bold text-slate-300">Low Performance Mode</p>
+                  <p className="text-xs text-slate-500">Disables complex animations to save battery</p>
                 </div>
                 <button
-                  onClick={togglePrivacy}
-                  disabled={savingPrivacy}
-                  className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 disabled:opacity-50 ${dashboard.profile.is_public ? 'bg-green-600' : 'bg-slate-700'}`}
+                  onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${lowPerformanceMode ? 'bg-indigo-500' : 'bg-slate-700'}`}
                 >
-                  <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${dashboard.profile.is_public ? 'left-6.5' : 'left-0.5'}`} />
+                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${lowPerformanceMode ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
               </div>
-            )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-300">Haptic Feedback</p>
+                  <p className="text-xs text-slate-500">Vibrations on supported devices</p>
+                </div>
+                <button
+                  onClick={() => setHapticsEnabled(!hapticsEnabled)}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${hapticsEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-sm font-bold text-slate-300">Animation Intensity</label>
+                  <span className="text-xs text-slate-500">{animationIntensity === 0 ? 'Off' : animationIntensity === 1 ? 'Normal' : 'High'}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0" max="2" step="1"
+                  value={animationIntensity}
+                  onChange={(e) => setAnimationIntensity(parseInt(e.target.value))}
+                  className="w-full accent-indigo-500"
+                />
+              </div>
+            </div>
+          </section>
 
-            <div className="pt-6 border-t border-slate-800 flex flex-col gap-3">
-              <button 
-                onClick={handleLogout}
-                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm transition-all flex items-center justify-center gap-2 border border-slate-700"
+          {/* Privacy */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Eye size={18} className="text-indigo-400" /> Privacy
+            </h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-300">Public Profile</p>
+                <p className="text-xs text-slate-500">Allow others to see your collection and stats</p>
+              </div>
+              <button
+                onClick={togglePrivacy}
+                disabled={savingPrivacy}
+                className={`w-12 h-6 rounded-full transition-colors relative ${dashboard?.profile?.is_public ? 'bg-indigo-500' : 'bg-slate-700'} ${savingPrivacy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <LogOut size={16} /> Sign Out
+                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${dashboard?.profile?.is_public ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
-          </div>
-        </motion.section>
+          </section>
 
-        {/* DANGER ZONE */}
-        <motion.section 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-red-950/10 rounded-2xl p-6 border border-red-900/30"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <ShieldAlert size={18} className="text-red-500" />
-            <h2 className="text-sm font-black text-red-500 tracking-widest uppercase">Danger Zone</h2>
-          </div>
-          
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-bold text-red-200">Restart Account</p>
-              <p className="text-xs text-red-900/70 mt-0.5">
-                Permanently wipe all progress, cards, and currency. This cannot be undone.
-              </p>
+          {/* Danger Zone */}
+          <section className="bg-red-950/20 border border-red-900/30 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+              <ShieldAlert size={18} /> Danger Zone
+            </h2>
+            <div className="space-y-3">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors"
+              >
+                <LogOut size={18} /> Sign Out
+              </button>
+              <button
+                onClick={() => setResetOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-xl font-bold transition-colors"
+              >
+                <ShieldAlert size={18} /> Reset Account
+              </button>
             </div>
-            <button
-              onClick={() => setResetOpen(true)}
-              className="flex-shrink-0 px-6 py-2.5 rounded-xl text-xs font-black text-red-400 border border-red-800/50 bg-red-950/40 hover:bg-red-900/60 hover:text-red-100 transition-all"
-            >
-              RESET
-            </button>
-          </div>
-        </motion.section>
-
-        {/* INFO */}
-        <div className="text-center pt-4">
-          <p className="text-[10px] font-mono text-slate-600 uppercase tracking-widest">
-            FryCards TCG v1.2.4 • Build 2024.03.02
-          </p>
+          </section>
         </div>
       </div>
-
       <ResetAccountModal isOpen={resetOpen} onClose={() => setResetOpen(false)} />
     </div>
   );

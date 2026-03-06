@@ -6,6 +6,7 @@ import { Deck, Card } from '../types';
 import { Swords, Trophy, Loader2, AlertTriangle } from 'lucide-react';
 import CardDisplay from '../components/CardDisplay';
 import { motion } from 'framer-motion';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const BattleArena: React.FC = () => {
   const { user, showToast } = useGame();
@@ -62,7 +63,7 @@ const BattleArena: React.FC = () => {
        </div>
 
        {loading ? (
-           <div className="animate-spin text-indigo-500"><Loader2 size={48} /></div>
+           <LoadingSpinner message="INITIALIZING ARENA..." />
        ) : userDecks.length === 0 ? (
            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-8 text-center max-w-md">
                <AlertTriangle size={48} className="mx-auto mb-4 text-amber-500" />

@@ -4,6 +4,8 @@ import { useGame } from '../context/GameContext';
 import { supabase } from '../supabaseClient';
 import { Friend, PendingRequest } from '../types';
 import { Users, UserPlus, Search, UserCheck, UserX, Clock, Check, X } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Friends: React.FC = () => {
   const { user, showToast } = useGame();
@@ -13,6 +15,7 @@ const Friends: React.FC = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
   const fetchFriends = async () => {
     setLoading(true);
@@ -62,13 +65,18 @@ const Friends: React.FC = () => {
   };
 
   const removeFriend = async (friendId: string) => {
-      if(!confirm("Are you sure you want to remove this friend?")) return;
-      const { error } = await supabase.rpc('remove_friend', { p_friend_id: friendId });
+      setConfirmRemoveId(friendId);
+  };
+
+  const executeRemoveFriend = async () => {
+      if (!confirmRemoveId) return;
+      const { error } = await supabase.rpc('remove_friend', { p_friend_id: confirmRemoveId });
       if (error) showToast(error.message, 'error');
       else {
           showToast('Friend removed', 'success');
           fetchFriends();
       }
+      setConfirmRemoveId(null);
   };
 
   return (
@@ -98,7 +106,7 @@ const Friends: React.FC = () => {
       </div>
 
       <div className="glass p-8 rounded-2xl border border-slate-700/50 min-h-[400px]">
-        {loading && <div className="text-center py-10 text-slate-500 animate-pulse">SYNCING DATA...</div>}
+        {loading && <LoadingSpinner message="SYNCING DATA..." />}
         
         {!loading && activeTab === 'my_friends' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -173,6 +181,15 @@ const Friends: React.FC = () => {
             </div>
         )}
       </div>
+      
+      <ConfirmModal
+        isOpen={!!confirmRemoveId}
+        title="Remove Friend"
+        message="Are you sure you want to remove this friend?"
+        confirmLabel="Remove"
+        onConfirm={executeRemoveFriend}
+        onCancel={() => setConfirmRemoveId(null)}
+      />
     </div>
   );
 };

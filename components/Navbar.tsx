@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import EnergyBar from './EnergyBar';
-import SettingsModal from './SettingsModal';
 
 interface NavItem { to: string; label: string; icon: React.FC<any>; navId: string; }
 
@@ -32,13 +31,12 @@ const SECONDARY: NavItem[] = [
   { to: '/missions',     label: 'Collection Missions',icon: Target,   navId: 'missions' },
   { to: '/leaderboard',  label: 'Leaderboard',        icon: BarChart2,navId: 'leaderboard'},
   { to: '/profile',      label: 'Profile',            icon: User,     navId: 'profile'  },
+  { to: '/settings',     label: 'Settings',           icon: Settings, navId: 'settings' },
 ];
 
 const Navbar: React.FC = () => {
-  const { user, dashboard } = useGame() as any;
-  const { showToast } = useGame();
+  const { user, dashboard, showToast } = useGame() as any;
   const [menuOpen, setMenuOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -177,10 +175,6 @@ const Navbar: React.FC = () => {
                         <link.icon size={15} /> {link.label}
                       </NavLink>
                     ))}
-                    <button onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors">
-                      <Settings size={15} /> Settings
-                    </button>
                   </div>
 
                   {/* Sign out */}
@@ -197,7 +191,6 @@ const Navbar: React.FC = () => {
         </div>
       </div>
     </nav>
-    <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 };

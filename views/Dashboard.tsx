@@ -6,6 +6,7 @@ import { Trophy, Gift, Zap, Target, Activity, RefreshCw, Sparkles, Flame, User }
 import DailyRewardModal from '../components/DailyRewardModal';
 import { motion } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Dashboard: React.FC = () => {
   const { dashboard, refreshDashboard, user, error, showToast } = useGame();
@@ -31,9 +32,8 @@ const Dashboard: React.FC = () => {
   );
 
   if (!dashboard || !dashboard.profile) return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500">
-       <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-       <p className="font-heading font-bold animate-pulse">CONNECTING...</p>
+    <div className="min-h-[60vh] flex flex-col items-center justify-center">
+       <LoadingSpinner message="CONNECTING..." />
     </div>
   );
 

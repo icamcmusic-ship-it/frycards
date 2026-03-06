@@ -9,6 +9,8 @@ import Navbar from './components/Navbar';
 import Toast from './components/Toast';
 import Login from './views/Login';
 
+import LoadingSpinner from './components/LoadingSpinner';
+
 // ── Lazy-loaded views ──────────────────────────────────────
 const Dashboard          = lazy(() => import('./views/Dashboard'));
 const Collection         = lazy(() => import('./views/Collection'));
@@ -26,19 +28,13 @@ const CollectionMissions = lazy(() => import('./views/CollectionMissions'));
 const Settings           = lazy(() => import('./views/Settings'));
 
 const LoadingScreen = () => (
-  <div className="min-h-screen flex items-center justify-center bg-slate-950">
-    <div className="text-indigo-400 font-mono animate-pulse tracking-widest text-sm">LOADING MODULE...</div>
-  </div>
+  <LoadingSpinner fullScreen message="LOADING MODULE..." />
 );
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useGame();
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
-        <div className="animate-spin h-10 w-10 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
-      </div>
-    );
+    return <LoadingSpinner fullScreen message="AUTHENTICATING..." />;
   }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;

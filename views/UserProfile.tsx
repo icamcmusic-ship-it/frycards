@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'react-router-dom';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface OwnedCosmetic {
   user_item_id: string;
@@ -166,7 +167,7 @@ const UserProfile: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin h-8 w-8 border-3 border-indigo-500 border-t-transparent rounded-full" />
+        <LoadingSpinner message="LOADING PROFILE..." />
       </div>
     );
   }

@@ -5,6 +5,7 @@ import { Quest, Achievement } from '../types';
 import { Target, Trophy, CheckCircle, Lock, RefreshCw, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
+import ConfirmModal from '../components/ConfirmModal';
 
 const QuestsAndAchievements: React.FC = () => {
   const { user, refreshDashboard, dashboard } = useGame();
@@ -12,6 +13,7 @@ const QuestsAndAchievements: React.FC = () => {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [activeTab, setActiveTab] = useState<'quests' | 'achievements'>('quests');
   const [loading, setLoading] = useState(false);
+  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
 
   const fetchData = async () => {
     if (!user) return;
@@ -47,8 +49,11 @@ const QuestsAndAchievements: React.FC = () => {
 
   const handleRefreshQuests = async () => {
     if (!user) return;
-    if (!confirm("Refresh daily quests? This can only be done once per day.")) return;
-    
+    setShowRefreshConfirm(true);
+  };
+
+  const executeRefreshQuests = async () => {
+    if (!user) return;
     setLoading(true);
     try {
       const { error } = await supabase.rpc('assign_daily_quests', { p_user_id: user.id });
@@ -58,6 +63,7 @@ const QuestsAndAchievements: React.FC = () => {
       alert(e.message);
     } finally {
       setLoading(false);
+      setShowRefreshConfirm(false);
     }
   };
 
@@ -108,8 +114,11 @@ const QuestsAndAchievements: React.FC = () => {
             </button>
           </div>
           
-          <div className="grid gap-4">
-             {quests.map(quest => (
+          {loading ? (
+            <LoadingSpinner message="SYNCING DATA..." />
+          ) : (
+            <div className="grid gap-4">
+               {quests.map(quest => (
                <motion.div 
                  initial={{ opacity: 0, y: 10 }}
                  animate={{ opacity: 1, y: 0 }}
@@ -180,7 +189,11 @@ const QuestsAndAchievements: React.FC = () => {
 
       {activeTab === 'achievements' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           {achievements.map(ach => (
+           {loading ? (
+             <div className="col-span-2">
+               <LoadingSpinner message="SYNCING DATA..." />
+             </div>
+           ) : achievements.map(ach => (
              <div 
                key={ach.id}
                className={`relative p-6 rounded-2xl border transition-all ${
@@ -219,6 +232,15 @@ const QuestsAndAchievements: React.FC = () => {
            ))}
         </div>
       )}
+      
+      <ConfirmModal
+        isOpen={showRefreshConfirm}
+        title="Refresh Quests"
+        message="Refresh daily quests? This can only be done once per day."
+        confirmLabel="Refresh"
+        onConfirm={executeRefreshQuests}
+        onCancel={() => setShowRefreshConfirm(false)}
+      />
     </div>
   );
 };

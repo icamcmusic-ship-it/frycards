@@ -6,6 +6,8 @@ import CardDisplay from '../components/CardDisplay';
 import SkeletonCard from '../components/SkeletonCard';
 import { Plus, Trash2, Save, Edit2, AlertCircle, LayoutGrid, Search, Filter, X, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ConfirmModal from '../components/ConfirmModal';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const Decks: React.FC = () => {
   const { user, showToast } = useGame();
@@ -14,6 +16,7 @@ const Decks: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingDeck, setEditingDeck] = useState<Partial<Deck> | null>(null);
   const [deckName, setDeckName] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
   // Builder State
   const [builderLeader, setBuilderLeader] = useState<Card | null>(null);
@@ -101,13 +104,19 @@ const Decks: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-      if (!confirm("Delete this deck?")) return;
+      setConfirmDeleteId(id);
+  };
+
+  const executeDelete = async () => {
+      if (!confirmDeleteId) return;
       try {
-          await supabase.from('decks').delete().eq('id', id);
-          setDecks(prev => prev.filter(d => d.id !== id));
+          await supabase.from('decks').delete().eq('id', confirmDeleteId);
+          setDecks(prev => prev.filter(d => d.id !== confirmDeleteId));
           showToast("Deck deleted", "success");
       } catch (e: any) {
           showToast(e.message, "error");
+      } finally {
+          setConfirmDeleteId(null);
       }
   };
 
@@ -324,9 +333,7 @@ const Decks: React.FC = () => {
               </div>
 
               {loading ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1,2,3].map(i => <div key={i} className="h-40 bg-slate-900 rounded-2xl animate-pulse" />)}
-                  </div>
+                  <LoadingSpinner message="LOADING DECKS..." />
               ) : decks.length === 0 ? (
                   <div className="text-center py-20 border-2 border-dashed border-slate-800 rounded-2xl text-slate-500">
                       <LayoutGrid size={48} className="mx-auto mb-4 opacity-20" />
@@ -353,6 +360,15 @@ const Decks: React.FC = () => {
               )}
           </div>
       )}
+      
+      <ConfirmModal
+        isOpen={!!confirmDeleteId}
+        title="Delete Deck"
+        message="Are you sure you want to delete this deck? This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 };

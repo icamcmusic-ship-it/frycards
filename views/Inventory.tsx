@@ -5,6 +5,7 @@ import { Archive, Package, Sparkles, AlertTriangle, ChevronDown, Box } from 'luc
 import { motion, AnimatePresence } from 'framer-motion';
 import PackOpener from '../components/PackOpener';
 import { PackResult } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface InventoryPack {
   inventory_id: string;
@@ -83,11 +84,7 @@ const Inventory: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="card-grid">
-          {[1,2,3].map(i => (
-            <div key={i} className="h-56 bg-slate-900 rounded-2xl animate-pulse border border-slate-800" />
-          ))}
-        </div>
+        <LoadingSpinner message="LOADING INVENTORY..." />
       ) : packs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-900/50 rounded-2xl border border-slate-800">
           <Box size={48} className="text-slate-700 mb-4" />

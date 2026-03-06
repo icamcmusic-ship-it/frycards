@@ -182,9 +182,7 @@ const Shop: React.FC = () => {
           </div>
 
           {loadingPacks ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1,2,3].map(i => <div key={i} className="h-80 bg-slate-900 rounded-2xl animate-pulse border border-slate-800" />)}
-            </div>
+            <LoadingSpinner message="LOADING PACKS..." />
           ) : packs.length === 0 ? (
             <div className="text-center py-20 border-2 border-dashed border-slate-800 rounded-2xl text-slate-600">
               <Package size={40} className="mx-auto mb-3 opacity-20" /><p className="font-heading text-sm">NO PACKS AVAILABLE</p>
@@ -240,9 +238,7 @@ const Shop: React.FC = () => {
           </div>
 
           {loadingItems ? (
-            <div className={`grid gap-4 ${activeTab === 'card_backs' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
-              {[1,2,3,4,5].map(i => <div key={i} className="h-52 bg-slate-900 rounded-xl animate-pulse border border-slate-800" />)}
-            </div>
+            <LoadingSpinner message="LOADING ITEMS..." />
           ) : items.length === 0 ? (
             <div className="text-center py-20 border-2 border-dashed border-slate-800 rounded-2xl text-slate-600">
               <AlertTriangle size={32} className="mx-auto mb-3 opacity-20" /><p className="font-heading text-sm">NO ITEMS AVAILABLE</p>

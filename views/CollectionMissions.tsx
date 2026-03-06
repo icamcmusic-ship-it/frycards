@@ -7,6 +7,8 @@ import { Target, Trophy, CheckCircle, Lock, RefreshCw, Star, Coins, Diamond, Zap
 import { motion } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
 
+import LoadingSpinner from '../components/LoadingSpinner';
+
 const DIFF_STYLES: Record<string, string> = {
   easy:      'text-green-400 bg-green-400/10 border-green-400/20',
   medium:    'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
@@ -191,7 +193,7 @@ const CollectionMissions: React.FC = () => {
             </button>
           </div>
           {loading ? (
-            <div className="text-center py-10 text-slate-500 animate-pulse">SYNCING DATA...</div>
+            <LoadingSpinner message="SYNCING DATA..." />
           ) : quests.length === 0 ? (
             <div className="text-center py-16 text-slate-600 border-2 border-dashed border-slate-800 rounded-2xl">
               <Star size={32} className="mx-auto mb-3 opacity-20" />
@@ -249,7 +251,9 @@ const CollectionMissions: React.FC = () => {
       {activeTab === 'achievements' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {loading ? (
-            <div className="col-span-2 text-center py-10 text-slate-500 animate-pulse">SYNCING DATA...</div>
+            <div className="col-span-2">
+              <LoadingSpinner message="SYNCING DATA..." />
+            </div>
           ) : achievements.length === 0 ? (
             <div className="col-span-2 text-center py-16 text-slate-600 border-2 border-dashed border-slate-800 rounded-2xl">
               <Trophy size={32} className="mx-auto mb-3 opacity-20" />

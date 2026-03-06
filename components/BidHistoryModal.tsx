@@ -5,6 +5,8 @@ import { supabase } from '../supabaseClient';
 import { useGame } from '../context/GameContext';
 import { BidRecord } from '../types';
 
+import LoadingSpinner from './LoadingSpinner';
+
 interface BidHistoryModalProps {
   listingId: string | null;
   currency: 'gold' | 'gems';
@@ -26,13 +28,15 @@ const BidHistoryModal: React.FC<BidHistoryModalProps> = ({ listingId, currency, 
       });
   }, [listingId]);
 
-  const timeAgo = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime();
+  const timeAgo = (ts: string, now: number) => {
+    const diff = now - new Date(ts).getTime();
     const m = Math.floor(diff / 60000);
     if (m < 1) return 'just now';
     if (m < 60) return `${m}m ago`;
     return `${Math.floor(m / 60)}h ago`;
   };
+
+  const now = Date.now();
 
   return (
     <AnimatePresence>
@@ -52,7 +56,7 @@ const BidHistoryModal: React.FC<BidHistoryModalProps> = ({ listingId, currency, 
             </div>
 
             {loading ? (
-              <div className="py-10 text-center text-indigo-400 font-mono animate-pulse text-sm">LOADING...</div>
+              <LoadingSpinner message="LOADING..." />
             ) : bids.length === 0 ? (
               <div className="py-10 text-center text-slate-600">
                 <Gavel size={32} className="mx-auto mb-2 opacity-20" />
