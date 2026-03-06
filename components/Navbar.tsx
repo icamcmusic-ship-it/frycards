@@ -20,6 +20,7 @@ const PRIMARY: NavItem[] = [
   { to: '/battle',     label: 'Battle',     icon: Swords,    navId: 'battle'    },
   { to: '/marketplace',label: 'Market',     icon: BarChart2, navId: 'market'    },
   { to: '/inventory',  label: 'Inventory',  icon: Archive,   navId: 'inventory' },
+  { to: '/settings',   label: 'Settings',   icon: Settings,  navId: 'settings'  },
 ];
 
 // Burger menu — secondary
@@ -31,7 +32,6 @@ const SECONDARY: NavItem[] = [
   { to: '/missions',     label: 'Collection Missions',icon: Target,   navId: 'missions' },
   { to: '/leaderboard',  label: 'Leaderboard',        icon: BarChart2,navId: 'leaderboard'},
   { to: '/profile',      label: 'Profile',            icon: User,     navId: 'profile'  },
-  { to: '/settings',     label: 'Settings',           icon: Settings, navId: 'settings' },
 ];
 
 const Navbar: React.FC = () => {
