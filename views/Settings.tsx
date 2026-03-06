@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, Cpu, Eye, EyeOff, Music, ShieldAlert, LogOut, Settings as SettingsIcon, Smartphone, Zap } from 'lucide-react';
+import { Volume2, VolumeX, Cpu, Music, ShieldAlert, LogOut, Settings as SettingsIcon, Smartphone, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSound } from '../context/SoundContext';
 import { supabase } from '../supabaseClient';
@@ -12,39 +12,38 @@ const Settings: React.FC = () => {
   const { sfxVolume, musicVolume, isMuted, lowPerformanceMode, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode } = useSound();
   const { user, dashboard, refreshDashboard, showToast } = useGame();
   const navigate = useNavigate();
-  
+
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [animationIntensity, setAnimationIntensity] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load settings
+  // Load settings — DB stores volumes as integers 0-100; SoundContext uses 0.0-1.0 floats
   useEffect(() => {
     const loadSettings = async () => {
       if (!user) return;
       const { data } = await supabase.rpc('get_user_settings');
       if (data && data.length > 0) {
         const s: UserSettings = data[0];
-        setSfxVolume(s.sfx_volume);
-        setMusicVolume(s.music_volume);
+        // FIX: divide by 100 to convert DB integer (0-100) → float (0.0-1.0)
+        setSfxVolume(s.sfx_volume / 100);
+        setMusicVolume(s.music_volume / 100);
         setMuted(!s.sfx_enabled);
         setLowPerformanceMode(s.low_perf_mode);
-        // Assuming we added these to the DB, or just keep them local if not
-        // For now, we'll just use the local state if they aren't in the DB
       }
     };
     loadSettings();
   }, [user, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode]);
 
-  // Debounced save
+  // Debounced save — multiply by 100 to convert float (0.0-1.0) → DB integer (0-100)
   useEffect(() => {
     if (!user) return;
     const timer = setTimeout(async () => {
       setIsSaving(true);
       const settingsPayload = {
-        sfx_volume: sfxVolume,
-        music_volume: musicVolume,
+        sfx_volume: Math.round(sfxVolume * 100),    // FIX: 0.0-1.0 → 0-100
+        music_volume: Math.round(musicVolume * 100), // FIX: 0.0-1.0 → 0-100
         sfx_enabled: !isMuted,
         music_enabled: !isMuted,
         low_perf_mode: lowPerformanceMode,
@@ -53,11 +52,10 @@ const Settings: React.FC = () => {
         auction_notifications: true,
         friend_notifications: true,
         show_online_status: true,
-        // Add haptics and animation if your DB supports it, otherwise they just won't persist
       };
       await supabase.rpc('upsert_user_settings', { p_settings: settingsPayload });
       setIsSaving(false);
-    }, 1000); // 1 second debounce
+    }, 1000);
     return () => clearTimeout(timer);
   }, [user, sfxVolume, musicVolume, isMuted, lowPerformanceMode, hapticsEnabled, animationIntensity]);
 
@@ -65,7 +63,10 @@ const Settings: React.FC = () => {
     if (!user || !dashboard || !dashboard.profile) return;
     setSavingPrivacy(true);
     try {
-      const { error } = await supabase.from('profiles').update({ is_public: !dashboard.profile.is_public }).eq('id', user.id);
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_public: !dashboard.profile.is_public })
+        .eq('id', user.id);
       if (error) throw error;
       await refreshDashboard();
       showToast(`Profile is now ${!dashboard.profile.is_public ? 'Public' : 'Private'}`, 'success');
@@ -92,6 +93,9 @@ const Settings: React.FC = () => {
             <h1 className="text-3xl font-heading font-black text-white tracking-wide">Settings</h1>
             <p className="text-slate-400 text-sm">Manage your game preferences</p>
           </div>
+          {isSaving && (
+            <span className="ml-auto text-xs text-slate-500 animate-pulse">Saving…</span>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -172,13 +176,15 @@ const Settings: React.FC = () => {
               <div>
                 <div className="flex justify-between mb-2">
                   <label className="text-sm font-bold text-slate-300">Animation Intensity</label>
-                  <span className="text-xs text-slate-500">{animationIntensity === 0 ? 'Off' : animationIntensity === 1 ? 'Normal' : 'High'}</span>
+                  <span className="text-xs text-slate-500">
+                    {animationIntensity === 0 ? 'Off' : animationIntensity === 1 ? 'Normal' : 'High'}
+                  </span>
                 </div>
                 <input
                   type="range"
                   min="0" max="2" step="1"
                   value={animationIntensity}
-                  onChange={(e) => setAnimationIntensity(parseInt(e.target.value))}
+                  onChange={(e) => setAnimationIntensity(Number(e.target.value))}
                   className="w-full accent-indigo-500"
                 />
               </div>
@@ -188,45 +194,46 @@ const Settings: React.FC = () => {
           {/* Privacy */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Eye size={18} className="text-indigo-400" /> Privacy
+              <ShieldAlert size={18} className="text-indigo-400" /> Privacy
             </h2>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-bold text-slate-300">Public Profile</p>
-                <p className="text-xs text-slate-500">Allow others to see your collection and stats</p>
+                <p className="text-xs text-slate-500">Allow other players to view your profile</p>
               </div>
               <button
                 onClick={togglePrivacy}
                 disabled={savingPrivacy}
-                className={`w-12 h-6 rounded-full transition-colors relative ${dashboard?.profile?.is_public ? 'bg-indigo-500' : 'bg-slate-700'} ${savingPrivacy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-12 h-6 rounded-full transition-colors relative disabled:opacity-50 ${dashboard?.profile?.is_public ? 'bg-indigo-500' : 'bg-slate-700'}`}
               >
                 <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${dashboard?.profile?.is_public ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
           </section>
 
-          {/* Danger Zone */}
-          <section className="bg-red-950/20 border border-red-900/30 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
-              <ShieldAlert size={18} /> Danger Zone
+          {/* Account */}
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <SettingsIcon size={18} className="text-indigo-400" /> Account
             </h2>
             <div className="space-y-3">
               <button
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors"
+                onClick={() => setResetOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-red-900/20 border border-red-800/50 text-red-400 rounded-xl font-bold text-sm hover:bg-red-900/40 transition-colors"
               >
-                <LogOut size={18} /> Sign Out
+                <ShieldAlert size={16} /> Reset Account
               </button>
               <button
-                onClick={() => setResetOpen(true)}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 rounded-xl font-bold transition-colors"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-slate-400 rounded-xl font-bold text-sm hover:bg-slate-700 hover:text-white transition-colors"
               >
-                <ShieldAlert size={18} /> Reset Account
+                <LogOut size={16} /> Sign Out
               </button>
             </div>
           </section>
         </div>
       </div>
+
       <ResetAccountModal isOpen={resetOpen} onClose={() => setResetOpen(false)} />
     </div>
   );

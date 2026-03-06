@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useGame } from '../context/GameContext';
 import {
   Home, Package, Layers, Swords, ShoppingBag, BarChart2,
-  Users, Repeat, User, Trophy, Menu, X, ChevronDown,
-  Coins, Diamond, Bell, Settings, Archive, Target, LogOut, Zap
+  Users, Repeat, User, Trophy, Menu, X,
+  Coins, Diamond, Settings, Archive, Target, LogOut
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import EnergyBar from './EnergyBar';
@@ -14,24 +13,24 @@ interface NavItem { to: string; label: string; icon: React.FC<any>; navId: strin
 
 // Primary nav — always visible
 const PRIMARY: NavItem[] = [
-  { to: '/',           label: 'Home',       icon: Home,      navId: 'home'      },
-  { to: '/shop',       label: 'Shop',       icon: ShoppingBag, navId: 'shop'   },
-  { to: '/collection', label: 'Collection', icon: Layers,    navId: 'collection'},
-  { to: '/battle',     label: 'Battle',     icon: Swords,    navId: 'battle'    },
-  { to: '/marketplace',label: 'Market',     icon: BarChart2, navId: 'market'    },
-  { to: '/inventory',  label: 'Inventory',  icon: Archive,   navId: 'inventory' },
+  { to: '/',           label: 'Home',       icon: Home,        navId: 'home'       },
+  { to: '/shop',       label: 'Shop',       icon: ShoppingBag, navId: 'shop'       },
+  { to: '/collection', label: 'Collection', icon: Layers,      navId: 'collection' },
+  { to: '/battle',     label: 'Battle',     icon: Swords,      navId: 'battle'     },
+  { to: '/marketplace',label: 'Market',     icon: BarChart2,   navId: 'market'     },
+  { to: '/inventory',  label: 'Inventory',  icon: Archive,     navId: 'inventory'  },
 ];
 
-// Burger menu — secondary
+// Burger menu — secondary (Settings is here, not in the top-bar)
 const SECONDARY: NavItem[] = [
-  { to: '/settings',     label: 'Settings',           icon: Settings, navId: 'settings' },
-  { to: '/profile',      label: 'Profile',            icon: User,     navId: 'profile'  },
-  { to: '/decks',        label: 'Decks',              icon: Package,  navId: 'decks'    },
-  { to: '/trading',      label: 'Trading',            icon: Repeat,   navId: 'trading'  },
-  { to: '/friends',      label: 'Friends',            icon: Users,    navId: 'friends'  },
-  { to: '/season-pass',  label: 'Season Pass',        icon: Trophy,   navId: 'season-pass'},
-  { to: '/missions',     label: 'Collection Missions',icon: Target,   navId: 'missions' },
-  { to: '/leaderboard',  label: 'Leaderboard',        icon: BarChart2,navId: 'leaderboard'},
+  { to: '/settings',    label: 'Settings',            icon: Settings, navId: 'settings'    },
+  { to: '/profile',     label: 'Profile',             icon: User,     navId: 'profile'     },
+  { to: '/decks',       label: 'Decks',               icon: Package,  navId: 'decks'       },
+  { to: '/trading',     label: 'Trading',             icon: Repeat,   navId: 'trading'     },
+  { to: '/friends',     label: 'Friends',             icon: Users,    navId: 'friends'     },
+  { to: '/season-pass', label: 'Season Pass',         icon: Trophy,   navId: 'season-pass' },
+  { to: '/missions',    label: 'Collection Missions', icon: Target,   navId: 'missions'    },
+  { to: '/leaderboard', label: 'Leaderboard',         icon: BarChart2,navId: 'leaderboard' },
 ];
 
 const Navbar: React.FC = () => {
@@ -94,7 +93,7 @@ const Navbar: React.FC = () => {
             ))}
           </div>
 
-          {/* Right side: currency + energy + bell + burger */}
+          {/* Right side: currency + energy + bell + profile + burger */}
           <div className="flex items-center gap-2 ml-auto">
             {/* Currency */}
             <div className="hidden sm:flex items-center gap-3 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5">
@@ -113,14 +112,6 @@ const Navbar: React.FC = () => {
             {/* Notification bell */}
             <NotificationBell />
 
-            {/* Settings quick link */}
-            <NavLink to="/settings"
-              className={({ isActive }) =>
-                `hidden md:flex items-center justify-center w-8 h-8 rounded-lg transition-all ${isActive ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`
-              }>
-              <Settings size={16} />
-            </NavLink>
-
             {/* Profile quick link */}
             <NavLink to="/profile"
               className={({ isActive }) =>
@@ -133,7 +124,7 @@ const Navbar: React.FC = () => {
               )}
             </NavLink>
 
-            {/* Burger menu */}
+            {/* Burger menu — Settings lives here */}
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen(v => !v)}
@@ -171,7 +162,7 @@ const Navbar: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* Secondary links */}
+                  {/* Secondary links (Settings is first) */}
                   <div className="py-1">
                     {SECONDARY.map(link => (
                       <NavLink key={link.to} to={link.to} onClick={() => setMenuOpen(false)}
