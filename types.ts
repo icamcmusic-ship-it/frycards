@@ -268,8 +268,10 @@ export interface TradeOffer {
   receiver_username: string;
   sender_cards: Card[]; 
   sender_gold: number;
+  sender_gems: number;
   receiver_cards: Card[];
   receiver_gold: number;
+  receiver_gems: number;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired';
   created_at: string;
   expires_at: string;

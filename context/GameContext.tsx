@@ -44,7 +44,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Toast System
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
-    const id = Math.random().toString(36).substring(7);
+    const id = crypto.randomUUID();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -92,23 +92,25 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Fetch Missions via robust RPC
       let finalMissions = [];
-      // Fixed: use new RPC that ensures missions exist
-      const { data: missions, error: missionsError } = await supabase.rpc('ensure_and_get_daily_missions');
-      
-      if (!missionsError && missions) {
-        finalMissions = missions;
-      } else {
-        // Fallback: check table directly
-        try {
-           const { data: fallbackMissions } = await supabase
-              .from('daily_missions')
-              .select('*')
-              .eq('user_id', user.id)
-              .gte('created_at', new Date().toISOString().split('T')[0]);
-           finalMissions = fallbackMissions || [];
-        } catch (e) {
-           console.warn('Mission fallback also failed', e);
-           finalMissions = [];
+      if (!user.is_anonymous) {
+        // Fixed: use new RPC that ensures missions exist
+        const { data: missions, error: missionsError } = await supabase.rpc('ensure_and_get_daily_missions');
+        
+        if (!missionsError && missions) {
+          finalMissions = missions;
+        } else {
+          // Fallback: check table directly
+          try {
+             const { data: fallbackMissions } = await supabase
+                .from('daily_missions')
+                .select('*')
+                .eq('user_id', user.id)
+                .gte('created_at', new Date().toISOString().split('T')[0]);
+             finalMissions = fallbackMissions || [];
+          } catch (e) {
+             console.warn('Mission fallback also failed', e);
+             finalMissions = [];
+          }
         }
       }
 

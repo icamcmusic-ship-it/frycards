@@ -58,6 +58,11 @@ const Decks: React.FC = () => {
     // Rehydrate cards from IDs
     const leader = collection.find(c => c.id === deck.leader_id) || null;
     const cards = deck.card_ids.map(id => collection.find(c => c.id === id)).filter(Boolean) as Card[];
+    
+    if (cards.length !== deck.card_ids.length) {
+        showToast("Some cards in this deck are missing from your collection and have been removed.", "error");
+    }
+    
     setBuilderLeader(leader);
     setBuilderCards(cards);
   };
@@ -70,13 +75,14 @@ const Decks: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!user || !builderLeader) return showToast("You must select a Leader", "error");
-    if (builderCards.length < 5) return showToast("Deck needs at least 5 cards", "error"); // Minimal rule for now
+    if (!user) return;
+    const validation = validateDeck(builderLeader, builderCards);
+    if (!validation.isValid) return showToast(validation.error || "Invalid deck", "error");
 
     const cardIds = builderCards.map(c => c.id);
     const payload = {
         name: deckName,
-        leader_id: builderLeader.id,
+        leader_id: builderLeader!.id,
         card_ids: cardIds,
         user_id: user.id
     };
@@ -127,10 +133,21 @@ const Decks: React.FC = () => {
           setBuilderCards(prev => prev.filter(c => c.id !== card.id));
       } else {
           // Guard: Only leaders can be in the leader slot, and only non-leaders in main deck
-          if (builderCards.find(c => c.id === card.id)) {
-              setBuilderCards(prev => prev.filter(c => c.id !== card.id));
+          const existingCount = builderCards.filter(c => c.id === card.id).length;
+          const totalOwned = (card.quantity || 0) + (card.foil_quantity || 0);
+          
+          if (existingCount > 0) {
+              setBuilderCards(prev => {
+                  // Remove only one instance
+                  const index = prev.findIndex(c => c.id === card.id);
+                  if (index === -1) return prev;
+                  const next = [...prev];
+                  next.splice(index, 1);
+                  return next;
+              });
           } else {
               if (builderCards.length >= 30) return showToast("Max 30 cards", "error");
+              if (existingCount >= totalOwned) return showToast("You don't have enough copies of this card", "error");
               setBuilderCards(prev => [...prev, card]);
           }
       }
@@ -171,9 +188,28 @@ const Decks: React.FC = () => {
       return matchesSearch && matchesRarity && matchesElement && matchesCost;
   });
 
-  const deckCount = builderCards.length;
-  const isDeckFull = deckCount >= 30;
-  const isDeckValid = deckCount >= 5 && deckCount <= 30 && builderLeader;
+  const validateDeck = (leader: Card | null, cards: Card[]): { isValid: boolean; error?: string } => {
+    if (!leader) return { isValid: false, error: "Leader required" };
+    if (cards.length < 5 || cards.length > 30) return { isValid: false, error: "Deck must have 5-30 cards" };
+
+    // Element matching
+    const invalidCards = cards.filter(c => c.element !== leader.element && c.element !== 'neutral');
+    if (invalidCards.length > 0) return { isValid: false, error: `Cards must match leader element (${leader.element})` };
+
+    // Rarity limits
+    const rarityLimits: Record<string, number> = { 'Common': 3, 'Uncommon': 3, 'Rare': 2, 'Super-Rare': 2, 'Mythic': 1, 'Divine': 1 };
+    const counts: Record<string, number> = {};
+    for (const card of cards) {
+        counts[card.id] = (counts[card.id] || 0) + 1;
+        const limit = rarityLimits[card.rarity] || 3;
+        if (counts[card.id] > limit) return { isValid: false, error: `Too many copies of ${card.name} (${limit} max)` };
+    }
+
+    return { isValid: true };
+  };
+
+  const validation = validateDeck(builderLeader, builderCards);
+  const isDeckValid = validation.isValid;
 
   return (
     <div className="container mx-auto pb-24">

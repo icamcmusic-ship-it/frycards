@@ -91,6 +91,14 @@ const PackOpener: React.FC<PackOpenerProps> = ({ packResult, onClose, packImage 
   useEffect(() => {
     if (!packResult) return;
 
+    // Stop any currently playing sounds
+    Object.values(sfx).forEach(audio => {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+    });
+
     // Start with shaking
     setStage('shaking');
     
@@ -115,7 +123,7 @@ const PackOpener: React.FC<PackOpenerProps> = ({ packResult, onClose, packImage 
     }, 1200);
 
     return () => clearTimeout(t1);
-  }, [packResult, sfx]);
+  }, [packResult, sfx, skipAnimation]);
 
   // Transition to Stack only when images are ready
   useEffect(() => {

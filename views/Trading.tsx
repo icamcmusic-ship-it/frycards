@@ -22,7 +22,17 @@ const Trading: React.FC = () => {
   const [partnerInventory, setPartnerInventory] = useState<Card[]>([]);
   const [myOffer, setMyOffer] = useState<Card[]>([]);
   const [partnerOffer, setPartnerOffer] = useState<Card[]>([]);
+  const [myGold, setMyGold] = useState(0);
+  const [myGems, setMyGems] = useState(0);
+  const [partnerGold, setPartnerGold] = useState(0);
+  const [partnerGems, setPartnerGems] = useState(0);
   const [isLoadingInventory, setIsLoadingInventory] = useState(false);
+
+  const [friendSearchTerm, setFriendSearchTerm] = useState('');
+  
+  const filteredFriends = friends.filter(f => 
+    f.username.toLowerCase().includes(friendSearchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -99,12 +109,15 @@ const Trading: React.FC = () => {
               receiver_id: selectedFriend.friend_id,
               sender_cards: myOffer.map(c => c.id),
               receiver_cards: partnerOffer.map(c => c.id),
-              sender_gold: 0,
-              receiver_gold: 0
+              sender_gold: myGold,
+              sender_gems: myGems,
+              receiver_gold: partnerGold,
+              receiver_gems: partnerGems
           });
           showToast("Trade offer sent!", "success");
           setCreating(false);
           setMyOffer([]); setPartnerOffer([]); setSelectedFriend(null);
+          setMyGold(0); setMyGems(0); setPartnerGold(0); setPartnerGems(0);
           fetchTrades();
       } catch (e: any) {
           showToast(e.message, "error");
@@ -177,9 +190,17 @@ const Trading: React.FC = () => {
 
               {/* Friends List */}
               <div>
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Start New Trade</h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Start New Trade</h3>
+                    <input 
+                      placeholder="Search friends..." 
+                      value={friendSearchTerm}
+                      onChange={e => setFriendSearchTerm(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      {friends.map(friend => (
+                      {filteredFriends.map(friend => (
                           <div key={friend.id} onClick={() => initCreate(friend)} className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:border-indigo-500 transition-colors">
                               <div className="w-10 h-10 rounded-full bg-slate-800 overflow-hidden">
                                   {friend.avatar_url ? <img src={friend.avatar_url} className="w-full h-full object-cover" /> : <User className="m-auto mt-2 text-slate-600"/>}
@@ -223,7 +244,11 @@ const Trading: React.FC = () => {
                           </div>
                           <div className="h-40 bg-slate-900 border border-indigo-500/30 rounded-xl p-4">
                               <h3 className="text-xs font-bold text-indigo-400 uppercase mb-2">My Offer ({myOffer.length}/5)</h3>
-                              <div className="flex gap-2 overflow-x-auto">
+                              <div className="flex gap-2">
+                                  <input type="number" value={myGold} onChange={e => setMyGold(Number(e.target.value))} placeholder="Gold" className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs" />
+                                  <input type="number" value={myGems} onChange={e => setMyGems(Number(e.target.value))} placeholder="Gems" className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs" />
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto mt-2">
                                   {myOffer.map(card => (
                                       <div key={card.id} onClick={() => toggleMyOffer(card)} className="w-20 flex-shrink-0 cursor-pointer hover:opacity-80">
                                           <CardDisplay card={card} size="sm" />
@@ -250,7 +275,11 @@ const Trading: React.FC = () => {
                           </div>
                           <div className="h-40 bg-slate-900 border border-indigo-500/30 rounded-xl p-4">
                               <h3 className="text-xs font-bold text-indigo-400 uppercase mb-2">Their Offer ({partnerOffer.length}/5)</h3>
-                              <div className="flex gap-2 overflow-x-auto">
+                              <div className="flex gap-2">
+                                  <input type="number" value={partnerGold} onChange={e => setPartnerGold(Number(e.target.value))} placeholder="Gold" className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs" />
+                                  <input type="number" value={partnerGems} onChange={e => setPartnerGems(Number(e.target.value))} placeholder="Gems" className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-xs" />
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto mt-2">
                                   {partnerOffer.map(card => (
                                       <div key={card.id} onClick={() => togglePartnerOffer(card)} className="w-20 flex-shrink-0 cursor-pointer hover:opacity-80">
                                           <CardDisplay card={card} size="sm" />

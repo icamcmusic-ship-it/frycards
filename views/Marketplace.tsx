@@ -37,6 +37,7 @@ const Marketplace: React.FC = () => {
   const [selectedCardToSell, setSelectedCardToSell] = useState<Card | null>(null);
   const [sellPrice, setSellPrice] = useState<number>(100);
   const [sellCurrency, setSellCurrency] = useState<'gold' | 'gems'>('gold');
+  const [listingType, setListingType] = useState<'fixed_price' | 'auction'>('fixed_price');
 
   // Quicksell confirmation state
   const [quicksellCard, setQuicksellCard] = useState<Card | null>(null);
@@ -45,17 +46,25 @@ const Marketplace: React.FC = () => {
   const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null);
   const [historyCurrency, setHistoryCurrency] = useState<'gold' | 'gems'>('gold');
 
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+
   useEffect(() => {
-    if (activeTab === 'buy') loadListings();
+    if (activeTab === 'buy') loadListings(true);
     else loadUserCards();
   }, [activeTab, user]);
 
-  const loadListings = async () => {
+  const loadListings = async (reset = false) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_active_listings', { p_limit: 50, p_offset: 0 });
+      const newOffset = reset ? 0 : offset;
+      const { data, error } = await supabase.rpc('get_active_listings', { p_limit: 50, p_offset: newOffset });
       if (error) throw error;
-      setListings(data || []);
+      
+      const newListings = data || [];
+      setListings(reset ? newListings : [...listings, ...newListings]);
+      setHasMore(newListings.length === 50);
+      setOffset(newOffset + 50);
     } catch (e: any) {
       console.error(e);
       showToast('Failed to load listings', 'error');
@@ -121,7 +130,7 @@ const Marketplace: React.FC = () => {
       await callEdge('buy-market-item', { listing_id: confirmListing.id });
       showToast('Purchase successful!', 'success');
       refreshDashboard();
-      loadListings();
+      loadListings(true);
     } catch (e: any) {
       showToast(e.message, 'error');
     } finally {
@@ -150,8 +159,8 @@ const Marketplace: React.FC = () => {
         card_id: userCardData.id,
         price: sellPrice,
         currency: sellCurrency,
-        listing_type: 'fixed_price',
-        duration_days: 3,
+        listing_type: listingType,
+        duration_days: listingType === 'auction' ? 1 : 3, // Auctions usually shorter
       });
       showToast('Listing created successfully!', 'success');
       setSelectedCardToSell(null);
@@ -208,53 +217,65 @@ const Marketplace: React.FC = () => {
         />
       </div>
 
-      {loading ? (
+      {loading && listings.length === 0 ? (
         <LoadingSpinner message="LOADING MARKETPLACE..." />
       ) : activeTab === 'buy' ? (
-        <div className="card-grid">
-          {filteredListings.length === 0 ? (
-            <div className="col-span-full text-center py-20 text-slate-500">No listings found.</div>
-          ) : filteredListings.map(listing => (
-            <div key={listing.id} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50 hover:border-indigo-500/50 transition-all group">
-              <div className="flex gap-4">
-                <div className="w-1/3">
-                  <div className="aspect-[2/3] relative">
-                    <CardDisplay card={listing.card} size="sm" isFlipped={true} />
-                  </div>
-                </div>
-                <div className="flex-1 flex flex-col justify-between py-1">
-                  <div>
-                    <h3 className="font-bold text-white leading-tight">{listing.card.name}</h3>
-                    <p className="text-xs text-slate-500 mb-2">Seller: {listing.seller_username}</p>
-                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${listing.currency === 'gold' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-cyan-900/20 text-cyan-400'}`}>
-                      {listing.currency === 'gold' ? <Coins size={12} /> : <Diamond size={12} />}
-                      {listing.price.toLocaleString()}
+        <>
+          <div className="card-grid">
+            {filteredListings.length === 0 ? (
+              <div className="col-span-full text-center py-20 text-slate-500">No listings found.</div>
+            ) : filteredListings.map(listing => (
+              <div key={listing.id} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50 hover:border-indigo-500/50 transition-all group">
+                <div className="flex gap-4">
+                  <div className="w-1/3">
+                    <div className="aspect-[2/3] relative">
+                      <CardDisplay card={listing.card} size="sm" isFlipped={true} />
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2 mt-2">
-                    {listing.seller_id !== user?.id && (
-                      <button
-                        onClick={() => handleBuy(listing)}
-                        disabled={processing}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95"
-                      >
-                        BUY NOW
-                      </button>
-                    )}
-                    {listing.listing_type === 'auction' && (
-                      <button
-                        onClick={() => { setViewingHistoryId(listing.id); setHistoryCurrency(listing.currency); }}
-                        className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all"
-                      >
-                        VIEW BIDS
-                      </button>
-                    )}
+                  <div className="flex-1 flex flex-col justify-between py-1">
+                    <div>
+                      <h3 className="font-bold text-white leading-tight">{listing.card.name}</h3>
+                      <p className="text-xs text-slate-500 mb-2">Seller: {listing.seller_username}</p>
+                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${listing.currency === 'gold' ? 'bg-yellow-900/20 text-yellow-400' : 'bg-cyan-900/20 text-cyan-400'}`}>
+                        {listing.currency === 'gold' ? <Coins size={12} /> : <Diamond size={12} />}
+                        {listing.price.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 mt-2">
+                      {listing.seller_id !== user?.id && (
+                        <button
+                          onClick={() => handleBuy(listing)}
+                          disabled={processing}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95"
+                        >
+                          BUY NOW
+                        </button>
+                      )}
+                      {listing.listing_type === 'auction' && (
+                        <button
+                          onClick={() => { setViewingHistoryId(listing.id); setHistoryCurrency(listing.currency); }}
+                          className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all"
+                        >
+                          VIEW BIDS
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
+            ))}
+          </div>
+          {hasMore && (
+            <div className="mt-8 text-center">
+              <button 
+                onClick={() => loadListings()}
+                className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-sm transition-all"
+              >
+                LOAD MORE
+              </button>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       ) : (
         <div className="card-grid">
           {filteredUserCards.length === 0 ? (
@@ -291,6 +312,17 @@ const Marketplace: React.FC = () => {
                   </p>
 
                   <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Listing Type</label>
+                      <div className="flex gap-2">
+                        <button onClick={() => setListingType('fixed_price')} className={`flex-1 py-2 rounded-lg text-xs font-bold border ${listingType === 'fixed_price' ? 'bg-indigo-900/20 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                          FIXED
+                        </button>
+                        <button onClick={() => setListingType('auction')} className={`flex-1 py-2 rounded-lg text-xs font-bold border ${listingType === 'auction' ? 'bg-indigo-900/20 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
+                          AUCTION
+                        </button>
+                      </div>
+                    </div>
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Price</label>
                       <input

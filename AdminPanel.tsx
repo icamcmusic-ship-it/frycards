@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../supabaseClient';
-import { useGame } from '../context/GameContext';
+import { supabase } from './supabaseClient';
+import { useGame } from './context/GameContext';
 import {
   ShieldAlert, Upload, Plus, Trash2, Edit2, Save, X, RefreshCw,
   Image as ImageIcon, Package, Layers, ShoppingBag, Database,
   ChevronDown, ChevronUp, Check, Video, FileImage, Users, Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import LoadingSpinner from '../components/LoadingSpinner';
+import LoadingSpinner from './components/LoadingSpinner';
 
 // ─────────────────────────────────────────────────────────────
 // Types
