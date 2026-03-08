@@ -1,77 +1,90 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, Cpu, Music, ShieldAlert, LogOut, Settings as SettingsIcon, Smartphone, Zap } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useSound } from '../context/SoundContext';
-import { supabase } from '../supabaseClient';
+import React, { useState, useEffect } from 'react';
 import { useGame } from '../context/GameContext';
-import { UserSettings } from '../types';
-import ResetAccountModal from '../components/ResetAccountModal';
+import { supabase } from '../supabaseClient';
+import { Settings as SettingsIcon, Volume2, Bell, ShieldAlert, LogOut, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Settings: React.FC = () => {
-  const { sfxVolume, musicVolume, isMuted, lowPerformanceMode, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode } = useSound();
-  const { user, dashboard, refreshDashboard, showToast } = useGame();
+  const { dashboard, showToast, refreshDashboard } = useGame() as any;
   const navigate = useNavigate();
 
-  const [savingPrivacy, setSavingPrivacy] = useState(false);
-  const [resetOpen, setResetOpen] = useState(false);
+  // Audio
+  const [sfxVolume, setSfxVolume] = useState(80);
+  const [musicVolume, setMusicVolume] = useState(50);
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+
+  // Performance / Display
+  const [lowPerfMode, setLowPerfMode] = useState(false);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [animationIntensity, setAnimationIntensity] = useState(1);
-  const [isSaving, setIsSaving] = useState(false);
 
-  // Load settings — DB stores volumes as integers 0-100; SoundContext uses 0.0-1.0 floats
+  // Notifications
+  const [notifsEnabled, setNotifsEnabled] = useState(true);
+  const [tradeNotifs, setTradeNotifs] = useState(true);
+  const [auctionNotifs, setAuctionNotifs] = useState(true);
+  const [friendNotifs, setFriendNotifs] = useState(true);
+
+  // Privacy
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+
+  // Load settings from DB on mount
   useEffect(() => {
-    const loadSettings = async () => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.rpc('get_user_settings');
-      if (data && data.length > 0) {
-        const s: UserSettings = data[0];
-        // FIX: divide by 100 to convert DB integer (0-100) → float (0.0-1.0)
-        setSfxVolume(s.sfx_volume / 100);
-        setMusicVolume(s.music_volume / 100);
-        setMuted(!s.sfx_enabled);
-        setLowPerformanceMode(s.low_perf_mode);
+      const { data } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      if (data) {
+        setSfxVolume(data.sfx_volume ?? 80);
+        setMusicVolume(data.music_volume ?? 50);
+        setSfxEnabled(data.sfx_enabled ?? true);
+        setMusicEnabled(data.music_enabled ?? true);
+        setLowPerfMode(data.low_perf_mode ?? false);
+        setNotifsEnabled(data.notifications_enabled ?? true);
+        setTradeNotifs(data.trade_notifications ?? true);
+        setAuctionNotifs(data.auction_notifications ?? true);
+        setFriendNotifs(data.friend_notifications ?? true);
       }
     };
-    loadSettings();
-  }, [user, setSfxVolume, setMusicVolume, setMuted, setLowPerformanceMode]);
+    load();
+  }, []);
 
-  // Debounced save — multiply by 100 to convert float (0.0-1.0) → DB integer (0-100)
-  useEffect(() => {
+  const saveSettings = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const timer = setTimeout(async () => {
-      setIsSaving(true);
-      const settingsPayload = {
-        sfx_volume: Math.round(sfxVolume * 100),    // FIX: 0.0-1.0 → 0-100
-        music_volume: Math.round(musicVolume * 100), // FIX: 0.0-1.0 → 0-100
-        sfx_enabled: !isMuted,
-        music_enabled: !isMuted,
-        low_perf_mode: lowPerformanceMode,
-        notifications_enabled: true,
-        trade_notifications: true,
-        auction_notifications: true,
-        friend_notifications: true,
-        show_online_status: true,
-      };
-      await supabase.rpc('upsert_user_settings', { p_settings: settingsPayload });
-      setIsSaving(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [user, sfxVolume, musicVolume, isMuted, lowPerformanceMode, hapticsEnabled, animationIntensity]);
+    const { error } = await supabase.from('user_settings').upsert({
+      user_id: user.id,
+      sfx_volume: sfxVolume,
+      music_volume: musicVolume,
+      sfx_enabled: sfxEnabled,
+      music_enabled: musicEnabled,
+      low_perf_mode: lowPerfMode,
+      notifications_enabled: notifsEnabled,
+      trade_notifications: tradeNotifs,
+      auction_notifications: auctionNotifs,
+      friend_notifications: friendNotifs,
+    });
+    if (error) showToast('Failed to save settings', 'error');
+    else showToast('Settings saved!', 'success');
+  };
 
   const togglePrivacy = async () => {
-    if (!user || !dashboard || !dashboard.profile) return;
     setSavingPrivacy(true);
     try {
+      const newValue = !dashboard?.profile?.is_public;
       const { error } = await supabase
         .from('profiles')
-        .update({ is_public: !dashboard.profile.is_public })
-        .eq('id', user.id);
+        .update({ is_public: newValue })
+        .eq('id', dashboard?.profile?.id);
       if (error) throw error;
       await refreshDashboard();
-      showToast(`Profile is now ${!dashboard.profile.is_public ? 'Public' : 'Private'}`, 'success');
+      showToast(newValue ? 'Profile is now public' : 'Profile is now private', 'success');
     } catch (e: any) {
-      showToast(e.message, 'error');
+      showToast(e.message || 'Failed to update privacy', 'error');
     } finally {
       setSavingPrivacy(false);
     }
@@ -79,162 +92,193 @@ const Settings: React.FC = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate('/login', { replace: true });
+    navigate('/login');
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 pt-20 pb-24 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-            <SettingsIcon size={24} className="text-indigo-400" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-heading font-black text-white tracking-wide">Settings</h1>
-            <p className="text-slate-400 text-sm">Manage your game preferences</p>
-          </div>
-          {isSaving && (
-            <span className="ml-auto text-xs text-slate-500 animate-pulse">Saving…</span>
-          )}
-        </div>
+    <div className="max-w-2xl mx-auto pb-24 px-4">
+      <div className="mb-8">
+        <h1 className="text-4xl font-heading font-black text-white mb-2">
+          SETTINGS
+        </h1>
+        <p className="text-slate-400 text-sm">Manage your account and preferences.</p>
+      </div>
 
-        <div className="space-y-6">
-          {/* Audio Settings */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Volume2 size={18} className="text-indigo-400" /> Audio
-            </h2>
-            <div className="space-y-6">
+      <div className="space-y-6">
+
+        {/* Audio */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Volume2 size={18} className="text-indigo-400" /> Audio
+          </h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-300">Sound Effects</p>
+                <p className="text-xs text-slate-500">Card reveals, button clicks, battle sounds</p>
+              </div>
+              <button
+                onClick={() => setSfxEnabled(v => !v)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${sfxEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+              >
+                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${sfxEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            {sfxEnabled && (
               <div>
                 <div className="flex justify-between mb-2">
                   <label className="text-sm font-bold text-slate-300">SFX Volume</label>
-                  <span className="text-xs text-slate-500">{Math.round(sfxVolume * 100)}%</span>
+                  <span className="text-xs text-slate-500">{sfxVolume}%</span>
                 </div>
-                <input
-                  type="range"
-                  min="0" max="1" step="0.01"
-                  value={sfxVolume}
-                  onChange={(e) => setSfxVolume(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
+                <input type="range" min="0" max="100" value={sfxVolume}
+                  onChange={e => setSfxVolume(Number(e.target.value))}
+                  className="w-full accent-indigo-500" />
               </div>
+            )}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-300">Music</p>
+                <p className="text-xs text-slate-500">Background music and ambiance</p>
+              </div>
+              <button
+                onClick={() => setMusicEnabled(v => !v)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${musicEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+              >
+                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${musicEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            {musicEnabled && (
               <div>
                 <div className="flex justify-between mb-2">
                   <label className="text-sm font-bold text-slate-300">Music Volume</label>
-                  <span className="text-xs text-slate-500">{Math.round(musicVolume * 100)}%</span>
+                  <span className="text-xs text-slate-500">{musicVolume}%</span>
                 </div>
-                <input
-                  type="range"
-                  min="0" max="1" step="0.01"
-                  value={musicVolume}
-                  onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
+                <input type="range" min="0" max="100" value={musicVolume}
+                  onChange={e => setMusicVolume(Number(e.target.value))}
+                  className="w-full accent-indigo-500" />
               </div>
-              <button
-                onClick={() => setMuted(!isMuted)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
-                  isMuted ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                {isMuted ? <VolumeX size={16} /> : <Music size={16} />}
-                {isMuted ? 'Unmute All' : 'Mute All'}
-              </button>
-            </div>
-          </section>
+            )}
+          </div>
+        </section>
 
-          {/* Performance & Display */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Cpu size={18} className="text-indigo-400" /> Performance & Display
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-slate-300">Low Performance Mode</p>
-                  <p className="text-xs text-slate-500">Disables complex animations to save battery</p>
-                </div>
-                <button
-                  onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${lowPerformanceMode ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${lowPerformanceMode ? 'translate-x-6' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-slate-300">Haptic Feedback</p>
-                  <p className="text-xs text-slate-500">Vibrations on supported devices</p>
-                </div>
-                <button
-                  onClick={() => setHapticsEnabled(!hapticsEnabled)}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${hapticsEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                </button>
-              </div>
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className="text-sm font-bold text-slate-300">Animation Intensity</label>
-                  <span className="text-xs text-slate-500">
-                    {animationIntensity === 0 ? 'Off' : animationIntensity === 1 ? 'Normal' : 'High'}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0" max="2" step="1"
-                  value={animationIntensity}
-                  onChange={(e) => setAnimationIntensity(Number(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Privacy */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <ShieldAlert size={18} className="text-indigo-400" /> Privacy
-            </h2>
+        {/* Display */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Eye size={18} className="text-indigo-400" /> Display
+          </h2>
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-bold text-slate-300">Public Profile</p>
-                <p className="text-xs text-slate-500">Allow other players to view your profile</p>
+                <p className="text-sm font-bold text-slate-300">Low Performance Mode</p>
+                <p className="text-xs text-slate-500">Reduces animations for better performance</p>
               </div>
               <button
-                onClick={togglePrivacy}
-                disabled={savingPrivacy}
-                className={`w-12 h-6 rounded-full transition-colors relative disabled:opacity-50 ${dashboard?.profile?.is_public ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                onClick={() => setLowPerfMode(v => !v)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${lowPerfMode ? 'bg-indigo-500' : 'bg-slate-700'}`}
               >
-                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${dashboard?.profile?.is_public ? 'translate-x-6' : 'translate-x-0'}`} />
+                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${lowPerfMode ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
-          </section>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-300">Haptic Feedback</p>
+                <p className="text-xs text-slate-500">Vibration on mobile devices</p>
+              </div>
+              <button
+                onClick={() => setHapticsEnabled(v => !v)}
+                className={`w-12 h-6 rounded-full transition-colors relative ${hapticsEnabled ? 'bg-indigo-500' : 'bg-slate-700'}`}
+              >
+                <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hapticsEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-sm font-bold text-slate-300">Animation Intensity</label>
+                <span className="text-xs text-slate-500">
+                  {animationIntensity === 0 ? 'Off' : animationIntensity === 1 ? 'Normal' : 'High'}
+                </span>
+              </div>
+              <input type="range" min="0" max="2" step="1" value={animationIntensity}
+                onChange={e => setAnimationIntensity(Number(e.target.value))}
+                className="w-full accent-indigo-500" />
+            </div>
+          </div>
+        </section>
 
-          {/* Account */}
-          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <SettingsIcon size={18} className="text-indigo-400" /> Account
-            </h2>
-            <div className="space-y-3">
-              <button
-                onClick={() => setResetOpen(true)}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-red-900/20 border border-red-800/50 text-red-400 rounded-xl font-bold text-sm hover:bg-red-900/40 transition-colors"
-              >
-                <ShieldAlert size={16} /> Reset Account
-              </button>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-slate-400 rounded-xl font-bold text-sm hover:bg-slate-700 hover:text-white transition-colors"
-              >
-                <LogOut size={16} /> Sign Out
-              </button>
+        {/* Notifications */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Bell size={18} className="text-indigo-400" /> Notifications
+          </h2>
+          <div className="space-y-3">
+            {[
+              { label: 'All Notifications', sub: 'Master toggle', val: notifsEnabled, set: setNotifsEnabled },
+              { label: 'Trade Notifications', sub: 'Offers and responses', val: tradeNotifs, set: setTradeNotifs },
+              { label: 'Auction Notifications', sub: 'Bids and auction results', val: auctionNotifs, set: setAuctionNotifs },
+              { label: 'Friend Notifications', sub: 'Friend requests and activity', val: friendNotifs, set: setFriendNotifs },
+            ].map(({ label, sub, val, set }) => (
+              <div key={label} className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-300">{label}</p>
+                  <p className="text-xs text-slate-500">{sub}</p>
+                </div>
+                <button
+                  onClick={() => set((v: boolean) => !v)}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${val ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${val ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Privacy */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <ShieldAlert size={18} className="text-indigo-400" /> Privacy
+          </h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-slate-300">Public Profile</p>
+              <p className="text-xs text-slate-500">Allow other players to view your profile</p>
             </div>
-          </section>
-        </div>
+            <button
+              onClick={togglePrivacy}
+              disabled={savingPrivacy}
+              className={`w-12 h-6 rounded-full transition-colors relative disabled:opacity-50 ${dashboard?.profile?.is_public ? 'bg-indigo-500' : 'bg-slate-700'}`}
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${dashboard?.profile?.is_public ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+        </section>
+
+        {/* Save + Sign Out */}
+        <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <SettingsIcon size={18} className="text-indigo-400" /> Account
+          </h2>
+          <div className="space-y-3">
+            <button
+              onClick={saveSettings}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition-colors"
+            >
+              Save Settings
+            </button>
+            <p className="text-xs text-slate-500 text-center">
+              To reset your account, visit your{' '}
+              <a href="/profile" className="text-indigo-400 hover:underline">Profile page</a>.
+            </p>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-slate-800 text-slate-400 rounded-xl font-bold text-sm hover:bg-slate-700 hover:text-white transition-colors"
+            >
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
+        </section>
+
       </div>
-
-      <ResetAccountModal isOpen={resetOpen} onClose={() => setResetOpen(false)} />
     </div>
   );
 };
