@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useGame } from '../context/GameContext';
@@ -6,7 +5,6 @@ import { Quest, Achievement } from '../types';
 import { Target, Trophy, CheckCircle, Lock, RefreshCw, Star, Coins, Diamond, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { callEdge } from '../utils/edgeFunctions';
-
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const DIFF_STYLES: Record<string, string> = {
@@ -25,13 +23,26 @@ const CollectionMissions: React.FC = () => {
   const [claiming, setClaiming] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [dailyMissions, setDailyMissions] = useState<any[]>([]);
+  const [claimingMission, setClaimingMission] = useState<string | null>(null);
+
+  const fetchDailyMissions = async () => {
+    if (!user) return;
+    try {
+      const { data } = await supabase.rpc('ensure_and_get_daily_missions');
+      if (data) setDailyMissions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('fetchDailyMissions error:', e);
+    }
+  };
+
   const fetchData = async () => {
     if (!user) return;
     setLoading(true);
     try {
       const [questsRes, achieveRes] = await Promise.all([
         supabase.rpc('get_user_quests', { p_user_id: user.id }),
-        supabase.rpc('get_user_achievements', { p_user_id: user.id })
+        supabase.rpc('get_user_achievements', { p_user_id: user.id }),
       ]);
       if (questsRes.data) setQuests(questsRes.data);
       if (achieveRes.data) setAchievements(achieveRes.data);
@@ -42,7 +53,10 @@ const CollectionMissions: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, [user]);
+  useEffect(() => {
+    fetchData();
+    fetchDailyMissions();
+  }, [user]);
 
   const handleClaimQuest = async (questId: string) => {
     setClaiming(questId);
@@ -56,13 +70,26 @@ const CollectionMissions: React.FC = () => {
     }
   };
 
+  const handleClaimMission = async (missionId: string) => {
+    setClaimingMission(missionId);
+    try {
+      await callEdge('claim-mission-reward', { mission_id: missionId });
+      // BUG FIX #6: Await both refreshes so the UI updates after claiming
+      await Promise.all([refreshDashboard(), fetchDailyMissions()]);
+    } catch (e: any) {
+      console.error(e.message);
+    } finally {
+      setClaimingMission(null);
+    }
+  };
+
   const handleRefreshDaily = async () => {
     if (!user || refreshing) return;
     setRefreshing(true);
     try {
       await supabase.rpc('ensure_and_get_daily_missions');
-      await fetchDailyMissions();
-      refreshDashboard();
+      // BUG FIX #6: await refreshDashboard() so context updates before spinner stops
+      await Promise.all([fetchDailyMissions(), refreshDashboard()]);
     } catch (e: any) {
       console.error(e.message);
     } finally {
@@ -70,214 +97,251 @@ const CollectionMissions: React.FC = () => {
     }
   };
 
-  // Get today's daily missions from dashboard
-  const [dailyMissions, setDailyMissions] = useState<any[]>([]);
-  const [claimingMission, setClaimingMission] = useState<string | null>(null);
-
-  const fetchDailyMissions = async () => {
-    if (!user) return;
-    try {
-      const { data } = await supabase.rpc('ensure_and_get_daily_missions');
-      if (data) setDailyMissions(data);
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => { if (activeTab === 'daily') fetchDailyMissions(); }, [user, activeTab]);
-
-  const claimMission = async (missionId: string) => {
-    setClaimingMission(missionId);
-    try {
-      await callEdge('claim-mission-reward', { mission_id: missionId });
-      await Promise.all([fetchDailyMissions(), refreshDashboard()]);
-    } catch (e: any) {
-      console.error(e);
-    } finally {
-      setClaimingMission(null);
-    }
-  };
-
-  const TABS = [
-    { id: 'daily', label: 'Daily Missions', icon: Target },
-    { id: 'quests', label: 'Quests', icon: Star },
-    { id: 'achievements', label: 'Achievements', icon: Trophy },
-  ] as const;
+  if (loading && quests.length === 0 && dailyMissions.length === 0) {
+    return <LoadingSpinner message="LOADING MISSIONS..." />;
+  }
 
   return (
-    <div className="max-w-4xl mx-auto pb-24">
+    <div className="pb-24">
       <div className="mb-8">
-        <h1 className="text-4xl font-heading font-black text-white tracking-tighter mb-1">
-          COLLECTION <span className="text-indigo-500">MISSIONS</span>
+        <h1 className="text-4xl font-heading font-black text-white mb-2">
+          MISSIONS <span className="text-indigo-400">&amp; QUESTS</span>
         </h1>
-        <p className="text-slate-500 text-sm">Complete tasks, earn rewards, and track your progress</p>
+        <p className="text-slate-400 text-sm">Complete objectives to earn rewards.</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-8 bg-slate-900/60 p-1.5 rounded-xl border border-slate-800 w-fit">
-        {TABS.map(tab => (
+      <div className="flex gap-1 mb-8 bg-slate-900/50 rounded-xl p-1 border border-slate-800">
+        {(['daily', 'quests', 'achievements'] as const).map(tab => (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-              activeTab === tab.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-slate-800/60'
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === tab
+                ? 'bg-indigo-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
-            <tab.icon size={13} />
-            {tab.label}
+            {tab === 'daily' ? '📅 Daily' : tab === 'quests' ? '🎯 Quests' : '🏆 Achievements'}
           </button>
         ))}
       </div>
 
-      {/* ── DAILY MISSIONS ── */}
+      {/* Daily Missions Tab */}
       {activeTab === 'daily' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-slate-600 font-mono">3 missions refresh daily at midnight</p>
-            <button onClick={handleRefreshDaily} disabled={refreshing}
-              className="text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1.5 transition-colors disabled:opacity-50">
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} /> Refresh
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Today's Missions</h2>
+            <button
+              onClick={handleRefreshDaily}
+              disabled={refreshing}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-400 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+              Refresh
             </button>
           </div>
-          {dailyMissions.length === 0 ? (
-            <div className="text-center py-12 text-slate-600 border-2 border-dashed border-slate-800 rounded-2xl">
-              <Target size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="font-bold">No missions loaded</p>
-              <button onClick={fetchDailyMissions} className="mt-3 text-xs text-indigo-400 hover:text-indigo-300">Try again</button>
-            </div>
-          ) : dailyMissions.map((m: any, idx: number) => {
-            const pct = Math.min(100, (m.progress / m.target) * 100);
-            const canClaim = m.progress >= m.target && !m.is_completed;
-            return (
-              <motion.div key={m.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay: idx*0.08 }}
-                className={`p-5 rounded-xl border transition-all ${m.is_completed ? 'bg-green-950/20 border-green-800/30' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'}`}>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <p className="font-bold text-white text-sm">{m.description}</p>
-                      {m.is_completed && <CheckCircle size={14} className="text-green-400 flex-shrink-0" />}
-                    </div>
-                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
-                      <div className="h-full bg-indigo-500 transition-all rounded-full"
-                        style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="flex items-center gap-3 text-[10px] font-mono">
-                      <span className="text-slate-500">{m.progress}/{m.target}</span>
-                      <span className="text-yellow-400/70 flex items-center gap-1"><Coins size={9} />{m.reward_gold}</span>
-                      {m.reward_gems > 0 && <span className="text-cyan-400/70 flex items-center gap-1"><Diamond size={9} />{m.reward_gems}</span>}
-                      <span className="text-purple-400/70 flex items-center gap-1"><Zap size={9} />{m.reward_xp} XP</span>
-                    </div>
-                  </div>
-                  {canClaim ? (
-                    <button onClick={() => claimMission(m.id)} disabled={claimingMission === m.id}
-                      className="flex-shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-black text-xs transition-all active:scale-95 animate-pulse">
-                      {claimingMission === m.id ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'CLAIM'}
-                    </button>
-                  ) : (
-                    <div className={`flex-shrink-0 text-xs font-bold px-3 py-2 rounded-lg ${m.is_completed ? 'text-green-500 bg-green-900/20' : 'text-slate-600 bg-slate-800/50'}`}>
-                      {m.is_completed ? '✓ DONE' : `${m.progress}/${m.target}`}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* ── QUESTS ── */}
-      {activeTab === 'quests' && (
-        <div className="space-y-4">
-          <div className="flex justify-end mb-2">
-            <button onClick={handleRefreshDaily} disabled={refreshing}
-              className="text-xs text-slate-500 hover:text-white flex items-center gap-1.5 uppercase tracking-widest transition-colors">
-              <RefreshCw size={12} /> Refresh Protocol
-            </button>
-          </div>
-          {loading ? (
-            <LoadingSpinner message="SYNCING DATA..." />
-          ) : quests.length === 0 ? (
-            <div className="text-center py-16 text-slate-600 border-2 border-dashed border-slate-800 rounded-2xl">
-              <Star size={32} className="mx-auto mb-3 opacity-20" />
-              <p className="font-bold">No active quests</p>
+          {dailyMissions.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <Target size={32} className="mx-auto mb-3 opacity-40" />
+              <p className="text-sm">No missions for today yet.</p>
+              <button onClick={handleRefreshDaily} className="mt-3 text-indigo-400 text-xs hover:underline">
+                Generate missions
+              </button>
             </div>
           ) : (
-            quests.map((quest, idx) => (
-              <motion.div key={quest.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:idx*0.06 }}
-                className={`p-5 rounded-xl border transition-all ${quest.status === 'completed' || quest.status === 'claimed' ? 'bg-green-950/20 border-green-800/30' : 'bg-slate-900/60 border-slate-800'}`}>
-                <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-xl border flex-shrink-0 ${DIFF_STYLES[quest.difficulty] || 'text-slate-400'}`}>
-                    <Target size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <h3 className="font-heading font-bold text-white">{quest.title}</h3>
-                      <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${DIFF_STYLES[quest.difficulty] || ''}`}>
-                        {quest.difficulty}
-                      </span>
+            <div className="space-y-3">
+              {dailyMissions.map((mission: any) => {
+                const pct = Math.min(
+                  Math.round((mission.progress / Math.max(mission.target, 1)) * 100),
+                  100
+                );
+                const isClaimable = mission.is_completed && !mission.is_claimed;
+                return (
+                  <motion.div
+                    key={mission.id}
+                    layout
+                    className={`bg-slate-900/60 border rounded-xl p-5 ${
+                      mission.is_claimed
+                        ? 'border-slate-700/50 opacity-60'
+                        : mission.is_completed
+                        ? 'border-green-500/40 bg-green-900/5'
+                        : 'border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white">{mission.description}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                          {mission.progress} / {mission.target}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {mission.reward_gold > 0 && (
+                          <span className="flex items-center gap-1 text-xs font-bold text-yellow-400">
+                            <Coins size={11} /> {mission.reward_gold}
+                          </span>
+                        )}
+                        {mission.reward_gems > 0 && (
+                          <span className="flex items-center gap-1 text-xs font-bold text-cyan-400">
+                            <Diamond size={11} /> {mission.reward_gems}
+                          </span>
+                        )}
+                        {mission.reward_xp > 0 && (
+                          <span className="flex items-center gap-1 text-xs font-bold text-indigo-400">
+                            <Zap size={11} /> {mission.reward_xp}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-slate-400 text-xs mb-3">{quest.description}</p>
-                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1">
-                      <motion.div className="h-full bg-indigo-500" initial={{ width: 0 }}
-                        animate={{ width: `${Math.min((quest.current_value / quest.target_value) * 100, 100)}%` }} />
+
+                    {/* Progress bar */}
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-3">
+                      <motion.div
+                        className={`h-full rounded-full ${mission.is_completed ? 'bg-green-500' : 'bg-indigo-500'}`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
+                      />
                     </div>
-                    <div className="flex justify-between text-[10px] font-mono text-slate-500">
-                      <span>PROGRESS</span>
-                      <span>{quest.current_value}/{quest.target_value}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <div className="flex gap-2 text-xs font-bold">
-                      <span className="text-yellow-400 flex items-center gap-1"><Coins size={11} />{quest.reward_gold}</span>
-                      <span className="text-cyan-400 flex items-center gap-1"><Diamond size={11} />{quest.reward_gems}</span>
-                    </div>
-                    {quest.status === 'completed' ? (
-                      <button onClick={() => handleClaimQuest(quest.id)} disabled={claiming === quest.id}
-                        className="bg-green-600 hover:bg-green-500 text-white py-1.5 px-4 rounded-lg font-bold text-xs animate-pulse active:scale-95">
-                        {claiming === quest.id ? '...' : 'CLAIM'}
+
+                    {isClaimable && (
+                      <button
+                        onClick={() => handleClaimMission(mission.id)}
+                        disabled={claimingMission === mission.id}
+                        className="w-full py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs font-black rounded-lg transition-all"
+                      >
+                        {claimingMission === mission.id ? 'CLAIMING...' : '✓ CLAIM REWARD'}
                       </button>
-                    ) : quest.status === 'claimed' ? (
-                      <span className="text-green-500 text-xs font-bold flex items-center gap-1"><CheckCircle size={12} /> Done</span>
-                    ) : (
-                      <span className="text-slate-600 text-xs font-bold">In Progress</span>
                     )}
-                  </div>
-                </div>
-              </motion.div>
-            ))
+
+                    {mission.is_claimed && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <CheckCircle size={13} className="text-green-600" />
+                        Claimed
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* ── ACHIEVEMENTS ── */}
-      {activeTab === 'achievements' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {loading ? (
-            <div className="col-span-2">
-              <LoadingSpinner message="SYNCING DATA..." />
-            </div>
-          ) : achievements.length === 0 ? (
-            <div className="col-span-2 text-center py-16 text-slate-600 border-2 border-dashed border-slate-800 rounded-2xl">
-              <Trophy size={32} className="mx-auto mb-3 opacity-20" />
-              <p className="font-bold">No achievements yet</p>
+      {/* Quests Tab */}
+      {activeTab === 'quests' && (
+        <div className="space-y-3">
+          {quests.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <Target size={32} className="mx-auto mb-3 opacity-40" />
+              <p className="text-sm">No active quests.</p>
             </div>
           ) : (
-            achievements.map((ach, idx) => (
-              <motion.div key={ach.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:idx*0.04 }}
-                className={`p-5 rounded-xl border transition-all ${ach.is_unlocked ? 'bg-slate-900/60 border-indigo-500/30 shadow-[0_0_20px_rgba(79,70,229,0.05)]' : 'bg-slate-950/40 border-slate-800 opacity-60'}`}>
-                <div className={`flex items-start gap-4 ${!ach.is_unlocked ? 'grayscale' : ''}`}>
-                  <div className={`p-3 rounded-xl flex-shrink-0 ${ach.is_unlocked ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-lg' : 'bg-slate-900 text-slate-600 border border-slate-800'}`}>
-                    {ach.is_unlocked ? <Trophy size={20} /> : <Lock size={20} />}
+            quests.map(q => {
+              const pct = Math.min(Math.round((q.current_value / Math.max(q.target_value, 1)) * 100), 100);
+              return (
+                <motion.div
+                  key={q.id}
+                  layout
+                  className={`bg-slate-900/60 border rounded-xl p-5 ${
+                    q.status === 'claimed'
+                      ? 'border-slate-700/50 opacity-60'
+                      : q.status === 'completed'
+                      ? 'border-green-500/40'
+                      : 'border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border ${DIFF_STYLES[q.difficulty] || ''}`}>
+                          {q.difficulty}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-white">{q.title}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{q.description}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0 text-xs font-bold">
+                      {q.reward_gold > 0 && <span className="text-yellow-400 flex items-center gap-1"><Coins size={10} />{q.reward_gold}</span>}
+                      {q.reward_gems > 0 && <span className="text-cyan-400 flex items-center gap-1"><Diamond size={10} />{q.reward_gems}</span>}
+                      {q.reward_xp > 0 && <span className="text-indigo-400 flex items-center gap-1"><Zap size={10} />{q.reward_xp} XP</span>}
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-heading font-bold text-white mb-1">{ach.title}</h3>
-                    <p className="text-slate-400 text-xs">{ach.description}</p>
-                    {ach.is_unlocked && ach.unlocked_at && (
-                      <p className="text-green-400 text-[10px] font-mono mt-2 flex items-center gap-1">
-                        <CheckCircle size={10} /> Unlocked {new Date(ach.unlocked_at).toLocaleDateString()}
-                      </p>
+
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-3">
+                    <motion.div
+                      className={`h-full rounded-full ${q.status !== 'in_progress' ? 'bg-green-500' : 'bg-indigo-500'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 font-mono">{q.current_value} / {q.target_value}</span>
+                    {q.status === 'completed' && (
+                      <button
+                        onClick={() => handleClaimQuest(q.id)}
+                        disabled={claiming === q.id}
+                        className="px-4 py-1.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-xs font-black rounded-lg transition-all"
+                      >
+                        {claiming === q.id ? 'CLAIMING...' : 'CLAIM'}
+                      </button>
+                    )}
+                    {q.status === 'claimed' && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <CheckCircle size={12} className="text-green-600" /> Claimed
+                      </span>
                     )}
                   </div>
+                </motion.div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Achievements Tab */}
+      {activeTab === 'achievements' && (
+        <div className="space-y-3">
+          {achievements.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <Trophy size={32} className="mx-auto mb-3 opacity-40" />
+              <p className="text-sm">No achievements yet.</p>
+            </div>
+          ) : (
+            achievements.map(a => (
+              <div
+                key={a.id}
+                className={`bg-slate-900/60 border rounded-xl p-5 flex items-center gap-4 ${
+                  a.is_unlocked ? 'border-yellow-500/30' : 'border-slate-800 opacity-60'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                  a.is_unlocked ? 'bg-yellow-900/30 border border-yellow-500/30' : 'bg-slate-800'
+                }`}>
+                  {a.is_unlocked ? (
+                    <Star size={20} className="text-yellow-400" />
+                  ) : (
+                    <Lock size={16} className="text-slate-600" />
+                  )}
                 </div>
-              </motion.div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white">{a.title}</p>
+                  <p className="text-xs text-slate-400">{a.description}</p>
+                  {a.is_unlocked && a.unlocked_at && (
+                    <p className="text-[10px] text-slate-600 mt-0.5">
+                      Unlocked {new Date(a.unlocked_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0 text-xs font-bold">
+                  {a.reward_gold > 0 && <span className="text-yellow-400 flex items-center gap-1"><Coins size={10} />{a.reward_gold}</span>}
+                  {a.reward_gems > 0 && <span className="text-cyan-400 flex items-center gap-1"><Diamond size={10} />{a.reward_gems}</span>}
+                </div>
+              </div>
             ))
           )}
         </div>
