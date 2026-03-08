@@ -26,6 +26,7 @@ const UserProfile        = lazy(() => import('./views/UserProfile'));
 const SeasonPass         = lazy(() => import('./views/SeasonPass'));
 const CollectionMissions = lazy(() => import('./views/CollectionMissions'));
 const Settings           = lazy(() => import('./views/Settings'));
+const AdminPanel         = lazy(() => import('./AdminPanel'));
 
 const LoadingScreen = () => (
   <LoadingSpinner fullScreen message="LOADING MODULE..." />
@@ -59,6 +60,7 @@ const RouterRoutes: React.FC = () => (
     <Route path="/leaderboard"   element={<Leaderboard />} />
     <Route path="/season-pass"   element={<SeasonPass />} />
     <Route path="/settings"      element={<Settings />} />
+    <Route path="/admin"         element={<AdminPanel />} />
     {/* Legacy redirects */}
     <Route path="/quests"        element={<Navigate to="/missions" replace />} />
     <Route path="/item-shop"     element={<Navigate to="/shop" replace />} />

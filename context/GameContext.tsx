@@ -18,6 +18,7 @@ interface GameContextType {
   pendingTradeCount: number;
   refreshDashboard: () => Promise<void>;
   signInWithDiscord: () => Promise<void>;
+  signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
   removeToast: (id: string) => void;
@@ -184,6 +185,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInAsGuest = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error && mountedRef.current) {
+      setLoading(false);
+      showToast(error.message, 'error');
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     if (mountedRef.current) {
@@ -194,7 +204,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <GameContext.Provider value={{ user, dashboard, loading, error, toasts, pendingTradeCount, refreshDashboard, signInWithDiscord, signOut, showToast, removeToast }}>
+    <GameContext.Provider value={{ user, dashboard, loading, error, toasts, pendingTradeCount, refreshDashboard, signInWithDiscord, signInAsGuest, signOut, showToast, removeToast }}>
       {children}
     </GameContext.Provider>
   );

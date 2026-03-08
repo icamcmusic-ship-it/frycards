@@ -184,6 +184,7 @@ const QuestsAndAchievements: React.FC = () => {
                </motion.div>
              ))}
           </div>
+          )}
         </div>
       )}
 

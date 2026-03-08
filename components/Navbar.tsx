@@ -4,7 +4,7 @@ import { useGame } from '../context/GameContext';
 import {
   Home, Package, Layers, Swords, ShoppingBag, BarChart2,
   Users, Repeat, User, Trophy, Menu, X,
-  Coins, Diamond, Settings, Archive, Target, LogOut
+  Coins, Diamond, Settings, Archive, Target, LogOut, ShieldAlert
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import EnergyBar from './EnergyBar';
@@ -42,6 +42,7 @@ const Navbar: React.FC = () => {
   const profile = dashboard?.profile;
   const gold = profile?.gold_balance ?? 0;
   const gems = profile?.gem_balance ?? 0;
+  const isAdmin = profile?.is_admin === true;
 
   // Close menu on outside click
   useEffect(() => {
@@ -164,6 +165,16 @@ const Navbar: React.FC = () => {
 
                   {/* Secondary links (Settings is first) */}
                   <div className="py-1">
+                    {isAdmin && (
+                      <NavLink to="/admin" onClick={() => setMenuOpen(false)}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-4 py-2.5 text-sm font-bold transition-colors ${
+                            isActive ? 'text-indigo-400 bg-indigo-600/10' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                          }`
+                        }>
+                        <ShieldAlert size={15} /> Admin Panel
+                      </NavLink>
+                    )}
                     {SECONDARY.map(link => (
                       <NavLink key={link.to} to={link.to} onClick={() => setMenuOpen(false)}
                         className={({ isActive }) =>
