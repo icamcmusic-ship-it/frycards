@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .mask-linear {
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+  }
+}
