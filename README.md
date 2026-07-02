@@ -81,11 +81,64 @@ Implemented from the rulebook:
   affordability, declares attackers, and assigns blocks (prioritizing lethal
   saves and favorable trades). Verified with headless CPU-vs-CPU simulations.
 
+### Rules clarifications (V1.2 errata, engine-enforced)
+
+- **Feedback negation** — negated Events return to hand; permanent plays and
+  activated abilities are simply negated and refunded (never bounced out of
+  their zone). The refund is exact, including any Ward surcharge.
+- **Siphon anti-exploit** — Siphon heals only from damage dealt to *enemy*
+  cards or the enemy Leader; self-damage can never produce net health gain.
+- **Wither thresholds** — a Unit whose maximum health is reduced to 0 is
+  destroyed immediately; current health scales down with the shrinking cap
+  (damage meeting/exceeding the new cap also destroys it).
+- **Zero-damage combat** — if Armor absorbs an entire hit, no combat damage
+  is legally dealt: Wither, Glitch, Reap and Pierce do not trigger.
+- **Armor layers** — base Armor is destroyed permanently once bypassed, but
+  Armor from non-glitched attached Items is a continuous modifier that is
+  recalculated on every hit.
+- **Lurk vs Guard** — Lurk (cannot be targeted) is suppressed while Guard
+  (must be targeted) is actively applied to the same Unit.
+- **Wildcast** — random splash targets are always unique; a splash can never
+  stack into a single-target nuke.
+- **Dynamic buffers (§5.3)** — destroying a bonus-health Item clears the
+  damage allocated to its tier (`bonusDamage` is clamped to the current bonus
+  pool); dynamic stat shrinkage merely lowers the cap and kills the Unit if
+  damage meets it.
+- **Item Capacity Overrun Law** — Units hold 2 Items plus Modularity [X]; if
+  capacity dynamically drops below the equipped count, the most recently
+  attached Items are destroyed until back within capacity.
+- **Graveborn & Overclock** — Graveborn Units deploy from the graveyard only
+  during the owner's normal Action Phase and are removed from the game when
+  they die again; Overclock's roll debt applies to the immediate next roll
+  only and never accumulates or rolls over.
+
+### CPU AI architecture (hybrid engine)
+
+The CPU (`src/game/ai.ts`) is a hybrid greedy-solver + one-ply simulation
+search rather than a raw tree search:
+
+1. **Greedy Resource Allocator** — enumerates every split of the d6 roll
+   across the Leader's elements and picks the one maximizing the hand's
+   *playable weight* (greedy knapsack), with a nudge toward single-color
+   allocations when a Pure card is held.
+2. **Action Permutation Pruner** — every candidate play is simulated through
+   the real reducer; plays the engine rejects (Lurk, Guard interlock, Ward
+   surcharge, capacity) are pruned automatically.
+3. **Dynamic evaluation** — `V = w1·LeaderLife + w2·Board + w3·Hand +
+   w4·FloatingMana`, with weights that shift per active Location (Location
+   Adaptation Layer), under harmful Charms (Status Emergency Modifier), and
+   with reactive Events in hand (persistent-mana buffer).
+4. **Unified combat solver** — bundles the assault wave biggest-first,
+   honors Burden affordability, applies the Stripping Rule (Meltdown/Purge
+   prioritized against Item-buffed Units), and the Leader Survival Caveat
+   (no Leader strike that leaves the Leader in counter-attack danger).
+
 ### Documented simplifications
 
 The full interactive **Stack / priority** (APNAP response windows) resolves
-effects immediately rather than through passed priority. Keywords not present
-in the current card set (Lurk, Rally, Fate, Freeze-Dry, Blessed, Phalanx,
-Photosynthesis, Scorched-Earth, Glaciate, Graveborn, Modularity, Decay,
-Wildcast, Exhume, Overclock-as-Event) are not engine-driven. The core game
-loop, combat and every keyword printed in the Blue Coral set are functional.
+effects immediately rather than through passed priority. Keywords now
+engine-driven beyond the printed Blue Coral set: Lurk, Guard, Wildcast [X],
+Graveborn, Modularity [X], Overclock [X]. Remaining glossary entries without
+engine hooks: Rally, Fate, Freeze-Dry, Blessed, Phalanx, Photosynthesis,
+Scorched-Earth, Glaciate, Exhume. The core game loop, combat and every
+keyword printed in the Blue Coral set are functional.
