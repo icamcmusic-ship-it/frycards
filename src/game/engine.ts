@@ -646,6 +646,15 @@ function reduce(state: GameState, action: GameAction): GameState {
     case 'ROLL_DICE': {
       if (next.phase !== 'ROLL') return next;
       let roll = Math.floor(Math.random() * 6) + 1;
+      // Photosynthesis (§2.3): an even natural roll grants +1 Nature resource.
+      if (roll % 2 === 0) {
+        for (const c of activePlayer.charms) {
+          if (c.charmActivated && hasKeyword(c, 'Photosynthesis') && !c.glitched) {
+            activePlayer.resources.Nature = (activePlayer.resources.Nature || 0) + 1;
+            next.log.push(`Photosynthesis (${c.name}): even roll grants +1 Nature.`);
+          }
+        }
+      }
       // Boost [X] from Leader / active Location / active Charms (§2.3).
       let boost = kwValueActive(activePlayer.leader, 'Boost');
       if (next.activeLocationOwnerId === activePlayer.id && next.activeLocation) {
@@ -692,6 +701,17 @@ function reduce(state: GameState, action: GameAction): GameState {
       // Pure (§2.3): remember whether the whole roll landed in a single color.
       const colorsUsed = Object.entries(activePlayer.resources).filter(([, v]) => v > 0);
       activePlayer.singleColorRoll = colorsUsed.length === 1;
+
+      // Decay [X] (§2.3): after the Resource Roll completes but before the
+      // Draw Phase, deal X Dark damage to all Units the afflicted player controls.
+      for (const c of activePlayer.charms) {
+        const decay = c.charmActivated && !c.glitched ? keywordValue(c, 'Decay') : 0;
+        if (decay > 0 && activePlayer.board.length > 0) {
+          for (const u of activePlayer.board) applyDamageToUnit(u, decay);
+          next.log.push(`Decay (${c.name}) deals ${decay} to all of ${activePlayer.name}'s Units.`);
+        }
+      }
+      cleanupDeaths(next);
 
       // Draw Phase — the first player skips their draw on Turn 1 (§2.1.2).
       if (next.turnNumber !== 1) {
@@ -851,9 +871,10 @@ function reduce(state: GameState, action: GameAction): GameState {
         const wildcastVal = kwValueActive(card, 'Wildcast');
         if (wildcastVal > 0 && card.effect && ['unit', 'friendly'].includes(card.effect.target || '')) {
           const isFriendlyOnly = card.effect.target === 'friendly';
+          // §2.3 Wildcast: random battlefield targets, Leaders included.
           const eligiblePool = isFriendlyOnly
             ? [...activePlayer.board]
-            : [...activePlayer.board, ...opponent.board];
+            : [...activePlayer.board, ...opponent.board, activePlayer.leader, opponent.leader];
 
           const validPool = eligiblePool.filter((u) => {
             if (u.ownerId !== activePlayer.id) {
@@ -1012,15 +1033,14 @@ function reduce(state: GameState, action: GameAction): GameState {
 
     case 'TOGGLE_BLOCKER': {
       if (!next.combat) return next;
-      // A blocker blocks at most one attacker; an attacker is blocked by at most one.
+      // §5.1: a blocker blocks at most one attacker, but multiple blockers may
+      // combine to block a single attacker.
       const already = next.combat.blockers.find(
         (b) => b.blockerId === action.blockerId && b.attackerId === action.attackerId
       );
       // remove any block involving this blocker
       next.combat.blockers = next.combat.blockers.filter((b) => b.blockerId !== action.blockerId);
       if (!already) {
-        // remove any existing blocker on that attacker
-        next.combat.blockers = next.combat.blockers.filter((b) => b.attackerId !== action.attackerId);
         next.combat.blockers.push({ attackerId: action.attackerId, blockerId: action.blockerId });
       }
       return next;
@@ -1095,32 +1115,38 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
   for (const attack of next.combat.attackers) {
     const attacker = entityMap.get(attack.instanceId);
     if (!attacker) continue;
-    const block = next.combat.blockers.find((b) => b.attackerId === attack.instanceId);
+    const blocks = next.combat.blockers.filter((b) => b.attackerId === attack.instanceId);
     const attackerAtk = effAttack(attacker, next);
 
-    if (block) {
-      // Blocked: attacker vs blocker.
-      const blocker = entityMap.get(block.blockerId);
-      if (!blocker) continue;
-      const blockerRemaining = totalRemaining(blocker, next);
-      const dealt = applyDamageToUnit(blocker, attackerAtk);
-      siphonHeal(attacker, playerOf(next, attacker), dealt, blocker);
-      if (dealt > 0) onCombatDamageToUnit(next, attacker, blocker);
-      // Pierce (§2.1): overflow beyond the blocker's remaining health goes to
-      // the defending Leader.
-      if (kwActive(attacker, 'Pierce') && attackerAtk > blockerRemaining) {
-        const overflow = attackerAtk - blockerRemaining;
-        opponent.leader.damageTaken += overflow;
-        recalcHealth(opponent);
-        next.log.push(`${attacker.name} Pierced ${overflow} to ${opponent.name}'s Leader.`);
+    if (blocks.length > 0) {
+      // Blocked: attacker damage is assigned across the blockers in declared
+      // order; every blocker deals full counter-damage (blocking does not
+      // exhaust the blocker).
+      let dmgLeft = attackerAtk;
+      for (const block of blocks) {
+        const blocker = entityMap.get(block.blockerId);
+        if (!blocker) continue;
+        const blockerRemaining = totalRemaining(blocker, next);
+        // Assign enough to chew through Armor + remaining health, capped by what's left.
+        const assigned = Math.min(dmgLeft, blockerRemaining + effArmor(blocker));
+        const dealt = assigned > 0 ? applyDamageToUnit(blocker, assigned) : 0;
+        dmgLeft -= assigned;
+        siphonHeal(attacker, playerOf(next, attacker), dealt, blocker);
+        if (dealt > 0) onCombatDamageToUnit(next, attacker, blocker);
+        const counter = effAttack(blocker, next);
+        const counterDealt = applyDamageToUnit(attacker, counter);
+        if (counterDealt > 0) onCombatDamageToUnit(next, blocker, attacker);
+        if (dealt > 0 && isDead(blocker, next)) reapHeal(next, attacker, blocker);
+        if (counterDealt > 0 && isDead(attacker, next)) reapHeal(next, blocker, attacker);
+        if (isDead(attacker, next)) break; // attacker died mid-swing; wave ends
       }
-      // Counter damage (blocking does not exhaust the blocker).
-      const counter = effAttack(blocker, next);
-      const counterDealt = applyDamageToUnit(attacker, counter);
-      if (counterDealt > 0) onCombatDamageToUnit(next, blocker, attacker);
-      // Reap: destroying an enemy Unit in combat heals for its base attack.
-      if (dealt > 0 && isDead(blocker, next)) reapHeal(next, attacker, blocker);
-      if (counterDealt > 0 && isDead(attacker, next)) reapHeal(next, blocker, attacker);
+      // Pierce (§2.1): overflow beyond the blockers' remaining health goes to
+      // the defending Leader.
+      if (kwActive(attacker, 'Pierce') && dmgLeft > 0 && !isDead(attacker, next)) {
+        opponent.leader.damageTaken += dmgLeft;
+        recalcHealth(opponent);
+        next.log.push(`${attacker.name} Pierced ${dmgLeft} to ${opponent.name}'s Leader.`);
+      }
     } else {
       // Unblocked: hit the declared target.
       let target = entityMap.get(attack.targetId);
