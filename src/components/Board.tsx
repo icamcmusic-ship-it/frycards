@@ -12,6 +12,8 @@ interface BoardProps {
 /** Which hand cards require the player to pick a target before playing. */
 function needsTarget(card: GameCard): boolean {
   if (card.type === 'Item') return true;
+  // Wildcast Events pick their own random targets — no manual selection.
+  if (card.keywords?.some((k) => k.split(' ')[0] === 'Wildcast')) return false;
   if (card.type === 'Event' && card.effect && (card.effect.target === 'unit' || card.effect.target === 'friendly')) return true;
   return false;
 }
@@ -218,7 +220,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
               <span className="text-[10px] font-bold max-w-52">Click your Units/Leader to attack the enemy Leader. Click an enemy Unit to send your Leader at it.</span>
               <button onClick={() => dispatch({ type: 'SUBMIT_ATTACKS' })}
                 className={`${popBtn} bg-[#E53935] text-[#F7F7F7]`}>
-                CONFIRM ATTACKS ({combat?.attackers.length ?? 0})
+                {(combat?.attackers.length ?? 0) > 0 ? `CONFIRM ATTACKS (${combat!.attackers.length})` : 'CANCEL COMBAT'}
               </button>
             </div>
           )}
@@ -297,7 +299,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
                 playable={isPlayable}
                 selected={pendingCardId === card.instanceId}
                 onClick={() => handleHandClick(card)}
-                className="hover:-translate-y-4 z-10 hover:z-20 shrink-0"
+                className={`hover:-translate-y-4 z-10 hover:z-20 shrink-0 ${phase === 'ACTION' && isViewingActive && !isPlayable ? 'opacity-50 saturate-50' : ''}`}
               />
             );
           })}
