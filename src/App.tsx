@@ -4,6 +4,7 @@ import { getCPUAction } from './game/ai';
 import { getDeckableLeaders, getCard, applyCardData } from './game/cards';
 import { fetchCardTemplates } from './lib/supabase';
 import { Board } from './components/Board';
+import { HowToPlay } from './components/HowToPlay';
 import { GameCard, GameState } from './types';
 import { GameAction } from './game/engine';
 import { cn } from './lib/utils';
@@ -161,6 +162,7 @@ function LogPanel({ state }: { state: GameState }) {
 // Start screen — pick your Leader
 // ---------------------------------------------------------------------------
 function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => void; dataSource: string }) {
+  const [showHelp, setShowHelp] = useState(false);
   return (
     <div className="w-full min-h-screen bg-[#F7F7F7] flex flex-col items-center justify-center text-[#1A1A1A] p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-[#2C3E50] pointer-events-none opacity-15" style={{ clipPath: 'polygon(0 0, 55% 0, 30% 100%, 0% 100%)' }} />
@@ -173,7 +175,13 @@ function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => v
           SHIFTING<br /><span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-1">MULTIVERSE TCG</span>
         </h1>
         <p className="text-[#2C3E50] font-bold text-sm mb-2">Choose your Leader. The CPU will pick another.</p>
-        <div className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5 mb-8">CARD DATA: {dataSource}</div>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5">CARD DATA: {dataSource}</div>
+          <button onClick={() => setShowHelp(true)}
+            className="btn-pop text-[11px] heading-font bg-[#FFD54F] text-[#1A1A1A] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+            ? HOW TO PLAY
+          </button>
+        </div>
         <div className="flex gap-6 flex-wrap justify-center max-w-5xl">
           {getDeckableLeaders().map((id) => {
             const l = getCard(id)!;
@@ -199,6 +207,7 @@ function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => v
           })}
         </div>
       </div>
+      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
@@ -210,6 +219,7 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
   const leaders = getDeckableLeaders();
   const cpuLeader = leaders.find((id) => id !== leaderId) || leaders[0];
   const [state, dispatch] = useReducer(gameReducer, null, () => initialGameState(true, leaderId, cpuLeader));
+  const [showHelp, setShowHelp] = useState(false);
 
   // Kick off the mulligan phase once.
   useEffect(() => { dispatch({ type: 'START_GAME' }); }, []);
@@ -235,6 +245,12 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
       <RollModal state={state} dispatch={dispatch} />
       <GameOverModal state={state} onReplay={onReplay} />
       <LogPanel state={state} />
+      <button onClick={() => setShowHelp(true)}
+        className="absolute top-2 left-2 z-40 btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
+        title="How to Play">
+        ? RULES
+      </button>
+      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>
   );
 }

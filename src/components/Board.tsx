@@ -227,7 +227,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
 
           {phase === 'COMBAT_BLOCK' && isViewingDefender && (
             <div className="flex gap-3 items-center">
-              <span className="text-[10px] font-bold">Select an attacker, then your blocker.</span>
+              <span className="text-[10px] font-bold max-w-52">Select an attacker, then a blocker. Multiple blockers may gang up on one attacker.</span>
               <button onClick={() => dispatch({ type: 'SUBMIT_BLOCKS' })}
                 className={`${popBtn} bg-[#2C3E50] text-[#F7F7F7]`}>
                 CONFIRM BLOCKS
