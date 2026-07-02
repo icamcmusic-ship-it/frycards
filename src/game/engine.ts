@@ -1,5 +1,5 @@
 import { GameState, GameCard, PlayerState } from '../types';
-import { buildDeck, hasKeyword, keywordValue, keywordArg, makeToken, DECKABLE_LEADERS } from './cards';
+import { buildDeck, hasKeyword, keywordValue, keywordArg, makeToken, getDeckableLeaders } from './cards';
 
 export type GameAction =
   | { type: 'START_GAME' }
@@ -8,6 +8,7 @@ export type GameAction =
   | { type: 'ROLL_DICE' }
   | { type: 'ALLOCATE_RESOURCES'; allocations: Record<string, number> }
   | { type: 'PLAY_CARD'; instanceId: string; targetId?: string }
+  | { type: 'LEADER_COMMAND'; targetId: string }
   | { type: 'ENTER_COMBAT' }
   | { type: 'TOGGLE_ATTACKER'; instanceId: string; targetId: string }
   | { type: 'SUBMIT_ATTACKS' }
@@ -55,6 +56,22 @@ function refund(cost: Record<string, number> | undefined, resources: Record<stri
   }
 }
 
+/** A keyword only functions while the card is not Glitched (§2.3 Glitch). */
+export function kwActive(card: GameCard, name: string): boolean {
+  return hasKeyword(card, name) && !card.glitched;
+}
+
+/** Burden [X] (§2.1): total extra generic cost to attack with this Unit. */
+export function attackBurden(unit: GameCard): number {
+  return (unit.attachedItems || []).reduce(
+    (s, it) => s + (it.glitched ? 0 : keywordValue(it, 'Burden')),
+    0
+  );
+}
+function kwValueActive(card: GameCard, name: string): number {
+  return card.glitched ? 0 : keywordValue(card, name);
+}
+
 // ---------------------------------------------------------------------------
 // Stat calculation (Layer Rule §5.3: Locations first, then Items)
 // ---------------------------------------------------------------------------
@@ -99,8 +116,8 @@ function applyDamageToUnit(
   opts: { bypassArmor?: boolean } = {}
 ): number {
   let dmg = amount;
-  if (hasKeyword(card, 'Brittle')) dmg *= 2; // §2.3 Brittle: incoming D becomes 2D
-  if (!opts.bypassArmor && card.armor > 0) {
+  if (kwActive(card, 'Brittle')) dmg *= 2; // §2.3 Brittle: incoming D becomes 2D
+  if (!opts.bypassArmor && card.armor > 0 && !card.glitched) {
     if (dmg <= card.armor) return 0; // Armor absorbs, remains
     dmg -= card.armor;
     card.armor = 0; // Armor destroyed
@@ -123,7 +140,8 @@ function recalcHealth(player: PlayerState) {
 }
 
 function siphonHeal(source: GameCard, controller: PlayerState, damageDealt: number) {
-  if (damageDealt > 0 && hasKeyword(source, 'Siphon')) {
+  // §2.2 Siphon: Leader recovers half the damage dealt, rounded up.
+  if (damageDealt > 0 && kwActive(source, 'Siphon')) {
     controller.leader.damageTaken = Math.max(0, controller.leader.damageTaken - Math.ceil(damageDealt / 2));
     recalcHealth(controller);
   }
@@ -135,7 +153,7 @@ function siphonHeal(source: GameCard, controller: PlayerState, damageDealt: numb
 export function initialGameState(vsCPU = true, p1Leader?: string, p2Leader?: string): GameState {
   const p1Id = 'p1';
   const p2Id = 'p2';
-  const leaders = DECKABLE_LEADERS;
+  const leaders = getDeckableLeaders();
   const l1 = p1Leader || leaders[0];
   const l2 = p2Leader || leaders[1 % leaders.length];
 
@@ -158,6 +176,7 @@ export function initialGameState(vsCPU = true, p1Leader?: string, p2Leader?: str
     mulliganKept: false,
     health: d.leader.health || 30,
     overclockPenalty: 0,
+    singleColorRoll: false,
   });
 
   const players: Record<string, PlayerState> = {
@@ -207,6 +226,7 @@ function checkWin(next: GameState) {
 function startOfTurn(next: GameState, player: PlayerState) {
   // §2.1.1 clear the active player's unspent resources first.
   player.resources = {};
+  player.singleColorRoll = false;
 
   // Location Shell Game (§3.1): flip a random face-down opponent Location.
   const oppId = player.id === next.player1Id ? next.player2Id : next.player1Id;
@@ -220,12 +240,12 @@ function startOfTurn(next: GameState, player: PlayerState) {
 
   // Sustain (§2.3): heal at the very start of the turn, before the roll.
   for (const u of player.board) {
-    const s = keywordValue(u, 'Sustain');
+    const s = kwValueActive(u, 'Sustain');
     if (s > 0 && u.damageTaken > 0) {
       u.damageTaken = Math.max(0, u.damageTaken - s);
     }
   }
-  const leaderSustain = keywordValue(player.leader, 'Sustain');
+  const leaderSustain = kwValueActive(player.leader, 'Sustain');
   if (leaderSustain > 0 && player.leader.damageTaken > 0) {
     player.leader.damageTaken = Math.max(0, player.leader.damageTaken - leaderSustain);
     recalcHealth(player);
@@ -264,7 +284,7 @@ function startOfTurn(next: GameState, player: PlayerState) {
 }
 
 function endOfTurnCleanup(next: GameState, player: PlayerState) {
-  // §2.4.2 the active player's Charms tick down (charms affecting this player).
+  // §2.1.4 Charms affecting the current player tick down by 1.
   const survivingCharms: GameCard[] = [];
   for (const charm of player.charms) {
     if (!charm.charmActivated) {
@@ -273,14 +293,16 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
     }
     charm.charmDuration = (charm.charmDuration || 1) - 1;
     if (charm.charmDuration <= 0) {
-      // Detonate [X] (§2.1): parting effect on expiry.
+      // Detonate [X] (§2.1): on expiry, deal X damage to all Units that are
+      // enemies of the Charm's owner (the player who cast it).
       const det = keywordValue(charm, 'Detonate');
       if (det > 0) {
-        const oppId = player.id === next.player1Id ? next.player2Id : next.player1Id;
-        for (const u of next.players[oppId].board) applyDamageToUnit(u, det);
-        next.log.push(`Charm "${charm.name}" detonated for ${det}.`);
+        const enemyOfOwnerId = charm.ownerId === next.player1Id ? next.player2Id : next.player1Id;
+        for (const u of next.players[enemyOfOwnerId].board) applyDamageToUnit(u, det);
+        next.log.push(`Charm "${charm.name}" detonated for ${det} against ${next.players[enemyOfOwnerId].name}'s Units.`);
       }
-      player.graveyard.push(charm);
+      next.players[charm.ownerId].graveyard.push(charm);
+      next.log.push(`Charm "${charm.name}" expired.`);
     } else {
       survivingCharms.push(charm);
     }
@@ -304,13 +326,20 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
   for (const u of player.board) if (u.frozen > 0) u.frozen -= 1;
   if (player.leader.frozen > 0) player.leader.frozen -= 1;
 
-  // Temporary buffs expire at end of turn.
+  // Temporary buffs expire at end of turn; Glitch wears off at Cleanup (§2.3).
+  for (const pl of Object.values(next.players)) {
+    for (const u of pl.board) {
+      u.glitched = false;
+      for (const it of u.attachedItems) it.glitched = false;
+    }
+    pl.leader.glitched = false;
+  }
   for (const u of player.board) {
     u.tempAtk = 0;
     u.tempHp = 0;
   }
 
-  // §2.4.3 discard down to 7.
+  // §2.1.4 discard down to 7.
   while (player.hand.length > 7) {
     const discarded = player.hand.pop()!;
     player.graveyard.push(discarded);
@@ -350,6 +379,12 @@ function cleanupDeaths(next: GameState) {
 function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, card: GameCard, targetId?: string) {
   const eff = card.effect;
   if (!eff) return;
+
+  // Pure (§2.3): bonus when 100% of this turn's roll went to one color.
+  const pureBonus = hasKeyword(card, 'Pure') && caster.singleColorRoll ? 2 : 0;
+  if (pureBonus > 0) next.log.push(`${card.name}'s Pure bonus triggers (+${pureBonus}).`);
+  const val = (eff.value || 0) + pureBonus;
+
   const findTarget = (): GameCard | null => {
     if (!targetId) return null;
     const all = [
@@ -364,13 +399,13 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
   switch (eff.action) {
     case 'damage': {
       if (eff.target === 'leader') {
-        opp.leader.damageTaken += eff.value || 0;
+        opp.leader.damageTaken += val;
         recalcHealth(opp);
-        siphonHeal(card, caster, eff.value || 0);
+        siphonHeal(card, caster, val);
       } else {
         const t = findTarget();
         if (t) {
-          const dealt = applyDamageToUnit(t, eff.value || 0);
+          const dealt = applyDamageToUnit(t, val);
           siphonHeal(card, caster, dealt);
         }
       }
@@ -387,18 +422,18 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
     case 'scorch': {
       const t = findTarget();
       if (t) {
-        t.scorch += eff.value || 0;
-        next.log.push(`${t.name} was Scorched ${eff.value}.`);
+        t.scorch += val;
+        next.log.push(`${t.name} was Scorched ${val}.`);
       }
       break;
     }
     case 'heal': {
-      caster.leader.damageTaken = Math.max(0, caster.leader.damageTaken - (eff.value || 0));
+      caster.leader.damageTaken = Math.max(0, caster.leader.damageTaken - val);
       recalcHealth(caster);
       break;
     }
     case 'draw': {
-      for (let i = 0; i < (eff.value || 0); i++) {
+      for (let i = 0; i < val; i++) {
         if (caster.deck.length > 0) caster.hand.push(caster.deck.pop()!);
         else {
           caster.leader.damageTaken += 2;
@@ -416,8 +451,42 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
       }
       break;
     }
+    case 'meltdown': {
+      // §2.3 Meltdown: destroy a target Item; deal its cost as Flame damage to the host.
+      const t = findTarget();
+      if (t && t.type === 'Unit' && t.attachedItems.length > 0) {
+        const item = t.attachedItems.shift()!;
+        const itemCost = Object.values(item.cost || {}).reduce((a, b) => a + b, 0);
+        next.players[item.ownerId].graveyard.push(item);
+        const dealt = applyDamageToUnit(t, itemCost);
+        siphonHeal(card, caster, dealt);
+        next.log.push(`Meltdown destroyed ${item.name}; ${t.name} took ${itemCost} Flame damage.`);
+      }
+      break;
+    }
+    case 'purge': {
+      // §3 Purge: strip Items, statuses and temporary buffs from the target.
+      const t = findTarget();
+      if (t) {
+        for (const it of t.attachedItems) next.players[it.ownerId].graveyard.push(it);
+        t.attachedItems = [];
+        t.bonusDamage = 0;
+        t.scorch = 0;
+        t.frozen = 0;
+        t.glitched = false;
+        t.tempAtk = 0;
+        t.tempHp = 0;
+        if (t.type === 'Leader') {
+          const pl = next.players[t.ownerId];
+          for (const ch of pl.charms) next.players[ch.ownerId].graveyard.push(ch);
+          pl.charms = [];
+        }
+        next.log.push(`${t.name} was Purged of all modifications.`);
+      }
+      break;
+    }
     case 'manifest': {
-      const v = eff.value || 1;
+      const v = val || 1;
       caster.board.push(makeToken('Scrap Drone', v, v, caster.id));
       next.log.push(`${caster.name} Manifested a ${v}/${v} Scrap Drone.`);
       break;
@@ -425,9 +494,9 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
     case 'buff': {
       const t = findTarget();
       if (t && t.type === 'Unit') {
-        t.tempAtk += eff.value || 0;
-        t.tempHp += eff.value || 0;
-        next.log.push(`${t.name} gained +${eff.value}/+${eff.value}.`);
+        t.tempAtk += val;
+        t.tempHp += val;
+        next.log.push(`${t.name} gained +${val}/+${val}.`);
       }
       break;
     }
@@ -506,8 +575,8 @@ function reduce(state: GameState, action: GameAction): GameState {
     case 'ROLL_DICE': {
       if (next.phase !== 'ROLL') return next;
       let roll = Math.floor(Math.random() * 6) + 1;
-      // Boost [X] from Leader / active Location (§2.3).
-      let boost = keywordValue(activePlayer.leader, 'Boost');
+      // Boost [X] from Leader / active Location / active Charms (§2.3).
+      let boost = kwValueActive(activePlayer.leader, 'Boost');
       if (next.activeLocationOwnerId === activePlayer.id && next.activeLocation) {
         boost += keywordValue(next.activeLocation, 'Boost');
       }
@@ -520,11 +589,17 @@ function reduce(state: GameState, action: GameAction): GameState {
         activePlayer.overclockPenalty = 0;
       }
       // Fix [Element] (§2.3): auto-allocate 1 point to the fixed element.
-      const fixArg = keywordArg(activePlayer.leader, 'Fix');
-      if (fixArg && roll > 0) {
-        activePlayer.resources[fixArg] = (activePlayer.resources[fixArg] || 0) + 1;
-        roll -= 1;
-        next.log.push(`Fix auto-allocates 1 ${fixArg}.`);
+      // Sources: Leader, the active Location (its controller), active Charms.
+      const fixSources: GameCard[] = [activePlayer.leader];
+      if (next.activeLocationOwnerId === activePlayer.id && next.activeLocation) fixSources.push(next.activeLocation);
+      for (const c of activePlayer.charms) if (c.charmActivated) fixSources.push(c);
+      for (const src of fixSources) {
+        const fixArg = keywordArg(src, 'Fix');
+        if (fixArg && roll > 0) {
+          activePlayer.resources[fixArg] = (activePlayer.resources[fixArg] || 0) + 1;
+          roll -= 1;
+          next.log.push(`Fix (${src.name}) auto-allocates 1 ${fixArg}.`);
+        }
       }
       next.pendingRoll = roll;
       next.phase = 'ALLOCATE';
@@ -543,7 +618,11 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
       next.pendingRoll = null;
 
-      // Draw Phase — the first player skips their draw on Turn 1 (§2.2).
+      // Pure (§2.3): remember whether the whole roll landed in a single color.
+      const colorsUsed = Object.entries(activePlayer.resources).filter(([, v]) => v > 0);
+      activePlayer.singleColorRoll = colorsUsed.length === 1;
+
+      // Draw Phase — the first player skips their draw on Turn 1 (§2.1.2).
       if (next.turnNumber !== 1) {
         if (activePlayer.deck.length > 0) {
           activePlayer.hand.push(activePlayer.deck.pop()!);
@@ -584,29 +663,44 @@ function reduce(state: GameState, action: GameAction): GameState {
         : undefined;
       if (needsTarget && !targetCard) return next; // wait for a valid target
 
-      // Ward [X] (§2.2): targeting an enemy card costs extra.
-      if (targetCard && targetCard.ownerId !== activePlayer.id) {
-        const ward = keywordValue(targetCard, 'Ward');
-        if (ward > 0) {
-          const extra: Record<string, number> = { Generic: ward };
-          if (!canAfford(extra, { ...activePlayer.resources })) return next;
+      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
+
+      // Guard (§2.1): targeted enemy Events must target a Unit with Guard
+      // while the defender has a ready Guard Unit.
+      if (targetsEnemy && card.type === 'Event') {
+        const guards = opponent.board.filter(
+          (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
+        );
+        if (guards.length > 0 && !guards.some((g) => g.instanceId === targetCard!.instanceId)) {
+          next.log.push('A ready Guard Unit forces enemy Events to target it.');
+          return next;
+        }
+      }
+
+      // Ward [X] (§2.1): targeting an enemy card costs extra; targeting is
+      // locked if the surcharge cannot be paid.
+      const wardCost = targetsEnemy ? kwValueActive(targetCard!, 'Ward') : 0;
+      if (wardCost > 0) {
+        const combined = { ...(card.cost || {}) };
+        combined.Generic = (combined.Generic || 0) + wardCost;
+        if (!canAfford(combined, activePlayer.resources)) {
+          next.log.push(`Cannot pay the Ward ${wardCost} surcharge.`);
+          return next;
         }
       }
 
       payCost(card.cost, activePlayer.resources);
-      // Pay Ward surcharge.
-      if (targetCard && targetCard.ownerId !== activePlayer.id) {
-        const ward = keywordValue(targetCard, 'Ward');
-        if (ward > 0) payCost({ Generic: ward }, activePlayer.resources);
-      }
+      if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
       activePlayer.hand.splice(cardIdx, 1);
 
-      // Feedback (§2.2): targeted enemy may negate on a d6 of 4-6.
-      if (targetCard && targetCard.ownerId !== activePlayer.id && hasKeyword(targetCard, 'Feedback')) {
+      // Feedback (§2.2): targeted enemy may negate on a d6 of 4-6, refunding
+      // everything spent (base cost and Ward surcharge) exactly.
+      if (targetsEnemy && kwActive(targetCard!, 'Feedback')) {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
-          next.log.push(`${targetCard.name}'s Feedback negated ${card.name} (rolled ${roll}). Card refunded.`);
+          next.log.push(`${targetCard!.name}'s Feedback negated ${card.name} (rolled ${roll}). Card refunded.`);
           refund(card.cost, activePlayer.resources);
+          if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
           activePlayer.hand.push(card);
           return next;
         }
@@ -625,10 +719,14 @@ function reduce(state: GameState, action: GameAction): GameState {
           next.log.push(`${activePlayer.name} attached ${card.name} to ${targetCard.name}.`);
         }
       } else if (card.type === 'Charm') {
+        // §3.2 Charms attach to a player's profile and sit dormant until the
+        // affected player's next turn. Deleterious charms (Decay) go on the
+        // opponent; protective/utility charms attach to their caster.
         card.charmDuration = card.duration || 1;
         card.charmActivated = false;
-        opponent.charms.push(card); // charms default to affecting the opponent
-        next.log.push(`${activePlayer.name} played the Charm ${card.name}.`);
+        const harmful = hasKeyword(card, 'Decay');
+        (harmful ? opponent : activePlayer).charms.push(card);
+        next.log.push(`${activePlayer.name} played the Charm ${card.name}${harmful ? ' on the opponent' : ''}.`);
       } else if (card.type === 'Event') {
         next.log.push(`${activePlayer.name} cast ${card.name}.`);
         resolveEvent(next, activePlayer, opponent, card, action.targetId);
@@ -648,9 +746,26 @@ function reduce(state: GameState, action: GameAction): GameState {
       return next;
     }
 
+    case 'LEADER_COMMAND': {
+      // Command [X] (§2.1): pay X resources to instantly ready a friendly
+      // Unit; it ignores summoning sickness and may attack again this turn.
+      if (next.phase !== 'ACTION') return next;
+      const x = kwValueActive(activePlayer.leader, 'Command');
+      if (x <= 0) return next;
+      const target = activePlayer.board.find((u) => u.instanceId === action.targetId && u.type === 'Unit');
+      if (!target) return next;
+      if (!canAfford({ Generic: x }, activePlayer.resources)) return next;
+      payCost({ Generic: x }, activePlayer.resources);
+      target.exhausted = false;
+      target.summoningSickness = false;
+      target.attacksThisTurn = Math.max(0, target.attacksThisTurn - 1);
+      next.log.push(`${activePlayer.name}'s Leader Commands ${target.name}: readied for another attack.`);
+      return next;
+    }
+
     case 'ENTER_COMBAT': {
       if (next.phase !== 'ACTION') return next;
-      if (next.turnNumber === 1) return next; // No attacks on Turn 1 (§2.2).
+      if (next.turnNumber === 1) return next; // No attacks on Turn 1 (§2.1.2).
       next.phase = 'COMBAT_DECLARE';
       next.combat = { attackers: [], blockers: [] };
       return next;
@@ -661,18 +776,40 @@ function reduce(state: GameState, action: GameAction): GameState {
       const existing = next.combat.attackers.findIndex((a) => a.instanceId === action.instanceId);
       if (existing >= 0) {
         next.combat.attackers.splice(existing, 1);
-      } else {
-        // Survival Caveat (§5.2): forbid a Leader attack whose counter is lethal.
-        if (activePlayer.leader.instanceId === action.instanceId) {
-          const counter = effAttack(opponent.leader, next);
-          const remaining = (activePlayer.leader.health || 0) - activePlayer.leader.damageTaken;
-          if (counter >= remaining) {
-            next.log.push('Leader attack blocked: counter-damage would be lethal.');
-            return next;
-          }
-        }
-        next.combat.attackers.push({ instanceId: action.instanceId, targetId: action.targetId });
+        return next;
       }
+      // Engine-side eligibility (§5.1): no summoning sickness, not frozen,
+      // not already spent.
+      const unit = activePlayer.board.find((u) => u.instanceId === action.instanceId);
+      if (unit) {
+        const maxAttacks = kwActive(unit, 'Overdrive') ? 2 : 1;
+        if (unit.summoningSickness || unit.frozen > 0 || unit.attacksThisTurn >= maxAttacks) return next;
+        if (unit.exhausted && unit.attacksThisTurn >= maxAttacks) return next;
+        // Burden (§2.1): the client locks the declaration if the combined
+        // surcharge of all declared attackers cannot be paid.
+        const declaredBurden = next.combat.attackers.reduce((s, a) => {
+          const du = activePlayer.board.find((b) => b.instanceId === a.instanceId);
+          return s + (du ? attackBurden(du) : 0);
+        }, 0);
+        const total = declaredBurden + attackBurden(unit);
+        if (total > 0 && !canAfford({ Generic: total }, activePlayer.resources)) {
+          next.log.push(`${unit.name} cannot attack: Burden ${attackBurden(unit)} unpayable.`);
+          return next;
+        }
+      } else if (activePlayer.leader.instanceId === action.instanceId) {
+        if (activePlayer.leader.exhausted || activePlayer.leader.frozen > 0) return next;
+        // Survival Caveat (§5.2): forbid a Leader attack whose counter is lethal.
+        const target = [opponent.leader, ...opponent.board].find((c) => c.instanceId === action.targetId);
+        const counter = target ? effAttack(target, next) : 0;
+        const remaining = (activePlayer.leader.health || 0) - activePlayer.leader.damageTaken;
+        if (counter >= remaining) {
+          next.log.push('Leader attack blocked: counter-damage would be lethal.');
+          return next;
+        }
+      } else {
+        return next;
+      }
+      next.combat.attackers.push({ instanceId: action.instanceId, targetId: action.targetId });
       return next;
     }
 
@@ -683,15 +820,36 @@ function reduce(state: GameState, action: GameAction): GameState {
         next.combat = null;
         return next;
       }
+      // Burden [X] (§2.1): attacking with a Unit holding a Burden Item costs
+      // extra generic resources; unaffordable attacks are cancelled.
+      const confirmed: typeof next.combat.attackers = [];
       for (const att of next.combat.attackers) {
         const u = activePlayer.board.find((b) => b.instanceId === att.instanceId);
         if (u) {
+          const burden = attackBurden(u);
+          if (burden > 0) {
+            if (!canAfford({ Generic: burden }, activePlayer.resources)) {
+              next.log.push(`${u.name} cannot attack: Burden ${burden} unpaid.`);
+              continue;
+            }
+            payCost({ Generic: burden }, activePlayer.resources);
+            next.log.push(`${activePlayer.name} paid Burden ${burden} for ${u.name}.`);
+          }
           u.exhausted = true;
           u.attacksThisTurn += 1;
+          confirmed.push(att);
+        } else if (activePlayer.leader.instanceId === att.instanceId) {
+          activePlayer.leader.exhausted = true;
+          confirmed.push(att);
         }
-        if (activePlayer.leader.instanceId === att.instanceId) activePlayer.leader.exhausted = true;
       }
-      next.log.push(`${activePlayer.name} declared ${next.combat.attackers.length} attacker(s).`);
+      next.combat.attackers = confirmed;
+      if (confirmed.length === 0) {
+        next.phase = 'ACTION';
+        next.combat = null;
+        return next;
+      }
+      next.log.push(`${activePlayer.name} declared ${confirmed.length} attacker(s).`);
 
       // If the defender has no possible blockers, resolve immediately.
       const canBlock = opponent.board.some((u) => !u.exhausted && u.frozen === 0);
@@ -749,9 +907,34 @@ function maybeStartFirstTurn(next: GameState) {
   }
 }
 
+/** Wither / Glitch / Reap triggers when `attacker` deals combat damage to `target`. */
+function onCombatDamageToUnit(next: GameState, attacker: GameCard, target: GameCard) {
+  const w = kwValueActive(attacker, 'Wither');
+  if (w > 0 && target.type === 'Unit') {
+    target.witherAtk += w;
+    target.witherHp += w;
+    next.log.push(`${attacker.name} Withered ${target.name} by ${w}.`);
+  }
+  if (kwActive(attacker, 'Glitch')) {
+    target.glitched = true;
+    for (const it of target.attachedItems || []) it.glitched = true;
+    next.log.push(`${target.name} was Glitched: abilities disabled until Cleanup.`);
+  }
+}
+
+function reapHeal(next: GameState, attacker: GameCard, victim: GameCard) {
+  if (kwActive(attacker, 'Reap')) {
+    const heal = victim.attack || 0; // printed base attack
+    const ctrl = playerOf(next, attacker);
+    ctrl.leader.damageTaken = Math.max(0, ctrl.leader.damageTaken - heal);
+    recalcHealth(ctrl);
+    next.log.push(`${attacker.name} Reaped ${heal} health.`);
+  }
+}
+
 /**
  * Resolve the unified assault wave (§5.1-5.3): apply combat damage, honor
- * blocking, Pierce, Wither, Siphon, Reap, Leader combat laws, then deaths.
+ * blocking, Pierce, Wither, Glitch, Siphon, Reap, Leader combat laws, then deaths.
  */
 function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: PlayerState): GameState {
   if (!next.combat) return next;
@@ -773,29 +956,22 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       const blockerRemaining = totalRemaining(blocker, next);
       const dealt = applyDamageToUnit(blocker, attackerAtk);
       siphonHeal(attacker, playerOf(next, attacker), dealt);
-      // Pierce: overflow to defending Leader.
-      if (hasKeyword(attacker, 'Pierce') && attackerAtk > blockerRemaining) {
+      if (dealt > 0) onCombatDamageToUnit(next, attacker, blocker);
+      // Pierce (§2.1): overflow beyond the blocker's remaining health goes to
+      // the defending Leader.
+      if (kwActive(attacker, 'Pierce') && attackerAtk > blockerRemaining) {
         const overflow = attackerAtk - blockerRemaining;
         opponent.leader.damageTaken += overflow;
         recalcHealth(opponent);
         next.log.push(`${attacker.name} Pierced ${overflow} to ${opponent.name}'s Leader.`);
       }
-      // Wither: permanently weaken the blocker.
-      const w = keywordValue(attacker, 'Wither');
-      if (w > 0) {
-        blocker.witherAtk += w;
-        blocker.witherHp += w;
-      }
       // Counter damage (blocking does not exhaust the blocker).
       const counter = effAttack(blocker, next);
-      applyDamageToUnit(attacker, counter);
+      const counterDealt = applyDamageToUnit(attacker, counter);
+      if (counterDealt > 0) onCombatDamageToUnit(next, blocker, attacker);
       // Reap: destroying an enemy Unit in combat heals for its base attack.
-      if (hasKeyword(attacker, 'Reap') && isDead(blocker, next)) {
-        const heal = blocker.attack || 0;
-        const ctrl = playerOf(next, attacker);
-        ctrl.leader.damageTaken = Math.max(0, ctrl.leader.damageTaken - heal);
-        recalcHealth(ctrl);
-      }
+      if (isDead(blocker, next)) reapHeal(next, attacker, blocker);
+      if (isDead(attacker, next)) reapHeal(next, blocker, attacker);
     } else {
       // Unblocked: hit the declared target.
       let target = entityMap.get(attack.targetId);
@@ -804,7 +980,7 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       // attack is forced onto it instead of the Leader.
       if (target.type === 'Leader' && target.ownerId === opponent.id) {
         const guard = opponent.board.find(
-          (u) => hasKeyword(u, 'Guard') && !u.exhausted && u.frozen === 0 && !isDead(u, next)
+          (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0 && !isDead(u, next)
         );
         if (guard) {
           target = guard;
@@ -814,11 +990,12 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       if (target.type === 'Leader') {
         const targetPlayer = playerOf(next, target);
         if (attacker.type === 'Leader') {
-          // Leader vs Leader: half damage (min 1), full counter (§5.2).
+          // Leader vs Leader: half damage (rounded down, min 1), full counter (§5.2).
           const dmg = Math.max(1, Math.floor(attackerAtk / 2));
           targetPlayer.leader.damageTaken += dmg;
           recalcHealth(targetPlayer);
           siphonHeal(attacker, playerOf(next, attacker), dmg);
+          if (dmg > 0) onCombatDamageToUnit(next, attacker, target);
           const counter = effAttack(target, next);
           attacker.damageTaken += counter;
           recalcHealth(playerOf(next, attacker));
@@ -826,24 +1003,22 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
           targetPlayer.leader.damageTaken += attackerAtk;
           recalcHealth(targetPlayer);
           siphonHeal(attacker, playerOf(next, attacker), attackerAtk);
+          if (attackerAtk > 0) onCombatDamageToUnit(next, attacker, target);
         }
       } else {
         // Leader (or unit) attacking a Unit: full both ways (§5.2).
         const dealt = applyDamageToUnit(target, attackerAtk);
         siphonHeal(attacker, playerOf(next, attacker), dealt);
+        if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
         const counter = effAttack(target, next);
         if (attacker.type === 'Leader') {
           attacker.damageTaken += counter;
           recalcHealth(playerOf(next, attacker));
         } else {
-          applyDamageToUnit(attacker, counter);
+          const counterDealt = applyDamageToUnit(attacker, counter);
+          if (counterDealt > 0) onCombatDamageToUnit(next, target, attacker);
         }
-        if (hasKeyword(attacker, 'Reap') && isDead(target, next)) {
-          const heal = target.attack || 0;
-          const ctrl = playerOf(next, attacker);
-          ctrl.leader.damageTaken = Math.max(0, ctrl.leader.damageTaken - heal);
-          recalcHealth(ctrl);
-        }
+        if (isDead(target, next)) reapHeal(next, attacker, target);
       }
     }
   }

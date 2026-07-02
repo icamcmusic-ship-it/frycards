@@ -1,7 +1,8 @@
 import React, { useEffect, useReducer, useState } from 'react';
 import { initialGameState, gameReducer } from './game/engine';
 import { getCPUAction } from './game/ai';
-import { DECKABLE_LEADERS, CARD_DB } from './game/cards';
+import { getDeckableLeaders, getCard, applyCardData } from './game/cards';
+import { fetchCardTemplates } from './lib/supabase';
 import { Board } from './components/Board';
 import { GameCard, GameState } from './types';
 import { GameAction } from './game/engine';
@@ -25,10 +26,10 @@ function MulliganModal({ state, dispatch }: { state: GameState; dispatch: React.
   };
 
   return (
-    <div className="absolute inset-0 bg-slate-950/90 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 shadow-2xl text-center max-w-4xl w-full">
-        <h2 className="text-2xl font-bold text-white mb-1">Mulligan — {human.name}</h2>
-        <p className="text-slate-400 mb-4 text-sm">
+    <div className="absolute inset-0 bg-[#1A1A1A]/90 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#F7F7F7] text-[#1A1A1A] p-6 ink-border-md shadow-hard-yellow text-center max-w-4xl w-full">
+        <h2 className="text-2xl heading-font mb-1">Mulligan — {human.name}</h2>
+        <p className="text-[#2C3E50] mb-4 text-sm font-bold">
           {needBottom > 0
             ? `You have mulliganed ${needBottom} time(s). Select ${needBottom} card(s) to put on the bottom, then keep.`
             : 'Keep this hand, or mulligan to shuffle and redraw 5.'}
@@ -41,11 +42,11 @@ function MulliganModal({ state, dispatch }: { state: GameState; dispatch: React.
         </div>
         <div className="flex gap-4 justify-center">
           <button onClick={keep} disabled={needBottom > 0 && bottoming.length !== needBottom}
-            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium">
+            className="btn-pop px-6 py-3 bg-[#FFD54F] disabled:bg-[#2C3E50] disabled:text-[#F7F7F7]/40 text-[#1A1A1A] ink-border-sm shadow-hard-black-xs heading-font text-sm">
             Keep Hand
           </button>
           <button onClick={() => { dispatch({ type: 'MULLIGAN', playerId: human.id }); setBottoming([]); }}
-            className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium">
+            className="btn-pop px-6 py-3 bg-[#1A1A1A] text-[#FFD54F] ink-border-sm shadow-hard-black-xs heading-font text-sm">
             Mulligan ({human.hand.length} → 5)
           </button>
         </div>
@@ -57,12 +58,12 @@ function MulliganModal({ state, dispatch }: { state: GameState; dispatch: React.
 function CardWithSelect({ card, selected, onClick, selectable }: any) {
   return (
     <div onClick={onClick} className={cn('cursor-pointer transition-transform', selectable && 'hover:-translate-y-1', selected && '-translate-y-3')}>
-      <div className={cn('rounded-lg', selected && 'ring-4 ring-rose-500')}>
+      <div className={cn(selected && 'outline outline-4 outline-[#E53935]')}>
         {/* lightweight card face */}
-        <div className="w-24 h-32 rounded-lg overflow-hidden bg-slate-800 border-2 border-slate-700 flex flex-col">
-          <div className="text-[10px] font-bold px-1 py-0.5 truncate bg-slate-900">{card.name}</div>
+        <div className="w-24 h-[134px] overflow-hidden bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col">
+          <div className="text-[9px] heading-font px-1 py-0.5 truncate bg-[#1A1A1A] text-[#FFD54F]">{card.name}</div>
           {card.image && <img src={card.image} className="w-full aspect-[4/3] object-cover" />}
-          <div className="text-[9px] px-1 text-slate-400 mt-auto">{card.type}</div>
+          <div className="text-[8px] font-mono font-bold px-1 text-[#2C3E50] mt-auto uppercase">{card.type} · {card.rarity}</div>
         </div>
       </div>
     </div>
@@ -95,37 +96,38 @@ function RollModal({ state, dispatch }: { state: GameState; dispatch: React.Disp
   const elements = active.leader.elements.filter((e) => e !== 'Generic');
 
   return (
-    <div className="absolute inset-0 bg-slate-950/80 flex items-center justify-center z-40 backdrop-blur-sm">
-      <div className="bg-slate-900 p-8 rounded-xl border border-slate-700 shadow-2xl text-center max-w-md w-full">
+    <div className="absolute inset-0 bg-[#1A1A1A]/85 flex items-center justify-center z-40">
+      <div className="bg-[#F7F7F7] text-[#1A1A1A] p-8 ink-border-md shadow-hard-yellow text-center max-w-md w-full relative overflow-hidden">
+        <div className="absolute inset-0 halftone-pattern pointer-events-none opacity-40" />
         {state.phase === 'ROLL' ? (
-          <>
-            <h2 className="text-2xl font-bold text-white mb-6">Resource Roll Phase</h2>
+          <div className="relative">
+            <h2 className="text-2xl heading-font mb-6">Resource Roll Phase</h2>
             <button onClick={() => dispatch({ type: 'ROLL_DICE' })}
-              className="px-8 py-4 bg-amber-600 hover:bg-amber-500 text-white text-xl rounded-lg font-medium active:scale-95 transition-transform">
-              Roll d6
+              className="btn-pop px-10 py-4 bg-[#FFD54F] text-[#1A1A1A] heading-font text-xl ink-border-md shadow-hard-black">
+              ⚄ Roll d6
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <h2 className="text-2xl font-bold text-white mb-1">Allocate Resources</h2>
-            <p className="text-slate-400 mb-5 text-sm">Distribute {remaining} more into your elements.</p>
+          <div className="relative">
+            <h2 className="text-2xl heading-font mb-1">Allocate Resources</h2>
+            <p className="text-[#2C3E50] mb-5 text-sm font-bold">Distribute {remaining} more into your elements.</p>
             <div className="flex flex-col gap-3 mb-6">
               {elements.map((el) => (
-                <div key={el} className="flex items-center justify-between bg-slate-800 p-3 rounded-lg border border-slate-700">
-                  <span className="font-bold text-slate-200">{el}</span>
+                <div key={el} className="flex items-center justify-between bg-[#F7F7F7] p-3 ink-border-sm shadow-hard-black-xs">
+                  <span className="heading-font text-sm">{el}</span>
                   <div className="flex items-center gap-4">
-                    <button onClick={() => change(el, -1)} className="w-8 h-8 rounded bg-slate-700 hover:bg-slate-600 text-white font-bold">-</button>
-                    <span className="w-4 font-mono">{allocs[el] || 0}</span>
-                    <button onClick={() => change(el, 1)} className="w-8 h-8 rounded bg-slate-700 hover:bg-slate-600 text-white font-bold">+</button>
+                    <button onClick={() => change(el, -1)} className="btn-pop w-8 h-8 bg-[#1A1A1A] text-[#FFD54F] font-black ink-border-sm">-</button>
+                    <span className="w-4 font-mono font-black">{allocs[el] || 0}</span>
+                    <button onClick={() => change(el, 1)} className="btn-pop w-8 h-8 bg-[#FFD54F] text-[#1A1A1A] font-black ink-border-sm">+</button>
                   </div>
                 </div>
               ))}
             </div>
             <button onClick={() => dispatch({ type: 'ALLOCATE_RESOURCES', allocations: allocs })} disabled={remaining !== 0}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium">
+              className="btn-pop w-full py-3 bg-[#E53935] disabled:bg-[#2C3E50] disabled:text-[#F7F7F7]/40 text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs">
               Confirm ({remaining} left)
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -136,11 +138,12 @@ function GameOverModal({ state, onReplay }: { state: GameState; onReplay: () => 
   if (!state.winner) return null;
   const winner = state.players[state.winner];
   return (
-    <div className="absolute inset-0 bg-slate-950/95 flex items-center justify-center z-50 backdrop-blur-md">
-      <div className="text-center">
-        <h1 className="text-6xl font-bold text-amber-500 uppercase mb-4 tracking-widest">Victory</h1>
-        <p className="text-3xl text-white mb-10">{winner.name} wins the match!</p>
-        <button onClick={onReplay} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">Play Again</button>
+    <div className="absolute inset-0 bg-[#FFD54F] flex items-center justify-center z-50 overflow-hidden">
+      <div className="absolute inset-0 starburst-ray" />
+      <div className="text-center relative bg-[#F7F7F7] ink-border-lg shadow-hard-black-lg p-12">
+        <h1 className="text-6xl heading-font text-[#1A1A1A] mb-4">Victory</h1>
+        <p className="text-2xl heading-font text-[#E53935] mb-10">{winner.name} wins the match!</p>
+        <button onClick={onReplay} className="btn-pop px-8 py-3 bg-[#1A1A1A] text-[#FFD54F] heading-font ink-border-md shadow-hard-yellow">Play Again</button>
       </div>
     </div>
   );
@@ -148,7 +151,7 @@ function GameOverModal({ state, onReplay }: { state: GameState; onReplay: () => 
 
 function LogPanel({ state }: { state: GameState }) {
   return (
-    <div className="absolute top-24 left-2 w-64 max-h-48 overflow-y-auto bg-slate-900/80 border border-slate-800 rounded-lg p-2 text-[10px] text-slate-400 font-mono z-30 backdrop-blur-sm">
+    <div className="absolute top-24 left-2 w-64 max-h-48 overflow-y-auto bg-[#1A1A1A]/90 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono z-30">
       {state.log.slice(-40).reverse().map((l, i) => <div key={i}>{l}</div>)}
     </div>
   );
@@ -157,26 +160,44 @@ function LogPanel({ state }: { state: GameState }) {
 // ---------------------------------------------------------------------------
 // Start screen — pick your Leader
 // ---------------------------------------------------------------------------
-function StartScreen({ onStart }: { onStart: (leaderId: string) => void }) {
+function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => void; dataSource: string }) {
   return (
-    <div className="w-full h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-200 p-6">
-      <h1 className="text-4xl font-bold text-white mb-2 tracking-widest uppercase">Shifting Multiverse</h1>
-      <p className="text-slate-400 mb-8">Choose your Leader. The CPU will pick another.</p>
-      <div className="flex gap-4 flex-wrap justify-center max-w-4xl">
-        {DECKABLE_LEADERS.map((id) => {
-          const l = CARD_DB[id];
-          return (
-            <button key={id} onClick={() => onStart(id)}
-              className="w-52 rounded-xl overflow-hidden bg-slate-900 border-2 border-slate-700 hover:border-emerald-500 hover:-translate-y-1 transition-all text-left">
-              {l.image && <img src={l.image} className="w-full aspect-[4/3] object-cover" />}
-              <div className="p-3">
-                <div className="font-bold text-white">{l.name}</div>
-                <div className="text-xs text-slate-400 mt-1">{l.elements.join(' / ')} · {l.health} HP · {l.attack} ATK</div>
-                <div className="text-[10px] text-indigo-300 mt-1">{(l.keywords || []).join(', ')}</div>
-              </div>
-            </button>
-          );
-        })}
+    <div className="w-full min-h-screen bg-[#F7F7F7] flex flex-col items-center justify-center text-[#1A1A1A] p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[#2C3E50] pointer-events-none opacity-15" style={{ clipPath: 'polygon(0 0, 55% 0, 30% 100%, 0% 100%)' }} />
+      <div className="absolute inset-0 bg-[#FFD54F] pointer-events-none" style={{ clipPath: 'polygon(88% 0, 100% 0, 100% 100%, 75% 100%)' }} />
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="bg-[#E53935] text-[#F7F7F7] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs mb-3">
+          STARK COMIC STANDARD · BLUE CORAL SET
+        </div>
+        <h1 className="text-5xl sm:text-6xl heading-font leading-none text-center mb-2">
+          SHIFTING<br /><span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-1">MULTIVERSE TCG</span>
+        </h1>
+        <p className="text-[#2C3E50] font-bold text-sm mb-2">Choose your Leader. The CPU will pick another.</p>
+        <div className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5 mb-8">CARD DATA: {dataSource}</div>
+        <div className="flex gap-6 flex-wrap justify-center max-w-5xl">
+          {getDeckableLeaders().map((id) => {
+            const l = getCard(id)!;
+            return (
+              <button key={id} onClick={() => onStart(id)}
+                className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left">
+                <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
+                  <span className="text-[9px] heading-font text-[#FFD54F]">MYTHIC LEADER ✸</span>
+                  <span className="text-[9px] font-mono font-bold text-[#F7F7F7]">{l.health} HP</span>
+                </div>
+                {l.image && <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]"><img src={l.image} className="w-full h-full object-cover" /></div>}
+                <div className="p-3 pt-1">
+                  <div className="heading-font text-base leading-tight">{l.name}</div>
+                  <div className="text-[10px] font-bold text-[#2C3E50] mt-1 uppercase">{l.elements.join(' / ')} · {l.attack} ATK</div>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {(l.keywords || []).map((kw) => (
+                      <span key={kw} className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm">{kw}</span>
+                    ))}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -186,7 +207,8 @@ function StartScreen({ onStart }: { onStart: (leaderId: string) => void }) {
 // Game (mounted per match)
 // ---------------------------------------------------------------------------
 function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }) {
-  const cpuLeader = DECKABLE_LEADERS.find((id) => id !== leaderId) || DECKABLE_LEADERS[0];
+  const leaders = getDeckableLeaders();
+  const cpuLeader = leaders.find((id) => id !== leaderId) || leaders[0];
   const [state, dispatch] = useReducer(gameReducer, null, () => initialGameState(true, leaderId, cpuLeader));
 
   // Kick off the mulligan phase once.
@@ -207,7 +229,7 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
   }, [state]);
 
   return (
-    <div className="relative w-full h-screen font-sans">
+    <div className="relative w-full h-screen">
       <Board gameState={state} dispatch={dispatch} />
       <MulliganModal state={state} dispatch={dispatch} />
       <RollModal state={state} dispatch={dispatch} />
@@ -220,8 +242,35 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
 export default function App() {
   const [leaderId, setLeaderId] = useState<string | null>(null);
   const [gameKey, setGameKey] = useState(0);
+  const [dataSource, setDataSource] = useState<'LOADING…' | 'SUPABASE LIVE' | 'BUNDLED FALLBACK'>('LOADING…');
 
-  if (!leaderId) return <StartScreen onStart={setLeaderId} />;
+  // Load the live card pool from the Supabase backend once at startup.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCardTemplates().then((templates) => {
+      if (cancelled) return;
+      if (templates) {
+        applyCardData(templates);
+        setDataSource('SUPABASE LIVE');
+      } else {
+        setDataSource('BUNDLED FALLBACK');
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (dataSource === 'LOADING…') {
+    return (
+      <div className="w-full h-screen bg-[#1A1A1A] flex flex-col items-center justify-center gap-4">
+        <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+          SHIFTING MULTIVERSE
+        </div>
+        <div className="text-[#F7F7F7] font-mono text-xs">FETCHING CARD DATABASE…</div>
+      </div>
+    );
+  }
+
+  if (!leaderId) return <StartScreen onStart={setLeaderId} dataSource={dataSource} />;
   return (
     <div key={gameKey} className="contents">
       <Game leaderId={leaderId} onReplay={() => { setLeaderId(null); setGameKey((k) => k + 1); }} />

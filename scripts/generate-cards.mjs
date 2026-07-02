@@ -1,151 +1,164 @@
-// Regenerate src/game/generated-cards.ts from data/cards_rows.csv:
+// Regenerate src/game/generated-cards.ts from data/live_cards.csv:
 //   node scripts/generate-cards.mjs
+//
+// The CSV (Title, Flavor Text, Type, Rarity, URL, Set, Color Costs, Keywords)
+// provides names, art, types, rarity, real color costs and real keywords from
+// the Master Keyword Glossary. Numeric stats (attack / health / generic cost /
+// item bonuses / charm duration) are generated deterministically from a name
+// hash so the rules are playable. The same templates are seeded into Supabase.
 import fs from 'fs';
-const raw = fs.readFileSync(new URL('../data/cards_rows.csv', import.meta.url), 'utf8');
-function parseCSV(text){const rows=[];let i=0,field='',row=[],inq=false;while(i<text.length){const c=text[i];if(inq){if(c==='"'){if(text[i+1]==='"'){field+='"';i+=2;continue;}inq=false;i++;continue;}field+=c;i++;continue;}else{if(c==='"'){inq=true;i++;continue;}if(c===','){row.push(field);field='';i++;continue;}if(c==='\r'){i++;continue;}if(c==='\n'){row.push(field);rows.push(row);row=[];field='';i++;continue;}field+=c;i++;continue;}}if(field.length||row.length){row.push(field);rows.push(row);}return rows;}
-const rows=parseCSV(raw);const header=rows[0];const idx=Object.fromEntries(header.map((h,i)=>[h,i]));
-let data=rows.slice(1).filter(r=>r[idx.name] && r[idx.card_type]);
 
-// stable hash
-function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0);}
-function slug(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');}
+const raw = fs.readFileSync(new URL('../data/live_cards.csv', import.meta.url), 'utf8');
 
-const RARITY_COST={Common:1,Uncommon:2,Rare:3,'Super-Rare':4,Mythic:5};
-const TYPE_MAP={Unit:'Unit',Location:'Location',Artifact:'Item',Event:'Event',Leader:'Leader'};
+function parseCSV(text) {
+  const rows = []; let i = 0, field = '', row = [], inq = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inq) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i += 2; continue; } inq = false; i++; continue; }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inq = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
 
-// Leaders: assign element pairs
-const LEADER_ELEMENTS={
-  'Avatar of the Abyss':['Dark','Chaos'],
-  'Ethereal Sea Witch':['Frost','Light'],
-  'Mer-King':['Order','Nature'],
-  'Legendary Diver':['Tech','Flame'],
+const rows = parseCSV(raw);
+// Row 0 is blank, row 1 is the header (first two columns are empty).
+const header = rows[1];
+const col = Object.fromEntries(header.map((h, i) => [h.trim(), i]));
+const data = rows.slice(2).filter((r) => r[col['Title']] && r[col['Type']]);
+
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
+
+const RARITY_TOTAL = { 'Common': 1, 'Uncommon': 2, 'Rare': 3, 'Super-Rare': 4, 'Mythic': 5 };
+
+// Leaders read "None" for Color Costs; assign each a two-element identity that
+// together covers all 8 elements and every dual color-cost pairing in the set.
+const LEADER_ELEMENTS = {
+  'Avatar of the Abyss': ['Dark', 'Nature'],
+  'Ethereal Sea Witch': ['Frost', 'Tech'],
+  'Mer-King': ['Light', 'Order'],
+  'Legendary Diver': ['Flame', 'Chaos'],
 };
-const LEADER_ORDER=Object.keys(LEADER_ELEMENTS);
 
-const leaders=data.filter(r=>r[idx.card_type]==='Leader');
-const nonLeaders=data.filter(r=>r[idx.card_type]!=='Leader');
-
-// Round-robin assign nonLeaders to 4 leader groups, balancing by type.
-// Sort by type then name for determinism, then distribute.
-const byType={};
-for(const r of nonLeaders){(byType[r[idx.card_type]]=byType[r[idx.card_type]]||[]).push(r);}
-const groups=[[],[],[],[]];
-let g=0;
-for(const t of ['Location','Unit','Artifact','Event']){
-  const arr=(byType[t]||[]).sort((a,b)=>a[idx.name].localeCompare(b[idx.name]));
-  for(const r of arr){groups[g%4].push(r);g++;}
+/** "Order / Light" -> { Order: 1, Light: 1 }; "Nature / Nature" -> { Nature: 2 } */
+function parseColorCost(s) {
+  const out = {};
+  for (const part of (s || '').split('/')) {
+    const el = part.trim();
+    if (!el || el === 'None') continue;
+    out[el] = (out[el] || 0) + 1;
+  }
+  return out;
 }
 
-function keywordFor(type,el,seed){
-  const uni={Unit:['Blitz','Guard','Pierce','Armor 2'],Item:['Armor 2','Pierce','Burden 1'],Location:['Symmetric'],Event:[],Leader:['Ward 1']};
-  const byEl={
-    Dark:{Unit:['Siphon','Reap','Wither 1'],Item:['Siphon'],Location:['Siphon'],Event:['Siphon'],Leader:['Siphon']},
-    Chaos:{Unit:['Feedback'],Item:['Feedback'],Location:['Feedback'],Event:['Echo'],Leader:['Feedback']},
-    Frost:{Unit:['Brittle','Freeze-Dry'],Item:['Brittle'],Location:['Freeze-Dry'],Event:['Freeze-Dry'],Leader:[]},
-    Tech:{Unit:['Overdrive','Glitch'],Item:['Glitch'],Location:['Boost 1'],Event:[],Leader:['Boost 1']},
-    Nature:{Unit:['Sustain 2'],Item:[],Location:['Boost 1'],Event:[],Leader:['Sustain 2','Boost 1']},
-    Flame:{Unit:[],Item:[],Location:[],Event:['Meltdown'],Leader:[]},
-    Light:{Unit:[],Item:[],Location:['Fix Light'],Event:['Pure'],Leader:['Fix Light']},
-    Order:{Unit:[],Item:[],Location:['Fix Order'],Event:['Pure'],Leader:['Command 2']},
-  };
-  const pool=[...(uni[type]||[]),...((byEl[el]&&byEl[el][type])||[])];
-  if(pool.length===0)return [];
-  return [pool[seed%pool.length]];
+/** Map CSV keyword strings onto glossary keywords; "Fix 1" -> "Fix <Element>". */
+function normalizeKeywords(kwRaw, elements) {
+  const list = (kwRaw || '').split(',').map((k) => k.trim()).filter(Boolean);
+  return list.map((k) => (k.startsWith('Fix') ? `Fix ${elements[0] || 'Light'}` : k));
 }
 
-// Event action generation (structured effect)
-const EVENT_ACTIONS=[
-  {action:'damage',value:3,target:'unit',text:'Deal 3 damage to target enemy Unit.'},
-  {action:'damage',value:2,target:'leader',text:'Deal 2 damage to the enemy Leader.'},
-  {action:'freeze',target:'unit',text:'Freeze target enemy Unit.'},
-  {action:'scorch',value:2,target:'unit',text:'Scorch 2 on target enemy Unit.'},
-  {action:'heal',value:4,target:'self',text:'Heal 4 damage from your Leader.'},
-  {action:'draw',value:2,text:'Draw 2 cards.'},
-  {action:'obliterate',target:'unit',text:'Obliterate target enemy Unit (bypasses Armor).'},
-  {action:'manifest',value:2,text:'Manifest a 2/2 Scrap Drone token.'},
-  {action:'buff',value:2,target:'friendly',text:'Give a friendly Unit +2/+2 until end of turn.'},
+// Action keywords (glossary §3) that turn an Event card into a structured effect.
+const ACTION_EFFECTS = {
+  Obliterate: { action: 'obliterate', target: 'unit', text: 'Obliterate target enemy Unit (bypasses Armor, no Parting Shot).' },
+  Purge: { action: 'purge', target: 'unit', text: 'Purge target Unit: strip its Items, statuses and buffs.' },
+  Meltdown: { action: 'meltdown', target: 'unit', text: "Destroy an Item on target enemy Unit; deal Flame damage equal to the Item's cost to its host." },
+};
+
+const EVENT_ACTIONS = [
+  { action: 'damage', value: 3, target: 'unit', text: 'Deal 3 damage to target enemy Unit.' },
+  { action: 'damage', value: 2, target: 'leader', text: 'Deal 2 damage to the enemy Leader.' },
+  { action: 'freeze', target: 'unit', text: 'Freeze target enemy Unit.' },
+  { action: 'scorch', value: 2, target: 'unit', text: 'Scorch 2 on target enemy Unit.' },
+  { action: 'heal', value: 4, target: 'self', text: 'Heal 4 damage from your Leader.' },
+  { action: 'draw', value: 2, text: 'Draw 2 cards.' },
+  { action: 'manifest', value: 2, text: 'Manifest a 2/2 Scrap Drone token.' },
+  { action: 'buff', value: 2, target: 'friendly', text: 'Give a friendly Unit +2/+2 until end of turn.' },
 ];
 
-const cards=[];
-const decks={};
+const cards = [];
+const seen = new Set();
 
-// Leaders
-for(const r of leaders){
-  const name=r[idx.name];const el=LEADER_ELEMENTS[name]||['Order','Nature'];
-  const seed=hash(name);
-  const health=30+(seed%3)*5; // 30/35/40
-  const attack=2+(seed%3); // 2-4
-  cards.push({
-    id:'L_'+slug(name),name,type:'Leader',elements:el,
-    health,attack,keywords:keywordFor('Leader',el[seed%2],seed),
-    text:r[idx.flavor_text]||'',image:r[idx.image_url]||'',
-  });
-}
+for (const r of data) {
+  const name = r[col['Title']].trim();
+  const type = r[col['Type']].trim();
+  const rarity = r[col['Rarity']].trim();
+  const flavor = (r[col['Flavor Text']] || '').trim();
+  const image = (r[col['URL']] || '').trim();
+  const set = (r[col['Set']] || '').trim();
+  const seed = hash(name);
+  let id = slug(name);
+  while (seen.has(id)) id += '_2';
+  seen.add(id);
 
-// Non-leaders per group
-groups.forEach((grp,gi)=>{
-  const leaderName=LEADER_ORDER[gi];const els=LEADER_ELEMENTS[leaderName];
-  grp.forEach((r,ci)=>{
-    const name=r[idx.name];const seed=hash(name);
-    const type=TYPE_MAP[r[idx.card_type]];
-    const el=els[ci%2];
-    const cost=RARITY_COST[r[idx.rarity]]||2;
-    const costObj={};costObj[el]=1;if(cost>1)costObj.Generic=cost-1;
-    const card={id:slug(name),name,type,elements:[el],cost:costObj,
-      keywords:keywordFor(type,el,seed),text:r[idx.flavor_text]||'',image:r[idx.image_url]||''};
-    if(type==='Item'){
-      card.attach={attack:Math.max(0,cost-1),health:cost};
-    }
-    if(type==='Location'){
-      const LOC=['ATK_ALL','HP_ALL','SCORCH_ALL'];
-      card.locEffect=LOC[seed%LOC.length];
-    }
-    if(type==='Unit'){
-      const def=parseInt(r[idx.defense])||4;
-      card.health=Math.max(1,Math.round(def/2));
-      card.attack=Math.max(1,Math.round(def/3)+(cost>=3?1:0));
-    }
-    if(type==='Event'){
-      const act=EVENT_ACTIONS[seed%EVENT_ACTIONS.length];
-      card.effect=act; card.text=(card.text?card.text+' ':'')+act.text;
-    }
+  const isLeader = type === 'Leader';
+  const elements = isLeader
+    ? (LEADER_ELEMENTS[name] || ['Order', 'Light'])
+    : Object.keys(parseColorCost(r[col['Color Costs']]));
+  const keywords = normalizeKeywords(r[col['Keywords']], elements);
+
+  const card = { id, name, type, elements, rarity, set, keywords, text: flavor, image };
+
+  if (isLeader) {
+    card.health = 30 + (seed % 3) * 5; // 30 / 35 / 40
+    card.attack = 2 + (seed % 3);      // 2-4
     cards.push(card);
-  });
-});
-
-// Build a 30-card deck per leader from its group
-groups.forEach((grp,gi)=>{
-  const leaderName=LEADER_ORDER[gi];
-  const leaderId='L_'+slug(leaderName);
-  const groupIds=grp.map(r=>slug(r[idx.name]));
-  const locs=grp.filter(r=>r[idx.card_type]==='Location').map(r=>slug(r[idx.name]));
-  // deck: 2 copies of each until 30, ensure at least 2 locations present
-  const deck=[];
-  // prioritize including locations first
-  const ordered=[...locs, ...groupIds.filter(id=>!locs.includes(id))];
-  let copiesLeft={};ordered.forEach(id=>copiesLeft[id]=2);
-  let i=0;
-  while(deck.length<30){
-    const id=ordered[i%ordered.length];
-    if(copiesLeft[id]>0){deck.push(id);copiesLeft[id]--;}
-    i++;
-    if(i>1000)break;
+    continue;
   }
-  decks[leaderId]={leader:leaderId,cards:deck.slice(0,30),locations:locs.slice(0,4)};
-});
 
-// Emit TS
-let out=`// AUTO-GENERATED from cards_rows.csv. Do not edit by hand.\n`;
-out+=`// Only name, image (url), and flavor text are taken from the source data; all\n`;
-out+=`// gameplay values (elements, cost, stats, keywords, effects) are generated to\n`;
-out+=`// make the Shifting Multiverse rules playable.\n`;
-out+=`import { CardTemplate } from '../types';\n\n`;
-out+=`export const GENERATED_CARDS: CardTemplate[] = ${JSON.stringify(cards,null,2)};\n\n`;
-out+=`export const GENERATED_DECKS: Record<string, { leader: string; cards: string[]; locations: string[] }> = ${JSON.stringify(decks,null,2)};\n\n`;
-out+=`export const LEADER_IDS: string[] = ${JSON.stringify(cards.filter(c=>c.type==='Leader').map(c=>c.id))};\n`;
-fs.writeFileSync(new URL('../src/game/generated-cards.ts', import.meta.url), out);
-console.log('Wrote',cards.length,'cards.');
-for(const [lid,d] of Object.entries(decks)){
-  const locsInDeck=d.cards.filter(id=>d.locations.includes(id)).length;
-  console.log(lid,'deck size',d.cards.length,'locations available',d.locations.length,'locs in deck',locsInDeck);
+  // Cost: printed color pips + generic filler up to the rarity's total cost.
+  const colorCost = parseColorCost(r[col['Color Costs']]);
+  const total = RARITY_TOTAL[rarity] || 2;
+  const pips = Object.values(colorCost).reduce((a, b) => a + b, 0);
+  const cost = { ...colorCost };
+  if (total > pips) cost.Generic = total - pips;
+  card.cost = cost;
+
+  if (type === 'Unit') {
+    const tier = RARITY_TOTAL[rarity] || 2;
+    card.attack = Math.max(1, tier + (seed % 2) - (tier >= 4 ? 0 : (seed >> 3) % 2));
+    card.health = Math.max(1, tier + 1 + ((seed >> 5) % 3));
+  } else if (type === 'Item') {
+    const tier = RARITY_TOTAL[rarity] || 2;
+    card.attach = { attack: Math.floor(tier / 2), health: Math.ceil(tier / 2) + (tier >= 3 ? 1 : 0) };
+  } else if (type === 'Location') {
+    const LOC = ['ATK_ALL', 'HP_ALL', 'SCORCH_ALL'];
+    card.locEffect = LOC[seed % LOC.length];
+  } else if (type === 'Charm') {
+    card.duration = 1 + (seed % 3); // 1-3 turns (rulebook §3.2)
+  } else if (type === 'Event') {
+    const actionKw = keywords.find((k) => ACTION_EFFECTS[k.split(' ')[0]]);
+    const eff = actionKw ? ACTION_EFFECTS[actionKw.split(' ')[0]] : EVENT_ACTIONS[seed % EVENT_ACTIONS.length];
+    card.effect = eff;
+    card.text = (flavor ? flavor + ' ' : '') + eff.text;
+  }
+  cards.push(card);
 }
+
+// Sanity: every non-leader card's elements must be covered by exactly one leader.
+const leaders = cards.filter((c) => c.type === 'Leader');
+for (const c of cards) {
+  if (c.type === 'Leader') continue;
+  const homes = leaders.filter((l) => c.elements.every((e) => l.elements.includes(e)));
+  if (homes.length === 0) console.warn('No leader covers', c.name, c.elements);
+}
+
+let out = `// AUTO-GENERATED from data/live_cards.csv. Do not edit by hand.\n`;
+out += `// Names, art, types, rarity, color costs and keywords come from the source\n`;
+out += `// data; numeric stats are generated deterministically to make the Shifting\n`;
+out += `// Multiverse rules playable. This file is the offline fallback for the\n`;
+out += `// Supabase 'cards' table.\n`;
+out += `import { CardTemplate } from '../types';\n\n`;
+out += `export const GENERATED_CARDS: CardTemplate[] = ${JSON.stringify(cards, null, 2)} as CardTemplate[];\n`;
+fs.writeFileSync(new URL('../src/game/generated-cards.ts', import.meta.url), out);
+console.log('Wrote', cards.length, 'cards (', leaders.length, 'leaders ).');
+
+// Also emit a JSON copy for the Supabase seeding step.
+fs.writeFileSync(new URL('../data/cards.generated.json', import.meta.url), JSON.stringify(cards, null, 1));

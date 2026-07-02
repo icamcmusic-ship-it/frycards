@@ -2,6 +2,7 @@ import React from 'react';
 import { GameCard, GameState } from '../types';
 import { CardView } from './CardView';
 import { canAfford, GameAction } from '../game/engine';
+import { keywordValue } from '../game/cards';
 
 interface BoardProps {
   gameState: GameState;
@@ -24,12 +25,19 @@ export function Board({ gameState, dispatch }: BoardProps) {
 
   const [selectedAttackerId, setSelectedAttackerId] = React.useState<string | null>(null);
   const [pendingCardId, setPendingCardId] = React.useState<string | null>(null); // targeting mode
+  const [commandMode, setCommandMode] = React.useState(false); // Leader Command targeting
 
   const pendingCard = pendingCardId ? viewer.hand.find((c) => c.instanceId === pendingCardId) : null;
+
+  const commandCost = keywordValue(viewer.leader, 'Command');
+  const canCommand =
+    phase === 'ACTION' && isViewingActive && commandCost > 0 &&
+    canAfford({ Generic: commandCost }, viewer.resources) && viewer.board.length > 0;
 
   const handleHandClick = (card: GameCard) => {
     if (phase !== 'ACTION' || !isViewingActive) return;
     if (!canAfford(card.cost, viewer.resources)) return;
+    setCommandMode(false);
     if (needsTarget(card)) {
       setPendingCardId(pendingCardId === card.instanceId ? null : card.instanceId);
     } else {
@@ -38,6 +46,13 @@ export function Board({ gameState, dispatch }: BoardProps) {
   };
 
   const handleUnitClick = (card: GameCard, isOpponent: boolean) => {
+    // Leader Command targeting (§2.1 Command [X])
+    if (commandMode && !isOpponent && card.type === 'Unit') {
+      dispatch({ type: 'LEADER_COMMAND', targetId: card.instanceId });
+      setCommandMode(false);
+      return;
+    }
+
     // Targeting mode for Items / Events
     if (pendingCard) {
       const wantsFriendly = pendingCard.type === 'Item' || pendingCard.effect?.target === 'friendly';
@@ -55,12 +70,22 @@ export function Board({ gameState, dispatch }: BoardProps) {
     }
 
     // Declare attackers
-    if (phase === 'COMBAT_DECLARE' && isViewingActive && !isOpponent) {
-      if (card.frozen > 0) return;
-      const isUnit = card.type === 'Unit';
-      if (isUnit && (card.summoningSickness || (card.exhausted && card.attacksThisTurn >= (card.keywords?.some((k) => k === 'Overdrive' || k.startsWith('Overdrive')) ? 2 : 1)))) return;
-      if (card.type === 'Leader' && card.exhausted) return;
-      dispatch({ type: 'TOGGLE_ATTACKER', instanceId: card.instanceId, targetId: opponent.leader.instanceId });
+    if (phase === 'COMBAT_DECLARE' && isViewingActive) {
+      if (!isOpponent) {
+        if (card.frozen > 0) return;
+        const isUnit = card.type === 'Unit';
+        if (isUnit && (card.summoningSickness || (card.exhausted && card.attacksThisTurn >= (card.keywords?.some((k) => k.startsWith('Overdrive')) ? 2 : 1)))) return;
+        if (card.type === 'Leader' && card.exhausted) return;
+        dispatch({ type: 'TOGGLE_ATTACKER', instanceId: card.instanceId, targetId: opponent.leader.instanceId });
+      } else if (card.type === 'Unit') {
+        // Leader vs Unit combat (§5.2): click an enemy Unit to send your
+        // Leader at it instead of the enemy Leader.
+        if (!viewer.leader.exhausted && viewer.leader.frozen === 0) {
+          const already = combat?.attackers.find((a) => a.instanceId === viewer.leader.instanceId);
+          if (already) dispatch({ type: 'TOGGLE_ATTACKER', instanceId: viewer.leader.instanceId, targetId: already.targetId });
+          dispatch({ type: 'TOGGLE_ATTACKER', instanceId: viewer.leader.instanceId, targetId: card.instanceId });
+        }
+      }
       return;
     }
 
@@ -87,15 +112,17 @@ export function Board({ gameState, dispatch }: BoardProps) {
 
   const activeLoc = gameState.activeLocation;
 
+  const popBtn = 'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors';
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-[#F7F7F7] text-[#1A1A1A] overflow-hidden">
       {/* Opponent Area */}
-      <div className="flex-1 flex flex-col border-b border-slate-800/50 p-3 relative min-h-0">
+      <div className="flex-1 flex flex-col p-3 relative min-h-0 bg-[#2C3E50]">
         <div className="flex justify-between items-start">
           <div className="flex gap-3 items-start">
             <CardView card={opponent.leader} compact
               onClick={() => handleUnitClick(opponent.leader, true)}
-              targetable={!!targetingEnemy && false}
+              targetable={false}
             />
             <div className="flex gap-1.5 flex-wrap">
               {opponent.board.map((u) => (
@@ -107,90 +134,110 @@ export function Board({ gameState, dispatch }: BoardProps) {
               ))}
             </div>
           </div>
-          <div className="text-right shrink-0">
-            <div className="text-lg font-bold text-slate-100">{opponent.name}</div>
-            <div className="text-rose-500 font-mono text-2xl">{opponent.health} HP</div>
-            <div className="text-slate-500 text-xs mt-1">Hand: {opponent.hand.length} · Deck: {opponent.deck.length} · GY: {opponent.graveyard.length}</div>
-            <div className="text-slate-500 text-xs">Locations set: {opponent.locations.length}</div>
-            {opponent.charms.length > 0 && <div className="text-fuchsia-400 text-xs">Charms: {opponent.charms.map((c) => c.name).join(', ')}</div>}
+          <div className="text-right shrink-0 bg-[#F7F7F7] ink-border-md shadow-hard-black-sm px-4 py-2">
+            <div className="heading-font text-sm">{opponent.name}</div>
+            <div className="heading-font text-2xl text-[#E53935]">{opponent.health} HP</div>
+            <div className="text-[#2C3E50] text-[10px] font-bold mt-1">HAND {opponent.hand.length} · DECK {opponent.deck.length} · GY {opponent.graveyard.length}</div>
+            <div className="text-[#2C3E50] text-[10px] font-bold">LOCATIONS SET: {opponent.locations.length}</div>
+            {opponent.charms.length > 0 && (
+              <div className="text-[10px] font-bold bg-[#FFD54F] px-1 mt-1 inline-block">
+                CHARMS: {opponent.charms.map((c) => `${c.name} (${c.charmDuration}T)`).join(', ')}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Center Zone */}
-      <div className="min-h-32 bg-slate-900/40 border-y border-slate-800 flex items-center justify-between px-6 py-2 gap-4">
+      <div className="min-h-32 bg-[#FFD54F] border-y-4 border-[#1A1A1A] flex items-center justify-between px-6 py-2 gap-4 relative">
+        <div className="absolute inset-0 halftone-pattern pointer-events-none" />
         {/* Active location */}
-        <div className="w-40 shrink-0">
+        <div className="w-44 shrink-0 z-10">
           {activeLoc ? (
             <div className="flex items-center gap-2">
               <CardView card={activeLoc} compact />
-              <div className="text-[10px] text-emerald-300">Active Location<br />(controlled by {gameState.players[gameState.activeLocationOwnerId!]?.name})</div>
+              <div className="text-[9px] font-black heading-font bg-[#1A1A1A] text-[#FFD54F] px-1.5 py-1">
+                ACTIVE LOCATION<br />
+                <span className="text-[#F7F7F7]">{gameState.players[gameState.activeLocationOwnerId!]?.name} CONTROLS</span>
+              </div>
             </div>
           ) : (
-            <div className="text-xs text-slate-600">No active Location</div>
+            <div className="text-[10px] font-black heading-font text-[#1A1A1A] opacity-60">NO ACTIVE LOCATION</div>
           )}
         </div>
 
-        <div className="flex flex-col items-center gap-2 flex-1">
-          <div className="text-sm font-semibold tracking-widest text-slate-400 uppercase">
-            Turn {gameState.turnNumber} · <span className="text-emerald-400">{phase}</span>
+        <div className="flex flex-col items-center gap-2 flex-1 z-10">
+          <div className="heading-font text-sm bg-[#1A1A1A] text-[#FFD54F] px-3 py-0.5">
+            TURN {gameState.turnNumber} · {phase.replace('_', ' ')}
           </div>
 
           {pendingCard && (
-            <div className="text-xs text-fuchsia-300">
-              Select a {targetingFriendly ? 'friendly' : 'enemy'} unit for {pendingCard.name} ·{' '}
-              <button className="underline" onClick={() => setPendingCardId(null)}>cancel</button>
+            <div className="text-[11px] font-bold bg-[#E53935] text-[#F7F7F7] px-2 py-0.5 ink-border-sm">
+              SELECT A {targetingFriendly ? 'FRIENDLY' : 'ENEMY'} UNIT FOR {pendingCard.name.toUpperCase()} ·{' '}
+              <button className="underline" onClick={() => setPendingCardId(null)}>CANCEL</button>
+            </div>
+          )}
+          {commandMode && (
+            <div className="text-[11px] font-bold bg-[#E53935] text-[#F7F7F7] px-2 py-0.5 ink-border-sm">
+              COMMAND: SELECT A FRIENDLY UNIT TO READY ·{' '}
+              <button className="underline" onClick={() => setCommandMode(false)}>CANCEL</button>
             </div>
           )}
 
           {phase === 'ACTION' && isViewingActive && (
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap justify-center">
               {gameState.turnNumber > 1 && (
                 <button onClick={() => dispatch({ type: 'ENTER_COMBAT' })}
-                  className="px-5 py-2 bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 border border-rose-600/50 rounded-md font-medium transition-colors">
-                  Enter Combat
+                  className={`${popBtn} bg-[#E53935] text-[#F7F7F7] hover:bg-[#1A1A1A]`}>
+                  ⚔ ENTER COMBAT
+                </button>
+              )}
+              {canCommand && (
+                <button onClick={() => { setCommandMode(!commandMode); setPendingCardId(null); }}
+                  className={`${popBtn} bg-[#2C3E50] text-[#FFD54F] hover:bg-[#1A1A1A]`}>
+                  ★ COMMAND {commandCost}
                 </button>
               )}
               <button onClick={() => dispatch({ type: 'END_TURN' })}
-                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-md font-medium transition-colors">
-                End Turn
+                className={`${popBtn} bg-[#1A1A1A] text-[#FFD54F] hover:bg-[#2C3E50]`}>
+                END TURN &gt;
               </button>
             </div>
           )}
 
           {phase === 'COMBAT_DECLARE' && isViewingActive && (
-            <div className="flex gap-3">
-              <span className="text-xs text-slate-400 self-center">Click your units/leader to attack the enemy Leader.</span>
+            <div className="flex gap-3 items-center">
+              <span className="text-[10px] font-bold max-w-52">Click your Units/Leader to attack the enemy Leader. Click an enemy Unit to send your Leader at it.</span>
               <button onClick={() => dispatch({ type: 'SUBMIT_ATTACKS' })}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-md font-medium transition-colors">
-                Confirm Attacks ({combat?.attackers.length ?? 0})
+                className={`${popBtn} bg-[#E53935] text-[#F7F7F7]`}>
+                CONFIRM ATTACKS ({combat?.attackers.length ?? 0})
               </button>
             </div>
           )}
 
           {phase === 'COMBAT_BLOCK' && isViewingDefender && (
-            <div className="flex gap-3">
-              <span className="text-xs text-slate-400 self-center">Select an attacker, then your blocker.</span>
+            <div className="flex gap-3 items-center">
+              <span className="text-[10px] font-bold">Select an attacker, then your blocker.</span>
               <button onClick={() => dispatch({ type: 'SUBMIT_BLOCKS' })}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-medium transition-colors">
-                Confirm Blocks
+                className={`${popBtn} bg-[#2C3E50] text-[#F7F7F7]`}>
+                CONFIRM BLOCKS
               </button>
             </div>
           )}
 
           {phase === 'COMBAT_BLOCK' && !isViewingDefender && (
-            <div className="text-xs text-slate-400">Waiting for defender to assign blocks…</div>
+            <div className="text-[11px] font-bold">WAITING FOR DEFENDER TO ASSIGN BLOCKS…</div>
           )}
         </div>
 
         {/* Viewer's own face-down locations */}
-        <div className="w-40 shrink-0 flex justify-end gap-1">
+        <div className="w-44 shrink-0 flex justify-end gap-1 z-10">
           {viewer.locations.map((loc, i) => <CardView key={i} card={loc} faceDown compact className="scale-75 origin-right" />)}
         </div>
       </div>
 
       {/* Viewer Area */}
-      <div className="flex-1 flex flex-col p-3 relative min-h-0">
+      <div className="flex-1 flex flex-col p-3 relative min-h-0 bg-[#F7F7F7]">
         <div className="flex justify-between items-start">
           <div className="flex gap-3 items-start">
             <CardView card={viewer.leader} compact
@@ -202,33 +249,37 @@ export function Board({ gameState, dispatch }: BoardProps) {
                 const blockedBy = blockAssignedTo(u.instanceId);
                 return (
                   <div key={u.instanceId} className="relative">
-                    <CardView card={u}
+                    <CardView card={u} compact
                       onClick={() => handleUnitClick(u, false)}
-                      targetable={!!targetingFriendly && u.type === 'Unit'}
+                      targetable={(!!targetingFriendly || commandMode) && u.type === 'Unit'}
                       selected={isAttacker(u.instanceId) || isBlocker(u.instanceId)}
                     />
-                    {blockedBy && <div className="absolute -bottom-4 left-0 right-0 text-center text-[9px] text-blue-300">blocking</div>}
+                    {blockedBy && <div className="absolute -bottom-4 left-0 right-0 text-center text-[9px] font-black text-[#2C3E50]">BLOCKING</div>}
                   </div>
                 );
               })}
             </div>
           </div>
-          <div className="text-right shrink-0">
-            <div className="text-lg font-bold text-slate-100">{viewer.name} {viewer.id === activePlayerId ? '(active)' : ''}</div>
-            <div className="text-rose-500 font-mono text-2xl">{viewer.health} HP</div>
-            <div className="text-slate-500 text-xs mt-1">Deck: {viewer.deck.length} · GY: {viewer.graveyard.length}</div>
-            {viewer.charms.length > 0 && <div className="text-fuchsia-400 text-xs">Charms: {viewer.charms.map((c) => c.name).join(', ')}</div>}
+          <div className="text-right shrink-0 bg-[#1A1A1A] text-[#F7F7F7] ink-border-md shadow-hard-black-sm px-4 py-2">
+            <div className="heading-font text-sm text-[#FFD54F]">{viewer.name} {viewer.id === activePlayerId ? '· ACTIVE' : ''}</div>
+            <div className="heading-font text-2xl text-[#E53935]">{viewer.health} HP</div>
+            <div className="text-[10px] font-bold mt-1 text-[#F7F7F7]/70">DECK {viewer.deck.length} · GY {viewer.graveyard.length}</div>
+            {viewer.charms.length > 0 && (
+              <div className="text-[10px] font-bold bg-[#FFD54F] text-[#1A1A1A] px-1 mt-1 inline-block">
+                CHARMS: {viewer.charms.map((c) => `${c.name} (${c.charmDuration}T)`).join(', ')}
+              </div>
+            )}
             <div className="mt-2 flex gap-1 justify-end flex-wrap max-w-xs">
               {Object.entries(viewer.resources).map(([el, amt]) => amt > 0 && (
-                <div key={el} className="px-2 py-0.5 bg-slate-800 rounded text-xs font-mono border border-slate-700">{amt} {el}</div>
+                <div key={el} className="px-1.5 py-0.5 bg-[#FFD54F] text-[#1A1A1A] text-[10px] font-black heading-font">{amt} {el.toUpperCase()}</div>
               ))}
-              {Object.values(viewer.resources).every((v) => !v) && <div className="text-xs text-slate-600">no resources</div>}
+              {Object.values(viewer.resources).every((v) => !v) && <div className="text-[10px] font-bold text-[#F7F7F7]/50">NO RESOURCES</div>}
             </div>
           </div>
         </div>
 
         {/* Hand */}
-        <div className="mt-auto flex justify-center gap-2 overflow-x-auto pb-1 pt-2">
+        <div className="mt-auto flex justify-center gap-2 overflow-x-auto pb-1 pt-3">
           {viewer.hand.map((card) => {
             const isPlayable = phase === 'ACTION' && isViewingActive && canAfford(card.cost, viewer.resources);
             return (
@@ -240,7 +291,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
               />
             );
           })}
-          {viewer.hand.length === 0 && <div className="text-slate-600 text-sm self-center">Empty hand</div>}
+          {viewer.hand.length === 0 && <div className="text-[#2C3E50] font-bold text-sm self-center">EMPTY HAND</div>}
         </div>
       </div>
     </div>

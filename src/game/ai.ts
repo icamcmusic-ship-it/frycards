@@ -1,5 +1,5 @@
 import { GameState, GameCard } from '../types';
-import { GameAction, canAfford, effAttack, totalRemaining } from './engine';
+import { GameAction, canAfford, effAttack, totalRemaining, attackBurden } from './engine';
 import { hasKeyword } from './cards';
 
 /**
@@ -81,20 +81,25 @@ function cpuAction(state: GameState, active: any, opp: any): GameAction {
     if (tgt !== undefined) return { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: tgt };
   }
 
-  // 4. Deploy a Location face-down.
+  // 4. Play a Charm (attaches to a player profile, no explicit target).
+  const charms = active.hand.filter((c: GameCard) => c.type === 'Charm' && canAfford(c.cost, active.resources));
+  if (charms.length > 0) return { type: 'PLAY_CARD', instanceId: charms[0].instanceId };
+
+  // 5. Deploy a Location face-down.
   const locs = active.hand.filter((c: GameCard) => c.type === 'Location' && canAfford(c.cost, active.resources));
   if (locs.length > 0) return { type: 'PLAY_CARD', instanceId: locs[0].instanceId };
 
-  // 5. Attack if any unit can.
+  // 6. Attack if any unit can (and its Burden surcharge is payable).
   if (state.turnNumber > 1) {
     const canAttack = active.board.some(
       (u: GameCard) => !u.summoningSickness && u.frozen === 0 && effAttack(u, state) > 0 &&
-        (!u.exhausted || (hasKeyword(u, 'Overdrive') && u.attacksThisTurn < 2))
+        (!u.exhausted || (hasKeyword(u, 'Overdrive') && u.attacksThisTurn < 2)) &&
+        canAfford({ Generic: attackBurden(u) }, active.resources)
     );
     if (canAttack) return { type: 'ENTER_COMBAT' };
   }
 
-  // 6. Nothing left to do.
+  // 7. Nothing left to do.
   return { type: 'END_TURN' };
 }
 
@@ -102,6 +107,18 @@ function cpuAction(state: GameState, active: any, opp: any): GameAction {
 function eventTarget(state: GameState, ev: GameCard, active: any, opp: any): string | undefined {
   const eff = ev.effect;
   if (!eff) return '';
+  if (eff.action === 'meltdown') {
+    // needs an enemy unit with an attached Item
+    const target = opp.board.find((u: GameCard) => (u.attachedItems || []).length > 0);
+    return target ? target.instanceId : undefined;
+  }
+  if (eff.action === 'purge') {
+    // worthwhile only against a modified enemy unit
+    const target = opp.board.find(
+      (u: GameCard) => (u.attachedItems || []).length > 0 || u.tempAtk > 0 || u.tempHp > 0
+    );
+    return target ? target.instanceId : undefined;
+  }
   if (eff.target === 'unit') {
     // needs an enemy unit
     const target = [...opp.board].sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
@@ -116,11 +133,17 @@ function eventTarget(state: GameState, ev: GameCard, active: any, opp: any): str
 
 function cpuDeclare(state: GameState, active: any, opp: any): GameAction {
   const combat = state.combat!;
+  // Total Burden already committed by declared attackers.
+  const declaredBurden = combat.attackers.reduce((s, a) => {
+    const du = active.board.find((b: GameCard) => b.instanceId === a.instanceId);
+    return s + (du ? attackBurden(du) : 0);
+  }, 0);
   // Add every eligible unit that isn't attacking yet.
   for (const u of active.board) {
     const eligible =
       !u.summoningSickness && u.frozen === 0 && effAttack(u, state) > 0 &&
-      (!u.exhausted || (hasKeyword(u, 'Overdrive') && u.attacksThisTurn < 2));
+      (!u.exhausted || (hasKeyword(u, 'Overdrive') && u.attacksThisTurn < 2)) &&
+      canAfford({ Generic: declaredBurden + attackBurden(u) }, active.resources);
     const already = combat.attackers.some((a) => a.instanceId === u.instanceId);
     if (eligible && !already) {
       return { type: 'TOGGLE_ATTACKER', instanceId: u.instanceId, targetId: opp.leader.instanceId };

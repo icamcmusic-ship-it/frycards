@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameCard } from '../types';
 import { cn } from '../lib/utils';
-import { Heart, Sword, Shield, Snowflake, Flame } from 'lucide-react';
+import { Shield, Snowflake, Flame, Zap } from 'lucide-react';
 
 interface CardViewProps {
   key?: React.Key;
@@ -15,16 +15,25 @@ interface CardViewProps {
   compact?: boolean;
 }
 
+// Monochrome & Pop element chips: ink/paper/steel with pop yellow + red accents.
 const ELEMENT_COLORS: Record<string, string> = {
-  Light: 'bg-yellow-500/20 text-yellow-200',
-  Dark: 'bg-purple-900/40 text-purple-200',
-  Frost: 'bg-cyan-500/20 text-cyan-200',
-  Flame: 'bg-orange-600/20 text-orange-200',
-  Tech: 'bg-sky-500/20 text-sky-200',
-  Nature: 'bg-emerald-600/20 text-emerald-200',
-  Order: 'bg-amber-400/20 text-amber-100',
-  Chaos: 'bg-rose-600/20 text-rose-200',
-  Generic: 'bg-slate-600/30 text-slate-200',
+  Light: 'bg-[#FFD54F] text-[#1A1A1A]',
+  Dark: 'bg-[#1A1A1A] text-[#F7F7F7]',
+  Frost: 'bg-[#F7F7F7] text-[#2C3E50]',
+  Flame: 'bg-[#E53935] text-[#F7F7F7]',
+  Tech: 'bg-[#2C3E50] text-[#F7F7F7]',
+  Nature: 'bg-[#F7F7F7] text-[#1A1A1A]',
+  Order: 'bg-[#FFD54F] text-[#2C3E50]',
+  Chaos: 'bg-[#E53935] text-[#1A1A1A]',
+  Generic: 'bg-[#2C3E50] text-[#F7F7F7]',
+};
+
+const RARITY_STYLE: Record<string, string> = {
+  'Common': 'bg-[#1A1A1A] text-[#F7F7F7]',
+  'Uncommon': 'bg-[#2C3E50] text-[#F7F7F7]',
+  'Rare': 'bg-[#E53935] text-[#F7F7F7]',
+  'Super-Rare': 'bg-[#1A1A1A] text-[#FFD54F]',
+  'Mythic': 'bg-gradient-to-r from-[#E53935] to-[#FFD54F] text-[#1A1A1A]',
 };
 
 function effAtk(card: GameCard): number {
@@ -38,15 +47,19 @@ function healthRemaining(card: GameCard): number {
   const max = Math.max(1, (card.health || 0) + card.tempHp - card.witherHp);
   return max + bonusHp(card) - card.damageTaken - card.bonusDamage;
 }
+function costTotal(card: GameCard): number {
+  return Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+}
 
 export function CardView({ card, onClick, className, selected, playable, targetable, faceDown, compact }: CardViewProps) {
-  const size = compact ? 'w-24 h-36' : 'w-28 h-40';
+  // Standard vertical TCG proportions: 5:7 outer frame.
+  const size = compact ? 'w-[104px] h-[146px]' : 'w-[120px] h-[168px]';
 
   if (faceDown) {
     return (
-      <div className={cn(size, 'rounded-lg bg-slate-800 border-2 border-slate-600 shadow-md flex items-center justify-center', className)}>
-        <div className="w-14 h-14 rounded-full border-2 border-slate-500 opacity-50 flex items-center justify-center">
-          <div className="w-7 h-7 rotate-45 bg-slate-500" />
+      <div className={cn(size, 'classic-black-back ink-border-sm shadow-hard-black-xs flex items-center justify-center', className)}>
+        <div className="w-10 h-10 bg-[#FFD54F] ink-border-sm rotate-45 flex items-center justify-center opacity-90">
+          <span className="-rotate-45 heading-font text-[10px] text-[#1A1A1A]">POP</span>
         </div>
       </div>
     );
@@ -60,79 +73,83 @@ export function CardView({ card, onClick, className, selected, playable, targeta
       onClick={onClick}
       title={card.text}
       className={cn(
-        'relative rounded-lg overflow-hidden flex flex-col select-none transition-transform',
-        'bg-slate-900 border-2 border-slate-700 shadow-lg text-xs',
+        'relative overflow-hidden flex flex-col select-none transition-transform bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs',
         size,
-        isLeader && (compact ? '' : 'w-32 h-44') + ' border-amber-500/50',
-        playable && 'cursor-pointer hover:-translate-y-2 hover:shadow-xl hover:border-emerald-500 ring-1 ring-emerald-500/40',
-        targetable && 'cursor-pointer ring-2 ring-fuchsia-400 animate-pulse',
-        selected && 'ring-4 ring-emerald-500 border-emerald-500 -translate-y-2',
-        onClick && !playable && !targetable && 'cursor-pointer hover:border-blue-400',
-        card.frozen > 0 && 'ring-2 ring-cyan-400',
+        isLeader && 'border-[#FFD54F]',
+        playable && 'cursor-pointer hover:-translate-y-2 outline outline-2 outline-[#FFD54F]',
+        targetable && 'cursor-pointer outline outline-4 outline-[#E53935] animate-pulse',
+        selected && 'outline outline-4 outline-[#FFD54F] -translate-y-2',
+        onClick && !playable && !targetable && 'cursor-pointer hover:outline hover:outline-2 hover:outline-[#2C3E50]',
+        card.frozen > 0 && 'outline outline-2 outline-[#2C3E50]',
         card.summoningSickness && 'opacity-80',
-        card.exhausted && 'rotate-6 opacity-75 grayscale-[0.3]',
+        card.exhausted && 'rotate-6 opacity-75 grayscale-[0.4]',
         className
       )}
     >
-      {/* Title */}
-      <div className="px-1.5 py-1 flex justify-between items-center bg-slate-800/90 border-b border-slate-700 gap-1">
-        <span className="font-bold truncate text-slate-100 text-[11px]">{card.name}</span>
+      {/* Top row: rarity chip + cast cost */}
+      <div className="px-1 pt-0.5 pb-0.5 flex justify-between items-center gap-1">
+        <span className={cn('px-1 text-[7px] font-black font-mono heading-font truncate', RARITY_STYLE[card.rarity || 'Common'])}>
+          {(card.rarity || card.type).toUpperCase()}
+        </span>
         {card.cost && (
-          <span className="shrink-0 flex gap-0.5">
-            {Object.entries(card.cost).map(([el, amt]) => (
-              <span key={el} className={cn('px-1 rounded-sm text-[9px] font-mono font-bold', ELEMENT_COLORS[el] || 'bg-slate-700')}>
-                {amt}{el === 'Generic' ? '' : el[0]}
-              </span>
-            ))}
+          <span className="shrink-0 flex items-center gap-0.5 text-[9px] font-black heading-font">
+            <Zap className="w-2.5 h-2.5" />{costTotal(card)}
+            <span className="flex gap-px">
+              {Object.entries(card.cost).map(([el, amt]) => el !== 'Generic' && (
+                <span key={el} className={cn('px-0.5 text-[7px] font-bold', ELEMENT_COLORS[el])}>{amt}{el[0]}</span>
+              ))}
+            </span>
           </span>
         )}
       </div>
 
-      {/* Art (4:3) */}
-      <div className="relative w-full aspect-[4/3] bg-slate-950 overflow-hidden">
+      {/* 4:3 art panel inside the vertical frame */}
+      <div className="relative w-full aspect-[4/3] bg-[#2C3E50] ink-border-sm overflow-hidden mx-auto" style={{ width: 'calc(100% - 8px)' }}>
         {card.image ? (
           <img src={card.image} alt={card.name} className="w-full h-full object-cover" loading="lazy" draggable={false} />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-600 text-[10px]">{card.type}</div>
+          <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-[10px] heading-font">{card.type}</div>
         )}
-        <div className="absolute top-0.5 left-0.5 flex gap-0.5">
-          {card.elements.map((e) => (
-            <span key={e} className={cn('px-1 rounded-sm text-[8px] font-semibold', ELEMENT_COLORS[e])}>{e[0]}</span>
-          ))}
-        </div>
         {/* Status badges */}
         <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end">
-          {card.armor > 0 && <span className="flex items-center gap-0.5 px-1 rounded-sm bg-slate-800/90 text-slate-200 text-[8px]"><Shield className="w-2.5 h-2.5" />{card.armor}</span>}
-          {card.frozen > 0 && <Snowflake className="w-3 h-3 text-cyan-300" />}
-          {card.scorch > 0 && <span className="flex items-center gap-0.5 px-1 rounded-sm bg-orange-900/80 text-orange-200 text-[8px]"><Flame className="w-2.5 h-2.5" />{card.scorch}</span>}
+          {card.armor > 0 && <span className="flex items-center gap-0.5 px-1 bg-[#1A1A1A] text-[#F7F7F7] text-[8px] font-bold"><Shield className="w-2.5 h-2.5" />{card.armor}</span>}
+          {card.frozen > 0 && <span className="px-0.5 bg-[#F7F7F7]"><Snowflake className="w-3 h-3 text-[#2C3E50]" /></span>}
+          {card.scorch > 0 && <span className="flex items-center gap-0.5 px-1 bg-[#E53935] text-[#F7F7F7] text-[8px] font-bold"><Flame className="w-2.5 h-2.5" />{card.scorch}</span>}
+          {card.glitched && <span className="px-1 bg-[#2C3E50] text-[#FFD54F] text-[7px] font-mono font-bold">GLITCH</span>}
         </div>
+        {(card.attachedItems || []).length > 0 && (
+          <div className="absolute bottom-0.5 left-0.5 px-1 bg-[#1A1A1A] text-[#FFD54F] text-[7px] font-bold heading-font truncate max-w-[95%]">
+            +{card.attachedItems.map((i) => i.name).join(', ')}
+          </div>
+        )}
       </div>
 
-      {/* Text / keywords */}
-      <div className="flex-1 px-1 py-0.5 bg-slate-900/70 overflow-hidden">
+      {/* Name + keywords */}
+      <div className="flex-1 px-1 pt-0.5 overflow-hidden">
+        <div className="heading-font text-[8.5px] leading-tight truncate">{card.name}</div>
         {card.keywords && card.keywords.length > 0 && (
-          <div className="flex flex-wrap gap-0.5">
+          <div className="flex flex-wrap gap-0.5 mt-0.5">
             {card.keywords.map((kw) => (
-              <span key={kw} className="text-[8px] font-medium px-1 bg-indigo-500/20 text-indigo-200 rounded-sm">{kw}</span>
+              <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F] text-[#1A1A1A]">{kw}</span>
             ))}
           </div>
         )}
-        {card.attachedItems && card.attachedItems.length > 0 && (
-          <div className="text-[8px] text-emerald-300 truncate">+{card.attachedItems.map((i) => i.name).join(', ')}</div>
-        )}
       </div>
 
-      {/* Stats */}
-      {showStats && (
-        <div className="px-1.5 py-1 flex justify-between items-center bg-slate-800 border-t border-slate-700 font-mono text-sm">
-          <div className="flex items-center gap-1 text-amber-400">
-            <Sword className="w-3.5 h-3.5" />
-            <span>{effAtk(card)}</span>
-          </div>
-          <div className={cn('flex items-center gap-1', card.damageTaken > 0 ? 'text-rose-400' : 'text-rose-500')}>
-            <span>{healthRemaining(card)}</span>
-            <Heart className="w-3.5 h-3.5" />
-          </div>
+      {/* Bottom stats bar */}
+      {showStats ? (
+        <div className="px-1 py-0.5 flex justify-between items-center border-t-2 border-[#1A1A1A]">
+          <span className="bg-[#1A1A1A] text-[#FFD54F] px-1 text-[9px] font-black heading-font">ATK {effAtk(card)}</span>
+          <span className="text-[7px] font-mono font-bold text-[#2C3E50] uppercase truncate px-0.5">{card.type}</span>
+          <span className={cn('px-1 text-[9px] font-black heading-font', card.damageTaken + card.bonusDamage > 0 ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#2C3E50] text-[#F7F7F7]')}>
+            DEF {healthRemaining(card)}
+          </span>
+        </div>
+      ) : (
+        <div className="px-1 py-0.5 border-t-2 border-[#1A1A1A] text-[7px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between">
+          <span>{card.type}</span>
+          {card.type === 'Charm' && card.charmDuration !== undefined && <span>{card.charmDuration}T</span>}
+          {card.type === 'Charm' && card.charmDuration === undefined && card.duration !== undefined && <span>{card.duration}T</span>}
         </div>
       )}
     </div>

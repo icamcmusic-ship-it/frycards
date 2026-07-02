@@ -1,13 +1,24 @@
 export type ElementColor = 'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Item' | 'Charm' | 'Event';
+export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Mythic';
 
 export interface CardCost {
   [element: string]: number;
 }
 
-/** Structured effect executed by Event cards (see rulebook §3 Action Verbs). */
+/** Structured effect executed by Event cards (see glossary §3 Action Verbs). */
 export interface EventEffect {
-  action: 'damage' | 'freeze' | 'scorch' | 'heal' | 'draw' | 'obliterate' | 'manifest' | 'buff';
+  action:
+    | 'damage'
+    | 'freeze'
+    | 'scorch'
+    | 'heal'
+    | 'draw'
+    | 'obliterate'
+    | 'manifest'
+    | 'buff'
+    | 'meltdown'
+    | 'purge';
   value?: number;
   /** who/what the effect needs: an enemy unit, the enemy leader, a friendly unit, or self. */
   target?: 'unit' | 'leader' | 'friendly' | 'self';
@@ -27,6 +38,8 @@ export interface CardTemplate {
   name: string;
   type: CardType;
   elements: ElementColor[];
+  rarity?: Rarity;
+  set?: string;
   cost?: CardCost;
   health?: number;
   attack?: number;
@@ -52,6 +65,7 @@ export interface GameCard extends CardTemplate {
   // Status counters / permanent modifiers
   scorch: number;          // flame damage per start-of-turn tick
   frozen: number;          // >0 = cannot attack/block/activate
+  glitched: boolean;       // Glitch: keywords disabled until Cleanup
   armor: number;           // current Armor value (from Armor [X])
   witherAtk: number;       // permanent attack reduction from Wither
   witherHp: number;        // permanent health reduction from Wither
@@ -84,6 +98,8 @@ export interface PlayerState {
   mulliganKept: boolean;
   health: number;
   overclockPenalty: number; // subtracted from next roll (Overclock)
+  /** true when this turn's entire resource roll went to a single color (Pure). */
+  singleColorRoll: boolean;
 }
 
 export type Phase =
