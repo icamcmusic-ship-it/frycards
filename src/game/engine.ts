@@ -15,7 +15,8 @@ export type GameAction =
   | { type: 'TOGGLE_BLOCKER'; attackerId: string; blockerId: string }
   | { type: 'SUBMIT_BLOCKS' }
   | { type: 'END_TURN' }
-  | { type: 'ACKNOWLEDGE_TRANSITION' };
+  | { type: 'ACKNOWLEDGE_TRANSITION' }
+  | { type: 'RESOLVE_CHOICE'; cardInstanceId?: string };
 
 // ---------------------------------------------------------------------------
 // Resource helpers
@@ -199,6 +200,27 @@ function applyDamageToUnit(
   return landed;
 }
 
+/**
+ * Blessed (§2.2): a card with Blessed cannot be targeted or affected by
+ * enemy Dark or Chaos abilities.
+ */
+export function blessedBlocks(target: GameCard, source: GameCard): boolean {
+  if (!kwActive(target, 'Blessed')) return false;
+  if (target.ownerId === source.ownerId) return false;
+  return (source.elements || []).some((e) => e === 'Dark' || e === 'Chaos');
+}
+
+/** Freeze-Dry (§2.2): +1 damage per other Frozen card on the battlefield. */
+function freezeDryBonus(state: GameState, source: GameCard, target: GameCard): number {
+  if (!kwActive(source, 'Freeze-Dry')) return 0;
+  let frozen = 0;
+  for (const p of Object.values(state.players)) {
+    for (const u of p.board) if (u.frozen > 0 && u.instanceId !== target.instanceId) frozen++;
+    if (p.leader.frozen > 0 && p.leader.instanceId !== target.instanceId) frozen++;
+  }
+  return frozen;
+}
+
 function recalcHealth(player: PlayerState) {
   player.health = (player.leader.health || 0) - player.leader.damageTaken;
 }
@@ -272,6 +294,7 @@ export function initialGameState(vsCPU = true, p1Leader?: string, p2Leader?: str
     activeLocation: null,
     activeLocationOwnerId: null,
     combat: null,
+    choices: [],
     pendingRoll: null,
     winner: null,
     log: ['Game initialized. Coin toss decides the first turn.'],
@@ -368,6 +391,17 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
         const enemyOfOwnerId = charm.ownerId === next.player1Id ? next.player2Id : next.player1Id;
         for (const u of next.players[enemyOfOwnerId].board) applyDamageToUnit(u, det);
         next.log.push(`Charm "${charm.name}" detonated for ${det} against ${next.players[enemyOfOwnerId].name}'s Units.`);
+      }
+      // Fate [X] (§2.1): on expiry, look at the top X cards of the owner's
+      // deck; they keep 1 and bottom the rest (queued as a choice).
+      const fate = keywordValue(charm, 'Fate');
+      if (fate > 0) {
+        const owner = next.players[charm.ownerId];
+        const looked = owner.deck.splice(Math.max(0, owner.deck.length - fate));
+        if (looked.length > 0) {
+          next.choices.push({ playerId: owner.id, kind: 'fate', cards: looked.reverse(), source: charm.name });
+          next.log.push(`Fate (${charm.name}): ${owner.name} looks at the top ${looked.length} card(s).`);
+        }
       }
       next.players[charm.ownerId].graveyard.push(charm);
       next.log.push(`Charm "${charm.name}" expired.`);
@@ -468,13 +502,16 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
   switch (eff.action) {
     case 'damage': {
       if (eff.target === 'leader') {
-        opp.leader.damageTaken += val;
+        const dmg = val + freezeDryBonus(next, card, opp.leader);
+        opp.leader.damageTaken += dmg;
         recalcHealth(opp);
-        siphonHeal(card, caster, val, opp.leader);
+        siphonHeal(card, caster, dmg, opp.leader);
       } else {
         const t = findTarget();
         if (t) {
-          const dealt = applyDamageToUnit(t, val);
+          const bonus = t.ownerId !== caster.id ? freezeDryBonus(next, card, t) : 0;
+          if (bonus > 0) next.log.push(`Freeze-Dry adds +${bonus} damage against ${t.name}.`);
+          const dealt = applyDamageToUnit(t, val + bonus);
           siphonHeal(card, caster, dealt, t);
         }
       }
@@ -553,6 +590,21 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
           pl.charms = [];
         }
         next.log.push(`${t.name} was Purged of all modifications.`);
+      }
+      break;
+    }
+    case 'exhume': {
+      // §3 Exhume [Type]: pick a card of the given type from your graveyard
+      // and return it to your hand (queued as a choice).
+      const type = eff.exhumeType || 'Unit';
+      const candidates = caster.graveyard.filter(
+        (c) => c.type === type && c.instanceId !== card.instanceId
+      );
+      if (candidates.length > 0) {
+        next.choices.push({ playerId: caster.id, kind: 'exhume', cards: candidates, source: card.name });
+        next.log.push(`Exhume (${card.name}): ${caster.name} may return a ${type} from the graveyard.`);
+      } else {
+        next.log.push(`Exhume (${card.name}) found no ${type} cards in the graveyard.`);
       }
       break;
     }
@@ -781,6 +833,12 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
 
+      // Blessed (§2.2): immune to enemy Dark/Chaos targeting.
+      if (targetsEnemy && targetCard && blessedBlocks(targetCard, card)) {
+        next.log.push(`${targetCard.name} is Blessed: it cannot be targeted by enemy Dark or Chaos cards.`);
+        return next;
+      }
+
       // Guard (§2.1): targeted enemy Events must target a Unit with Guard
       // while the defender has a ready Guard Unit.
       if (targetsEnemy && card.type === 'Event') {
@@ -848,6 +906,15 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (card.type === 'Unit') {
         activePlayer.board.push(card);
         next.log.push(`${activePlayer.name} deployed ${card.name}.`);
+        // Rally [X] (§2.1): deploying a Unit costing X or less grants it a
+        // temporary +1/+1 until Cleanup.
+        const rally = kwValueActive(activePlayer.leader, 'Rally');
+        const deployCost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+        if (rally > 0 && deployCost <= rally && !fromGraveyard) {
+          card.tempAtk += 1;
+          card.tempHp += 1;
+          next.log.push(`Rally: ${card.name} gains +1/+1 until Cleanup.`);
+        }
       } else if (card.type === 'Location') {
         activePlayer.locations.push(card);
         next.log.push(`${activePlayer.name} set a Location face-down.`);
@@ -880,7 +947,8 @@ function reduce(state: GameState, action: GameAction): GameState {
             if (u.ownerId !== activePlayer.id) {
               const hasLurk = kwActive(u, 'Lurk');
               const hasGuard = kwActive(u, 'Guard');
-              if (hasLurk && !hasGuard) return false;
+              if (hasLurk && !hasGuard && u.type === 'Unit') return false;
+              if (blessedBlocks(u, card)) return false;
             }
             return true;
           });
@@ -905,8 +973,9 @@ function reduce(state: GameState, action: GameAction): GameState {
           const roll = Math.floor(Math.random() * 6) + 1;
           if (roll >= 5) {
             next.log.push(`Echo duplicated ${card.name}!`);
-            // random target for the copy
-            const pool = card.effect?.target === 'friendly' ? activePlayer.board : opponent.board;
+            // random target for the copy (Blessed cards are excluded)
+            const rawPool = card.effect?.target === 'friendly' ? activePlayer.board : opponent.board;
+            const pool = rawPool.filter((u) => !blessedBlocks(u, card));
             const rnd = pool[Math.floor(Math.random() * pool.length)];
             resolveEvent(next, activePlayer, opponent, card, rnd?.instanceId);
           }
@@ -1051,6 +1120,31 @@ function reduce(state: GameState, action: GameAction): GameState {
       return resolveCombat(next, activePlayer, opponent);
     }
 
+    case 'RESOLVE_CHOICE': {
+      const choice = next.choices[0];
+      if (!choice) return next;
+      const chooser = next.players[choice.playerId];
+      const picked =
+        choice.cards.find((c) => c.instanceId === action.cardInstanceId) || choice.cards[0];
+      if (choice.kind === 'fate') {
+        // Chosen card to hand; the rest go to the bottom of the deck.
+        chooser.hand.push(picked);
+        for (const c of choice.cards) {
+          if (c.instanceId !== picked.instanceId) chooser.deck.unshift(c);
+        }
+        next.log.push(`Fate (${choice.source}): ${chooser.name} kept a card and bottomed the rest.`);
+      } else {
+        // Exhume: move the chosen card from the graveyard to hand.
+        const idx = chooser.graveyard.findIndex((c) => c.instanceId === picked.instanceId);
+        if (idx >= 0) {
+          chooser.hand.push(chooser.graveyard.splice(idx, 1)[0]);
+          next.log.push(`Exhume (${choice.source}): ${chooser.name} returned ${picked.name} to hand.`);
+        }
+      }
+      next.choices.shift();
+      return next;
+    }
+
     case 'END_TURN': {
       if (next.phase !== 'ACTION') return next; // turn can only end from the Action phase
       endOfTurnCleanup(next, activePlayer);
@@ -1129,16 +1223,41 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         const blockerRemaining = totalRemaining(blocker, next);
         // Assign enough to chew through Armor + remaining health, capped by what's left.
         const assigned = Math.min(dmgLeft, blockerRemaining + effArmor(blocker));
-        const dealt = assigned > 0 ? applyDamageToUnit(blocker, assigned) : 0;
+        const fdBonus = assigned > 0 ? freezeDryBonus(next, attacker, blocker) : 0;
+        const dealt = assigned > 0 ? applyDamageToUnit(blocker, assigned + fdBonus) : 0;
         dmgLeft -= assigned;
         siphonHeal(attacker, playerOf(next, attacker), dealt, blocker);
         if (dealt > 0) onCombatDamageToUnit(next, attacker, blocker);
+        // Glaciate [X] (§2.3): the blocker Freezes the attacker, or deals X
+        // Frost damage if the attacker is already Frozen.
+        const glaciate = kwValueActive(blocker, 'Glaciate');
+        if (hasKeyword(blocker, 'Glaciate') && !blocker.glitched && attacker.type === 'Unit') {
+          if (attacker.frozen > 0) {
+            applyDamageToUnit(attacker, Math.max(1, glaciate));
+            next.log.push(`Glaciate: ${blocker.name} deals ${Math.max(1, glaciate)} Frost damage to the Frozen ${attacker.name}.`);
+          } else {
+            attacker.frozen = 2; // lasts through the attacker's next turn
+            next.log.push(`Glaciate: ${blocker.name} Froze ${attacker.name}.`);
+          }
+        }
         const counter = effAttack(blocker, next);
         const counterDealt = applyDamageToUnit(attacker, counter);
         if (counterDealt > 0) onCombatDamageToUnit(next, blocker, attacker);
         if (dealt > 0 && isDead(blocker, next)) reapHeal(next, attacker, blocker);
         if (counterDealt > 0 && isDead(attacker, next)) reapHeal(next, blocker, attacker);
         if (isDead(attacker, next)) break; // attacker died mid-swing; wave ends
+      }
+      // Scorched-Earth (§2.3): a blocked attacker singes all other enemy Units.
+      if (kwActive(attacker, 'Scorched-Earth') && attacker.type === 'Unit') {
+        const blockerIds = new Set(blocks.map((b) => b.blockerId));
+        let hits = 0;
+        for (const u of opponent.board) {
+          if (!blockerIds.has(u.instanceId) && !isDead(u, next)) {
+            applyDamageToUnit(u, 1);
+            hits++;
+          }
+        }
+        if (hits > 0) next.log.push(`Scorched-Earth: ${attacker.name} deals 1 Flame damage to ${hits} other enemy Unit(s).`);
       }
       // Pierce (§2.1): overflow beyond the blockers' remaining health goes to
       // the defending Leader.
@@ -1166,7 +1285,7 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         const targetPlayer = playerOf(next, target);
         if (attacker.type === 'Leader') {
           // Leader vs Leader: half damage (rounded down, min 1), full counter (§5.2).
-          const dmg = Math.max(1, Math.floor(attackerAtk / 2));
+          const dmg = Math.max(1, Math.floor(attackerAtk / 2)) + freezeDryBonus(next, attacker, target);
           targetPlayer.leader.damageTaken += dmg;
           recalcHealth(targetPlayer);
           siphonHeal(attacker, playerOf(next, attacker), dmg, target);
@@ -1175,14 +1294,15 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
           attacker.damageTaken += counter;
           recalcHealth(playerOf(next, attacker));
         } else {
-          targetPlayer.leader.damageTaken += attackerAtk;
+          const dmg = attackerAtk + freezeDryBonus(next, attacker, target);
+          targetPlayer.leader.damageTaken += dmg;
           recalcHealth(targetPlayer);
-          siphonHeal(attacker, playerOf(next, attacker), attackerAtk, target);
-          if (attackerAtk > 0) onCombatDamageToUnit(next, attacker, target);
+          siphonHeal(attacker, playerOf(next, attacker), dmg, target);
+          if (dmg > 0) onCombatDamageToUnit(next, attacker, target);
         }
       } else {
         // Leader (or unit) attacking a Unit: full both ways (§5.2).
-        const dealt = applyDamageToUnit(target, attackerAtk);
+        const dealt = applyDamageToUnit(target, attackerAtk + freezeDryBonus(next, attacker, target));
         siphonHeal(attacker, playerOf(next, attacker), dealt, target);
         if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
         const counter = effAttack(target, next);

@@ -130,7 +130,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Legendary",
     "set": "Blue Coral",
     "keywords": [
-      "Wildcast 3"
+      "Wildcast 3",
+      "Freeze-Dry"
     ],
     "text": "Wildcast 3: Deals 1 damage to 3 unique random enemy units.",
     "cost": {
@@ -713,7 +714,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Ward 1"
+      "Ward 1",
+      "Fate 2"
     ],
     "text": "A spell woven from living bodies.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_magical_ritual_where_a_group_of_eels_weave_themselves_toget_4f318a23-e2a0-447e-8b22-6b966bf4161e_2_result.webp?updatedAt=1778240809724",
@@ -826,7 +828,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Detonate 1"
+      "Detonate 1",
+      "Fate 3"
     ],
     "text": "Time stopped when the ship went down.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ornate_pocket_watch_with_a_cracked_crystal_the_hands_indic_914062f7-eafc-4237-aef0-5a62dbfd1a6e_0_result.webp?updatedAt=1778240809395",
@@ -1248,7 +1251,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Rally 2"
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
@@ -1311,7 +1315,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Freeze-Dry"
     ],
     "text": "A moving fortress.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ancient_colossal_turtle_the_Isle_of_Shells_with_a_fully_re_a1eaaeea-a159-4cca-96eb-9d78264914d5_3_result.webp?updatedAt=1778240807932",
@@ -1471,7 +1476,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Pierce"
+      "Pierce",
+      "Scorched-Earth"
     ],
     "text": "A bizarre amalgamation of the deep.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_long-nosed_chimera_fish_with_silver_skin_gliding_through_a__c396adc5-f761-431a-a326-82aa3c19a4e9_0_result.webp?updatedAt=1778240807391",
@@ -1493,7 +1499,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Rare",
     "set": "Blue Coral",
     "keywords": [
-      "Detonate 2"
+      "Detonate 2",
+      "Fate 2"
     ],
     "text": "Words of power lost to the sea.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_fractured_ancient_stone_tablet_etched_with_glowing_blue_gly_6667b0eb-723e-473c-ab81-ff549b2d3875_1_result.webp?updatedAt=1778240807336",
@@ -1533,7 +1540,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Purge"
+      "Purge",
+      "Blessed"
     ],
     "text": "The ocean's wrath unleashed. Purge target Unit: strip its Items, statuses and buffs.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_tsunami_wave_forming_viewed_as_a_massive_towering_wall_of_d_69ec0d39-3e05-4cab-b911-2a6c5112ef6a_3_result.webp?updatedAt=1778240807141",
@@ -2228,19 +2236,20 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Echo"
+      "Echo",
+      "Exhume Unit"
     ],
-    "text": "The ocean stops in its tracks. Heal 4 damage from your Leader.",
+    "text": "The ocean stops in its tracks. Exhume: return a Unit from your graveyard to your hand.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_flash-freezing_event_in_the_deep_where_a_pocket_of_supercoo_f684b1bf-637b-4cd1-9302-3fb50ff28df4_0_result.webp?updatedAt=1778240803069",
     "cost": {
       "Dark": 1,
       "Generic": 1
     },
     "effect": {
-      "action": "heal",
-      "value": 4,
+      "action": "exhume",
+      "exhumeType": "Unit",
       "target": "self",
-      "text": "Heal 4 damage from your Leader."
+      "text": "Return a Unit card from your graveyard to your hand."
     }
   },
   {
@@ -2275,7 +2284,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Ward 1"
+      "Ward 1",
+      "Fate 2"
     ],
     "text": "Preserved perfectly for millennia.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_sphere_of_polished_amber_containing_a_perfectly_preserved_g_5381c256-0b07-4479-aa8c-6d8f573c34cc_3_result.webp?updatedAt=1778240802656",
@@ -2630,7 +2640,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Ward 1"
+      "Ward 1",
+      "Fate 2"
     ],
     "text": "The world inside a shell.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_iridescent_pearl_that_contains_a_map_of_the_entire_oc_70ccb525-3214-4694-92ef-98d830751f6f_0_result.webp?updatedAt=1778240801221",
@@ -2668,7 +2679,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Scorched-Earth"
     ],
     "text": "Creeping along the ocean floor.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_sea_spider_with_spindly_glowing_legs_walking_over_a_bed_of__40ff17ce-dbfa-4400-8fc9-0aec91fa3878_2_result.webp?updatedAt=1778240801118",
@@ -2854,7 +2866,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Glaciate 2"
     ],
     "text": "Invisible to most predators.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_collection_of_Glass_Squid_that_look_like_floating_bubbles_f_ac07fc79-3803-449a-9501-7b53a385c909_1_result.webp?updatedAt=1778240799662",
@@ -2935,7 +2948,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Rally 2"
     ],
     "text": "He has seen the bottom of the world.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_legendary_diver_in_a_highly_modified_heavy_brass_and_steel__d425f53e-5d8e-4cd2-b28b-a12ad45e3c7b_3_result.webp?updatedAt=1778240799013",
@@ -3011,7 +3025,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Glaciate 1"
     ],
     "text": "Delicate but sharp.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_lobster_with_a_shell_that_looks_like_cracked_porcelain_with_d43c7ea8-610b-429c-8f2e-d58014ecbf4a_1_result.webp?updatedAt=1778240797832",
@@ -3050,7 +3065,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Blessed"
     ],
     "text": "A slow and steady traveler.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_sea_turtle_with_a_shell_made_of_polished_emerald_a_8871346a-f40b-41c2-bf76-001b8daf79fe_3_result.webp?updatedAt=1778240795581",

@@ -33,7 +33,11 @@ export function buildCardData(templates: CardTemplate[]): CardData {
 
     const costOf = (t: CardTemplate) =>
       Object.values(t.cost || {}).reduce((a, b) => a + b, 0);
-    rest.sort((a, b) => costOf(a) - costOf(b) || a.name.localeCompare(b.name));
+    // Deck priority: cheap cards first, but keyword- and effect-rich cards
+    // jump the queue so decks showcase the mechanics instead of vanilla fillers.
+    const prio = (t: CardTemplate) =>
+      costOf(t) - Math.min((t.keywords || []).length, 2) * 0.75 - (t.effect ? 0.5 : 0);
+    rest.sort((a, b) => prio(a) - prio(b) || a.name.localeCompare(b.name));
     locations.sort((a, b) => costOf(a) - costOf(b) || a.name.localeCompare(b.name));
 
     const deck: string[] = [];

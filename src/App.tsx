@@ -135,6 +135,43 @@ function RollModal({ state, dispatch }: { state: GameState; dispatch: React.Disp
   );
 }
 
+// ---------------------------------------------------------------------------
+// Fate / Exhume card selection
+// ---------------------------------------------------------------------------
+function ChoiceModal({ state, dispatch }: { state: GameState; dispatch: React.Dispatch<GameAction> }) {
+  const choice = state.choices?.[0];
+  if (!choice) return null;
+  const chooser = state.players[choice.playerId];
+  if (chooser.isCPU) return null; // the CPU resolves its own choices
+
+  const title = choice.kind === 'fate' ? 'Fate — Keep One Card' : 'Exhume — Return One Card';
+  const hint = choice.kind === 'fate'
+    ? `${choice.source}: pick 1 card to add to your hand. The rest go to the bottom of your deck.`
+    : `${choice.source}: pick 1 card to return from your graveyard to your hand.`;
+
+  return (
+    <div className="absolute inset-0 bg-[#1A1A1A]/90 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#F7F7F7] text-[#1A1A1A] p-6 ink-border-md shadow-hard-yellow text-center max-w-3xl w-full">
+        <h2 className="text-2xl heading-font mb-1">{title}</h2>
+        <p className="text-[#2C3E50] mb-4 text-sm font-bold">{hint}</p>
+        <div className="flex justify-center gap-3 flex-wrap">
+          {choice.cards.map((c: GameCard) => (
+            <div key={c.instanceId} className="flex flex-col items-center gap-2">
+              <CardWithSelect card={c} selectable
+                onClick={() => dispatch({ type: 'RESOLVE_CHOICE', cardInstanceId: c.instanceId })} />
+              <button
+                onClick={() => dispatch({ type: 'RESOLVE_CHOICE', cardInstanceId: c.instanceId })}
+                className="btn-pop px-3 py-1 bg-[#FFD54F] text-[#1A1A1A] font-black text-xs ink-border-sm shadow-hard-black-xs">
+                Take
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GameOverModal({ state, onReplay }: { state: GameState; onReplay: () => void }) {
   if (!state.winner) return null;
   const winner = state.players[state.winner];
@@ -243,6 +280,7 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
       <Board gameState={state} dispatch={dispatch} />
       <MulliganModal state={state} dispatch={dispatch} />
       <RollModal state={state} dispatch={dispatch} />
+      <ChoiceModal state={state} dispatch={dispatch} />
       <GameOverModal state={state} onReplay={onReplay} />
       <LogPanel state={state} />
       <button onClick={() => setShowHelp(true)}

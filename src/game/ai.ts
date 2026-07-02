@@ -36,6 +36,17 @@ import { hasKeyword, keywordValue } from './cards';
 export function getCPUAction(state: GameState): GameAction | null {
   if (state.phase === 'INIT' || state.phase === 'GAME_OVER') return null;
 
+  // Pending Fate/Exhume selection: resolve it if it belongs to a CPU player.
+  const choice = state.choices?.[0];
+  if (choice) {
+    const chooser = state.players[choice.playerId];
+    if (!chooser.isCPU) return null; // human picks via the UI
+    const best = [...choice.cards].sort(
+      (a, b) => cardPlayValue(state, chooser, b) - cardPlayValue(state, chooser, a)
+    )[0];
+    return { type: 'RESOLVE_CHOICE', cardInstanceId: best?.instanceId };
+  }
+
   const active = state.players[state.activePlayerId];
   const oppId = state.activePlayerId === state.player1Id ? state.player2Id : state.player1Id;
   const opp = state.players[oppId];
@@ -166,11 +177,13 @@ function evaluate(state: GameState, aiId: string): number {
 
   const boardVal = (p: PlayerState) => p.board.reduce((s, u) => s + unitValue(u, state), 0);
   const floating = Object.values(me.resources).reduce((a, b) => a + b, 0);
+  // A pending Fate/Exhume pick is a card in hand the simulation hasn't cashed yet.
+  const pendingPicks = (state.choices || []).filter((c) => c.playerId === aiId && c.cards.length > 0).length;
 
   return (
     wLife * (me.health - opp.health) +
     wBoard * (boardVal(me) - boardVal(opp)) +
-    wHand * (me.hand.length - opp.hand.length) +
+    wHand * (me.hand.length + pendingPicks - opp.hand.length) +
     wMana * Math.min(floating, 4) // a small persistent-mana buffer is good; hoarding is not
   );
 }
@@ -187,6 +200,10 @@ function unitValue(u: GameCard, state: GameState): number {
   if (kwActive(u, 'Siphon')) v += 1;
   if (kwActive(u, 'Lurk')) v += 1;
   if (kwActive(u, 'Overdrive')) v += atk * 0.5;
+  if (kwActive(u, 'Blessed')) v += 1;
+  if (kwActive(u, 'Glaciate')) v += 1;
+  if (kwActive(u, 'Scorched-Earth')) v += 0.5;
+  if (kwActive(u, 'Freeze-Dry')) v += 0.5;
   v += effArmor(u) * 0.8;
   // Location Adaptation Layer: under a SCORCH_ALL Location, units about to
   // burn out are worth almost nothing.
@@ -263,6 +280,20 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
     if (holdsEvent && cand.action.type === 'PLAY_CARD') {
       const played = me.hand.find((c) => c.instanceId === (cand.action as any).instanceId);
       if (played && played.type !== 'Unit' && costTotal(played) >= floating - 1) adjusted -= 0.6;
+    }
+    // Delayed-payoff correction: Charms and Locations pay off on later turns,
+    // which a one-ply evaluation only sees as a lost hand card. Credit their
+    // future value up front so the AI actually develops them.
+    if (cand.action.type === 'PLAY_CARD') {
+      const played = me.hand.find((c) => c.instanceId === (cand.action as any).instanceId);
+      if (played?.type === 'Charm') {
+        adjusted += 2.0 + 0.4 * (played.duration || 1)
+          + keywordValue(played, 'Detonate') * 0.3
+          + keywordValue(played, 'Fate') * 0.4
+          + keywordValue(played, 'Boost') * 0.6;
+      } else if (played?.type === 'Location') {
+        adjusted += me.locations.length < 2 ? 2.2 : 0.8;
+      }
     }
     if (adjusted > bestScore) {
       bestScore = adjusted;
@@ -359,8 +390,12 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
   const eff = ev.effect;
   if (!eff) return [''];
   const val = (eff.value || 0) + (hasKeyword(ev, 'Pure') && me.singleColorRoll ? 2 : 0);
+  const evIsDarkChaos = (ev.elements || []).some((e) => e === 'Dark' || e === 'Chaos');
   const enemyTargetable = opp.board.filter(
-    (u) => u.type === 'Unit' && !(kwActive(u, 'Lurk') && !kwActive(u, 'Guard'))
+    (u) =>
+      u.type === 'Unit' &&
+      !(kwActive(u, 'Lurk') && !kwActive(u, 'Guard')) &&
+      !(kwActive(u, 'Blessed') && evIsDarkChaos)
   );
   const byThreat = [...enemyTargetable].sort((a, b) => unitValue(b, state) - unitValue(a, state));
 
@@ -416,6 +451,10 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
       return me.deck.length > (eff.value || 1) ? [''] : [];
     case 'manifest':
       return [''];
+    case 'exhume': {
+      const type = eff.exhumeType || 'Unit';
+      return me.graveyard.some((c) => c.type === type) ? [''] : [];
+    }
     default:
       return eff.target === 'unit' ? byThreat.slice(0, 1).map((u) => u.instanceId) : [''];
   }

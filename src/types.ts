@@ -18,8 +18,11 @@ export interface EventEffect {
     | 'manifest'
     | 'buff'
     | 'meltdown'
-    | 'purge';
+    | 'purge'
+    | 'exhume';
   value?: number;
+  /** for 'exhume': the card type that may be returned from the graveyard. */
+  exhumeType?: CardType;
   /** who/what the effect needs: an enemy unit, the enemy leader, a friendly unit, or self. */
   target?: 'unit' | 'leader' | 'friendly' | 'self';
   text?: string;
@@ -113,6 +116,15 @@ export type Phase =
   | 'COMBAT_BLOCK'
   | 'GAME_OVER';
 
+/** A pending "pick one card" decision (Fate / Exhume). */
+export interface ChoiceState {
+  playerId: string;
+  kind: 'fate' | 'exhume';
+  /** candidates; for 'fate' these were removed from the top of the deck. */
+  cards: GameCard[];
+  source: string;
+}
+
 export interface CombatState {
   attackers: {
     instanceId: string; // unit or leader
@@ -137,6 +149,8 @@ export interface GameState {
   /** the player currently treated as controller of the active Location. */
   activeLocationOwnerId: string | null;
   combat: CombatState | null;
+  /** queued Fate/Exhume selections awaiting a RESOLVE_CHOICE. */
+  choices: ChoiceState[];
   pendingRoll: number | null;
   winner: string | null;
   log: string[];

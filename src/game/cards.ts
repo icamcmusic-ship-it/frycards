@@ -7,21 +7,35 @@ import { buildCardData, CardData } from './deckbuilder';
 let cardData: CardData = buildCardData(GENERATED_CARDS);
 
 export function applyCardData(templates: CardTemplate[]) {
+  // Cards whose bundled version carries engine-specific keywords/effects that
+  // the live data does not know about yet. The local copy always wins.
   const customIds = [
     "abyssal_soul_eater",
     "chrono_phalanx",
     "modularity_core",
     "quantum_overclocker",
     "lurking_coral_prowler",
-    "starfall_wildcaster"
+    "starfall_wildcaster",
+    // Rally / Fate / Glaciate / Scorched-Earth / Freeze-Dry / Blessed / Exhume
+    "mer_king",
+    "legendary_diver",
+    "sunken_timepiece",
+    "glowing_glyph_tablet",
+    "eel_s_weave",
+    "glass_squid",
+    "porcelain_lobster",
+    "silver_chimera",
+    "glowing_sea_spider",
+    "isle_of_shells",
+    "emerald_turtle",
+    "towering_tsunami",
+    "flash_freeze",
+    "map_pearl",
+    "amber_sphere"
   ];
   const customCards = GENERATED_CARDS.filter((c) => customIds.includes(c.id));
-  const merged = [...templates];
-  for (const c of customCards) {
-    if (!merged.some((m) => m.id === c.id)) {
-      merged.push(c);
-    }
-  }
+  const merged = templates.filter((t) => !customIds.includes(t.id));
+  merged.push(...customCards);
   const next = buildCardData(merged);
   if (next.leaderIds.length === 0) return; // refuse a pool with no Leaders
   cardData = next;
