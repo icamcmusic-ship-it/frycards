@@ -739,9 +739,10 @@ function reduce(state: GameState, action: GameAction): GameState {
       const card = fromGraveyard ? activePlayer.graveyard[cardIdx] : activePlayer.hand[cardIdx];
       if (!canAfford(card.cost, activePlayer.resources)) return next;
 
-      // Determine target for cards that need one.
+      // Determine target for cards that need one. Wildcast Events pick their
+      // own random targets, so they never wait for a manual selection.
       const needsTarget =
-        (card.type === 'Event' && card.effect && ['unit', 'friendly'].includes(card.effect.target || '')) ||
+        (card.type === 'Event' && !kwActive(card, 'Wildcast') && card.effect && ['unit', 'friendly'].includes(card.effect.target || '')) ||
         card.type === 'Item';
       const targetCard = action.targetId
         ? [...activePlayer.board, ...opponent.board].find((c) => c.instanceId === action.targetId)
@@ -813,10 +814,12 @@ function reduce(state: GameState, action: GameAction): GameState {
             activePlayer.resources.Generic = Math.max(0, (activePlayer.resources.Generic || 0) - overclockVal);
             activePlayer.overclockPenalty = Math.max(0, activePlayer.overclockPenalty - overclockVal);
           }
-          if (card.type === 'Event' && !fromGraveyard) {
+          if (fromGraveyard) {
+            activePlayer.graveyard.push(card); // negated Graveborn cast returns to the graveyard
+          } else if (card.type === 'Event') {
             activePlayer.hand.push(card);
           } else {
-            if (!fromGraveyard) activePlayer.graveyard.push(card);
+            activePlayer.graveyard.push(card);
           }
           return next;
         }
@@ -1029,7 +1032,7 @@ function reduce(state: GameState, action: GameAction): GameState {
     }
 
     case 'END_TURN': {
-      if (next.phase === 'GAME_OVER') return next;
+      if (next.phase !== 'ACTION') return next; // turn can only end from the Action phase
       endOfTurnCleanup(next, activePlayer);
       if ((next.phase as string) === 'GAME_OVER') return next;
       next.activePlayerId = opponentId;
