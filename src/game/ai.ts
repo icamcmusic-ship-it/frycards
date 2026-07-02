@@ -11,6 +11,7 @@ import {
   maxItemCapacity,
   gameReducer,
   kwActive,
+  lurkProtected,
 } from './engine';
 import { hasKeyword, keywordValue } from './cards';
 
@@ -359,9 +360,7 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
   const eff = ev.effect;
   if (!eff) return [''];
   const val = (eff.value || 0) + (hasKeyword(ev, 'Pure') && me.singleColorRoll ? 2 : 0);
-  const enemyTargetable = opp.board.filter(
-    (u) => u.type === 'Unit' && !(kwActive(u, 'Lurk') && !kwActive(u, 'Guard'))
-  );
+  const enemyTargetable = opp.board.filter((u) => u.type === 'Unit' && !lurkProtected(u));
   const byThreat = [...enemyTargetable].sort((a, b) => unitValue(b, state) - unitValue(a, state));
 
   switch (eff.action) {

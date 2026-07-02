@@ -61,6 +61,14 @@ export function kwActive(card: GameCard, name: string): boolean {
   return hasKeyword(card, name) && !card.glitched;
 }
 
+/**
+ * Lurk (§2.1): untargetable by enemy attacks/Events until it has declared an
+ * attack at least once this match; suppressed while the card has Guard.
+ */
+export function lurkProtected(card: GameCard): boolean {
+  return kwActive(card, 'Lurk') && !kwActive(card, 'Guard') && !card.hasAttacked;
+}
+
 /** Burden [X] (§2.1): total extra generic cost to attack with this Unit. */
 export function attackBurden(unit: GameCard): number {
   return (unit.attachedItems || []).reduce(
@@ -87,27 +95,27 @@ export function itemAtk(card: GameCard): number {
 export function bonusHp(card: GameCard): number {
   return (card.attachedItems || []).reduce((s, it) => s + (it.attach?.health || 0), 0);
 }
+/**
+ * Phalanx [X] (§2.2): +X max health for each OTHER ready friendly card on the
+ * battlefield (health only — a dynamic buffer that never wipes damage §5.3).
+ */
+function phalanxHp(card: GameCard, state: GameState): number {
+  if (card.type !== 'Unit' || !kwActive(card, 'Phalanx')) return 0;
+  const player = state.players[card.ownerId];
+  if (!player) return 0;
+  const x = Math.max(1, keywordValue(card, 'Phalanx'));
+  const readyOthers =
+    player.board.filter((u) => u.instanceId !== card.instanceId && !u.exhausted).length +
+    (player.leader.exhausted ? 0 : 1);
+  return x * readyOthers;
+}
 export function effAttack(card: GameCard, state: GameState): number {
   const loc = card.type === 'Unit' ? locAtkBuff(state) : 0;
-  let phalanxBuff = 0;
-  if (card.type === 'Unit' && kwActive(card, 'Phalanx')) {
-    const player = state.players[card.ownerId];
-    if (player) {
-      phalanxBuff = Math.max(0, player.board.filter((u) => u.instanceId !== card.instanceId).length);
-    }
-  }
-  return Math.max(0, (card.attack || 0) + card.tempAtk + itemAtk(card) - card.witherAtk + loc + phalanxBuff);
+  return Math.max(0, (card.attack || 0) + card.tempAtk + itemAtk(card) - card.witherAtk + loc);
 }
 export function effMaxHealth(card: GameCard, state: GameState): number {
   const loc = card.type === 'Unit' ? locHpBuff(state) : 0;
-  let phalanxBuff = 0;
-  if (card.type === 'Unit' && kwActive(card, 'Phalanx')) {
-    const player = state.players[card.ownerId];
-    if (player) {
-      phalanxBuff = Math.max(0, player.board.filter((u) => u.instanceId !== card.instanceId).length);
-    }
-  }
-  return Math.max(0, (card.health || 0) + card.tempHp - card.witherHp + loc + phalanxBuff);
+  return Math.max(0, (card.health || 0) + card.tempHp - card.witherHp + loc + phalanxHp(card, state));
 }
 export function baseRemaining(card: GameCard, state: GameState): number {
   return effMaxHealth(card, state) - card.damageTaken;
@@ -218,14 +226,20 @@ function siphonHeal(source: GameCard, controller: PlayerState, damageDealt: numb
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
-export function initialGameState(vsCPU = true, p1Leader?: string, p2Leader?: string): GameState {
+export function initialGameState(
+  vsCPU = true,
+  p1Leader?: string,
+  p2Leader?: string,
+  p1CustomDeck?: string[],
+  p1Name = 'Player 1'
+): GameState {
   const p1Id = 'p1';
   const p2Id = 'p2';
   const leaders = getDeckableLeaders();
   const l1 = p1Leader || leaders[0];
   const l2 = p2Leader || leaders[1 % leaders.length];
 
-  const p1Deck = buildDeck(l1, p1Id);
+  const p1Deck = buildDeck(l1, p1Id, p1CustomDeck);
   const p2Deck = buildDeck(l2, p2Id);
 
   const makePlayer = (id: string, name: string, isCPU: boolean, d: ReturnType<typeof buildDeck>): PlayerState => ({
@@ -248,7 +262,7 @@ export function initialGameState(vsCPU = true, p1Leader?: string, p2Leader?: str
   });
 
   const players: Record<string, PlayerState> = {
-    [p1Id]: makePlayer(p1Id, 'Player 1', false, p1Deck),
+    [p1Id]: makePlayer(p1Id, p1Name, false, p1Deck),
     [p2Id]: makePlayer(p2Id, 'CPU', vsCPU, p2Deck),
   };
 
@@ -483,7 +497,9 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
     case 'freeze': {
       const t = findTarget();
       if (t) {
-        t.frozen = 1;
+        // §3 Freeze persists until the end of the target controller's next
+        // full turn: freezing your own-side card mid-turn needs 2 ticks.
+        t.frozen = t.ownerId === caster.id ? 2 : 1;
         next.log.push(`${t.name} was Frozen.`);
       }
       break;
@@ -769,26 +785,36 @@ function reduce(state: GameState, action: GameAction): GameState {
         : undefined;
       if (needsTarget && !targetCard) return next; // wait for a valid target
 
-      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
-
-      // Lurk vs Guard Conflict
-      if (targetsEnemy && targetCard && targetCard.type === 'Unit') {
-        const hasLurk = kwActive(targetCard, 'Lurk');
-        const hasGuard = kwActive(targetCard, 'Guard');
-        if (hasLurk && !hasGuard) {
-          next.log.push(`Cannot target ${targetCard.name} because it has Lurk.`);
+      // Items attach only to Units with spare capacity (§5.3 Capacity Law).
+      if (card.type === 'Item' && targetCard) {
+        if (targetCard.type !== 'Unit') return next;
+        if (targetCard.attachedItems.length >= maxItemCapacity(targetCard)) {
+          next.log.push(`${targetCard.name} has no free Item capacity.`);
           return next;
         }
       }
 
+      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
+
+      // Lurk vs Guard Conflict (§2.1): Lurk lifts after the unit's first attack.
+      if (targetsEnemy && targetCard && targetCard.type === 'Unit' && lurkProtected(targetCard)) {
+        next.log.push(`Cannot target ${targetCard.name} because it has Lurk.`);
+        return next;
+      }
+
       // Guard (§2.1): targeted enemy Events must target a Unit with Guard
-      // while the defender has a ready Guard Unit.
-      if (targetsEnemy && card.type === 'Event') {
-        const guards = opponent.board.filter(
-          (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
-        );
-        if (guards.length > 0 && !guards.some((g) => g.instanceId === targetCard!.instanceId)) {
+      // while the defender has a ready Guard Unit. This also blocks Events
+      // aimed at the enemy Leader.
+      const readyGuards = opponent.board.filter(
+        (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
+      );
+      if (readyGuards.length > 0 && card.type === 'Event' && !kwActive(card, 'Wildcast')) {
+        if (targetsEnemy && !readyGuards.some((g) => g.instanceId === targetCard!.instanceId)) {
           next.log.push('A ready Guard Unit forces enemy Events to target it.');
+          return next;
+        }
+        if (!targetCard && card.effect?.target === 'leader' && card.effect.action === 'damage') {
+          next.log.push('A ready Guard Unit protects the enemy Leader from targeted Events.');
           return next;
         }
       }
@@ -846,6 +872,15 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
 
       if (card.type === 'Unit') {
+        // Rally [X] (§2.1): deploying a Unit from hand costing X or less
+        // grants it +1/+1 until this turn's Cleanup Phase.
+        const rally = kwValueActive(activePlayer.leader, 'Rally');
+        const deployCost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+        if (rally > 0 && !fromGraveyard && deployCost <= rally) {
+          card.tempAtk += 1;
+          card.tempHp += 1;
+          next.log.push(`Rally ${rally}: ${card.name} gains +1/+1 until Cleanup.`);
+        }
         activePlayer.board.push(card);
         next.log.push(`${activePlayer.name} deployed ${card.name}.`);
       } else if (card.type === 'Location') {
@@ -876,14 +911,9 @@ function reduce(state: GameState, action: GameAction): GameState {
             ? [...activePlayer.board]
             : [...activePlayer.board, ...opponent.board, activePlayer.leader, opponent.leader];
 
-          const validPool = eligiblePool.filter((u) => {
-            if (u.ownerId !== activePlayer.id) {
-              const hasLurk = kwActive(u, 'Lurk');
-              const hasGuard = kwActive(u, 'Guard');
-              if (hasLurk && !hasGuard) return false;
-            }
-            return true;
-          });
+          const validPool = eligiblePool.filter(
+            (u) => u.ownerId === activePlayer.id || !lurkProtected(u)
+          );
 
           const shuffled = [...validPool].sort(() => Math.random() - 0.5);
           const chosenTargets = shuffled.slice(0, wildcastVal);
@@ -968,8 +998,13 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       } else if (activePlayer.leader.instanceId === action.instanceId) {
         if (activePlayer.leader.exhausted || activePlayer.leader.frozen > 0) return next;
-        // Survival Caveat (§5.2): forbid a Leader attack whose counter is lethal.
-        const target = [opponent.leader, ...opponent.board].find((c) => c.instanceId === action.targetId);
+        // Guard Interlock (§5.2): a ready Guard Unit intercepts Leader strikes,
+        // so the Survival Caveat must be measured against the Guard's counter.
+        let target = [opponent.leader, ...opponent.board].find((c) => c.instanceId === action.targetId);
+        const guard = opponent.board.find(
+          (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
+        );
+        if (guard) target = guard;
         const counter = target ? effAttack(target, next) : 0;
         const remaining = (activePlayer.leader.health || 0) - activePlayer.leader.damageTaken;
         if (counter >= remaining) {
@@ -1007,9 +1042,11 @@ function reduce(state: GameState, action: GameAction): GameState {
           }
           u.exhausted = true;
           u.attacksThisTurn += 1;
+          u.hasAttacked = true; // lifts Lurk protection for the rest of the match
           confirmed.push(att);
         } else if (activePlayer.leader.instanceId === att.instanceId) {
           activePlayer.leader.exhausted = true;
+          activePlayer.leader.hasAttacked = true;
           confirmed.push(att);
         }
       }
@@ -1151,9 +1188,9 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       // Unblocked: hit the declared target.
       let target = entityMap.get(attack.targetId);
       if (!target) continue;
-      // Guard Interlock (§5.2): if the defender has a ready Guard unit, the
-      // attack is forced onto it instead of the Leader.
-      if (target.type === 'Leader' && target.ownerId === opponent.id) {
+      // Guard Interlock (§2.1/§5.2): while a ready Guard Unit stands, every
+      // enemy attack (Leader strikes included) is forced onto a Guard Unit.
+      if (target.ownerId === opponent.id && !kwActive(target, 'Guard')) {
         const guard = opponent.board.find(
           (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0 && !isDead(u, next)
         );

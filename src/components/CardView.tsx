@@ -3,6 +3,7 @@ import { GameCard, GameState } from '../types';
 import { cn } from '../lib/utils';
 import { Shield, Snowflake, Flame, Zap } from 'lucide-react';
 import { effAttack, effMaxHealth } from '../game/engine';
+import { getCardBackImage } from '../meta/cardback';
 
 interface CardViewProps {
   key?: React.Key;
@@ -64,11 +65,16 @@ export function CardView({ card, onClick, className, selected, playable, targeta
   const size = compact ? 'w-[104px] h-[146px]' : 'w-[120px] h-[168px]';
 
   if (faceDown) {
+    const back = getCardBackImage();
     return (
-      <div className={cn(size, 'classic-black-back ink-border-sm shadow-hard-black-xs flex items-center justify-center', className)}>
-        <div className="w-10 h-10 bg-[#FFD54F] ink-border-sm rotate-45 flex items-center justify-center opacity-90">
-          <span className="-rotate-45 heading-font text-[10px] text-[#1A1A1A]">POP</span>
-        </div>
+      <div className={cn(size, 'classic-black-back ink-border-sm shadow-hard-black-xs flex items-center justify-center overflow-hidden', className)}>
+        {back ? (
+          <img src={back} className="w-full h-full object-cover" draggable={false} />
+        ) : (
+          <div className="w-10 h-10 bg-[#FFD54F] ink-border-sm rotate-45 flex items-center justify-center opacity-90">
+            <span className="-rotate-45 heading-font text-[10px] text-[#1A1A1A]">POP</span>
+          </div>
+        )}
       </div>
     );
   }

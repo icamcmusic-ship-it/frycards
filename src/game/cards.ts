@@ -27,6 +27,11 @@ export function applyCardData(templates: CardTemplate[]) {
   cardData = next;
 }
 
+/** Every template in the active card pool (live Supabase set or bundled fallback). */
+export function getAllCards(): CardTemplate[] {
+  return Object.values(cardData.db);
+}
+
 export function getCard(id: string): CardTemplate | undefined {
   return cardData.db[id];
 }
@@ -130,12 +135,13 @@ function shuffle<T>(arr: T[]): T[] {
  * Per rulebook §1.2, two Location cards are pulled from the deck into the
  * Location Zone; the remaining cards form the draw deck.
  */
-export function buildDeck(leaderId: string, ownerId: string) {
+export function buildDeck(leaderId: string, ownerId: string, customCards?: string[]) {
   const def = cardData.decks[leaderId];
-  if (!def) throw new Error(`No deck for leader ${leaderId}`);
+  const cardIds = customCards && customCards.length > 0 ? customCards : def?.cards;
+  if (!cardIds) throw new Error(`No deck for leader ${leaderId}`);
 
-  const leader = instantiateCard(def.leader, ownerId);
-  const cards = def.cards.map((id) => instantiateCard(id, ownerId));
+  const leader = instantiateCard(leaderId, ownerId);
+  const cards = cardIds.filter((id) => cardData.db[id]).map((id) => instantiateCard(id, ownerId));
 
   // Pull 2 Location cards from the deck into the Location Zone.
   const locations: GameCard[] = [];
