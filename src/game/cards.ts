@@ -1,11 +1,28 @@
 import { CardTemplate, GameCard } from '../types';
-import { GENERATED_CARDS, GENERATED_DECKS, LEADER_IDS } from './generated-cards';
+import { GENERATED_CARDS } from './generated-cards';
+import { buildCardData, CardData } from './deckbuilder';
 
-export const CARD_DB: Record<string, CardTemplate> = Object.fromEntries(
-  GENERATED_CARDS.map((c) => [c.id, c])
-);
+// The active card pool. Starts from the bundled fallback data and can be
+// swapped for the live Supabase card set before a match starts.
+let cardData: CardData = buildCardData(GENERATED_CARDS);
 
-export const LEADERS: CardTemplate[] = LEADER_IDS.map((id) => CARD_DB[id]);
+export function applyCardData(templates: CardTemplate[]) {
+  const next = buildCardData(templates);
+  if (next.leaderIds.length === 0) return; // refuse a pool with no Leaders
+  cardData = next;
+}
+
+export function getCard(id: string): CardTemplate | undefined {
+  return cardData.db[id];
+}
+
+export function getLeaders(): CardTemplate[] {
+  return cardData.leaderIds.map((id) => cardData.db[id]);
+}
+
+export function getDeckableLeaders(): string[] {
+  return cardData.leaderIds.filter((id) => cardData.decks[id]);
+}
 
 /** Parse a keyword string like "Armor 2" into { name, value }. */
 export function parseKeyword(kw: string): { name: string; value: number; arg?: string } {
@@ -31,7 +48,7 @@ export function keywordArg(card: CardTemplate | GameCard, name: string): string 
 }
 
 export function instantiateCard(templateId: string, ownerId: string): GameCard {
-  const template = CARD_DB[templateId];
+  const template = cardData.db[templateId];
   if (!template) throw new Error(`Card not found: ${templateId}`);
   return {
     ...template,
@@ -43,6 +60,7 @@ export function instantiateCard(templateId: string, ownerId: string): GameCard {
     summoningSickness: template.type === 'Unit' ? !hasKeyword(template, 'Blitz') : false,
     scorch: 0,
     frozen: 0,
+    glitched: false,
     armor: keywordValue(template, 'Armor'),
     witherAtk: 0,
     witherHp: 0,
@@ -72,6 +90,7 @@ export function makeToken(name: string, attack: number, health: number, ownerId:
     summoningSickness: true,
     scorch: 0,
     frozen: 0,
+    glitched: false,
     armor: 0,
     witherAtk: 0,
     witherHp: 0,
@@ -97,7 +116,7 @@ function shuffle<T>(arr: T[]): T[] {
  * Location Zone; the remaining cards form the draw deck.
  */
 export function buildDeck(leaderId: string, ownerId: string) {
-  const def = GENERATED_DECKS[leaderId];
+  const def = cardData.decks[leaderId];
   if (!def) throw new Error(`No deck for leader ${leaderId}`);
 
   const leader = instantiateCard(def.leader, ownerId);
@@ -113,5 +132,3 @@ export function buildDeck(leaderId: string, ownerId: string) {
 
   return { leader, locations, deck: shuffle(rest) };
 }
-
-export const DECKABLE_LEADERS = Object.keys(GENERATED_DECKS);
