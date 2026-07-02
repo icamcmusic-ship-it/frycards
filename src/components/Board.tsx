@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameCard, GameState } from '../types';
 import { CardView } from './CardView';
-import { canAfford, GameAction } from '../game/engine';
+import { canAfford, lurkProtected, GameAction } from '../game/engine';
 import { keywordValue } from '../game/cards';
 
 interface BoardProps {
@@ -136,7 +136,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
               {opponent.board.map((u) => (
                 <CardView key={u.instanceId} card={u} compact gameState={gameState}
                   onClick={() => handleUnitClick(u, true)}
-                  targetable={!!targetingEnemy && u.type === 'Unit' && !(kwActive(u, 'Lurk') && !kwActive(u, 'Guard'))}
+                  targetable={!!targetingEnemy && u.type === 'Unit' && !lurkProtected(u)}
                   selected={selectedAttackerId === u.instanceId || isAttacker(u.instanceId)}
                 />
               ))}

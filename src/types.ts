@@ -72,6 +72,8 @@ export interface GameCard extends CardTemplate {
   tempAtk: number;         // temporary buff (until end of turn)
   tempHp: number;
   attacksThisTurn: number; // for Overdrive
+  /** true once this card has declared an attack this match (unlocks Lurk targeting §2.1). */
+  hasAttacked?: boolean;
   // Items
   attachedItems: GameCard[];
   hostId?: string;         // if this card is an Item attached to a Unit

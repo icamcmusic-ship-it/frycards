@@ -1,13 +1,22 @@
-import React, { useEffect, useReducer, useState } from 'react';
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { initialGameState, gameReducer } from './game/engine';
 import { getCPUAction } from './game/ai';
-import { getDeckableLeaders, getCard, applyCardData } from './game/cards';
-import { fetchCardTemplates } from './lib/supabase';
+import { getDeckableLeaders, getCard, getAllCards, applyCardData } from './game/cards';
+import { fetchCardTemplates, recordMatchResult, DeckRow } from './lib/supabase';
 import { Board } from './components/Board';
 import { HowToPlay } from './components/HowToPlay';
-import { GameCard, GameState } from './types';
+import { CardTemplate, GameCard, GameState } from './types';
 import { GameAction } from './game/engine';
 import { cn } from './lib/utils';
+import { MetaProvider, useMeta } from './meta/MetaContext';
+import { AuthScreen } from './meta/AuthScreen';
+import { MainMenu, MetaScreen } from './meta/MainMenu';
+import { StoreScreen } from './meta/StoreScreen';
+import { CollectionScreen } from './meta/CollectionScreen';
+import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
+import { ProfileScreen } from './meta/ProfileScreen';
+import { PopButton } from './meta/ui';
+import { setCardBackImage } from './meta/cardback';
 
 // ---------------------------------------------------------------------------
 // Mulligan (London protocol)
@@ -60,7 +69,6 @@ function CardWithSelect({ card, selected, onClick, selectable }: any) {
   return (
     <div onClick={onClick} className={cn('cursor-pointer transition-transform', selectable && 'hover:-translate-y-1', selected && '-translate-y-3')}>
       <div className={cn(selected && 'outline outline-4 outline-[#E53935]')}>
-        {/* lightweight card face */}
         <div className="w-24 h-[134px] overflow-hidden bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col">
           <div className="text-[9px] heading-font px-1 py-0.5 truncate bg-[#1A1A1A] text-[#FFD54F]">{card.name}</div>
           {card.image && <img src={card.image} className="w-full aspect-[4/3] object-cover" />}
@@ -135,58 +143,101 @@ function RollModal({ state, dispatch }: { state: GameState; dispatch: React.Disp
   );
 }
 
-function GameOverModal({ state, onReplay }: { state: GameState; onReplay: () => void }) {
+function GameOverModal({ state, onReplay, reward }: { state: GameState; onReplay: () => void; reward: number | null }) {
   if (!state.winner) return null;
   const winner = state.players[state.winner];
+  const humanWon = !winner.isCPU;
   return (
     <div className="absolute inset-0 bg-[#FFD54F] flex items-center justify-center z-50 overflow-hidden">
       <div className="absolute inset-0 starburst-ray" />
       <div className="text-center relative bg-[#F7F7F7] ink-border-lg shadow-hard-black-lg p-12">
-        <h1 className="text-6xl heading-font text-[#1A1A1A] mb-4">Victory</h1>
-        <p className="text-2xl heading-font text-[#E53935] mb-10">{winner.name} wins the match!</p>
-        <button onClick={onReplay} className="btn-pop px-8 py-3 bg-[#1A1A1A] text-[#FFD54F] heading-font ink-border-md shadow-hard-yellow">Play Again</button>
+        <h1 className="text-6xl heading-font text-[#1A1A1A] mb-4">{humanWon ? 'Victory' : 'Defeat'}</h1>
+        <p className="text-2xl heading-font text-[#E53935] mb-4">{winner.name} wins the match!</p>
+        {reward !== null && (
+          <div className="heading-font text-sm bg-[#1A1A1A] text-[#FFD54F] inline-block px-4 py-2 ink-border-sm mb-8">
+            +{reward} GOLD EARNED
+          </div>
+        )}
+        <div className="flex gap-3 justify-center">
+          <button onClick={onReplay} className="btn-pop px-8 py-3 bg-[#1A1A1A] text-[#FFD54F] heading-font ink-border-md shadow-hard-yellow">
+            Back to Menu
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 function LogPanel({ state }: { state: GameState }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="absolute top-24 left-2 w-64 max-h-48 overflow-y-auto bg-[#1A1A1A]/90 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono z-30">
-      {state.log.slice(-40).reverse().map((l, i) => <div key={i}>{l}</div>)}
+    <div className="absolute top-24 left-2 z-30 w-64">
+      <button onClick={() => setOpen(!open)}
+        className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5 ink-border-sm mb-0.5">
+        BATTLE LOG {open ? '▾' : '▸'}
+      </button>
+      {open && (
+        <div className="max-h-48 overflow-y-auto bg-[#1A1A1A]/90 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono">
+          {state.log.slice(-40).reverse().map((l, i) => <div key={i}>{l}</div>)}
+        </div>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Start screen — pick your Leader
+// Play setup — choose a saved deck (or a prebuilt quick-play deck)
 // ---------------------------------------------------------------------------
-function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => void; dataSource: string }) {
-  const [showHelp, setShowHelp] = useState(false);
+interface MatchSetup {
+  leaderId: string;
+  customDeck?: string[];
+  deckName: string;
+}
+
+function PlayScreen({ onStart, onBack }: { onStart: (setup: MatchSetup) => void; onBack: () => void }) {
+  const { decks, guest, session } = useMeta();
+  const validDecks = decks.filter((d) => d.is_valid);
+  const leaders = getDeckableLeaders();
+
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] flex flex-col items-center justify-center text-[#1A1A1A] p-6 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[#2C3E50] pointer-events-none opacity-15" style={{ clipPath: 'polygon(0 0, 55% 0, 30% 100%, 0% 100%)' }} />
-      <div className="absolute inset-0 bg-[#FFD54F] pointer-events-none" style={{ clipPath: 'polygon(88% 0, 100% 0, 100% 100%, 75% 100%)' }} />
-      <div className="relative z-10 flex flex-col items-center">
-        <div className="bg-[#E53935] text-[#F7F7F7] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs mb-3">
-          STARK COMIC STANDARD · BLUE CORAL SET
-        </div>
-        <h1 className="text-5xl sm:text-6xl heading-font leading-none text-center mb-2">
-          SHIFTING<br /><span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-1">MULTIVERSE TCG</span>
-        </h1>
-        <p className="text-[#2C3E50] font-bold text-sm mb-2">Choose your Leader. The CPU will pick another.</p>
-        <div className="flex items-center gap-3 mb-8">
-          <div className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5">CARD DATA: {dataSource}</div>
-          <button onClick={() => setShowHelp(true)}
-            className="btn-pop text-[11px] heading-font bg-[#FFD54F] text-[#1A1A1A] px-3 py-1 ink-border-sm shadow-hard-black-xs">
-            ? HOW TO PLAY
-          </button>
-        </div>
-        <div className="flex gap-6 flex-wrap justify-center max-w-5xl">
-          {getDeckableLeaders().map((id) => {
+    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
+      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#1A1A1A] px-4 py-2.5">
+        <PopButton onClick={onBack} color="yellow">&lt; MENU</PopButton>
+        <h1 className="heading-font text-xl text-[#FFD54F]">CHOOSE YOUR DECK</h1>
+      </div>
+      <div className="p-6 max-w-5xl mx-auto">
+        {session && validDecks.length > 0 && (
+          <>
+            <h2 className="heading-font text-base mb-3 bg-[#E53935] text-[#F7F7F7] inline-block px-2 py-0.5">YOUR DECKS</h2>
+            <div className="flex flex-wrap gap-4 mb-8">
+              {validDecks.map((d: DeckRow) => {
+                const leader = getCard(d.leader_id);
+                return (
+                  <button key={d.id}
+                    onClick={() => onStart({ leaderId: d.leader_id, customDeck: d.card_ids, deckName: d.name })}
+                    className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left">
+                    <div className="px-2 py-1 bg-[#E53935] heading-font text-[10px] text-[#F7F7F7] truncate">{d.name}</div>
+                    {leader?.image && <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]"><img src={leader.image} className="w-full h-full object-cover" /></div>}
+                    <div className="p-3 pt-1">
+                      <div className="heading-font text-sm leading-tight">{leader?.name}</div>
+                      <div className="text-[10px] font-bold text-[#2C3E50] mt-0.5 uppercase">{leader?.elements.join(' / ')}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <h2 className="heading-font text-base mb-3 bg-[#2C3E50] text-[#F7F7F7] inline-block px-2 py-0.5">
+          QUICK PLAY · PREBUILT DECKS
+        </h2>
+        {guest && <p className="text-[11px] font-bold text-[#2C3E50] mb-3">Guest mode: prebuilt decks only. Create an account to forge your own.</p>}
+        <div className="flex flex-wrap gap-4">
+          {leaders.map((id) => {
             const l = getCard(id)!;
             return (
-              <button key={id} onClick={() => onStart(id)}
+              <button key={id} onClick={() => onStart({ leaderId: id, deckName: `${l.name} (Prebuilt)` })}
                 className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left">
                 <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
                   <span className="text-[9px] heading-font text-[#FFD54F]">MYTHIC LEADER ✸</span>
@@ -207,7 +258,6 @@ function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => v
           })}
         </div>
       </div>
-      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
@@ -215,11 +265,18 @@ function StartScreen({ onStart, dataSource }: { onStart: (leaderId: string) => v
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
 // ---------------------------------------------------------------------------
-function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }) {
+function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
+  const { session, profile, refreshProfile } = useMeta();
   const leaders = getDeckableLeaders();
-  const cpuLeader = leaders.find((id) => id !== leaderId) || leaders[0];
-  const [state, dispatch] = useReducer(gameReducer, null, () => initialGameState(true, leaderId, cpuLeader));
+  const cpuLeader = leaders.find((id) => id !== setup.leaderId) || leaders[0];
+  const [state, dispatch] = useReducer(
+    gameReducer,
+    null,
+    () => initialGameState(true, setup.leaderId, cpuLeader, setup.customDeck, profile?.username || 'Player 1')
+  );
   const [showHelp, setShowHelp] = useState(false);
+  const [reward, setReward] = useState<number | null>(null);
+  const recorded = useRef(false);
 
   // Kick off the mulligan phase once.
   useEffect(() => { dispatch({ type: 'START_GAME' }); }, []);
@@ -238,44 +295,117 @@ function Game({ leaderId, onReplay }: { leaderId: string; onReplay: () => void }
     }
   }, [state]);
 
+  // Record the result + pay out gold once per match (accounts only).
+  useEffect(() => {
+    if (state.phase !== 'GAME_OVER' || !state.winner || recorded.current) return;
+    recorded.current = true;
+    if (!session) return;
+    const humanWon = !state.players[state.winner].isCPU;
+    recordMatchResult(humanWon).then((res) => {
+      if (res) {
+        setReward(res.reward);
+        refreshProfile();
+      }
+    });
+  }, [state.phase, state.winner, session, state.players, refreshProfile]);
+
   return (
     <div className="relative w-full h-screen">
       <Board gameState={state} dispatch={dispatch} />
       <MulliganModal state={state} dispatch={dispatch} />
       <RollModal state={state} dispatch={dispatch} />
-      <GameOverModal state={state} onReplay={onReplay} />
+      <GameOverModal state={state} onReplay={onExit} reward={reward} />
       <LogPanel state={state} />
-      <button onClick={() => setShowHelp(true)}
-        className="absolute top-2 left-2 z-40 btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
-        title="How to Play">
-        ? RULES
-      </button>
+      <div className="absolute top-2 left-2 z-40 flex gap-1.5">
+        <button onClick={onExit}
+          className="btn-pop heading-font text-[11px] bg-[#1A1A1A] text-[#F7F7F7] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
+          title="Concede and return to menu">
+          ✕ CONCEDE
+        </button>
+        <button onClick={() => setShowHelp(true)}
+          className="btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
+          title="How to Play">
+          ? RULES
+        </button>
+      </div>
       {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
 
-export default function App() {
-  const [leaderId, setLeaderId] = useState<string | null>(null);
+// ---------------------------------------------------------------------------
+// App shell
+// ---------------------------------------------------------------------------
+function AppInner({ allCards }: { allCards: CardTemplate[] }) {
+  const { session, guest, loading, profile, shopItems } = useMeta();
+  const [screen, setScreen] = useState<MetaScreen>('menu');
+  const [match, setMatch] = useState<MatchSetup | null>(null);
   const [gameKey, setGameKey] = useState(0);
-  const [dataSource, setDataSource] = useState<'LOADING…' | 'SUPABASE LIVE' | 'BUNDLED FALLBACK'>('LOADING…');
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Keep the equipped card back applied to in-game face-down cards.
+  useEffect(() => {
+    const back = shopItems.find((s) => s.id === profile?.equipped_card_back);
+    setCardBackImage(back?.image_url || null);
+  }, [profile?.equipped_card_back, shopItems]);
+
+  if (loading) {
+    return (
+      <div className="w-full h-screen bg-[#1A1A1A] flex items-center justify-center">
+        <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+          SHIFTING MULTIVERSE
+        </div>
+      </div>
+    );
+  }
+
+  if (!session && !guest) return <AuthScreen />;
+
+  if (match) {
+    return (
+      <div key={gameKey} className="contents">
+        <Game setup={match} onExit={() => { setMatch(null); setScreen('menu'); setGameKey((k) => k + 1); }} />
+      </div>
+    );
+  }
+
+  switch (screen) {
+    case 'play':
+      return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
+    case 'store':
+      return <StoreScreen onBack={() => setScreen('menu')} />;
+    case 'collection':
+      return <CollectionScreen onBack={() => setScreen('menu')} allCards={allCards} />;
+    case 'decks':
+      return <DeckBuilderScreen onBack={() => setScreen('menu')} allCards={allCards} />;
+    case 'profile':
+      return <ProfileScreen onBack={() => setScreen('menu')} />;
+    default:
+      return (
+        <>
+          <MainMenu onNavigate={setScreen} onHelp={() => setShowHelp(true)} />
+          {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
+        </>
+      );
+  }
+}
+
+export default function App() {
+  const [cardPool, setCardPool] = useState<CardTemplate[] | null>(null);
 
   // Load the live card pool from the Supabase backend once at startup.
   useEffect(() => {
     let cancelled = false;
     fetchCardTemplates().then((templates) => {
       if (cancelled) return;
-      if (templates) {
-        applyCardData(templates);
-        setDataSource('SUPABASE LIVE');
-      } else {
-        setDataSource('BUNDLED FALLBACK');
-      }
+      if (templates) applyCardData(templates);
+      // Snapshot whatever pool is now active (live or bundled fallback).
+      setCardPool(getAllCards());
     });
     return () => { cancelled = true; };
   }, []);
 
-  if (dataSource === 'LOADING…') {
+  if (!cardPool) {
     return (
       <div className="w-full h-screen bg-[#1A1A1A] flex flex-col items-center justify-center gap-4">
         <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
@@ -286,10 +416,9 @@ export default function App() {
     );
   }
 
-  if (!leaderId) return <StartScreen onStart={setLeaderId} dataSource={dataSource} />;
   return (
-    <div key={gameKey} className="contents">
-      <Game leaderId={leaderId} onReplay={() => { setLeaderId(null); setGameKey((k) => k + 1); }} />
-    </div>
+    <MetaProvider>
+      <AppInner allCards={cardPool} />
+    </MetaProvider>
   );
 }
