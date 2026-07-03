@@ -104,7 +104,10 @@ export function DeckBuilderScreen({ onBack, allCards }: { onBack: () => void; al
                 </div>
                 <div className="flex gap-2 p-3">
                   <PopButton color="yellow" className="flex-1" onClick={() => setEditing(d)}>EDIT</PopButton>
-                  <PopButton color="black" onClick={async () => { await deleteDeck(d.id); refreshDecks(); }}>
+                  <PopButton color="black" onClick={async () => {
+                    if (!window.confirm(`Delete the deck "${d.name}"? This cannot be undone.`)) return;
+                    await deleteDeck(d.id); refreshDecks();
+                  }}>
                     <Trash2 className="w-4 h-4" />
                   </PopButton>
                 </div>
