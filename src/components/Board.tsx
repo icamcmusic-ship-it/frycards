@@ -19,6 +19,32 @@ function needsTarget(card: GameCard): boolean {
   return false;
 }
 
+/** Punchy center-screen toast that fires whenever a new game action hits the log. */
+function ActionToast({ log }: { log: string[] }) {
+  const [toast, setToast] = React.useState<{ msg: string; id: number } | null>(null);
+  const lastLen = React.useRef(log.length);
+  React.useEffect(() => {
+    if (log.length > lastLen.current) {
+      const msg = log[log.length - 1];
+      // Skip pure bookkeeping lines to keep the banner meaningful.
+      if (!/^---/.test(msg)) setToast({ msg, id: log.length });
+    }
+    lastLen.current = log.length;
+  }, [log.length]);
+  if (!toast) return null;
+  const isCombat = /destroyed|Pierced|Reaped|attack|Withered|damage/i.test(toast.msg);
+  return (
+    <div key={toast.id} className="absolute left-1/2 top-[38%] -translate-x-1/2 z-40 pointer-events-none action-toast">
+      <div className={cn(
+        'heading-font text-sm px-4 py-2 ink-border-md shadow-hard-black-sm max-w-md text-center',
+        isCombat ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#FFD54F] text-[#1A1A1A]'
+      )}>
+        {toast.msg}
+      </div>
+    </div>
+  );
+}
+
 export function Board({ gameState, dispatch }: BoardProps) {
   const { viewingPlayerId, activePlayerId, phase, combat } = gameState;
   const viewer = gameState.players[viewingPlayerId];
@@ -90,7 +116,8 @@ export function Board({ gameState, dispatch }: BoardProps) {
       return;
     }
 
-    if (phase === 'ACTION' && isViewingActive && !isOpponent && card.effect && !card.glitched) {
+    if (phase === 'ACTION' && isViewingActive && !isOpponent && card.effect && !card.glitched &&
+        card.frozen === 0 && !card.abilityUsedThisTurn) {
       if (['unit', 'friendly'].includes(card.effect.target || '')) {
         setPendingCardId(card.instanceId);
       } else {
@@ -153,8 +180,10 @@ export function Board({ gameState, dispatch }: BoardProps) {
 
   return (
     <div className="flex flex-col h-screen bg-[#F7F7F7] text-[#1A1A1A] overflow-hidden">
-      {/* Opponent Area */}
-      <div className="flex-1 flex flex-col p-3 relative min-h-0 bg-[#2C3E50]">
+      <ActionToast log={gameState.log} />
+
+      {/* Opponent Area — pt-12 clears the fixed CONCEDE/RULES/LOG bar at top-left */}
+      <div className="flex-1 flex flex-col px-3 pb-3 pt-12 relative min-h-0 bg-[#2C3E50]">
         <div className="flex justify-between items-start">
           <div className="flex gap-3 items-start">
             <CardView card={opponent.leader} compact gameState={gameState}
@@ -309,7 +338,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
                       targetable={(!!targetingFriendly || commandMode) && u.type === 'Unit'}
                       selected={isAttacker(u.instanceId) || isBlocker(u.instanceId)}
                     />
-                    {blockedBy && <div className="absolute -bottom-4 left-0 right-0 text-center text-[9px] font-black text-[#2C3E50]">BLOCKING</div>}
+                    {blockedBy && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-black bg-[#2C3E50] text-[#F7F7F7] px-1 ink-border-sm pointer-events-none">BLOCKING</div>}
                   </div>
                 );
               })}

@@ -177,13 +177,13 @@ function GameOverModal({ state, onReplay, reward }: { state: GameState; onReplay
 function LogPanel({ state }: { state: GameState }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="absolute top-24 left-2 z-30 w-64">
+    <div className="relative">
       <button onClick={() => setOpen(!open)}
-        className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5 ink-border-sm mb-0.5">
-        BATTLE LOG {open ? '▾' : '▸'}
+        className="btn-pop heading-font text-[11px] bg-[#2C3E50] text-[#FFD54F] px-2.5 py-1 ink-border-sm shadow-hard-black-xs">
+        ☰ LOG {open ? '▾' : '▸'}
       </button>
       {open && (
-        <div className="max-h-48 overflow-y-auto bg-[#1A1A1A]/90 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono">
+        <div className="absolute top-full left-0 mt-1 w-72 max-h-48 overflow-y-auto bg-[#1A1A1A]/95 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono z-50">
           {state.log.slice(-40).reverse().map((l, i) => <div key={i}>{l}</div>)}
         </div>
       )}
@@ -292,7 +292,11 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
     if (state.phase === 'GAME_OVER' || state.phase === 'INIT') return;
     const cpuAct = getCPUAction(state);
     if (cpuAct) {
-      const t = setTimeout(() => dispatch(cpuAct), 450);
+      // Human-paced CPU: quick for bookkeeping steps, deliberate for visible
+      // plays so the action toasts have time to read.
+      const slowActions = ['PLAY_CARD', 'ACTIVATE_ABILITY', 'LEADER_COMMAND', 'ENTER_COMBAT', 'SUBMIT_ATTACKS', 'SUBMIT_BLOCKS', 'END_TURN'];
+      const delay = slowActions.includes(cpuAct.type) ? 1100 + Math.random() * 500 : 600;
+      const t = setTimeout(() => dispatch(cpuAct), delay);
       return () => clearTimeout(t);
     }
     if (state.phase === 'TURN_TRANSITION' && !state.players[state.activePlayerId].isCPU) {
@@ -321,8 +325,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
       <MulliganModal state={state} dispatch={dispatch} />
       <RollModal state={state} dispatch={dispatch} />
       <GameOverModal state={state} onReplay={onExit} reward={reward} />
-      <LogPanel state={state} />
-      <div className="absolute top-2 left-2 z-40 flex gap-1.5">
+      <div className="absolute top-2 left-2 z-40 flex gap-1.5 items-start">
         <button onClick={() => { if (state.phase === 'GAME_OVER' || window.confirm('Concede this match and return to the menu?')) onExit(); }}
           className="btn-pop heading-font text-[11px] bg-[#1A1A1A] text-[#F7F7F7] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
           title="Concede and return to menu">
@@ -333,6 +336,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
           title="How to Play">
           ? RULES
         </button>
+        <LogPanel state={state} />
       </div>
       {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
     </div>

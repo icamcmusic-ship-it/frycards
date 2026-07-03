@@ -758,8 +758,12 @@ function reduce(state: GameState, action: GameAction): GameState {
         u.summoningSickness = false;
         u.exhausted = false;
         u.attacksThisTurn = 0;
+        u.abilityUsedThisTurn = false;
+        for (const it of u.attachedItems) it.abilityUsedThisTurn = false;
       }
       activePlayer.leader.exhausted = false;
+      activePlayer.leader.abilityUsedThisTurn = false;
+      for (const loc of activePlayer.locations) loc.abilityUsedThisTurn = false;
 
       if ((next.phase as string) !== 'GAME_OVER') next.phase = 'ACTION';
       return next;
@@ -1000,6 +1004,15 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
       if (!source || !source.effect || source.glitched) return next;
+      // Freeze (§3) also locks activated abilities; abilities are once per turn.
+      if (source.frozen > 0) {
+        next.log.push(`${source.name} is Frozen and cannot use its ability.`);
+        return next;
+      }
+      if (source.abilityUsedThisTurn) {
+        next.log.push(`${source.name}'s ability was already used this turn.`);
+        return next;
+      }
 
       // Ensure cost can be paid (assuming ability cost is stored in the card's base cost for simplicity, 
       // or we can allow 0 cost if missing)
@@ -1054,9 +1067,10 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
 
+      source.abilityUsedThisTurn = true;
       next.log.push(`${activePlayer.name} activated ${source.name}'s ability.`);
       resolveEvent(next, activePlayer, opponent, source, action.targetId);
-      
+
       return next;
     }
 
