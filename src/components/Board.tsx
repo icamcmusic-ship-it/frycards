@@ -75,6 +75,14 @@ export function Board({ gameState, dispatch }: BoardProps) {
         setPendingCardId(null);
         return;
       }
+      // Events may also legally target Leaders (§2.1/§3): e.g. Purge your own
+      // Leader to strip hostile Charms, or aim damage/freeze at the enemy
+      // Leader. The engine validates Guard/Lurk/Ward and rejects if illegal.
+      if (!wantsFriendly && pendingCard.type === 'Event' && card.type === 'Leader') {
+        dispatch({ type: 'PLAY_CARD', instanceId: pendingCard.instanceId, targetId: card.instanceId });
+        setPendingCardId(null);
+        return;
+      }
       return;
     }
 
@@ -138,7 +146,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
           <div className="flex gap-3 items-start">
             <CardView card={opponent.leader} compact gameState={gameState}
               onClick={() => handleUnitClick(opponent.leader, true)}
-              targetable={false}
+              targetable={!!targetingEnemy && pendingCard?.type === 'Event'}
             />
             <div className="flex gap-1.5 flex-wrap">
               {opponent.board.map((u) => (
@@ -188,6 +196,11 @@ export function Board({ gameState, dispatch }: BoardProps) {
           <div className="heading-font text-sm bg-[#1A1A1A] text-[#FFD54F] px-3 py-0.5">
             TURN {gameState.turnNumber} · {phase.replace('_', ' ')}
           </div>
+          {gameState.log.length > 0 && (
+            <div className="text-[10px] font-bold text-[#1A1A1A] bg-[#F7F7F7]/90 px-2 py-0.5 ink-border-sm max-w-md truncate" title={gameState.log[gameState.log.length - 1]}>
+              {gameState.log[gameState.log.length - 1]}
+            </div>
+          )}
 
           {pendingCard && (
             <div className="text-[11px] font-bold bg-[#E53935] text-[#F7F7F7] px-2 py-0.5 ink-border-sm">
@@ -261,6 +274,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
           <div className="flex gap-3 items-start">
             <CardView card={viewer.leader} compact gameState={gameState}
               onClick={() => handleUnitClick(viewer.leader, false)}
+              targetable={!!targetingEnemy && pendingCard?.effect?.action === 'purge'}
               selected={isAttacker(viewer.leader.instanceId)}
             />
             <div className="flex gap-1.5 flex-wrap">

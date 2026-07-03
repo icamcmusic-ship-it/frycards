@@ -661,7 +661,8 @@ function reduce(state: GameState, action: GameAction): GameState {
 
     case 'ROLL_DICE': {
       if (next.phase !== 'ROLL') return next;
-      let roll = Math.floor(Math.random() * 6) + 1;
+      const natural = Math.floor(Math.random() * 6) + 1;
+      let roll = natural;
       // Photosynthesis (§2.3): an even natural roll grants +1 Nature resource.
       if (roll % 2 === 0) {
         for (const c of activePlayer.charms) {
@@ -699,7 +700,7 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
       next.pendingRoll = roll;
       next.phase = 'ALLOCATE';
-      next.log.push(`${activePlayer.name} rolled (result ${roll} to allocate).`);
+      next.log.push(`${activePlayer.name} rolled a ${natural}${roll !== natural ? ` (modified to ${roll})` : ''} — ${roll} to allocate.`);
       // If nothing to allocate, skip straight through.
       if (roll <= 0) {
         return gameReducer(next, { type: 'ALLOCATE_RESOURCES', allocations: {} });
@@ -887,6 +888,26 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
 
       if (card.type === 'Unit') {
+        if (fromGraveyard) {
+          // Graveborn recast (§2.1): the Unit re-enters play as a fresh copy —
+          // damage, statuses and combat history do not follow it out of the
+          // graveyard (it died with lethal damage marked on it).
+          card.damageTaken = 0;
+          card.bonusDamage = 0;
+          card.exhausted = false;
+          card.summoningSickness = !kwActive(card, 'Blitz');
+          card.scorch = 0;
+          card.frozen = 0;
+          card.glitched = false;
+          card.armor = keywordValue(card, 'Armor');
+          card.witherAtk = 0;
+          card.witherHp = 0;
+          card.tempAtk = 0;
+          card.tempHp = 0;
+          card.attacksThisTurn = 0;
+          card.hasAttacked = false;
+          card.attachedItems = [];
+        }
         // Rally [X] (§2.1): deploying a Unit from hand costing X or less
         // grants it +1/+1 until this turn's Cleanup Phase.
         const rally = kwValueActive(activePlayer.leader, 'Rally');

@@ -2,7 +2,7 @@ import React from 'react';
 import { GameCard, GameState } from '../types';
 import { cn } from '../lib/utils';
 import { Shield, Snowflake, Flame, Zap } from 'lucide-react';
-import { effAttack, effMaxHealth } from '../game/engine';
+import { effAttack, effMaxHealth, effArmor } from '../game/engine';
 import { getCardBackImage } from '../meta/cardback';
 
 interface CardViewProps {
@@ -127,7 +127,7 @@ export function CardView({ card, onClick, className, selected, playable, targeta
         )}
         {/* Status badges */}
         <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end">
-          {card.armor > 0 && <span className="flex items-center gap-0.5 px-1 bg-[#1A1A1A] text-[#F7F7F7] text-[8px] font-bold"><Shield className="w-2.5 h-2.5" />{card.armor}</span>}
+          {card.armor !== undefined && effArmor(card) > 0 && <span className="flex items-center gap-0.5 px-1 bg-[#1A1A1A] text-[#F7F7F7] text-[8px] font-bold"><Shield className="w-2.5 h-2.5" />{effArmor(card)}</span>}
           {card.frozen > 0 && <span className="px-0.5 bg-[#F7F7F7]"><Snowflake className="w-3 h-3 text-[#2C3E50]" /></span>}
           {card.scorch > 0 && <span className="flex items-center gap-0.5 px-1 bg-[#E53935] text-[#F7F7F7] text-[8px] font-bold"><Flame className="w-2.5 h-2.5" />{card.scorch}</span>}
           {card.glitched && <span className="px-1 bg-[#2C3E50] text-[#FFD54F] text-[7px] font-mono font-bold">GLITCH</span>}

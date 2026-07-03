@@ -273,9 +273,21 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
   if (best) return best.action;
 
   // Combat macro-action: bundle all profitable attackers into one wave.
+  // Only enter combat if the reducer will actually accept at least one of the
+  // planned declarations — otherwise ENTER_COMBAT → cancel → ENTER_COMBAT
+  // would loop forever (e.g. Burden or the Leader Survival Caveat disagreeing
+  // with the plan).
   if (state.turnNumber > 1 && !state.combat) {
     const plan = planAttackWave(state, me, opp);
-    if (plan.length > 0) return { type: 'ENTER_COMBAT' };
+    if (plan.length > 0) {
+      const probe = gameReducer(state, { type: 'ENTER_COMBAT' });
+      const accepted = plan.some(
+        (p) =>
+          (gameReducer(probe, { type: 'TOGGLE_ATTACKER', instanceId: p.instanceId, targetId: p.targetId })
+            .combat?.attackers.length ?? 0) > 0
+      );
+      if (accepted) return { type: 'ENTER_COMBAT' };
+    }
   }
 
   // Leader Command: re-ready a strong attacker for a second strike.
