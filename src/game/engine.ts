@@ -416,9 +416,13 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
     }
     pl.leader.glitched = false;
   }
-  for (const u of player.board) {
-    u.tempAtk = 0;
-    u.tempHp = 0;
+  // Temporary buffs were all granted during this turn, so they expire at this
+  // Cleanup regardless of whose Unit ended up carrying them (e.g. Wildcast).
+  for (const pl of Object.values(next.players)) {
+    for (const u of pl.board) {
+      u.tempAtk = 0;
+      u.tempHp = 0;
+    }
   }
 
   // §2.1.4 discard down to 7.
@@ -990,6 +994,10 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (x <= 0) return next;
       const target = activePlayer.board.find((u) => u.instanceId === action.targetId && u.type === 'Unit');
       if (!target) return next;
+      if (target.frozen > 0) {
+        next.log.push(`${target.name} is Frozen and cannot be Commanded.`);
+        return next;
+      }
       if (!canAfford({ Generic: x }, activePlayer.resources)) return next;
       payCost({ Generic: x }, activePlayer.resources);
       target.exhausted = false;
@@ -1012,6 +1020,13 @@ function reduce(state: GameState, action: GameAction): GameState {
       const existing = next.combat.attackers.findIndex((a) => a.instanceId === action.instanceId);
       if (existing >= 0) {
         next.combat.attackers.splice(existing, 1);
+        return next;
+      }
+      // Lurk (§2.1): an enemy Unit with active Lurk cannot be chosen as the
+      // target of an attack declaration.
+      const declaredTarget = opponent.board.find((c) => c.instanceId === action.targetId);
+      if (declaredTarget && lurkProtected(declaredTarget)) {
+        next.log.push(`Cannot attack ${declaredTarget.name}: it is protected by Lurk.`);
         return next;
       }
       // Engine-side eligibility (§5.1): no summoning sickness, not frozen,

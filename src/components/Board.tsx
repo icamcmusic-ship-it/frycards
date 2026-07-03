@@ -96,7 +96,8 @@ export function Board({ gameState, dispatch }: BoardProps) {
         dispatch({ type: 'TOGGLE_ATTACKER', instanceId: card.instanceId, targetId: opponent.leader.instanceId });
       } else if (card.type === 'Unit') {
         // Leader vs Unit combat (§5.2): click an enemy Unit to send your
-        // Leader at it instead of the enemy Leader.
+        // Leader at it instead of the enemy Leader. Lurk units are untargetable.
+        if (lurkProtected(card)) return;
         if (!viewer.leader.exhausted && viewer.leader.frozen === 0) {
           const already = combat?.attackers.find((a) => a.instanceId === viewer.leader.instanceId);
           if (already) dispatch({ type: 'TOGGLE_ATTACKER', instanceId: viewer.leader.instanceId, targetId: already.targetId });

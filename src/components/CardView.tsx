@@ -2,7 +2,7 @@ import React from 'react';
 import { GameCard, GameState } from '../types';
 import { cn } from '../lib/utils';
 import { Shield, Snowflake, Flame, Zap } from 'lucide-react';
-import { effAttack, effMaxHealth, effArmor } from '../game/engine';
+import { effAttack, totalRemaining, effArmor } from '../game/engine';
 import { getCardBackImage } from '../meta/cardback';
 
 interface CardViewProps {
@@ -50,10 +50,11 @@ function getEffectiveAtk(card: GameCard, state?: GameState): number {
 
 function getEffectiveHp(card: GameCard, state?: GameState): number {
   if (state) {
-    return effMaxHealth(card, state) - card.damageTaken;
+    // Total remaining = base health tier + Item bonus health tier (§5.3).
+    return totalRemaining(card, state);
   }
   const itemHp = (card.attachedItems || []).reduce((s, it) => s + (it.attach?.health || 0), 0);
-  const baseMax = Math.max(1, (card.health || 0) + card.tempHp - card.witherHp);
+  const baseMax = Math.max(0, (card.health || 0) + card.tempHp - card.witherHp);
   return baseMax + itemHp - card.damageTaken - card.bonusDamage;
 }
 
