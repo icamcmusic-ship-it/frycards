@@ -31,7 +31,10 @@ export function Board({ gameState, dispatch }: BoardProps) {
   const [commandMode, setCommandMode] = React.useState(false); // Leader Command targeting
   const [viewingGraveyardPlayerId, setViewingGraveyardPlayerId] = React.useState<string | null>(null);
 
-  const pendingCard = pendingCardId ? viewer.hand.find((c) => c.instanceId === pendingCardId) : null;
+  const pendingCard = pendingCardId 
+    ? (viewer.hand.find((c) => c.instanceId === pendingCardId) || viewer.board.find((c) => c.instanceId === pendingCardId) || (viewer.leader.instanceId === pendingCardId ? viewer.leader : null) || viewer.locations.find((c) => c.instanceId === pendingCardId)) 
+    : null;
+  const isPendingCardOnBoard = pendingCard && viewer.hand.findIndex((c) => c.instanceId === pendingCard.instanceId) === -1;
 
   const kwActive = (card: GameCard, kw: string) => {
     if (card.glitched) return false;
@@ -62,26 +65,36 @@ export function Board({ gameState, dispatch }: BoardProps) {
       return;
     }
 
-    // Targeting mode for Items / Events
+    // Targeting mode for Items / Events / Abilities
     if (pendingCard) {
+      const actionType = isPendingCardOnBoard ? 'ACTIVATE_ABILITY' : 'PLAY_CARD';
       const wantsFriendly = pendingCard.type === 'Item' || pendingCard.effect?.target === 'friendly';
       if (wantsFriendly && !isOpponent && card.type === 'Unit') {
-        dispatch({ type: 'PLAY_CARD', instanceId: pendingCard.instanceId, targetId: card.instanceId });
+        dispatch({ type: actionType, instanceId: pendingCard.instanceId, targetId: card.instanceId });
         setPendingCardId(null);
         return;
       }
       if (!wantsFriendly && isOpponent && card.type === 'Unit') {
-        dispatch({ type: 'PLAY_CARD', instanceId: pendingCard.instanceId, targetId: card.instanceId });
+        dispatch({ type: actionType, instanceId: pendingCard.instanceId, targetId: card.instanceId });
         setPendingCardId(null);
         return;
       }
       // Events may also legally target Leaders (§2.1/§3): e.g. Purge your own
       // Leader to strip hostile Charms, or aim damage/freeze at the enemy
       // Leader. The engine validates Guard/Lurk/Ward and rejects if illegal.
-      if (!wantsFriendly && pendingCard.type === 'Event' && card.type === 'Leader') {
-        dispatch({ type: 'PLAY_CARD', instanceId: pendingCard.instanceId, targetId: card.instanceId });
+      if (!wantsFriendly && (pendingCard.type === 'Event' || isPendingCardOnBoard) && card.type === 'Leader') {
+        dispatch({ type: actionType, instanceId: pendingCard.instanceId, targetId: card.instanceId });
         setPendingCardId(null);
         return;
+      }
+      return;
+    }
+
+    if (phase === 'ACTION' && isViewingActive && !isOpponent && card.effect && !card.glitched) {
+      if (['unit', 'friendly'].includes(card.effect.target || '')) {
+        setPendingCardId(card.instanceId);
+      } else {
+        dispatch({ type: 'ACTIVATE_ABILITY', instanceId: card.instanceId });
       }
       return;
     }
@@ -197,8 +210,17 @@ export function Board({ gameState, dispatch }: BoardProps) {
             TURN {gameState.turnNumber} · {phase.replace('_', ' ')}
           </div>
           {gameState.log.length > 0 && (
-            <div className="text-[10px] font-bold text-[#1A1A1A] bg-[#F7F7F7]/90 px-2 py-0.5 ink-border-sm max-w-md truncate" title={gameState.log[gameState.log.length - 1]}>
-              {gameState.log[gameState.log.length - 1]}
+            <div className="flex flex-col gap-1 w-full max-w-md items-center pointer-events-none">
+              {gameState.log.slice(-3).map((logMsg, i, arr) => (
+                <div key={`${gameState.log.length - arr.length + i}`} 
+                     className={cn(
+                       "text-[10px] font-bold text-[#1A1A1A] bg-[#F7F7F7]/90 px-2 py-0.5 ink-border-sm w-full truncate text-center transition-opacity",
+                       i === arr.length - 1 ? "opacity-100 scale-100" : "opacity-40 scale-95"
+                     )} 
+                     title={logMsg}>
+                  {logMsg}
+                </div>
+              ))}
             </div>
           )}
 

@@ -8,6 +8,7 @@ export type GameAction =
   | { type: 'ROLL_DICE' }
   | { type: 'ALLOCATE_RESOURCES'; allocations: Record<string, number> }
   | { type: 'PLAY_CARD'; instanceId: string; targetId?: string }
+  | { type: 'ACTIVATE_ABILITY'; instanceId: string; targetId?: string }
   | { type: 'LEADER_COMMAND'; targetId: string }
   | { type: 'ENTER_COMBAT' }
   | { type: 'TOGGLE_ATTACKER'; instanceId: string; targetId: string }
@@ -979,6 +980,83 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
         activePlayer.graveyard.push(card);
       }
+      return next;
+    }
+
+    case 'ACTIVATE_ABILITY': {
+      if (next.phase !== 'ACTION') return next;
+      // Find the permanent on the board (Unit, Location, Leader, or Item)
+      let source = activePlayer.board.find((c) => c.instanceId === action.instanceId) ||
+                   activePlayer.locations.find((c) => c.instanceId === action.instanceId);
+      if (!source && activePlayer.leader.instanceId === action.instanceId) source = activePlayer.leader;
+      if (!source) {
+        // Check items attached to units
+        for (const u of activePlayer.board) {
+          const item = u.attachedItems.find((it) => it.instanceId === action.instanceId);
+          if (item) {
+            source = item;
+            break;
+          }
+        }
+      }
+      if (!source || !source.effect || source.glitched) return next;
+
+      // Ensure cost can be paid (assuming ability cost is stored in the card's base cost for simplicity, 
+      // or we can allow 0 cost if missing)
+      if (!canAfford(source.cost, activePlayer.resources)) return next;
+
+      const needsTarget = ['unit', 'friendly'].includes(source.effect.target || '');
+      const targetPool = [...activePlayer.board, ...opponent.board, activePlayer.leader, opponent.leader];
+      const targetCard = action.targetId ? targetPool.find((c) => c.instanceId === action.targetId) : undefined;
+      
+      if (needsTarget && !targetCard) return next;
+
+      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
+
+      if (targetsEnemy && targetCard && targetCard.type === 'Unit' && lurkProtected(targetCard)) {
+        next.log.push(`Cannot target ${targetCard.name} because it has Lurk.`);
+        return next;
+      }
+
+      const readyGuards = opponent.board.filter((u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0);
+      if (readyGuards.length > 0) {
+        if (targetsEnemy && !readyGuards.some((g) => g.instanceId === targetCard!.instanceId)) {
+          next.log.push('A ready Guard Unit forces enemy abilities to target it.');
+          return next;
+        }
+        if (!targetCard && source.effect.target === 'leader' && source.effect.action === 'damage') {
+          next.log.push('A ready Guard Unit protects the enemy Leader from targeted abilities.');
+          return next;
+        }
+      }
+
+      const wardCost = targetsEnemy ? kwValueActive(targetCard!, 'Ward') : 0;
+      if (wardCost > 0) {
+        const combined = { ...(source.cost || {}) };
+        combined.Generic = (combined.Generic || 0) + wardCost;
+        if (!canAfford(combined, activePlayer.resources)) {
+          next.log.push(`Cannot pay the Ward ${wardCost} surcharge.`);
+          return next;
+        }
+      }
+
+      payCost(source.cost, activePlayer.resources);
+      if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
+
+      // Feedback negates abilities without bouncing the source
+      if (targetsEnemy && kwActive(targetCard!, 'Feedback')) {
+        const roll = Math.floor(Math.random() * 6) + 1;
+        if (roll >= 4) {
+          next.log.push(`${targetCard!.name}'s Feedback negated ${source.name}'s ability (rolled ${roll}). Resources refunded.`);
+          refund(source.cost, activePlayer.resources);
+          if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
+          return next; // ability is negated, source remains on board
+        }
+      }
+
+      next.log.push(`${activePlayer.name} activated ${source.name}'s ability.`);
+      resolveEvent(next, activePlayer, opponent, source, action.targetId);
+      
       return next;
     }
 
