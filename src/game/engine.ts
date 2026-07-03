@@ -393,7 +393,7 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
 
   // Overdrive self-damage (§2.3): attacked twice -> 2 permanent damage.
   for (const u of player.board) {
-    if (hasKeyword(u, 'Overdrive') && u.attacksThisTurn >= 2) {
+    if (kwActive(u, 'Overdrive') && u.attacksThisTurn >= 2) {
       applyDamageToUnit(u, 2, { bypassArmor: true });
       next.log.push(`${u.name} took 2 damage from Overdrive.`);
     }
@@ -709,13 +709,22 @@ function reduce(state: GameState, action: GameAction): GameState {
 
     case 'ALLOCATE_RESOURCES': {
       if (next.phase !== 'ALLOCATE') return next;
+      // Validate: only the Leader's elements are legal, and the total cannot
+      // exceed this turn's roll (§2.1.1).
+      const legalElements = activePlayer.leader.elements.filter((e) => e !== 'Generic');
+      let budget = next.pendingRoll || 0;
       for (const [element, amount] of Object.entries(action.allocations)) {
-        activePlayer.resources[element] = (activePlayer.resources[element] || 0) + amount;
+        if (!legalElements.includes(element as any)) continue;
+        const granted = Math.max(0, Math.min(Math.floor(amount), budget));
+        if (granted <= 0) continue;
+        budget -= granted;
+        activePlayer.resources[element] = (activePlayer.resources[element] || 0) + granted;
       }
       next.pendingRoll = null;
 
       // Pure (§2.3): remember whether the whole roll landed in a single color.
-      const colorsUsed = Object.entries(activePlayer.resources).filter(([, v]) => v > 0);
+      // Generic resources (e.g. from Overclock) are not part of the roll.
+      const colorsUsed = Object.entries(activePlayer.resources).filter(([el, v]) => el !== 'Generic' && v > 0);
       activePlayer.singleColorRoll = colorsUsed.length === 1;
 
       // Decay [X] (§2.3): after the Resource Roll completes but before the
@@ -780,14 +789,20 @@ function reduce(state: GameState, action: GameAction): GameState {
       const needsTarget =
         (card.type === 'Event' && !kwActive(card, 'Wildcast') && card.effect && ['unit', 'friendly'].includes(card.effect.target || '')) ||
         card.type === 'Item';
+      // Events may also legally reference a Leader (e.g. Purge on your own
+      // Leader to strip hostile Charms); Items only ever target Units.
+      const targetPool =
+        card.type === 'Event'
+          ? [...activePlayer.board, ...opponent.board, activePlayer.leader, opponent.leader]
+          : [...activePlayer.board, ...opponent.board];
       const targetCard = action.targetId
-        ? [...activePlayer.board, ...opponent.board].find((c) => c.instanceId === action.targetId)
+        ? targetPool.find((c) => c.instanceId === action.targetId)
         : undefined;
       if (needsTarget && !targetCard) return next; // wait for a valid target
 
-      // Items attach only to Units with spare capacity (§5.3 Capacity Law).
+      // Items attach only to friendly Units with spare capacity (§5.3 Capacity Law).
       if (card.type === 'Item' && targetCard) {
-        if (targetCard.type !== 'Unit') return next;
+        if (targetCard.type !== 'Unit' || targetCard.ownerId !== activePlayer.id) return next;
         if (targetCard.attachedItems.length >= maxItemCapacity(targetCard)) {
           next.log.push(`${targetCard.name} has no free Item capacity.`);
           return next;
@@ -1069,7 +1084,12 @@ function reduce(state: GameState, action: GameAction): GameState {
     }
 
     case 'TOGGLE_BLOCKER': {
-      if (!next.combat) return next;
+      if (!next.combat || next.phase !== 'COMBAT_BLOCK') return next;
+      // Only the defender's ready, unfrozen Units may block, and only against
+      // an actually-declared attacker (§5.1).
+      const blocker = opponent.board.find((u) => u.instanceId === action.blockerId);
+      if (!blocker || blocker.type !== 'Unit' || blocker.exhausted || blocker.frozen > 0) return next;
+      if (!next.combat.attackers.some((a) => a.instanceId === action.attackerId)) return next;
       // §5.1: a blocker blocks at most one attacker, but multiple blockers may
       // combine to block a single attacker.
       const already = next.combat.blockers.find(

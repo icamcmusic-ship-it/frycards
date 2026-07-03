@@ -7,7 +7,7 @@ import { MetaHeader, PopButton, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Event', 'Item', 'Charm', 'Location'];
-const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Mythic'];
+const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
 
 /** Static card face for out-of-game browsing (collection & deck builder). */
 export function StaticCard({ card, count, foilCount, dimmed, onClick, badge }: {
