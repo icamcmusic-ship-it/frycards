@@ -31,6 +31,12 @@ function ActionToast({ log }: { log: string[] }) {
     }
     lastLen.current = log.length;
   }, [log.length]);
+  // Auto-dismiss so a stale toast doesn't linger over the board.
+  React.useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast?.id]);
   if (!toast) return null;
   const isCombat = /destroyed|Pierced|Reaped|attack|Withered|damage/i.test(toast.msg);
   return (
@@ -155,6 +161,10 @@ export function Board({ gameState, dispatch }: BoardProps) {
         if (selectedAttackerId && !card.exhausted && card.frozen === 0 && card.type === 'Unit') {
           dispatch({ type: 'TOGGLE_BLOCKER', attackerId: selectedAttackerId, blockerId: card.instanceId });
           setSelectedAttackerId(null);
+        } else if (!selectedAttackerId) {
+          // Clicking an already-assigned blocker with no attacker selected unassigns it.
+          const assignment = combat?.blockers.find((b) => b.blockerId === card.instanceId);
+          if (assignment) dispatch({ type: 'TOGGLE_BLOCKER', attackerId: assignment.attackerId, blockerId: card.instanceId });
         }
       }
     }
@@ -188,7 +198,7 @@ export function Board({ gameState, dispatch }: BoardProps) {
           <div className="flex gap-3 items-start">
             <CardView card={opponent.leader} compact gameState={gameState}
               onClick={() => handleUnitClick(opponent.leader, true)}
-              targetable={!!targetingEnemy && pendingCard?.type === 'Event'}
+              targetable={!!targetingEnemy && (pendingCard?.type === 'Event' || !!isPendingCardOnBoard)}
             />
             <div className="flex gap-1.5 flex-wrap">
               {opponent.board.map((u) => (
