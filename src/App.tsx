@@ -124,10 +124,16 @@ function RollModal({ state, dispatch }: { state: GameState; dispatch: React.Disp
               {elements.map((el) => (
                 <div key={el} className="flex items-center justify-between bg-[#F7F7F7] p-3 ink-border-sm shadow-hard-black-xs">
                   <span className="heading-font text-sm">{el}</span>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <button onClick={() => change(el, -1)} className="btn-pop w-8 h-8 bg-[#1A1A1A] text-[#FFD54F] font-black ink-border-sm">-</button>
                     <span className="w-4 font-mono font-black">{allocs[el] || 0}</span>
                     <button onClick={() => change(el, 1)} className="btn-pop w-8 h-8 bg-[#FFD54F] text-[#1A1A1A] font-black ink-border-sm">+</button>
+                    <button onClick={() => remaining > 0 && setAllocs({ ...allocs, [el]: (allocs[el] || 0) + remaining })}
+                      disabled={remaining <= 0}
+                      className="btn-pop px-2 h-8 bg-[#E53935] disabled:bg-[#2C3E50]/30 text-[#F7F7F7] font-black text-[10px] ink-border-sm"
+                      title={`Put all remaining points into ${el}`}>
+                      ALL
+                    </button>
                   </div>
                 </div>
               ))}
@@ -317,7 +323,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
       <GameOverModal state={state} onReplay={onExit} reward={reward} />
       <LogPanel state={state} />
       <div className="absolute top-2 left-2 z-40 flex gap-1.5">
-        <button onClick={onExit}
+        <button onClick={() => { if (state.phase === 'GAME_OVER' || window.confirm('Concede this match and return to the menu?')) onExit(); }}
           className="btn-pop heading-font text-[11px] bg-[#1A1A1A] text-[#F7F7F7] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
           title="Concede and return to menu">
           ✕ CONCEDE

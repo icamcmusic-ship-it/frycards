@@ -497,7 +497,12 @@ function declareAttacks(state: GameState, me: PlayerState, opp: PlayerState): Ga
   const plan = planAttackWave(state, me, opp);
   for (const p of plan) {
     if (!combat.attackers.some((a) => a.instanceId === p.instanceId)) {
-      return { type: 'TOGGLE_ATTACKER', instanceId: p.instanceId, targetId: p.targetId };
+      const action: GameAction = { type: 'TOGGLE_ATTACKER', instanceId: p.instanceId, targetId: p.targetId };
+      // Verify the reducer actually accepts this declaration; otherwise the AI
+      // would re-dispatch the same rejected toggle forever (e.g. Burden or the
+      // Leader Survival Caveat disagreeing with the plan).
+      const probe = gameReducer(state, action);
+      if ((probe.combat?.attackers.length ?? 0) > combat.attackers.length) return action;
     }
   }
   return { type: 'SUBMIT_ATTACKS' };

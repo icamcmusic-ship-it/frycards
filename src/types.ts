@@ -1,6 +1,6 @@
 export type ElementColor = 'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Item' | 'Charm' | 'Event';
-export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Mythic';
+export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Legendary' | 'Mythic';
 
 export interface CardCost {
   [element: string]: number;

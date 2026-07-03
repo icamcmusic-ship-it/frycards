@@ -3,6 +3,7 @@ import { GameCard, GameState } from '../types';
 import { CardView } from './CardView';
 import { canAfford, lurkProtected, GameAction } from '../game/engine';
 import { keywordValue } from '../game/cards';
+import { cn } from '../lib/utils';
 
 interface BoardProps {
   gameState: GameState;
@@ -120,6 +121,13 @@ export function Board({ gameState, dispatch }: BoardProps) {
 
   const activeLoc = gameState.activeLocation;
 
+  // Surface castable Graveborn units so the player doesn't forget the mechanic.
+  const hasCastableGraveborn =
+    phase === 'ACTION' && isViewingActive &&
+    viewer.graveyard.some(
+      (c) => c.type === 'Unit' && c.keywords?.some((k) => k.split(' ')[0] === 'Graveborn') && canAfford(c.cost, viewer.resources)
+    );
+
   const popBtn = 'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors';
 
   return (
@@ -209,8 +217,9 @@ export function Board({ gameState, dispatch }: BoardProps) {
                 </button>
               )}
               <button onClick={() => dispatch({ type: 'END_TURN' })}
-                className={`${popBtn} bg-[#1A1A1A] text-[#FFD54F] hover:bg-[#2C3E50]`}>
-                END TURN &gt;
+                className={`${popBtn} bg-[#1A1A1A] text-[#FFD54F] hover:bg-[#2C3E50]`}
+                title={viewer.hand.length > 7 ? `You will discard ${viewer.hand.length - 7} card(s) down to the 7-card hand limit.` : undefined}>
+                END TURN {viewer.hand.length > 7 ? `(DISCARD ${viewer.hand.length - 7})` : ''}&gt;
               </button>
             </div>
           )}
@@ -274,7 +283,10 @@ export function Board({ gameState, dispatch }: BoardProps) {
             <div className="heading-font text-sm text-[#FFD54F]">{viewer.name} {viewer.id === activePlayerId ? '· ACTIVE' : ''}</div>
             <div className="heading-font text-2xl text-[#E53935]">{viewer.health} HP</div>
             <div className="text-[10px] font-bold mt-1 text-[#F7F7F7]/70">
-              DECK {viewer.deck.length} · <button onClick={() => setViewingGraveyardPlayerId(viewer.id)} className="underline text-[#FFD54F] font-black hover:text-[#F7F7F7] cursor-pointer">GY {viewer.graveyard.length}</button>
+              DECK {viewer.deck.length} · <button onClick={() => setViewingGraveyardPlayerId(viewer.id)}
+                className={cn('underline text-[#FFD54F] font-black hover:text-[#F7F7F7] cursor-pointer', hasCastableGraveborn && 'animate-pulse bg-[#E53935] text-[#F7F7F7] px-1')}>
+                GY {viewer.graveyard.length}{hasCastableGraveborn ? ' ⭐' : ''}
+              </button>
             </div>
             {viewer.charms.length > 0 && (
               <div className="text-[10px] font-bold bg-[#FFD54F] text-[#1A1A1A] px-1 mt-1 inline-block">
