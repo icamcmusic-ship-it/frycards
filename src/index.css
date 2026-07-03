@@ -62,6 +62,24 @@ h1, h2, h3, h4, .heading-font {
   background-position: 0 0, 15px 15px;
 }
 
+/* Pop-in animation for modals and keyword popups */
+@keyframes banner-pop-kf {
+  0% { transform: scale(0.7) rotate(-2deg); opacity: 0; }
+  60% { transform: scale(1.06) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.banner-pop { animation: banner-pop-kf 0.22s ease-out; }
+
+/* Action toast: punch in, hold, fade out */
+@keyframes action-toast-kf {
+  0% { transform: translateY(14px) scale(0.6); opacity: 0; }
+  10% { transform: translateY(0) scale(1.05); opacity: 1; }
+  16% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.action-toast { animation: action-toast-kf 2.4s ease-out forwards; }
+
 @layer utilities {
   .mask-linear {
     mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
