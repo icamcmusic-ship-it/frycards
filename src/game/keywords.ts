@@ -29,6 +29,15 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Wildcast: 'Wildcast X: hits X unique random battlefield targets (Leaders included).',
   Photosynthesis: 'Charm: an even resource roll grants +1 Nature resource.',
   Overclock: 'Overclock X: gain X resources now; your next roll is reduced by X.',
+  Rally: 'Rally X: Units you deploy from hand costing X or less get +1/+1 until Cleanup.',
+  // Action verbs — these appear as keyword chips on Event cards.
+  Freeze: 'Target cannot attack, block or use abilities until the end of its controller\'s next turn.',
+  Scorch: 'Scorch X: target takes X damage at the start of each of its turns; the counter ticks down each Cleanup.',
+  Obliterate: 'Destroys a Unit outright, bypassing Armor and death triggers.',
+  Meltdown: 'Destroys a target Item, then burns the host Unit for the Item\'s total cost.',
+  Purge: 'Strips a target of all Items, Charms, statuses and temporary buffs.',
+  Manifest: 'Creates a token Unit. Tokens vanish when they leave the battlefield.',
+  Heal: 'Heal X: removes X damage from your Leader (cannot exceed printed health).',
 };
 
 /** Look up a keyword string like "Armor 2" → its glossary text. */

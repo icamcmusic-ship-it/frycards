@@ -446,6 +446,11 @@ function cleanupDeaths(next: GameState) {
         // Attached Items go to graveyard without triggering their own effects.
         for (const it of u.attachedItems) if (!it.isToken) p.graveyard.push(it);
         u.attachedItems = [];
+        // Transient statuses do not follow a card into the graveyard — a Unit
+        // that dies while Glitched must not have its Graveborn locked forever.
+        u.glitched = false;
+        u.frozen = 0;
+        u.scorch = 0;
         if (!u.isToken) p.graveyard.push(u); // Tokens vanish, bypassing graveyard triggers.
         next.log.push(`${u.name} was destroyed.`);
       } else {
@@ -806,6 +811,15 @@ function reduce(state: GameState, action: GameAction): GameState {
         : undefined;
       if (needsTarget && !targetCard) return next; // wait for a valid target
 
+      // Events aimed at the enemy Leader (effect.target 'leader') carry no
+      // explicit targetId, but they still target that Leader for the purposes
+      // of Guard, Ward and Feedback (§2.1/§2.2).
+      const implicitTarget =
+        !targetCard && card.type === 'Event' && !kwActive(card, 'Wildcast') && card.effect?.target === 'leader'
+          ? opponent.leader
+          : undefined;
+      const interactTarget = targetCard ?? implicitTarget;
+
       // Items attach only to friendly Units with spare capacity (§5.3 Capacity Law).
       if (card.type === 'Item' && targetCard) {
         if (targetCard.type !== 'Unit' || targetCard.ownerId !== activePlayer.id) return next;
@@ -815,11 +829,11 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
 
-      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
+      const targetsEnemy = !!interactTarget && interactTarget.ownerId !== activePlayer.id;
 
       // Lurk vs Guard Conflict (§2.1): Lurk lifts after the unit's first attack.
-      if (targetsEnemy && targetCard && targetCard.type === 'Unit' && lurkProtected(targetCard)) {
-        next.log.push(`Cannot target ${targetCard.name} because it has Lurk.`);
+      if (targetsEnemy && interactTarget && interactTarget.type === 'Unit' && lurkProtected(interactTarget)) {
+        next.log.push(`Cannot target ${interactTarget.name} because it has Lurk.`);
         return next;
       }
 
@@ -830,19 +844,15 @@ function reduce(state: GameState, action: GameAction): GameState {
         (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
       );
       if (readyGuards.length > 0 && card.type === 'Event' && !kwActive(card, 'Wildcast')) {
-        if (targetsEnemy && !readyGuards.some((g) => g.instanceId === targetCard!.instanceId)) {
+        if (targetsEnemy && !readyGuards.some((g) => g.instanceId === interactTarget!.instanceId)) {
           next.log.push('A ready Guard Unit forces enemy Events to target it.');
-          return next;
-        }
-        if (!targetCard && card.effect?.target === 'leader' && card.effect.action === 'damage') {
-          next.log.push('A ready Guard Unit protects the enemy Leader from targeted Events.');
           return next;
         }
       }
 
       // Ward [X] (§2.1): targeting an enemy card costs extra; targeting is
       // locked if the surcharge cannot be paid.
-      const wardCost = targetsEnemy ? kwValueActive(targetCard!, 'Ward') : 0;
+      const wardCost = targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0;
       if (wardCost > 0) {
         const combined = { ...(card.cost || {}) };
         combined.Generic = (combined.Generic || 0) + wardCost;
@@ -871,10 +881,10 @@ function reduce(state: GameState, action: GameAction): GameState {
 
       // Feedback (§2.2): targeted enemy may negate on a d6 of 4-6, refunding
       // everything spent (base cost and Ward surcharge) exactly.
-      if (targetsEnemy && kwActive(targetCard!, 'Feedback')) {
+      if (targetsEnemy && kwActive(interactTarget!, 'Feedback')) {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
-          next.log.push(`${targetCard!.name}'s Feedback negated ${card.name} (rolled ${roll}). Resources refunded.`);
+          next.log.push(`${interactTarget!.name}'s Feedback negated ${card.name} (rolled ${roll}). Resources refunded.`);
           refund(card.cost, activePlayer.resources);
           if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
           if (overclockVal > 0) {
@@ -1016,7 +1026,10 @@ function reduce(state: GameState, action: GameAction): GameState {
 
       // Ensure cost can be paid (assuming ability cost is stored in the card's base cost for simplicity, 
       // or we can allow 0 cost if missing)
-      if (!canAfford(source.cost, activePlayer.resources)) return next;
+      if (!canAfford(source.cost, activePlayer.resources)) {
+        next.log.push(`Cannot afford ${source.name}'s ability cost.`);
+        return next;
+      }
 
       const needsTarget = ['unit', 'friendly'].includes(source.effect.target || '');
       const targetPool = [...activePlayer.board, ...opponent.board, activePlayer.leader, opponent.leader];
@@ -1024,26 +1037,24 @@ function reduce(state: GameState, action: GameAction): GameState {
       
       if (needsTarget && !targetCard) return next;
 
-      const targetsEnemy = !!targetCard && targetCard.ownerId !== activePlayer.id;
+      // Abilities aimed at the enemy Leader implicitly target it (Ward/Guard/Feedback).
+      const implicitTarget =
+        !targetCard && source.effect.target === 'leader' ? opponent.leader : undefined;
+      const interactTarget = targetCard ?? implicitTarget;
+      const targetsEnemy = !!interactTarget && interactTarget.ownerId !== activePlayer.id;
 
-      if (targetsEnemy && targetCard && targetCard.type === 'Unit' && lurkProtected(targetCard)) {
-        next.log.push(`Cannot target ${targetCard.name} because it has Lurk.`);
+      if (targetsEnemy && interactTarget && interactTarget.type === 'Unit' && lurkProtected(interactTarget)) {
+        next.log.push(`Cannot target ${interactTarget.name} because it has Lurk.`);
         return next;
       }
 
       const readyGuards = opponent.board.filter((u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0);
-      if (readyGuards.length > 0) {
-        if (targetsEnemy && !readyGuards.some((g) => g.instanceId === targetCard!.instanceId)) {
-          next.log.push('A ready Guard Unit forces enemy abilities to target it.');
-          return next;
-        }
-        if (!targetCard && source.effect.target === 'leader' && source.effect.action === 'damage') {
-          next.log.push('A ready Guard Unit protects the enemy Leader from targeted abilities.');
-          return next;
-        }
+      if (readyGuards.length > 0 && targetsEnemy && !readyGuards.some((g) => g.instanceId === interactTarget!.instanceId)) {
+        next.log.push('A ready Guard Unit forces enemy abilities to target it.');
+        return next;
       }
 
-      const wardCost = targetsEnemy ? kwValueActive(targetCard!, 'Ward') : 0;
+      const wardCost = targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0;
       if (wardCost > 0) {
         const combined = { ...(source.cost || {}) };
         combined.Generic = (combined.Generic || 0) + wardCost;
@@ -1057,10 +1068,10 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
 
       // Feedback negates abilities without bouncing the source
-      if (targetsEnemy && kwActive(targetCard!, 'Feedback')) {
+      if (targetsEnemy && kwActive(interactTarget!, 'Feedback')) {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
-          next.log.push(`${targetCard!.name}'s Feedback negated ${source.name}'s ability (rolled ${roll}). Resources refunded.`);
+          next.log.push(`${interactTarget!.name}'s Feedback negated ${source.name}'s ability (rolled ${roll}). Resources refunded.`);
           refund(source.cost, activePlayer.resources);
           if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
           return next; // ability is negated, source remains on board
