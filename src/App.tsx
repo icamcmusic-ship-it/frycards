@@ -246,7 +246,7 @@ function PlayScreen({ onStart, onBack }: { onStart: (setup: MatchSetup) => void;
               <button key={id} onClick={() => onStart({ leaderId: id, deckName: `${l.name} (Prebuilt)` })}
                 className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left">
                 <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
-                  <span className="text-[9px] heading-font text-[#FFD54F]">MYTHIC LEADER ✸</span>
+                  <span className="text-[9px] heading-font text-[#FFD54F]">{(l.rarity || 'LEADER').toUpperCase()} LEADER ✸</span>
                   <span className="text-[9px] font-mono font-bold text-[#F7F7F7]">{l.health} HP</span>
                 </div>
                 {l.image && <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]"><img src={l.image} className="w-full h-full object-cover" /></div>}

@@ -795,6 +795,12 @@ function reduce(state: GameState, action: GameAction): GameState {
       const card = fromGraveyard ? activePlayer.graveyard[cardIdx] : activePlayer.hand[cardIdx];
       if (!canAfford(card.cost, activePlayer.resources)) return next;
 
+      // Location Zone cap: at most 3 face-down Locations per player (§3.1).
+      if (card.type === 'Location' && activePlayer.locations.length >= 3) {
+        next.log.push('Your Location Zone is full (max 3 face-down Locations).');
+        return next;
+      }
+
       // Determine target for cards that need one. Wildcast Events pick their
       // own random targets, so they never wait for a manual selection.
       const needsTarget =
@@ -814,8 +820,12 @@ function reduce(state: GameState, action: GameAction): GameState {
       // Events aimed at the enemy Leader (effect.target 'leader') carry no
       // explicit targetId, but they still target that Leader for the purposes
       // of Guard, Ward and Feedback (§2.1/§2.2).
+      // Hostile Charms (Decay) land on the enemy player, so they interact with
+      // the enemy Leader's Ward/Feedback the same way a targeted Event would.
       const implicitTarget =
-        !targetCard && card.type === 'Event' && !kwActive(card, 'Wildcast') && card.effect?.target === 'leader'
+        !targetCard &&
+        ((card.type === 'Event' && !kwActive(card, 'Wildcast') && card.effect?.target === 'leader') ||
+          (card.type === 'Charm' && hasKeyword(card, 'Decay')))
           ? opponent.leader
           : undefined;
       const interactTarget = targetCard ?? implicitTarget;
@@ -893,10 +903,9 @@ function reduce(state: GameState, action: GameAction): GameState {
           }
           if (fromGraveyard) {
             activePlayer.graveyard.push(card); // negated Graveborn cast returns to the graveyard
-          } else if (card.type === 'Event') {
-            activePlayer.hand.push(card);
           } else {
-            activePlayer.graveyard.push(card);
+            // Feedback negates the effect, not the card: it returns to hand.
+            activePlayer.hand.push(card);
           }
           return next;
         }

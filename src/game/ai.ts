@@ -300,7 +300,7 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
 /** Simulate an action through the real reducer; average over samples. */
 function simulateAction(state: GameState, action: GameAction, aiId: string): number | null {
   const isStochastic =
-    action.type === 'PLAY_CARD';
+    action.type === 'PLAY_CARD' || action.type === 'ACTIVATE_ABILITY';
   const samples = isStochastic ? 3 : 1;
   let total = 0;
   let changed = false;
@@ -339,6 +339,24 @@ function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState)
           `${card.id}>${tgt || 'none'}`
         );
       }
+    }
+  }
+
+  // Activated abilities on the Leader and board Units (once per turn).
+  const abilitySources = [me.leader, ...me.board].filter(
+    (c) =>
+      c.effect &&
+      !c.abilityUsedThisTurn &&
+      !c.glitched &&
+      c.frozen === 0 &&
+      canAfford(c.cost, me.resources)
+  );
+  for (const src of abilitySources) {
+    for (const tgt of eventTargets(state, src, me, opp)) {
+      push(
+        { type: 'ACTIVATE_ABILITY', instanceId: src.instanceId, targetId: tgt || undefined },
+        `ab:${src.id}>${tgt || 'none'}`
+      );
     }
   }
 
@@ -484,7 +502,25 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
       );
       if (eaten && !kwActive(u, 'Pierce') && unitValue(u, state) >= 4) continue;
     }
-    plan.push({ instanceId: u.instanceId, targetId: opp.leader.instanceId });
+    // Trade solver: prefer a profitable strike on an enemy Unit over a leader
+    // hit when the trade clearly wins value (kill without dying, or kill a
+    // bigger threat). Lurk-protected units cannot be chosen.
+    let targetId = opp.leader.instanceId;
+    if (!lethalPush && !interceptor) {
+      const trades = opp.board
+        .filter((e) => e.type === 'Unit' && !lurkProtected(e) && atk >= damageToKill(e, state))
+        .map((e) => ({ e, counter: effAttack(e, state) }))
+        .filter(
+          ({ e, counter }) =>
+            counter < uHp || unitValue(e, state) > unitValue(u, state) * 1.2
+        )
+        .sort((x, y) => unitValue(y.e, state) - unitValue(x.e, state));
+      const bestTrade = trades[0];
+      if (bestTrade && unitValue(bestTrade.e, state) >= 3.5) {
+        targetId = bestTrade.e.instanceId;
+      }
+    }
+    plan.push({ instanceId: u.instanceId, targetId });
     burdenBudget -= burden;
   }
 

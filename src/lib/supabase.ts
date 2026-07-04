@@ -193,6 +193,15 @@ export async function openPack(packId: string, currency: 'gold' | 'gems'): Promi
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
 }
 
+/**
+ * One-time Starter Pack: grants the chosen Leader plus the exact 30 cards of
+ * that Leader's prebuilt deck, and saves it as a ready-to-play deck.
+ */
+export async function claimStarterPack(leaderId: string): Promise<{ data: OpenPackResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('claim_starter_pack', { p_leader_id: leaderId });
+  return { data: (data as OpenPackResult) || null, error: rpcError(error) };
+}
+
 export async function buyShopItem(itemId: string, currency: 'gold' | 'gems', foil = false): Promise<string | null> {
   const { error } = await supabase.rpc('buy_shop_item', { p_item_id: itemId, p_currency: currency, p_foil: foil });
   return rpcError(error);

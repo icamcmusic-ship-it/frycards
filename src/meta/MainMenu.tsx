@@ -68,6 +68,16 @@ export function MainMenu({ onNavigate, onHelp }: { onNavigate: (s: MetaScreen) =
         </h1>
       </div>
 
+      {/* One-time starter deck call-out */}
+      {profile && !profile.starter_claimed && (
+        <div className="relative z-10 flex justify-center px-6 mb-6">
+          <button onClick={() => onNavigate('store')}
+            className="btn-pop bg-[#E53935] text-[#F7F7F7] heading-font text-sm px-5 py-3 ink-border-md shadow-hard-black hover:-translate-y-0.5 transition-transform">
+            🎁 CLAIM YOUR FREE STARTER DECK IN THE STORE ▸
+          </button>
+        </div>
+      )}
+
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">
         {tiles.map((t) => (

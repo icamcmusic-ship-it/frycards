@@ -1,14 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Package, Sparkles } from 'lucide-react';
+import { Gift, Package, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { openPack, buyShopItem, PackType, ShopItem, PackPull } from '../lib/supabase';
+import { openPack, buyShopItem, claimStarterPack, PackType, ShopItem, PackPull } from '../lib/supabase';
+import { getLeaders } from '../game/cards';
 import { MetaHeader, PopButton, Notice, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
 
 type Tab = 'packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
 export function StoreScreen({ onBack }: { onBack: () => void }) {
-  const { profile, packTypes, shopItems, cosmetics, refreshProfile, refreshCollection, refreshCosmetics } = useMeta();
+  const { profile, packTypes, shopItems, cosmetics, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks } = useMeta();
   const [tab, setTab] = useState<Tab>('packs');
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -33,6 +34,24 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setRevealed(new Set());
     refreshProfile();
     refreshCollection();
+  };
+
+  const handleClaimStarter = async (leaderId: string, leaderName: string) => {
+    if (!profile || busyId) return;
+    setError('');
+    setBusyId('starter:' + leaderId);
+    const { data, error } = await claimStarterPack(leaderId);
+    setBusyId(null);
+    if (error || !data) {
+      setError(error || 'Starter Pack claim failed.');
+      return;
+    }
+    setOpenedPackName(`Starter Deck — ${leaderName}`);
+    setPulls(data.cards);
+    setRevealed(new Set());
+    refreshProfile();
+    refreshCollection();
+    refreshDecks();
   };
 
   const handleBuyItem = async (item: ShopItem, currency: 'gold' | 'gems') => {
@@ -73,6 +92,38 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
           ))}
         </div>
         {error && <div className="mb-4"><Notice text={error} /></div>}
+
+        {tab === 'packs' && profile && !profile.starter_claimed && (
+          <div className="mb-6 bg-[#1A1A1A] ink-border-md shadow-hard-yellow p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Gift className="w-5 h-5 text-[#FFD54F]" />
+              <span className="heading-font text-base text-[#FFD54F]">FREE STARTER DECK — ONE TIME ONLY</span>
+            </div>
+            <p className="text-[11px] font-bold text-[#F7F7F7]/80 mb-3">
+              Pick a Leader and instantly receive that Leader plus a complete, ready-to-play 30-card deck.
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {getLeaders().map((l) => (
+                <button key={l.id}
+                  disabled={!!busyId}
+                  onClick={() => handleClaimStarter(l.id, l.name)}
+                  className="btn-pop bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs text-left overflow-hidden hover:-translate-y-0.5 transition-transform">
+                  {l.image && <img src={l.image} className="w-full aspect-[16/9] object-cover" loading="lazy" />}
+                  <div className="p-2">
+                    <div className="heading-font text-[11px] leading-tight truncate">{l.name}</div>
+                    <div className="text-[9px] font-bold text-[#2C3E50] uppercase">{l.elements.join(' / ')}</div>
+                    <div className={cn('inline-block mt-1 text-[8px] font-black px-1', RARITY_CHIP[l.rarity || 'Common'] || RARITY_CHIP.Common)}>
+                      {(l.rarity || 'Common').toUpperCase()}
+                    </div>
+                    <div className="heading-font text-[10px] mt-1 text-[#E53935]">
+                      {busyId === 'starter:' + l.id ? 'CLAIMING…' : 'CLAIM FREE ▸'}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {tab === 'packs' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

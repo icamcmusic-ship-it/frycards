@@ -24,7 +24,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Dark": 1,
       "Nature": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 3,
     "health": 3
@@ -90,7 +90,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Overclock 3. Draw 1 card. (Grants 3 temporary generic resources now, but subtracts 3 from your next resource roll).",
     "cost": {
       "Flame": 1,
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 3
     },
     "effect": {
       "action": "draw",
@@ -135,7 +136,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Wildcast 3: Deals 1 damage to 3 unique random enemy units.",
     "cost": {
       "Frost": 2,
-      "Generic": 1
+      "Generic": 3
     },
     "effect": {
       "action": "damage",
@@ -160,7 +161,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_dragonfish_with_a_long_glowing_chin_barbel_and_needle-thin__eea9a746-ad31-423e-a0fb-919ee9cf4960_3_result.webp?updatedAt=1778240811387",
     "cost": {
       "Order": 1,
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 3,
     "health": 4
@@ -261,7 +263,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Frost": 1,
       "Tech": 1,
-      "Generic": 1
+      "Generic": 3
     },
     "attack": 4,
     "health": 4
@@ -324,7 +326,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Chaos": 1,
       "Flame": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "duration": 3
   },
@@ -501,7 +503,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Reflecting the greed of those who hunt them.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_school_of_hatchetfish_with_mirror-like_sides_reflecting_the_0c67e36f-eb21-48d2-b27e-8cc7a44a053e_1_result.webp?updatedAt=1778240810515",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -566,7 +569,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A rusted relic repurposed by nature.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_coral-encrusted_anchor_with_a_school_of_yellow_tangs_dartin_9d490bbf-fd69-4d9f-85ea-9ad39f7cbadc_0_result.webp?updatedAt=1778240810362",
     "cost": {
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 1
     },
     "attack": 3,
     "health": 1
@@ -587,7 +591,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_swarm_of_transparent_eels_forming_a_DNA-like_double_helix_i_eec43e67-782e-4eef-87c6-5a279cfa9914_0_result.webp?updatedAt=1778240810230",
     "cost": {
       "Flame": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 4,
     "health": 2
@@ -611,7 +615,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Frost": 1,
       "Tech": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 3,
     "health": 4
@@ -656,7 +660,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Light": 1,
       "Order": 1,
-      "Generic": 2
+      "Generic": 3
     },
     "attack": 5,
     "health": 3
@@ -676,7 +680,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A hypnotic dance that masks their deadly strike.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_colony_of_garden_eels_swaying_in_the_current_like_tall_thin_d2a9f229-ddd8-4110-8f98-49128292584c_3_result.webp?updatedAt=1778240809945",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -719,7 +724,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_magical_ritual_where_a_group_of_eels_weave_themselves_toget_4f318a23-e2a0-447e-8b22-6b966bf4161e_2_result.webp?updatedAt=1778240809724",
     "cost": {
       "Nature": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "duration": 3
   },
@@ -742,7 +747,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Tech": 1,
       "Frost": 1,
-      "Generic": 2
+      "Generic": 3
     },
     "attach": {
       "attack": 2,
@@ -810,7 +815,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Thriving in the boiling heat of the vents.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_cluster_of_tube_worms_with_bright_red_tips_surrounding_a_gl_45b1c039-8494-4c33-a2a9-2b0bc3797fc5_0_result.webp?updatedAt=1778240809528",
     "cost": {
-      "Dark": 1
+      "Dark": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 2
@@ -832,7 +838,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ornate_pocket_watch_with_a_cracked_crystal_the_hands_indic_914062f7-eafc-4237-aef0-5a62dbfd1a6e_0_result.webp?updatedAt=1778240809395",
     "cost": {
       "Light": 1,
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "duration": 3
   },
@@ -852,7 +859,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_curtain_of_glowing_silk-like_algae_hanging_from_a_trench_ce_5d030bc5-90c0-424e-80d2-dfd980605736_3_result.webp?updatedAt=1778240809320",
     "cost": {
       "Chaos": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "duration": 3
   },
@@ -864,7 +871,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Frost",
       "Tech"
     ],
-    "rarity": "Mythic",
+    "rarity": "Rare",
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
@@ -914,7 +921,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Tech": 1,
       "Frost": 1,
-      "Generic": 2
+      "Generic": 4
     },
     "attack": 5,
     "health": 6
@@ -981,7 +988,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_anglerfish_with_a_lure_that_looks_like_a_miniature_glowing_4f5cff58-6150-46e2-930a-6e9b8d5e5743_0_result.webp?updatedAt=1778240808875",
     "cost": {
       "Dark": 2,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 4,
     "health": 2
@@ -1050,7 +1057,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_crown-of-thorns_starfish_encrusted_with_amethyst_crystals_m_f337c7a6-fdfb-4b13-89dd-1966112e502f_0_result.webp?updatedAt=1778240808615",
     "cost": {
       "Order": 1,
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 5
@@ -1070,7 +1078,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "They navigate by the stars on their backs.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_field_of_Star-Crabs_whose_shells_perfectly_match_the_conste_0625aabd-67ee-4c7a-bd5d-7804dd3ad877_1_result.webp?updatedAt=1778240808497",
     "cost": {
-      "Nature": 1
+      "Nature": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
@@ -1120,7 +1129,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Flame": 1,
       "Chaos": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "duration": 3
   },
@@ -1211,7 +1220,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Chaos": 1,
       "Flame": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 4,
     "health": 2
@@ -1231,7 +1240,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Bound together for life.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_pair_of_seahorses_with_manes_like_flowing_seaweed_intertwin_9e7e08be-e4b8-4458-8a1e-3695070f3fd7_0_result.webp?updatedAt=1778240808016",
     "cost": {
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -1244,7 +1254,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Light",
       "Order"
     ],
-    "rarity": "Mythic",
+    "rarity": "Super-Rare",
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
@@ -1296,7 +1306,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Flame": 1,
       "Chaos": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 5,
     "health": 2
@@ -1316,7 +1326,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A moving fortress.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ancient_colossal_turtle_the_Isle_of_Shells_with_a_fully_re_a1eaaeea-a159-4cca-96eb-9d78264914d5_3_result.webp?updatedAt=1778240807932",
     "cost": {
-      "Frost": 1
+      "Frost": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
@@ -1364,7 +1375,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Light": 1,
       "Order": 1,
-      "Generic": 2
+      "Generic": 3
     },
     "attach": {
       "attack": 2,
@@ -1386,8 +1397,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A macabre source of light.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_lantern_made_from_a_dried_pufferfish_containing_a_pulsating_0f791616-9d72-4791-a835-3220c5494046_1_result.webp?updatedAt=1778240807631",
     "cost": {
-      "Chaos": 1,
-      "Generic": 1
+      "Chaos": 1
     },
     "attach": {
       "attack": 1,
@@ -1409,7 +1419,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A deadly sting wrapped in beauty.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_translucent_jellyfish_with_long_trailing_tentacles_that_loo_4ca23972-d237-42d9-9a12-558b6f9ef5b1_1_result.webp?updatedAt=1778240807572",
     "cost": {
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -1477,7 +1488,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_long-nosed_chimera_fish_with_silver_skin_gliding_through_a__c396adc5-f761-431a-a326-82aa3c19a4e9_0_result.webp?updatedAt=1778240807391",
     "cost": {
       "Flame": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 4,
     "health": 3
@@ -1500,7 +1511,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Frost": 1,
       "Tech": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "duration": 3
   },
@@ -1587,7 +1598,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A guiding light in the darkness.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_swarm_of_tiny_glowing_krill_forming_the_shape_of_a_constell_0797d41a-7aee-4025-a9a2-d6b645ec6fc3_0_result.webp?updatedAt=1778240806784",
     "cost": {
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 2
@@ -1656,7 +1668,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Flame": 1,
       "Chaos": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 5,
     "health": 2
@@ -1676,7 +1688,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Forged in the heat of hydrothermal vents.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_leviathan-sized_crab_with_a_shell_that_looks_like_a_volcani_d72b1473-c170-4285-8096-c3ea80f67f67_0_result.webp?updatedAt=1778240806378",
     "cost": {
-      "Frost": 1
+      "Frost": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -1696,8 +1709,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A trap for the greedy.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_cursed_treasure_chest_its_lid_made_of_a_giant_gaping_clam_m_646b1a5b-c10e-42d9-88cd-4be885f6351f_2_result.webp?updatedAt=1778240806311",
     "cost": {
-      "Dark": 1,
-      "Generic": 1
+      "Dark": 1
     },
     "attach": {
       "attack": 1,
@@ -1764,7 +1776,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_swordfish_with_a_blade_made_of_shimmering_obsidian_cutting__7ebb5fa0-b9a0-475c-a4ff-59509058cc1b_3_result.webp?updatedAt=1778240805816",
     "cost": {
       "Order": 1,
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 4,
     "health": 3
@@ -1809,7 +1822,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Tech": 1,
       "Frost": 1,
-      "Generic": 1
+      "Generic": 3
     },
     "attack": 4,
     "health": 4
@@ -1829,8 +1842,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A dance to summon the tide.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_ritual_dance_of_Merfolk_surrounding_a_massive_floating_bubb_0717ce3c-5805-4cef-94bf-e4dff324ba2a_0_result.webp?updatedAt=1778240805640",
     "cost": {
-      "Flame": 1,
-      "Generic": 1
+      "Flame": 1
     },
     "duration": 1
   },
@@ -1986,7 +1998,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_hermit_crab_using_a_discarded_ornate_brass_diving_helmet_as_d2ac14fb-e2a7-43ba-9286-90644683a356_2_result.webp?updatedAt=1778240805003",
     "cost": {
       "Tech": 1,
-      "Frost": 1
+      "Frost": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 5
@@ -2076,7 +2089,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_reef_shark_with_skin_like_polished_marble_patrolling_a_jagg_39379ae8-b8b3-44e7-8378-53d3e4fb12cc_1_result.webp?updatedAt=1778240804059",
     "cost": {
       "Light": 1,
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "attack": 3,
     "health": 3
@@ -2118,7 +2132,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/The_Bioluminescent_Tide--a_wave_of_pure_concentrated_glowing__89650f44-9095-4f47-a765-259f2fd8f49d_3_result.webp?updatedAt=1778240803723",
     "cost": {
       "Order": 1,
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "effect": {
       "action": "heal",
@@ -2192,7 +2207,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_predatory_tunicate_ghost_fish_with_a_translucent_hood_open__3d78cd67-4810-440c-bc83-45e55d2131e4_0_result.webp?updatedAt=1778240803200",
     "cost": {
       "Flame": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 2,
     "health": 5
@@ -2234,7 +2249,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_flash-freezing_event_in_the_deep_where_a_pocket_of_supercoo_f684b1bf-637b-4cd1-9302-3fb50ff28df4_0_result.webp?updatedAt=1778240803069",
     "cost": {
       "Dark": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "effect": {
       "action": "heal",
@@ -2280,7 +2295,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Preserved perfectly for millennia.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_sphere_of_polished_amber_containing_a_perfectly_preserved_g_5381c256-0b07-4479-aa8c-6d8f573c34cc_3_result.webp?updatedAt=1778240802656",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "duration": 2
   },
@@ -2303,7 +2319,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Order": 1,
       "Light": 1,
-      "Generic": 1
+      "Generic": 3
     },
     "attack": 5,
     "health": 4
@@ -2323,7 +2339,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A tiny beacon of hope.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_tiny_glowing_seahorse_made_of_pure_white_light._--chaos_5_-_6b8d2e24-d96a-4711-b9d0-0120a230753f_1_result.webp?updatedAt=1778240802535",
     "cost": {
-      "Nature": 1
+      "Nature": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -2343,7 +2360,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Cold as ice, sharp as a tooth.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_creature_that_is_half-shark_half-glacier_with_ice-blue_glow_bfc65751-38d8-48b9-85e3-fd56fb67df2f_3_result.webp?updatedAt=1778240802467",
     "cost": {
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -2376,7 +2394,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Fix Frost"
+    ],
     "text": "Trapped air from a forgotten age.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_series_of_underwater_stone_bubbles_containing_tiny_preserve_1f3b8d61-5de8-4093-9581-f2b55342c3a9_1_result.webp?updatedAt=1778240802365",
     "cost": {
@@ -2399,7 +2419,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A massive drifter of the sea.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_bioluminescent_jellyfish_that_looks_like_a_floating_1e3bbb89-9d8b-4e7d-b88e-aa697a1e7ceb_3_result.webp?updatedAt=1778240802162",
     "cost": {
-      "Dark": 1
+      "Dark": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -2419,7 +2440,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "It can swallow anything whole.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_gulper_eel_with_an_impossibly_large_mouth_lined_with_tiny_g_3bbd23c2-3122-4ac0-acd1-ae0c621f4728_1_result.webp?updatedAt=1778240802180",
     "cost": {
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -2439,7 +2461,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Beautiful, but deadly to touch.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_lionfish_with_fins_like_delicate_lace_and_poisonous_spines__eb06ebfc-a7f3-4982-93e0-fe69de2f85b7_1_result.webp?updatedAt=1778240802084",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 2
@@ -2453,7 +2476,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Fix Order"
+    ],
     "text": "Lights guiding the way home.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_series_of_floating_orbs_of_light_tethered_to_the_sea_floor__b73b6cf0-7fa5-4f5b-91cc-b02c4de30cd6_0_result.webp?updatedAt=1778240801995",
     "cost": {
@@ -2470,7 +2495,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Symmetric"
+    ],
     "text": "A place of worship for the merfolk.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_wide_shot_of_a_Coral_Cathedral--a_massive_hollowed-out_reef_1adbbe9f-3d1c-412c-9b7b-a234853d06f8_3_result.webp?updatedAt=1778240801788",
     "cost": {
@@ -2493,7 +2520,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A universe within a bell.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_jellyfish_whose_bell_contains_a_miniature_rotating_ga_ba1c6e8a-148f-429e-83f0-d449072fcb97_2_result.webp?updatedAt=1778240801719",
     "cost": {
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 2
@@ -2507,7 +2535,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Scorch"
+    ],
     "text": "A frenzy waiting to happen. Scorch 2 on target enemy Unit.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_gathering_of_a_dozen_different_species_of_sharks_swimming_i_7f4ecc96-4303-4c17-82ed-c0cfdb7aac79_3_result.webp?updatedAt=1778240801512",
     "cost": {
@@ -2529,7 +2559,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Boost 1"
+    ],
     "text": "The beating center of the reef.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_pulsating_heart-shaped_coral_growing_in_the_center__b53de206-38ca-450d-af24-cbbbec3a7177_0_result.webp?updatedAt=1778240801439",
     "cost": {
@@ -2552,7 +2584,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A slow but inevitable doom.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_predatory_cone_snail_with_a_shell_like_a_dark_nebula_extend_25fb6523-41f2-4cc6-bd19-99c576834b20_2_result.webp?updatedAt=1778240801407",
     "cost": {
-      "Dark": 1
+      "Dark": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
@@ -2594,7 +2627,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Joyful swimmers of the kelp.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_group_of_playful_otters_weaving_through_a_canopy_of_glowing_7486d850-4c1e-4341-92cc-7e0b02912fe7_0_result.webp?updatedAt=1778240801338",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -2608,7 +2642,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
+    "keywords": [
+      "Pure"
+    ],
     "text": "A shadow of fear from above. Draw 2 cards.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_hammerhead_shark_silhouette_seen_from_below_framed_by_a_hal_77f31484-d105-428c-8d17-0a1745e6c4cd_3_result.webp?updatedAt=1778240801419",
     "cost": {
@@ -2635,7 +2671,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "The world inside a shell.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_iridescent_pearl_that_contains_a_map_of_the_entire_oc_70ccb525-3214-4694-92ef-98d830751f6f_0_result.webp?updatedAt=1778240801221",
     "cost": {
-      "Nature": 1
+      "Nature": 1,
+      "Generic": 1
     },
     "duration": 2
   },
@@ -2673,7 +2710,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Creeping along the ocean floor.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_sea_spider_with_spindly_glowing_legs_walking_over_a_bed_of__40ff17ce-dbfa-4400-8fc9-0aec91fa3878_2_result.webp?updatedAt=1778240801118",
     "cost": {
-      "Flame": 1
+      "Flame": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -2776,7 +2814,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A sturdy survivor.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_nautilus_with_a_metallic_copper_shell_and_glowing_blue_tent_76bea100-9c9e-4434-9b17-564e72c4b19a_1_result.webp?updatedAt=1778240800219",
     "cost": {
-      "Order": 1
+      "Order": 1,
+      "Generic": 2
     },
     "attack": 2,
     "health": 4
@@ -2859,7 +2898,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Invisible to most predators.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_collection_of_Glass_Squid_that_look_like_floating_bubbles_f_ac07fc79-3803-449a-9501-7b53a385c909_1_result.webp?updatedAt=1778240799662",
     "cost": {
-      "Frost": 1
+      "Frost": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -2879,7 +2919,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A bright flash before the bite.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_moray_eel_with_neon_green_stripes_coiled_inside_a_rusted_ir_f356cf5c-2a00-48ee-a89a-71a0c13f8b8c_1_result.webp?updatedAt=1778240799285",
     "cost": {
-      "Dark": 1
+      "Dark": 1,
+      "Generic": 2
     },
     "attack": 2,
     "health": 4
@@ -2918,7 +2959,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A bizarre mutation.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_squid_whose_tentacles_end_in_human-like_hands_made_of_8b1c21e2-a054-446e-b7c2-0ab9ad0dc62f_0_result.webp?updatedAt=1778240799210",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 3,
     "health": 2
@@ -2931,7 +2973,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame",
       "Chaos"
     ],
-    "rarity": "Mythic",
+    "rarity": "Legendary",
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
@@ -2976,7 +3018,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A scavenger of the deep.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_isopod_with_a_shell_made_of_frosted_glass._--chaos_5__a965bed8-cd1c-424a-bf93-31c200ea8c08_3_result.webp?updatedAt=1778240798591",
     "cost": {
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 4
@@ -3016,7 +3059,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Delicate but sharp.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_lobster_with_a_shell_that_looks_like_cracked_porcelain_with_d43c7ea8-610b-429c-8f2e-d58014ecbf4a_1_result.webp?updatedAt=1778240797832",
     "cost": {
-      "Frost": 1
+      "Frost": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
@@ -3055,7 +3099,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A slow and steady traveler.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_sea_turtle_with_a_shell_made_of_polished_emerald_a_8871346a-f40b-41c2-bf76-001b8daf79fe_3_result.webp?updatedAt=1778240795581",
     "cost": {
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 2
@@ -3075,7 +3120,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A flash of color in the blue.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_school_of_iridescent_butterflyfish_weaving_through_a_forest_80e33cfd-cc51-49b2-bd3d-14c20badfe48_1_result.webp?updatedAt=1778240795323",
     "cost": {
-      "Chaos": 1
+      "Chaos": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 2
@@ -3095,7 +3141,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Small, but deadly.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_macro_shot_of_a_blue-ringed_octopus_resting_on_a_bed_of_gol_26ea0a68-b2ac-4604-b779-5da434b941e6_0_result.webp?updatedAt=1778240794552",
     "cost": {
-      "Order": 1
+      "Order": 1,
+      "Generic": 1
     },
     "attack": 1,
     "health": 3
@@ -3115,7 +3162,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A psychedelic display.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_vibrant_mandarin_dragonet_fish_displaying_its_psychedelic_o_aebdb5b0-cb9b-4260-b4a9-a4a45200020f_1_result.webp?updatedAt=1778240794407",
     "cost": {
-      "Nature": 1
+      "Nature": 1,
+      "Generic": 2
     },
     "attack": 2,
     "health": 4
@@ -3135,7 +3183,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "A rhythm of the sea.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_clam_with_a_pulsating_iridescent_purple_mantle_and__8b5df861-d469-4daf-b0a5-6d575c9019a5_3_result.webp?updatedAt=1778240794311",
     "cost": {
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 1
     },
     "attack": 3,
     "health": 1
@@ -3155,7 +3204,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Almost invisible to the eye.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_transparent_glass_shrimp_perched_on_a_branch_of_translucent_d5120657-8f8a-462f-ba6a-ca3a8f57d23e_1_result.webp?updatedAt=1778240793914",
     "cost": {
-      "Flame": 1
+      "Flame": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
