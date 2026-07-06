@@ -454,12 +454,14 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
   checkWin(next);
 }
 
-/** Move dead units to graveyard (detaching Items) and clear tokens. */
-function cleanupDeaths(next: GameState) {
+/** One sweep of the board: move dead units to graveyard, detaching Items. */
+function sweepDeathsOnce(next: GameState): boolean {
+  let anyDied = false;
   for (const p of Object.values(next.players)) {
     const survivors: GameCard[] = [];
     for (const u of p.board) {
       if (isDead(u, next)) {
+        anyDied = true;
         // Attached Items go to graveyard without triggering their own effects.
         for (const it of u.attachedItems) if (!it.isToken) p.graveyard.push(it);
         u.attachedItems = [];
@@ -475,6 +477,23 @@ function cleanupDeaths(next: GameState) {
       }
     }
     p.board = survivors;
+  }
+  return anyDied;
+}
+
+/**
+ * Move dead units to graveyard, detaching Items, and re-sweep to a fixpoint.
+ * Dynamic max-health effects (Phalanx) mean removing one dead Unit can drop
+ * another's health below zero in the same instant (a cascade) — a single
+ * pass would leave that second Unit sitting at 0 HP on the battlefield until
+ * some later action happened to re-trigger the sweep.
+ */
+function cleanupDeaths(next: GameState) {
+  // Bounded by board size: each pass removes at least one Unit, so the loop
+  // cannot run more times than there are Units in play.
+  const maxPasses = Object.values(next.players).reduce((s, p) => s + p.board.length, 0) + 1;
+  for (let i = 0; i < maxPasses; i++) {
+    if (!sweepDeathsOnce(next)) break;
   }
   enforceAllItemCapacities(next);
 }

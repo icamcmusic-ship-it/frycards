@@ -463,7 +463,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "The ocean incarnate, commanding the tides.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
-    "health": 35,
+    "health": 30,
     "attack": 3
   },
   {
@@ -881,7 +881,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Her magic is as cold as the abyss.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_powerful_ethereal_Sea_Witch_with_pale_skin_and_glowing_viol_660bc480-f4fc-44d2-bd62-2cb96ed1204d_1_result.webp?updatedAt=1778240809298",
-    "health": 35,
+    "health": 38,
     "attack": 3
   },
   {
@@ -1266,7 +1266,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
-    "health": 35,
+    "health": 37,
     "attack": 3
   },
   {

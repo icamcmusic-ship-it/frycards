@@ -506,16 +506,31 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   const totalSwing = eligible.reduce((s, u) => s + effAttack(u, state), 0);
   const lethalPush = totalSwing >= opp.health && guards.length === 0;
 
+  // Guard Clearing Solver: while ANY ready Guard stands, every attack not
+  // explicitly aimed at a Guard gets redirected onto whichever Guard the
+  // engine finds first (§5.2 Interlock) — so with 2+ simultaneous Guards,
+  // always aiming at "the" Guard would dog-pile every attacker onto one and
+  // let the rest survive forever, permanently locking out Leader damage.
+  // Track outstanding lethal need per Guard and finish off the
+  // closest-to-dead one first so multiple Guards can die in the same wave.
+  const guardNeed = new Map(guards.map((g) => [g.instanceId, damageToKill(g, state)]));
+  const pickGuardTarget = (): GameCard | undefined => {
+    const alive = guards.filter((g) => (guardNeed.get(g.instanceId) ?? 0) > 0);
+    if (alive.length === 0) return guards[0];
+    return alive.sort((a, b) => (guardNeed.get(a.instanceId) ?? 0) - (guardNeed.get(b.instanceId) ?? 0))[0];
+  };
+
   for (const u of [...eligible].sort((a, b) => effAttack(b, state) - effAttack(a, state))) {
     const burden = attackBurden(u);
     if (burden > burdenBudget) continue;
     const atk = effAttack(u, state);
     const uHp = totalRemaining(u, state);
-    // Interlock awareness: if a Guard stands, we hit it; evaluate that trade.
-    const interceptor = guards[0];
+    // Interlock awareness: if a Guard stands, we hit one; evaluate that trade.
+    const interceptor = guards.length > 0 ? pickGuardTarget() : undefined;
     if (interceptor) {
+      const need = guardNeed.get(interceptor.instanceId) ?? damageToKill(interceptor, state);
       const dieToCounter = effAttack(interceptor, state) >= uHp && !kwActive(u, 'Lurk');
-      const killsGuard = atk >= damageToKill(interceptor, state);
+      const killsGuard = atk >= need;
       if (dieToCounter && !killsGuard && unitValue(u, state) > unitValue(interceptor, state) * 0.8) continue;
     } else if (!lethalPush && readyBlockers.length > 0) {
       // A blocker that eats us and survives makes this attack a pure loss —
@@ -529,7 +544,10 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
     // hit when the trade clearly wins value (kill without dying, or kill a
     // bigger threat). Lurk-protected units cannot be chosen.
     let targetId = opp.leader.instanceId;
-    if (!lethalPush && !interceptor) {
+    if (interceptor) {
+      targetId = interceptor.instanceId;
+      guardNeed.set(interceptor.instanceId, (guardNeed.get(interceptor.instanceId) ?? 0) - atk);
+    } else if (!lethalPush) {
       const trades = opp.board
         .filter((e) => e.type === 'Unit' && !lurkProtected(e) && atk >= damageToKill(e, state))
         .map((e) => ({ e, counter: effAttack(e, state) }))
