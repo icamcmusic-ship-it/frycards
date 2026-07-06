@@ -28,6 +28,16 @@ startup via `src/lib/supabase.ts` and falls back to the bundled
 [`src/game/generated-cards.ts`](src/game/generated-cards.ts) when offline —
 the start screen shows which source is active.
 
+The card pool spans two sets: **Blue Coral** (146 cards) and **Crimson
+Circuit** (47 cards, part 1) — a volcanic Kinetix industrial complex of
+nanite swarms, magma harvesters and shadow ninjas. Crimson Circuit prints
+all 18 Set-2 keywords plus the seven Blue Coral glossary keywords that had
+no printing (Brittle, Decay, Freeze, Heal, Manifest, Overdrive,
+Photosynthesis), and adds two Mythic Leaders: Crimson Vector Commander
+(Flame/Order — Command 2, Ward 2, Inspire 2, 30 HP) and Apex Nanite Shinobi
+(Tech/Dark — Command 2, Ward 2, Sync 1, 40 HP), giving every card in the
+new set at least one Leader whose color pair can run it.
+
 The source of truth is `data/live_cards.csv` (Blue Coral set, 140 cards).
 Names, art, types, rarity, **real color costs** and **real glossary keywords**
 come from the CSV; numeric stats (attack / health / generic cost / item
@@ -36,17 +46,23 @@ bonuses / charm durations) are generated deterministically by
 edit the CSV, run `npm run generate-cards`, and re-seed the Supabase table
 from `data/cards.generated.json`.
 
-There are 4 Mythic Leaders — Avatar of the Abyss (Dark/Nature), Ethereal Sea
-Witch (Frost/Tech), Mer-King (Light/Order), Legendary Diver (Flame/Chaos) —
-whose element pairs cover all 8 elements and every dual color cost in the
-set. Each gets an auto-built legal 30-card deck (max 2 copies per name, ≥2
-Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
+There are 6 Leaders — Avatar of the Abyss (Dark/Nature), Ethereal Sea
+Witch (Frost/Tech), Mer-King (Light/Order), Legendary Diver (Flame/Chaos),
+Crimson Vector Commander (Flame/Order) and Apex Nanite Shinobi (Tech/Dark) —
+whose element pairs cover all 8 elements and every dual color cost across
+both sets. Each gets an auto-built legal 30-card deck (max 2 copies per
+name, ≥2 Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
 mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
 top-end). Leader stats carry per-pool balance counterweights: every Leader is
 3 ATK; Legendary Diver (30 HP, hyper-aggressive Flame/Chaos, no third
-keyword) and Avatar of the Abyss (30 HP, Sustain 1 — a per-turn heal
+keyword) and Avatar of the Abyss (27 HP, Sustain 1 — a per-turn heal
 compounds hard over a ~17-turn game, so it needs the lowest life total) run
-leaner than Mer-King (37 HP, Rally 2) and Ethereal Sea Witch (38 HP, Boost 1).
+leaner than Mer-King (39 HP, Rally 2), Ethereal Sea Witch (38 HP, Boost 1)
+and Apex Nanite Shinobi (40 HP, Sync 1); Crimson Vector Commander sits at
+30 HP with Inspire 2 — its first draft carried Valor 1, but an always-on
+attack aura on a Leader simulated at ~80% win rate no matter the HP, so
+Valor now lives on the Heart of the Thermal Grid Location instead, where the
+Shell Game time-limits it.
 Balance is tuned with `npx tsx scripts/simulate.ts <games>`, which reports a
 per-leader win rate (wins ÷ appearances) and holds every leader between
 roughly 44% and 57% over large (2000+ game) headless CPU-vs-CPU samples —
@@ -87,8 +103,8 @@ Implemented from the rulebook:
   incl. Ward surcharge), Echo (d6 duplication), Pure (single-color roll
   bonus), plus action verbs Freeze, Scorch [X], Obliterate, Meltdown, Purge,
   Heal, Draw, Manifest.
-- **New Set keywords (preview)** — 18 engine-driven keywords staged for the
-  next set, none printed on a Blue Coral card yet: per card type —
+- **Crimson Circuit keywords** — 18 engine-driven Set-2 keywords, all
+  printed in Crimson Circuit: per card type —
   Vengeance [X] / Solitary [X] (Units), Efficient [X] / Rummage [X]
   (Events), Hatchling [X] / Confluence [X] (Locations), Overcharge [X] /
   Surge (Items), Valor [X] / Inspire [X] (Charms) — and one per color —
@@ -106,7 +122,12 @@ Implemented from the rulebook:
   saves and favorable trades). Against multiple simultaneous ready Guards it
   spreads lethal attackers across them to clear the board instead of
   dog-piling every attack onto a single Guard and leaving the rest
-  untouched forever. Verified with headless CPU-vs-CPU simulations.
+  untouched forever. Its evaluation values Charms as permanents (own charms
+  are assets, hostile Decay charms are liabilities — without this the
+  hand-size weight made every Charm play look like a loss and the CPU never
+  cast one) and values face-down Locations, preferring Symmetric ones since
+  the Shell Game hands control of a flipped Location to the flipper.
+  Verified with headless CPU-vs-CPU simulations.
 
 ### Documented simplifications
 
@@ -120,8 +141,6 @@ even when one Phalanx Unit's death shrinks another's max health enough to
 kill it in the same instant). A hit larger than a card's total
 Armor breaks ALL of its Armor — printed and Item-granted alike. Keywords with
 no printing in the Blue Coral set (Fate, Freeze-Dry, Blessed, Scorched-Earth,
-Glaciate, Exhume) are not engine-driven; the 18 New Set preview keywords ARE
-engine-driven ahead of printing so the next set can be designed against a
-working ruleset. The core game loop, combat and every
-keyword printed in the Blue Coral set are functional; see
+Glaciate, Exhume) are not engine-driven. The core game loop, combat and
+every keyword printed in Blue Coral and Crimson Circuit are functional; see
 `scripts/engine-tests.ts` for the executable rules bible.

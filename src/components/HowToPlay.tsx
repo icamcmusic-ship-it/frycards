@@ -101,7 +101,7 @@ const SECTIONS = [
     ],
   },
   {
-    title: '8 · New Set Keywords (Preview)',
+    title: '8 · Crimson Circuit Keywords',
     body: [
       ['Vengeance X', 'Unit: when this Unit blocks, it deals X extra damage to the attacking Unit on top of its normal counter.'],
       ['Solitary X', 'Unit: +X/+X while this is your only Unit on the battlefield.'],

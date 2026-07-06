@@ -542,6 +542,22 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   assert((c.players.p1.resources.Nature || 0) === 2, 'Flourish granted 2 Nature at the roll');
 }
 
+// --- Decay: hostile charm damages all the victim's Units after their roll -------
+{
+  const s = actionState();
+  const victim1 = addUnit(s, 'p1', 2, 3);
+  const victim2 = addUnit(s, 'p1', 2, 3);
+  const hostile = makeCharm('p2', ['Decay 1']); // cast by p2, afflicting p1
+  hostile.ownerId = 'p2';
+  s.players.p1.charms.push(hostile);
+  s.phase = 'ROLL';
+  let c = gameReducer(s, { type: 'ROLL_DICE' });
+  if (c.phase === 'ALLOCATE') c = gameReducer(c, { type: 'ALLOCATE_RESOURCES', allocations: {} });
+  const u1 = c.players.p1.board.find((u) => u.instanceId === victim1.instanceId);
+  const u2 = c.players.p1.board.find((u) => u.instanceId === victim2.instanceId);
+  assert(!!u1 && u1.damageTaken === 1 && !!u2 && u2.damageTaken === 1, 'Decay 1 hit all afflicted Units after the roll');
+}
+
 // --- Discord: one of three random outcomes at the start of the turn --------------
 {
   const s = actionState();

@@ -38,7 +38,7 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Purge: 'Strips a target of all Items, Charms, statuses and temporary buffs.',
   Manifest: 'Creates a token Unit. Tokens vanish when they leave the battlefield.',
   Heal: 'Heal X: removes X damage from your Leader (cannot exceed printed health).',
-  // New-set keywords (Set 2 preview) — engine-driven, not yet printed in Blue Coral.
+  // Crimson Circuit (Set 2) keywords.
   Vengeance: 'Vengeance X: when this Unit blocks, it deals X extra damage to the attacking Unit.',
   Solitary: 'Solitary X: +X/+X while this is your only Unit on the battlefield.',
   Efficient: 'Efficient X: the next Unit you deploy this turn costs X fewer resources.',

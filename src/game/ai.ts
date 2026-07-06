@@ -169,10 +169,25 @@ function evaluate(state: GameState, aiId: string): number {
   const boardVal = (p: PlayerState) => p.board.reduce((s, u) => s + unitValue(u, state), 0);
   const floating = Object.values(me.resources).reduce((a, b) => a + b, 0);
 
+  // Charms are permanents too: a charm on your own profile that you cast is
+  // an asset (Ward, Boost, Sync, Beacon, ...); a charm someone else stuck on
+  // you (Decay) is a liability. Without this term the hand-size weight makes
+  // every charm play look like a net loss and the CPU never casts one.
+  const charmVal = (p: PlayerState) =>
+    p.charms.reduce((s, c) => s + (c.ownerId === p.id ? costTotal(c) + 1 : -(costTotal(c) + 1)), 0);
+
+  // Face-down Locations: the Shell Game hands control to the FLIPPER, so a
+  // non-Symmetric Location in your zone mostly works for the opponent — only
+  // Symmetric ones are clearly worth committing from hand.
+  const locVal = (p: PlayerState) =>
+    p.locations.reduce((s, l) => s + (hasKeyword(l, 'Symmetric') ? 1.8 : 0.4), 0);
+
   return (
     wLife * (me.health - opp.health) +
     wBoard * (boardVal(me) - boardVal(opp)) +
     wHand * (me.hand.length - opp.hand.length) +
+    0.8 * (charmVal(me) - charmVal(opp)) +
+    (locVal(me) - locVal(opp)) +
     wMana * Math.min(floating, 4) // a small persistent-mana buffer is good; hoarding is not
   );
 }
