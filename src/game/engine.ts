@@ -807,7 +807,11 @@ function reduce(state: GameState, action: GameAction): GameState {
       return next;
 
     case 'KEEP_HAND': {
+      // Server authority (§1.2): keeping a hand is only legal during the
+      // Mulligan phase, and only once per player.
+      if (next.phase !== 'MULLIGAN') return next;
       const p = next.players[action.playerId];
+      if (!p || p.mulliganKept) return next;
       // London Mulligan: bottom X cards, X = number of mulligans taken (§1.2).
       const x = p.mulliganCount;
       if (x > 0) {
@@ -830,7 +834,11 @@ function reduce(state: GameState, action: GameAction): GameState {
     }
 
     case 'MULLIGAN': {
+      // Server authority (§1.2): no re-shuffling once the hand is kept or
+      // after the Mulligan phase has ended.
+      if (next.phase !== 'MULLIGAN') return next;
       const p = next.players[action.playerId];
+      if (!p || p.mulliganKept) return next;
       p.deck = [...p.deck, ...p.hand];
       // shuffle
       for (let i = p.deck.length - 1; i > 0; i--) {
@@ -1030,6 +1038,20 @@ function reduce(state: GameState, action: GameAction): GameState {
         ? targetPool.find((c) => c.instanceId === action.targetId)
         : undefined;
       if (needsTarget && !targetCard) return next; // wait for a valid target
+
+      // 'friendly'-target effects may only be aimed at the caster's own Units
+      // (§5.3 Targeting Law) — the server rejects a mis-aimed cast outright
+      // rather than letting the resources burn on a no-op.
+      if (
+        card.type === 'Event' &&
+        !kwActive(card, 'Wildcast') &&
+        card.effect?.target === 'friendly' &&
+        targetCard &&
+        (targetCard.ownerId !== activePlayer.id || targetCard.type !== 'Unit')
+      ) {
+        next.log.push(`${card.name} can only target one of your own Units.`);
+        return next;
+      }
 
       // Events aimed at the enemy Leader (effect.target 'leader') carry no
       // explicit targetId, but they still target that Leader for the purposes
@@ -1323,6 +1345,16 @@ function reduce(state: GameState, action: GameAction): GameState {
       const targetCard = action.targetId ? targetPool.find((c) => c.instanceId === action.targetId) : undefined;
       
       if (needsTarget && !targetCard) return next;
+
+      // 'friendly'-target abilities may only be aimed at the owner's own Units.
+      if (
+        source.effect.target === 'friendly' &&
+        targetCard &&
+        (targetCard.ownerId !== activePlayer.id || targetCard.type !== 'Unit')
+      ) {
+        next.log.push(`${source.name}'s ability can only target one of your own Units.`);
+        return next;
+      }
 
       // Abilities aimed at the enemy Leader implicitly target it (Ward/Guard/Feedback).
       const implicitTarget =
