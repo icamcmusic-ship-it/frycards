@@ -463,7 +463,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "The ocean incarnate, commanding the tides.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
-    "health": 30,
+    "health": 25,
     "attack": 3
   },
   {
@@ -1266,7 +1266,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
-    "health": 37,
+    "health": 39,
     "attack": 3
   },
   {
@@ -3213,5 +3213,1063 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attack": 2,
     "health": 1
+  },
+  {
+    "id": "smokeveil_striketeam",
+    "name": "Smokeveil Striketeam",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Blitz"
+    ],
+    "text": "They arrive with the smoke and leave with your secrets.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Multiple_hidden_ninjas_leaping_out_of_smoke_with_katanas._--n_ff05b7ac-5cb3-4400-8e09-e04889e09af9_2.png?updatedAt=1783333969035",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 1
+    },
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "kinetix_blacksite_cavern",
+    "name": "Kinetix Blacksite Cavern",
+    "type": "Location",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Discord"
+    ],
+    "text": "What Kinetix hides underground, the underground keeps.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Secure_cavern_hiding_secret_Kinetix_operations._--chaos_5_--a_2925d666-027b-4487-9478-f46c8e4fe9ca_3.png?updatedAt=1783333969030",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1
+    },
+    "locEffect": "HP_ALL"
+  },
+  {
+    "id": "nanite_purge_protocol",
+    "name": "Nanite Purge Protocol",
+    "type": "Event",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Purge",
+      "Rummage 1"
+    ],
+    "text": "Purge a target of all modifications. Rummage 1: draw 1, then discard 1 at random.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Initiates_massive_nanite_purge._--chaos_5_--ar_43_--raw_--sre_9f950050-e05b-4f65-aebd-4e09503206c7_1.png?updatedAt=1783333968991",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "effect": {
+      "action": "purge",
+      "target": "unit"
+    }
+  },
+  {
+    "id": "magma_phase_infiltrator",
+    "name": "Magma-Phase Infiltrator",
+    "type": "Unit",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Lurk",
+      "Taint 1"
+    ],
+    "text": "Rock is only a suggestion to someone made of heat.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Invisible_ninja_phasing_through_volcanic_rock._--chaos_5_--ar_33c7dee6-82a0-4adb-9300-8eb9285e4db4_1.png?updatedAt=1783333969054",
+    "cost": {
+      "Flame": 1,
+      "Chaos": 1,
+      "Generic": 1
+    },
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "cinder_mite",
+    "name": "Cinder Mite",
+    "type": "Unit",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Blitz",
+      "Brittle"
+    ],
+    "text": "Built to explode. Twice, if possible.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Exploding_volcanic_insectoid_drone._--ar_43_--raw_--sref_2208_347f8ece-8999-4015-89f0-96e0b1e590ca_2.png?updatedAt=1783333968994",
+    "cost": {
+      "Flame": 1
+    },
+    "attack": 2,
+    "health": 1
+  },
+  {
+    "id": "obsidian_bore_site",
+    "name": "Obsidian Bore Site",
+    "type": "Location",
+    "elements": [
+      "Frost",
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Symmetric",
+      "Glacier 1"
+    ],
+    "text": "Lava cooled to glass; ambition cooled to schedule.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Industrial_drill_mining_dark_volcanic_glass_structures._--no__de75d842-f735-4879-a407-af20d6756bf8_1.png?updatedAt=1783333969094",
+    "cost": {
+      "Frost": 1,
+      "Tech": 1
+    },
+    "locEffect": "HP_ALL"
+  },
+  {
+    "id": "crimson_vector_commander",
+    "name": "Crimson Vector Commander",
+    "type": "Leader",
+    "elements": [
+      "Flame",
+      "Order"
+    ],
+    "rarity": "Mythic",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Command 2",
+      "Ward 2",
+      "Inspire 2"
+    ],
+    "text": "Her orders arrive at the speed of an eruption.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Crimson-armored_commander_overlooking_a_lava_pit._--chaos_5_-_c9144cb0-c6ac-4520-b9bb-5d988f91fca1_0.png?updatedAt=1783333969026",
+    "health": 30,
+    "attack": 3
+  },
+  {
+    "id": "ashhound_pack",
+    "name": "Ashhound Pack",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Blitz",
+      "Overdrive"
+    ],
+    "text": "They run twice as fast as anything alive. They are not alive.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Pack_of_fast_smoky_phantom_dogs._--chaos_5_--ar_43_--raw_--sr_ff08bc25-4e13-4beb-92af-7f0512e3a651_2.png?updatedAt=1783333969033",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "magma_conduit_network",
+    "name": "Magma Conduit Network",
+    "type": "Location",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Confluence 1"
+    ],
+    "text": "The mountain's blood, rerouted through payroll.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Interconnected_steel_pipes_carrying_glowing_red_lava._--chaos_dd903156-78fc-405c-946c-9f1f662b05fe_0.png?updatedAt=1783333968998",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "locEffect": "ATK_ALL"
+  },
+  {
+    "id": "fissure_gas_bunker",
+    "name": "Fissure Gas Bunker",
+    "type": "Location",
+    "elements": [
+      "Order"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Symmetric",
+      "Codex 1"
+    ],
+    "text": "Regulation thickness: enough to outlive the mountain.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Military_bunker_positioned_near_yellow_gas_fissures._--chaos__9ea3e1ec-e63b-4b8f-a99c-ffb804fc91ae_3.png?updatedAt=1783333969041",
+    "cost": {
+      "Order": 1,
+      "Generic": 1
+    },
+    "locEffect": "HP_ALL"
+  },
+  {
+    "id": "volcanic_nanite_core",
+    "name": "Volcanic Nanite Core",
+    "type": "Item",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Legendary",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Overcharge 2"
+    ],
+    "text": "Unlimited power, invoiced nightly.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ultimate_volcanic_nanite_power_source._--ar_43_--raw_--sref_2_910511a1-5832-45e9-9236-abf8e0e80b40_2.png?updatedAt=1783333969058",
+    "cost": {
+      "Tech": 1,
+      "Generic": 2
+    },
+    "attach": {
+      "attack": 2,
+      "health": 2
+    }
+  },
+  {
+    "id": "micro_drone_immolation",
+    "name": "Micro-Drone Immolation",
+    "type": "Event",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Scorch 2"
+    ],
+    "text": "Scorch 2: the swarm keeps burning long after it lands.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Countless_glowing_red_micro-drones_burning_enemy._--chaos_5_-_1d47d727-49d9-43f3-a18e-39d3ffe2492a_1.png?updatedAt=1783333969066",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "effect": {
+      "action": "scorch",
+      "value": 2,
+      "target": "unit"
+    }
+  },
+  {
+    "id": "kunoichi_of_the_magma_rings",
+    "name": "Kunoichi of the Magma Rings",
+    "type": "Unit",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Super-Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Blitz",
+      "Inferno"
+    ],
+    "text": "Every strike she lands sets the whole line alight.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Female_Ninja_Commands_the_kinetic_magma_rings._--ar_43_--raw__4084f947-0b0a-46f6-8e8b-6e6e71a2d3fe_3.png?updatedAt=1783333969075",
+    "cost": {
+      "Flame": 2,
+      "Chaos": 1,
+      "Generic": 1
+    },
+    "attack": 3,
+    "health": 3
+  },
+  {
+    "id": "heart_of_the_thermal_grid",
+    "name": "Heart of the Thermal Grid",
+    "type": "Location",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Boost 1",
+      "Valor 1"
+    ],
+    "text": "The city breathes when it beats.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Heart_of_the_thermal_grid._--ar_43_--raw_--sref_2208496562_36_01ba5ff2-545c-4aa1-8a1d-b42be9ab1524_1.png?updatedAt=1783333969063",
+    "cost": {
+      "Flame": 1,
+      "Generic": 2
+    },
+    "locEffect": "ATK_ALL"
+  },
+  {
+    "id": "nanite_culture_lab",
+    "name": "Nanite Culture Lab",
+    "type": "Location",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Hatchling 1",
+      "Flourish 1"
+    ],
+    "text": "The vats never sleep, and neither does what grows in them.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/High-tech_laboratory_filled_with_glowing_green_vats._--no_tex_d0613563-9572-4410-894b-2be2576d98ac_0.png?updatedAt=1783333969044",
+    "cost": {
+      "Tech": 1,
+      "Generic": 2
+    },
+    "locEffect": "HP_ALL"
+  },
+  {
+    "id": "magma_ring_adept",
+    "name": "Magma Ring Adept",
+    "type": "Unit",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Vengeance 2"
+    ],
+    "text": "Strike him and the rings answer.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Commands_the_kinetic_magma_rings._--ar_43_--raw_--sref_220849_0be2b56f-5615-4700-b49d-bdab0d5b5eb2_3.png?updatedAt=1783333968951",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "absolute_eruption",
+    "name": "Absolute Eruption",
+    "type": "Event",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Legendary",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Wildcast 3"
+    ],
+    "text": "Wildcast 3: deals 2 damage to 3 unique random battlefield targets.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Absolute_volcanic_energy_eruption._--ar_43_--raw_--sref_22084_d9f16813-c068-490b-9e4a-5abd193f8a4e_2.png?updatedAt=1783333968955",
+    "cost": {
+      "Flame": 2,
+      "Chaos": 1,
+      "Generic": 2
+    },
+    "effect": {
+      "action": "damage",
+      "value": 2,
+      "target": "unit"
+    }
+  },
+  {
+    "id": "caldera_harvest_works",
+    "name": "Caldera Harvest Works",
+    "type": "Location",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Super-Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Symmetric",
+      "Confluence 2"
+    ],
+    "text": "The volcano pays dividends to whoever dares collect.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/A_massive_industrial_energy-harvesting_facility_built_directl_bc94866f-69c5-4e5b-9dfc-eea5026f3f22_3.png?updatedAt=1783333968957",
+    "cost": {
+      "Tech": 1,
+      "Generic": 2
+    },
+    "locEffect": "ATK_ALL"
+  },
+  {
+    "id": "consuming_ash_cloud",
+    "name": "Consuming Ash Cloud",
+    "type": "Event",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Freeze"
+    ],
+    "text": "Freeze: smothered in ash, the target cannot act until its controller's next turn ends.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Massive_ash_cloud_consuming_the_landscape._--chaos_5_--ar_43__818954ab-3d44-4fe8-9c84-32f997eb350c_3.png?updatedAt=1783333969049",
+    "cost": {
+      "Flame": 1,
+      "Chaos": 1,
+      "Generic": 1
+    },
+    "effect": {
+      "action": "freeze",
+      "target": "unit"
+    }
+  },
+  {
+    "id": "kinetic_overflow",
+    "name": "Kinetic Overflow",
+    "type": "Event",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Heal 3"
+    ],
+    "text": "Heal 3: surplus current, routed back into the one who commands it.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ninja_Generates_endless_kinetic_current._--chaos_5_--ar_43_--_fdff127f-65fd-454f-9cf5-ec4c3084c3d9_1.png?updatedAt=1783333969056",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "effect": {
+      "action": "heal",
+      "value": 3
+    }
+  },
+  {
+    "id": "symbiotic_scan_swarm",
+    "name": "Symbiotic Scan-Swarm",
+    "type": "Charm",
+    "elements": [
+      "Dark",
+      "Nature"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Photosynthesis"
+    ],
+    "text": "It maps the caverns and feeds on what it finds.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Tiny_metallic_insect_swarm_scanning_dark_caverns._--chaos_5_-_3476861c-8815-48bd-b547-3f0d287cf3ea_0.png?updatedAt=1783333969036",
+    "cost": {
+      "Dark": 1,
+      "Nature": 1
+    },
+    "duration": 3
+  },
+  {
+    "id": "tectonic_rift",
+    "name": "Tectonic Rift",
+    "type": "Event",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Obliterate"
+    ],
+    "text": "Obliterate: the ground simply stops agreeing to hold them.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ground_splitting_apart_showing_bright_lava_underneath._--no_t_99f5673d-3557-4c49-9e9a-0e9a70f5b302_0.png?updatedAt=1783333968996",
+    "cost": {
+      "Flame": 2,
+      "Chaos": 1,
+      "Generic": 2
+    },
+    "effect": {
+      "action": "obliterate",
+      "target": "unit"
+    }
+  },
+  {
+    "id": "nanite_division_marshal",
+    "name": "Nanite Division Marshal",
+    "type": "Unit",
+    "elements": [
+      "Order"
+    ],
+    "rarity": "Super-Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Guard",
+      "Armor 1"
+    ],
+    "text": "A billion machines, one salute.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Specialized_leader_commanding_armored_nanite_divisions._--cha_5ac2c09c-bb9b-41c2-9f2e-d69a6b2098bd_1.png?updatedAt=1783333969088",
+    "cost": {
+      "Order": 2,
+      "Generic": 2
+    },
+    "attack": 2,
+    "health": 5
+  },
+  {
+    "id": "shinobi_operations_base",
+    "name": "Shinobi Operations Base",
+    "type": "Location",
+    "elements": [
+      "Dark",
+      "Tech"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Inspire 1"
+    ],
+    "text": "Recruits enter. Weapons leave.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/High-tech_ninja_operations_base._--ar_43_--raw_--sref_2208496_86434ad5-db02-4b77-86f8-dd45bd7a089d_1.png?updatedAt=1783333969028",
+    "cost": {
+      "Dark": 1,
+      "Tech": 1
+    },
+    "locEffect": "ATK_ALL"
+  },
+  {
+    "id": "shatterline",
+    "name": "Shatterline",
+    "type": "Event",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Efficient 2"
+    ],
+    "text": "Efficient 2: the breach is open — the next Unit you deploy this turn costs 2 less. Deals 1 damage.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Explosive_energy_crack_shattering_solid_rock._--chaos_5_--ar__0599db95-7f40-451e-b15e-63c460039fdd_1.png?updatedAt=1783333969017",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "effect": {
+      "action": "damage",
+      "value": 1,
+      "target": "unit"
+    }
+  },
+  {
+    "id": "pyroproof_vanguard",
+    "name": "Pyroproof Vanguard",
+    "type": "Unit",
+    "elements": [
+      "Flame",
+      "Order"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Guard",
+      "Armor 2"
+    ],
+    "text": "The lava moved around him. So did the war.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Heavy_armored_ninja_impervious_to_heat._--chaos_5_--ar_43_--r_fd7ce4bd-17bc-4a37-94ec-3158c1bde894_1.png?updatedAt=1783333969053",
+    "cost": {
+      "Flame": 1,
+      "Order": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 4
+  },
+  {
+    "id": "ash_shaper_mystic",
+    "name": "Ash-Shaper Mystic",
+    "type": "Unit",
+    "elements": [
+      "Flame",
+      "Chaos"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Taint 2"
+    ],
+    "text": "What his ash touches, the world finishes.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Sorcerer-ninja_shaping_burning_ash_swarms._--chaos_5_--ar_43__0ff0a5b9-7d1f-4c7e-93a7-226265bf0f1f_1.png?updatedAt=1783333969038",
+    "cost": {
+      "Flame": 1,
+      "Chaos": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "perpetual_dynamo",
+    "name": "Perpetual Dynamo",
+    "type": "Charm",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Sync 1"
+    ],
+    "text": "Every deployment feeds the current; the current feeds the next.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Generates_endless_kinetic_current._--chaos_5_--ar_43_--raw_--_e152a325-58a9-46a0-bec3-6ca458c0ec53_0.png?updatedAt=1783333969031",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "duration": 3
+  },
+  {
+    "id": "violet_haze_kunoichi",
+    "name": "Violet Haze Kunoichi",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Lurk",
+      "Wither 1"
+    ],
+    "text": "The smoke remembers her shape long after she's gone.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Masked_female_ninja_walking_through_thick_purple_smoke._--cha_bd6de1fe-4d0c-4642-a6fd-3908c1102e61_0.png?updatedAt=1783333969061",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 1
+    },
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "skydark_locust_host",
+    "name": "Skydark Locust Host",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Phalanx 1"
+    ],
+    "text": "One locust is a glitch. A billion are a weather system.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Massive_mechanical_swarm_darkens_the_flat_purple_sky._--no_te_ec7cabcb-1477-4a94-9d1f-aa21c75d7afb_1.png?updatedAt=1783333968987",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 2
+    },
+    "attack": 3,
+    "health": 3
+  },
+  {
+    "id": "locust_veil",
+    "name": "Locust Veil",
+    "type": "Event",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Manifest 2"
+    ],
+    "text": "Manifest: the cloud condenses into a 2/2 swarm token.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Billions_of_sharp_vector-rendered_mechanical_locusts_clouding_0d54c5d8-8fae-4e64-bd53-ec98fca13ed3_0.png?updatedAt=1783333968945",
+    "cost": {
+      "Tech": 1,
+      "Generic": 2
+    },
+    "effect": {
+      "action": "manifest",
+      "value": 2
+    }
+  },
+  {
+    "id": "nanite_shock_trooper",
+    "name": "Nanite Shock Trooper",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Armor 1",
+      "Vengeance 1"
+    ],
+    "text": "Standard issue: plating, protocol, payback.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Heavy_armor_nanite_ninja_shock_trooper._--ar_43_--raw_--sref__2a759665-9d96-4337-bd2a-35f9349db400_0.png?updatedAt=1783333969097",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1
+    },
+    "attack": 2,
+    "health": 3
+  },
+  {
+    "id": "neon_phantom_assassin",
+    "name": "Neon Phantom Assassin",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Lurk",
+      "Solitary 2"
+    ],
+    "text": "Backup would only get in the way.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Invisible_neon_shadow_assassin._--chaos_5_--ar_43_--raw_--sre_7345f2eb-2761-45d4-957a-cb8c73b46e5a_2.png?updatedAt=1783333969012",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 2
+    },
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "molten_camo_weave",
+    "name": "Molten Camo Weave",
+    "type": "Item",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Armor 1"
+    ],
+    "text": "Dress for the terrain you want to disappear into.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ninja_Camouflage_gear_utilizing_molten_environment_colors._--_c3073159-f89c-4bf9-9341-e6f68c215272_1.png?updatedAt=1783333968982",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "attach": {
+      "attack": 0,
+      "health": 2
+    }
+  },
+  {
+    "id": "hive_power_cell",
+    "name": "Hive Power Cell",
+    "type": "Item",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Overcharge 1"
+    ],
+    "text": "Concentrated appetite in a bottle.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Concentrated_power_source_for_nanite_hives._--chaos_5_--ar_43_101eca08-185a-46c7-82af-a028eac8f693_2.png?updatedAt=1783333968947",
+    "cost": {
+      "Tech": 1
+    },
+    "attach": {
+      "attack": 1,
+      "health": 1
+    }
+  },
+  {
+    "id": "kinetic_storage_gauntlet",
+    "name": "Kinetic Storage Gauntlet",
+    "type": "Item",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Surge"
+    ],
+    "text": "Every blow you land is a deposit.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/High-tech_metal_glove_glowing_with_stored_energy._--no_text_w_76e853bc-0374-4637-8ff1-ea4a9c78ee56_1.png?updatedAt=1783333968989",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "attach": {
+      "attack": 1,
+      "health": 1
+    }
+  },
+  {
+    "id": "bladetail_symbiont",
+    "name": "Bladetail Symbiont",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Pierce",
+      "Overdrive"
+    ],
+    "text": "The tail has its own opinion about when the fight is over.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/A_biomechanical_ninja_unit_utilizing_a_segmented_bladed_tail._0ecbd9d3-094b-4057-b6a7-b6127a575f35_3.png?updatedAt=1783333968962",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 1
+    },
+    "attack": 3,
+    "health": 2
+  },
+  {
+    "id": "vector_blade_captain",
+    "name": "Vector Blade Captain",
+    "type": "Unit",
+    "elements": [
+      "Order"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Blitz",
+      "Reap"
+    ],
+    "text": "The blade renders; the captain collects.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Vector_ninja_captain_with_glowing_green_blade._--chaos_5_--ar_a2a668dc-416c-4da3-8df1-99746a033a3e_0.png?updatedAt=1783333969006",
+    "cost": {
+      "Order": 1,
+      "Generic": 2
+    },
+    "attack": 3,
+    "health": 3
+  },
+  {
+    "id": "apex_nanite_shinobi",
+    "name": "Apex Nanite Shinobi",
+    "type": "Leader",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Mythic",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Command 2",
+      "Ward 2",
+      "Sync 2"
+    ],
+    "text": "He is not wearing the swarm. The swarm is wearing him.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/ultimate_nanite-integrated_shinobi._--ar_43_--raw_--sref_2208_1ef2a9f4-aba7-4094-8f2c-f658dca2886f_2.png?updatedAt=1783333969071",
+    "health": 40,
+    "attack": 3
+  },
+  {
+    "id": "obsidian_golem",
+    "name": "Obsidian Golem",
+    "type": "Unit",
+    "elements": [
+      "Frost",
+      "Tech"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Armor 2",
+      "Brittle"
+    ],
+    "text": "Hard as glass. Exactly as glass.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Crystallized_rock_soldier_with_sharp_vector_edges._--no_text__a422b5d2-6288-4413-bf94-ade6c6d2100f_2.png?updatedAt=1783333969016",
+    "cost": {
+      "Frost": 1,
+      "Tech": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 5
+  },
+  {
+    "id": "overseer_optic",
+    "name": "Overseer Optic",
+    "type": "Unit",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Feedback"
+    ],
+    "text": "It sees your spell before you finish casting it.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Floating_mechanical_eye_emitting_bright_red_laser._--chaos_5__c33828d5-f8d3-401c-830a-c074b68c445f_1.png?updatedAt=1783333969008",
+    "cost": {
+      "Tech": 1
+    },
+    "attack": 1,
+    "health": 3
+  },
+  {
+    "id": "kinetix_enforcer",
+    "name": "Kinetix Enforcer",
+    "type": "Unit",
+    "elements": [
+      "Tech",
+      "Dark"
+    ],
+    "rarity": "Uncommon",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Guard",
+      "Ward 1"
+    ],
+    "text": "The contract says protect. The armor says try me.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/A_high-contrast_character_profile._Sharp_black_cyber-armor_wi_67967b76-6fc1-4c6a-97c4-f6007cd06c70_0.png?updatedAt=1783333968949",
+    "cost": {
+      "Tech": 1,
+      "Dark": 1,
+      "Generic": 1
+    },
+    "attack": 2,
+    "health": 4
+  },
+  {
+    "id": "kinetic_siphon_swarm",
+    "name": "Kinetic Siphon Swarm",
+    "type": "Charm",
+    "elements": [
+      "Dark",
+      "Tech"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Decay 1"
+    ],
+    "text": "Decay 1: it drinks the motion out of everything they field.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Swarm_Drains_kinetic_energy_instantly._--ar_43_--raw_--sref_2_080e2c82-4605-4624-b485-9489582867a9_0.png?updatedAt=1783333969010",
+    "cost": {
+      "Dark": 1,
+      "Tech": 1,
+      "Generic": 1
+    },
+    "duration": 2
+  },
+  {
+    "id": "barrier_projection_field",
+    "name": "Barrier Projection Field",
+    "type": "Charm",
+    "elements": [
+      "Light",
+      "Order"
+    ],
+    "rarity": "Rare",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Beacon 1"
+    ],
+    "text": "A wall of light, folded to pocket size.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Compact_device_projecting_flat_red_protective_barrier._--no_t_6e57d670-bfff-4e8f-a04e-801fddca8ac6_2.png?updatedAt=1783333969065",
+    "cost": {
+      "Light": 1,
+      "Order": 1
+    },
+    "duration": 2
+  },
+  {
+    "id": "kinetic_anchor_monolith",
+    "name": "Kinetic Anchor Monolith",
+    "type": "Location",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Fix Tech"
+    ],
+    "text": "It does one thing: it does not move.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/A_monolithic_triangular_technical_device_anchoring_kinetic_tr_cf1eb229-330e-4806-930d-9bae0bb56aea_1.png?updatedAt=1783333968939",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "locEffect": "HP_ALL"
+  },
+  {
+    "id": "kinetic_piercer",
+    "name": "Kinetic Piercer",
+    "type": "Item",
+    "elements": [
+      "Flame"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Pierce"
+    ],
+    "text": "It doesn't stop at the first thing it hits.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Piercing_ninja_weapon_--chaos_5_--ar_43_--raw_--sref_22084965_b7d23660-c9f0-4299-9796-b2bb3dcec398_1.png?updatedAt=1783333969014",
+    "cost": {
+      "Flame": 1,
+      "Generic": 1
+    },
+    "attach": {
+      "attack": 2,
+      "health": 0
+    }
+  },
+  {
+    "id": "resonant_shuriken",
+    "name": "Resonant Shuriken",
+    "type": "Item",
+    "elements": [
+      "Tech"
+    ],
+    "rarity": "Common",
+    "set": "Crimson Circuit",
+    "keywords": [
+      "Glitch"
+    ],
+    "text": "You hear it twice: once going in, once in your dreams.",
+    "image": "https://ik.imagekit.io/zusyw2yie/SET2/Sharp_throwing_star_emitting_sound_waves._--no_text_words_--c_2010384a-a332-4ab5-87c7-441b9fc6892e_1.png?updatedAt=1783333968992",
+    "cost": {
+      "Tech": 1,
+      "Generic": 1
+    },
+    "attach": {
+      "attack": 1,
+      "health": 0
+    }
   }
 ] as CardTemplate[];
