@@ -2,7 +2,7 @@
  * Targeted engine regression tests for game rules and keywords.
  * Usage: npx tsx scripts/engine-tests.ts
  */
-import { initialGameState, gameReducer, payCost, canAfford } from '../src/game/engine';
+import { initialGameState, gameReducer, payCost, canAfford, maxItemCapacity } from '../src/game/engine';
 import { makeToken } from '../src/game/cards';
 import { GameState, GameCard } from '../src/types';
 
@@ -120,6 +120,87 @@ function addUnit(s: GameState, owner: string, atk: number, hp: number, keywords:
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   const a2 = c.players.p2.board.find((u) => u.instanceId === armored.instanceId);
   assert(!!a2 && a2.damageTaken === 0, 'Armor 2 fully absorbed a 2-damage hit');
+}
+
+// --- SUBMIT_BLOCKS cannot be forced during COMBAT_DECLARE ---------------------
+{
+  const s = actionState();
+  const mine = addUnit(s, 'p1', 3, 3);
+  addUnit(s, 'p2', 2, 2); // ready blocker exists
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: mine.instanceId, targetId: c.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_BLOCKS' }); // attacker tries to skip blocks
+  assert(c.phase === 'COMBAT_DECLARE', 'SUBMIT_BLOCKS rejected outside COMBAT_BLOCK');
+}
+
+// --- Double SUBMIT_ATTACKS does not double-exhaust/charge ----------------------
+{
+  const s = actionState();
+  const mine = addUnit(s, 'p1', 3, 3, ['Overdrive']);
+  addUnit(s, 'p2', 2, 2); // blocker so combat pauses
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: mine.instanceId, targetId: c.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' }); // stray duplicate
+  const u = c.players.p1.board.find((b) => b.instanceId === mine.instanceId)!;
+  assert(u.attacksThisTurn === 1, 'duplicate SUBMIT_ATTACKS ignored');
+}
+
+// --- Dead target: second attacker fizzles, takes no corpse counter -------------
+{
+  const s = actionState();
+  const a1 = addUnit(s, 'p1', 5, 5);
+  const a2 = addUnit(s, 'p1', 4, 4);
+  const victim = addUnit(s, 'p2', 3, 3);
+  victim.exhausted = true; // cannot block, combat resolves immediately
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: a1.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: a2.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  const second = c.players.p1.board.find((u) => u.instanceId === a2.instanceId);
+  assert(!!second && second.damageTaken === 0, 'attack on a corpse fizzles without counter-damage');
+}
+
+// --- Glitch persists into the controller's own turn ----------------------------
+{
+  const s = actionState();
+  const enemy = addUnit(s, 'p2', 2, 5, ['Guard']);
+  enemy.glitched = true;
+  let c = gameReducer(s, { type: 'END_TURN' }); // p1 cleanup must NOT clear p2's glitch
+  const g = c.players.p2.board.find((u) => u.instanceId === enemy.instanceId);
+  assert(!!g && g.glitched, 'Glitch survives the opponent\'s Cleanup');
+}
+
+// --- Modularity X raises capacity by X ------------------------------------------
+{
+  const s = actionState();
+  const u = addUnit(s, 'p1', 2, 2, ['Modularity 2']);
+  assert(maxItemCapacity(u) === 4, 'Modularity 2 gives capacity 4');
+  const u1 = addUnit(s, 'p1', 2, 2, ['Modularity']);
+  assert(maxItemCapacity(u1) === 3, 'bare Modularity gives capacity 3');
+}
+
+// --- Command cannot ready a Frozen unit ------------------------------------------
+{
+  const s = actionState();
+  s.players.p1.leader.keywords = [...(s.players.p1.leader.keywords || []), 'Command 1'];
+  s.players.p1.resources = { Frost: 3 };
+  const u = addUnit(s, 'p1', 3, 3);
+  u.exhausted = true;
+  u.frozen = 1;
+  const c = gameReducer(s, { type: 'LEADER_COMMAND', targetId: u.instanceId });
+  const after = c.players.p1.board.find((b) => b.instanceId === u.instanceId)!;
+  assert(after.exhausted, 'Frozen unit cannot be Commanded');
+  assert((c.players.p1.resources.Frost || 0) === 3, 'no resources spent on rejected Command');
+}
+
+// --- Simultaneous KO: active player loses ----------------------------------------
+{
+  const s = actionState();
+  s.players.p1.leader.damageTaken = (s.players.p1.leader.health || 30);
+  s.players.p2.leader.damageTaken = (s.players.p2.leader.health || 30);
+  const c = gameReducer(s, { type: 'END_TURN' });
+  assert(c.winner === 'p2', 'simultaneous KO is lost by the active player');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

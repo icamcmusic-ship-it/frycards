@@ -142,10 +142,11 @@ export function effArmor(card: GameCard): number {
 }
 
 export function maxItemCapacity(unit: GameCard): number {
+  // Modularity [X] raises capacity by X (a bare "Modularity" counts as 1).
   let capacity = 2;
-  if (kwActive(unit, 'Modularity')) capacity += 1;
+  if (kwActive(unit, 'Modularity')) capacity += Math.max(1, keywordValue(unit, 'Modularity'));
   for (const it of unit.attachedItems || []) {
-    if (!it.glitched && hasKeyword(it, 'Modularity')) capacity += 1;
+    if (!it.glitched && hasKeyword(it, 'Modularity')) capacity += Math.max(1, keywordValue(it, 'Modularity'));
   }
   return capacity;
 }
@@ -297,13 +298,19 @@ export function initialGameState(
 }
 
 function checkWin(next: GameState) {
-  for (const p of Object.values(next.players)) {
-    recalcHealth(p);
-    if (p.health <= 0 && !next.winner) {
-      next.winner = p.id === next.player1Id ? next.player2Id : next.player1Id;
-      next.phase = 'GAME_OVER';
-    }
+  const all = Object.values(next.players);
+  for (const p of all) recalcHealth(p);
+  if (next.winner) return;
+  const dead = all.filter((p) => p.health <= 0);
+  if (dead.length === 0) return;
+  if (dead.length === all.length) {
+    // Simultaneous KO: the active player initiated the destruction and loses.
+    const loserId = next.activePlayerId;
+    next.winner = loserId === next.player1Id ? next.player2Id : next.player1Id;
+  } else {
+    next.winner = dead[0].id === next.player1Id ? next.player2Id : next.player1Id;
   }
+  next.phase = 'GAME_OVER';
 }
 
 // ---------------------------------------------------------------------------
@@ -412,14 +419,14 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
   for (const u of player.board) if (u.frozen > 0) u.frozen -= 1;
   if (player.leader.frozen > 0) player.leader.frozen -= 1;
 
-  // Temporary buffs expire at end of turn; Glitch wears off at Cleanup (§2.3).
-  for (const pl of Object.values(next.players)) {
-    for (const u of pl.board) {
-      u.glitched = false;
-      for (const it of u.attachedItems) it.glitched = false;
-    }
-    pl.leader.glitched = false;
+  // Temporary buffs expire at end of turn; Glitch wears off at the affected
+  // controller's own Cleanup (§2.3) — so a Unit Glitched during the enemy's
+  // combat stays disabled through its controller's whole next turn.
+  for (const u of player.board) {
+    u.glitched = false;
+    for (const it of u.attachedItems) it.glitched = false;
   }
+  player.leader.glitched = false;
   for (const u of player.board) {
     u.tempAtk = 0;
     u.tempHp = 0;
@@ -620,6 +627,7 @@ function reduce(state: GameState, action: GameAction): GameState {
 
   switch (action.type) {
     case 'START_GAME':
+      if (next.phase !== 'INIT') return next;
       next.phase = 'MULLIGAN';
       next.log.push('Mulligan phase started.');
       return next;
@@ -998,8 +1006,11 @@ function reduce(state: GameState, action: GameAction): GameState {
           const roll = Math.floor(Math.random() * 6) + 1;
           if (roll >= 5) {
             next.log.push(`Echo duplicated ${card.name}!`);
-            // random target for the copy
-            const pool = card.effect?.target === 'friendly' ? activePlayer.board : opponent.board;
+            // random target for the copy — Lurk still protects enemy Units
+            const pool =
+              card.effect?.target === 'friendly'
+                ? activePlayer.board
+                : opponent.board.filter((u) => !lurkProtected(u));
             const rnd = pool[Math.floor(Math.random() * pool.length)];
             resolveEvent(next, activePlayer, opponent, card, rnd?.instanceId);
           }
@@ -1103,8 +1114,13 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (next.phase !== 'ACTION') return next;
       const x = kwValueActive(activePlayer.leader, 'Command');
       if (x <= 0) return next;
+      if (activePlayer.leader.frozen > 0) return next; // Freeze locks Leader abilities (§3)
       const target = activePlayer.board.find((u) => u.instanceId === action.targetId && u.type === 'Unit');
       if (!target) return next;
+      if (target.frozen > 0) {
+        next.log.push(`${target.name} is Frozen and cannot be Commanded.`);
+        return next;
+      }
       if (!canAfford({ Generic: x }, activePlayer.resources)) return next;
       payCost({ Generic: x }, activePlayer.resources);
       target.exhausted = false;
@@ -1180,7 +1196,9 @@ function reduce(state: GameState, action: GameAction): GameState {
     }
 
     case 'SUBMIT_ATTACKS': {
-      if (!next.combat) return next;
+      // Phase guard: a stray second submit (or one sent during the block step)
+      // must not re-pay Burden or re-increment attacksThisTurn.
+      if (next.phase !== 'COMBAT_DECLARE' || !next.combat) return next;
       if (next.combat.attackers.length === 0) {
         next.phase = 'ACTION';
         next.combat = null;
@@ -1250,7 +1268,9 @@ function reduce(state: GameState, action: GameAction): GameState {
     }
 
     case 'SUBMIT_BLOCKS': {
-      if (!next.combat) return next;
+      // Only the defender may resolve combat, and only during the block step —
+      // otherwise the attacker could skip the opponent's blocks entirely.
+      if (next.phase !== 'COMBAT_BLOCK' || !next.combat) return next;
       return resolveCombat(next, activePlayer, opponent);
     }
 
@@ -1328,7 +1348,7 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       let dmgLeft = attackerAtk;
       for (const block of blocks) {
         const blocker = entityMap.get(block.blockerId);
-        if (!blocker) continue;
+        if (!blocker || isDead(blocker, next)) continue; // died earlier in the wave
         const blockerRemaining = totalRemaining(blocker, next);
         // Assign enough to chew through Armor + remaining health, capped by what's left.
         const assigned = Math.min(dmgLeft, blockerRemaining + effArmor(blocker));
@@ -1351,9 +1371,16 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         next.log.push(`${attacker.name} Pierced ${dmgLeft} to ${opponent.name}'s Leader.`);
       }
     } else {
-      // Unblocked: hit the declared target.
+      // Unblocked: hit the declared target. A target already destroyed
+      // earlier in the wave neither absorbs the hit nor counter-attacks —
+      // the attack simply fizzles (the attacker stays exhausted).
       let target = entityMap.get(attack.targetId);
       if (!target) continue;
+      if (target.type === 'Unit' && isDead(target, next)) {
+        next.log.push(`${attacker.name}'s attack fizzled: its target was already destroyed.`);
+        continue;
+      }
+      if (attacker.type === 'Unit' && isDead(attacker, next)) continue; // attacker died to an earlier counter
       // Guard Interlock (§2.1/§5.2): while a ready Guard Unit stands, every
       // enemy attack (Leader strikes included) is forced onto a Guard Unit.
       if (target.ownerId === opponent.id && !kwActive(target, 'Guard')) {
