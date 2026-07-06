@@ -125,8 +125,9 @@ function compositions(total: number, elements: string[]): Record<string, number>
 function allocationScore(state: GameState, me: PlayerState, alloc: Record<string, number>): number {
   const pool: Record<string, number> = { ...me.resources };
   for (const [el, v] of Object.entries(alloc)) pool[el] = (pool[el] || 0) + v;
-  const singleColor = Object.values({ ...alloc }).filter((v) => v > 0).length === 1
-    && Object.values(me.resources).every((v) => !v || Object.keys(alloc).some((k) => alloc[k] > 0 && me.resources[k] === v));
+  // Pure checks the resulting resource pool: exactly one non-Generic color lit.
+  const litColors = Object.entries(pool).filter(([el, v]) => el !== 'Generic' && v > 0).length;
+  const singleColor = litColors === 1;
 
   const ranked = [...me.hand].sort((a, b) => cardPlayValue(state, me, b) - cardPlayValue(state, me, a));
   let weight = 0;
@@ -188,6 +189,12 @@ function unitValue(u: GameCard, state: GameState): number {
   if (kwActive(u, 'Siphon')) v += 1;
   if (kwActive(u, 'Lurk')) v += 1;
   if (kwActive(u, 'Overdrive')) v += atk * 0.5;
+  if (kwActive(u, 'Reap')) v += 1;
+  if (kwActive(u, 'Feedback')) v += 1;
+  if (kwActive(u, 'Ward')) v += 0.5;
+  v += kwActive(u, 'Wither') ? keywordValue(u, 'Wither') * 0.8 : 0;
+  v += kwActive(u, 'Sustain') ? keywordValue(u, 'Sustain') * 0.5 : 0;
+  if (u.glitched) v *= 0.8; // temporarily keyword-dead
   v += effArmor(u) * 0.8;
   // Location Adaptation Layer: under a SCORCH_ALL Location, units about to
   // burn out are worth almost nothing.
@@ -639,6 +646,30 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
     const top = ranked[0];
     if (top && (scoreBlock(top) > 0 || lethal)) {
       return { type: 'TOGGLE_BLOCKER', attackerId: a.instanceId, blockerId: top.instanceId };
+    }
+  }
+
+  // Gang-blocking: pile a spare blocker onto an already-blocked attacker when
+  // the current blocks won't kill it and the extra counter-damage will.
+  if (available.length > 0) {
+    for (const a of combat.attackers) {
+      const card = entity(a.instanceId);
+      if (!card || card.type === 'Leader') continue;
+      const existing = combat.blockers.filter((b) => b.attackerId === a.instanceId);
+      if (existing.length === 0) continue;
+      const counterSoFar = existing.reduce((s, b) => {
+        const bl = entity(b.blockerId);
+        return s + (bl ? effAttack(bl, state) : 0);
+      }, 0);
+      const need = damageToKill(card, state);
+      if (counterSoFar >= need) continue; // already dies
+      const helper = available.find(
+        (b) => counterSoFar + effAttack(b, state) >= need &&
+          (unitValue(card, state) > unitValue(b, state) || damageToKill(b, state) > effAttack(card, state))
+      );
+      if (helper) {
+        return { type: 'TOGGLE_BLOCKER', attackerId: a.instanceId, blockerId: helper.instanceId };
+      }
     }
   }
 
