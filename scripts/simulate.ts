@@ -33,7 +33,7 @@ function invariants(state: GameState, errors: string[]) {
   }
 }
 
-function runGame(seedNames: [string, string], gameIdx: number): { winner: string | null; turns: number; errors: string[] } {
+function runGame(seedNames: [string, string], gameIdx: number): { winner: string | null; turns: number; errors: string[]; firstPlayerWon: boolean | null; winCondition: string } {
   const errors: string[] = [];
   let state = initialGameState(true, seedNames[0], seedNames[1]);
   // Make both players CPUs.
@@ -65,13 +65,31 @@ function runGame(seedNames: [string, string], gameIdx: number): { winner: string
     lastLogLen = state.log.length;
   }
   if (actions >= MAX_ACTIONS) errors.push(`game ${gameIdx} did not terminate in ${MAX_ACTIONS} actions (turn ${state.turnNumber})`);
-  return { winner: state.winner, turns: state.turnNumber, errors };
+  // Win-condition diversity: classify how the loser's last health was taken.
+  let winCondition = 'combat';
+  if (state.winner) {
+    const loser = state.winner === 'p1' ? 'p2' : 'p1';
+    const tail = state.log.slice(-6).join(' | ');
+    if (state.players[loser].deck.length === 0 && /deckout/.test(tail)) winCondition = 'deckout';
+    else if (/Scorch damage/.test(tail) && new RegExp(state.players[loser].name).test(tail)) winCondition = 'scorch';
+    else if (/Discord/.test(tail)) winCondition = 'discord';
+  }
+  return {
+    winner: state.winner,
+    turns: state.turnNumber,
+    errors,
+    firstPlayerWon: state.winner ? state.winner === state.firstPlayerId : null,
+    winCondition,
+  };
 }
 
 const leaders = getDeckableLeaders();
 let failed = 0;
 const wins: Record<string, number> = {};
 const appearances: Record<string, number> = {};
+const winConditions: Record<string, number> = {};
+let firstWins = 0;
+let decidedGames = 0;
 let totalTurns = 0;
 for (let g = 0; g < GAMES; g++) {
   const l1 = leaders[g % leaders.length];
@@ -88,6 +106,11 @@ for (let g = 0; g < GAMES; g++) {
       appearances[l2] = (appearances[l2] || 0) + 1;
       const key = res.winner === 'p1' ? l1 : l2;
       wins[key] = (wins[key] || 0) + 1;
+      winConditions[res.winCondition] = (winConditions[res.winCondition] || 0) + 1;
+      if (res.firstPlayerWon !== null) {
+        decidedGames++;
+        if (res.firstPlayerWon) firstWins++;
+      }
     }
   } catch (err) {
     failed++;
@@ -102,4 +125,8 @@ for (const l of leaders) {
   const w = wins[l] || 0;
   console.log(`  ${l}: ${n ? ((w / n) * 100).toFixed(1) : '0.0'}% (${w}/${n})`);
 }
+if (decidedGames > 0) {
+  console.log(`First-player win rate: ${((firstWins / decidedGames) * 100).toFixed(1)}% (${firstWins}/${decidedGames})`);
+}
+console.log('Win conditions:', winConditions);
 process.exit(failed > 0 ? 1 : 0);

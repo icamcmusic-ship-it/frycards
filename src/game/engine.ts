@@ -34,12 +34,22 @@ export function canAfford(cost: Record<string, number> | undefined, resources: R
   return totalLeft >= genericCost;
 }
 
-export function payCost(cost: Record<string, number> | undefined, resources: Record<string, number>) {
-  if (!cost) return;
+/**
+ * Deduct a cost from the pool. Returns the exact per-element amounts drained
+ * so a negation (Feedback §2.2) can refund precisely what was spent —
+ * including which colored pools the Generic portion was paid from.
+ */
+export function payCost(
+  cost: Record<string, number> | undefined,
+  resources: Record<string, number>
+): Record<string, number> {
+  const paid: Record<string, number> = {};
+  if (!cost) return paid;
   let genericCost = cost.Generic || 0;
   for (const [element, amount] of Object.entries(cost)) {
     if (element === 'Generic') continue;
     resources[element] = (resources[element] || 0) - amount;
+    if (amount > 0) paid[element] = (paid[element] || 0) + amount;
   }
   // Pay generic costs from the largest remaining pool first, preserving the
   // player's scarcer colors for element-specific costs later in the turn.
@@ -48,15 +58,16 @@ export function payCost(cost: Record<string, number> | undefined, resources: Rec
     while (genericCost > 0 && resources[element] > 0) {
       resources[element] -= 1;
       genericCost -= 1;
+      paid[element] = (paid[element] || 0) + 1;
     }
   }
+  return paid;
 }
 
-function refund(cost: Record<string, number> | undefined, resources: Record<string, number>) {
-  if (!cost) return;
-  for (const [element, amount] of Object.entries(cost)) {
-    if (element === 'Generic') resources.Generic = (resources.Generic || 0) + amount;
-    else resources[element] = (resources[element] || 0) + amount;
+function refund(paid: Record<string, number> | undefined, resources: Record<string, number>) {
+  if (!paid) return;
+  for (const [element, amount] of Object.entries(paid)) {
+    resources[element] = (resources[element] || 0) + amount;
   }
 }
 
@@ -453,9 +464,11 @@ function startOfTurn(next: GameState, player: PlayerState) {
     }
   }
   if (player.leader.scorch > 0) {
-    player.leader.damageTaken += player.leader.scorch;
+    // Keyword uniformity: Leader Scorch runs the same damage pipeline as
+    // Units (Armor, Brittle and Taint all apply).
+    const dealt = applyDamageToUnit(player.leader, player.leader.scorch);
     recalcHealth(player);
-    next.log.push(`${player.name}'s Leader took ${player.leader.scorch} Scorch damage.`);
+    next.log.push(`${player.name}'s Leader took ${dealt} Scorch damage.`);
   }
 
   // SCORCH_ALL location: singe every unit for 1 at start of the controller's turn.
@@ -815,15 +828,18 @@ function reduce(state: GameState, action: GameAction): GameState {
       // London Mulligan: bottom X cards, X = number of mulligans taken (§1.2).
       const x = p.mulliganCount;
       if (x > 0) {
-        let ids = action.bottomIds;
-        if (!ids || ids.length < x) {
-          // default: bottom the last X cards
-          ids = p.hand.slice(p.hand.length - x).map((c) => c.instanceId);
-        }
+        // Server authority: exactly X cards go to the bottom, no matter what
+        // the client sent. Bogus/duplicate ids cannot dodge the penalty —
+        // any shortfall is topped up from the back of the hand.
+        const ids = [...new Set(action.bottomIds || [])];
         const toBottom: GameCard[] = [];
-        for (const id of ids.slice(0, x)) {
+        for (const id of ids) {
+          if (toBottom.length >= x) break;
           const idx = p.hand.findIndex((c) => c.instanceId === id);
           if (idx >= 0) toBottom.push(p.hand.splice(idx, 1)[0]);
+        }
+        while (toBottom.length < x && p.hand.length > 0) {
+          toBottom.push(p.hand.pop()!);
         }
         p.deck.unshift(...toBottom);
         if (toBottom.length) next.log.push(`${p.name} put ${toBottom.length} card(s) on the bottom.`);
@@ -971,6 +987,7 @@ function reduce(state: GameState, action: GameAction): GameState {
         u.summoningSickness = false;
         u.exhausted = false;
         u.attacksThisTurn = 0;
+        u.commandedThisTurn = false;
         u.abilityUsedThisTurn = false;
         for (const it of u.attachedItems) it.abilityUsedThisTurn = false;
       }
@@ -1113,10 +1130,11 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
 
-      payCost(effCost, activePlayer.resources);
-      if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
+      const paidBase = payCost(effCost, activePlayer.resources);
+      const paidWard = wardCost > 0 ? payCost({ Generic: wardCost }, activePlayer.resources) : undefined;
+      let paidGlacier: Record<string, number> | undefined;
       if (glacierTax > 0) {
-        payCost({ Generic: glacierTax }, activePlayer.resources);
+        paidGlacier = payCost({ Generic: glacierTax }, activePlayer.resources);
         next.log.push(`Glacier: ${activePlayer.name} paid ${glacierTax} extra to cast ${card.name}.`);
       }
       
@@ -1140,9 +1158,9 @@ function reduce(state: GameState, action: GameAction): GameState {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
           next.log.push(`${interactTarget!.name}'s Feedback negated ${card.name} (rolled ${roll}). Resources refunded.`);
-          refund(effCost, activePlayer.resources);
-          if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
-          if (glacierTax > 0) refund({ Generic: glacierTax }, activePlayer.resources);
+          refund(paidBase, activePlayer.resources);
+          refund(paidWard, activePlayer.resources);
+          refund(paidGlacier, activePlayer.resources);
           if (overclockVal > 0) {
             activePlayer.resources.Generic = Math.max(0, (activePlayer.resources.Generic || 0) - overclockVal);
             activePlayer.overclockPenalty = Math.max(0, activePlayer.overclockPenalty - overclockVal);
@@ -1387,16 +1405,16 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
 
-      payCost(source.cost, activePlayer.resources);
-      if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
+      const paidAbility = payCost(source.cost, activePlayer.resources);
+      const paidAbilityWard = wardCost > 0 ? payCost({ Generic: wardCost }, activePlayer.resources) : undefined;
 
       // Feedback negates abilities without bouncing the source
       if (targetsEnemy && kwActive(interactTarget!, 'Feedback')) {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
           next.log.push(`${interactTarget!.name}'s Feedback negated ${source.name}'s ability (rolled ${roll}). Resources refunded.`);
-          refund(source.cost, activePlayer.resources);
-          if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
+          refund(paidAbility, activePlayer.resources);
+          refund(paidAbilityWard, activePlayer.resources);
           return next; // ability is negated, source remains on board
         }
       }
@@ -1421,8 +1439,16 @@ function reduce(state: GameState, action: GameAction): GameState {
         next.log.push(`${target.name} is Frozen and cannot be Commanded.`);
         return next;
       }
+      // Command Cap (§2.1): each Unit may be Commanded only once per turn.
+      // Without this cap, Command + resource-on-hit effects (Surge) chain
+      // into an infinite attack loop.
+      if (target.commandedThisTurn) {
+        next.log.push(`${target.name} was already Commanded this turn.`);
+        return next;
+      }
       if (!canAfford({ Generic: x }, activePlayer.resources)) return next;
       payCost({ Generic: x }, activePlayer.resources);
+      target.commandedThisTurn = true;
       target.exhausted = false;
       target.summoningSickness = false;
       target.attacksThisTurn = Math.max(0, target.attacksThisTurn - 1);
@@ -1461,7 +1487,6 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (unit) {
         const maxAttacks = kwActive(unit, 'Overdrive') ? 2 : 1;
         if (unit.summoningSickness || unit.frozen > 0 || unit.attacksThisTurn >= maxAttacks) return next;
-        if (unit.exhausted && unit.attacksThisTurn >= maxAttacks) return next;
         // Burden (§2.1): the client locks the declaration if the combined
         // surcharge of all declared attackers cannot be paid.
         const declaredBurden = next.combat.attackers.reduce((s, a) => {

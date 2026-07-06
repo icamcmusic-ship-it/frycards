@@ -74,6 +74,8 @@ export interface GameCard extends CardTemplate {
   /** Taint [X]: extra damage taken from all sources until Cleanup. */
   tainted?: number;
   attacksThisTurn: number; // for Overdrive
+  /** true once this Unit was readied by Leader Command this turn (once per Unit per turn §2.1). */
+  commandedThisTurn?: boolean;
   /** true once this card's activated ability was used this turn. */
   abilityUsedThisTurn?: boolean;
   /** true once this card has declared an attack this match (unlocks Lurk targeting §2.1). */

@@ -463,7 +463,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "The ocean incarnate, commanding the tides.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
-    "health": 25,
+    "health": 23,
     "attack": 3
   },
   {
@@ -881,7 +881,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Her magic is as cold as the abyss.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_powerful_ethereal_Sea_Witch_with_pale_skin_and_glowing_viol_660bc480-f4fc-44d2-bd62-2cb96ed1204d_1_result.webp?updatedAt=1778240809298",
-    "health": 38,
+    "health": 33,
     "attack": 3
   },
   {
@@ -3367,7 +3367,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Her orders arrive at the speed of an eruption.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Crimson-armored_commander_overlooking_a_lava_pit._--chaos_5_-_c9144cb0-c6ac-4520-b9bb-5d988f91fca1_0.png?updatedAt=1783333969026",
-    "health": 30,
+    "health": 36,
     "attack": 3
   },
   {
