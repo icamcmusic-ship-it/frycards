@@ -1,7 +1,7 @@
 # Shifting Multiverse TCG — Monochrome & Pop
 
 A digital implementation of the **Shifting Multiverse** trading card game
-(Comprehensive Rulebook V1.6 + Master Keyword Glossary — see
+(Comprehensive Rulebook V1.7 + Master Keyword Glossary — see
 [`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full Rules Bible), built with React +
 Vite + TypeScript in the **Monochrome & Pop** visual identity (stark comic
 standard: ink borders, flat offset shadows, Montserrat 900 headings, 5:7 card

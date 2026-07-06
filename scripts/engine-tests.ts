@@ -715,5 +715,85 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   assert(effAttack(b2, c2) === 1, '+100/+100 buff expires at Cleanup like any temp buff');
 }
 
+// --- V1.7: Leader combat damage runs the standard pipeline (Armor) --------------
+{
+  const s = actionState();
+  s.players.p2.leader.keywords.push('Armor 2');
+  s.players.p2.leader.armor = 2;
+  const a = addUnit(s, 'p1', 3, 3);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: a.instanceId, targetId: s.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  assert(c.players.p2.leader.damageTaken === 1 && c.players.p2.leader.armor === 0,
+    'unblocked combat hit on a Leader honors Armor + Armor Break (§5.4 uniformity)');
+}
+
+// --- V1.7: Event damage aimed at the Leader runs the pipeline; Siphon heals dealt --
+{
+  const s = actionState();
+  s.players.p1.leader.damageTaken = 5;
+  s.players.p1.health = (s.players.p1.leader.health || 0) - 5;
+  s.players.p2.leader.keywords.push('Armor 2');
+  s.players.p2.leader.armor = 2;
+  const ev = makeEvent('p1', ['Siphon'], { action: 'damage', value: 5, target: 'leader' });
+  s.players.p1.hand.push(ev);
+  s.players.p1.resources = { Generic: 10 };
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId });
+  assert(c.players.p2.leader.damageTaken === 3,
+    'leader-target Event damage honors Leader Armor (5 - Armor 2 = 3)');
+  assert(c.players.p1.leader.damageTaken === 5 - Math.ceil(3 / 2),
+    'Siphon heals half the damage that actually landed, not the raw value');
+}
+
+// --- V1.7: Pierce overflow onto the Leader runs the pipeline ---------------------
+{
+  const s = actionState();
+  s.players.p2.leader.keywords.push('Armor 2');
+  s.players.p2.leader.armor = 2;
+  const big = addUnit(s, 'p1', 8, 8, ['Pierce']);
+  const chump = addUnit(s, 'p2', 0, 2);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: big.instanceId, targetId: s.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  c = gameReducer(c, { type: 'TOGGLE_BLOCKER', attackerId: big.instanceId, blockerId: chump.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  // 8 attack, 2 assigned to the chump, 6 overflow − Armor 2 = 4 to the Leader.
+  assert(c.players.p2.leader.damageTaken === 4, 'Pierce overflow honors Leader Armor');
+}
+
+// --- V1.7: Leader Survival Caveat is Armor-aware ---------------------------------
+{
+  const s = actionState();
+  const l1 = s.players.p1.leader;
+  l1.attack = 3;
+  l1.damageTaken = (l1.health || 30) - 2; // 2 HP left
+  s.players.p1.health = 2;
+  s.players.p2.leader.attack = 3; // raw counter 3 would be lethal…
+  l1.keywords.push('Armor 5'); // …but Armor 5 soaks it entirely
+  l1.armor = 5;
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: l1.instanceId, targetId: s.players.p2.leader.instanceId });
+  assert((c.combat?.attackers.length ?? 0) === 1,
+    'Survival Caveat lets an Armored Leader attack when the projected counter is non-lethal');
+}
+
+// --- V1.7: triple-stack pipeline order — Brittle × 2, then +Taint, then Armor ----
+{
+  const s = actionState();
+  const victim = addUnit(s, 'p2', 0, 20, ['Brittle', 'Armor 3']);
+  victim.armor = 3;
+  victim.tainted = 2;
+  const hitter = addUnit(s, 'p1', 3, 3);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: hitter.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const v = c.players.p2.board.find((u) => u.instanceId === victim.instanceId)!;
+  // 3 dmg → Brittle ×2 = 6 → Taint +2 = 8 → Armor 3 breaks, 5 lands.
+  assert(v.damageTaken === 5 && v.armor === 0,
+    'pipeline order: Brittle doubles, Taint adds, Armor breaks last (3→6→8→5)');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

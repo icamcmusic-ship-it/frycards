@@ -315,6 +315,32 @@ function recalcHealth(player: PlayerState) {
   player.health = (player.leader.health || 0) - player.leader.damageTaken;
 }
 
+/** Non-mutating preview of applyDamageToUnit: how much of AMOUNT would land? */
+export function projectedDamage(card: GameCard, amount: number): number {
+  let dmg = amount;
+  if (kwActive(card, 'Brittle')) dmg *= 2;
+  if (dmg > 0 && card.tainted) dmg += card.tainted;
+  const armor = effArmor(card);
+  if (armor > 0) {
+    if (dmg <= armor) return 0;
+    dmg -= armor;
+  }
+  return dmg;
+}
+
+/**
+ * Deal DAMAGE to a Leader through the standard pipeline (§5.4): Brittle,
+ * Taint and Armor all apply, exactly as they do for Units (keyword
+ * uniformity). Returns the damage that actually landed. Loss-of-life
+ * penalties (Deckout Law, Discord) intentionally bypass this — they are not
+ * "damage from a source" and no keyword mitigates them.
+ */
+function damageLeader(next: GameState, leader: GameCard, amount: number): number {
+  const dealt = applyDamageToUnit(leader, amount);
+  recalcHealth(next.players[leader.ownerId]);
+  return dealt;
+}
+
 function siphonHeal(source: GameCard, controller: PlayerState, damageDealt: number, targetCard?: GameCard) {
   // §2.2 Siphon: Leader recovers half the damage dealt, rounded up.
   if (damageDealt > 0 && kwActive(source, 'Siphon')) {
@@ -677,9 +703,8 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
   switch (eff.action) {
     case 'damage': {
       if (eff.target === 'leader') {
-        opp.leader.damageTaken += val;
-        recalcHealth(opp);
-        siphonHeal(card, caster, val, opp.leader);
+        const dealt = damageLeader(next, opp.leader, val);
+        siphonHeal(card, caster, dealt, opp.leader);
       } else {
         const t = findTarget();
         if (t) {
@@ -1258,7 +1283,12 @@ function reduce(state: GameState, action: GameAction): GameState {
             (u) => u.ownerId === activePlayer.id || !lurkProtected(u)
           );
 
-          const shuffled = [...validPool].sort(() => Math.random() - 0.5);
+          // Fair Shuffling (§6): Fisher-Yates — comparator shuffles are biased.
+          const shuffled = [...validPool];
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
           const chosenTargets = shuffled.slice(0, wildcastVal);
 
           if (chosenTargets.length > 0) {
@@ -1507,7 +1537,9 @@ function reduce(state: GameState, action: GameAction): GameState {
           (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0
         );
         if (guard) target = guard;
-        const counter = target ? effAttack(target, next) : 0;
+        // Pipeline-aware (§5.4): the caveat measures the counter as it would
+        // actually land on our Leader (Armor/Brittle/Taint included).
+        const counter = target ? projectedDamage(activePlayer.leader, effAttack(target, next)) : 0;
         const remaining = (activePlayer.leader.health || 0) - activePlayer.leader.damageTaken;
         if (counter >= remaining) {
           next.log.push('Leader attack blocked: counter-damage would be lethal.');
@@ -1726,8 +1758,8 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
       // Pierce (§2.1): overflow beyond the blockers' remaining health goes to
       // the defending Leader.
       if (kwActive(attacker, 'Pierce') && dmgLeft > 0 && !isDead(attacker, next)) {
-        opponent.leader.damageTaken += dmgLeft;
-        recalcHealth(opponent);
+        const dealt = damageLeader(next, opponent.leader, dmgLeft);
+        siphonHeal(attacker, playerOf(next, attacker), dealt, opponent.leader);
         next.log.push(`${attacker.name} Pierced ${dmgLeft} to ${opponent.name}'s Leader.`);
       }
     } else {
@@ -1753,22 +1785,19 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         }
       }
       if (target.type === 'Leader') {
-        const targetPlayer = playerOf(next, target);
         if (attacker.type === 'Leader') {
-          // Leader vs Leader: half damage (rounded down, min 1), full counter (§5.2).
+          // Leader vs Leader: half damage (rounded down, min 1), full counter
+          // (§5.2); both hits run the standard pipeline (§5.4).
           const dmg = Math.max(1, Math.floor(attackerAtk / 2));
-          targetPlayer.leader.damageTaken += dmg;
-          recalcHealth(targetPlayer);
-          siphonHeal(attacker, playerOf(next, attacker), dmg, target);
-          if (dmg > 0) onCombatDamageToUnit(next, attacker, target);
+          const dealt = damageLeader(next, target, dmg);
+          siphonHeal(attacker, playerOf(next, attacker), dealt, target);
+          if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
           const counter = effAttack(target, next);
-          attacker.damageTaken += counter;
-          recalcHealth(playerOf(next, attacker));
+          damageLeader(next, attacker, counter);
         } else {
-          targetPlayer.leader.damageTaken += attackerAtk;
-          recalcHealth(targetPlayer);
-          siphonHeal(attacker, playerOf(next, attacker), attackerAtk, target);
-          if (attackerAtk > 0) onCombatDamageToUnit(next, attacker, target);
+          const dealt = damageLeader(next, target, attackerAtk);
+          siphonHeal(attacker, playerOf(next, attacker), dealt, target);
+          if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
         }
       } else {
         // Leader (or unit) attacking a Unit: full both ways (§5.2).
@@ -1777,8 +1806,7 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
         const counter = effAttack(target, next);
         if (attacker.type === 'Leader') {
-          attacker.damageTaken += counter;
-          recalcHealth(playerOf(next, attacker));
+          damageLeader(next, attacker, counter);
         } else {
           const counterDealt = applyDamageToUnit(attacker, counter);
           if (counterDealt > 0) onCombatDamageToUnit(next, target, attacker);

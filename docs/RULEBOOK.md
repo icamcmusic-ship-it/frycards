@@ -1,4 +1,4 @@
-# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.6)
+# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.7)
 
 This document is the **authoritative rules reference** for the digital
 implementation. The engine (`src/game/engine.ts`) is the executable version of
@@ -40,6 +40,10 @@ this document.
 - **Deckout Law:** any failed draw (empty deck) deals **2 damage** to your
   Leader instead of drawing. This applies to the Draw Phase, `draw` effects,
   Rummage and Discord draws alike.
+- **Damage vs loss of life:** Deckout damage and Discord's 1-Leader-damage
+  fate are **loss-of-life penalties** — no keyword (Armor, Brittle, Taint)
+  modifies them. All other damage to a Leader runs the standard damage
+  pipeline (§5.4).
 
 ---
 
@@ -202,7 +206,8 @@ where a specific enemy card is implicitly chosen — the enemy Leader for
 - **Pure** Events add +2 to their value when your pool is mono-colored (§2.2.9).
 - **Echo** Events duplicate on a d6 of 5–6 with a random legal target.
 - **Wildcast X** Events pick X unique random battlefield targets themselves
-  (Leaders included; enemy Lurk still protects).
+  (Leaders included; enemy Lurk still protects). Target selection uses an
+  unbiased (Fisher-Yates) shuffle, like every other random pick in the game.
 
 ---
 
@@ -220,7 +225,9 @@ where a specific enemy card is implicitly chosen — the enemy Leader for
   ready (§4.3).
 - **Leader Survival Caveat:** the game refuses a Leader attack declaration
   whose expected counter-damage (from the declared target, or the Guard that
-  would intercept) would kill your own Leader.
+  would intercept) would kill your own Leader. The expectation is
+  **pipeline-aware** (§5.4): your Leader's Armor/Brittle/Taint are projected
+  onto the counter before comparing it to your remaining health.
 - Submitting a wave **exhausts** the attackers, marks their attack count, and
   permanently lifts Lurk on them.
 
@@ -254,14 +261,18 @@ defending Leader if the attacker survived.
   Units).
 - **Leader vs Leader:** attacker deals **half damage rounded down (min 1)**
   and takes the defending Leader's **full** counter-damage.
+- **Leader damage uniformity:** every one of these hits — including hits on
+  a Leader, counter-damage taken by an attacking Leader, and Pierce
+  overflow — runs the standard damage pipeline (§5.4). A Leader's Armor
+  soaks combat and Event damage exactly the way a Unit's does.
 
 On-combat-damage triggers, in order: **Wither → Glitch → Taint → Inferno →
 Surge**, then **Siphon** (heal half the damage dealt to enemies, rounded up)
 and **Reap** (on kill, heal the victim's printed attack).
 
 ### §5.4 The damage pipeline (single source → single card)
-Applied in this exact order — this is the answer to every "which applies
-first?" question:
+Applied in this exact order to **Units and Leaders alike** — this is the
+answer to every "which applies first?" question:
 
 1. **Brittle** doubles the incoming damage.
 2. **Taint [X]** adds +X (after doubling: a Brittle+Tainted card takes
@@ -341,7 +352,31 @@ card's keywords are all inactive until they wear off.
 
 ## Change log
 
-**V1.6 (this revision)**
+**V1.7 (this revision)**
+- **Leader damage uniformity** (rules fix): all damage dealt to a Leader —
+  unblocked combat hits, Leader-vs-Leader exchanges, counter-damage to an
+  attacking Leader, Pierce overflow and `damage`-verb Events — now runs the
+  standard §5.4 pipeline (Brittle → Taint → Armor → health), exactly like
+  Units. Previously only Scorch and *blocked* combat were uniform; an
+  Armored Leader took full damage from an unblocked swing. Siphon now heals
+  from the damage that actually **landed** on a Leader, not the raw value.
+- **Deckout & Discord are loss of life** (clarified §1.3): these penalties
+  bypass the pipeline by design; no keyword mitigates them.
+- **Leader Survival Caveat is pipeline-aware** (§5.1): the pre-declaration
+  lethality check projects Armor/Brittle/Taint onto the expected counter, so
+  an Armored Leader is no longer wrongly barred from attacking.
+- **Fair shuffling**: Wildcast target selection replaced a biased
+  comparator shuffle with Fisher-Yates (§4.1).
+- **CPU improvements**: Leader Command is now also used as pseudo-haste
+  (readying a freshly deployed Unit so it can join the wave), Command that
+  completes lethal is always taken, and the CPU mulligans hands with no
+  Units. The new CPU beats the V1.6 CPU 55.8% over 240 mirrored games.
+- **Balance validated, no card changes**: over 600 CPU-vs-CPU games with the
+  improved AI, all six Leaders land between 45.0% and 52.5% win rate
+  (first-player win rate 51.5%). The V1.6 outliers (Mer-King 61%, Crimson
+  Vector Commander 39%) were artifacts of the old AI, not card imbalance.
+
+**V1.6**
 - **Command Cap** (new): a Unit may be readied by Leader Command only once
   per turn. Closes the infinite Command + Surge resource/attack loop.
 - **London Mulligan enforcement** hardened: bottoming exactly X cards is
