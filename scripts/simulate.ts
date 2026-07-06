@@ -22,7 +22,9 @@ function invariants(state: GameState, errors: string[]) {
     }
     for (const u of p.board) {
       check(totalRemaining(u, state) > 0 || state.phase === 'GAME_OVER',
-        `dead unit ${u.name} (${totalRemaining(u, state)} hp) left on board`, state, errors);
+        `dead unit ${u.name} (${totalRemaining(u, state)} hp) left on board ` +
+        `[hp=${u.health} dmg=${u.damageTaken} bonusDmg=${u.bonusDamage} tempHp=${u.tempHp} witherHp=${u.witherHp} kw=${u.keywords.join('/')} items=${u.attachedItems.length}]`,
+        state, errors);
       check(u.attachedItems.length <= 3, `${u.name} exceeds item capacity`, state, errors);
     }
     check(p.health <= (p.leader.health || 30), `${p.name} health above printed max`, state, errors);

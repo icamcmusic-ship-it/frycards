@@ -582,7 +582,7 @@ function declareAttacks(state: GameState, me: PlayerState, opp: PlayerState): Ga
 /** Command [X]: pay to re-ready a strong Unit for another swing. */
 function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): GameAction | null {
   const x = keywordValue(me.leader, 'Command');
-  if (x <= 0 || me.leader.glitched) return null;
+  if (x <= 0 || me.leader.glitched || me.leader.frozen > 0) return null;
   if (state.turnNumber <= 1) return null;
   if (!canAfford({ Generic: x }, me.resources)) return null;
   // Only worth it for a unit that already attacked and hits harder than the cost.
@@ -627,12 +627,25 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
   const unblocked = combat.attackers
     .filter((a) => !blockedAttackers.has(a.instanceId))
     .map((a) => ({ a, card: entity(a.instanceId)! }))
-    .filter((x) => x.card && x.card.type !== 'Leader') // Leaders cannot be blocked by design here
+    .filter((x) => !!x.card)
     .sort((x, y) => effAttack(y.card, state) - effAttack(x.card, state));
 
   for (const { a, card } of unblocked) {
     const atkVal = effAttack(card, state);
+    const isLeaderAttacker = card.type === 'Leader';
+    const attackerLife = isLeaderAttacker ? (card.health || 0) - card.damageTaken : 0;
     const scoreBlock = (b: GameCard): number => {
+      // Blocking an enemy Leader: it takes the blocker's full counter-damage
+      // and its strike is soaked — often free value, lethal if it finishes it.
+      if (isLeaderAttacker) {
+        const kills = effAttack(b, state) >= attackerLife;
+        const survives = damageToKill(b, state) > atkVal;
+        let s = effAttack(b, state) * 0.5; // chip the enemy Leader
+        if (kills) s += 100; // blocking wins the game
+        if (survives) s += unitValue(b, state) * 0.5;
+        else s -= unitValue(b, state) * 0.7;
+        return s;
+      }
       const kills = effAttack(b, state) >= damageToKill(card, state);
       const survives = damageToKill(b, state) > atkVal;
       let s = 0;
