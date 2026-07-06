@@ -85,6 +85,73 @@ function kwValueActive(card: GameCard, name: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Player auras (new-set keywords): Valor / Codex / Beacon / Inspire / Sync /
+// Glacier / Flourish / Discord radiate from a player's Leader, their active
+// Charms, and the active Location while they control it (Symmetric Locations
+// radiate to both players). A bare keyword counts as 1.
+// ---------------------------------------------------------------------------
+function auraSources(state: GameState, playerId: string): GameCard[] {
+  const p = state.players[playerId];
+  if (!p) return [];
+  const out: GameCard[] = [p.leader];
+  for (const c of p.charms) if (c.charmActivated && !c.glitched) out.push(c);
+  const loc = state.activeLocation;
+  if (loc && (state.activeLocationOwnerId === playerId || hasKeyword(loc, 'Symmetric'))) {
+    out.push(loc);
+  }
+  return out;
+}
+function auraValue(state: GameState, playerId: string, name: string): number {
+  return auraSources(state, playerId).reduce(
+    (s, c) => s + (!c.glitched && hasKeyword(c, name) ? Math.max(1, keywordValue(c, name)) : 0),
+    0
+  );
+}
+
+/** Solitary [X] (new set): +X/+X while this is the owner's only Unit in play. */
+function solitaryBuff(card: GameCard, state: GameState): number {
+  if (card.type !== 'Unit' || !kwActive(card, 'Solitary')) return 0;
+  const player = state.players[card.ownerId];
+  if (!player) return 0;
+  const others = player.board.filter((u) => u.instanceId !== card.instanceId).length;
+  return others === 0 ? Math.max(1, keywordValue(card, 'Solitary')) : 0;
+}
+
+/** Overcharge [X] (new set): attached Items grant +X/+X while their upkeep is paid. */
+function overchargeBuff(card: GameCard): number {
+  return (card.attachedItems || []).reduce(
+    (s, it) => s + (!it.glitched && hasKeyword(it, 'Overcharge') ? Math.max(1, keywordValue(it, 'Overcharge')) : 0),
+    0
+  );
+}
+
+/**
+ * Efficient [X] (new set): reduce a Unit's deploy cost by the banked discount —
+ * Generic requirements shrink first, then the largest color requirements.
+ */
+function discountCost(
+  cost: Record<string, number> | undefined,
+  discount: number
+): Record<string, number> | undefined {
+  if (!cost || discount <= 0) return cost;
+  const c = { ...cost };
+  let d = discount;
+  const take = (el: string) => {
+    const t = Math.min(c[el] || 0, d);
+    if (t > 0) {
+      c[el] = (c[el] || 0) - t;
+      d -= t;
+    }
+  };
+  take('Generic');
+  for (const el of Object.keys(c).sort((a, b) => (c[b] || 0) - (c[a] || 0))) {
+    if (d <= 0) break;
+    if (el !== 'Generic') take(el);
+  }
+  return c;
+}
+
+// ---------------------------------------------------------------------------
 // Stat calculation (Layer Rule §5.3: Locations first, then Items)
 // ---------------------------------------------------------------------------
 function locAtkBuff(state: GameState): number {
@@ -115,11 +182,23 @@ function phalanxHp(card: GameCard, state: GameState): number {
 }
 export function effAttack(card: GameCard, state: GameState): number {
   const loc = card.type === 'Unit' ? locAtkBuff(state) : 0;
-  return Math.max(0, (card.attack || 0) + card.tempAtk + itemAtk(card) - card.witherAtk + loc);
+  // Valor (new set): an aura of +X attack on all of the controller's Units.
+  const valor = card.type === 'Unit' ? auraValue(state, card.ownerId, 'Valor') : 0;
+  return Math.max(
+    0,
+    (card.attack || 0) + card.tempAtk + itemAtk(card) - card.witherAtk + loc + valor +
+      solitaryBuff(card, state) + overchargeBuff(card)
+  );
 }
 export function effMaxHealth(card: GameCard, state: GameState): number {
   const loc = card.type === 'Unit' ? locHpBuff(state) : 0;
-  return Math.max(0, (card.health || 0) + card.tempHp - card.witherHp + loc + phalanxHp(card, state));
+  // Codex (new set): an aura of +X max health on all of the controller's Units.
+  const codex = card.type === 'Unit' ? auraValue(state, card.ownerId, 'Codex') : 0;
+  return Math.max(
+    0,
+    (card.health || 0) + card.tempHp - card.witherHp + loc + phalanxHp(card, state) + codex +
+      solitaryBuff(card, state) + overchargeBuff(card)
+  );
 }
 export function baseRemaining(card: GameCard, state: GameState): number {
   return effMaxHealth(card, state) - card.damageTaken;
@@ -192,7 +271,9 @@ function applyDamageToUnit(
 ): number {
   let dmg = amount;
   if (kwActive(card, 'Brittle')) dmg *= 2; // §2.3 Brittle: incoming D becomes 2D
-  
+  if (dmg > 0 && card.tainted) dmg += card.tainted; // Taint [X] (new set): +X from all sources until Cleanup
+
+
   const currentArmor = opts.bypassArmor ? 0 : effArmor(card);
   if (currentArmor > 0) {
     if (dmg <= currentArmor) return 0; // Armor absorbs, remains
@@ -338,6 +419,19 @@ function startOfTurn(next: GameState, player: PlayerState) {
     next.log.push(`${player.name} revealed the Location "${pick.name}".`);
   }
 
+  // Hatchling [X] (new set): a revealed Location seeds X 1/1 tokens for its
+  // controller; a Symmetric Location hatches for both players.
+  if (next.activeLocation) {
+    const hatch = keywordValue(next.activeLocation, 'Hatchling');
+    if (hatch > 0) {
+      const recipients = hasKeyword(next.activeLocation, 'Symmetric') ? [player, opp] : [player];
+      for (const pl of recipients) {
+        for (let i = 0; i < hatch; i++) pl.board.push(makeToken('Hatchling', 1, 1, pl.id));
+        next.log.push(`Hatchling (${next.activeLocation.name}): ${pl.name} created ${hatch} 1/1 token(s).`);
+      }
+    }
+  }
+
   // Sustain (§2.3): heal at the very start of the turn, before the roll.
   for (const u of player.board) {
     const s = kwValueActive(u, 'Sustain');
@@ -376,6 +470,30 @@ function startOfTurn(next: GameState, player: PlayerState) {
     if (!charm.charmActivated) {
       charm.charmActivated = true;
       next.log.push(`Charm "${charm.name}" is now active on ${player.name}.`);
+    }
+  }
+
+  // Discord (new set): each active Discord source rolls the dice of fate —
+  // gain 1 Generic resource, draw 1 card, or the Leader takes 1 damage.
+  for (const src of auraSources(next, player.id)) {
+    if (src.glitched || !hasKeyword(src, 'Discord')) continue;
+    const fate = Math.floor(Math.random() * 3);
+    if (fate === 0) {
+      player.resources.Generic = (player.resources.Generic || 0) + 1;
+      next.log.push(`Discord (${src.name}): ${player.name} gains 1 Generic resource.`);
+    } else if (fate === 1) {
+      if (player.deck.length > 0) {
+        player.hand.push(player.deck.pop()!);
+        next.log.push(`Discord (${src.name}): ${player.name} draws a card.`);
+      } else {
+        player.leader.damageTaken += 2; // Deckout Law still applies
+        recalcHealth(player);
+        next.log.push(`Discord (${src.name}): ${player.name} took 2 deckout damage.`);
+      }
+    } else {
+      player.leader.damageTaken += 1;
+      recalcHealth(player);
+      next.log.push(`Discord (${src.name}): ${player.name}'s Leader takes 1 damage.`);
     }
   }
 
@@ -418,6 +536,22 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
     u.attacksThisTurn = 0;
   }
 
+  // Overcharge [X] (new set): upkeep is paid automatically at Cleanup when
+  // affordable; an unpaid Overcharge Item burns out and is destroyed.
+  for (const u of player.board) {
+    for (const it of [...u.attachedItems]) {
+      const oc = hasKeyword(it, 'Overcharge') ? Math.max(1, keywordValue(it, 'Overcharge')) : 0;
+      if (oc <= 0) continue;
+      if (canAfford({ Generic: oc }, player.resources)) {
+        payCost({ Generic: oc }, player.resources);
+        next.log.push(`${player.name} paid Overcharge ${oc} to keep ${it.name}.`);
+      } else {
+        detachItem(u, it.instanceId, player.graveyard);
+        next.log.push(`${it.name} burned out: its Overcharge ${oc} upkeep went unpaid.`);
+      }
+    }
+  }
+
   // Scorch counter decreases by 1 during the Cleanup Phase.
   for (const u of player.board) if (u.scorch > 0) u.scorch -= 1;
   if (player.leader.scorch > 0) player.leader.scorch -= 1;
@@ -437,7 +571,12 @@ function endOfTurnCleanup(next: GameState, player: PlayerState) {
   for (const u of player.board) {
     u.tempAtk = 0;
     u.tempHp = 0;
+    u.tainted = 0; // Taint (new set) wears off at the victim controller's Cleanup
   }
+  player.leader.tainted = 0;
+
+  // Efficient (new set): an unused deploy discount expires at end of turn.
+  player.deployDiscount = 0;
 
   // §2.1.4 discard down to 7.
   while (player.hand.length > 7) {
@@ -470,6 +609,7 @@ function sweepDeathsOnce(next: GameState): boolean {
         u.glitched = false;
         u.frozen = 0;
         u.scorch = 0;
+        u.tainted = 0;
         if (!u.isToken) p.graveyard.push(u); // Tokens vanish, bypassing graveyard triggers.
         next.log.push(`${u.name} was destroyed.`);
       } else {
@@ -605,6 +745,7 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
         t.glitched = false;
         t.tempAtk = 0;
         t.tempHp = 0;
+        t.tainted = 0;
         if (t.type === 'Leader') {
           const pl = next.players[t.ownerId];
           for (const ch of pl.charms) next.players[ch.ownerId].graveyard.push(ch);
@@ -722,6 +863,21 @@ function reduce(state: GameState, action: GameAction): GameState {
           }
         }
       }
+      // Confluence [X] (new set): the active Location grants its controller
+      // extra Generic resources at the Resource Roll.
+      if (next.activeLocation && next.activeLocationOwnerId === activePlayer.id) {
+        const conf = keywordValue(next.activeLocation, 'Confluence');
+        if (conf > 0) {
+          activePlayer.resources.Generic = (activePlayer.resources.Generic || 0) + conf;
+          next.log.push(`Confluence (${next.activeLocation.name}): +${conf} Generic resource(s).`);
+        }
+      }
+      // Flourish [X] (new set): active sources grant X Nature at the roll.
+      const flourish = auraValue(next, activePlayer.id, 'Flourish');
+      if (flourish > 0) {
+        activePlayer.resources.Nature = (activePlayer.resources.Nature || 0) + flourish;
+        next.log.push(`Flourish grants +${flourish} Nature.`);
+      }
       // Boost [X] from Leader / active Location / active Charms (§2.3).
       let boost = kwValueActive(activePlayer.leader, 'Boost');
       if (next.activeLocationOwnerId === activePlayer.id && next.activeLocation) {
@@ -837,7 +993,21 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
       }
       const card = fromGraveyard ? activePlayer.graveyard[cardIdx] : activePlayer.hand[cardIdx];
-      if (!canAfford(card.cost, activePlayer.resources)) return next;
+      // Efficient (new set): a banked discount shrinks the next Unit's cost.
+      const effCost =
+        card.type === 'Unit'
+          ? discountCost(card.cost, activePlayer.deployDiscount || 0)
+          : card.cost;
+      // Glacier (new set): enemy auras surcharge this player's Events.
+      const glacierTax = card.type === 'Event' ? auraValue(next, opponentId, 'Glacier') : 0;
+      const upfront =
+        glacierTax > 0
+          ? { ...(effCost || {}), Generic: (effCost?.Generic || 0) + glacierTax }
+          : effCost;
+      if (!canAfford(upfront, activePlayer.resources)) {
+        if (glacierTax > 0) next.log.push(`Cannot pay the Glacier ${glacierTax} surcharge.`);
+        return next;
+      }
 
       // Location Zone cap: at most 3 face-down Locations per player (§3.1).
       if (card.type === 'Location' && activePlayer.locations.length >= 3) {
@@ -905,19 +1075,28 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
 
       // Ward [X] (§2.1): targeting an enemy card costs extra; targeting is
-      // locked if the surcharge cannot be paid.
-      const wardCost = targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0;
+      // locked if the surcharge cannot be paid. Beacon (new set) grants the
+      // defender's Units aura Ward on top of any printed Ward.
+      const beaconWard =
+        targetsEnemy && interactTarget!.type === 'Unit'
+          ? auraValue(next, interactTarget!.ownerId, 'Beacon')
+          : 0;
+      const wardCost = (targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0) + beaconWard;
       if (wardCost > 0) {
-        const combined = { ...(card.cost || {}) };
-        combined.Generic = (combined.Generic || 0) + wardCost;
+        const combined = { ...(effCost || {}) };
+        combined.Generic = (combined.Generic || 0) + wardCost + glacierTax;
         if (!canAfford(combined, activePlayer.resources)) {
           next.log.push(`Cannot pay the Ward ${wardCost} surcharge.`);
           return next;
         }
       }
 
-      payCost(card.cost, activePlayer.resources);
+      payCost(effCost, activePlayer.resources);
       if (wardCost > 0) payCost({ Generic: wardCost }, activePlayer.resources);
+      if (glacierTax > 0) {
+        payCost({ Generic: glacierTax }, activePlayer.resources);
+        next.log.push(`Glacier: ${activePlayer.name} paid ${glacierTax} extra to cast ${card.name}.`);
+      }
       
       if (fromGraveyard) {
         activePlayer.graveyard.splice(cardIdx, 1);
@@ -939,8 +1118,9 @@ function reduce(state: GameState, action: GameAction): GameState {
         const roll = Math.floor(Math.random() * 6) + 1;
         if (roll >= 4) {
           next.log.push(`${interactTarget!.name}'s Feedback negated ${card.name} (rolled ${roll}). Resources refunded.`);
-          refund(card.cost, activePlayer.resources);
+          refund(effCost, activePlayer.resources);
           if (wardCost > 0) refund({ Generic: wardCost }, activePlayer.resources);
+          if (glacierTax > 0) refund({ Generic: glacierTax }, activePlayer.resources);
           if (overclockVal > 0) {
             activePlayer.resources.Generic = Math.max(0, (activePlayer.resources.Generic || 0) - overclockVal);
             activePlayer.overclockPenalty = Math.max(0, activePlayer.overclockPenalty - overclockVal);
@@ -972,6 +1152,7 @@ function reduce(state: GameState, action: GameAction): GameState {
           card.witherHp = 0;
           card.tempAtk = 0;
           card.tempHp = 0;
+          card.tainted = 0;
           card.attacksThisTurn = 0;
           card.hasAttacked = false;
           card.attachedItems = [];
@@ -987,6 +1168,24 @@ function reduce(state: GameState, action: GameAction): GameState {
         }
         activePlayer.board.push(card);
         next.log.push(`${activePlayer.name} deployed ${card.name}.`);
+        // Inspire (new set): active auras grant deployed Units +X/+X until Cleanup.
+        const inspire = auraValue(next, activePlayer.id, 'Inspire');
+        if (inspire > 0) {
+          card.tempAtk += inspire;
+          card.tempHp += inspire;
+          next.log.push(`Inspire: ${card.name} gains +${inspire}/+${inspire} until Cleanup.`);
+        }
+        // Sync (new set): active auras convert deployments into Generic resources.
+        const sync = auraValue(next, activePlayer.id, 'Sync');
+        if (sync > 0) {
+          activePlayer.resources.Generic = (activePlayer.resources.Generic || 0) + sync;
+          next.log.push(`Sync: ${activePlayer.name} gains ${sync} Generic resource(s).`);
+        }
+        // Efficient (new set): the banked discount is spent on this deploy.
+        if ((activePlayer.deployDiscount || 0) > 0) {
+          next.log.push(`Efficient: ${card.name}'s cost was reduced by ${activePlayer.deployDiscount}.`);
+          activePlayer.deployDiscount = 0;
+        }
       } else if (card.type === 'Location') {
         activePlayer.locations.push(card);
         next.log.push(`${activePlayer.name} set a Location face-down.`);
@@ -1032,6 +1231,38 @@ function reduce(state: GameState, action: GameAction): GameState {
           }
         } else {
           resolveEvent(next, activePlayer, opponent, card, action.targetId);
+        }
+
+        // Efficient [X] (new set): bank a cost discount for the next Unit
+        // deployed this turn (unused discounts expire at Cleanup).
+        const efficient = kwActive(card, 'Efficient') ? Math.max(1, keywordValue(card, 'Efficient')) : 0;
+        if (efficient > 0) {
+          activePlayer.deployDiscount = (activePlayer.deployDiscount || 0) + efficient;
+          next.log.push(`Efficient ${efficient}: the next Unit ${activePlayer.name} deploys this turn costs ${efficient} less.`);
+        }
+
+        // Rummage [X] (new set): draw X (Deckout Law applies), then discard 1
+        // card at random if anything was drawn.
+        const rummage = kwActive(card, 'Rummage') ? Math.max(1, keywordValue(card, 'Rummage')) : 0;
+        if (rummage > 0) {
+          let drew = 0;
+          for (let i = 0; i < rummage; i++) {
+            if (activePlayer.deck.length > 0) {
+              activePlayer.hand.push(activePlayer.deck.pop()!);
+              drew++;
+            } else {
+              activePlayer.leader.damageTaken += 2;
+              recalcHealth(activePlayer);
+              next.log.push(`${activePlayer.name} took 2 deckout damage (Rummage).`);
+            }
+          }
+          if (drew > 0 && activePlayer.hand.length > 0) {
+            const idx = Math.floor(Math.random() * activePlayer.hand.length);
+            const tossed = activePlayer.hand.splice(idx, 1)[0];
+            activePlayer.graveyard.push(tossed);
+            next.log.push(`Rummage ${rummage}: ${activePlayer.name} drew ${drew} and discarded ${tossed.name}.`);
+          }
+          checkWin(next);
         }
 
         // Echo (§2.3): Chaos Events may duplicate on a d6 of 5-6.
@@ -1110,7 +1341,11 @@ function reduce(state: GameState, action: GameAction): GameState {
         return next;
       }
 
-      const wardCost = targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0;
+      const abilityBeacon =
+        targetsEnemy && interactTarget!.type === 'Unit'
+          ? auraValue(next, interactTarget!.ownerId, 'Beacon')
+          : 0;
+      const wardCost = (targetsEnemy ? kwValueActive(interactTarget!, 'Ward') : 0) + abilityBeacon;
       if (wardCost > 0) {
         const combined = { ...(source.cost || {}) };
         combined.Generic = (combined.Generic || 0) + wardCost;
@@ -1345,6 +1580,31 @@ function onCombatDamageToUnit(next: GameState, attacker: GameCard, target: GameC
     for (const it of target.attachedItems || []) it.glitched = true;
     next.log.push(`${target.name} was Glitched: abilities disabled until Cleanup.`);
   }
+  // Taint [X] (new set): the damaged Unit takes +X from all sources until Cleanup.
+  const taint = kwValueActive(attacker, 'Taint');
+  if (taint > 0 && target.type === 'Unit') {
+    target.tainted = (target.tainted || 0) + taint;
+    next.log.push(`${target.name} was Tainted ${taint}.`);
+  }
+  // Inferno (new set): combat damage splashes 1 onto the victim's other Units.
+  if (kwActive(attacker, 'Inferno') && target.type === 'Unit') {
+    const victims = playerOf(next, target).board.filter((u) => u.instanceId !== target.instanceId);
+    for (const u of victims) applyDamageToUnit(u, 1);
+    if (victims.length > 0) {
+      next.log.push(`${attacker.name}'s Inferno splashed 1 damage onto ${victims.length} other Unit(s).`);
+    }
+  }
+  // Surge (new set): each Surge Item on the damage dealer taps 1 Generic resource.
+  if (attacker.type === 'Unit' && target.ownerId !== attacker.ownerId) {
+    const surges = (attacker.attachedItems || []).filter(
+      (it) => !it.glitched && hasKeyword(it, 'Surge')
+    ).length;
+    if (surges > 0) {
+      const ctrl = playerOf(next, attacker);
+      ctrl.resources.Generic = (ctrl.resources.Generic || 0) + surges;
+      next.log.push(`Surge: ${ctrl.name} gained ${surges} Generic resource(s).`);
+    }
+  }
 }
 
 function reapHeal(next: GameState, attacker: GameCard, victim: GameCard) {
@@ -1394,6 +1654,16 @@ function resolveCombat(next: GameState, activePlayer: PlayerState, opponent: Pla
         if (counterDealt > 0) onCombatDamageToUnit(next, blocker, attacker);
         if (dealt > 0 && isDead(blocker, next)) reapHeal(next, attacker, blocker);
         if (counterDealt > 0 && isDead(attacker, next)) reapHeal(next, blocker, attacker);
+        // Vengeance [X] (new set): a blocker strikes the attacking Unit for X
+        // extra damage on top of its normal counter.
+        const venge = kwActive(blocker, 'Vengeance') ? Math.max(1, keywordValue(blocker, 'Vengeance')) : 0;
+        if (venge > 0 && attacker.type === 'Unit' && !isDead(attacker, next)) {
+          const vDealt = applyDamageToUnit(attacker, venge);
+          if (vDealt > 0) {
+            next.log.push(`${blocker.name}'s Vengeance dealt ${venge} extra to ${attacker.name}.`);
+            if (isDead(attacker, next)) reapHeal(next, blocker, attacker);
+          }
+        }
         if (isDead(attacker, next)) break; // attacker died mid-swing; wave ends
       }
       // Pierce (§2.1): overflow beyond the blockers' remaining health goes to

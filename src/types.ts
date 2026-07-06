@@ -71,6 +71,8 @@ export interface GameCard extends CardTemplate {
   witherHp: number;        // permanent health reduction from Wither
   tempAtk: number;         // temporary buff (until end of turn)
   tempHp: number;
+  /** Taint [X]: extra damage taken from all sources until Cleanup. */
+  tainted?: number;
   attacksThisTurn: number; // for Overdrive
   /** true once this card's activated ability was used this turn. */
   abilityUsedThisTurn?: boolean;
@@ -104,6 +106,8 @@ export interface PlayerState {
   overclockPenalty: number; // subtracted from next roll (Overclock)
   /** true when this turn's entire resource roll went to a single color (Pure). */
   singleColorRoll: boolean;
+  /** Efficient [X]: cost reduction banked for the next Unit deployed this turn. */
+  deployDiscount?: number;
 }
 
 export type Phase =

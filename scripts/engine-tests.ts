@@ -2,7 +2,7 @@
  * Targeted engine regression tests for game rules and keywords.
  * Usage: npx tsx scripts/engine-tests.ts
  */
-import { initialGameState, gameReducer, payCost, canAfford, maxItemCapacity } from '../src/game/engine';
+import { initialGameState, gameReducer, payCost, canAfford, maxItemCapacity, effAttack, effMaxHealth } from '../src/game/engine';
 import { makeToken } from '../src/game/cards';
 import { GameState, GameCard } from '../src/types';
 
@@ -306,6 +306,258 @@ function addUnit(s: GameState, owner: string, atk: number, hp: number, keywords:
   c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   assert(c.players.p2.health === (c.players.p2.leader.health || 0), 'blocked Leader strike never reached the enemy Leader');
   assert(c.players.p1.leader.damageTaken === 3, 'attacking Leader took the blocker\'s counter-damage');
+}
+
+// ============================================================================
+// New-set keyword tests (Set 2 preview)
+// ============================================================================
+
+function makeCharm(owner: string, keywords: string[]): GameCard {
+  const c = makeToken('Charm ' + keywords.join('/'), 0, 0, owner);
+  c.type = 'Charm';
+  c.keywords = keywords;
+  c.charmActivated = true;
+  c.charmDuration = 3;
+  return c;
+}
+function makeEvent(owner: string, keywords: string[] = [], effect?: GameCard['effect']): GameCard {
+  const e = makeToken('Event ' + (keywords.join('/') || 'plain'), 0, 0, owner);
+  e.type = 'Event';
+  e.keywords = keywords;
+  e.effect = effect || { action: 'heal', value: 0, target: 'self' };
+  return e;
+}
+function makeItem(owner: string, keywords: string[]): GameCard {
+  const it = makeToken('Item ' + keywords.join('/'), 0, 0, owner);
+  it.type = 'Item';
+  it.keywords = keywords;
+  it.attach = { attack: 0, health: 0 };
+  return it;
+}
+
+// --- Vengeance: blocker deals extra damage back to the attacker ---------------
+{
+  const s = actionState();
+  const atk = addUnit(s, 'p1', 2, 10);
+  const blk = addUnit(s, 'p2', 1, 10, ['Vengeance 3']);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: atk.instanceId, targetId: c.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  c = gameReducer(c, { type: 'TOGGLE_BLOCKER', attackerId: atk.instanceId, blockerId: blk.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const a = c.players.p1.board.find((u) => u.instanceId === atk.instanceId);
+  assert(!!a && a.damageTaken === 4, 'Vengeance dealt counter (1) + extra (3) to the attacker');
+}
+
+// --- Solitary: +X/+X only while alone -----------------------------------------
+{
+  const s = actionState();
+  const solo = addUnit(s, 'p1', 1, 1, ['Solitary 2']);
+  assert(effAttack(solo, s) === 3 && effMaxHealth(solo, s) === 3, 'Solitary buffs a lone Unit');
+  addUnit(s, 'p1', 1, 1);
+  assert(effAttack(solo, s) === 1 && effMaxHealth(solo, s) === 1, 'Solitary buff lifts when an ally arrives');
+}
+
+// --- Efficient: banks a deploy discount, consumed by the next Unit ------------
+{
+  const s = actionState();
+  s.players.p1.resources = {};
+  const ev = makeEvent('p1', ['Efficient 2']);
+  s.players.p1.hand.push(ev);
+  let c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId });
+  assert((c.players.p1.deployDiscount || 0) === 2, 'Efficient banked a 2-resource discount');
+  const unit = makeToken('Costly Unit', 2, 2, 'p1');
+  unit.cost = { Generic: 2 };
+  c.players.p1.hand.push(unit);
+  c = gameReducer(c, { type: 'PLAY_CARD', instanceId: unit.instanceId });
+  assert(c.players.p1.board.some((u) => u.instanceId === unit.instanceId), 'discounted Unit deployed with zero resources');
+  assert((c.players.p1.deployDiscount || 0) === 0, 'Efficient discount consumed by the deploy');
+}
+
+// --- Rummage: draw X then discard 1 at random ----------------------------------
+{
+  const s = actionState();
+  const deckBefore = s.players.p1.deck.length;
+  const handBefore = s.players.p1.hand.length;
+  const ev = makeEvent('p1', ['Rummage 2']);
+  s.players.p1.hand.push(ev);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId });
+  assert(c.players.p1.deck.length === deckBefore - 2, 'Rummage drew 2 from the deck');
+  assert(c.players.p1.hand.length === handBefore + 1, 'Rummage net hand: -event +2 drawn -1 discarded');
+}
+
+// --- Hatchling: revealed Location seeds tokens for its controller --------------
+{
+  const s = actionState();
+  const loc = makeToken('Nest', 0, 0, 'p1');
+  loc.type = 'Location';
+  loc.keywords = ['Hatchling 2'];
+  s.players.p1.locations = [loc];
+  let c = gameReducer(s, { type: 'END_TURN' }); // p2's turn begins
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // flips p1's Location
+  assert(c.players.p2.board.filter((u) => u.name === 'Hatchling').length === 2, 'Hatchling created 2 tokens for the controller');
+}
+
+// --- Confluence: extra Generic at the controller's Resource Roll ---------------
+{
+  const s = actionState();
+  const loc = makeToken('Ley Line', 0, 0, 'p1');
+  loc.type = 'Location';
+  loc.keywords = ['Confluence 2'];
+  s.players.p1.locations = [loc];
+  let c = gameReducer(s, { type: 'END_TURN' });
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' });
+  c = gameReducer(c, { type: 'ROLL_DICE' });
+  assert((c.players.p2.resources.Generic || 0) === 2, 'Confluence granted 2 Generic at the roll');
+}
+
+// --- Overcharge: +X/+X stats, upkeep or the Item burns out ---------------------
+{
+  const s = actionState();
+  const u = addUnit(s, 'p1', 2, 2);
+  u.attachedItems.push(makeItem('p1', ['Overcharge 2']));
+  assert(effAttack(u, s) === 4 && effMaxHealth(u, s) === 4, 'Overcharge grants +2/+2');
+  s.players.p1.resources = {};
+  const c = gameReducer(s, { type: 'END_TURN' });
+  const u2 = c.players.p1.board.find((b) => b.instanceId === u.instanceId);
+  assert(!!u2 && u2.attachedItems.length === 0, 'unpaid Overcharge Item destroyed at Cleanup');
+}
+{
+  const s = actionState();
+  const u = addUnit(s, 'p1', 2, 2);
+  u.attachedItems.push(makeItem('p1', ['Overcharge 2']));
+  s.players.p1.resources = { Generic: 3 };
+  const c = gameReducer(s, { type: 'END_TURN' });
+  const u2 = c.players.p1.board.find((b) => b.instanceId === u.instanceId);
+  assert(!!u2 && u2.attachedItems.length === 1, 'paid Overcharge Item survives Cleanup');
+  assert((c.players.p1.resources.Generic || 0) === 1, 'Overcharge upkeep deducted 2 Generic');
+}
+
+// --- Surge: combat damage taps Generic resources -------------------------------
+{
+  const s = actionState();
+  const atk = addUnit(s, 'p1', 2, 10);
+  atk.attachedItems.push(makeItem('p1', ['Surge']));
+  const victim = addUnit(s, 'p2', 0, 5);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: atk.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  assert((c.players.p1.resources.Generic || 0) === 1, 'Surge granted 1 Generic on combat damage');
+}
+
+// --- Valor / Codex: charm auras buff all friendly Units -------------------------
+{
+  const s = actionState();
+  s.players.p1.charms.push(makeCharm('p1', ['Valor 2']));
+  s.players.p1.charms.push(makeCharm('p1', ['Codex 1']));
+  const u = addUnit(s, 'p1', 1, 1);
+  assert(effAttack(u, s) === 3, 'Valor 2 aura grants +2 attack');
+  assert(effMaxHealth(u, s) === 2, 'Codex 1 aura grants +1 max health');
+}
+
+// --- Inspire / Sync: deploy triggers -------------------------------------------
+{
+  const s = actionState();
+  s.players.p1.charms.push(makeCharm('p1', ['Inspire']));
+  s.players.p1.charms.push(makeCharm('p1', ['Sync 2']));
+  s.players.p1.resources = {};
+  const unit = makeToken('Recruit', 1, 1, 'p1');
+  s.players.p1.hand.push(unit);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: unit.instanceId });
+  const deployed = c.players.p1.board.find((u) => u.instanceId === unit.instanceId);
+  assert(!!deployed && deployed.tempAtk === 1 && deployed.tempHp === 1, 'Inspire granted +1/+1 on deploy');
+  assert((c.players.p1.resources.Generic || 0) === 2, 'Sync granted 2 Generic on deploy');
+}
+
+// --- Beacon: aura Ward on friendly Units ----------------------------------------
+{
+  const s = actionState();
+  s.players.p2.charms.push(makeCharm('p2', ['Beacon 1']));
+  const tgt = addUnit(s, 'p2', 1, 3);
+  const ev = makeEvent('p1', [], { action: 'damage', value: 1, target: 'unit' });
+  s.players.p1.hand.push(ev);
+  s.players.p1.resources = {};
+  let c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: tgt.instanceId });
+  assert(c.players.p1.hand.some((h) => h.instanceId === ev.instanceId), 'Beacon Ward surcharge blocked a free targeting');
+  c.players.p1.resources = { Generic: 1 };
+  c = gameReducer(c, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: tgt.instanceId });
+  const t = c.players.p2.board.find((u) => u.instanceId === tgt.instanceId);
+  assert(!!t && t.damageTaken === 1, 'Ward surcharge paid: the Event resolved');
+}
+
+// --- Taint: victim takes +X from all later sources until Cleanup ----------------
+{
+  const s = actionState();
+  const atk = addUnit(s, 'p1', 1, 10, ['Taint 2']);
+  const victim = addUnit(s, 'p2', 0, 10);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: atk.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  let v = c.players.p2.board.find((u) => u.instanceId === victim.instanceId);
+  assert(!!v && v.damageTaken === 1 && (v.tainted || 0) === 2, 'combat damage applied Taint 2');
+  const ev = makeEvent('p1', [], { action: 'damage', value: 1, target: 'unit' });
+  c.players.p1.hand.push(ev);
+  c = gameReducer(c, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: victim.instanceId });
+  v = c.players.p2.board.find((u) => u.instanceId === victim.instanceId);
+  assert(!!v && v.damageTaken === 4, 'Tainted Unit took 1 + 2 from a later source');
+}
+
+// --- Glacier: enemy Events cost extra -------------------------------------------
+{
+  const s = actionState();
+  s.players.p2.charms.push(makeCharm('p2', ['Glacier']));
+  const ev = makeEvent('p1');
+  s.players.p1.hand.push(ev);
+  s.players.p1.resources = {};
+  let c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId });
+  assert(c.players.p1.hand.some((h) => h.instanceId === ev.instanceId), 'Glacier surcharge blocked a free Event');
+  c.players.p1.resources = { Generic: 1 };
+  c = gameReducer(c, { type: 'PLAY_CARD', instanceId: ev.instanceId });
+  assert(!c.players.p1.hand.some((h) => h.instanceId === ev.instanceId), 'Glacier surcharge paid: Event cast');
+  assert((c.players.p1.resources.Generic || 0) === 0, 'Glacier tax consumed the resource');
+}
+
+// --- Inferno: combat damage splashes 1 onto the victim's other Units ------------
+{
+  const s = actionState();
+  const atk = addUnit(s, 'p1', 2, 10, ['Inferno']);
+  const t1 = addUnit(s, 'p2', 0, 5);
+  const t2 = addUnit(s, 'p2', 0, 5);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: atk.instanceId, targetId: t1.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const other = c.players.p2.board.find((u) => u.instanceId === t2.instanceId);
+  assert(!!other && other.damageTaken === 1, 'Inferno splashed 1 onto the other enemy Unit');
+}
+
+// --- Flourish: Nature granted at the Resource Roll -------------------------------
+{
+  const s = actionState();
+  s.players.p1.leader.keywords = [...(s.players.p1.leader.keywords || []), 'Flourish 2'];
+  s.phase = 'ROLL';
+  const c = gameReducer(s, { type: 'ROLL_DICE' });
+  assert((c.players.p1.resources.Nature || 0) === 2, 'Flourish granted 2 Nature at the roll');
+}
+
+// --- Discord: one of three random outcomes at the start of the turn --------------
+{
+  const s = actionState();
+  s.players.p1.charms.push(makeCharm('p1', ['Discord']));
+  const handBefore = s.players.p1.hand.length;
+  let c = gameReducer(s, { type: 'END_TURN' });
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // p2's turn
+  c = gameReducer(c, { type: 'ROLL_DICE' });
+  if (c.phase === 'ALLOCATE') c = gameReducer(c, { type: 'ALLOCATE_RESOURCES', allocations: {} });
+  c = gameReducer(c, { type: 'END_TURN' });
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // p1's turn: Discord fires
+  const p1 = c.players.p1;
+  const gotResource = (p1.resources.Generic || 0) === 1;
+  const gotCard = p1.hand.length === handBefore + 1;
+  const gotHurt = p1.leader.damageTaken >= 1;
+  assert(gotResource || gotCard || gotHurt, 'Discord produced one of its three outcomes');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

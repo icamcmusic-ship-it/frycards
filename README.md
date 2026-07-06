@@ -87,6 +87,19 @@ Implemented from the rulebook:
   incl. Ward surcharge), Echo (d6 duplication), Pure (single-color roll
   bonus), plus action verbs Freeze, Scorch [X], Obliterate, Meltdown, Purge,
   Heal, Draw, Manifest.
+- **New Set keywords (preview)** — 18 engine-driven keywords staged for the
+  next set, none printed on a Blue Coral card yet: per card type —
+  Vengeance [X] / Solitary [X] (Units), Efficient [X] / Rummage [X]
+  (Events), Hatchling [X] / Confluence [X] (Locations), Overcharge [X] /
+  Surge (Items), Valor [X] / Inspire [X] (Charms) — and one per color —
+  Beacon [X] (Light), Taint [X] (Dark), Glacier [X] (Frost), Inferno
+  (Flame), Sync [X] (Tech), Flourish [X] (Nature), Codex [X] (Order),
+  Discord (Chaos). Aura keywords (Valor, Codex, Beacon, Inspire, Sync,
+  Glacier, Flourish, Discord) radiate from a player's Leader, active Charms,
+  and the active Location while they control it (Symmetric Locations radiate
+  to both players); a bare aura keyword counts as 1. Rules text lives in the
+  in-game rulebook (§8) and `src/game/keywords.ts`; each keyword has an
+  engine regression test.
 - **CPU** — mulligans, rolls/allocates, deploys units, attaches items, casts
   events with targets (incl. Meltdown/Purge), plays charms, respects Burden
   affordability, declares attackers, and assigns blocks (prioritizing lethal
@@ -107,6 +120,8 @@ even when one Phalanx Unit's death shrinks another's max health enough to
 kill it in the same instant). A hit larger than a card's total
 Armor breaks ALL of its Armor — printed and Item-granted alike. Keywords with
 no printing in the Blue Coral set (Fate, Freeze-Dry, Blessed, Scorched-Earth,
-Glaciate, Exhume) are not engine-driven. The core game loop, combat and every
+Glaciate, Exhume) are not engine-driven; the 18 New Set preview keywords ARE
+engine-driven ahead of printing so the next set can be designed against a
+working ruleset. The core game loop, combat and every
 keyword printed in the Blue Coral set are functional; see
 `scripts/engine-tests.ts` for the executable rules bible.

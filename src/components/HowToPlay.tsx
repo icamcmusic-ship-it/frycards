@@ -100,6 +100,29 @@ const SECTIONS = [
       ['Heal X', 'Removes X damage (Leaders cannot exceed their printed health).'],
     ],
   },
+  {
+    title: '8 · New Set Keywords (Preview)',
+    body: [
+      ['Vengeance X', 'Unit: when this Unit blocks, it deals X extra damage to the attacking Unit on top of its normal counter.'],
+      ['Solitary X', 'Unit: +X/+X while this is your only Unit on the battlefield.'],
+      ['Efficient X', 'Event: the next Unit you deploy this turn costs X fewer resources (Generic first, then colors; unused discounts expire at Cleanup).'],
+      ['Rummage X', 'Event: draw X cards (the Deckout Law applies), then discard 1 card at random.'],
+      ['Hatchling X', 'Location: while revealed, creates X 1/1 tokens for its controller at the start of the turn. Symmetric Hatchling Locations hatch for both players.'],
+      ['Confluence X', 'Location: grants its controller X extra Generic resources at their Resource Roll.'],
+      ['Overcharge X', 'Item: the equipped Unit gets +X/+X. At your Cleanup the upkeep of X is paid automatically if you can afford it — otherwise the Item is destroyed.'],
+      ['Surge', 'Item: whenever the equipped Unit deals combat damage to an enemy, you gain 1 Generic resource.'],
+      ['Valor X', 'Charm: your Units get +X attack while this is active.'],
+      ['Inspire X', 'Charm: Units you deploy get +X/+X until Cleanup while this is active.'],
+      ['Beacon X', 'Light: your Units have Ward X while this is active (stacks with printed Ward).'],
+      ['Taint X', 'Dark: Units this card damages in combat take +X damage from ALL sources until their controller\'s Cleanup.'],
+      ['Glacier X', 'Frost: enemy Events cost X extra resources to cast while this is active.'],
+      ['Inferno', 'Flame: combat damage this card deals to a Unit splashes 1 damage onto that Unit\'s other friendly Units.'],
+      ['Sync X', 'Tech: whenever you deploy a Unit, gain X Generic resources while this is active.'],
+      ['Flourish X', 'Nature: gain X Nature resources at your Resource Roll while this is active.'],
+      ['Codex X', 'Order: your Units get +X max health while this is active.'],
+      ['Discord', 'Chaos: at the start of your turn, randomly one of — gain 1 Generic resource, draw 1 card, or your Leader takes 1 damage.'],
+    ],
+  },
 ];
 
 export function HowToPlay({ onClose }: HowToPlayProps) {
@@ -136,7 +159,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.3
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.4
           </div>
         </div>
       </div>

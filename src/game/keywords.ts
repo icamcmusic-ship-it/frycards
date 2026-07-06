@@ -38,6 +38,25 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Purge: 'Strips a target of all Items, Charms, statuses and temporary buffs.',
   Manifest: 'Creates a token Unit. Tokens vanish when they leave the battlefield.',
   Heal: 'Heal X: removes X damage from your Leader (cannot exceed printed health).',
+  // New-set keywords (Set 2 preview) — engine-driven, not yet printed in Blue Coral.
+  Vengeance: 'Vengeance X: when this Unit blocks, it deals X extra damage to the attacking Unit.',
+  Solitary: 'Solitary X: +X/+X while this is your only Unit on the battlefield.',
+  Efficient: 'Efficient X: the next Unit you deploy this turn costs X fewer resources.',
+  Rummage: 'Rummage X: draw X cards, then discard 1 card at random.',
+  Hatchling: 'Hatchling X: while revealed, this Location creates X 1/1 tokens for its controller at the start of the turn (Symmetric: both players hatch).',
+  Confluence: 'Confluence X: this Location grants its controller X extra Generic resources at their Resource Roll.',
+  Overcharge: 'Overcharge X: the equipped Unit gets +X/+X; pay X at your Cleanup or this Item is destroyed.',
+  Surge: 'Item: whenever the equipped Unit deals combat damage to an enemy, you gain 1 Generic resource.',
+  Valor: 'Valor X: your Units get +X attack while this is active.',
+  Inspire: 'Inspire X: Units you deploy get +X/+X until Cleanup while this is active.',
+  Beacon: 'Beacon X: your Units have Ward X while this is active.',
+  Taint: 'Taint X: Units this card damages in combat take +X damage from all sources until their controller\'s Cleanup.',
+  Glacier: 'Glacier X: enemy Events cost X extra resources to cast while this is active.',
+  Inferno: 'When this card deals combat damage to a Unit, that Unit\'s other friendly Units take 1 damage.',
+  Sync: 'Sync X: whenever you deploy a Unit, gain X Generic resources while this is active.',
+  Flourish: 'Flourish X: gain X Nature resources at your Resource Roll while this is active.',
+  Codex: 'Codex X: your Units get +X max health while this is active.',
+  Discord: 'At the start of your turn, randomly: gain 1 Generic resource, draw 1 card, or your Leader takes 1 damage.',
 };
 
 /** Look up a keyword string like "Armor 2" → its glossary text. */
