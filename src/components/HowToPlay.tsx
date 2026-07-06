@@ -20,7 +20,7 @@ const SECTIONS = [
     body: [
       ['Resource Roll', 'Your leftover resources from last turn are cleared, then you roll a d6 and split the result across the elements your Leader supports. Boost adds to the roll; Fix auto-assigns 1 point to a set element.'],
       ['Draw', 'Draw 1 card. Drawing from an empty deck deals 2 damage to your Leader instead (the Deckout Law).'],
-      ['Flexible Action Phase', 'In any order, repeatedly: deploy Units, set Locations face-down, attach Items, play Charms, cast Events, use Leader Command, and declare combat assaults. Attacking exhausts a Unit, but Leader Command (and Overdrive) can set up a second assault in the same turn.'],
+      ['Flexible Action Phase', 'In any order, repeatedly: deploy Units, set Locations face-down, attach Items, play Charms, cast Events, use Leader Command, and declare combat assaults. Attacking exhausts a Unit, but Leader Command (and Overdrive) can set up a second assault in the same turn. Each Unit can be Commanded at most once per turn.'],
       ['Cleanup', 'Unspent resources persist into the opponent\'s turn. Your Charms tick down 1. Discard down to 7 cards. Temporary buffs, Glitch and the active Location reset.'],
     ],
   },
@@ -28,7 +28,7 @@ const SECTIONS = [
     title: '3 · Resources & Persistent Mana',
     body: [
       ['Allocation', 'The whole roll must be allocated immediately. Splitting is allowed only among your Leader\'s elements. Any points you leave unallocated are forfeited — they do not carry over.'],
-      ['Pure', 'Cards with Pure get a bonus if 100% of this turn\'s roll went into a single element.'],
+      ['Pure', 'Cards with Pure get a bonus if, after allocating, exactly one element is lit in your pool. Colors carried over from last turn count against this — Pure rewards a truly mono-colored pool.'],
       ['Carry-over', 'Resources you don\'t spend stay in your pool during the opponent\'s turn — they only clear at the start of your own next Resource Roll.'],
       ['Overclock', 'Grants instant extra resources now, but your next roll is penalized by the same amount.'],
     ],
@@ -62,14 +62,14 @@ const SECTIONS = [
       ['Pierce', 'Blocked damage beyond the blocker\'s health hits the enemy Leader.'],
       ['Guard', 'Enemy attacks and targeted Events must target this Unit while it is ready.'],
       ['Ward X', 'Enemies pay X extra resources to target this card.'],
-      ['Command X', 'Leader ability: pay X to instantly ready a friendly Unit for another attack.'],
+      ['Command X', 'Leader ability: pay X to instantly ready a friendly Unit for another attack. Command Cap: each Unit can be Commanded only once per turn.'],
       ['Rally X', 'Leader trait: Units you deploy from hand costing X or less get +1/+1 until Cleanup.'],
       ['Lurk', 'Cannot be targeted by enemy attacks or Events until it attacks (suppressed by Guard).'],
       ['Burden X', 'Attacking with the equipped Unit costs X extra resources.'],
       ['Symmetric', 'Location effects apply to both players and cannot be bypassed.'],
       ['Detonate X', 'Expiring Charm deals X damage to all enemy Units.'],
       ['Siphon', 'Damage dealt heals your Leader for half (rounded up).'],
-      ['Feedback', 'When targeted: 4-6 on a d6 negates the effect and refunds the caster.'],
+      ['Feedback', 'When targeted: 4-6 on a d6 negates the effect and refunds the caster exactly what was spent (Ward and Glacier surcharges included).'],
       ['Phalanx', 'Phalanx X: +X max health for each other READY friendly card on your battlefield.'],
       ['Overdrive', 'May attack twice per turn, taking 2 damage at Cleanup if it did.'],
       ['Wither X', 'Combat damage permanently shrinks the target\'s stats by X.'],
@@ -92,7 +92,7 @@ const SECTIONS = [
     title: '7 · Keyword Glossary — Action Verbs',
     body: [
       ['Freeze', 'Target cannot attack, block or use abilities until the end of its controller\'s next turn.'],
-      ['Scorch X', 'Target takes X damage at the start of each of its turns; the counter ticks down by 1 each Cleanup.'],
+      ['Scorch X', 'Target takes X damage at the start of each of its turns (Armor and Brittle apply — Units and Leaders alike); the counter ticks down by 1 each Cleanup.'],
       ['Obliterate', 'Destroys a Unit outright, bypassing Armor and death triggers.'],
       ['Meltdown', 'Destroys a target Item, then burns the host Unit for the Item\'s cost.'],
       ['Purge', 'Strips a target of all Items, Charms, statuses and temporary buffs.'],
@@ -160,7 +160,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.5
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.6
           </div>
         </div>
       </div>

@@ -1,7 +1,8 @@
 # Shifting Multiverse TCG — Monochrome & Pop
 
 A digital implementation of the **Shifting Multiverse** trading card game
-(Comprehensive Rulebook V1.1 + Master Keyword Glossary), built with React +
+(Comprehensive Rulebook V1.6 + Master Keyword Glossary — see
+[`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full Rules Bible), built with React +
 Vite + TypeScript in the **Monochrome & Pop** visual identity (stark comic
 standard: ink borders, flat offset shadows, Montserrat 900 headings, 5:7 card
 frames with 4:3 art panels). Play a full match against a CPU opponent.
@@ -34,8 +35,8 @@ nanite swarms, magma harvesters and shadow ninjas. Crimson Circuit prints
 all 18 Set-2 keywords plus the seven Blue Coral glossary keywords that had
 no printing (Brittle, Decay, Freeze, Heal, Manifest, Overdrive,
 Photosynthesis), and adds two Mythic Leaders: Crimson Vector Commander
-(Flame/Order — Command 2, Ward 2, Inspire 2, 30 HP) and Apex Nanite Shinobi
-(Tech/Dark — Command 2, Ward 2, Sync 1, 40 HP), giving every card in the
+(Flame/Order — Command 2, Ward 2, Inspire 1, 36 HP) and Apex Nanite Shinobi
+(Tech/Dark — Command 2, Ward 2, Sync 2, 40 HP), giving every card in the
 new set at least one Leader whose color pair can run it.
 
 The source of truth is `data/live_cards.csv` (Blue Coral set, 140 cards).
@@ -54,12 +55,13 @@ both sets. Each gets an auto-built legal 30-card deck (max 2 copies per
 name, ≥2 Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
 mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
 top-end). Leader stats carry per-pool balance counterweights: every Leader is
-3 ATK; Legendary Diver (30 HP, hyper-aggressive Flame/Chaos, no third
-keyword) and Avatar of the Abyss (27 HP, Sustain 1 — a per-turn heal
-compounds hard over a ~17-turn game, so it needs the lowest life total) run
-leaner than Mer-King (39 HP, Rally 2), Ethereal Sea Witch (38 HP, Boost 1)
-and Apex Nanite Shinobi (40 HP, Sync 1); Crimson Vector Commander sits at
-30 HP with Inspire 2 — its first draft carried Valor 1, but an always-on
+3 ATK; Legendary Diver (30 HP, Flame/Chaos, Fix Flame) and Avatar of the
+Abyss (23 HP, Sustain 1 — a per-turn heal compounds hard over a ~18-turn
+game, so it needs the lowest life total) run leaner than Mer-King (39 HP,
+Rally 3) and Apex Nanite Shinobi (40 HP, Sync 2); Ethereal Sea Witch
+(Boost 1 — a permanent extra resource every turn) is trimmed to 33 HP and
+Crimson Vector Commander sits at 36 HP with Inspire 1 — its first draft
+carried Valor 1, but an always-on
 attack aura on a Leader simulated at ~80% win rate no matter the HP, so
 Valor now lives on the Heart of the Thermal Grid Location instead, where the
 Shell Game time-limits it.

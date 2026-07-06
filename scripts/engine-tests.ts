@@ -618,5 +618,102 @@ function makeItem(owner: string, keywords: string[]): GameCard {
     "'friendly' Event rejected when aimed at an enemy Unit");
 }
 
+// --- KEEP_HAND: bogus bottomIds cannot dodge the London Mulligan penalty --------
+{
+  let s = initialGameState(true);
+  s.activePlayerId = 'p1';
+  s = gameReducer(s, { type: 'START_GAME' });
+  s = gameReducer(s, { type: 'MULLIGAN', playerId: 'p1' });
+  s = gameReducer(s, { type: 'KEEP_HAND', playerId: 'p1', bottomIds: ['fake-id'] });
+  assert(s.players.p1.hand.length === 4, 'invalid bottomIds still bottom exactly X cards');
+}
+{
+  let s = initialGameState(true);
+  s.activePlayerId = 'p1';
+  s = gameReducer(s, { type: 'START_GAME' });
+  s = gameReducer(s, { type: 'MULLIGAN', playerId: 'p1' });
+  s = gameReducer(s, { type: 'MULLIGAN', playerId: 'p1' });
+  const dup = s.players.p1.hand[0].instanceId;
+  s = gameReducer(s, { type: 'KEEP_HAND', playerId: 'p1', bottomIds: [dup, dup] });
+  assert(s.players.p1.hand.length === 3, 'duplicate bottomIds still bottom exactly X cards');
+}
+
+// --- Command Cap: a Unit can only be Commanded once per turn --------------------
+{
+  const s = actionState();
+  s.players.p1.leader.keywords = ['Command 1'];
+  s.players.p1.resources = { Generic: 10 };
+  const u = addUnit(s, 'p1', 3, 3);
+  u.exhausted = true;
+  u.attacksThisTurn = 1;
+  let c = gameReducer(s, { type: 'LEADER_COMMAND', targetId: u.instanceId });
+  let after = c.players.p1.board.find((b) => b.instanceId === u.instanceId)!;
+  assert(!after.exhausted && after.attacksThisTurn === 0, 'first Command readies the Unit');
+  after.exhausted = true;
+  after.attacksThisTurn = 1;
+  c = gameReducer(c, { type: 'LEADER_COMMAND', targetId: u.instanceId });
+  after = c.players.p1.board.find((b) => b.instanceId === u.instanceId)!;
+  assert(after.exhausted && (c.players.p1.resources.Generic || 0) === 9,
+    'second Command on the same Unit is rejected without charging resources');
+}
+
+// --- Feedback refund is exact: generic paid from colors returns to those colors --
+{
+  const s = actionState();
+  const feedbacker = addUnit(s, 'p2', 1, 9, ['Feedback']);
+  const ev = makeEvent('p1', [], { action: 'damage', value: 1, target: 'unit' });
+  ev.cost = { Generic: 2 };
+  s.players.p1.hand.push(ev);
+  s.players.p1.resources = { Frost: 2 };
+  // Run until Feedback actually negates once (d6 ≥ 4 — retry a few times).
+  let refunded = false;
+  for (let i = 0; i < 40 && !refunded; i++) {
+    const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: feedbacker.instanceId });
+    if (c.players.p1.hand.some((h) => h.instanceId === ev.instanceId)) {
+      refunded = true;
+      assert((c.players.p1.resources.Frost || 0) === 2 && !(c.players.p1.resources.Generic! > 0),
+        'Feedback refunds the exact colored resources spent on a Generic cost');
+    }
+  }
+  assert(refunded, 'Feedback negation occurred at least once in 40 tries');
+}
+
+// --- Leader Scorch honors Armor (keyword uniformity) -----------------------------
+{
+  const s = actionState();
+  const p2leader = s.players.p2.leader;
+  p2leader.scorch = 2;
+  p2leader.armor = 3;
+  let c = gameReducer(s, { type: 'END_TURN' });
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // p2's turn starts: scorch ticks
+  assert(c.players.p2.leader.damageTaken === 0, 'Leader Armor absorbed the Scorch tick');
+}
+
+// --- Scalability: extreme keyword values behave like small ones -----------------
+{
+  const s = actionState();
+  const tank = addUnit(s, 'p2', 0, 5, ['Armor 100']);
+  tank.armor = 100;
+  const hitter = addUnit(s, 'p1', 50, 50);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: hitter.instanceId, targetId: tank.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const t = c.players.p2.board.find((u) => u.instanceId === tank.instanceId);
+  assert(!!t && t.damageTaken === 0 && t.armor === 100, 'Armor 100 absorbs a 50 hit without breaking');
+}
+{
+  const s = actionState();
+  const buffed = addUnit(s, 'p1', 1, 1);
+  const ev = makeEvent('p1', [], { action: 'buff', value: 100, target: 'friendly' });
+  s.players.p1.hand.push(ev);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: buffed.instanceId });
+  const b = c.players.p1.board.find((u) => u.instanceId === buffed.instanceId)!;
+  assert(effAttack(b, c) === 101 && effMaxHealth(b, c) === 101, '+100/+100 buff applies exactly');
+  const c2 = gameReducer(c, { type: 'END_TURN' });
+  const b2 = c2.players.p1.board.find((u) => u.instanceId === buffed.instanceId)!;
+  assert(effAttack(b2, c2) === 1, '+100/+100 buff expires at Cleanup like any temp buff');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

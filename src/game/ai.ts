@@ -529,6 +529,22 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   const totalSwing = eligible.reduce((s, u) => s + effAttack(u, state), 0);
   const lethalPush = totalSwing >= opp.health && guards.length === 0;
 
+  // Defensive Hold-Back: when the opponent's board can swing for our whole
+  // life total next turn, keep the best defensive Unit home as a blocker
+  // instead of throwing everything at the enemy (unless we kill them first).
+  let holdBackId: string | null = null;
+  if (!lethalPush && eligible.length > 1) {
+    const oppSwing = opp.board.reduce((s, u) => s + effAttack(u, state), 0);
+    if (oppSwing >= me.health) {
+      const defenseValue = (u: GameCard) =>
+        totalRemaining(u, state) +
+        (kwActive(u, 'Guard') ? 5 : 0) +
+        (kwActive(u, 'Vengeance') ? Math.max(1, keywordValue(u, 'Vengeance')) * 2 : 0) -
+        effAttack(u, state) * 0.5;
+      holdBackId = [...eligible].sort((a, b) => defenseValue(b) - defenseValue(a))[0].instanceId;
+    }
+  }
+
   // Guard Clearing Solver: while ANY ready Guard stands, every attack not
   // explicitly aimed at a Guard gets redirected onto whichever Guard the
   // engine finds first (§5.2 Interlock) — so with 2+ simultaneous Guards,
@@ -544,6 +560,7 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   };
 
   for (const u of [...eligible].sort((a, b) => effAttack(b, state) - effAttack(a, state))) {
+    if (u.instanceId === holdBackId) continue; // reserved as a blocker
     const burden = attackBurden(u);
     if (burden > burdenBudget) continue;
     const atk = effAttack(u, state);
@@ -628,7 +645,7 @@ function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): G
   if (!canAfford({ Generic: x }, me.resources)) return null;
   // Only worth it for a unit that already attacked and hits harder than the cost.
   const target = [...me.board]
-    .filter((u) => u.attacksThisTurn > 0 && u.frozen === 0 && effAttack(u, state) > x)
+    .filter((u) => u.attacksThisTurn > 0 && !u.commandedThisTurn && u.frozen === 0 && effAttack(u, state) > x)
     .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
   if (!target) return null;
   // Make sure the re-readied unit will actually attack again profitably.
@@ -689,11 +706,18 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
       }
       const kills = blockCounter(b, state) >= damageToKill(card, state);
       const survives = damageToKill(b, state) > atkVal;
+      const savesLeader = a.targetId === defender.leader.instanceId;
       let s = 0;
       if (kills) s += unitValue(card, state) + 2;
       if (survives) s += unitValue(b, state) * 0.5;
       if (!kills && !survives) s -= unitValue(b, state); // pure chump
-      if (kwActive(card, 'Pierce') && !kills) s -= 1; // overflow still lands
+      // Soaking a Leader hit is worth something even without a kill — chip
+      // damage adds up. Pierce overflow negates most of that value.
+      if (savesLeader && (kills || survives)) s += atkVal * 0.35;
+      if (kwActive(card, 'Pierce') && !kills) {
+        s -= 1; // overflow still lands
+        if (savesLeader) s -= Math.max(0, atkVal - totalRemaining(b, state)) * 0.35;
+      }
       return s;
     };
     const ranked = [...available].sort((x, y) => scoreBlock(y) - scoreBlock(x));
