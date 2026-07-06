@@ -214,8 +214,10 @@ function unitValue(u: GameCard, state: GameState): number {
   // Location Adaptation Layer: under a SCORCH_ALL Location, units about to
   // burn out are worth almost nothing.
   if (state.activeLocation?.locEffect === 'SCORCH_ALL' && hp <= 1) v *= 0.25;
+  if (kwActive(u, 'Vengeance')) v += Math.max(1, keywordValue(u, 'Vengeance')) * 0.6;
   if (u.frozen > 0) v *= 0.6;
   if (u.scorch >= hp) v *= 0.3; // will die to its scorch counter
+  if (u.tainted > 0) v *= 0.85; // Tainted units amplify every incoming hit
   return v;
 }
 
@@ -253,6 +255,12 @@ function eventUrgency(state: GameState, me: PlayerState, card: GameCard): number
 function damageToKill(card: GameCard, state: GameState): number {
   const need = totalRemaining(card, state) + effArmor(card);
   return kwActive(card, 'Brittle') ? Math.ceil(need / 2) : need;
+}
+
+/** Counter-damage a unit deals when it BLOCKS: normal counter + Vengeance. */
+function blockCounter(b: GameCard, state: GameState): number {
+  const venge = kwActive(b, 'Vengeance') ? Math.max(1, keywordValue(b, 'Vengeance')) : 0;
+  return effAttack(b, state) + venge;
 }
 
 // ---------------------------------------------------------------------------
@@ -551,7 +559,7 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
       // A blocker that eats us and survives makes this attack a pure loss —
       // unless our value is low (acceptable trade bait) or we have Pierce.
       const eaten = readyBlockers.some(
-        (b) => effAttack(b, state) >= uHp && damageToKill(b, state) > atk
+        (b) => blockCounter(b, state) >= uHp && damageToKill(b, state) > atk
       );
       if (eaten && !kwActive(u, 'Pierce') && unitValue(u, state) >= 4) continue;
     }
@@ -679,7 +687,7 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
         else s -= unitValue(b, state) * 0.7;
         return s;
       }
-      const kills = effAttack(b, state) >= damageToKill(card, state);
+      const kills = blockCounter(b, state) >= damageToKill(card, state);
       const survives = damageToKill(b, state) > atkVal;
       let s = 0;
       if (kills) s += unitValue(card, state) + 2;
@@ -705,12 +713,12 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
       if (existing.length === 0) continue;
       const counterSoFar = existing.reduce((s, b) => {
         const bl = entity(b.blockerId);
-        return s + (bl ? effAttack(bl, state) : 0);
+        return s + (bl ? blockCounter(bl, state) : 0);
       }, 0);
       const need = damageToKill(card, state);
       if (counterSoFar >= need) continue; // already dies
       const helper = available.find(
-        (b) => counterSoFar + effAttack(b, state) >= need &&
+        (b) => counterSoFar + blockCounter(b, state) >= need &&
           (unitValue(card, state) > unitValue(b, state) || damageToKill(b, state) > effAttack(card, state))
       );
       if (helper) {

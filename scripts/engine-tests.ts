@@ -576,5 +576,47 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   assert(gotResource || gotCard || gotHurt, 'Discord produced one of its three outcomes');
 }
 
+// --- Mulligan actions are locked outside the Mulligan phase ---------------------
+{
+  const s = actionState(); // both players already kept; phase is ACTION
+  const deckBefore = s.players.p1.deck.length;
+  const handBefore = s.players.p1.hand.length;
+  let c = gameReducer(s, { type: 'MULLIGAN', playerId: 'p1' });
+  assert(
+    c.players.p1.deck.length === deckBefore && c.players.p1.hand.length === handBefore,
+    'MULLIGAN rejected outside the Mulligan phase'
+  );
+  c = gameReducer(s, { type: 'KEEP_HAND', playerId: 'p1', bottomIds: s.players.p1.hand.map((h) => h.instanceId) });
+  assert(c.players.p1.hand.length === handBefore, 'KEEP_HAND rejected outside the Mulligan phase');
+}
+{
+  let s = initialGameState(true);
+  s.activePlayerId = 'p1';
+  s = gameReducer(s, { type: 'START_GAME' });
+  s = gameReducer(s, { type: 'KEEP_HAND', playerId: 'p1' });
+  const deckBefore = s.players.p1.deck.length;
+  const c = gameReducer(s, { type: 'MULLIGAN', playerId: 'p1' });
+  assert(
+    c.players.p1.deck.length === deckBefore && c.players.p1.mulliganCount === 0,
+    'a kept hand cannot be re-mulliganed'
+  );
+}
+
+// --- 'friendly'-target Events cannot be aimed at enemy Units --------------------
+{
+  const s = actionState();
+  addUnit(s, 'p1', 1, 1);
+  const enemy = addUnit(s, 'p2', 2, 2);
+  const ev = makeToken('Buff Bolt', 0, 0, 'p1');
+  ev.type = 'Event';
+  ev.cost = {};
+  ev.effect = { action: 'buff', target: 'friendly', value: 2 };
+  s.players.p1.hand.push(ev);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: enemy.instanceId });
+  const e = c.players.p2.board.find((u) => u.instanceId === enemy.instanceId);
+  assert(!!e && e.tempAtk === 0 && c.players.p1.hand.some((h) => h.instanceId === ev.instanceId),
+    "'friendly' Event rejected when aimed at an enemy Unit");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

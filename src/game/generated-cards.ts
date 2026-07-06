@@ -1262,7 +1262,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Rally 2"
+      "Rally 3"
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
@@ -2981,7 +2981,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Fix Flame"
     ],
     "text": "He has seen the bottom of the world.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_legendary_diver_in_a_highly_modified_heavy_brass_and_steel__d425f53e-5d8e-4cd2-b28b-a12ad45e3c7b_3_result.webp?updatedAt=1778240799013",
@@ -3362,7 +3363,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Inspire 2"
+      "Inspire 1"
     ],
     "text": "Her orders arrive at the speed of an eruption.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Crimson-armored_commander_overlooking_a_lava_pit._--chaos_5_-_c9144cb0-c6ac-4520-b9bb-5d988f91fca1_0.png?updatedAt=1783333969026",

@@ -11,7 +11,7 @@ const SECTIONS = [
       ['Win Condition', 'Reduce the enemy Leader\'s health to 0. Your Leader\'s printed health is your life total. If both Leaders fall simultaneously, the active player loses.'],
       ['Deck', '30 cards led by a Leader that dictates which elements and cards your deck may contain (max 2 copies of any card).'],
       ['Setup', 'Leaders are revealed, 2 Location cards from each deck are placed face-down in the Location Zone, and each player draws 5 cards.'],
-      ['London Mulligan', 'You may shuffle your hand back and redraw 5, as many times as you like. Each time you finally keep, you must bottom 1 card per mulligan taken.'],
+      ['London Mulligan', 'You may shuffle your hand back and redraw 5, as many times as you like. When you finally keep, you must bottom 1 card per mulligan taken. Once kept, your hand is locked — mulligan decisions cannot be revisited later in the match.'],
       ['First Turn', 'A coin toss decides who goes first. The first player skips their Turn-1 draw, and nobody may attack on Turn 1.'],
     ],
   },
@@ -27,7 +27,7 @@ const SECTIONS = [
   {
     title: '3 · Resources & Persistent Mana',
     body: [
-      ['Allocation', 'The whole roll must be allocated immediately. Splitting is allowed only among your Leader\'s elements.'],
+      ['Allocation', 'The whole roll must be allocated immediately. Splitting is allowed only among your Leader\'s elements. Any points you leave unallocated are forfeited — they do not carry over.'],
       ['Pure', 'Cards with Pure get a bonus if 100% of this turn\'s roll went into a single element.'],
       ['Carry-over', 'Resources you don\'t spend stay in your pool during the opponent\'s turn — they only clear at the start of your own next Resource Roll.'],
       ['Overclock', 'Grants instant extra resources now, but your next roll is penalized by the same amount.'],
@@ -43,6 +43,7 @@ const SECTIONS = [
       ['Damage', 'Damage on Units is permanent (it does not heal at end of turn). Item bonus health absorbs damage first — destroy the Item and the damage stored on it vanishes (the Stripping Rule).'],
       ['Death Sweep', 'A Unit dies the moment its remaining health reaches 0 — including when a dynamic buff (like Phalanx) shrinks because a friendly card exhausted or left the battlefield. The check runs after every action and re-sweeps until stable, so one Phalanx Unit dying can chain into shrinking and killing another in the same instant.'],
       ['Fizzled Attacks', 'An attack whose target was already destroyed earlier in the same assault wave fizzles: no damage is dealt either way, and the attacker stays exhausted.'],
+      ['Targeting Law', 'An effect that targets a "friendly Unit" can only ever be aimed at one of your own Units — the game rejects a mis-aimed cast outright, so no resources are wasted. Vengeance triggers only on a declared block, not when a Guard passively absorbs a redirected attack.'],
     ],
   },
   {
@@ -159,7 +160,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.4
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.5
           </div>
         </div>
       </div>
