@@ -197,7 +197,14 @@ function applyDamageToUnit(
   if (currentArmor > 0) {
     if (dmg <= currentArmor) return 0; // Armor absorbs, remains
     dmg -= currentArmor;
-    card.armor = 0; // Base armor destroyed permanently when bypassed
+    // Armor Break (§2.1): a hit bigger than the total Armor shatters ALL of
+    // it — printed Armor and Item-granted Armor alike (keyword uniformity).
+    card.armor = 0;
+    for (const it of card.attachedItems || []) {
+      if (it.keywords?.some((k) => k.split(' ')[0] === 'Armor')) {
+        it.keywords = it.keywords.filter((k) => k.split(' ')[0] !== 'Armor');
+      }
+    }
   }
   let landed = 0;
   const bh = bonusHp(card) - card.bonusDamage;
@@ -613,6 +620,13 @@ function resolveEvent(next: GameState, caster: PlayerState, opp: PlayerState, ca
 // ---------------------------------------------------------------------------
 export function gameReducer(state: GameState, action: GameAction): GameState {
   const next = reduce(state, action);
+  // State-Based Death Sweep (§5.3): dynamic max health (Phalanx) can drop a
+  // damaged Unit to 0 remaining HP from ANY action (e.g. its neighbors
+  // exhausting to attack), so the death check runs after every action.
+  if (next.phase !== 'INIT' && next.phase !== 'MULLIGAN') {
+    cleanupDeaths(next);
+    checkWin(next);
+  }
   // In single-player (exactly one human), the human always views their own side.
   const humans = Object.values(next.players).filter((p) => !p.isCPU);
   if (humans.length === 1) next.viewingPlayerId = humans[0].id;

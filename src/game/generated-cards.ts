@@ -26,8 +26,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Nature": 1,
       "Generic": 2
     },
-    "attack": 3,
-    "health": 3
+    "attack": 4,
+    "health": 4
   },
   {
     "id": "chrono_phalanx",
@@ -458,12 +458,13 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Sustain 1"
     ],
     "text": "The ocean incarnate, commanding the tides.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
-    "health": 30,
-    "attack": 2
+    "health": 35,
+    "attack": 3
   },
   {
     "id": "crystalline_metropolis",
@@ -875,12 +876,13 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Boost 1"
     ],
     "text": "Her magic is as cold as the abyss.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_powerful_ethereal_Sea_Witch_with_pale_skin_and_glowing_viol_660bc480-f4fc-44d2-bd62-2cb96ed1204d_1_result.webp?updatedAt=1778240809298",
-    "health": 40,
-    "attack": 4
+    "health": 35,
+    "attack": 3
   },
   {
     "id": "flickering_sea_pens",
@@ -991,7 +993,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 2
     },
     "attack": 4,
-    "health": 2
+    "health": 3
   },
   {
     "id": "bone_white_forest",
@@ -1171,7 +1173,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "An eternal struggle in the deep. Obliterate target enemy Unit (bypasses Armor, no Parting Shot).",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_colossal_squid_wrestling_with_a_sperm_whale_both_covered_in_401e42b2-bd87-4baa-9399-4c20d6c67746_1_result.webp?updatedAt=1778240808225",
     "cost": {
-      "Dark": 1
+      "Dark": 1,
+      "Generic": 3
     },
     "effect": {
       "action": "obliterate",
@@ -1258,7 +1261,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Command 2",
-      "Ward 2"
+      "Ward 2",
+      "Rally 2"
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
@@ -1308,7 +1312,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 2
     },
-    "attack": 5,
+    "attack": 4,
     "health": 2
   },
   {
@@ -1670,7 +1674,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 2
     },
-    "attack": 5,
+    "attack": 4,
     "health": 2
   },
   {
@@ -1756,7 +1760,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 4,
+    "attack": 3,
     "health": 1
   },
   {
@@ -2981,7 +2985,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "He has seen the bottom of the world.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_legendary_diver_in_a_highly_modified_heavy_brass_and_steel__d425f53e-5d8e-4cd2-b28b-a12ad45e3c7b_3_result.webp?updatedAt=1778240799013",
-    "health": 35,
+    "health": 30,
     "attack": 3
   },
   {

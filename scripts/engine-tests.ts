@@ -203,5 +203,110 @@ function addUnit(s: GameState, owner: string, atk: number, hp: number, keywords:
   assert(c.winner === 'p2', 'simultaneous KO is lost by the active player');
 }
 
+// --- Armor Break is uniform: item armor shatters with base armor --------------
+{
+  const s = actionState();
+  const mine = addUnit(s, 'p1', 5, 5);
+  const armored = addUnit(s, 'p2', 0, 9, ['Armor 1']);
+  armored.armor = 1;
+  const plate = makeToken('Plate', 0, 0, 'p2');
+  plate.type = 'Item';
+  plate.keywords = ['Armor 2'];
+  armored.attachedItems.push(plate);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: mine.instanceId, targetId: armored.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const a = c.players.p2.board.find((u) => u.instanceId === armored.instanceId)!;
+  assert(a.damageTaken === 2, 'hit of 5 vs Armor 3 deals 2');
+  assert(a.armor === 0 && !a.attachedItems[0].keywords.includes('Armor 2'),
+    'Armor Break shatters base AND item armor');
+}
+
+// --- Wither can shrink a unit to death (max health 0) --------------------------
+{
+  const s = actionState();
+  const witherer = addUnit(s, 'p1', 1, 9, ['Wither 3']);
+  const victim = addUnit(s, 'p2', 1, 3);
+  victim.exhausted = true;
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: witherer.instanceId, targetId: victim.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  assert(!c.players.p2.board.some((u) => u.instanceId === victim.instanceId),
+    'Wither 3 + 1 damage destroys a 1/3 unit');
+}
+
+// --- Siphon does not heal off friendly-fire damage ------------------------------
+{
+  const s = actionState();
+  s.players.p1.leader.damageTaken = 10;
+  const ev = makeToken('Zap', 0, 0, 'p1');
+  ev.type = 'Event';
+  ev.keywords = ['Siphon'];
+  ev.effect = { action: 'damage', target: 'unit', value: 2 };
+  ev.cost = {};
+  s.players.p1.hand.push(ev);
+  const friendly = addUnit(s, 'p1', 1, 5);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: ev.instanceId, targetId: friendly.instanceId });
+  assert(c.players.p1.leader.damageTaken === 10, 'Siphon ignores damage dealt to own units');
+}
+
+// --- Graveborn recast enters clean (no stale damage/status) ---------------------
+{
+  const s = actionState();
+  const gb = makeToken('Revenant', 2, 2, 'p1');
+  gb.isToken = false;
+  gb.keywords = ['Graveborn'];
+  gb.cost = {};
+  gb.damageTaken = 5;
+  gb.scorch = 2;
+  s.players.p1.graveyard.push(gb);
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: gb.instanceId });
+  const u = c.players.p1.board.find((b) => b.instanceId === gb.instanceId)!;
+  assert(!!u && u.damageTaken === 0 && u.scorch === 0 && !u.glitched && u.summoningSickness,
+    'Graveborn recast is a clean copy with summoning sickness');
+}
+
+// --- Charm Detonate hits the caster's enemies on expiry -------------------------
+{
+  const s = actionState();
+  const charm = makeToken('Bomb', 0, 0, 'p1');
+  charm.type = 'Charm';
+  charm.keywords = ['Detonate 3'];
+  charm.charmDuration = 1;
+  charm.charmActivated = true;
+  s.players.p1.charms.push(charm); // self-charm cast by p1
+  const enemy = addUnit(s, 'p2', 1, 3);
+  const c = gameReducer(s, { type: 'END_TURN' });
+  assert(!c.players.p2.board.some((u) => u.instanceId === enemy.instanceId),
+    'Detonate 3 killed the enemy 1/3 on expiry');
+}
+
+// --- Deckout Law ends the game --------------------------------------------------
+{
+  let s = actionState();
+  s.players.p1.deck = [];
+  s.players.p1.leader.damageTaken = (s.players.p1.leader.health || 30) - 1;
+  s.phase = 'ALLOCATE';
+  s.pendingRoll = 0;
+  s.turnNumber = 3;
+  const c = gameReducer(s, { type: 'ALLOCATE_RESOURCES', allocations: {} });
+  assert(c.winner === 'p2' && c.phase === 'GAME_OVER', 'deckout damage can win the game');
+}
+
+// --- Blocking an attacking enemy Leader is legal and counter-damages it ---------
+{
+  const s = actionState();
+  s.players.p1.leader.attack = 4;
+  const blocker = addUnit(s, 'p2', 3, 9);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, { type: 'TOGGLE_ATTACKER', instanceId: s.players.p1.leader.instanceId, targetId: c.players.p2.leader.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  c = gameReducer(c, { type: 'TOGGLE_BLOCKER', attackerId: s.players.p1.leader.instanceId, blockerId: blocker.instanceId });
+  c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  assert(c.players.p2.health === (c.players.p2.leader.health || 0), 'blocked Leader strike never reached the enemy Leader');
+  assert(c.players.p1.leader.damageTaken === 3, 'attacking Leader took the blocker\'s counter-damage');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

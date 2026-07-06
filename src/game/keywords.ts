@@ -1,7 +1,7 @@
 /** Shared keyword glossary — used by the in-game keyword popups and the rulebook. */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   Blitz: 'May attack the turn it is deployed (no summoning sickness).',
-  Armor: 'Armor X: ignores hits of X or less. Bigger hits break the armor and deal the rest.',
+  Armor: 'Armor X: ignores hits of X or less. A bigger hit breaks ALL Armor (printed and Item-granted) and deals the rest.',
   Pierce: 'Blocked damage beyond the blocker\'s health hits the enemy Leader.',
   Guard: 'Enemy attacks and targeted Events must target this Unit while it is ready.',
   Ward: 'Ward X: enemies pay X extra resources to target this card.',

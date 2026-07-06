@@ -20,7 +20,7 @@ const SECTIONS = [
     body: [
       ['Resource Roll', 'Your leftover resources from last turn are cleared, then you roll a d6 and split the result across the elements your Leader supports. Boost adds to the roll; Fix auto-assigns 1 point to a set element.'],
       ['Draw', 'Draw 1 card. Drawing from an empty deck deals 2 damage to your Leader instead (the Deckout Law).'],
-      ['Flexible Action Phase', 'In any order, repeatedly: deploy Units, set Locations face-down, attach Items, play Charms, cast Events, use Leader Command, and declare one combat assault.'],
+      ['Flexible Action Phase', 'In any order, repeatedly: deploy Units, set Locations face-down, attach Items, play Charms, cast Events, use Leader Command, and declare combat assaults. Attacking exhausts a Unit, but Leader Command (and Overdrive) can set up a second assault in the same turn.'],
       ['Cleanup', 'Unspent resources persist into the opponent\'s turn. Your Charms tick down 1. Discard down to 7 cards. Temporary buffs, Glitch and the active Location reset.'],
     ],
   },
@@ -37,10 +37,12 @@ const SECTIONS = [
     title: '4 · Combat',
     body: [
       ['Unified Assault', 'Declare all your attackers at once; attacking exhausts them. Units with summoning sickness (deployed this turn, unless they have Blitz) and Frozen units cannot attack.'],
-      ['Blocking', 'The defender assigns ready Units as blockers. Blocking does not exhaust. Each blocker stops one attacker, but several blockers may gang up on a single attacker.'],
+      ['Blocking', 'The defender assigns ready Units as blockers. Blocking does not exhaust. Each blocker stops one attacker, but several blockers may gang up on a single attacker. Attacking Leaders can be blocked too — they take every blocker\'s full counter-damage.'],
       ['Leader Attacks', 'Your Leader may attack a Unit (full damage both ways) or the enemy Leader (you deal HALF damage rounded down, min 1 — but take FULL counter-damage). The game blocks a Leader attack that would kill your own Leader.'],
       ['Guard Interlock', 'While the defender has a ready Guard Unit, all attacks and targeted enemy Events must go at a Guard Unit.'],
       ['Damage', 'Damage on Units is permanent (it does not heal at end of turn). Item bonus health absorbs damage first — destroy the Item and the damage stored on it vanishes (the Stripping Rule).'],
+      ['Death Sweep', 'A Unit dies the moment its remaining health reaches 0 — including when a dynamic buff (like Phalanx) shrinks because a friendly card exhausted or left the battlefield. The check runs after every action.'],
+      ['Fizzled Attacks', 'An attack whose target was already destroyed earlier in the same assault wave fizzles: no damage is dealt either way, and the attacker stays exhausted.'],
     ],
   },
   {
@@ -55,11 +57,12 @@ const SECTIONS = [
     title: '6 · Keyword Glossary — Traits',
     body: [
       ['Blitz', 'May attack the turn it is deployed.'],
-      ['Armor X', 'Ignores hits of X or less. Bigger hits break the armor and deal the rest.'],
+      ['Armor X', 'Ignores hits of X or less. A bigger hit breaks ALL of the card\'s Armor — printed Armor and Item-granted Armor alike — and deals the rest.'],
       ['Pierce', 'Blocked damage beyond the blocker\'s health hits the enemy Leader.'],
       ['Guard', 'Enemy attacks and targeted Events must target this Unit while it is ready.'],
       ['Ward X', 'Enemies pay X extra resources to target this card.'],
       ['Command X', 'Leader ability: pay X to instantly ready a friendly Unit for another attack.'],
+      ['Rally X', 'Leader trait: Units you deploy from hand costing X or less get +1/+1 until Cleanup.'],
       ['Lurk', 'Cannot be targeted by enemy attacks or Events until it attacks (suppressed by Guard).'],
       ['Burden X', 'Attacking with the equipped Unit costs X extra resources.'],
       ['Symmetric', 'Location effects apply to both players and cannot be bypassed.'],
@@ -133,7 +136,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.1
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.2
           </div>
         </div>
       </div>

@@ -40,7 +40,14 @@ There are 4 Mythic Leaders — Avatar of the Abyss (Dark/Nature), Ethereal Sea
 Witch (Frost/Tech), Mer-King (Light/Order), Legendary Diver (Flame/Chaos) —
 whose element pairs cover all 8 elements and every dual color cost in the
 set. Each gets an auto-built legal 30-card deck (max 2 copies per name, ≥2
-Locations) in `src/game/deckbuilder.ts`.
+Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
+mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
+top-end). Leader stats carry per-pool balance counterweights: every Leader is
+3 ATK; Legendary Diver runs 30 HP against his hyper-aggressive Flame/Chaos
+pool while the rest run 35 HP; Ethereal Sea Witch has Boost 1, Mer-King has
+Rally 2 and Avatar of the Abyss has Sustain 1. Balance is tuned with
+`npx tsx scripts/simulate.ts <games>`, which holds every leader between
+roughly 44% and 57% winrate over headless CPU-vs-CPU games.
 
 ## Rules Coverage
 
@@ -84,8 +91,13 @@ Implemented from the rulebook:
 ### Documented simplifications
 
 The full interactive **Stack / priority** (APNAP response windows) resolves
-effects immediately rather than through passed priority. Keywords not present
-in the current card set (Lurk, Rally, Fate, Freeze-Dry, Blessed, Phalanx,
-Photosynthesis, Scorched-Earth, Glaciate, Graveborn, Modularity, Decay,
-Wildcast, Exhume, Overclock-as-Event) are not engine-driven. The core game
-loop, combat and every keyword printed in the Blue Coral set are functional.
+effects immediately rather than through passed priority — timing rules are
+deterministic instead: Armor absorbs before health, Brittle doubles before
+Armor, the Stripping Rule fills Item bonus health first, and a state-based
+**Death Sweep** runs after every action (so dynamic buffs like Phalanx can
+never leave a 0-HP Unit on the battlefield). A hit larger than a card's total
+Armor breaks ALL of its Armor — printed and Item-granted alike. Keywords with
+no printing in the Blue Coral set (Fate, Freeze-Dry, Blessed, Scorched-Earth,
+Glaciate, Exhume) are not engine-driven. The core game loop, combat and every
+keyword printed in the Blue Coral set are functional; see
+`scripts/engine-tests.ts` for the executable rules bible.
