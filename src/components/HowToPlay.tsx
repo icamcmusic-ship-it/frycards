@@ -39,9 +39,9 @@ const SECTIONS = [
       ['Unified Assault', 'Declare all your attackers at once; attacking exhausts them. Units with summoning sickness (deployed this turn, unless they have Blitz) and Frozen units cannot attack.'],
       ['Blocking', 'The defender assigns ready Units as blockers. Blocking does not exhaust. Each blocker stops one attacker, but several blockers may gang up on a single attacker. Attacking Leaders can be blocked too — they take every blocker\'s full counter-damage.'],
       ['Leader Attacks', 'Your Leader may attack a Unit (full damage both ways) or the enemy Leader (you deal HALF damage rounded down, min 1 — but take FULL counter-damage). The game blocks a Leader attack that would kill your own Leader.'],
-      ['Guard Interlock', 'While the defender has a ready Guard Unit, all attacks and targeted enemy Events must go at a Guard Unit.'],
+      ['Guard Interlock', 'While the defender has a ready Guard Unit, all attacks and targeted enemy Events must go at a Guard Unit. With multiple ready Guards you may split your attackers across them; an attack that doesn\'t name a specific Guard is auto-redirected to one.'],
       ['Damage', 'Damage on Units is permanent (it does not heal at end of turn). Item bonus health absorbs damage first — destroy the Item and the damage stored on it vanishes (the Stripping Rule).'],
-      ['Death Sweep', 'A Unit dies the moment its remaining health reaches 0 — including when a dynamic buff (like Phalanx) shrinks because a friendly card exhausted or left the battlefield. The check runs after every action.'],
+      ['Death Sweep', 'A Unit dies the moment its remaining health reaches 0 — including when a dynamic buff (like Phalanx) shrinks because a friendly card exhausted or left the battlefield. The check runs after every action and re-sweeps until stable, so one Phalanx Unit dying can chain into shrinking and killing another in the same instant.'],
       ['Fizzled Attacks', 'An attack whose target was already destroyed earlier in the same assault wave fizzles: no damage is dealt either way, and the attacker stays exhausted.'],
     ],
   },
@@ -136,7 +136,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.2
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.3
           </div>
         </div>
       </div>

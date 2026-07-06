@@ -3,7 +3,7 @@
  * Runs full games through the real reducer + AI and asserts engine invariants.
  * Usage: npx tsx scripts/simulate.ts [games]
  */
-import { initialGameState, gameReducer, totalRemaining } from '../src/game/engine';
+import { initialGameState, gameReducer, totalRemaining, maxItemCapacity } from '../src/game/engine';
 import { getCPUAction } from '../src/game/ai';
 import { getDeckableLeaders } from '../src/game/cards';
 import { GameState } from '../src/types';
@@ -25,7 +25,7 @@ function invariants(state: GameState, errors: string[]) {
         `dead unit ${u.name} (${totalRemaining(u, state)} hp) left on board ` +
         `[hp=${u.health} dmg=${u.damageTaken} bonusDmg=${u.bonusDamage} tempHp=${u.tempHp} witherHp=${u.witherHp} kw=${u.keywords.join('/')} items=${u.attachedItems.length}]`,
         state, errors);
-      check(u.attachedItems.length <= 3, `${u.name} exceeds item capacity`, state, errors);
+      check(u.attachedItems.length <= maxItemCapacity(u), `${u.name} exceeds item capacity`, state, errors);
     }
     check(p.health <= (p.leader.health || 30), `${p.name} health above printed max`, state, errors);
     // Hand limit is enforced at cleanup; give slack for mid-turn draws.
@@ -71,6 +71,7 @@ function runGame(seedNames: [string, string], gameIdx: number): { winner: string
 const leaders = getDeckableLeaders();
 let failed = 0;
 const wins: Record<string, number> = {};
+const appearances: Record<string, number> = {};
 let totalTurns = 0;
 for (let g = 0; g < GAMES; g++) {
   const l1 = leaders[g % leaders.length];
@@ -83,6 +84,8 @@ for (let g = 0; g < GAMES; g++) {
       console.error(`GAME ${g} (${l1} vs ${l2}) FAILED:`);
       for (const e of res.errors.slice(0, 8)) console.error('  - ' + e);
     } else {
+      appearances[l1] = (appearances[l1] || 0) + 1;
+      appearances[l2] = (appearances[l2] || 0) + 1;
       const key = res.winner === 'p1' ? l1 : l2;
       wins[key] = (wins[key] || 0) + 1;
     }
@@ -93,4 +96,10 @@ for (let g = 0; g < GAMES; g++) {
 }
 console.log(`\n${GAMES - failed}/${GAMES} games passed. Avg turns: ${(totalTurns / GAMES).toFixed(1)}`);
 console.log('Wins by leader:', wins);
+console.log('Win rate by leader:');
+for (const l of leaders) {
+  const n = appearances[l] || 0;
+  const w = wins[l] || 0;
+  console.log(`  ${l}: ${n ? ((w / n) * 100).toFixed(1) : '0.0'}% (${w}/${n})`);
+}
 process.exit(failed > 0 ? 1 : 0);

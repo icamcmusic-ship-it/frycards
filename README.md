@@ -43,11 +43,15 @@ set. Each gets an auto-built legal 30-card deck (max 2 copies per name, ≥2
 Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
 mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
 top-end). Leader stats carry per-pool balance counterweights: every Leader is
-3 ATK; Legendary Diver runs 30 HP against his hyper-aggressive Flame/Chaos
-pool while the rest run 35 HP; Ethereal Sea Witch has Boost 1, Mer-King has
-Rally 2 and Avatar of the Abyss has Sustain 1. Balance is tuned with
-`npx tsx scripts/simulate.ts <games>`, which holds every leader between
-roughly 44% and 57% winrate over headless CPU-vs-CPU games.
+3 ATK; Legendary Diver (30 HP, hyper-aggressive Flame/Chaos, no third
+keyword) and Avatar of the Abyss (30 HP, Sustain 1 — a per-turn heal
+compounds hard over a ~17-turn game, so it needs the lowest life total) run
+leaner than Mer-King (37 HP, Rally 2) and Ethereal Sea Witch (38 HP, Boost 1).
+Balance is tuned with `npx tsx scripts/simulate.ts <games>`, which reports a
+per-leader win rate (wins ÷ appearances) and holds every leader between
+roughly 44% and 57% over large (2000+ game) headless CPU-vs-CPU samples —
+smaller samples swing several points on variance alone, so re-tune against
+at least a couple thousand games, not a few hundred.
 
 ## Rules Coverage
 
@@ -86,7 +90,10 @@ Implemented from the rulebook:
 - **CPU** — mulligans, rolls/allocates, deploys units, attaches items, casts
   events with targets (incl. Meltdown/Purge), plays charms, respects Burden
   affordability, declares attackers, and assigns blocks (prioritizing lethal
-  saves and favorable trades). Verified with headless CPU-vs-CPU simulations.
+  saves and favorable trades). Against multiple simultaneous ready Guards it
+  spreads lethal attackers across them to clear the board instead of
+  dog-piling every attack onto a single Guard and leaving the rest
+  untouched forever. Verified with headless CPU-vs-CPU simulations.
 
 ### Documented simplifications
 
@@ -94,8 +101,10 @@ The full interactive **Stack / priority** (APNAP response windows) resolves
 effects immediately rather than through passed priority — timing rules are
 deterministic instead: Armor absorbs before health, Brittle doubles before
 Armor, the Stripping Rule fills Item bonus health first, and a state-based
-**Death Sweep** runs after every action (so dynamic buffs like Phalanx can
-never leave a 0-HP Unit on the battlefield). A hit larger than a card's total
+**Death Sweep** runs after every action and re-sweeps to a fixpoint (so
+dynamic buffs like Phalanx can never leave a 0-HP Unit on the battlefield,
+even when one Phalanx Unit's death shrinks another's max health enough to
+kill it in the same instant). A hit larger than a card's total
 Armor breaks ALL of its Armor — printed and Item-granted alike. Keywords with
 no printing in the Blue Coral set (Fate, Freeze-Dry, Blessed, Scorched-Earth,
 Glaciate, Exhume) are not engine-driven. The core game loop, combat and every
