@@ -254,6 +254,15 @@ function GameOverModal({
 
 function LogPanel({ state }: { state: GameState }) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyLog = async () => {
+    const header = `Shifting Multiverse match log — turn ${state.turnNumber}`;
+    await navigator.clipboard.writeText([header, ...state.log].join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
     <div className="relative">
       <button
@@ -264,6 +273,13 @@ function LogPanel({ state }: { state: GameState }) {
       </button>
       {open && (
         <div className="absolute top-full left-0 mt-1 w-72 max-h-48 overflow-y-auto bg-[#1A1A1A]/95 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono z-50">
+          <button
+            onClick={copyLog}
+            className="btn-pop heading-font text-[9px] bg-[#FFD54F] text-[#1A1A1A] px-1.5 py-0.5 ink-border-sm mb-1"
+            title="Copy the full match log to the clipboard"
+          >
+            {copied ? '✓ COPIED' : '⧉ COPY FULL LOG'}
+          </button>
           {state.log
             .slice(-40)
             .reverse()
@@ -415,7 +431,14 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   );
   const [showHelp, setShowHelp] = useState(false);
   const [reward, setReward] = useState<number | null>(null);
+  const [fast, setFast] = useState(() => localStorage.getItem('smv_game_speed') === 'fast');
   const recorded = useRef(false);
+
+  const toggleSpeed = () => {
+    const next = !fast;
+    setFast(next);
+    localStorage.setItem('smv_game_speed', next ? 'fast' : 'normal');
+  };
 
   // Kick off the mulligan phase once.
   useEffect(() => {
@@ -438,7 +461,8 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         'SUBMIT_BLOCKS',
         'END_TURN',
       ];
-      const delay = slowActions.includes(cpuAct.type) ? 1100 + Math.random() * 500 : 600;
+      let delay = slowActions.includes(cpuAct.type) ? 1100 + Math.random() * 500 : 600;
+      if (fast) delay = Math.min(delay, 250);
       const t = setTimeout(() => dispatch(cpuAct), delay);
       return () => clearTimeout(t);
     }
@@ -446,7 +470,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
       const t = setTimeout(() => dispatch({ type: 'ACKNOWLEDGE_TRANSITION' }), 250);
       return () => clearTimeout(t);
     }
-  }, [state]);
+  }, [state, fast]);
 
   // Record the result + pay out gold once per match (accounts only).
   useEffect(() => {
@@ -488,6 +512,16 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
           title="How to Play"
         >
           ? RULES
+        </button>
+        <button
+          onClick={toggleSpeed}
+          className={cn(
+            'btn-pop heading-font text-[11px] px-2.5 py-1 ink-border-sm shadow-hard-black-xs',
+            fast ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#2C3E50] text-[#F7F7F7]',
+          )}
+          title="Toggle CPU turn pacing"
+        >
+          {fast ? '⚡ FAST' : '▸ NORMAL'}
         </button>
         <LogPanel state={state} />
       </div>
