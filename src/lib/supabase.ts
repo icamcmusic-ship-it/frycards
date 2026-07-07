@@ -141,7 +141,11 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
 }
 
 export async function fetchShopItems(): Promise<ShopItem[]> {
-  const { data } = await supabase.from('shop_items').select('*').order('item_type').order('cost_gold');
+  const { data } = await supabase
+    .from('shop_items')
+    .select('*')
+    .order('item_type')
+    .order('cost_gold');
   return (data as ShopItem[]) || [];
 }
 
@@ -150,7 +154,8 @@ export async function fetchPackTypes(): Promise<PackType[]> {
   const packs = (data as PackType[]) || [];
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
-    (a, b) => (a.price_gold ?? (a.price_gems ?? 0) * 10) - (b.price_gold ?? (b.price_gems ?? 0) * 10)
+    (a, b) =>
+      (a.price_gold ?? (a.price_gems ?? 0) * 10) - (b.price_gold ?? (b.price_gems ?? 0) * 10),
   );
 }
 
@@ -188,8 +193,14 @@ function rpcError(error: { message: string } | null): string | null {
   return error.message.replace(/^.*?: /, '');
 }
 
-export async function openPack(packId: string, currency: 'gold' | 'gems'): Promise<{ data: OpenPackResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('open_pack', { p_pack_id: packId, p_currency: currency });
+export async function openPack(
+  packId: string,
+  currency: 'gold' | 'gems',
+): Promise<{ data: OpenPackResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('open_pack', {
+    p_pack_id: packId,
+    p_currency: currency,
+  });
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
 }
 
@@ -197,13 +208,23 @@ export async function openPack(packId: string, currency: 'gold' | 'gems'): Promi
  * One-time Starter Pack: grants the chosen Leader plus the exact 30 cards of
  * that Leader's prebuilt deck, and saves it as a ready-to-play deck.
  */
-export async function claimStarterPack(leaderId: string): Promise<{ data: OpenPackResult | null; error: string | null }> {
+export async function claimStarterPack(
+  leaderId: string,
+): Promise<{ data: OpenPackResult | null; error: string | null }> {
   const { data, error } = await supabase.rpc('claim_starter_pack', { p_leader_id: leaderId });
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
 }
 
-export async function buyShopItem(itemId: string, currency: 'gold' | 'gems', foil = false): Promise<string | null> {
-  const { error } = await supabase.rpc('buy_shop_item', { p_item_id: itemId, p_currency: currency, p_foil: foil });
+export async function buyShopItem(
+  itemId: string,
+  currency: 'gold' | 'gems',
+  foil = false,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('buy_shop_item', {
+    p_item_id: itemId,
+    p_currency: currency,
+    p_foil: foil,
+  });
   return rpcError(error);
 }
 
@@ -217,7 +238,9 @@ export async function setUsername(name: string): Promise<string | null> {
   return rpcError(error);
 }
 
-export async function recordMatchResult(won: boolean): Promise<{ reward: number; gold: number } | null> {
+export async function recordMatchResult(
+  won: boolean,
+): Promise<{ reward: number; gold: number } | null> {
   const { data, error } = await supabase.rpc('record_match_result', { p_won: won });
   if (error) return null;
   return data as { reward: number; gold: number };

@@ -24,15 +24,14 @@ export function buildCardData(templates: CardTemplate[]): CardData {
   const leaders = templates.filter((t) => t.type === 'Leader');
   const decks: Record<string, DeckDef> = {};
 
-  const costOf = (t: CardTemplate) =>
-    Object.values(t.cost || {}).reduce((a, b) => a + b, 0);
+  const costOf = (t: CardTemplate) => Object.values(t.cost || {}).reduce((a, b) => a + b, 0);
 
   // Rate a card's raw strength so every Leader plays the BEST of its pool,
   // not merely the cheapest. Keywords carry a flat premium.
   const cardScore = (t: CardTemplate): number => {
     const kwBonus = (t.keywords || []).length * 1.2;
     if (t.type === 'Unit') return (t.attack || 0) + (t.health || 0) + kwBonus - costOf(t);
-    const eff = t.effect ? (t.effect.value || 2) : 0;
+    const eff = t.effect ? t.effect.value || 2 : 0;
     const attach = t.attach ? (t.attach.attack || 0) + (t.attach.health || 0) : 0;
     return eff + attach + kwBonus - costOf(t) * 0.5;
   };
@@ -59,7 +58,7 @@ export function buildCardData(templates: CardTemplate[]): CardData {
 
   for (const leader of leaders) {
     const pool = templates.filter(
-      (t) => t.type !== 'Leader' && t.elements.every((e) => leader.elements.includes(e))
+      (t) => t.type !== 'Leader' && t.elements.every((e) => leader.elements.includes(e)),
     );
     const locations = pool.filter((t) => t.type === 'Location');
     const units = pool.filter((t) => t.type === 'Unit');
@@ -82,7 +81,7 @@ export function buildCardData(templates: CardTemplate[]): CardData {
     }
     // Backfill from the remaining pool if a color pair has a shallow pool.
     const leftovers = [...units, ...spells, ...locations.slice(2)].filter(
-      (t) => !deck.includes(t.id)
+      (t) => !deck.includes(t.id),
     );
     for (const t of leftovers) {
       if (deck.length >= 30) break;

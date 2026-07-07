@@ -5,7 +5,12 @@ import { useMeta } from './MetaContext';
 
 /** Comic-pop button used across all meta screens. */
 export function PopButton({
-  children, onClick, disabled, color = 'yellow', className, title,
+  children,
+  onClick,
+  disabled,
+  color = 'yellow',
+  className,
+  title,
 }: {
   key?: React.Key;
   children: React.ReactNode;
@@ -30,7 +35,7 @@ export function PopButton({
         'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors',
         palette,
         disabled && 'opacity-40 cursor-not-allowed',
-        className
+        className,
       )}
     >
       {children}
@@ -69,7 +74,9 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
   return (
     <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-[#1A1A1A] px-4 py-2.5 border-b-4 border-[#1A1A1A]">
       <div className="flex items-center gap-3">
-        <PopButton onClick={onBack} color="yellow">&lt; MENU</PopButton>
+        <PopButton onClick={onBack} color="yellow">
+          &lt; MENU
+        </PopButton>
         <h1 className="heading-font text-xl text-[#FFD54F]">{title}</h1>
       </div>
       {profile && (
@@ -86,10 +93,12 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
 export function Notice({ text, kind = 'error' }: { text: string; kind?: 'error' | 'success' }) {
   if (!text) return null;
   return (
-    <div className={cn(
-      'text-xs font-bold px-3 py-1.5 ink-border-sm inline-block',
-      kind === 'error' ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#FFD54F] text-[#1A1A1A]'
-    )}>
+    <div
+      className={cn(
+        'text-xs font-bold px-3 py-1.5 ink-border-sm inline-block',
+        kind === 'error' ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#FFD54F] text-[#1A1A1A]',
+      )}
+    >
       {text}
     </div>
   );

@@ -21,11 +21,19 @@ function invariants(state: GameState, errors: string[]) {
       check(v >= 0, `${p.name} has negative ${el} resources (${v})`, state, errors);
     }
     for (const u of p.board) {
-      check(totalRemaining(u, state) > 0 || state.phase === 'GAME_OVER',
+      check(
+        totalRemaining(u, state) > 0 || state.phase === 'GAME_OVER',
         `dead unit ${u.name} (${totalRemaining(u, state)} hp) left on board ` +
-        `[hp=${u.health} dmg=${u.damageTaken} bonusDmg=${u.bonusDamage} tempHp=${u.tempHp} witherHp=${u.witherHp} kw=${u.keywords.join('/')} items=${u.attachedItems.length}]`,
-        state, errors);
-      check(u.attachedItems.length <= maxItemCapacity(u), `${u.name} exceeds item capacity`, state, errors);
+          `[hp=${u.health} dmg=${u.damageTaken} bonusDmg=${u.bonusDamage} tempHp=${u.tempHp} witherHp=${u.witherHp} kw=${u.keywords.join('/')} items=${u.attachedItems.length}]`,
+        state,
+        errors,
+      );
+      check(
+        u.attachedItems.length <= maxItemCapacity(u),
+        `${u.name} exceeds item capacity`,
+        state,
+        errors,
+      );
     }
     check(p.health <= (p.leader.health || 30), `${p.name} health above printed max`, state, errors);
     // Hand limit is enforced at cleanup; give slack for mid-turn draws.
@@ -33,7 +41,16 @@ function invariants(state: GameState, errors: string[]) {
   }
 }
 
-function runGame(seedNames: [string, string], gameIdx: number): { winner: string | null; turns: number; errors: string[]; firstPlayerWon: boolean | null; winCondition: string } {
+function runGame(
+  seedNames: [string, string],
+  gameIdx: number,
+): {
+  winner: string | null;
+  turns: number;
+  errors: string[];
+  firstPlayerWon: boolean | null;
+  winCondition: string;
+} {
   const errors: string[] = [];
   let state = initialGameState(true, seedNames[0], seedNames[1]);
   // Make both players CPUs.
@@ -49,13 +66,27 @@ function runGame(seedNames: [string, string], gameIdx: number): { winner: string
       errors.push(`AI returned no action in phase ${state.phase} (turn ${state.turnNumber})`);
       break;
     }
-    const before = JSON.stringify({ p: state.phase, l: state.log.length, t: state.turnNumber, c: state.combat?.attackers.length ?? -1, b: state.combat?.blockers.length ?? -1 });
+    const before = JSON.stringify({
+      p: state.phase,
+      l: state.log.length,
+      t: state.turnNumber,
+      c: state.combat?.attackers.length ?? -1,
+      b: state.combat?.blockers.length ?? -1,
+    });
     state = gameReducer(state, act);
-    const after = JSON.stringify({ p: state.phase, l: state.log.length, t: state.turnNumber, c: state.combat?.attackers.length ?? -1, b: state.combat?.blockers.length ?? -1 });
+    const after = JSON.stringify({
+      p: state.phase,
+      l: state.log.length,
+      t: state.turnNumber,
+      c: state.combat?.attackers.length ?? -1,
+      b: state.combat?.blockers.length ?? -1,
+    });
     if (before === after) {
       stuckCount++;
       if (stuckCount > 5) {
-        errors.push(`AI stuck repeating no-op action ${act.type} in phase ${state.phase} (turn ${state.turnNumber})`);
+        errors.push(
+          `AI stuck repeating no-op action ${act.type} in phase ${state.phase} (turn ${state.turnNumber})`,
+        );
         break;
       }
     } else stuckCount = 0;
@@ -64,14 +95,18 @@ function runGame(seedNames: [string, string], gameIdx: number): { winner: string
     actions++;
     lastLogLen = state.log.length;
   }
-  if (actions >= MAX_ACTIONS) errors.push(`game ${gameIdx} did not terminate in ${MAX_ACTIONS} actions (turn ${state.turnNumber})`);
+  if (actions >= MAX_ACTIONS)
+    errors.push(
+      `game ${gameIdx} did not terminate in ${MAX_ACTIONS} actions (turn ${state.turnNumber})`,
+    );
   // Win-condition diversity: classify how the loser's last health was taken.
   let winCondition = 'combat';
   if (state.winner) {
     const loser = state.winner === 'p1' ? 'p2' : 'p1';
     const tail = state.log.slice(-6).join(' | ');
     if (state.players[loser].deck.length === 0 && /deckout/.test(tail)) winCondition = 'deckout';
-    else if (/Scorch damage/.test(tail) && new RegExp(state.players[loser].name).test(tail)) winCondition = 'scorch';
+    else if (/Scorch damage/.test(tail) && new RegExp(state.players[loser].name).test(tail))
+      winCondition = 'scorch';
     else if (/Discord/.test(tail)) winCondition = 'discord';
   }
   return {
@@ -117,7 +152,9 @@ for (let g = 0; g < GAMES; g++) {
     console.error(`GAME ${g} (${l1} vs ${l2}) THREW:`, err);
   }
 }
-console.log(`\n${GAMES - failed}/${GAMES} games passed. Avg turns: ${(totalTurns / GAMES).toFixed(1)}`);
+console.log(
+  `\n${GAMES - failed}/${GAMES} games passed. Avg turns: ${(totalTurns / GAMES).toFixed(1)}`,
+);
 console.log('Wins by leader:', wins);
 console.log('Win rate by leader:');
 for (const l of leaders) {
@@ -126,7 +163,9 @@ for (const l of leaders) {
   console.log(`  ${l}: ${n ? ((w / n) * 100).toFixed(1) : '0.0'}% (${w}/${n})`);
 }
 if (decidedGames > 0) {
-  console.log(`First-player win rate: ${((firstWins / decidedGames) * 100).toFixed(1)}% (${firstWins}/${decidedGames})`);
+  console.log(
+    `First-player win rate: ${((firstWins / decidedGames) * 100).toFixed(1)}% (${firstWins}/${decidedGames})`,
+  );
 }
 console.log('Win conditions:', winConditions);
 process.exit(failed > 0 ? 1 : 0);

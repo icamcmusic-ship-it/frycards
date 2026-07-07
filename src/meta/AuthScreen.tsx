@@ -34,7 +34,8 @@ export function AuthScreen() {
           options: { data: { username: username.trim() } },
         });
         if (error) setError(error.message);
-        else if (!data.session) setInfo('Account created! Check your email to confirm, then sign in.');
+        else if (!data.session)
+          setInfo('Account created! Check your email to confirm, then sign in.');
         // if a session was returned, onAuthStateChange takes it from here
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -65,8 +66,14 @@ export function AuthScreen() {
 
   return (
     <div className="w-full min-h-screen bg-[#F7F7F7] flex items-center justify-center p-6 relative overflow-hidden text-[#1A1A1A]">
-      <div className="absolute inset-0 bg-[#2C3E50] pointer-events-none opacity-15" style={{ clipPath: 'polygon(0 0, 55% 0, 30% 100%, 0% 100%)' }} />
-      <div className="absolute inset-0 bg-[#FFD54F] pointer-events-none" style={{ clipPath: 'polygon(88% 0, 100% 0, 100% 100%, 75% 100%)' }} />
+      <div
+        className="absolute inset-0 bg-[#2C3E50] pointer-events-none opacity-15"
+        style={{ clipPath: 'polygon(0 0, 55% 0, 30% 100%, 0% 100%)' }}
+      />
+      <div
+        className="absolute inset-0 bg-[#FFD54F] pointer-events-none"
+        style={{ clipPath: 'polygon(88% 0, 100% 0, 100% 100%, 75% 100%)' }}
+      />
 
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-6">
@@ -74,35 +81,81 @@ export function AuthScreen() {
             BLUE CORAL SET · OPERATIVE TERMINAL
           </div>
           <h1 className="text-4xl heading-font leading-none">
-            SHIFTING<br /><span className="bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 inline-block mt-1">MULTIVERSE TCG</span>
+            SHIFTING
+            <br />
+            <span className="bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 inline-block mt-1">
+              MULTIVERSE TCG
+            </span>
           </h1>
         </div>
 
-        <form onSubmit={submit} className="bg-[#F7F7F7] ink-border-md shadow-hard-black p-6 flex flex-col gap-3">
+        <form
+          onSubmit={submit}
+          className="bg-[#F7F7F7] ink-border-md shadow-hard-black p-6 flex flex-col gap-3"
+        >
           <div className="flex gap-2 mb-1">
-            <PopButton color={mode === 'signin' ? 'black' : 'yellow'} onClick={() => { setMode('signin'); setError(''); }} className="flex-1">
+            <PopButton
+              color={mode === 'signin' ? 'black' : 'yellow'}
+              onClick={() => {
+                setMode('signin');
+                setError('');
+              }}
+              className="flex-1"
+            >
               SIGN IN
             </PopButton>
-            <PopButton color={mode === 'signup' ? 'black' : 'yellow'} onClick={() => { setMode('signup'); setError(''); }} className="flex-1">
+            <PopButton
+              color={mode === 'signup' ? 'black' : 'yellow'}
+              onClick={() => {
+                setMode('signup');
+                setError('');
+              }}
+              className="flex-1"
+            >
               CREATE ACCOUNT
             </PopButton>
           </div>
 
           {mode === 'signup' && (
-            <input className={input} placeholder="Operative name" value={username}
-              onChange={(e) => setUsername(e.target.value)} maxLength={24} />
+            <input
+              className={input}
+              placeholder="Operative name"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              maxLength={24}
+            />
           )}
-          <input className={input} type="email" placeholder="Email" value={email} required
-            onChange={(e) => setEmail(e.target.value)} />
-          <input className={input} type="password" placeholder="Password (6+ characters)" value={password} required minLength={6}
-            onChange={(e) => setPassword(e.target.value)} />
+          <input
+            className={input}
+            type="email"
+            placeholder="Email"
+            value={email}
+            required
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className={input}
+            type="password"
+            placeholder="Password (6+ characters)"
+            value={password}
+            required
+            minLength={6}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
           {error && <Notice text={error} />}
           {info && <Notice text={info} kind="success" />}
 
-          <button type="submit" disabled={busy}
-            className="btn-pop w-full py-3 bg-[#E53935] text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50">
-            {busy ? 'CONTACTING MULTIVERSE…' : mode === 'signin' ? 'ENTER THE MULTIVERSE' : 'FORGE ACCOUNT'}
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn-pop w-full py-3 bg-[#E53935] text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50"
+          >
+            {busy
+              ? 'CONTACTING MULTIVERSE…'
+              : mode === 'signin'
+                ? 'ENTER THE MULTIVERSE'
+                : 'FORGE ACCOUNT'}
           </button>
 
           <div className="flex items-center gap-2 my-1">
@@ -111,8 +164,12 @@ export function AuthScreen() {
             <div className="flex-1 h-0.5 bg-[#1A1A1A]/20" />
           </div>
 
-          <button type="button" onClick={signInWithDiscord} disabled={busy}
-            className="btn-pop w-full py-3 bg-[#5865F2] text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={signInWithDiscord}
+            disabled={busy}
+            className="btn-pop w-full py-3 bg-[#5865F2] text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50 flex items-center justify-center gap-2"
+          >
             <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
               <path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
             </svg>
@@ -125,8 +182,10 @@ export function AuthScreen() {
         </form>
 
         <div className="text-center mt-4">
-          <button onClick={() => setGuest(true)}
-            className="btn-pop px-6 py-2 bg-[#2C3E50] text-[#F7F7F7] heading-font text-xs ink-border-sm shadow-hard-black-xs">
+          <button
+            onClick={() => setGuest(true)}
+            className="btn-pop px-6 py-2 bg-[#2C3E50] text-[#F7F7F7] heading-font text-xs ink-border-sm shadow-hard-black-xs"
+          >
             PLAY AS GUEST (NO SAVING)
           </button>
         </div>

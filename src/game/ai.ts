@@ -132,7 +132,9 @@ function allocationScore(state: GameState, me: PlayerState, alloc: Record<string
   const litColors = Object.entries(pool).filter(([el, v]) => el !== 'Generic' && v > 0).length;
   const singleColor = litColors === 1;
 
-  const ranked = [...me.hand].sort((a, b) => cardPlayValue(state, me, b) - cardPlayValue(state, me, a));
+  const ranked = [...me.hand].sort(
+    (a, b) => cardPlayValue(state, me, b) - cardPlayValue(state, me, a),
+  );
   let weight = 0;
   for (const card of ranked) {
     if (canAfford(card.cost, pool)) {
@@ -165,7 +167,9 @@ function evaluate(state: GameState, aiId: string): number {
 
   // Status Emergency Modifier: an activated hostile Decay Charm on the AI
   // forces survival/cleanse behavior by inflating the life weight.
-  const decayed = me.charms.some((c) => c.charmActivated && hasKeyword(c, 'Decay') && c.ownerId !== aiId);
+  const decayed = me.charms.some(
+    (c) => c.charmActivated && hasKeyword(c, 'Decay') && c.ownerId !== aiId,
+  );
   if (decayed) wLife *= 1.7;
   if (me.health <= 8) wLife *= 1.5; // critical health
 
@@ -245,7 +249,9 @@ function cardPlayValue(state: GameState, me: PlayerState, card: GameCard): numbe
 function eventUrgency(state: GameState, me: PlayerState, card: GameCard): number {
   const eff = card.effect;
   if (!eff) return 0;
-  const decayed = me.charms.some((c) => c.charmActivated && hasKeyword(c, 'Decay') && c.ownerId !== me.id);
+  const decayed = me.charms.some(
+    (c) => c.charmActivated && hasKeyword(c, 'Decay') && c.ownerId !== me.id,
+  );
   if (eff.action === 'heal' && (me.leader.damageTaken > 4 || decayed)) return 2.5;
   if (eff.action === 'purge' && decayed) return 3;
   return 0.5;
@@ -291,7 +297,10 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
     if (!canBlock) {
       const plan = planAttackWave(state, me, opp);
       const swing = plan.reduce((s, p) => {
-        const u = p.instanceId === me.leader.instanceId ? me.leader : me.board.find((b) => b.instanceId === p.instanceId);
+        const u =
+          p.instanceId === me.leader.instanceId
+            ? me.leader
+            : me.board.find((b) => b.instanceId === p.instanceId);
         if (!u || p.targetId !== opp.leader.instanceId) return s;
         const atk = effAttack(u, state);
         return s + (u.type === 'Leader' ? Math.max(1, Math.floor(atk / 2)) : atk);
@@ -332,8 +341,11 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
       const probe = gameReducer(state, { type: 'ENTER_COMBAT' });
       const accepted = plan.some(
         (p) =>
-          (gameReducer(probe, { type: 'TOGGLE_ATTACKER', instanceId: p.instanceId, targetId: p.targetId })
-            .combat?.attackers.length ?? 0) > 0
+          (gameReducer(probe, {
+            type: 'TOGGLE_ATTACKER',
+            instanceId: p.instanceId,
+            targetId: p.targetId,
+          }).combat?.attackers.length ?? 0) > 0,
       );
       if (accepted) return { type: 'ENTER_COMBAT' };
     }
@@ -348,8 +360,7 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
 
 /** Simulate an action through the real reducer; average over samples. */
 function simulateAction(state: GameState, action: GameAction, aiId: string): number | null {
-  const isStochastic =
-    action.type === 'PLAY_CARD' || action.type === 'ACTIVATE_ABILITY';
+  const isStochastic = action.type === 'PLAY_CARD' || action.type === 'ACTIVATE_ABILITY';
   const samples = isStochastic ? 3 : 1;
   let total = 0;
   let changed = false;
@@ -379,13 +390,16 @@ function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState)
       push({ type: 'PLAY_CARD', instanceId: card.instanceId }, `${card.id}`);
     } else if (card.type === 'Item') {
       for (const host of itemHosts(state, me)) {
-        push({ type: 'PLAY_CARD', instanceId: card.instanceId, targetId: host.instanceId }, `${card.id}>${host.id}`);
+        push(
+          { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: host.instanceId },
+          `${card.id}>${host.id}`,
+        );
       }
     } else if (card.type === 'Event') {
       for (const tgt of eventTargets(state, card, me, opp)) {
         push(
           { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: tgt || undefined },
-          `${card.id}>${tgt || 'none'}`
+          `${card.id}>${tgt || 'none'}`,
         );
       }
     }
@@ -398,13 +412,13 @@ function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState)
       !c.abilityUsedThisTurn &&
       !c.glitched &&
       c.frozen === 0 &&
-      canAfford(c.cost, me.resources)
+      canAfford(c.cost, me.resources),
   );
   for (const src of abilitySources) {
     for (const tgt of eventTargets(state, src, me, opp)) {
       push(
         { type: 'ACTIVATE_ABILITY', instanceId: src.instanceId, targetId: tgt || undefined },
-        `ab:${src.id}>${tgt || 'none'}`
+        `ab:${src.id}>${tgt || 'none'}`,
       );
     }
   }
@@ -476,7 +490,10 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
     }
     case 'obliterate': {
       // Obliterate only what's worth the card.
-      return byThreat.filter((u) => unitValue(u, state) >= 4).slice(0, 1).map((u) => u.instanceId);
+      return byThreat
+        .filter((u) => unitValue(u, state) >= 4)
+        .slice(0, 1)
+        .map((u) => u.instanceId);
     }
     case 'buff': {
       if (eff.target === 'friendly') {
@@ -559,7 +576,9 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   const pickGuardTarget = (): GameCard | undefined => {
     const alive = guards.filter((g) => (guardNeed.get(g.instanceId) ?? 0) > 0);
     if (alive.length === 0) return guards[0];
-    return alive.sort((a, b) => (guardNeed.get(a.instanceId) ?? 0) - (guardNeed.get(b.instanceId) ?? 0))[0];
+    return alive.sort(
+      (a, b) => (guardNeed.get(a.instanceId) ?? 0) - (guardNeed.get(b.instanceId) ?? 0),
+    )[0];
   };
 
   for (const u of [...eligible].sort((a, b) => effAttack(b, state) - effAttack(a, state))) {
@@ -574,12 +593,13 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
       const need = guardNeed.get(interceptor.instanceId) ?? damageToKill(interceptor, state);
       const dieToCounter = effAttack(interceptor, state) >= uHp && !kwActive(u, 'Lurk');
       const killsGuard = atk >= need;
-      if (dieToCounter && !killsGuard && unitValue(u, state) > unitValue(interceptor, state) * 0.8) continue;
+      if (dieToCounter && !killsGuard && unitValue(u, state) > unitValue(interceptor, state) * 0.8)
+        continue;
     } else if (!lethalPush && readyBlockers.length > 0) {
       // A blocker that eats us and survives makes this attack a pure loss —
       // unless our value is low (acceptable trade bait) or we have Pierce.
       const eaten = readyBlockers.some(
-        (b) => blockCounter(b, state) >= uHp && damageToKill(b, state) > atk
+        (b) => blockCounter(b, state) >= uHp && damageToKill(b, state) > atk,
       );
       if (eaten && !kwActive(u, 'Pierce') && unitValue(u, state) >= 4) continue;
     }
@@ -595,8 +615,7 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
         .filter((e) => e.type === 'Unit' && !lurkProtected(e) && atk >= damageToKill(e, state))
         .map((e) => ({ e, counter: effAttack(e, state) }))
         .filter(
-          ({ e, counter }) =>
-            counter < uHp || unitValue(e, state) > unitValue(u, state) * 1.2
+          ({ e, counter }) => counter < uHp || unitValue(e, state) > unitValue(u, state) * 1.2,
         )
         .sort((x, y) => unitValue(y.e, state) - unitValue(x.e, state));
       const bestTrade = trades[0];
@@ -610,11 +629,17 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
 
   // Leader Survival Caveat: a Leader strike takes full counter-damage.
   const leader = me.leader;
-  if (!leader.exhausted && leader.frozen === 0 && effAttack(leader, state) > 0 && guards.length === 0) {
+  if (
+    !leader.exhausted &&
+    leader.frozen === 0 &&
+    effAttack(leader, state) > 0 &&
+    guards.length === 0
+  ) {
     const counter = effAttack(opp.leader, state);
     const remaining = (leader.health || 0) - leader.damageTaken;
     const halfDmg = Math.max(1, Math.floor(effAttack(leader, state) / 2));
-    const oppThreat = opp.board.reduce((s, u) => s + effAttack(u, state), 0) + effAttack(opp.leader, state);
+    const oppThreat =
+      opp.board.reduce((s, u) => s + effAttack(u, state), 0) + effAttack(opp.leader, state);
     const survivable = counter < remaining && remaining - counter > Math.min(oppThreat, 8);
     const finishing = totalSwing + halfDmg >= opp.health;
     if ((finishing && counter < remaining) || (survivable && halfDmg >= 2)) {
@@ -629,7 +654,11 @@ function declareAttacks(state: GameState, me: PlayerState, opp: PlayerState): Ga
   const plan = planAttackWave(state, me, opp);
   for (const p of plan) {
     if (!combat.attackers.some((a) => a.instanceId === p.instanceId)) {
-      const action: GameAction = { type: 'TOGGLE_ATTACKER', instanceId: p.instanceId, targetId: p.targetId };
+      const action: GameAction = {
+        type: 'TOGGLE_ATTACKER',
+        instanceId: p.instanceId,
+        targetId: p.targetId,
+      };
       // Verify the reducer actually accepts this declaration; otherwise the AI
       // would re-dispatch the same rejected toggle forever (e.g. Burden or the
       // Leader Survival Caveat disagreeing with the plan).
@@ -659,7 +688,7 @@ function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): G
       !u.commandedThisTurn &&
       u.frozen === 0 &&
       (u.attacksThisTurn > 0 || u.summoningSickness) &&
-      effAttack(u, state) > 0
+      effAttack(u, state) > 0,
   );
   if (eligible.length === 0) return null;
 
@@ -688,7 +717,7 @@ function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): G
         !b.exhausted &&
         b.frozen === 0 &&
         effAttack(b, state) >= totalRemaining(target, state) &&
-        totalRemaining(b, state) + effArmor(b) > effAttack(target, state)
+        totalRemaining(b, state) + effArmor(b) > effAttack(target, state),
     );
     if (eatenForFree) return null;
   }
@@ -702,12 +731,14 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
   const combat = state.combat!;
   const attackerSide = state.players[state.activePlayerId];
   const entity = (id: string): GameCard | undefined =>
-    [attackerSide.leader, ...attackerSide.board, ...defender.board].find((c) => c.instanceId === id);
+    [attackerSide.leader, ...attackerSide.board, ...defender.board].find(
+      (c) => c.instanceId === id,
+    );
 
   const usedBlockers = new Set(combat.blockers.map((b) => b.blockerId));
   const blockedAttackers = new Set(combat.blockers.map((b) => b.attackerId));
   const available = defender.board.filter(
-    (u) => !u.exhausted && u.frozen === 0 && u.type === 'Unit' && !usedBlockers.has(u.instanceId)
+    (u) => !u.exhausted && u.frozen === 0 && u.type === 'Unit' && !usedBlockers.has(u.instanceId),
   );
 
   // Incoming unblocked damage headed at the Leader.
@@ -783,8 +814,10 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
       const need = damageToKill(card, state);
       if (counterSoFar >= need) continue; // already dies
       const helper = available.find(
-        (b) => counterSoFar + blockCounter(b, state) >= need &&
-          (unitValue(card, state) > unitValue(b, state) || damageToKill(b, state) > effAttack(card, state))
+        (b) =>
+          counterSoFar + blockCounter(b, state) >= need &&
+          (unitValue(card, state) > unitValue(b, state) ||
+            damageToKill(b, state) > effAttack(card, state)),
       );
       if (helper) {
         return { type: 'TOGGLE_BLOCKER', attackerId: a.instanceId, blockerId: helper.instanceId };
