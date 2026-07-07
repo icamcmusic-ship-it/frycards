@@ -126,9 +126,18 @@ const winConditions: Record<string, number> = {};
 let firstWins = 0;
 let decidedGames = 0;
 let totalTurns = 0;
+// wins/games per unordered leader pair, keyed "A|B" with A/B in leaders order.
+const pairGames: Record<string, number> = {};
+const pairWins: Record<string, number> = {};
+// Round-robin over all non-mirror pairs so the matchup matrix fills evenly;
+// alternate seat order between passes to wash out first-player advantage.
+const pairs: [string, string][] = [];
+for (let i = 0; i < leaders.length; i++)
+  for (let j = i + 1; j < leaders.length; j++) pairs.push([leaders[i], leaders[j]]);
 for (let g = 0; g < GAMES; g++) {
-  const l1 = leaders[g % leaders.length];
-  const l2 = leaders[(g + 1 + (g % (leaders.length - 1))) % leaders.length];
+  const pair = pairs[g % pairs.length];
+  const swap = Math.floor(g / pairs.length) % 2 === 1;
+  const [l1, l2] = swap ? [pair[1], pair[0]] : pair;
   try {
     const res = runGame([l1, l2], g);
     totalTurns += res.turns;
@@ -141,6 +150,9 @@ for (let g = 0; g < GAMES; g++) {
       appearances[l2] = (appearances[l2] || 0) + 1;
       const key = res.winner === 'p1' ? l1 : l2;
       wins[key] = (wins[key] || 0) + 1;
+      const pairKey = pair.join('|');
+      pairGames[pairKey] = (pairGames[pairKey] || 0) + 1;
+      if (key === pair[0]) pairWins[pairKey] = (pairWins[pairKey] || 0) + 1;
       winConditions[res.winCondition] = (winConditions[res.winCondition] || 0) + 1;
       if (res.firstPlayerWon !== null) {
         decidedGames++;
@@ -168,4 +180,25 @@ if (decidedGames > 0) {
   );
 }
 console.log('Win conditions:', winConditions);
+
+// Matchup matrix: each cell is the row leader's win rate against the column leader.
+const short = (l: string) => l.split(/[\s,]/)[0].slice(0, 8);
+const colW = 9;
+console.log('\nMatchup matrix (row win% vs column):');
+console.log(' '.repeat(colW) + leaders.map((l) => short(l).padStart(colW)).join(''));
+for (const row of leaders) {
+  let line = short(row).padEnd(colW);
+  for (const col of leaders) {
+    if (row === col) {
+      line += '—'.padStart(colW);
+      continue;
+    }
+    const i = leaders.indexOf(row) < leaders.indexOf(col);
+    const key = i ? `${row}|${col}` : `${col}|${row}`;
+    const n = pairGames[key] || 0;
+    const w = i ? pairWins[key] || 0 : n - (pairWins[key] || 0);
+    line += (n ? `${((w / n) * 100).toFixed(0)}% n=${n}` : '·').padStart(colW);
+  }
+  console.log(line);
+}
 process.exit(failed > 0 ? 1 : 0);
