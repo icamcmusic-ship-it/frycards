@@ -14,15 +14,12 @@ import {
 import { makeToken } from '../src/game/cards';
 import { GameState, GameCard } from '../src/types';
 
-let passed = 0;
-let failed = 0;
+/** Every assertion made by this suite, in execution order. Consumed by the
+ * Vitest wrapper (src/game/engine.test.ts) to report per-case results. */
+export const results: { name: string; pass: boolean }[] = [];
 function assert(cond: boolean, name: string) {
-  if (cond) {
-    passed++;
-  } else {
-    failed++;
-    console.error('FAIL: ' + name);
-  }
+  results.push({ name, pass: cond });
+  if (!cond) console.error('FAIL: ' + name);
 }
 
 /** A game state fast-forwarded into the ACTION phase with empty boards. */
@@ -1007,5 +1004,11 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   );
 }
 
+const passed = results.filter((r) => r.pass).length;
+const failed = results.length - passed;
 console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed > 0 ? 1 : 0);
+// Only hard-exit when run directly as a CLI script; under Vitest the wrapper
+// reports each case and exiting here would kill the runner.
+if (process.argv[1]?.includes('engine-tests')) {
+  process.exit(failed > 0 ? 1 : 0);
+}
