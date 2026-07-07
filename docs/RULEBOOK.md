@@ -1,4 +1,4 @@
-# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.7)
+# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.8)
 
 This document is the **authoritative rules reference** for the digital
 implementation. The engine (`src/game/engine.ts`) is the executable version of
@@ -56,10 +56,16 @@ Cleanup**. The exact ordering *within* each step is fixed and is the game's
 ### §2.1 Start of Turn (in order)
 1. The active player's **unspent resources are cleared** (resources persist
    through the *opponent's* turn, clearing only at the start of your own).
-2. **Location Shell Game:** one random face-down Location of the
-   **opponent's** is flipped. It is active for the whole turn, with the
-   **active player as its controller** (Symmetric Locations serve both
-   players). It flips back face-down at end of turn.
+2. **Location Shell Game:** one random face-down Location of the **active
+   player's own** is flipped. It is active for the whole turn with the
+   active player as its controller. Its passive effect (`ATK_ALL`,
+   `HP_ALL`, resource keywords, auras) serves **only its controller**;
+   **Symmetric** Locations serve both players. A revealed `SCORCH_ALL`
+   Location singes every **enemy** Unit for 1 (both boards if Symmetric).
+   It flips back face-down at end of turn. *(V1.8: previously the
+   opponent's Location was flipped for the active player's benefit, which
+   made decking Locations a gift to the enemy; and non-Symmetric passives
+   applied to both players, which made Symmetric nearly meaningless.)*
 3. **Hatchling** on the revealed Location seeds tokens for its controller
    (both players if Symmetric).
 4. **Sustain** heals the active player's Units and Leader.
@@ -67,7 +73,8 @@ Cleanup**. The exact ordering *within* each step is fixed and is the game's
    Scorch damage. *Keyword uniformity:* this runs the standard damage
    pipeline (§5.4) for Units **and** the Leader — Armor, Brittle and Taint
    all apply.
-6. A revealed **SCORCH_ALL** Location singes every Unit for 1.
+6. A revealed **SCORCH_ALL** Location singes every enemy Unit for 1
+   (every Unit if Symmetric).
 7. Dormant **Charms** on the active player activate.
 8. **Discord** sources each roll the dice of fate (resource / draw / 1 Leader
    damage).
@@ -111,7 +118,9 @@ In any order, repeatedly:
 - **Cast Events** (targeting laws §4 apply), then the Event goes to the
   graveyard.
 - **Activate abilities** — once per card per turn; paying the card's printed
-  cost; Freeze and Glitch lock abilities.
+  cost; Freeze and Glitch lock abilities. **Face-down Locations are hidden
+  information: their abilities cannot be activated.** The revealed active
+  Location's ability is usable by its controller (once per turn).
 - **Leader Command [X]:** pay X to instantly ready a friendly Unit (clears
   exhaustion, summoning sickness and one attack mark).
   **Command Cap:** each Unit may be Commanded **only once per turn**. (This
@@ -152,7 +161,7 @@ In any order, repeatedly:
 | Item | Attached to a friendly Unit | Grants stats/keywords. Capacity Law §2.3. |
 | Event | One-shot → graveyard | Resolves its effect (§4). |
 | Charm | A player's profile | Dormant until the affected player's next turn; lasts 1–3 of their Cleanups. |
-| Location | Location Zone (face-down) | Flipped by the **opponent's** Shell Game (§2.1). |
+| Location | Location Zone (face-down) | One of **your own** is flipped by the Shell Game at the start of your turn (§2.1). |
 
 Tokens (Manifest, Hatchling) are real Units on the battlefield, but they
 **vanish** when they leave it — they never enter the graveyard, and Items
@@ -277,10 +286,12 @@ answer to every "which applies first?" question:
 1. **Brittle** doubles the incoming damage.
 2. **Taint [X]** adds +X (after doubling: a Brittle+Tainted card takes
    `2·D + X`).
-3. **Armor:** if the result is ≤ total Armor (printed + Item-granted), the
-   hit is fully absorbed and Armor is untouched. If it is greater, **all**
-   Armor shatters permanently (Armor Break — printed and Item Armor alike)
-   and the remainder continues.
+3. **Armor:** the result is reduced by the card's total Armor (printed +
+   Item-granted), **but a hit always deals at least 1 damage** — chip
+   damage is guaranteed counter-play against any wall. Armor is permanent;
+   it never breaks. *(V1.8 replaced the old all-or-nothing absorb + Armor
+   Break: an Armor 2 Unit used to be permanently immune to every 1–2
+   attack Unit in the game.)*
 4. **Stripping Rule:** remaining damage fills bonus (Item) health first,
    then base health. Destroying or detaching an Item erases the damage that
    was stored on it.
@@ -352,7 +363,48 @@ card's keywords are all inactive until they wear off.
 
 ## Change log
 
-**V1.7 (this revision)**
+**V1.8 (this revision)**
+- **Shell Game rework (§2.1.2):** at the start of your turn you now flip one
+  of **your own** face-down Locations and control it for the turn. The old
+  rule flipped the *opponent's* Location for the active player's benefit —
+  every Location you put in your deck mostly worked for your enemy, making
+  Locations anti-synergistic with their own deck.
+- **Location passives are controller-only (§2.1/§3):** a revealed Location's
+  `ATK_ALL`/`HP_ALL` buff now applies only to its controller's Units, and
+  `SCORCH_ALL` singes only **enemy** Units. **Symmetric** Locations affect
+  both players — the keyword finally does what its name says (previously
+  every Location's passive hit both boards, Symmetric or not).
+- **Armor rework (§5.4):** Armor X now reduces every incoming hit by X, but
+  a hit always deals **at least 1 damage**, and Armor never breaks. The old
+  all-or-nothing absorb made an Armor 2 Unit permanently immune to every
+  1–2 attack Unit — entire low-curve decks had literally no way to interact.
+  The Armor Break rule is gone with it.
+- **Face-down Location abilities sealed (§2.3):** activating a face-down
+  Location's ability (hidden information) is now rejected server-side; the
+  revealed active Location's ability is usable by its controller once per
+  turn. (Latent exploit: no printed Location currently has an ability, but
+  the live card pool could add one.)
+- **Balance pass** (validated over 1,200 CPU-vs-CPU games, all six Leaders
+  between 46.0% and 53.3% win rate, first-player 51.8%): under the reworked
+  Location and Armor rules the old tuning collapsed (Sea Witch 75%,
+  Mer-King 26%). ~40 cards were re-costed/re-statted against a vanilla
+  baseline — over-rate Tech/Dark/Frost staples trimmed (Overseer Optic,
+  Deceptive Angler's item packages, the +1/+3 Armor-Pierce item trio,
+  Modularity Core, Crown of the Reef, Bound Leviathan lost Echo), bottom-rate
+  cards made playable (the 2-cost 1/2 Blitz cycle → 2/2, the +0/+1 Burden
+  trinket cycle → +1/+1, Towering Tsunami is now real removal: 4 damage for
+  3). Leader engines were re-seated: Mer-King Rally 3 → Codex 1,
+  Legendary Diver Fix Flame → Boost 1, Crimson Vector Commander
+  Inspire 1 → Boost 1, Apex Nanite Shinobi Sync 2 → Sustain 1, plus HP
+  adjustments (Avatar 23→20, Sea Witch 33→26, Mer-King 39→44, Diver 30→35,
+  Crimson 36→38, Shinobi 40→33).
+- **CPU improvements:** the AI now values its own face-down Locations as the
+  recurring assets they became, considers burning unit-target damage Events
+  at the enemy Leader when it closes the game, and its Guard-clearing solver
+  projects per-hit Armor reduction instead of raw attack when splitting a
+  wave across multiple Guards.
+
+**V1.7**
 - **Leader damage uniformity** (rules fix): all damage dealt to a Leader —
   unblocked combat hits, Leader-vs-Leader exchanges, counter-damage to an
   attacking Leader, Pierce overflow and `damage`-verb Events — now runs the

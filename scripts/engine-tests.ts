@@ -168,7 +168,7 @@ function addUnit(
   c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   const a2 = c.players.p2.board.find((u) => u.instanceId === armored.instanceId);
-  assert(!!a2 && a2.damageTaken === 0, 'Armor 2 fully absorbed a 2-damage hit');
+  assert(!!a2 && a2.damageTaken === 1, 'Armor 2 chips a 2-damage hit down to 1 (min-1 rule)');
 }
 
 // --- SUBMIT_BLOCKS cannot be forced during COMBAT_DECLARE ---------------------
@@ -268,7 +268,7 @@ function addUnit(
   assert(c.winner === 'p2', 'simultaneous KO is lost by the active player');
 }
 
-// --- Armor Break is uniform: item armor shatters with base armor --------------
+// --- Armor stacks (printed + Item) and is permanent (V1.8: no Armor Break) ----
 {
   const s = actionState();
   const mine = addUnit(s, 'p1', 5, 5);
@@ -289,8 +289,8 @@ function addUnit(
   const a = c.players.p2.board.find((u) => u.instanceId === armored.instanceId)!;
   assert(a.damageTaken === 2, 'hit of 5 vs Armor 3 deals 2');
   assert(
-    a.armor === 0 && !a.attachedItems[0].keywords.includes('Armor 2'),
-    'Armor Break shatters base AND item armor',
+    a.armor === 1 && a.attachedItems[0].keywords.includes('Armor 2'),
+    'Armor is permanent: printed and Item Armor survive a big hit',
   );
 }
 
@@ -502,32 +502,89 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   );
 }
 
-// --- Hatchling: revealed Location seeds tokens for its controller --------------
+// --- Shell Game (§3.1): your OWN Location flips at the start of your turn ------
 {
   const s = actionState();
-  const loc = makeToken('Nest', 0, 0, 'p1');
+  const loc = makeToken('Nest', 0, 0, 'p2');
   loc.type = 'Location';
   loc.keywords = ['Hatchling 2'];
-  s.players.p1.locations = [loc];
+  s.players.p2.locations = [loc];
   let c = gameReducer(s, { type: 'END_TURN' }); // p2's turn begins
-  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // flips p1's Location
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // flips p2's own Location
+  assert(
+    c.activeLocation?.instanceId === loc.instanceId && c.activeLocationOwnerId === 'p2',
+    'Shell Game reveals the active player their OWN Location',
+  );
   assert(
     c.players.p2.board.filter((u) => u.name === 'Hatchling').length === 2,
     'Hatchling created 2 tokens for the controller',
   );
 }
+{
+  // The opponent's face-down Locations stay down on your turn.
+  const s = actionState();
+  const loc = makeToken('Enemy Nest', 0, 0, 'p1');
+  loc.type = 'Location';
+  loc.keywords = ['Hatchling 2'];
+  s.players.p1.locations = [loc];
+  s.players.p2.locations = []; // p2 has nothing to flip
+  let c = gameReducer(s, { type: 'END_TURN' }); // p2's turn begins
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' });
+  assert(c.activeLocation === null, "opponent's Locations are not flipped on your turn");
+}
 
 // --- Confluence: extra Generic at the controller's Resource Roll ---------------
 {
   const s = actionState();
-  const loc = makeToken('Ley Line', 0, 0, 'p1');
+  const loc = makeToken('Ley Line', 0, 0, 'p2');
   loc.type = 'Location';
   loc.keywords = ['Confluence 2'];
-  s.players.p1.locations = [loc];
+  s.players.p2.locations = [loc];
   let c = gameReducer(s, { type: 'END_TURN' });
   c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' });
   c = gameReducer(c, { type: 'ROLL_DICE' });
   assert((c.players.p2.resources.Generic || 0) === 2, 'Confluence granted 2 Generic at the roll');
+}
+
+// --- Face-down Location abilities are not activatable ---------------------------
+{
+  const s = actionState();
+  const loc = makeToken('Secret Lab', 0, 0, 'p1');
+  loc.type = 'Location';
+  loc.effect = { action: 'draw', value: 2, target: 'self' };
+  s.players.p1.locations = [loc];
+  const hand = s.players.p1.hand.length;
+  const c = gameReducer(s, { type: 'ACTIVATE_ABILITY', instanceId: loc.instanceId });
+  assert(
+    c.players.p1.hand.length === hand,
+    'face-down Location ability rejected (hidden information)',
+  );
+}
+{
+  // The revealed active Location's ability IS usable by its controller.
+  const s = actionState();
+  const loc = makeToken('Open Lab', 0, 0, 'p2');
+  loc.type = 'Location';
+  loc.effect = { action: 'draw', value: 1, target: 'self' };
+  s.players.p2.locations = [loc];
+  let c = gameReducer(s, { type: 'END_TURN' });
+  c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' });
+  c = gameReducer(c, { type: 'ROLL_DICE' });
+  if (c.phase === 'ALLOCATE') c = gameReducer(c, { type: 'ALLOCATE_RESOURCES', allocations: {} });
+  const hand = c.players.p2.hand.length;
+  const c2 = gameReducer(c, {
+    type: 'ACTIVATE_ABILITY',
+    instanceId: c.activeLocation!.instanceId,
+  });
+  assert(
+    c2.players.p2.hand.length === hand + 1,
+    "revealed Location's ability usable by its controller",
+  );
+  const c3 = gameReducer(c2, {
+    type: 'ACTIVATE_ABILITY',
+    instanceId: c2.activeLocation!.instanceId,
+  });
+  assert(c3.players.p2.hand.length === hand + 1, "revealed Location's ability is once per turn");
 }
 
 // --- Overcharge: +X/+X stats, upkeep or the Item burns out ---------------------
@@ -854,7 +911,10 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   p2leader.armor = 3;
   let c = gameReducer(s, { type: 'END_TURN' });
   c = gameReducer(c, { type: 'ACKNOWLEDGE_TRANSITION' }); // p2's turn starts: scorch ticks
-  assert(c.players.p2.leader.damageTaken === 0, 'Leader Armor absorbed the Scorch tick');
+  assert(
+    c.players.p2.leader.damageTaken === 1,
+    'Leader Armor shaved the Scorch tick to 1 (min-1 rule)',
+  );
 }
 
 // --- Scalability: extreme keyword values behave like small ones -----------------
@@ -873,8 +933,8 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   const t = c.players.p2.board.find((u) => u.instanceId === tank.instanceId);
   assert(
-    !!t && t.damageTaken === 0 && t.armor === 100,
-    'Armor 100 absorbs a 50 hit without breaking',
+    !!t && t.damageTaken === 1 && t.armor === 100,
+    'Armor 100 shaves a 50 hit to the 1-damage floor without breaking',
   );
 }
 {
@@ -909,8 +969,8 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   assert(
-    c.players.p2.leader.damageTaken === 1 && c.players.p2.leader.armor === 0,
-    'unblocked combat hit on a Leader honors Armor + Armor Break (§5.4 uniformity)',
+    c.players.p2.leader.damageTaken === 1 && c.players.p2.leader.armor === 2,
+    'unblocked combat hit on a Leader honors permanent Armor (§5.4 uniformity)',
   );
 }
 
@@ -997,10 +1057,10 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
   const v = c.players.p2.board.find((u) => u.instanceId === victim.instanceId)!;
-  // 3 dmg → Brittle ×2 = 6 → Taint +2 = 8 → Armor 3 breaks, 5 lands.
+  // 3 dmg → Brittle ×2 = 6 → Taint +2 = 8 → Armor 3 shaves it, 5 lands; Armor stays.
   assert(
-    v.damageTaken === 5 && v.armor === 0,
-    'pipeline order: Brittle doubles, Taint adds, Armor breaks last (3→6→8→5)',
+    v.damageTaken === 5 && v.armor === 3,
+    'pipeline order: Brittle doubles, Taint adds, Armor reduces last (3→6→8→5)',
   );
 }
 

@@ -12,6 +12,7 @@ import {
   gameReducer,
   kwActive,
   lurkProtected,
+  projectedDamage,
 } from './engine';
 import { hasKeyword, keywordValue } from './cards';
 
@@ -183,11 +184,12 @@ function evaluate(state: GameState, aiId: string): number {
   const charmVal = (p: PlayerState) =>
     p.charms.reduce((s, c) => s + (c.ownerId === p.id ? costTotal(c) + 1 : -(costTotal(c) + 1)), 0);
 
-  // Face-down Locations: the Shell Game hands control to the FLIPPER, so a
-  // non-Symmetric Location in your zone mostly works for the opponent — only
-  // Symmetric ones are clearly worth committing from hand.
+  // Face-down Locations: the Shell Game (§3.1) reveals one of YOUR OWN
+  // Locations at the start of your turn and you control it, so each one in
+  // your zone is a recurring asset. Symmetric ones share their effect with
+  // the opponent, so they are worth a bit less.
   const locVal = (p: PlayerState) =>
-    p.locations.reduce((s, l) => s + (hasKeyword(l, 'Symmetric') ? 1.8 : 0.4), 0);
+    p.locations.reduce((s, l) => s + (hasKeyword(l, 'Symmetric') ? 1.2 : 1.8), 0);
 
   return (
     wLife * (me.health - opp.health) +
@@ -218,9 +220,15 @@ function unitValue(u: GameCard, state: GameState): number {
   v += kwActive(u, 'Sustain') ? keywordValue(u, 'Sustain') * 0.5 : 0;
   if (u.glitched) v *= 0.8; // temporarily keyword-dead
   v += effArmor(u) * 0.8;
-  // Location Adaptation Layer: under a SCORCH_ALL Location, units about to
-  // burn out are worth almost nothing.
-  if (state.activeLocation?.locEffect === 'SCORCH_ALL' && hp <= 1) v *= 0.25;
+  // Location Adaptation Layer: under a hostile SCORCH_ALL Location, units
+  // about to burn out are worth almost nothing.
+  if (
+    state.activeLocation?.locEffect === 'SCORCH_ALL' &&
+    hp <= 1 &&
+    (state.activeLocationOwnerId !== u.ownerId || hasKeyword(state.activeLocation, 'Symmetric'))
+  ) {
+    v *= 0.25;
+  }
   if (kwActive(u, 'Vengeance')) v += Math.max(1, keywordValue(u, 'Vengeance')) * 0.6;
   if (u.frozen > 0) v *= 0.6;
   if (u.scorch >= hp) v *= 0.3; // will die to its scorch counter
@@ -240,7 +248,9 @@ function cardPlayValue(state: GameState, me: PlayerState, card: GameCard): numbe
     case 'Charm':
       return base + 0.5;
     case 'Location':
-      return me.locations.length < 2 ? 1 : 0.25;
+      // Own Locations pay out every turn under the §3.1 Shell Game; the zone
+      // caps at 3, and the engine rejects a 4th.
+      return me.locations.length < 3 ? 1.5 : 0;
     default:
       return base;
   }
@@ -479,7 +489,13 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
       // Prefer clean kills, then biggest threat.
       const kills = byThreat.filter((u) => damageToKill(u, state) <= val);
       const pool = kills.length > 0 ? kills : byThreat;
-      return pool.slice(0, 2).map((u) => u.instanceId);
+      const out = pool.slice(0, 2).map((u) => u.instanceId);
+      // Burn to the face: a unit-target damage Event may legally aim at the
+      // enemy Leader (paying its Ward). Worth considering when it closes the
+      // game or there is nothing else to hit; the simulation pass prices the
+      // Ward surcharge and Guard/Feedback risk for us.
+      if (val >= opp.health || out.length === 0) out.push(opp.leader.instanceId);
+      return out;
     }
     case 'freeze': {
       const t = [...enemyTargetable].sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
@@ -572,7 +588,9 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   // let the rest survive forever, permanently locking out Leader damage.
   // Track outstanding lethal need per Guard and finish off the
   // closest-to-dead one first so multiple Guards can die in the same wave.
-  const guardNeed = new Map(guards.map((g) => [g.instanceId, damageToKill(g, state)]));
+  // Track remaining effective health per Guard; each declared hit contributes
+  // its projected (post-Armor/Brittle) damage, since Armor shaves EVERY hit.
+  const guardNeed = new Map(guards.map((g) => [g.instanceId, totalRemaining(g, state)]));
   const pickGuardTarget = (): GameCard | undefined => {
     const alive = guards.filter((g) => (guardNeed.get(g.instanceId) ?? 0) > 0);
     if (alive.length === 0) return guards[0];
@@ -590,9 +608,9 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
     // Interlock awareness: if a Guard stands, we hit one; evaluate that trade.
     const interceptor = guards.length > 0 ? pickGuardTarget() : undefined;
     if (interceptor) {
-      const need = guardNeed.get(interceptor.instanceId) ?? damageToKill(interceptor, state);
+      const need = guardNeed.get(interceptor.instanceId) ?? totalRemaining(interceptor, state);
       const dieToCounter = effAttack(interceptor, state) >= uHp && !kwActive(u, 'Lurk');
-      const killsGuard = atk >= need;
+      const killsGuard = projectedDamage(interceptor, atk) >= need;
       if (dieToCounter && !killsGuard && unitValue(u, state) > unitValue(interceptor, state) * 0.8)
         continue;
     } else if (!lethalPush && readyBlockers.length > 0) {
@@ -609,7 +627,10 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
     let targetId = opp.leader.instanceId;
     if (interceptor) {
       targetId = interceptor.instanceId;
-      guardNeed.set(interceptor.instanceId, (guardNeed.get(interceptor.instanceId) ?? 0) - atk);
+      guardNeed.set(
+        interceptor.instanceId,
+        (guardNeed.get(interceptor.instanceId) ?? 0) - projectedDamage(interceptor, atk),
+      );
     } else if (!lethalPush) {
       const trades = opp.board
         .filter((e) => e.type === 'Unit' && !lurkProtected(e) && atk >= damageToKill(e, state))

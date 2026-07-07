@@ -47,7 +47,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Frost": 1,
       "Tech": 1,
-      "Generic": 2
+      "Generic": 1
     },
     "attack": 2,
     "health": 4
@@ -70,7 +70,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attach": {
-      "attack": 2,
+      "attack": 1,
       "health": 2
     }
   },
@@ -118,7 +118,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Order": 1,
       "Generic": 2
     },
-    "attack": 4,
+    "attack": 3,
     "health": 3
   },
   {
@@ -463,7 +463,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "The ocean incarnate, commanding the tides.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
-    "health": 23,
+    "health": 20,
     "attack": 3
   },
   {
@@ -541,7 +541,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Rare",
     "set": "Blue Coral",
     "keywords": [
-      "Armor 2",
+      "Armor 1",
       "Pierce"
     ],
     "text": "Marked by the beast that rules the depths.",
@@ -552,7 +552,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attach": {
       "attack": 1,
-      "health": 3
+      "health": 2
     }
   },
   {
@@ -619,7 +619,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 2
     },
     "attack": 3,
-    "health": 4
+    "health": 3
   },
   {
     "id": "phantom_squadron",
@@ -752,7 +752,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attach": {
       "attack": 2,
-      "health": 3
+      "health": 2
     }
   },
   {
@@ -819,7 +819,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Dark": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 2
   },
   {
@@ -881,7 +881,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "text": "Her magic is as cold as the abyss.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_powerful_ethereal_Sea_Witch_with_pale_skin_and_glowing_viol_660bc480-f4fc-44d2-bd62-2cb96ed1204d_1_result.webp?updatedAt=1778240809298",
-    "health": 33,
+    "health": 26,
     "attack": 3
   },
   {
@@ -1097,7 +1097,6 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Super-Rare",
     "set": "Blue Coral",
     "keywords": [
-      "Echo",
       "Pure"
     ],
     "text": "Even monsters can be chained. Draw 2 cards.",
@@ -1262,11 +1261,11 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Rally 3"
+      "Codex 1"
     ],
     "text": "Ruler of the sunken realms.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_majestic_Mer-King_with_a_beard_like_flowing_white_seaweed_s_8914ae9c-6e33-441e-b460-124428685853_0_result.webp?updatedAt=1778240808133",
-    "health": 39,
+    "health": 44,
     "attack": 3
   },
   {
@@ -1346,7 +1345,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Rare",
     "set": "Blue Coral",
     "keywords": [
-      "Armor 2",
+      "Armor 1",
       "Pierce"
     ],
     "text": "Riches beyond imagination.",
@@ -1357,7 +1356,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attach": {
       "attack": 1,
-      "health": 3
+      "health": 2
     }
   },
   {
@@ -1395,9 +1394,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Uncommon",
     "set": "Blue Coral",
-    "keywords": [
-      "Armor 1"
-    ],
+    "keywords": [],
     "text": "A macabre source of light.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_lantern_made_from_a_dried_pufferfish_containing_a_pulsating_0f791616-9d72-4791-a835-3220c5494046_1_result.webp?updatedAt=1778240807631",
     "cost": {
@@ -1547,18 +1544,18 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [
-      "Purge"
-    ],
+    "keywords": [],
     "text": "The ocean's wrath unleashed. Purge target Unit: strip its Items, statuses and buffs.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_tsunami_wave_forming_viewed_as_a_massive_towering_wall_of_d_69ec0d39-3e05-4cab-b911-2a6c5112ef6a_3_result.webp?updatedAt=1778240807141",
     "cost": {
-      "Light": 1
+      "Light": 1,
+      "Generic": 2
     },
     "effect": {
-      "action": "purge",
+      "action": "damage",
+      "value": 4,
       "target": "unit",
-      "text": "Purge target Unit: strip its Items, statuses and buffs."
+      "text": "Deal 4 damage to target enemy Unit."
     }
   },
   {
@@ -1605,7 +1602,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Order": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 2
   },
   {
@@ -1618,7 +1615,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Rare",
     "set": "Blue Coral",
     "keywords": [
-      "Armor 2",
+      "Armor 1",
       "Pierce"
     ],
     "text": "Channeling the energy of the deep.",
@@ -1629,7 +1626,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attach": {
       "attack": 1,
-      "health": 3
+      "health": 2
     }
   },
   {
@@ -1707,9 +1704,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Uncommon",
     "set": "Blue Coral",
-    "keywords": [
-      "Armor 1"
-    ],
+    "keywords": [],
     "text": "A trap for the greedy.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_cursed_treasure_chest_its_lid_made_of_a_giant_gaping_clam_m_646b1a5b-c10e-42d9-88cd-4be885f6351f_2_result.webp?updatedAt=1778240806311",
     "cost": {
@@ -1738,7 +1733,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Light": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -1894,7 +1889,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Dark": 1,
       "Generic": 1
     },
-    "attack": 4,
+    "attack": 3,
     "health": 1
   },
   {
@@ -2213,7 +2208,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame": 1,
       "Generic": 2
     },
-    "attack": 2,
+    "attack": 3,
     "health": 5
   },
   {
@@ -2280,7 +2275,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Light": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -2427,7 +2422,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 1,
-    "health": 4
+    "health": 3
   },
   {
     "id": "gulper_eel",
@@ -2468,7 +2463,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 2
   },
   {
@@ -2488,7 +2483,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Order": 1
     },
-    "locEffect": "HP_ALL"
+    "locEffect": "ATK_ALL"
   },
   {
     "id": "coral_cathedral",
@@ -2527,7 +2522,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Tech": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 2
   },
   {
@@ -2564,7 +2559,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Boost 1"
+      "Codex 1"
     ],
     "text": "The beating center of the reef.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_pulsating_heart-shaped_coral_growing_in_the_center__b53de206-38ca-450d-af24-cbbbec3a7177_0_result.webp?updatedAt=1778240801439",
@@ -2612,7 +2607,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Light": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -2738,7 +2733,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Frost": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -2842,7 +2837,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Nature": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -2883,7 +2878,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame": 1
     },
     "attach": {
-      "attack": 0,
+      "attack": 1,
       "health": 1
     }
   },
@@ -2906,7 +2901,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 1,
-    "health": 4
+    "health": 3
   },
   {
     "id": "neon_moray",
@@ -2982,11 +2977,11 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Fix Flame"
+      "Boost 1"
     ],
     "text": "He has seen the bottom of the world.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_legendary_diver_in_a_highly_modified_heavy_brass_and_steel__d425f53e-5d8e-4cd2-b28b-a12ad45e3c7b_3_result.webp?updatedAt=1778240799013",
-    "health": 30,
+    "health": 35,
     "attack": 3
   },
   {
@@ -3027,7 +3022,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 1,
-    "health": 4
+    "health": 3
   },
   {
     "id": "sphere_pufferfish",
@@ -3128,7 +3123,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 2
   },
   {
@@ -3236,7 +3231,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 3,
-    "health": 2
+    "health": 3
   },
   {
     "id": "kinetix_blacksite_cavern",
@@ -3305,7 +3300,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 3,
-    "health": 2
+    "health": 3
   },
   {
     "id": "cinder_mite",
@@ -3363,11 +3358,11 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Inspire 1"
+      "Boost 1"
     ],
     "text": "Her orders arrive at the speed of an eruption.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Crimson-armored_commander_overlooking_a_lava_pit._--chaos_5_-_c9144cb0-c6ac-4520-b9bb-5d988f91fca1_0.png?updatedAt=1783333969026",
-    "health": 36,
+    "health": 38,
     "attack": 3
   },
   {
@@ -3503,7 +3498,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 3,
+    "attack": 4,
     "health": 3
   },
   {
@@ -3651,7 +3646,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Crimson Circuit",
     "keywords": [
-      "Heal 3"
+      "Heal 2"
     ],
     "text": "Heal 3: surplus current, routed back into the one who commands it.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ninja_Generates_endless_kinetic_current._--chaos_5_--ar_43_--_fdff127f-65fd-454f-9cf5-ec4c3084c3d9_1.png?updatedAt=1783333969056",
@@ -3661,7 +3656,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "effect": {
       "action": "heal",
-      "value": 3
+      "value": 2
     }
   },
   {
@@ -3766,7 +3761,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Efficient 2"
     ],
-    "text": "Efficient 2: the breach is open — the next Unit you deploy this turn costs 2 less. Deals 1 damage.",
+    "text": "Efficient 2: the breach is open \u2014 the next Unit you deploy this turn costs 2 less. Deals 1 damage.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Explosive_energy_crack_shattering_solid_rock._--chaos_5_--ar__0599db95-7f40-451e-b15e-63c460039fdd_1.png?updatedAt=1783333969017",
     "cost": {
       "Flame": 1,
@@ -3800,7 +3795,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attack": 2,
-    "health": 4
+    "health": 3
   },
   {
     "id": "ash_shaper_mystic",
@@ -3822,7 +3817,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 2,
+    "attack": 3,
     "health": 3
   },
   {
@@ -3890,7 +3885,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 2
     },
     "attack": 3,
-    "health": 3
+    "health": 4
   },
   {
     "id": "locust_veil",
@@ -3936,7 +3931,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Dark": 1
     },
     "attack": 2,
-    "health": 3
+    "health": 2
   },
   {
     "id": "neon_phantom_assassin",
@@ -3957,7 +3952,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Tech": 1,
       "Dark": 1,
-      "Generic": 2
+      "Generic": 1
     },
     "attack": 3,
     "health": 2
@@ -4089,11 +4084,11 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Sync 2"
+      "Sustain 1"
     ],
     "text": "He is not wearing the swarm. The swarm is wearing him.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/ultimate_nanite-integrated_shinobi._--ar_43_--raw_--sref_2208_1ef2a9f4-aba7-4094-8f2c-f658dca2886f_2.png?updatedAt=1783333969071",
-    "health": 40,
+    "health": 33,
     "attack": 3
   },
   {
@@ -4138,7 +4133,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Tech": 1
     },
     "attack": 1,
-    "health": 3
+    "health": 2
   },
   {
     "id": "kinetix_enforcer",
@@ -4270,7 +4265,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "attach": {
       "attack": 1,
-      "health": 0
+      "health": 1
     }
   }
 ] as CardTemplate[];

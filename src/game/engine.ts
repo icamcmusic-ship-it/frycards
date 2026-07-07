@@ -179,11 +179,20 @@ function discountCost(
 // ---------------------------------------------------------------------------
 // Stat calculation (Layer Rule §5.3: Locations first, then Items)
 // ---------------------------------------------------------------------------
-function locAtkBuff(state: GameState): number {
-  return state.activeLocation?.locEffect === 'ATK_ALL' ? 1 : 0;
+/**
+ * A revealed Location's passive effect serves its CONTROLLER's Units only;
+ * Symmetric Locations serve both players (§3.1).
+ */
+function locAffects(state: GameState, card: GameCard): boolean {
+  const loc = state.activeLocation;
+  if (!loc) return false;
+  return state.activeLocationOwnerId === card.ownerId || hasKeyword(loc, 'Symmetric');
 }
-function locHpBuff(state: GameState): number {
-  return state.activeLocation?.locEffect === 'HP_ALL' ? 1 : 0;
+function locAtkBuff(state: GameState, card: GameCard): number {
+  return state.activeLocation?.locEffect === 'ATK_ALL' && locAffects(state, card) ? 1 : 0;
+}
+function locHpBuff(state: GameState, card: GameCard): number {
+  return state.activeLocation?.locEffect === 'HP_ALL' && locAffects(state, card) ? 1 : 0;
 }
 export function itemAtk(card: GameCard): number {
   return (card.attachedItems || []).reduce((s, it) => s + (it.attach?.attack || 0), 0);
@@ -206,7 +215,7 @@ function phalanxHp(card: GameCard, state: GameState): number {
   return x * readyOthers;
 }
 export function effAttack(card: GameCard, state: GameState): number {
-  const loc = card.type === 'Unit' ? locAtkBuff(state) : 0;
+  const loc = card.type === 'Unit' ? locAtkBuff(state, card) : 0;
   // Valor (new set): an aura of +X attack on all of the controller's Units.
   const valor = card.type === 'Unit' ? auraValue(state, card.ownerId, 'Valor') : 0;
   return Math.max(
@@ -222,7 +231,7 @@ export function effAttack(card: GameCard, state: GameState): number {
   );
 }
 export function effMaxHealth(card: GameCard, state: GameState): number {
-  const loc = card.type === 'Unit' ? locHpBuff(state) : 0;
+  const loc = card.type === 'Unit' ? locHpBuff(state, card) : 0;
   // Codex (new set): an aura of +X max health on all of the controller's Units.
   const codex = card.type === 'Unit' ? auraValue(state, card.ownerId, 'Codex') : 0;
   return Math.max(
@@ -313,18 +322,12 @@ function applyDamageToUnit(
   if (kwActive(card, 'Brittle')) dmg *= 2; // §2.3 Brittle: incoming D becomes 2D
   if (dmg > 0 && card.tainted) dmg += card.tainted; // Taint [X] (new set): +X from all sources until Cleanup
 
+  // Armor X (§5.4): flat damage reduction on every hit, but a hit always
+  // deals at least 1 — chip damage is guaranteed counter-play. Armor is
+  // permanent (V1.8 removed the old all-or-nothing absorb + Armor Break).
   const currentArmor = opts.bypassArmor ? 0 : effArmor(card);
-  if (currentArmor > 0) {
-    if (dmg <= currentArmor) return 0; // Armor absorbs, remains
-    dmg -= currentArmor;
-    // Armor Break (§2.1): a hit bigger than the total Armor shatters ALL of
-    // it — printed Armor and Item-granted Armor alike (keyword uniformity).
-    card.armor = 0;
-    for (const it of card.attachedItems || []) {
-      if (it.keywords?.some((k) => k.split(' ')[0] === 'Armor')) {
-        it.keywords = it.keywords.filter((k) => k.split(' ')[0] !== 'Armor');
-      }
-    }
+  if (currentArmor > 0 && dmg > 0) {
+    dmg = Math.max(1, dmg - currentArmor);
   }
   let landed = 0;
   const bh = bonusHp(card) - card.bonusDamage;
@@ -349,10 +352,7 @@ export function projectedDamage(card: GameCard, amount: number): number {
   if (kwActive(card, 'Brittle')) dmg *= 2;
   if (dmg > 0 && card.tainted) dmg += card.tainted;
   const armor = effArmor(card);
-  if (armor > 0) {
-    if (dmg <= armor) return 0;
-    dmg -= armor;
-  }
+  if (armor > 0 && dmg > 0) dmg = Math.max(1, dmg - armor);
   return dmg;
 }
 
@@ -487,14 +487,17 @@ function startOfTurn(next: GameState, player: PlayerState) {
   player.resources = {};
   player.singleColorRoll = false;
 
-  // Location Shell Game (§3.1): flip a random face-down opponent Location.
+  // Location Shell Game (§3.1): flip a random face-down Location of YOUR OWN
+  // at the start of your turn — you control it for the whole turn. (V1.8: the
+  // old rule flipped the *opponent's* Location for the active player, which
+  // made decking Locations a gift to the enemy.)
   const oppId = player.id === next.player1Id ? next.player2Id : next.player1Id;
   const opp = next.players[oppId];
-  if (opp.locations.length > 0) {
-    const pick = opp.locations[Math.floor(Math.random() * opp.locations.length)];
+  if (player.locations.length > 0) {
+    const pick = player.locations[Math.floor(Math.random() * player.locations.length)];
     next.activeLocation = pick;
     next.activeLocationOwnerId = player.id;
-    next.log.push(`${player.name} revealed the Location "${pick.name}".`);
+    next.log.push(`${player.name} revealed their Location "${pick.name}".`);
   }
 
   // Hatchling [X] (new set): a revealed Location seeds X 1/1 tokens for its
@@ -540,9 +543,12 @@ function startOfTurn(next: GameState, player: PlayerState) {
     next.log.push(`${player.name}'s Leader took ${dealt} Scorch damage.`);
   }
 
-  // SCORCH_ALL location: singe every unit for 1 at start of the controller's turn.
+  // SCORCH_ALL location: at the start of the controller's turn, singe every
+  // ENEMY unit for 1; a Symmetric SCORCH_ALL burns both boards.
   if (next.activeLocation?.locEffect === 'SCORCH_ALL') {
+    const symmetric = hasKeyword(next.activeLocation, 'Symmetric');
     for (const pl of Object.values(next.players)) {
+      if (!symmetric && pl.id === next.activeLocationOwnerId) continue;
       for (const u of pl.board) applyDamageToUnit(u, 1);
     }
   }
@@ -1447,10 +1453,18 @@ function reduce(state: GameState, action: GameAction): GameState {
 
     case 'ACTIVATE_ABILITY': {
       if (next.phase !== 'ACTION') return next;
-      // Find the permanent on the board (Unit, Location, Leader, or Item)
-      let source =
-        activePlayer.board.find((c) => c.instanceId === action.instanceId) ||
-        activePlayer.locations.find((c) => c.instanceId === action.instanceId);
+      // Find the permanent on the board (Unit, revealed Location, Leader, or
+      // Item). Face-down Locations are hidden information — their abilities
+      // are NOT activatable until the Shell Game reveals them (§3.1).
+      let source = activePlayer.board.find((c) => c.instanceId === action.instanceId);
+      if (
+        !source &&
+        next.activeLocation &&
+        next.activeLocationOwnerId === activePlayer.id &&
+        next.activeLocation.instanceId === action.instanceId
+      ) {
+        source = next.activeLocation;
+      }
       if (!source && activePlayer.leader.instanceId === action.instanceId)
         source = activePlayer.leader;
       if (!source) {

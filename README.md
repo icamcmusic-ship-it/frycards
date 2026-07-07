@@ -35,8 +35,8 @@ nanite swarms, magma harvesters and shadow ninjas. Crimson Circuit prints
 all 18 Set-2 keywords plus the seven Blue Coral glossary keywords that had
 no printing (Brittle, Decay, Freeze, Heal, Manifest, Overdrive,
 Photosynthesis), and adds two Mythic Leaders: Crimson Vector Commander
-(Flame/Order — Command 2, Ward 2, Inspire 1, 36 HP) and Apex Nanite Shinobi
-(Tech/Dark — Command 2, Ward 2, Sync 2, 40 HP), giving every card in the
+(Flame/Order — Command 2, Ward 2, Boost 1, 38 HP) and Apex Nanite Shinobi
+(Tech/Dark — Command 2, Ward 2, Sustain 1, 33 HP), giving every card in the
 new set at least one Leader whose color pair can run it.
 
 The source of truth is `data/live_cards.csv` (Blue Coral set, 140 cards).
@@ -54,20 +54,18 @@ whose element pairs cover all 8 elements and every dual color cost across
 both sets. Each gets an auto-built legal 30-card deck (max 2 copies per
 name, ≥2 Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
 mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
-top-end). Leader stats carry per-pool balance counterweights: every Leader is
-3 ATK; Legendary Diver (30 HP, Flame/Chaos, Fix Flame) and Avatar of the
-Abyss (23 HP, Sustain 1 — a per-turn heal compounds hard over a ~18-turn
-game, so it needs the lowest life total) run leaner than Mer-King (39 HP,
-Rally 3) and Apex Nanite Shinobi (40 HP, Sync 2); Ethereal Sea Witch
-(Boost 1 — a permanent extra resource every turn) is trimmed to 33 HP and
-Crimson Vector Commander sits at 36 HP with Inspire 1 — its first draft
-carried Valor 1, but an always-on
-attack aura on a Leader simulated at ~80% win rate no matter the HP, so
-Valor now lives on the Heart of the Thermal Grid Location instead, where the
-Shell Game time-limits it.
+top-end). Leader stats carry per-pool balance counterweights (re-tuned for
+Rulebook V1.8's Shell Game / Location / Armor reworks): every Leader is
+3 ATK; Avatar of the Abyss (20 HP, Sustain 1 — a per-turn heal compounds
+hard over a ~18-turn game, so it needs the lowest life total) and Ethereal
+Sea Witch (26 HP, Boost 1 — a permanent extra resource every turn) run
+leaner than Mer-King (44 HP, Codex 1) and Crimson Vector Commander (38 HP,
+Boost 1); Legendary Diver sits at 35 HP with Boost 1 and Apex Nanite
+Shinobi at 33 HP with Sustain 1. Always-on attack auras (Valor) proved too
+strong on Leaders at any HP in simulation, so no Leader carries one.
 Balance is tuned with `npx tsx scripts/simulate.ts <games>`, which reports a
 per-leader win rate (wins ÷ appearances) and holds every leader between
-roughly 44% and 57% over large (2000+ game) headless CPU-vs-CPU samples —
+roughly 44% and 55% over large (1000+ game) headless CPU-vs-CPU samples —
 smaller samples swing several points on variance alone, so re-tune against
 at least a couple thousand games, not a few hundred.
 
