@@ -75,7 +75,10 @@ export function getCPUAction(state: GameState): GameAction | null {
 // ---------------------------------------------------------------------------
 function cpuMulligan(cpu: PlayerState): GameAction {
   const cheapPlays = cpu.hand.filter((c) => costTotal(c) <= 3 && c.type !== 'Location').length;
-  if (cpu.mulliganCount === 0 && cheapPlays === 0) {
+  const units = cpu.hand.filter((c) => c.type === 'Unit').length;
+  // Mull once for an unplayable-early hand OR a hand with no board presence
+  // at all (all Events/Items/Locations loses the board before it can act).
+  if (cpu.mulliganCount === 0 && (cheapPlays === 0 || units === 0)) {
     return { type: 'MULLIGAN', playerId: cpu.id };
   }
   // Bottom the most expensive cards when a mulligan was taken.
@@ -637,20 +640,58 @@ function declareAttacks(state: GameState, me: PlayerState, opp: PlayerState): Ga
   return { type: 'SUBMIT_ATTACKS' };
 }
 
-/** Command [X]: pay to re-ready a strong Unit for another swing. */
+/**
+ * Command [X]: pay to ready a Unit for a(nother) swing. Two profitable shapes:
+ *  1. Re-ready a Unit that already attacked (extra attack this turn).
+ *  2. "Haste": clear a freshly deployed Unit's summoning sickness so it can
+ *     join this turn's assault wave at all.
+ * A Command that completes lethal is always taken, whatever the value math.
+ */
 function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): GameAction | null {
   const x = keywordValue(me.leader, 'Command');
   if (x <= 0 || me.leader.glitched || me.leader.frozen > 0) return null;
   if (state.turnNumber <= 1) return null;
   if (!canAfford({ Generic: x }, me.resources)) return null;
-  // Only worth it for a unit that already attacked and hits harder than the cost.
-  const target = [...me.board]
-    .filter((u) => u.attacksThisTurn > 0 && !u.commandedThisTurn && u.frozen === 0 && effAttack(u, state) > x)
+
+  const readyGuard = opp.board.some((u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0);
+  const eligible = [...me.board].filter(
+    (u) =>
+      !u.commandedThisTurn &&
+      u.frozen === 0 &&
+      (u.attacksThisTurn > 0 || u.summoningSickness) &&
+      effAttack(u, state) > 0
+  );
+  if (eligible.length === 0) return null;
+
+  // Lethal completion: if the opponent cannot block and readying this Unit's
+  // swing closes the game, pay whatever it costs.
+  const oppCanBlock = opp.board.some((u) => !u.exhausted && u.frozen === 0);
+  if (!oppCanBlock && !readyGuard) {
+    const closer = eligible
+      .filter((u) => effAttack(u, state) >= opp.health)
+      .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
+    if (closer) return { type: 'LEADER_COMMAND', targetId: closer.instanceId };
+  }
+
+  // Value line: the readied Unit must out-hit the Command cost, and against a
+  // ready Guard a small swing just feeds the interceptor.
+  const target = eligible
+    .filter((u) => effAttack(u, state) > x)
     .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
   if (!target) return null;
-  // Make sure the re-readied unit will actually attack again profitably.
-  const readyGuard = opp.board.some((u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0);
   if (readyGuard && effAttack(target, state) < 3) return null;
+  // Don't burn the whole reserve hasting a unit that would die pointlessly
+  // into a bigger ready blocker while we're behind on life.
+  if (target.summoningSickness && me.health < opp.health) {
+    const eatenForFree = opp.board.some(
+      (b) =>
+        !b.exhausted &&
+        b.frozen === 0 &&
+        effAttack(b, state) >= totalRemaining(target, state) &&
+        totalRemaining(b, state) + effArmor(b) > effAttack(target, state)
+    );
+    if (eatenForFree) return null;
+  }
   return { type: 'LEADER_COMMAND', targetId: target.instanceId };
 }
 

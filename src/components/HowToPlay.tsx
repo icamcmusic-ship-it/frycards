@@ -58,7 +58,7 @@ const SECTIONS = [
     title: '6 · Keyword Glossary — Traits',
     body: [
       ['Blitz', 'May attack the turn it is deployed.'],
-      ['Armor X', 'Ignores hits of X or less. A bigger hit breaks ALL of the card\'s Armor — printed Armor and Item-granted Armor alike — and deals the rest.'],
+      ['Armor X', 'Ignores hits of X or less. A bigger hit breaks ALL of the card\'s Armor — printed Armor and Item-granted Armor alike — and deals the rest. Works identically on Units and Leaders, in combat and against Events.'],
       ['Pierce', 'Blocked damage beyond the blocker\'s health hits the enemy Leader.'],
       ['Guard', 'Enemy attacks and targeted Events must target this Unit while it is ready.'],
       ['Ward X', 'Enemies pay X extra resources to target this card.'],
@@ -160,7 +160,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.6
+            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.7
           </div>
         </div>
       </div>
