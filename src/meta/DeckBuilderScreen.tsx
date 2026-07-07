@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Trash2, Plus, Check, AlertTriangle } from 'lucide-react';
+import { Trash2, Plus, Check, AlertTriangle, Copy, Import } from 'lucide-react';
+import { encodeDeckCode, decodeDeckCode } from './deckcode';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { CardTemplate } from '../types';
@@ -79,6 +80,25 @@ export function DeckBuilderScreen({
 }) {
   const { decks, refreshDecks } = useMeta();
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(null);
+  const [importError, setImportError] = useState('');
+
+  const handleImport = () => {
+    const code = window.prompt('Paste a deck code (FRY1:…):');
+    if (!code) return;
+    const db = new Map(allCards.map((c) => [c.id, c]));
+    const res = decodeDeckCode(code, db);
+    if ('error' in res) {
+      setImportError(res.error);
+      return;
+    }
+    setImportError('');
+    // Unsaved draft: no id yet, saving creates a new deck row.
+    setEditing({
+      name: 'Imported Deck',
+      leader_id: res.leaderId,
+      card_ids: res.cardIds,
+    } as DeckRow);
+  };
 
   if (editing) {
     return (
@@ -97,11 +117,21 @@ export function DeckBuilderScreen({
     <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
       <MetaHeader title="DECK BUILDER" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
-        <PopButton color="red" onClick={() => setEditing('new')} className="mb-5">
-          <span className="flex items-center gap-1">
-            <Plus className="w-4 h-4" /> FORGE NEW DECK
-          </span>
-        </PopButton>
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <PopButton color="red" onClick={() => setEditing('new')}>
+            <span className="flex items-center gap-1">
+              <Plus className="w-4 h-4" /> FORGE NEW DECK
+            </span>
+          </PopButton>
+          <PopButton color="yellow" onClick={handleImport}>
+            <span className="flex items-center gap-1">
+              <Import className="w-4 h-4" /> IMPORT CODE
+            </span>
+          </PopButton>
+          {importError && (
+            <span className="text-[11px] font-bold text-[#E53935]">⚠ {importError}</span>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {decks.map((d) => {
             const leader = allCards.find((c) => c.id === d.leader_id);
@@ -185,9 +215,18 @@ function DeckEditor({
   const [leaderId, setLeaderId] = useState<string | null>(deck?.leader_id || null);
   const [cardIds, setCardIds] = useState<string[]>(deck?.card_ids || []);
   const [typeFilter, setTypeFilter] = useState('All');
+  const [costFilter, setCostFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleExport = async () => {
+    if (!leaderId) return;
+    await navigator.clipboard.writeText(encodeDeckCode(leaderId, cardIds));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const ownedLeaders = allCards.filter((c) => c.type === 'Leader' && (ownedQty.get(c.id) || 0) > 0);
   const leader = leaderId ? db.get(leaderId) : undefined;
@@ -218,6 +257,10 @@ function DeckEditor({
     if (leader && !c.elements.every((e) => e === 'Generic' || leader.elements.includes(e)))
       return false;
     if (typeFilter !== 'All' && c.type !== typeFilter) return false;
+    if (costFilter !== 'All') {
+      const cost = Object.values(c.cost || {}).reduce((a, b) => a + b, 0);
+      if (costFilter === '6+' ? cost < 6 : cost !== parseInt(costFilter, 10)) return false;
+    }
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -329,6 +372,11 @@ function DeckEditor({
           >
             {cardIds.length}/{DECK_SIZE}
           </span>
+          <PopButton color="yellow" onClick={handleExport} title="Copy deck code to clipboard">
+            <span className="flex items-center gap-1">
+              <Copy className="w-4 h-4" /> {copied ? 'COPIED!' : 'CODE'}
+            </span>
+          </PopButton>
           <PopButton color="red" onClick={handleSave} disabled={saving}>
             {saving ? 'SAVING…' : isValid ? 'SAVE DECK ✓' : 'SAVE DRAFT'}
           </PopButton>
@@ -362,6 +410,17 @@ function DeckEditor({
             >
               {['All', 'Unit', 'Event', 'Item', 'Charm', 'Location'].map((t) => (
                 <option key={t}>{t}</option>
+              ))}
+            </select>
+            <select
+              className={select}
+              value={costFilter}
+              onChange={(e) => setCostFilter(e.target.value)}
+            >
+              {['All', '0', '1', '2', '3', '4', '5', '6+'].map((v) => (
+                <option key={v} value={v}>
+                  {v === 'All' ? 'Any cost' : `Cost ${v}`}
+                </option>
               ))}
             </select>
             <span className="text-[10px] font-bold text-[#2C3E50] ml-auto">
