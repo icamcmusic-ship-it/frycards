@@ -5,6 +5,26 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Changed (Rulebook V1.9)
+
+- **Leader rebalance** (validated over 900 simulated games; all six leaders
+  now 45.0–54.7% win rate, first-player 51.8%): Avatar of the Abyss 20→24 HP,
+  Crimson Vector Commander 38→35 HP. Live Supabase pool re-synced.
+- **Rules clarification:** Guard cannot bodyblock hostile Charms — a Charm
+  attaches to a player, so it interacts with the enemy Leader's Ward and
+  Feedback only (§4). The text now matches what the engine always enforced.
+- **CPU:** can activate the revealed active Location's ability, mulligans
+  Location-flooded hands, and aims Freeze at a ready enemy Guard first
+  (silencing the interceptor unlocks the rest of the board).
+- **Fixed:** TypeScript build error in the pack-reveal screen
+  (`pullToGameCard` missing `attacksThisTurn`).
+
+### Added (V1.9)
+
+- Negative-path fuzzer (`npm run fuzz`, in CI): games survive a 50% mix of
+  hostile/garbage actions with server authority asserted — no crash, no
+  resource theft, no zone/capacity overruns, no duplicated card instances.
+
 ### Changed (Rulebook V1.8)
 
 - **Shell Game rework:** you now flip one of your OWN face-down Locations at

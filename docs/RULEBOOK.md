@@ -1,4 +1,4 @@
-# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.8)
+# Shifting Multiverse TCG — Rules Bible (Comprehensive Rulebook V1.9)
 
 This document is the **authoritative rules reference** for the digital
 implementation. The engine (`src/game/engine.ts`) is the executable version of
@@ -191,10 +191,12 @@ Resolved in this exact order when a card or ability is aimed at something:
    returns to the graveyard; a negated ability is not marked as used.
 6. **Resolution** — the effect resolves (§4.1).
 
-Untargeted effects (Wildcast, `leader`-target damage with no explicit target,
-hostile Charms) still "target" for the purposes of Guard, Ward and Feedback
-where a specific enemy card is implicitly chosen — the enemy Leader for
-`leader`-target Events and Decay Charms.
+Untargeted effects that implicitly choose a specific enemy card still
+"target" it: `leader`-target Events implicitly target the enemy Leader for
+**Guard, Ward and Feedback**; hostile (Decay) Charms implicitly target the
+enemy Leader for **Ward and Feedback only** — a Charm attaches to a
+*player*, so a Guard Unit cannot bodyblock it. Wildcast is fully untargeted
+and ignores all three.
 
 ### §4.1 Event verbs
 - **damage X** — standard pipeline (§5.4).
@@ -363,7 +365,31 @@ card's keywords are all inactive until they wear off.
 
 ## Change log
 
-**V1.8 (this revision)**
+**V1.9 (this revision)**
+- **Guard vs Charms clarified (§4):** a hostile (Decay) Charm attaches to a
+  *player*, so a Guard Unit cannot bodyblock it — Charms interact with the
+  enemy Leader's **Ward and Feedback only**. (The old wording claimed Guard
+  applied to Charms too, which the engine never enforced and which makes no
+  physical sense; the text now matches the engine.) `leader`-target Events
+  are unchanged: Guard, Ward and Feedback all apply.
+- **Negative-path fuzzer** (`npm run fuzz`, wired into CI): every game now
+  also survives a 50% mix of hostile/garbage actions — bogus card ids,
+  out-of-phase submits, foreign-element and negative allocations, replayed
+  mulligans. Asserted invariants: no crash, no negative or non-finite
+  resources, no dead Units left on board, no zone-cap or Item-capacity
+  overruns, no duplicated card instances, no state carried on hand cards,
+  and silently rejected actions change nothing at all (no resource theft).
+- **Leader rebalance** (validated over 900 CPU-vs-CPU games; all six
+  Leaders now land between 45.0% and 54.7% win rate, first-player 51.8%):
+  Avatar of the Abyss 20→24 HP (was 41.0%), Crimson Vector Commander
+  38→35 HP (was 58.3%). The live Supabase pool was re-synced.
+- **CPU improvements:** the AI can now activate the revealed active
+  Location's ability (latent gap — no printed Location has one yet), it
+  mulligans Location-flooded hands (3+ Locations), and its Freeze targeting
+  prefers a ready enemy Guard — freezing the interceptor both silences its
+  counter-attack and unlocks every other target on that board.
+
+**V1.8**
 - **Shell Game rework (§2.1.2):** at the start of your turn you now flip one
   of **your own** face-down Locations and control it for the turn. The old
   rule flipped the *opponent's* Location for the active player's benefit —

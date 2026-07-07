@@ -347,7 +347,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
 function pullToGameCard(pull: PackPull): GameCard {
   const template = getCard(pull.card_id);
-  
+
   const baseTemplate = template || {
     id: pull.card_id,
     name: pull.name,
@@ -374,6 +374,7 @@ function pullToGameCard(pull: PackPull): GameCard {
     witherHp: 0,
     tempAtk: 0,
     tempHp: 0,
+    attacksThisTurn: 0,
     attachedItems: [],
   };
 }
@@ -420,11 +421,7 @@ function PackRevealModal({
               style={{ perspective: '600px' }}
             >
               {!shown ? (
-                <CardView
-                  card={gameCard}
-                  faceDown={true}
-                  className="shadow-hard-yellow"
-                />
+                <CardView card={gameCard} faceDown={true} className="shadow-hard-yellow" />
               ) : (
                 <div
                   className={cn(
@@ -432,9 +429,7 @@ function PackRevealModal({
                     pull.foil && 'shadow-hard-yellow outline outline-2 outline-[#FFD54F]',
                   )}
                 >
-                  <CardView
-                    card={gameCard}
-                  />
+                  <CardView card={gameCard} />
                   {pull.foil && (
                     <div
                       className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
