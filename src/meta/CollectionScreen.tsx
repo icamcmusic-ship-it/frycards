@@ -10,7 +10,14 @@ const TYPES = ['All', 'Leader', 'Unit', 'Event', 'Item', 'Charm', 'Location'];
 const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
 
 /** Static card face for out-of-game browsing (collection & deck builder). */
-export function StaticCard({ card, count, foilCount, dimmed, onClick, badge }: {
+export function StaticCard({
+  card,
+  count,
+  foilCount,
+  dimmed,
+  onClick,
+  badge,
+}: {
   key?: React.Key;
   card: CardTemplate;
   count?: number;
@@ -21,37 +28,67 @@ export function StaticCard({ card, count, foilCount, dimmed, onClick, badge }: {
 }) {
   const cost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
   return (
-    <div onClick={onClick} title={card.text}
+    <div
+      onClick={onClick}
+      title={card.text}
       className={cn(
         'w-[130px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col overflow-hidden relative select-none',
         onClick && 'cursor-pointer hover:-translate-y-1 transition-transform',
-        dimmed && 'opacity-40 saturate-50'
-      )}>
-      <div className={cn('px-1.5 py-0.5 flex justify-between items-center text-[8px] font-black heading-font', RARITY_CHIP[card.rarity || 'Common'])}>
+        dimmed && 'opacity-40 saturate-50',
+      )}
+    >
+      <div
+        className={cn(
+          'px-1.5 py-0.5 flex justify-between items-center text-[8px] font-black heading-font',
+          RARITY_CHIP[card.rarity || 'Common'],
+        )}
+      >
         <span className="truncate">{(card.rarity || card.type).toUpperCase()}</span>
         {card.cost && <span className="shrink-0">⚡{cost}</span>}
       </div>
       <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative">
-        {card.image
-          ? <img src={card.image} className="w-full h-full object-cover" loading="lazy" draggable={false} />
-          : <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-[10px] heading-font">{card.type}</div>}
+        {card.image ? (
+          <img
+            src={card.image}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-[10px] heading-font">
+            {card.type}
+          </div>
+        )}
         {(foilCount || 0) > 0 && (
           <span className="absolute top-1 right-1 bg-[#FFD54F] text-[#1A1A1A] text-[8px] font-black px-1 ink-border-sm flex items-center gap-0.5">
-            <Sparkles className="w-2.5 h-2.5" />{foilCount}
+            <Sparkles className="w-2.5 h-2.5" />
+            {foilCount}
           </span>
         )}
-        {badge && <span className="absolute top-1 left-1 bg-[#E53935] text-[#F7F7F7] text-[9px] font-black px-1 ink-border-sm">{badge}</span>}
+        {badge && (
+          <span className="absolute top-1 left-1 bg-[#E53935] text-[#F7F7F7] text-[9px] font-black px-1 ink-border-sm">
+            {badge}
+          </span>
+        )}
       </div>
       <div className="px-1.5 py-1 flex-1">
         <div className="heading-font text-[9px] leading-tight truncate">{card.name}</div>
         <div className="text-[8px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between">
-          <span>{card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}</span>
-          {card.attack !== undefined && <span>{card.attack}/{card.health}</span>}
+          <span>
+            {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
+          </span>
+          {card.attack !== undefined && (
+            <span>
+              {card.attack}/{card.health}
+            </span>
+          )}
         </div>
         {card.keywords && card.keywords.length > 0 && (
           <div className="flex flex-wrap gap-0.5 mt-0.5">
             {card.keywords.slice(0, 3).map((kw) => (
-              <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F]">{kw}</span>
+              <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F]">
+                {kw}
+              </span>
             ))}
           </div>
         )}
@@ -65,7 +102,13 @@ export function StaticCard({ card, count, foilCount, dimmed, onClick, badge }: {
   );
 }
 
-export function CollectionScreen({ onBack, allCards }: { onBack: () => void; allCards: CardTemplate[] }) {
+export function CollectionScreen({
+  onBack,
+  allCards,
+}: {
+  onBack: () => void;
+  allCards: CardTemplate[];
+}) {
   const { collection } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
@@ -106,18 +149,31 @@ export function CollectionScreen({ onBack, allCards }: { onBack: () => void; all
       <MetaHeader title="COLLECTION" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <input className={cn(select, 'w-44 placeholder:text-[#2C3E50]/50')} placeholder="Search cards…"
-            value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input
+            className={cn(select, 'w-44 placeholder:text-[#2C3E50]/50')}
+            placeholder="Search cards…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
           <select className={select} value={type} onChange={(e) => setType(e.target.value)}>
-            {TYPES.map((t) => <option key={t}>{t}</option>)}
+            {TYPES.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
           </select>
           <select className={select} value={rarity} onChange={(e) => setRarity(e.target.value)}>
-            {RARITIES.map((r) => <option key={r}>{r}</option>)}
+            {RARITIES.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
           </select>
           <select className={select} value={element} onChange={(e) => setElement(e.target.value)}>
-            {elements.map((el) => <option key={el}>{el}</option>)}
+            {elements.map((el) => (
+              <option key={el}>{el}</option>
+            ))}
           </select>
-          <PopButton color={ownedOnly ? 'black' : 'yellow'} onClick={() => setOwnedOnly(!ownedOnly)}>
+          <PopButton
+            color={ownedOnly ? 'black' : 'yellow'}
+            onClick={() => setOwnedOnly(!ownedOnly)}
+          >
             {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
           </PopButton>
           <div className="ml-auto text-[11px] font-bold text-[#2C3E50]">
@@ -129,7 +185,15 @@ export function CollectionScreen({ onBack, allCards }: { onBack: () => void; all
           {filtered.map((c) => {
             const o = owned.get(c.id);
             const total = (o?.q || 0) + (o?.f || 0);
-            return <StaticCard key={c.id} card={c} count={total} foilCount={o?.f || 0} dimmed={total === 0} />;
+            return (
+              <StaticCard
+                key={c.id}
+                card={c}
+                count={total}
+                foilCount={o?.f || 0}
+                dimmed={total === 0}
+              />
+            );
           })}
           {filtered.length === 0 && (
             <div className="w-full text-center font-bold text-[#2C3E50] py-14">

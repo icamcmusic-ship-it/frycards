@@ -112,8 +112,21 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   return (
     <MetaContext.Provider
       value={{
-        session, guest, loading, profile, shopItems, packTypes, collection, cosmetics, decks,
-        setGuest, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, signOut,
+        session,
+        guest,
+        loading,
+        profile,
+        shopItems,
+        packTypes,
+        collection,
+        cosmetics,
+        decks,
+        setGuest,
+        refreshProfile,
+        refreshCollection,
+        refreshCosmetics,
+        refreshDecks,
+        signOut,
       }}
     >
       {children}

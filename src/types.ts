@@ -1,4 +1,5 @@
-export type ElementColor = 'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
+export type ElementColor =
+  'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Item' | 'Charm' | 'Event';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Legendary' | 'Mythic';
 
@@ -63,13 +64,13 @@ export interface GameCard extends CardTemplate {
   exhausted: boolean;
   summoningSickness: boolean;
   // Status counters / permanent modifiers
-  scorch: number;          // flame damage per start-of-turn tick
-  frozen: number;          // >0 = cannot attack/block/activate
-  glitched: boolean;       // Glitch: keywords disabled until Cleanup
-  armor: number;           // current Armor value (from Armor [X])
-  witherAtk: number;       // permanent attack reduction from Wither
-  witherHp: number;        // permanent health reduction from Wither
-  tempAtk: number;         // temporary buff (until end of turn)
+  scorch: number; // flame damage per start-of-turn tick
+  frozen: number; // >0 = cannot attack/block/activate
+  glitched: boolean; // Glitch: keywords disabled until Cleanup
+  armor: number; // current Armor value (from Armor [X])
+  witherAtk: number; // permanent attack reduction from Wither
+  witherHp: number; // permanent health reduction from Wither
+  tempAtk: number; // temporary buff (until end of turn)
   tempHp: number;
   /** Taint [X]: extra damage taken from all sources until Cleanup. */
   tainted?: number;
@@ -82,7 +83,7 @@ export interface GameCard extends CardTemplate {
   hasAttacked?: boolean;
   // Items
   attachedItems: GameCard[];
-  hostId?: string;         // if this card is an Item attached to a Unit
+  hostId?: string; // if this card is an Item attached to a Unit
   isToken?: boolean;
   // Charm bookkeeping
   charmDuration?: number;
@@ -126,7 +127,7 @@ export type Phase =
 export interface CombatState {
   attackers: {
     instanceId: string; // unit or leader
-    targetId: string;   // enemy leader or unit
+    targetId: string; // enemy leader or unit
   }[];
   blockers: {
     attackerId: string;

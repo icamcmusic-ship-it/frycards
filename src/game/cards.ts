@@ -8,12 +8,12 @@ let cardData: CardData = buildCardData(GENERATED_CARDS);
 
 export function applyCardData(templates: CardTemplate[]) {
   const customIds = [
-    "abyssal_soul_eater",
-    "chrono_phalanx",
-    "modularity_core",
-    "quantum_overclocker",
-    "lurking_coral_prowler",
-    "starfall_wildcaster"
+    'abyssal_soul_eater',
+    'chrono_phalanx',
+    'modularity_core',
+    'quantum_overclocker',
+    'lurking_coral_prowler',
+    'starfall_wildcaster',
   ];
   const customCards = GENERATED_CARDS.filter((c) => customIds.includes(c.id));
   const merged = [...templates];
