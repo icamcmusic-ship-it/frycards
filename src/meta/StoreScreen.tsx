@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Gift, Package, Sparkles } from 'lucide-react';
+import { Gift, Package } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   openPack,
@@ -9,9 +9,11 @@ import {
   ShopItem,
   PackPull,
 } from '../lib/supabase';
-import { getLeaders } from '../game/cards';
+import { getLeaders, getCard } from '../game/cards';
 import { MetaHeader, PopButton, Notice, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
+import { CardView } from '../components/CardView';
+import { GameCard } from '../types';
 
 type Tab = 'packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
@@ -343,6 +345,39 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
+function pullToGameCard(pull: PackPull): GameCard {
+  const template = getCard(pull.card_id);
+  
+  const baseTemplate = template || {
+    id: pull.card_id,
+    name: pull.name,
+    type: pull.card_type as any,
+    rarity: pull.rarity as any,
+    image: pull.image_url || undefined,
+    elements: ['Generic'],
+    keywords: [],
+  };
+
+  return {
+    ...baseTemplate,
+    instanceId: pull.card_id + '-' + pull.slot,
+    ownerId: 'player',
+    damageTaken: 0,
+    bonusDamage: 0,
+    exhausted: false,
+    summoningSickness: false,
+    scorch: 0,
+    frozen: 0,
+    glitched: false,
+    armor: 0,
+    witherAtk: 0,
+    witherHp: 0,
+    tempAtk: 0,
+    tempHp: 0,
+    attachedItems: [],
+  };
+}
+
 function PackRevealModal({
   packName,
   pulls,
@@ -369,71 +404,46 @@ function PackRevealModal({
         Click each card to reveal your pull.
       </p>
 
-      <div className="flex flex-wrap justify-center gap-3 max-w-5xl relative">
+      <div className="flex flex-wrap justify-center gap-4 max-w-5xl relative">
         {pulls.map((pull, i) => {
           const shown = revealed.has(i);
+          const gameCard = pullToGameCard(pull);
           return (
             <div
               key={i}
-              onClick={() => onReveal(i)}
+              onClick={() => !shown && onReveal(i)}
               className={cn(
-                'w-32 h-[181px] cursor-pointer transition-transform duration-200',
+                'w-[120px] h-[168px] cursor-pointer transition-transform duration-200',
                 !shown && 'hover:-translate-y-2',
+                shown && (pull.rarity === 'Mythic' || pull.rarity === 'Super-Rare') && 'scale-105',
               )}
               style={{ perspective: '600px' }}
             >
               {!shown ? (
-                <div className="w-full h-full classic-black-back ink-border-sm shadow-hard-yellow flex items-center justify-center">
-                  <div className="w-12 h-12 bg-[#FFD54F] ink-border-sm rotate-45 flex items-center justify-center">
-                    <span className="-rotate-45 heading-font text-[10px] text-[#1A1A1A]">POP</span>
-                  </div>
-                </div>
+                <CardView
+                  card={gameCard}
+                  faceDown={true}
+                  className="shadow-hard-yellow"
+                />
               ) : (
                 <div
                   className={cn(
-                    'w-full h-full bg-[#F7F7F7] ink-border-sm flex flex-col overflow-hidden animate-[flipIn_.3s_ease-out]',
-                    pull.foil
-                      ? 'shadow-hard-yellow outline outline-2 outline-[#FFD54F]'
-                      : 'shadow-hard-black-xs',
-                    (pull.rarity === 'Mythic' || pull.rarity === 'Super-Rare') && 'scale-105',
+                    'relative w-full h-full animate-[flipIn_.3s_ease-out]',
+                    pull.foil && 'shadow-hard-yellow outline outline-2 outline-[#FFD54F]',
                   )}
                 >
-                  <div
-                    className={cn(
-                      'px-1.5 py-0.5 text-[8px] font-black heading-font flex justify-between items-center',
-                      RARITY_CHIP[pull.rarity] || RARITY_CHIP.Common,
-                    )}
-                  >
-                    <span>{pull.rarity.toUpperCase()}</span>
-                    {pull.foil && (
-                      <span className="flex items-center gap-0.5">
-                        <Sparkles className="w-2.5 h-2.5" />
-                        FOIL
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative flex-1 bg-[#2C3E50] overflow-hidden">
-                    {pull.image_url && (
-                      <img src={pull.image_url} className="w-full h-full object-cover" />
-                    )}
-                    {pull.foil && (
-                      <div
-                        className="absolute inset-0 pointer-events-none opacity-40"
-                        style={{
-                          background:
-                            'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div className="px-1.5 py-1">
-                    <div className="heading-font text-[9px] leading-tight truncate">
-                      {pull.name}
-                    </div>
-                    <div className="text-[8px] font-mono font-bold text-[#2C3E50] uppercase">
-                      {pull.card_type}
-                    </div>
-                  </div>
+                  <CardView
+                    card={gameCard}
+                  />
+                  {pull.foil && (
+                    <div
+                      className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
+                      style={{
+                        background:
+                          'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
+                      }}
+                    />
+                  )}
                 </div>
               )}
             </div>

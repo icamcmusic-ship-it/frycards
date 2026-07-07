@@ -165,11 +165,11 @@ function ExpandedCard({
       }}
     >
       <div
-        className="w-[320px] max-w-full ink-border-lg shadow-hard-black-lg flex flex-col text-[#1A1A1A] banner-pop"
+        className="w-[320px] max-w-full max-h-[90vh] ink-border-lg shadow-hard-black-lg flex flex-col text-[#1A1A1A] banner-pop"
         style={elementBackground(card.elements)}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center px-3 py-2 bg-[#1A1A1A]">
+        <div className="flex justify-between items-center px-3 py-2 bg-[#1A1A1A] shrink-0">
           <span className="heading-font text-base text-[#FFD54F] truncate">{card.name}</span>
           <button
             onClick={onClose}
@@ -178,74 +178,76 @@ function ExpandedCard({
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="px-3 py-1.5 flex justify-between items-center gap-2 text-xs font-black">
-          <span
-            className={cn(
-              'px-1.5 py-0.5 heading-font text-[10px]',
-              RARITY_STYLE[card.rarity || 'Common'],
-            )}
-          >
-            {(card.rarity || card.type).toUpperCase()}
-          </span>
-          {card.cost && (
-            <span className="flex items-center gap-1 heading-font">
-              <Zap className="w-3.5 h-3.5" />
-              {costTotal(card)}
-              <span className="flex gap-0.5">
-                {Object.entries(card.cost).map(([el, amt]) => (
-                  <span key={el} className={cn('px-1 text-[9px] font-bold', ELEMENT_COLORS[el])}>
-                    {amt} {el}
-                  </span>
-                ))}
-              </span>
+        <div className="flex-1 overflow-y-auto min-h-0 flex flex-col pb-3">
+          <div className="px-3 py-1.5 flex justify-between items-center gap-2 text-xs font-black shrink-0">
+            <span
+              className={cn(
+                'px-1.5 py-0.5 heading-font text-[10px]',
+                RARITY_STYLE[card.rarity || 'Common'],
+              )}
+            >
+              {(card.rarity || card.type).toUpperCase()}
             </span>
-          )}
-        </div>
-        {card.image && (
-          <div className="mx-3 ink-border-sm overflow-hidden aspect-[4/3] bg-[#2C3E50]">
-            <img
-              src={card.image}
-              alt={card.name}
-              className="w-full h-full object-cover"
-              draggable={false}
-            />
+            {card.cost && (
+              <span className="flex items-center gap-1 heading-font">
+                <Zap className="w-3.5 h-3.5" />
+                {costTotal(card)}
+                <span className="flex gap-0.5">
+                  {Object.entries(card.cost).map(([el, amt]) => (
+                    <span key={el} className={cn('px-1 text-[9px] font-bold', ELEMENT_COLORS[el])}>
+                      {amt} {el}
+                    </span>
+                  ))}
+                </span>
+              </span>
+            )}
           </div>
-        )}
-        <div className="px-3 py-2 flex flex-col gap-1.5">
-          <div className="text-[10px] font-mono font-black uppercase text-[#2C3E50]">
-            {card.type} · {(card.elements || []).join(' / ')}
-          </div>
-          {card.keywords && card.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {card.keywords.map((kw) => (
-                <KeywordChip
-                  key={kw}
-                  kw={kw}
-                  onOpen={onKeyword}
-                  className="text-[10px] px-1.5 py-0.5 ink-border-sm"
-                />
-              ))}
+          {card.image && (
+            <div className="mx-3 ink-border-sm overflow-hidden aspect-[4/3] bg-[#2C3E50] shrink-0">
+              <img
+                src={card.image}
+                alt={card.name}
+                className="w-full h-full object-cover"
+                draggable={false}
+              />
             </div>
           )}
-          {card.text && <p className="text-[12px] font-bold leading-snug">{card.text}</p>}
-          {card.effect?.text && card.effect.text !== card.text && (
-            <p className="text-[11px] font-medium leading-snug text-[#2C3E50]">
-              {card.effect.text}
-            </p>
-          )}
-          {card.attach && (
-            <p className="text-[11px] font-bold">
-              Grants +{card.attach.attack} ATK / +{card.attach.health} HP to the host Unit.
-            </p>
-          )}
-          {(card.attachedItems || []).length > 0 && (
-            <div className="text-[11px] font-bold">
-              Attached: {card.attachedItems.map((i) => i.name).join(', ')}
+          <div className="px-3 py-2 flex flex-col gap-1.5">
+            <div className="text-[10px] font-mono font-black uppercase text-[#2C3E50]">
+              {card.type} · {(card.elements || []).join(' / ')}
             </div>
-          )}
+            {card.keywords && card.keywords.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {card.keywords.map((kw) => (
+                  <KeywordChip
+                    key={kw}
+                    kw={kw}
+                    onOpen={onKeyword}
+                    className="text-[10px] px-1.5 py-0.5 ink-border-sm"
+                  />
+                ))}
+              </div>
+            )}
+            {card.text && <p className="text-[12px] font-bold leading-snug">{card.text}</p>}
+            {card.effect?.text && card.effect.text !== card.text && (
+              <p className="text-[11px] font-medium leading-snug text-[#2C3E50]">
+                {card.effect.text}
+              </p>
+            )}
+            {card.attach && (
+              <p className="text-[11px] font-bold">
+                Grants +{card.attach.attack} ATK / +{card.attach.health} HP to the host Unit.
+              </p>
+            )}
+            {(card.attachedItems || []).length > 0 && (
+              <div className="text-[11px] font-bold">
+                Attached: {card.attachedItems.map((i) => i.name).join(', ')}
+              </div>
+            )}
+          </div>
         </div>
         {showStats && (
-          <div className="px-3 py-2 flex justify-between items-center border-t-2 border-[#1A1A1A] mt-auto">
+          <div className="px-3 py-2 flex justify-between items-center border-t-2 border-[#1A1A1A] shrink-0">
             <span className="bg-[#1A1A1A] text-[#FFD54F] px-2 py-0.5 text-sm font-black heading-font">
               ATK {getEffectiveAtk(card, gameState)}
             </span>
@@ -294,15 +296,38 @@ export function CardView({
       <div
         className={cn(
           size,
-          'classic-black-back ink-border-sm shadow-hard-black-xs flex items-center justify-center overflow-hidden',
+          'classic-black-back ink-border-sm shadow-hard-black-xs flex items-center justify-center overflow-hidden relative select-none',
           className,
         )}
       >
         {back ? (
           <img src={back} className="w-full h-full object-cover" draggable={false} />
         ) : (
-          <div className="w-10 h-10 bg-[#FFD54F] ink-border-sm rotate-45 flex items-center justify-center opacity-90">
-            <span className="-rotate-45 heading-font text-[10px] text-[#1A1A1A]">POP</span>
+          <div className="w-full h-full flex flex-col items-center justify-between p-2 relative">
+            {/* Outer decorative borders to look like a real physical card back */}
+            <div className="absolute inset-1.5 border-2 border-[#FFD54F]/80 opacity-90 rounded pointer-events-none" />
+            <div className="absolute inset-2.5 border border-[#F7F7F7]/40 opacity-50 rounded pointer-events-none" />
+            
+            {/* Top comic label */}
+            <div className="text-[7px] heading-font text-[#FFD54F] tracking-widest opacity-80 mt-1">
+              OPERATIVE
+            </div>
+
+            {/* Central multi-layered retro comic burst logo */}
+            <div className="relative flex items-center justify-center w-12 h-12">
+              <div className="absolute w-10 h-10 bg-[#E53935] rotate-12 ink-border-xs shadow-md" />
+              <div className="absolute w-9 h-9 bg-[#2C3E50] -rotate-12 ink-border-xs" />
+              <div className="absolute w-8 h-8 bg-[#FFD54F] rotate-45 ink-border-xs flex items-center justify-center">
+                <span className="-rotate-45 heading-font text-[9px] font-black text-[#1A1A1A] tracking-tighter">
+                  POP
+                </span>
+              </div>
+            </div>
+
+            {/* Bottom text */}
+            <div className="text-[6px] font-mono text-[#F7F7F7] opacity-60 mb-0.5 uppercase tracking-wider">
+              MULTIVERSE TCG
+            </div>
           </div>
         )}
       </div>

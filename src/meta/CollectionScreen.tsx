@@ -17,6 +17,7 @@ export function StaticCard({
   dimmed,
   onClick,
   badge,
+  large = false,
 }: {
   key?: React.Key;
   card: CardTemplate;
@@ -25,14 +26,99 @@ export function StaticCard({
   dimmed?: boolean;
   onClick?: () => void;
   badge?: string;
+  large?: boolean;
 }) {
   const cost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+
+  if (large) {
+    return (
+      <div
+        onClick={onClick}
+        title={card.text}
+        className={cn(
+          'w-[240px] h-[336px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-black flex flex-col overflow-hidden relative select-none',
+          onClick && 'cursor-pointer hover:-translate-y-1.5 transition-transform duration-200',
+          dimmed && 'opacity-40 saturate-50',
+        )}
+      >
+        <div
+          className={cn(
+            'px-3 py-1 flex justify-between items-center text-xs font-black heading-font',
+            RARITY_CHIP[card.rarity || 'Common'],
+          )}
+        >
+          <span className="truncate">{(card.rarity || card.type).toUpperCase()}</span>
+          {card.cost && <span className="shrink-0">⚡ {cost}</span>}
+        </div>
+        <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative border-b-2 border-[#1A1A1A]">
+          {card.image ? (
+            <img
+              src={card.image}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              draggable={false}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-lg heading-font">
+              {card.type}
+            </div>
+          )}
+          {(foilCount || 0) > 0 && (
+            <span className="absolute top-2 right-2 bg-[#FFD54F] text-[#1A1A1A] text-xs font-black px-1.5 py-0.5 ink-border-sm flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5" />
+              {foilCount}
+            </span>
+          )}
+          {badge && (
+            <span className="absolute top-2 left-2 bg-[#E53935] text-[#F7F7F7] text-xs font-black px-1.5 py-0.5 ink-border-sm">
+              {badge}
+            </span>
+          )}
+        </div>
+        <div className="px-3 py-2 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
+          <div>
+            <div className="heading-font text-base font-black leading-tight truncate" title={card.name}>{card.name}</div>
+            <div className="text-[10px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between mt-0.5">
+              <span>
+                {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
+              </span>
+              {card.attack !== undefined && (
+                <span className="font-mono font-black">
+                  {card.attack}/{card.health}
+                </span>
+              )}
+            </div>
+          </div>
+          {card.text && (
+            <p className="text-[11px] font-bold leading-snug text-[#1A1A1A]/80 line-clamp-3 italic my-1">
+              {card.text}
+            </p>
+          )}
+          {card.keywords && card.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-auto pt-1">
+              {card.keywords.map((kw) => (
+                <span key={kw} className="text-[9px] font-black px-1.5 py-0.5 bg-[#FFD54F] ink-border-sm">
+                  {kw}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {count !== undefined && (
+          <div className="px-3 py-1 border-t-2 border-[#1A1A1A] text-xs font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
+            OWNED ×{count}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={onClick}
       title={card.text}
       className={cn(
-        'w-[130px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col overflow-hidden relative select-none',
+        'w-[130px] h-[182px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col overflow-hidden relative select-none',
         onClick && 'cursor-pointer hover:-translate-y-1 transition-transform',
         dimmed && 'opacity-40 saturate-50',
       )}
@@ -71,20 +157,22 @@ export function StaticCard({
           </span>
         )}
       </div>
-      <div className="px-1.5 py-1 flex-1">
-        <div className="heading-font text-[9px] leading-tight truncate">{card.name}</div>
-        <div className="text-[8px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between">
-          <span>
-            {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
-          </span>
-          {card.attack !== undefined && (
-            <span>
-              {card.attack}/{card.health}
+      <div className="px-1.5 py-1 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
+        <div>
+          <div className="heading-font text-[9px] leading-tight truncate">{card.name}</div>
+          <div className="text-[8px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between">
+            <span className="truncate">
+              {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
             </span>
-          )}
+            {card.attack !== undefined && (
+              <span className="shrink-0">
+                {card.attack}/{card.health}
+              </span>
+            )}
+          </div>
         </div>
         {card.keywords && card.keywords.length > 0 && (
-          <div className="flex flex-wrap gap-0.5 mt-0.5">
+          <div className="flex flex-wrap gap-0.5 mt-auto pt-1">
             {card.keywords.slice(0, 3).map((kw) => (
               <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F]">
                 {kw}
@@ -94,7 +182,7 @@ export function StaticCard({
         )}
       </div>
       {count !== undefined && (
-        <div className="px-1.5 py-0.5 border-t-2 border-[#1A1A1A] text-[9px] font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center">
+        <div className="px-1.5 py-0.5 border-t-2 border-[#1A1A1A] text-[9px] font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
           OWNED ×{count}
         </div>
       )}
@@ -192,6 +280,7 @@ export function CollectionScreen({
                 count={total}
                 foilCount={o?.f || 0}
                 dimmed={total === 0}
+                large={true}
               />
             );
           })}
