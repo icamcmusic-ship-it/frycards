@@ -2,7 +2,7 @@
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   Blitz: 'May attack the turn it is deployed (no summoning sickness).',
   Armor:
-    'Armor X: ignores hits of X or less. A bigger hit breaks ALL Armor (printed and Item-granted) and deals the rest.',
+    'Armor X: every incoming hit is reduced by X, but always deals at least 1 damage. Armor never breaks.',
   Pierce: "Blocked damage beyond the blocker's health hits the enemy Leader.",
   Guard: 'Enemy attacks and targeted Events must target this Unit while it is ready.',
   Ward: 'Ward X: enemies pay X extra resources to target this card.',
@@ -10,7 +10,8 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
     'Command X: Leader ability — pay X to instantly ready a friendly Unit for another attack (each Unit at most once per turn).',
   Lurk: 'Cannot be targeted by enemy attacks or Events until it attacks (suppressed by Guard).',
   Burden: 'Burden X: attacking with the equipped Unit costs X extra resources.',
-  Symmetric: 'Location effects apply to both players and cannot be bypassed.',
+  Symmetric:
+    "Location effects apply to both players (a normal Location's passive serves only its controller).",
   Detonate: 'Detonate X: when this Charm expires it deals X damage to all enemy Units.',
   Siphon: 'Damage dealt to enemies heals your Leader for half (rounded up).',
   Feedback:

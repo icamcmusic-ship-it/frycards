@@ -114,7 +114,7 @@ const SECTIONS = [
     body: [
       [
         'Location Shell Game',
-        "At the start of every turn one of the OPPONENT's face-down Locations is flipped at random. Its rules affect both players for the whole turn, but the active player counts as its controller. It flips back face-down at end of turn.",
+        'At the start of your turn one of YOUR OWN face-down Locations is flipped at random and you control it for the whole turn. Its passive effect serves only you (Symmetric Locations serve both players); a SCORCH_ALL Location singes enemy Units. It flips back face-down at end of turn. Face-down Location abilities cannot be activated.',
       ],
       [
         'Charms',
@@ -132,7 +132,7 @@ const SECTIONS = [
       ['Blitz', 'May attack the turn it is deployed.'],
       [
         'Armor X',
-        "Ignores hits of X or less. A bigger hit breaks ALL of the card's Armor — printed Armor and Item-granted Armor alike — and deals the rest. Works identically on Units and Leaders, in combat and against Events.",
+        'Every incoming hit is reduced by X (printed + Item Armor), but always deals at least 1 damage. Armor never breaks. Works identically on Units and Leaders, in combat and against Events.',
       ],
       ['Pierce', "Blocked damage beyond the blocker's health hits the enemy Leader."],
       ['Guard', 'Enemy attacks and targeted Events must target this Unit while it is ready.'],
@@ -150,7 +150,10 @@ const SECTIONS = [
         'Cannot be targeted by enemy attacks or Events until it attacks (suppressed by Guard).',
       ],
       ['Burden X', 'Attacking with the equipped Unit costs X extra resources.'],
-      ['Symmetric', 'Location effects apply to both players and cannot be bypassed.'],
+      [
+        'Symmetric',
+        "Location effects apply to both players (a normal Location's passive serves only its controller).",
+      ],
       ['Detonate X', 'Expiring Charm deals X damage to all enemy Units.'],
       ['Siphon', 'Damage dealt heals your Leader for half (rounded up).'],
       [
