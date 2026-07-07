@@ -1,0 +1,3 @@
+dist
+src/game/generated-cards.ts
+package-lock.json
