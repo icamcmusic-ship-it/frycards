@@ -307,7 +307,7 @@ export function CardView({
             {/* Outer decorative borders to look like a real physical card back */}
             <div className="absolute inset-1.5 border-2 border-[#FFD54F]/80 opacity-90 rounded pointer-events-none" />
             <div className="absolute inset-2.5 border border-[#F7F7F7]/40 opacity-50 rounded pointer-events-none" />
-            
+
             {/* Top comic label */}
             <div className="text-[7px] heading-font text-[#FFD54F] tracking-widest opacity-80 mt-1">
               OPERATIVE

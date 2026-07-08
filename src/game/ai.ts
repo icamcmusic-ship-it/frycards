@@ -77,9 +77,11 @@ export function getCPUAction(state: GameState): GameAction | null {
 function cpuMulligan(cpu: PlayerState): GameAction {
   const cheapPlays = cpu.hand.filter((c) => costTotal(c) <= 3 && c.type !== 'Location').length;
   const units = cpu.hand.filter((c) => c.type === 'Unit').length;
-  // Mull once for an unplayable-early hand OR a hand with no board presence
-  // at all (all Events/Items/Locations loses the board before it can act).
-  if (cpu.mulliganCount === 0 && (cheapPlays === 0 || units === 0)) {
+  const locations = cpu.hand.filter((c) => c.type === 'Location').length;
+  // Mull once for an unplayable-early hand, a hand with no board presence at
+  // all (all Events/Items/Locations loses the board before it can act), or a
+  // Location-flooded hand (the zone already starts stocked with 2).
+  if (cpu.mulliganCount === 0 && (cheapPlays === 0 || units === 0 || locations >= 3)) {
     return { type: 'MULLIGAN', playerId: cpu.id };
   }
   // Bottom the most expensive cards when a mulligan was taken.
@@ -415,8 +417,11 @@ function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState)
     }
   }
 
-  // Activated abilities on the Leader and board Units (once per turn).
-  const abilitySources = [me.leader, ...me.board].filter(
+  // Activated abilities on the Leader, board Units, and the revealed active
+  // Location while we control it (once per turn; §2.3).
+  const locationSource =
+    state.activeLocation && state.activeLocationOwnerId === me.id ? [state.activeLocation] : [];
+  const abilitySources = [me.leader, ...me.board, ...locationSource].filter(
     (c) =>
       c.effect &&
       !c.abilityUsedThisTurn &&
@@ -498,7 +503,15 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
       return out;
     }
     case 'freeze': {
-      const t = [...enemyTargetable].sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
+      // A frozen Guard stops guarding (§4.3): freezing the interceptor both
+      // silences its attack and unlocks every other target on that board.
+      const readyGuard = enemyTargetable
+        .filter((u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0)
+        .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
+      if (readyGuard) return [readyGuard.instanceId];
+      const t = [...enemyTargetable]
+        .filter((u) => u.frozen === 0)
+        .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
       return t && effAttack(t, state) > 0 ? [t.instanceId] : [];
     }
     case 'scorch': {

@@ -13,8 +13,8 @@
     "format": "prettier --write src scripts",
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
-    "generate-cards": "node scripts/generate-cards.mjs",
     "sim": "tsx scripts/simulate.ts",
+    "fuzz": "tsx scripts/fuzz.ts",
     "test:engine": "tsx scripts/engine-tests.ts"
   },
   "dependencies": {

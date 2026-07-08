@@ -15,8 +15,11 @@ frames with 4:3 art panels). Play a full match against a CPU opponent.
 npm install
 npm run dev              # dev server on http://localhost:3000
 npm run build            # production build
-npm run lint             # type-check (tsc --noEmit)
-npm run generate-cards   # rebuild card data from data/live_cards.csv
+npm run lint             # eslint
+npm run typecheck        # tsc --noEmit
+npm run test:engine      # rules regression suite
+npm run sim -- 300       # CPU-vs-CPU balance simulation
+npm run fuzz -- 30       # negative-path fuzzer (server authority)
 ```
 
 ## Card Data & Supabase Backend
@@ -35,17 +38,14 @@ nanite swarms, magma harvesters and shadow ninjas. Crimson Circuit prints
 all 18 Set-2 keywords plus the seven Blue Coral glossary keywords that had
 no printing (Brittle, Decay, Freeze, Heal, Manifest, Overdrive,
 Photosynthesis), and adds two Mythic Leaders: Crimson Vector Commander
-(Flame/Order — Command 2, Ward 2, Boost 1, 38 HP) and Apex Nanite Shinobi
+(Flame/Order — Command 2, Ward 2, Boost 1, 35 HP) and Apex Nanite Shinobi
 (Tech/Dark — Command 2, Ward 2, Sustain 1, 33 HP), giving every card in the
 new set at least one Leader whose color pair can run it.
 
-The source of truth is `data/live_cards.csv` (Blue Coral set, 140 cards).
-Names, art, types, rarity, **real color costs** and **real glossary keywords**
-come from the CSV; numeric stats (attack / health / generic cost / item
-bonuses / charm durations) are generated deterministically by
-`scripts/generate-cards.mjs` so the rules are playable. To update the set:
-edit the CSV, run `npm run generate-cards`, and re-seed the Supabase table
-from `data/cards.generated.json`.
+The bundled pool in `src/game/generated-cards.ts` and the Supabase
+`public.cards` rows are kept in sync: balance changes are edited in the
+bundled file, validated with `npm run sim`, and the changed rows are
+re-seeded to Supabase (the `template` JSON column is what the app consumes).
 
 There are 6 Leaders — Avatar of the Abyss (Dark/Nature), Ethereal Sea
 Witch (Frost/Tech), Mer-King (Light/Order), Legendary Diver (Flame/Chaos),
