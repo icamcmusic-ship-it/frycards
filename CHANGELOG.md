@@ -5,6 +5,42 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (Rulebook v4.0 — errata pass + real-card remap)
+
+- **Rulebook v4.0** (`docs/RULEBOOK.md`): applied the errata from the 1,280-game
+  v3.0 playtest. Leader HP 20→28, deck size 40→30, Twin capped at one die per
+  Placement Phase, Ward refreshes for both players every End Phase, Bind also
+  stops retaliation, Frenzy only doubles retaliation on its 2nd swing, new
+  **Pitch** die-waste sink (unplaced die → Mend 1), Echo fodder-discard ruling
+  codified. All enforced in `src/game/v3/engine.ts`.
+- **Real-card remap** (`src/game/v3/cardpool.ts`): all 193 backend cards are now
+  remapped onto v4.0 mechanics, keeping their core identity (name, image, flavor,
+  rarity, type, elements) and deleting the obsolete resource-era data (colored
+  costs, attach bonuses, Overclock/Modularity/Siphon/Phalanx keywords). The
+  dead `Item` type is folded into Charms. 6 real Leaders at 28 HP.
+- **Deck builder** (`src/game/v3/decks.ts`): 12 archetype decks (2 per Leader)
+  built from the pool as legal 30-card / max-3-copy lists, with combo-family
+  coherence (never mixes straight- and matching-gated cards in one shell).
+- **Advanced CPU** (`src/game/v3/ai.ts`): adds a start-of-game mulligan,
+  deck-aware reroll (chases the shell's combo family and staged-Twin needs),
+  and Twin staging across turns under the new one-die rule.
+- **v4.0 harness** (`npm run sim:v4`): round-robin across all 24 decks (12
+  archetypes + Location-stripped twins) with an **isolated Location win-rate
+  contribution** measurement, first-player edge, game-length distribution,
+  per-card OP/useless ranking, Pitch/waste split, and combo/keyword activity.
+
+### Playtest findings (10,000+ v4.0 games)
+
+- Locations contribute only ~+0.7–1.5 win% over filling their slot with cheap
+  Units, and cast 0.3–0.7×/game — they still under-earn a full die even with
+  the passive+Ability-Slot upgrade.
+- Yahtzee/Four-of-a-Kind trophy gates (Submerged Starfall etc.) cast ~0.02×/game
+  — effectively dead even with Echo. Recommend reserving those gates for a tiny
+  trophy count and capping regular-play gates at Full House / Large Straight.
+- Leader/archetype win rates still span ~19–80%; the spread is driven by deck
+  *construction quality* (aggressive/tempo shells beat reactive shells in a fast
+  ~6-round meta), not single-card power. Flagged for a deeper tuning pass.
+
 ### Added (Rulebook v3.0 — dice-placement overhaul)
 
 - **New rules canon:** `docs/RULEBOOK.md` is now the v3.0 dice-placement

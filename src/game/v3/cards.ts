@@ -35,10 +35,20 @@ export interface Effect {
 
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
+export type ElementColor =
+  | 'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
+export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Legendary' | 'Mythic';
+
 export interface CardDef {
   id: string;
   name: string;
   type: CardType;
+  /** Core identity preserved from the backend card data (v4.0 remap). */
+  elements?: ElementColor[];
+  rarity?: Rarity;
+  set?: string;
+  image?: string;
+  flavor?: string;
   /** Cast Slot threshold 1-6. Undefined only for Combo-gated Events and Leaders. */
   threshold?: number;
   /** Combo-gated Event cost. */
@@ -62,7 +72,7 @@ export interface CardDef {
   text?: string;
 }
 
-export const LEADER_HP = 20;
+export const LEADER_HP = 28; // v4.0: raised from 20 to hit the 8-10 round target window.
 
 const U = (
   id: string,

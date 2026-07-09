@@ -1,10 +1,18 @@
-# [Working Title] — Definitive Rulebook v3.0
+# [Working Title] — Definitive Rulebook v4.0
 
-Supersedes v2.0 (and the legacy Shifting Multiverse V1.x rules, preserved in
-`RULEBOOK_V1_LEGACY.md`). The executable version of this document is the new
-dice-placement engine in `src/game/v3/engine.ts`; card data lives in
-`src/game/v3/cards.ts`, and `npm run sim:v3` runs the headless playtest
-harness against it.
+Supersedes v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
+preserved in `RULEBOOK_V1_LEGACY.md`). The executable version of this document
+is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
+is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
+built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
+playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
+harness).
+
+**v4.0 errata (applied from a 1,280-game v3.0 playtest):** Leader HP 20→28;
+deck size 40→30; Twin capped at one die per Placement Phase; Ward now refreshes
+for both players every End Phase; Bind also stops retaliation; Frenzy only
+doubles retaliation on its second swing; new **Pitch** die-waste sink; and the
+Echo fodder-discard ruling is codified. Changes are marked *(v4.0)* inline.
 
 This pass closed every remaining gap: two genuinely broken placement rules (Staging Zone and Discard were never actually listed as legal die targets, making Twin and Echo unplayable as written), several damage-math edge cases, and a handful of open design questions (Ward vs. self-retaliation, Pierce vs. Guard, Leader combat stats) that needed an explicit answer rather than an implicit one.
 
@@ -38,7 +46,7 @@ Two players duel using a deck of Locations, Units, Charms, and Events, each led 
 ## 2. Game Materials & Setup
 
 ### Deck construction
-- Each player builds exactly **one 40-card deck** from Locations, Units, Charms, and Events, plus **exactly one Leader** kept separate (not part of the 40).
+- Each player builds exactly **one 30-card deck** *(v4.0: was 40)* from Locations, Units, Charms, and Events, plus **exactly one Leader** kept separate (not part of the 30). A tighter 30-card deck at the same 3-copy cap raises synergy density, making include/cut decisions sharper.
 - **Maximum 3 copies** of any single named card.
 - **Recommended physical components:** each player should have **at least 10 six-sided dice** of their own. You roll 5 at a time, but dice can rest in your Staging Zone (Twin) across turns, so 5 alone isn't enough to guarantee you can always roll a full turn. Each player's dice are entirely their own — there is no communal dice pool shared between opponents.
 
@@ -90,6 +98,8 @@ Fully resolve one placement before placing the next. A die you haven't yet place
 
 **Scrap** may be activated at any point during this phase, on any die you haven't placed yet (this includes dice that will simply go unplaced when the phase ends — as long as it's before that happens, it's still eligible). Once a die is placed on any of the four destinations above, it's locked and can't be rerolled by anything, including Scrap.
 
+**Pitch *(v4.0)*:** any die that would otherwise clear unplaced at the end of this phase may instead be pitched for **Mend 1** to your Leader. This requires no card, works on any die value, and is always available — it's the baseline floor for a die that would otherwise do nothing. It's deliberately small (not a draw, not damage) so it never competes with a real play; it just removes the pure-waste feeling of a dead 1 or 2.
+
 ### 3.5 Combo Check
 Check your final five die values against the Combo requirements of cards you control. Any qualifying `Combo:` card triggers its bonus now, once each, in an order you choose — **including a card you cast earlier this same Placement Phase.** A card's Combo bonus always resolves here, never earlier, even if it entered play mid-Placement — this avoids any chance of it double-triggering.
 
@@ -102,7 +112,8 @@ See §8. Only the active player's Units may attack. **Neither player may attack 
 
 ### 3.7 End Phase
 1. Discard down to 6 cards in hand if needed (your choice which). This is an ordinary discard and can trigger Echo eligibility on a qualifying card — but see §10 for why you can't actually pay to recast it until a future turn.
-2. All exhaustion clears (both the "attacked" flag and every Ability Slot's used-flag). Any dice still resting on Ability Slots return to your supply. Ward refreshes.
+2. All exhaustion clears (both the "attacked" flag and every Ability Slot's used-flag). Any dice still resting on Ability Slots return to your supply.
+3. **Ward refresh *(v4.0)*:** all Ward effects, on *both* players' cards, refresh at the end of *every* End Phase — yours and your opponent's. Ward is never off for a full round; it's a per-turn-taken resource, not a per-player-turn resource. (Under the old reading Ward would only ever be "on" every other turn for whichever player wasn't currently active, which broke defenders.)
 3. Pass the turn.
 
 ---
@@ -162,6 +173,8 @@ Some Events have no numeric threshold — their entire cost is "Combo: [Pattern]
 ### Twin cards and the Staging Zone
 A Twin X card has two Cast Slots. The moment the first is filled, move it face-up into your Staging Zone. **The second die placed must show the exact same face value as the first** — not merely independently meet the printed threshold. The card isn't in play while staged (can't be attacked or targeted) and can sit there across turns. The moment the second slot is filled, it fully enters play, both resting dice immediately return to your supply, and its bonus triggers. Every card with Twin must print its own bonus effect text (e.g. "Twin 1: Draw a card") — Twin has no generic effect on its own.
 
+**One die per Placement Phase *(v4.0)*:** a Twin card may receive **at most one die per Placement Phase**. Its two slots must be filled on two different turns (not necessarily consecutive). This is what makes the Staging Zone and voluntary-abandon rule actually matter — without it, Twin collapses into "cost: two matching dice this turn, with extra steps," which is exactly what 283-completions-vs-12-abandons in v3.0 playtesting showed happening.
+
 **Voluntary abandonment:** at the start of any of your turns, before Draw Phase, you may abandon a partially-filled Twin card: return it to your hand and clear its resting die.
 
 ### Anchor
@@ -180,7 +193,7 @@ Combat uses a **targeted-attack model**. Attacks are **declared and resolved one
    - Against a Unit: attacker's ATK is subtracted from the target's HP, and simultaneously the target's ATK is subtracted from the attacker's HP. **ATK and HP are never treated as below 0** — a Unit with reduced ATK below 0 simply deals 0 damage, it never heals its target.
    - **Pierce:** Guard only restricts which target you may legally declare — once an attack against a Guard Unit is legal and declared, Pierce's overflow damage is a consequence of that already-legal hit, not a new target, and proceeds to the Leader normally regardless of Guard. The overflow amount is exactly the leftover damage (attacker's ATK minus what was needed to destroy the target) — never the attacker's full ATK. All of this (damage to target, retaliation to attacker, Pierce overflow) is calculated simultaneously off both units' stats the instant before the attack resolves — if the attacker is also destroyed by retaliation in this same exchange, its Pierce overflow still goes through.
    - **Ward:** only prevents damage from instances where this Unit is the one being attacked or targeted. It does not prevent retaliation damage a Unit takes as a result of an attack it declared — attacking is never "free" just because the attacker has Ward. Applied before any multiplier (see below).
-4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack; retaliation damage taken while attacking is doubled (see Damage Resolution Order).
+4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack. *(v4.0)* Its **first attack is entirely normal**; **only its second (bonus) attack** doubles the retaliation damage it takes (see Damage Resolution Order). This keeps the "risk on the bonus action" identity without a Frenzy unit dying to doubled retaliation before it ever gets to use its keyword.
 5. Damage is **persistent** and does not reset at end of turn. Any Unit reaching 0 HP is destroyed immediately and moves to Discard, checked continuously.
 
 **Design note on big stat-stick Units:** intentional, not a bug — Pierce, Sap, and direct-removal Events are the answer to a wall.
@@ -189,7 +202,7 @@ Combat uses a **targeted-attack model**. Attacks are **declared and resolved one
 Prevention effects (Ward) apply before multiplication effects (Frenzy). If Ward fully prevents an instance of damage, there's nothing left for Frenzy to double.
 
 ### HP maximums
-A Unit's or **Leader's** maximum HP is always its printed/starting value, unless a card effect explicitly and permanently raises it. Mend can never heal past the current maximum.
+A Unit's or **Leader's** maximum HP is always its printed/starting value, unless a card effect explicitly and permanently raises it. Mend can never heal past the current maximum. *(v4.0: Leader starting/max HP is **28**, raised from 20 — 5.3-round v3.0 games were short of the 8–10 round target window.)*
 
 ---
 
@@ -229,9 +242,9 @@ You lose immediately if either is true:
 
 **Pierce** — See §8 for full interaction with Guard and simultaneous-death timing.
 
-**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before multipliers (§8).
+**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before multipliers (§8). *(v4.0)* Refreshes at the end of the **next End Phase to occur, whether it's yours or your opponent's** — see §3.7.
 
-**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. Retaliation damage taken while attacking is doubled.
+**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. *(v4.0)* Its first attack is normal; **only its second attack** takes doubled retaliation.
 
 ### Utility keywords
 
@@ -241,9 +254,9 @@ You lose immediately if either is true:
 
 **Sap X** — Deal X damage directly to a target Unit or Leader.
 
-**Bind** — Target Unit cannot attack or use an Ability Slot during its controller's **next** turn. (By design, this means self-targeting Bind does nothing on your current turn — it's built as a disruption tool against an opponent's upcoming turn, not a same-turn restriction, and self-targeting it is simply not useful rather than exploitable.)
+**Bind** — Target Unit cannot attack, use an Ability Slot, **or deal retaliation damage** *(v4.0)*, during its controller's **next** turn. The retaliation clause turns Bind from "skip a turn" (measured at a weak 41.3% in v3.0) into a genuine tempo tool: it converts a threatening blocker or attacker into a completely safe target for one turn — a real answer to a Guard wall, not a minor speed bump. (By design, self-targeting Bind does nothing on your current turn — it's disruption aimed at an opponent's upcoming turn, so self-targeting is simply useless rather than exploitable.)
 
-**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard. Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard. *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
 
 ---
 
@@ -265,7 +278,9 @@ You lose immediately if either is true:
 
 **Slot** — generic term covering Cast Slots and Ability Slots.
 
-**Leader** — your one persistent, non-deck card; 20 starting/max HP, one Ability Slot, no ATK, can never change zones.
+**Leader** — your one persistent, non-deck card; **28** starting/max HP *(v4.0)*, one Ability Slot, no ATK, can never change zones.
+
+**Pitch *(v4.0)*** — the baseline use for an otherwise-unplaced die: Mend 1 to your Leader, no card required. See §3.4.
 
 **Location** — persistent field card; max one in play, max one cast per turn.
 
@@ -295,8 +310,8 @@ You lose immediately if either is true:
 | Setting | Value |
 |---|---|
 | Players | 2 |
-| Leader starting/max HP | 20, no ATK, cannot change zones |
-| Deck size | 40 (Leader separate) |
+| Leader starting/max HP | **28** *(v4.0, was 20)*, no ATK, cannot change zones |
+| Deck size | **30** *(v4.0, was 40)* (Leader separate) |
 | Max copies per card | 3 |
 | Starting hand | 5 (one mulligan allowed, first player decides first, both execute together) |
 | Hand size cap | 6 |
@@ -305,5 +320,10 @@ You lose immediately if either is true:
 | Units in play | unlimited |
 | First player | high 1d6 roll; skips first Draw Phase; can't attack their first turn |
 | Combat | sequential targeted-attack, no blocking step; Guard walls until fully destroyed |
+| Twin | *(v4.0)* max 1 die per card per Placement Phase (two slots ⇒ two turns) |
+| Ward refresh | *(v4.0)* both players, end of every End Phase |
+| Bind | *(v4.0)* stops attack, Ability Slot, **and** retaliation next turn |
+| Frenzy downside | *(v4.0)* only the 2nd attack takes doubled retaliation |
+| Pitch | *(v4.0)* any unplaced die → Mend 1 to your Leader, no card needed |
 
-**Turn order:** Draw → Roll → Reroll → Placement (4 legal die destinations, Scrap on unplaced dice) → Combo Check → Combat (sequential) → End (discard to 6, clear exhaustion, pass turn).
+**Turn order:** Draw → Roll → Reroll → Placement (4 legal die destinations, Scrap + Pitch on unplaced dice) → Combo Check → Combat (sequential) → End (discard to 6, clear exhaustion, refresh Ward both sides, pass turn).

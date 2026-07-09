@@ -6,7 +6,7 @@
  * (hand Cast Slot, in-play Ability Slot, Staging second Twin slot, Echo
  * recast from Discard). Sequential targeted combat with Guard walls.
  */
-import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw, LEADER_HP } from './cards';
+import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw } from './cards';
 
 // ---------------------------------------------------------------------------
 // RNG (seeded, for reproducible playtests)
@@ -46,6 +46,8 @@ export interface Inst {
   /** first Twin die value while in Staging. */
   stagedDie?: number;
   stagedTurns: number;
+  /** v4.0: true if this Twin card received its first die this same Placement Phase. */
+  stagedThisTurn?: boolean;
 }
 
 export interface Die {
@@ -93,6 +95,7 @@ export interface GameStats {
   rallies: number;
   wardBlocks: number;
   diceWasted: number;
+  dicePitched: number;
   attacks: number;
   leaderAbilityUses: Record<string, number>;
 }
@@ -138,7 +141,9 @@ export function effThreshold(g: Game, pid: string, def: CardDef): number {
   const inPlay = [...p.board, p.location].filter(
     (c): c is Inst => !!c && hasKw(c.def, 'Anchor'),
   ).length;
-  return Math.max(1, t - inPlay);
+  // v4.0: cap the reduction at 2 so Anchor is ramp, not a threshold collapse
+  // that lets a wide Anchor board dump its whole hand at threshold 1.
+  return Math.max(1, t - Math.min(2, inPlay));
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +185,31 @@ export function rollValues(p: Player): number[] {
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
-export function newGame(leaderA: string, leaderB: string, rng: Rng): Game {
-  const mk = (id: string, leaderId: string): Player => {
-    const leaderDef = CARD_DB[leaderId];
+/** A deck definition: which Leader, and a card-id -> copies map. */
+export interface DeckDef {
+  leaderId: string;
+  cards: Record<string, number>;
+  /** optional resolver so callers can supply their own card DB (e.g. POOL_V4). */
+  resolve?: (id: string) => CardDef;
+  /** optional human label for reporting. */
+  label?: string;
+}
+
+export function newGame(
+  a: string | DeckDef,
+  b: string | DeckDef,
+  rng: Rng,
+): Game {
+  const deckA: DeckDef = typeof a === 'string'
+    ? { leaderId: a, cards: DECKLISTS_V3[a] } : a;
+  const deckB: DeckDef = typeof b === 'string'
+    ? { leaderId: b, cards: DECKLISTS_V3[b] } : b;
+  const mk = (id: string, dd: DeckDef): Player => {
+    const resolve = dd.resolve || ((cid: string) => CARD_DB[cid]);
+    const leaderDef = resolve(dd.leaderId);
     const deck: Inst[] = [];
-    for (const [cid, n] of Object.entries(DECKLISTS_V3[leaderId])) {
-      for (let i = 0; i < n; i++) deck.push(makeInst(CARD_DB[cid], id));
+    for (const [cid, n] of Object.entries(dd.cards)) {
+      for (let i = 0; i < n; i++) deck.push(makeInst(resolve(cid), id));
     }
     return {
       id, leader: makeInst(leaderDef, id), deck, hand: [], discard: [], banished: [],
@@ -194,7 +218,7 @@ export function newGame(leaderA: string, leaderB: string, rng: Rng): Game {
     };
   };
   const g: Game = {
-    players: { A: mk('A', leaderA), B: mk('B', leaderB) },
+    players: { A: mk('A', deckA), B: mk('B', deckB) },
     order: ['A', 'B'],
     active: rng() < 0.5 ? 'A' : 'B',
     turn: 0,
@@ -203,7 +227,7 @@ export function newGame(leaderA: string, leaderB: string, rng: Rng): Game {
     log: [],
     stats: {
       casts: {}, comboTriggers: {}, echoRecasts: 0, twinCompletions: 0, twinAbandons: 0,
-      scraps: 0, rallies: 0, wardBlocks: 0, diceWasted: 0, attacks: 0,
+      scraps: 0, rallies: 0, wardBlocks: 0, diceWasted: 0, dicePitched: 0, attacks: 0,
       leaderAbilityUses: {},
     },
   };
@@ -362,7 +386,7 @@ export function startTurn(g: Game) {
     u.boundNextTurn = false;
   }
   if (p.location) { p.location.abilityUsed = false; p.location.abilityDie = undefined; }
-  for (const s of p.staging) s.stagedTurns++;
+  for (const s of p.staging) { s.stagedTurns++; s.stagedThisTurn = false; }
 
   // Draw Phase (first player skips on the very first turn).
   const isFirstPlayerFirstTurn = g.turn === 1;
@@ -493,9 +517,10 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
   p.hand.splice(idx, 1);
 
   if (hasKw(c.def, 'Twin')) {
-    // First Twin slot filled -> Staging Zone.
+    // First Twin slot filled -> Staging Zone. v4.0: one die per Placement Phase.
     c.stagedDie = die.value;
     c.stagedTurns = 0;
+    c.stagedThisTurn = true;
     p.staging.push(c);
     g.log.push(`${c.def.name} moved to Staging (die ${die.value}).`);
     return true;
@@ -567,6 +592,7 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   if (!die || idx < 0) return false;
   const c = p.staging[idx];
   if (die.value !== c.stagedDie) return false;
+  if (c.stagedThisTurn) return false; // v4.0: at most one die per Placement Phase
   die.placed = true;
   p.staging.splice(idx, 1);
   c.stagedDie = undefined;
@@ -675,6 +701,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
 
   g.stats.attacks++;
   att.hasAttacked = true;
+  const attackNumber = att.attacksMade + 1; // 1 = first swing, 2 = Frenzy swing
   att.attacksMade++;
 
   const atk = effAtk(g, att);
@@ -695,8 +722,10 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     g.stats.wardBlocks++;
     dmgToTarget = 0;
   }
-  let retaliation = effAtk(g, tgt);
-  if (hasKw(att.def, 'Frenzy')) retaliation *= 2; // doubled while attacking
+  // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
+  let retaliation = tgt.boundThisTurn ? 0 : effAtk(g, tgt);
+  // v4.0 Frenzy: only the SECOND (bonus) swing takes doubled retaliation.
+  if (hasKw(att.def, 'Frenzy') && attackNumber === 2) retaliation *= 2;
   const pierceOverflow =
     hasKw(att.def, 'Pierce') && dmgToTarget >= tgtHp && tgtHp > 0 ? dmgToTarget - tgtHp : 0;
 
@@ -715,8 +744,18 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
 // ---------------------------------------------------------------------------
 export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   const p = g.players[g.active];
-  // Count wasted dice for playtest stats.
-  g.stats.diceWasted += p.dice.filter((d) => !d.placed).length;
+  // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
+  // A dead 1 or 2 always has this baseline floor; only a die pitched with the
+  // Leader already at full HP is truly "wasted".
+  for (const d of p.dice) {
+    if (d.placed) continue;
+    if (p.leader.damage > 0) {
+      p.leader.damage = Math.max(0, p.leader.damage - 1);
+      g.stats.dicePitched++;
+    } else {
+      g.stats.diceWasted++;
+    }
+  }
   // Discard down to 6.
   while (p.hand.length > 6) {
     const pick = discardChooser ? discardChooser(p.hand) : p.hand[p.hand.length - 1];

@@ -12,6 +12,30 @@ import {
 } from './engine';
 import { hasKw } from './cards';
 
+/**
+ * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
+ * flooded with expensive cards (no cheap early plays) or has no Units, then
+ * bottom one card (London-style). Called by the harness before turn 1.
+ */
+export function maybeMulligan(g: Game, rng: () => number) {
+  for (const p of Object.values(g.players)) {
+    const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
+    const units = p.hand.filter((c) => c.def.type === 'Unit').length;
+    if (cheapPlays >= 2 && units >= 1) continue;
+    // Reshuffle hand into deck, redraw 5, bottom the single worst card.
+    p.deck.push(...p.hand);
+    p.hand = [];
+    for (let i = p.deck.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+    }
+    for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+    const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+    const idx = p.hand.indexOf(worst);
+    if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
+  }
+}
+
 function unplacedDice(p: Player): number[] {
   return p.dice.map((d, i) => (d.placed ? -1 : i)).filter((i) => i >= 0);
 }
@@ -32,16 +56,43 @@ function bestDieFor(p: Player, threshold: number, preferExact = true): number {
 }
 
 function chooseReroll(g: Game, p: Player): number[] {
-  // Keep the most common value (combo chasing) and any die >= 4; reroll the rest.
   const values = rollValues(p);
   const counts: Record<number, number> = {};
   for (const v of values) counts[v] = (counts[v] || 0) + 1;
+
+  // Figure out what this hand actually wants: straight-family or matching-family
+  // combos, and the set of Cast thresholds we'd like at least one die to reach.
+  const gates = [...p.hand, ...p.staging].flatMap((c) => {
+    const g2: string[] = [];
+    if (c.def.comboGate) g2.push(c.def.comboGate);
+    if (c.def.combo) g2.push(c.def.combo.pattern);
+    return g2;
+  });
+  const wantStraight = gates.some((x) => x === 'SmallStraight' || x === 'LargeStraight');
+  const wantMatch = gates.some((x) =>
+    ['AnyPair', 'TwoPair', 'ThreeKind', 'FourKind', 'FullHouse', 'Yahtzee'].includes(x),
+  );
+  const stagedNeeds = new Set(p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined));
+
+  const out: number[] = [];
+  if (wantStraight && !wantMatch) {
+    // Keep distinct values; reroll duplicates and isolated extremes.
+    const seen = new Set<number>();
+    p.dice.forEach((d, i) => {
+      if (stagedNeeds.has(d.value)) return;
+      if (seen.has(d.value)) { out.push(i); return; }
+      seen.add(d.value);
+    });
+    return out;
+  }
+  // Default / matching: keep the mode cluster and any die >= 4 (thresholds),
+  // plus dice matching a staged Twin need; reroll small singletons.
   const modeValue = Number(
     Object.entries(counts).sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]))[0][0],
   );
   const modeCount = counts[modeValue];
-  const out: number[] = [];
   p.dice.forEach((d, i) => {
+    if (stagedNeeds.has(d.value)) return;
     const partOfPair = d.value === modeValue && modeCount >= 2;
     if (!partOfPair && d.value <= 3) out.push(i);
   });
@@ -98,21 +149,16 @@ function playPlacement(g: Game, p: Player) {
       if (c.def.onCast?.action === 'destroy' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
-      // Twin: only start if we can complete now (a second matching die) or the
-      // die is high and hand has room to wait.
+      // Twin (v4.0): only one die per Placement Phase, so we commit the first
+      // slot now and complete on a later turn. Stage a low-ish common value
+      // (2-4) so the matching second die is reachable, and only if we aren't
+      // already juggling a staged copy.
       if (hasKw(c.def, 'Twin')) {
-        const idxs = unplacedDice(p).filter((i) => p.dice[i].value >= thr);
-        const pairIdx = idxs.find((i) =>
-          idxs.some((j) => j !== i && p.dice[j].value === p.dice[i].value),
-        );
-        if (pairIdx !== undefined) {
-          const v = p.dice[pairIdx].value;
-          const second = idxs.find((j) => j !== pairIdx && p.dice[j].value === v)!;
-          if (castFromHand(g, pairIdx, c.iid)) {
-            completeTwin(g, second, c.iid);
-            progress = true;
-          }
-        } else if (idxs.length > 0 && p.staging.length === 0) {
+        if (p.staging.some((s) => s.def.id === c.def.id)) continue;
+        const idxs = unplacedDice(p)
+          .filter((i) => p.dice[i].value >= thr)
+          .sort((a, b) => p.dice[a].value - p.dice[b].value);
+        if (idxs.length > 0 && p.hand.length >= 3) {
           if (castFromHand(g, idxs[0], c.iid)) progress = true;
         }
         continue;
