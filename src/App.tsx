@@ -4,7 +4,13 @@ import { fetchCardTemplates, recordMatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
 import { HowToPlay } from './components/HowToPlay';
 import { CardTemplate } from './types';
-import { ARCHETYPES, Archetype, buildDeck, deckDefFromCustom } from './game/v3/decks';
+import {
+  ARCHETYPES,
+  Archetype,
+  buildDeck,
+  deckDefFromCustom,
+  randomArchetype,
+} from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID } from './game/v3/cardpool';
 import { LEADER_HP } from './game/v3/cards';
@@ -17,6 +23,7 @@ import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
+import { ChangelogScreen } from './meta/ChangelogScreen';
 import { PopButton } from './meta/ui';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
@@ -24,9 +31,7 @@ import { useTheme } from './meta/useTheme';
 // ---------------------------------------------------------------------------
 // Play setup — a v4.2 archetype deck, or one of the player's own saved decks
 // ---------------------------------------------------------------------------
-type MatchSetup =
-  | { kind: 'archetype'; archetype: Archetype }
-  | { kind: 'custom'; deck: DeckRow };
+type MatchSetup = { kind: 'archetype'; archetype: Archetype } | { kind: 'custom'; deck: DeckRow };
 
 function PlayScreen({
   onStart,
@@ -109,7 +114,9 @@ function PlayScreen({
                 className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
               >
                 <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
-                  <span className="text-[9px] heading-font text-[#FFD54F] truncate">{arch.label}</span>
+                  <span className="text-[9px] heading-font text-[#FFD54F] truncate">
+                    {arch.label}
+                  </span>
                   <span className="text-[9px] font-mono font-bold text-[#F7F7F7] shrink-0">
                     {LEADER_HP} HP
                   </span>
@@ -128,7 +135,10 @@ function PlayScreen({
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {arch.keywords.map((kw) => (
-                      <span key={kw} className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm">
+                      <span
+                        key={kw}
+                        className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm"
+                      >
                         {kw}
                       </span>
                     ))}
@@ -164,10 +174,10 @@ function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
 function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   const { session, profile, refreshProfile } = useMeta();
   const human = setupToDeck(setup);
-  // The CPU always plays a random prebuilt archetype — its AI heuristics were
-  // tuned against those decks specifically, and it keeps every match legal
-  // even when the human's own custom deck is still a work in progress.
-  const [cpuArch] = useState(() => ARCHETYPES[Math.floor(Math.random() * ARCHETYPES.length)]);
+  // CPU plays a freshly randomized deck every match rather than one of the
+  // fixed archetype presets — keeps every match legal even when the human's
+  // own custom deck is still a work in progress.
+  const [cpuArch] = useState(() => randomArchetype());
   const [reward, setReward] = useState<number | null>(null);
 
   const onResult = (won: boolean) => {
@@ -221,7 +231,7 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
     return (
       <div className="w-full h-screen bg-[#1A1A1A] flex items-center justify-center">
         <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          SHIFTING MULTIVERSE
+          FRYCARDS
         </div>
       </div>
     );
@@ -263,6 +273,8 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
           onBack={() => setScreen('menu')}
         />
       );
+    case 'changelog':
+      return <ChangelogScreen onBack={() => setScreen('menu')} />;
     default:
       return (
         <>
@@ -296,7 +308,7 @@ export default function App() {
     return (
       <div className="w-full h-screen bg-[#1A1A1A] flex flex-col items-center justify-center gap-4">
         <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          SHIFTING MULTIVERSE
+          FRYCARDS
         </div>
         <div className="text-[#F7F7F7] font-mono text-xs">FETCHING CARD DATABASE…</div>
       </div>

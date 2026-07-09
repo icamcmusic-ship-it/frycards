@@ -1,9 +1,20 @@
 import React from 'react';
-import { Swords, Library, Layers, Store, User, LogOut, BookOpen, Settings } from 'lucide-react';
+import {
+  Swords,
+  Library,
+  Layers,
+  Store,
+  User,
+  LogOut,
+  BookOpen,
+  Settings,
+  ScrollText,
+} from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { GoldChip, GemChip } from './ui';
 
-export type MetaScreen = 'menu' | 'play' | 'collection' | 'decks' | 'store' | 'profile' | 'settings';
+export type MetaScreen =
+  'menu' | 'play' | 'collection' | 'decks' | 'store' | 'profile' | 'settings' | 'changelog';
 
 export function MainMenu({
   onNavigate,
@@ -120,6 +131,12 @@ export function MainMenu({
             <BookOpen className="w-3.5 h-3.5" /> RULES
           </button>
           <button
+            onClick={() => onNavigate('changelog')}
+            className="btn-pop heading-font text-[11px] bg-[#F7F7F7] text-[#1A1A1A] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+          >
+            <ScrollText className="w-3.5 h-3.5" /> CHANGELOG
+          </button>
+          <button
             onClick={() => onNavigate('settings')}
             className="btn-pop heading-font text-[11px] bg-[#2C3E50] text-[#F7F7F7] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
@@ -140,11 +157,9 @@ export function MainMenu({
           STARK COMIC STANDARD · BLUE CORAL SET
         </div>
         <h1 className="text-5xl sm:text-7xl heading-font leading-none">
-          SHIFTING
+          FRY
           <br />
-          <span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-2">
-            MULTIVERSE TCG
-          </span>
+          <span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-2">CARDS</span>
         </h1>
       </div>
 

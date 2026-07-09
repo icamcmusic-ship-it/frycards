@@ -1,4 +1,4 @@
-# [Working Title] — Definitive Rulebook v4.2
+# FryCards — Definitive Rulebook v4.2
 
 Supersedes v4.1, v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
 preserved in `RULEBOOK_V1_LEGACY.md`). The executable version of this document

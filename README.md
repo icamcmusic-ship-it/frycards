@@ -1,6 +1,6 @@
-# Shifting Multiverse TCG — Monochrome & Pop
+# FryCards — Monochrome & Pop
 
-A digital implementation of the **Shifting Multiverse** trading card game
+A digital implementation of the **FryCards** trading card game
 (Comprehensive Rulebook V1.7 + Master Keyword Glossary — see
 [`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full Rules Bible), built with React +
 Vite + TypeScript in the **Monochrome & Pop** visual identity (stark comic

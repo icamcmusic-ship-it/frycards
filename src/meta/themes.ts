@@ -1,4 +1,4 @@
-export type ThemeName = 'dusty' | 'watermelon' | 'amber' | 'purple' | 'neutral' | 'warm';
+export type ThemeName = 'dusty' | 'watermelon' | 'amber' | 'purple' | 'neutral' | 'warm' | 'lilac';
 
 export interface Theme {
   name: ThemeName;
@@ -77,6 +77,17 @@ export const THEMES: Record<ThemeName, Theme> = {
       secondary: '#f5cac3ff',
       accent: '#84a59dff',
       highlight: '#f28482ff',
+    },
+  },
+  lilac: {
+    name: 'lilac',
+    label: 'LILAC ASH',
+    colors: {
+      primary1: '#aba9bfff',
+      primary2: '#beb7dfff',
+      secondary: '#d4f2d2ff',
+      accent: '#34113fff',
+      highlight: '#868784ff',
     },
   },
 };

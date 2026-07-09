@@ -97,7 +97,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
-      <MetaHeader title="MULTIVERSE STORE" onBack={onBack} />
+      <MetaHeader title="FRYCARDS STORE" onBack={onBack} />
 
       <div className="p-5 max-w-6xl mx-auto">
         <div className="flex gap-2 flex-wrap mb-4">
@@ -379,6 +379,26 @@ function pullToGameCard(pull: PackPull): GameCard {
   };
 }
 
+const BIG_RARITIES = new Set(['Mythic', 'Legendary', 'Super-Rare']);
+
+/** Rarity-tinted glow behind the spotlight card — bigger pulls get a bigger halo. */
+function rarityGlow(rarity: string): string {
+  switch (rarity) {
+    case 'Mythic':
+      return 'shadow-[0_0_70px_22px_rgba(255,213,79,0.55)]';
+    case 'Legendary':
+      return 'shadow-[0_0_55px_16px_rgba(229,57,53,0.45)]';
+    case 'Super-Rare':
+      return 'shadow-[0_0_45px_13px_rgba(255,213,79,0.35)]';
+    case 'Rare':
+      return 'shadow-[0_0_30px_8px_rgba(229,57,53,0.25)]';
+    default:
+      return '';
+  }
+}
+
+/** Cinematic one-at-a-time pack reveal: spotlight flip, rarity flourishes, thumbnail
+ * strip for context, and a final haul summary. "REVEAL ALL" skips straight there. */
 function PackRevealModal({
   packName,
   pulls,
@@ -394,42 +414,52 @@ function PackRevealModal({
   onRevealAll: () => void;
   onClose: () => void;
 }) {
+  const [index, setIndex] = useState(0);
+  const done = index >= pulls.length;
   const allRevealed = revealed.size >= pulls.length;
-  return (
-    <div className="fixed inset-0 bg-[#1A1A1A]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
-      <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
-      <h2 className="heading-font text-2xl text-[#FFD54F] mb-1 relative">
-        {packName.toUpperCase()}
-      </h2>
-      <p className="text-[#F7F7F7]/70 text-xs font-bold mb-6 relative">
-        Click each card to reveal your pull.
-      </p>
 
-      <div className="flex flex-wrap justify-center gap-4 max-w-5xl relative">
-        {pulls.map((pull, i) => {
-          const shown = revealed.has(i);
-          const gameCard = pullToGameCard(pull);
-          return (
-            <div
-              key={i}
-              onClick={() => !shown && onReveal(i)}
-              className={cn(
-                'w-[120px] h-[168px] cursor-pointer transition-transform duration-200',
-                !shown && 'hover:-translate-y-2',
-                shown && (pull.rarity === 'Mythic' || pull.rarity === 'Super-Rare') && 'scale-105',
-              )}
-              style={{ perspective: '600px' }}
-            >
-              {!shown ? (
-                <CardView card={gameCard} faceDown={true} className="shadow-hard-yellow" />
-              ) : (
-                <div
-                  className={cn(
-                    'relative w-full h-full animate-[flipIn_.3s_ease-out]',
-                    pull.foil && 'shadow-hard-yellow outline outline-2 outline-[#FFD54F]',
-                  )}
-                >
-                  <CardView card={gameCard} />
+  const current = pulls[index];
+  const currentShown = !done && revealed.has(index);
+  const currentCard = current ? pullToGameCard(current) : null;
+
+  const handleFlip = () => {
+    if (done || currentShown) return;
+    onReveal(index);
+  };
+  const handleNext = () => setIndex((i) => Math.min(i + 1, pulls.length));
+  const handleSkipToSummary = () => {
+    onRevealAll();
+    setIndex(pulls.length);
+  };
+
+  if (done) {
+    const rarityCounts = new Map<string, number>();
+    for (const p of pulls) rarityCounts.set(p.rarity, (rarityCounts.get(p.rarity) || 0) + 1);
+    return (
+      <div className="fixed inset-0 bg-[#1A1A1A]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
+        <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
+        <h2 className="heading-font text-2xl text-[#FFD54F] mb-1 relative">
+          {packName.toUpperCase()}
+        </h2>
+        <p className="text-[#F7F7F7]/70 text-xs font-bold mb-6 relative">
+          Your haul — {pulls.length} card{pulls.length === 1 ? '' : 's'}
+        </p>
+
+        <div className="flex flex-wrap justify-center gap-4 max-w-5xl relative mb-6">
+          {pulls.map((pull, i) => {
+            const gameCard = pullToGameCard(pull);
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'w-[110px] h-[154px] animate-[flipIn_.3s_ease-out]',
+                  BIG_RARITIES.has(pull.rarity) && 'scale-105',
+                  rarityGlow(pull.rarity),
+                )}
+                style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
+              >
+                <div className="relative w-full h-full">
+                  <CardView card={gameCard} className="shadow-hard-yellow" />
                   {pull.foil && (
                     <div
                       className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
@@ -440,20 +470,120 @@ function PackRevealModal({
                     />
                   )}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap justify-center gap-2 mb-8 relative">
+          {[...rarityCounts.entries()].map(([r, n]) => (
+            <span
+              key={r}
+              className={cn(
+                'text-[10px] font-black px-2 py-1 ink-border-sm',
+                RARITY_CHIP[r] || RARITY_CHIP.Common,
+              )}
+            >
+              {r} ×{n}
+            </span>
+          ))}
+        </div>
+
+        <PopButton color="red" onClick={onClose}>
+          ADD TO COLLECTION ✓
+        </PopButton>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#1A1A1A]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
+      <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
+      <h2 className="heading-font text-2xl text-[#FFD54F] mb-1 relative">
+        {packName.toUpperCase()}
+      </h2>
+      <p className="text-[#F7F7F7]/70 text-xs font-bold mb-1 relative">
+        {currentShown ? 'Nice! Tap NEXT to continue.' : 'Tap the card to reveal it.'}
+      </p>
+      <div className="text-[10px] font-mono font-bold text-[#F7F7F7]/50 mb-6 relative">
+        CARD {index + 1} / {pulls.length}
+      </div>
+
+      <div
+        onClick={handleFlip}
+        className={cn(
+          'relative w-[220px] h-[308px] transition-transform duration-300',
+          !currentShown && 'cursor-pointer hover:-translate-y-2',
+        )}
+        style={{ perspective: '800px' }}
+      >
+        {!currentShown ? (
+          <CardView card={currentCard!} faceDown={true} className="shadow-hard-yellow" />
+        ) : (
+          <div
+            className={cn(
+              'relative w-full h-full animate-[flipIn_.4s_ease-out] rounded-sm',
+              rarityGlow(current.rarity),
+            )}
+          >
+            <CardView card={currentCard!} />
+            {current.foil && (
+              <div
+                className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
+                style={{
+                  background:
+                    'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
+                }}
+              />
+            )}
+            {BIG_RARITIES.has(current.rarity) && (
+              <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-70 -z-10" />
+            )}
+          </div>
+        )}
+      </div>
+
+      {currentShown && (
+        <div
+          className={cn(
+            'mt-4 heading-font text-sm px-3 py-1 ink-border-sm relative',
+            RARITY_CHIP[current.rarity] || RARITY_CHIP.Common,
+          )}
+        >
+          {current.rarity.toUpperCase()}
+          {current.foil ? ' · FOIL' : ''}
+        </div>
+      )}
+
+      {/* Thumbnail strip for context */}
+      <div className="flex gap-1.5 mt-6 relative max-w-full overflow-x-auto px-4 py-1">
+        {pulls.map((p, i) => {
+          const shown = revealed.has(i);
+          return (
+            <div
+              key={i}
+              onClick={() => setIndex(i)}
+              className={cn(
+                'w-8 h-11 shrink-0 ink-border-sm cursor-pointer overflow-hidden bg-[#1A1A1A]',
+                i === index ? 'ring-2 ring-[#FFD54F]' : 'opacity-60 hover:opacity-90',
+              )}
+            >
+              {shown && p.image_url && (
+                <img src={p.image_url} className="w-full h-full object-cover" />
               )}
             </div>
           );
         })}
       </div>
 
-      <div className="flex gap-3 mt-8 relative">
+      <div className="flex gap-3 mt-6 relative">
         {!allRevealed && (
-          <PopButton color="yellow" onClick={onRevealAll}>
+          <PopButton color="yellow" onClick={handleSkipToSummary}>
             REVEAL ALL
           </PopButton>
         )}
-        <PopButton color={allRevealed ? 'red' : 'black'} onClick={onClose}>
-          {allRevealed ? 'ADD TO COLLECTION ✓' : 'SKIP'}
+        <PopButton color="black" onClick={handleNext} disabled={!currentShown}>
+          {index < pulls.length - 1 ? 'NEXT ▸' : 'SEE SUMMARY ▸'}
         </PopButton>
       </div>
     </div>

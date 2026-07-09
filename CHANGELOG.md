@@ -1,7 +1,9 @@
 # Changelog
 
-Product-level changes to Frycards (Shifting Multiverse TCG). Rules-specific
-changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
+Product-level changes to FryCards (formerly "Shifting Multiverse TCG").
+Rules-specific changes are also tracked in the Change Log section of
+`docs/RULEBOOK.md`. A condensed version of this history also powers the
+in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
@@ -15,9 +17,9 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
   (`deckcode.ts`) generalized to work with either card pool. Added
   `src/meta/DeckBuilderScreen.test.ts` covering the new v4.2 validation rules.
 - **Play screen** now lists the player's own saved, legal decks (via
-  `deckDefFromCustom`) alongside the 12 prebuilt archetypes; the CPU still
-  always plays a prebuilt archetype, since its AI heuristics were tuned
-  against those decks.
+  `deckDefFromCustom`) alongside the 12 prebuilt archetypes. The CPU now
+  plays a freshly randomized deck every match (see below) rather than a
+  prebuilt archetype, so both sides can field an unpredictable build.
 - Extracted the card-face renderer into `src/components/CardFaceV4.tsx` so
   the match UI and the deck builder share one card presentation instead of
   drifting into two different "what does this card do" reads.
@@ -57,6 +59,28 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
   `maybeMulligan` for both sides) — added `maybeMulliganPlayer` so the CPU
   opponent gets the same keep/mulligan judgment in real matches that all the
   balance data assumes it has.
+
+### Added (Settings, Changelog & CPU/Deck-builder improvements)
+
+- **Renamed the game to FryCards** across all user-facing screens, the
+  README, the rulebook and page metadata.
+- **Settings screen** with 7 selectable color themes, saved to
+  `localStorage` (no backend) and applied instantly via CSS variables.
+- **Changelog screen**, accessible from the main menu, rendering this file's
+  history in-app.
+- **CPU opponents now play a freshly randomized deck** every match (random
+  Leader, random keyword/effect leanings, random combo family) instead of
+  picking from the twelve fixed archetype decks.
+- **Deck Builder**: added a "QUICKBUILD" button that auto-fills a legal
+  30-card deck from your owned collection, and a live deck stats panel (cast
+  slot curve, type breakdown, keyword density) shown while editing.
+- **Pack opening** redesigned into a cinematic one-at-a-time spotlight
+  reveal with rarity-based glow/particle flourishes, plus a pull summary
+  screen, alongside the original grid/reveal-all flow for quick opens.
+- **How to Play accuracy pass**: fixed two spots where the in-app rules text
+  didn't match engine behavior — Rally's once-per-turn cap is shared across
+  your whole board (not per Rally card), and Pitching an unplaced die does
+  nothing if your Leader is already at full HP.
 
 ### Added (v4.2 frontend — the dice-placement game is now playable in the app)
 

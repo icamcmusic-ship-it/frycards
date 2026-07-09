@@ -11,7 +11,7 @@ const SECTIONS = [
     body: [
       [
         'Win Condition',
-        "Reduce the enemy Leader from 64 HP to 0. You also lose if you must draw during your Draw Phase with an empty deck. Simultaneous KOs are a draw.",
+        'Reduce the enemy Leader from 64 HP to 0. You also lose if you must draw during your Draw Phase with an empty deck. Simultaneous KOs are a draw.',
       ],
       [
         'Deck',
@@ -50,7 +50,7 @@ const SECTIONS = [
       ],
       [
         'End',
-        'Discard down to 6. Unplaced dice are Pitched: each heals your Leader 1. Ward refreshes for both players.',
+        'Discard down to 6. Unplaced dice are Pitched: each heals your Leader 1 (no effect at full HP). Ward refreshes for both players.',
       ],
     ],
   },
@@ -75,7 +75,7 @@ const SECTIONS = [
       ],
       [
         'Pitch',
-        "Any die you don't use is Pitched at end of turn for Mend 1 to your Leader — a dead 1 or 2 is never a total waste.",
+        "Any die you don't use may be Pitched at end of turn for Mend 1 to your Leader — no effect if your Leader is already at full HP.",
       ],
       [
         'Scrap',
@@ -135,7 +135,7 @@ const SECTIONS = [
       ],
       [
         'Rally',
-        'Once per turn, activate its ability using a die already resting on another used Ability Slot — free.',
+        "Once per turn across your whole board, activate a Rally card's ability for free using a die already resting on another used Ability Slot.",
       ],
     ],
   },

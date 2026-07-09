@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Trash2, Plus, Check, AlertTriangle, Copy, Import } from 'lucide-react';
+import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-react';
 import { encodeDeckCode, decodeDeckCode } from './deckcode';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
@@ -40,7 +40,8 @@ export function validateDeckList(
       continue;
     }
     byId.set(id, (byId.get(id) || 0) + 1);
-    if (c.type === 'Leader') issues.push({ text: `${c.name}: Leaders cannot be in the 30-card deck.` });
+    if (c.type === 'Leader')
+      issues.push({ text: `${c.name}: Leaders cannot be in the 30-card deck.` });
   }
   for (const [id, n] of byId) {
     if (n > MAX_COPIES) {
@@ -190,6 +191,15 @@ function castBucket(c: CardDef): string {
   return String(c.threshold ?? 1);
 }
 
+function shuffleArr<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void }) {
   const { session, collection } = useMeta();
   const db = useMemo(() => new Map(POOL_V4.map((c) => [c.id, c])), []);
@@ -236,6 +246,39 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     if (idx >= 0) setCardIds([...cardIds.slice(0, idx), ...cardIds.slice(idx + 1)]);
   };
 
+  /** Auto-fills a legal 30-card deck from owned cards — no color-identity
+   * restriction, since v4.1 removed elements from the game entirely. */
+  const handleQuickbuild = () => {
+    const eligible = poolByType('Unit')
+      .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
+      .filter((c) => (ownedQty.get(c.id) || 0) > 0);
+    const shuffled = shuffleArr(eligible);
+
+    const picked: string[] = [];
+    const countMap = new Map<string, number>();
+    const tryAdd = (c: CardDef) => {
+      if (picked.length >= DECK_SIZE) return false;
+      const cur = countMap.get(c.id) || 0;
+      if (cur >= MAX_COPIES) return false;
+      if (cur >= (ownedQty.get(c.id) || 0)) return false;
+      picked.push(c.id);
+      countMap.set(c.id, cur + 1);
+      return true;
+    };
+
+    let guard = 0;
+    while (picked.length < DECK_SIZE && guard < 500) {
+      guard++;
+      let progressed = false;
+      for (const c of shuffled) {
+        if (picked.length >= DECK_SIZE) break;
+        if (tryAdd(c)) progressed = true;
+      }
+      if (!progressed) break;
+    }
+    setCardIds(picked);
+  };
+
   // Pool: owned, non-Leader cards from the v4.2 pool. No color-identity
   // restriction — elements were removed from the game entirely (v4.1).
   const pool = poolByType('Unit')
@@ -270,6 +313,22 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     const m: Record<string, number> = { Unit: 0, Charm: 0, Event: 0, Location: 0 };
     for (const { card, n } of grouped) m[card.type] = (m[card.type] || 0) + n;
     return m;
+  }, [grouped]);
+
+  // Cast-slot curve + keyword density, shown live while editing.
+  const deckStats = useMemo(() => {
+    const curve: Record<string, number> = {};
+    const keywordCounts: Record<string, number> = {};
+    for (const { card, n } of grouped) {
+      const bucket = castBucket(card);
+      curve[bucket] = (curve[bucket] || 0) + n;
+      for (const kw of card.keywords || []) keywordCounts[kw] = (keywordCounts[kw] || 0) + n;
+    }
+    const maxCurve = Math.max(1, ...Object.values(curve));
+    const topKeywords = Object.entries(keywordCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+    return { curve, maxCurve, topKeywords };
   }, [grouped]);
 
   const handleSave = async () => {
@@ -365,6 +424,15 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           >
             {cardIds.length}/{DECK_SIZE}
           </span>
+          <PopButton
+            color="steel"
+            onClick={handleQuickbuild}
+            title="Auto-fill a legal deck from your owned cards"
+          >
+            <span className="flex items-center gap-1">
+              <Wand2 className="w-4 h-4" /> QUICKBUILD
+            </span>
+          </PopButton>
           <PopButton color="yellow" onClick={handleExport} title="Copy deck code to clipboard">
             <span className="flex items-center gap-1">
               <Copy className="w-4 h-4" /> {copied ? 'COPIED!' : 'CODE'}
@@ -396,15 +464,29 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <select className={select} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <select
+              className={select}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
               {TYPE_FILTERS.map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </select>
-            <select className={select} value={castFilter} onChange={(e) => setCastFilter(e.target.value)}>
+            <select
+              className={select}
+              value={castFilter}
+              onChange={(e) => setCastFilter(e.target.value)}
+            >
               {CAST_FILTERS.map((v) => (
                 <option key={v} value={v}>
-                  {v === 'All' ? 'Any Cast Slot' : v === 'Combo' ? 'Combo-gated' : v === 'Free' ? 'Free (Location)' : `Cast ${v}+`}
+                  {v === 'All'
+                    ? 'Any Cast Slot'
+                    : v === 'Combo'
+                      ? 'Combo-gated'
+                      : v === 'Free'
+                        ? 'Free (Location)'
+                        : `Cast ${v}+`}
                 </option>
               ))}
             </select>
@@ -448,16 +530,53 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
         {/* Deck list */}
         <div className="w-72 shrink-0 border-l-4 border-[#1A1A1A] bg-[#2C3E50] flex flex-col">
-          <div className="px-3 py-2 heading-font text-xs text-[#FFD54F] shrink-0">
-            DECK LIST
+          {/* Deck stats: cast-slot curve, type breakdown, top keywords */}
+          <div className="px-3 py-2.5 border-b-2 border-[#1A1A1A]/40 shrink-0">
+            <div className="heading-font text-[10px] text-[#FFD54F] mb-1.5">DECK STATS</div>
+            <div className="flex items-end gap-1 h-12 mb-1.5">
+              {['1', '2', '3', '4', '5', '6', 'Combo', 'Free'].map((bucket) => {
+                const n = deckStats.curve[bucket] || 0;
+                const h = Math.round((n / deckStats.maxCurve) * 100);
+                return (
+                  <div key={bucket} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div
+                      className="w-full bg-[#FFD54F] ink-border-sm min-h-[2px]"
+                      style={{ height: `${Math.max(h, n > 0 ? 8 : 2)}%` }}
+                      title={`${n} card${n === 1 ? '' : 's'} at ${bucket === 'Combo' ? 'Combo-gate' : bucket === 'Free' ? 'Free (Location)' : `Cast ${bucket}`}`}
+                    />
+                    <span className="text-[7px] font-mono font-bold text-[#F7F7F7]/70">
+                      {bucket === 'Combo' ? 'CB' : bucket === 'Free' ? 'FR' : bucket}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 flex-wrap mb-1.5">
+              {Object.entries(typeCounts).map(([t, n]) => (
+                <span
+                  key={t}
+                  className="text-[9px] font-bold text-[#F7F7F7] bg-[#1A1A1A]/50 px-1.5 py-0.5"
+                >
+                  {n} {t}
+                  {n === 1 ? '' : 's'}
+                </span>
+              ))}
+            </div>
+            {deckStats.topKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {deckStats.topKeywords.map(([kw, n]) => (
+                  <span
+                    key={kw}
+                    className="text-[8px] font-black px-1 py-0.5 bg-[#FFD54F] text-[#1A1A1A] ink-border-sm"
+                  >
+                    {kw} ×{n}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="px-3 pb-2 flex gap-2 flex-wrap shrink-0">
-            {Object.entries(typeCounts).map(([t, n]) => (
-              <span key={t} className="text-[9px] font-bold text-[#F7F7F7] bg-[#1A1A1A]/50 px-1.5 py-0.5">
-                {n} {t}{n === 1 ? '' : 's'}
-              </span>
-            ))}
-          </div>
+
+          <div className="px-3 py-2 heading-font text-xs text-[#FFD54F] shrink-0">DECK LIST</div>
           <div className="flex-1 overflow-y-auto px-2 pb-3 flex flex-col gap-1">
             {grouped.map(({ card, n }) => (
               <button
@@ -467,9 +586,16 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 className="flex items-center gap-1.5 bg-[#F7F7F7] ink-border-sm px-1.5 py-1 text-left hover:bg-[#E53935] hover:text-[#F7F7F7] transition-colors group"
               >
                 <span
-                  className={cn('text-[8px] font-black px-1 shrink-0', RARITY_COLOR[card.rarity || 'Common'])}
+                  className={cn(
+                    'text-[8px] font-black px-1 shrink-0',
+                    RARITY_COLOR[card.rarity || 'Common'],
+                  )}
                 >
-                  {castBucket(card) === 'Free' ? 'FR' : castBucket(card) === 'Combo' ? 'CB' : castBucket(card)}
+                  {castBucket(card) === 'Free'
+                    ? 'FR'
+                    : castBucket(card) === 'Combo'
+                      ? 'CB'
+                      : castBucket(card)}
                 </span>
                 <span className="text-[10px] font-bold truncate flex-1">{card.name}</span>
                 <span className="text-[9px] font-mono font-black shrink-0">×{n}</span>
@@ -486,16 +612,30 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
       {/* Card inspector */}
       {inspect && (
-        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center" onClick={() => setInspect(null)}>
-          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]" onClick={(e) => e.stopPropagation()}>
-            {inspect.image && <img src={inspect.image} className="w-full h-[160px] object-cover ink-border-sm mb-2" />}
+        <div
+          className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center"
+          onClick={() => setInspect(null)}
+        >
+          <div
+            className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {inspect.image && (
+              <img
+                src={inspect.image}
+                className="w-full h-[160px] object-cover ink-border-sm mb-2"
+              />
+            )}
             <div className="heading-font text-sm">{inspect.name}</div>
             <div className="text-[10px] font-bold text-[#2C3E50] uppercase">
-              {inspect.type}{inspect.rarity ? ` · ${inspect.rarity}` : ''}
+              {inspect.type}
+              {inspect.rarity ? ` · ${inspect.rarity}` : ''}
               {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
             </div>
             <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
-            {inspect.flavor && <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>}
+            {inspect.flavor && (
+              <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>
+            )}
             <button
               onClick={() => setInspect(null)}
               className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm"

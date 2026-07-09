@@ -51,7 +51,12 @@ function score(c: CardDef, arch: Archetype): number {
   return s;
 }
 
-function take(pool: CardDef[], arch: Archetype, count: number, used: Set<string>): [string, number][] {
+function take(
+  pool: CardDef[],
+  arch: Archetype,
+  count: number,
+  used: Set<string>,
+): [string, number][] {
   const ranked = pool
     .filter((c) => !used.has(c.id))
     .sort((a, b) => score(b, arch) - score(a, arch));
@@ -87,7 +92,10 @@ export function buildDeck(arch: Archetype): DeckDef {
     const ids = Object.keys(cards);
     let over = total - DECK_SIZE;
     for (const id of ids.reverse()) {
-      while (over > 0 && cards[id] > 0) { cards[id]--; over--; }
+      while (over > 0 && cards[id] > 0) {
+        cards[id]--;
+        over--;
+      }
       if (cards[id] === 0) delete cards[id];
       if (over === 0) break;
     }
@@ -99,47 +107,131 @@ export function buildDeck(arch: Archetype): DeckDef {
 // A varied roster of archetypes across all six real Leaders.
 // ---------------------------------------------------------------------------
 export const ARCHETYPES: Archetype[] = [
-  { label: 'Abyss Echo-Recursion', leaderId: 'avatar_of_the_abyss',
-    keywords: ['Echo', 'Twin'], effects: ['draw', 'sap'],
-    units: 17, spells: 9, locations: 4, comboFamily: 'match' },
-  { label: 'Abyss Sap Burn', leaderId: 'avatar_of_the_abyss',
-    keywords: ['Frenzy', 'Pierce'], effects: ['sap', 'destroy'],
-    units: 15, spells: 12, locations: 3, comboFamily: 'none' },
+  {
+    label: 'Abyss Echo-Recursion',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Echo', 'Twin'],
+    effects: ['draw', 'sap'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'match',
+  },
+  {
+    label: 'Abyss Sap Burn',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Frenzy', 'Pierce'],
+    effects: ['sap', 'destroy'],
+    units: 15,
+    spells: 12,
+    locations: 3,
+    comboFamily: 'none',
+  },
 
-  { label: 'Sea Witch Bind-Control', leaderId: 'ethereal_sea_witch',
-    keywords: ['Ward', 'Anchor'], effects: ['bind', 'destroy', 'draw'],
-    units: 16, spells: 11, locations: 3, comboFamily: 'straight' },
-  { label: 'Sea Witch Anchor-Ramp', leaderId: 'ethereal_sea_witch',
-    keywords: ['Anchor', 'Ward'], effects: ['draw', 'bind'],
-    units: 18, spells: 8, locations: 4, comboFamily: 'none' },
+  {
+    label: 'Sea Witch Bind-Control',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Ward', 'Anchor'],
+    effects: ['bind', 'destroy', 'draw'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'straight',
+  },
+  {
+    label: 'Sea Witch Anchor-Ramp',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Anchor', 'Ward'],
+    effects: ['draw', 'bind'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
 
-  { label: 'Mer King Guard-Wall', leaderId: 'mer_king',
-    keywords: ['Guard', 'Ward'], effects: ['mend', 'destroy'],
-    units: 18, spells: 8, locations: 4, comboFamily: 'none' },
-  { label: 'Mer King Heal-Midrange', leaderId: 'mer_king',
-    keywords: ['Guard', 'Twin'], effects: ['mend', 'buff'],
-    units: 16, spells: 10, locations: 4, comboFamily: 'match' },
+  {
+    label: 'Mer King Guard-Wall',
+    leaderId: 'mer_king',
+    keywords: ['Guard', 'Ward'],
+    effects: ['mend', 'destroy'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Mer King Heal-Midrange',
+    leaderId: 'mer_king',
+    keywords: ['Guard', 'Twin'],
+    effects: ['mend', 'buff'],
+    units: 16,
+    spells: 10,
+    locations: 4,
+    comboFamily: 'match',
+  },
 
-  { label: 'Diver Straight-Combo', leaderId: 'legendary_diver',
-    keywords: ['Swift', 'Frenzy'], effects: ['sap', 'draw'],
-    units: 15, spells: 12, locations: 3, comboFamily: 'straight' },
-  { label: 'Diver Aggro-Swift', leaderId: 'legendary_diver',
-    keywords: ['Frenzy', 'Swift', 'Pierce'], effects: ['sap'],
-    units: 19, spells: 8, locations: 3, comboFamily: 'none' },
+  {
+    label: 'Diver Straight-Combo',
+    leaderId: 'legendary_diver',
+    keywords: ['Swift', 'Frenzy'],
+    effects: ['sap', 'draw'],
+    units: 15,
+    spells: 12,
+    locations: 3,
+    comboFamily: 'straight',
+  },
+  {
+    label: 'Diver Aggro-Swift',
+    leaderId: 'legendary_diver',
+    keywords: ['Frenzy', 'Swift', 'Pierce'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
 
-  { label: 'Crimson Frenzy-Aggro', leaderId: 'crimson_vector_commander',
-    keywords: ['Frenzy', 'Pierce', 'Guard'], effects: ['sap'],
-    units: 19, spells: 8, locations: 3, comboFamily: 'none' },
-  { label: 'Crimson Match-Combo', leaderId: 'crimson_vector_commander',
-    keywords: ['Guard', 'Frenzy'], effects: ['sap', 'buff'],
-    units: 16, spells: 11, locations: 3, comboFamily: 'match' },
+  {
+    label: 'Crimson Frenzy-Aggro',
+    leaderId: 'crimson_vector_commander',
+    keywords: ['Frenzy', 'Pierce', 'Guard'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Crimson Match-Combo',
+    leaderId: 'crimson_vector_commander',
+    keywords: ['Guard', 'Frenzy'],
+    effects: ['sap', 'buff'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'match',
+  },
 
-  { label: 'Shinobi Tempo-Anchor', leaderId: 'apex_nanite_shinobi',
-    keywords: ['Anchor', 'Echo', 'Swift'], effects: ['buff', 'sap'],
-    units: 17, spells: 10, locations: 3, comboFamily: 'none' },
-  { label: 'Shinobi Echo-Straight', leaderId: 'apex_nanite_shinobi',
-    keywords: ['Echo', 'Anchor'], effects: ['draw', 'sap'],
-    units: 16, spells: 11, locations: 3, comboFamily: 'straight' },
+  {
+    label: 'Shinobi Tempo-Anchor',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Anchor', 'Echo', 'Swift'],
+    effects: ['buff', 'sap'],
+    units: 17,
+    spells: 10,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Shinobi Echo-Straight',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Echo', 'Anchor'],
+    effects: ['draw', 'sap'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'straight',
+  },
 ];
 
 export function allDecks(): DeckDef[] {
@@ -155,4 +247,59 @@ export function deckDefFromCustom(leaderId: string, cardIds: string[], label: st
   const cards: Record<string, number> = {};
   for (const id of cardIds) cards[id] = (cards[id] || 0) + 1;
   return { leaderId, cards, resolve: (id) => POOL_BY_ID[id], label };
+}
+
+// ---------------------------------------------------------------------------
+// Random deck generation — used for the CPU opponent so every match plays a
+// freshly rolled build instead of one of the twelve fixed archetypes above.
+// ---------------------------------------------------------------------------
+const ALL_KEYWORDS = [
+  'Guard',
+  'Swift',
+  'Pierce',
+  'Ward',
+  'Frenzy',
+  'Anchor',
+  'Echo',
+  'Rally',
+  'Twin',
+];
+const ALL_EFFECTS = ['sap', 'mend', 'draw', 'bind', 'destroy', 'buff'];
+const COMBO_FAMILIES: Array<Archetype['comboFamily']> = ['match', 'straight', 'none'];
+
+function shuffle<T>(arr: T[], rng: () => number): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Builds a random-but-coherent Archetype spec: random Leader, random keyword/effect
+ * leanings and a random unit/spell/location split. `buildDeck()` still does the
+ * actual card scoring, so the result is a legal, sensibly-curved 30-card deck. */
+export function randomArchetype(rng: () => number = Math.random): Archetype {
+  const leaderIds = [...new Set(ARCHETYPES.map((a) => a.leaderId))];
+  const leaderId = leaderIds[Math.floor(rng() * leaderIds.length)];
+  const leader = POOL_BY_ID[leaderId];
+
+  const keywords = shuffle(ALL_KEYWORDS, rng).slice(0, 2 + Math.floor(rng() * 2));
+  const effects = shuffle(ALL_EFFECTS, rng).slice(0, 1 + Math.floor(rng() * 3));
+  const comboFamily = COMBO_FAMILIES[Math.floor(rng() * COMBO_FAMILIES.length)];
+
+  const units = 14 + Math.floor(rng() * 6); // 14-19
+  const locations = 3 + Math.floor(rng() * 2); // 3-4
+  const spells = Math.max(4, DECK_SIZE - units - locations);
+
+  return {
+    label: `${leader?.name || 'Unknown Leader'} — Randomized Build`,
+    leaderId,
+    keywords,
+    effects,
+    units,
+    spells,
+    locations,
+    comboFamily,
+  };
 }
