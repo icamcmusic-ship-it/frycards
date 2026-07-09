@@ -16,8 +16,10 @@ import { StoreScreen } from './meta/StoreScreen';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
+import { SettingsScreen } from './meta/SettingsScreen';
 import { PopButton } from './meta/ui';
 import { setCardBackImage } from './meta/cardback';
+import { useTheme } from './meta/useTheme';
 
 // ---------------------------------------------------------------------------
 // Play setup — a v4.2 archetype deck, or one of the player's own saved decks
@@ -203,6 +205,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
 // ---------------------------------------------------------------------------
 function AppInner({ allCards }: { allCards: CardTemplate[] }) {
   const { session, guest, loading, profile, shopItems } = useMeta();
+  const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const [screen, setScreen] = useState<MetaScreen>('menu');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [gameKey, setGameKey] = useState(0);
@@ -214,7 +217,7 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
     setCardBackImage(back?.image_url || null);
   }, [profile?.equipped_card_back, shopItems]);
 
-  if (loading) {
+  if (loading || !themeLoaded) {
     return (
       <div className="w-full h-screen bg-[#1A1A1A] flex items-center justify-center">
         <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
@@ -252,6 +255,14 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
       return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
     case 'profile':
       return <ProfileScreen onBack={() => setScreen('menu')} />;
+    case 'settings':
+      return (
+        <SettingsScreen
+          currentTheme={currentTheme}
+          onThemeChange={changeTheme}
+          onBack={() => setScreen('menu')}
+        />
+      );
     default:
       return (
         <>
