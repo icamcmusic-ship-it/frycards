@@ -26,7 +26,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Nature": 1,
       "Generic": 2
     },
-    "attack": 4,
+    "attack": 3,
     "health": 4
   },
   {
@@ -201,21 +201,21 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Echo",
-      "Pure",
-      "Meltdown"
+      "Pure"
     ],
-    "text": "The sky falls, even where the sun never shines. Destroy an Item on target enemy Unit; deal Flame damage equal to the Item's cost to its host.",
+    "text": "The sky falls, even where the sun never shines. X-Cost: name any amount of extra resources; deal that much damage to target enemy Unit.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_meteor_shower_viewed_from_underwater_the_falling_stars_stre_48fcca4a-4ecc-4256-86ce-82944aea31a5_3_result.webp?updatedAt=1778240811310",
     "cost": {
       "Tech": 1,
-      "Frost": 1,
-      "Generic": 3
+      "Frost": 1
     },
     "effect": {
-      "action": "meltdown",
+      "action": "damage",
       "target": "unit",
-      "text": "Destroy an Item on target enemy Unit; deal Flame damage equal to the Item's cost to its host."
-    }
+      "value": 0,
+      "text": "Name any amount of extra resources when you cast this: deal that much damage to target enemy Unit."
+    },
+    "xCost": true
   },
   {
     "id": "chrono_tide",
@@ -854,9 +854,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Ward 1"
+      "Ward 1",
+      "Overload 2"
     ],
-    "text": "A shimmering barrier hiding terrible secrets.",
+    "text": "A shimmering barrier hiding terrible secrets. Overload 2: gain 2 of a random one of your resources now; your next roll is reduced by 2.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_curtain_of_glowing_silk-like_algae_hanging_from_a_trench_ce_5d030bc5-90c0-424e-80d2-dfd980605736_3_result.webp?updatedAt=1778240809320",
     "cost": {
       "Chaos": 1,
@@ -1075,9 +1076,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Fate"
     ],
-    "text": "They navigate by the stars on their backs.",
+    "text": "They navigate by the stars on their backs. Fate: a 6+-cost top-decked card is auto-bottomed at the start of your turn.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_field_of_Star-Crabs_whose_shells_perfectly_match_the_conste_0625aabd-67ee-4c7a-bd5d-7804dd3ad877_1_result.webp?updatedAt=1778240808497",
     "cost": {
       "Nature": 1,
@@ -1324,16 +1326,17 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Freeze-Dry 1"
     ],
-    "text": "A moving fortress.",
+    "text": "A moving fortress. Freeze-Dry 1: combat damage from this also freezes the target for 1 turn.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ancient_colossal_turtle_the_Isle_of_Shells_with_a_fully_re_a1eaaeea-a159-4cca-96eb-9d78264914d5_3_result.webp?updatedAt=1778240807932",
     "cost": {
       "Frost": 1,
       "Generic": 1
     },
     "attack": 2,
-    "health": 1
+    "health": 2
   },
   {
     "id": "sunken_bounty",
@@ -1544,18 +1547,19 @@ export const GENERATED_CARDS: CardTemplate[] = [
     ],
     "rarity": "Common",
     "set": "Blue Coral",
-    "keywords": [],
-    "text": "The ocean's wrath unleashed. Purge target Unit: strip its Items, statuses and buffs.",
+    "keywords": [
+      "Scorched-Earth 1"
+    ],
+    "text": "The ocean's wrath unleashed. Scorched-Earth 1: all Units in play, both players', take 1 damage.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_tsunami_wave_forming_viewed_as_a_massive_towering_wall_of_d_69ec0d39-3e05-4cab-b911-2a6c5112ef6a_3_result.webp?updatedAt=1778240807141",
     "cost": {
       "Light": 1,
       "Generic": 2
     },
     "effect": {
-      "action": "damage",
-      "value": 4,
-      "target": "unit",
-      "text": "Deal 4 damage to target enemy Unit."
+      "action": "scorchedEarth",
+      "value": 1,
+      "text": "All Units in play -- both players' -- take 1 damage."
     }
   },
   {
@@ -1594,9 +1598,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Fate"
     ],
-    "text": "A guiding light in the darkness.",
+    "text": "A guiding light in the darkness. Fate: a 6+-cost top-decked card is auto-bottomed at the start of your turn.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_swarm_of_tiny_glowing_krill_forming_the_shape_of_a_constell_0797d41a-7aee-4025-a9a2-d6b645ec6fc3_0_result.webp?updatedAt=1778240806784",
     "cost": {
       "Order": 1,
@@ -1616,9 +1621,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Blue Coral",
     "keywords": [
       "Armor 1",
-      "Pierce"
+      "Pierce",
+      "Overload 2"
     ],
-    "text": "Channeling the energy of the deep.",
+    "text": "Channeling the energy of the deep. Overload 2: gain 2 of a random one of your resources now; your next roll is reduced by 2.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_staff_made_of_narwhal_tusk_wrapped_in_copper_wire_and_toppe_642e4745-1fd2-4f06-b0d5-78edf967c08b_1_result.webp?updatedAt=1778240806491",
     "cost": {
       "Nature": 2,
@@ -1948,9 +1954,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Pierce"
+      "Pierce",
+      "Blessed 1"
     ],
-    "text": "Her strings control the currents.",
+    "text": "Her strings control the currents. Blessed 1: prevents the first damage instance against it each of your turns.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_mermaid_with_multiple_arms_like_an_anemone_braiding_strings_99d00ed0-e2ef-497e-a2ad-c8ca04b12694_1_result.webp?updatedAt=1778240805244",
     "cost": {
       "Order": 1,
@@ -2035,19 +2042,18 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Blue Coral",
     "keywords": [
-      "Pure"
+      "Glaciate"
     ],
-    "text": "Seeking knowledge in the dark. Deal 3 damage to target enemy Unit.",
+    "text": "Glaciate: freezes every enemy Unit that does not have Guard.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_fleet_of_miniature_glowing_research_submersibles_descending_56080902-ceec-4090-913e-4b7af01dc9fc_1_result.webp?updatedAt=1778240804274",
     "cost": {
       "Frost": 1,
-      "Tech": 1
+      "Tech": 1,
+      "Generic": 2
     },
     "effect": {
-      "action": "damage",
-      "value": 3,
-      "target": "unit",
-      "text": "Deal 3 damage to target enemy Unit."
+      "action": "glaciate",
+      "text": "Freezes every enemy Unit that does not have Guard."
     }
   },
   {
@@ -2153,7 +2159,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Echo"
     ],
-    "text": "A perfect cover for a quick escape. Deal 2 damage to the enemy Leader.",
+    "text": "A perfect cover for a quick escape. Sacrifice a friendly Unit: deal 2 damage, plus that Unit's printed attack, to the enemy Leader.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_dense_cloud_of_ink_from_a_squid_containing_swirling_pattern_db4c58e4-087d-44a7-922f-004545a0947b_0_result.webp?updatedAt=1778240803552",
     "cost": {
       "Nature": 1,
@@ -2161,10 +2167,11 @@ export const GENERATED_CARDS: CardTemplate[] = [
     },
     "effect": {
       "action": "damage",
-      "value": 2,
       "target": "leader",
-      "text": "Deal 2 damage to the enemy Leader."
-    }
+      "value": 2,
+      "text": "Sacrifice a friendly Unit: deal 2 damage plus that Unit's attack to the enemy Leader."
+    },
+    "sacrifice": true
   },
   {
     "id": "scallop_map",
@@ -2434,9 +2441,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Blessed 1"
     ],
-    "text": "It can swallow anything whole.",
+    "text": "It can swallow anything whole. Blessed 1: prevents the first damage instance against it each of your turns.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_gulper_eel_with_an_impossibly_large_mouth_lined_with_tiny_g_3bbd23c2-3122-4ac0-acd1-ae0c621f4728_1_result.webp?updatedAt=1778240802180",
     "cost": {
       "Light": 1,
@@ -3013,15 +3021,16 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Blitz"
+      "Blitz",
+      "Freeze-Dry 1"
     ],
-    "text": "A scavenger of the deep.",
+    "text": "A scavenger of the deep. Freeze-Dry 1: combat damage from this also freezes the target for 1 turn.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_giant_isopod_with_a_shell_made_of_frosted_glass._--chaos_5__a965bed8-cd1c-424a-bf93-31c200ea8c08_3_result.webp?updatedAt=1778240798591",
     "cost": {
       "Tech": 1,
       "Generic": 1
     },
-    "attack": 1,
+    "attack": 2,
     "health": 3
   },
   {
@@ -3419,8 +3428,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Crimson Circuit",
     "keywords": [
-      "Symmetric",
-      "Codex 1"
+      "Symmetric"
     ],
     "text": "Regulation thickness: enough to outlive the mountain.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Military_bunker_positioned_near_yellow_gas_fissures._--chaos__9ea3e1ec-e63b-4b8f-a99c-ffb804fc91ae_3.png?updatedAt=1783333969041",
