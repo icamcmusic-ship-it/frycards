@@ -583,22 +583,37 @@ function pickDie(p: Player, dieIndex: number): Die | null {
   return die && !die.placed ? die : null;
 }
 
-function enterPlay(g: Game, p: Player, c: Inst, dieValue: number, viaEcho = false) {
+function enterPlay(
+  g: Game, p: Player, c: Inst, dieValue: number, viaEcho = false, targetIid?: string,
+) {
   g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
   const eff = effThreshold(g, p.id, c.def);
   const overflowHit =
     !!c.def.overflow && c.def.threshold !== undefined && dieValue - eff >= c.def.overflow.amount;
 
   if (c.def.type === 'Unit') {
+    // A Unit (re)entering play — whether a fresh cast, a completed Twin, or
+    // an Echo recast reusing the same Inst — starts a clean "life": nothing
+    // it accumulated on a previous stint in play (buffs, exhaustion, a
+    // pending Bind) should carry over.
     c.enteredThisTurn = true;
     c.damage = 0;
+    c.permAtk = 0;
+    c.permHp = 0;
+    c.hasAttacked = false;
+    c.attacksMade = 0;
+    c.abilityUsed = false;
+    c.abilityDie = undefined;
     c.wardUsed = false;
+    c.boundThisTurn = false;
+    c.boundNextTurn = false;
     p.board.push(c);
   } else if (c.def.type === 'Location') {
     if (p.location) {
       g.log.push(`${p.location.def.name} was replaced.`);
       discardCard(g, p, p.location);
     }
+    c.excavateStacks = 0; // fresh Location life: no unearned Excavate discount
     p.location = c;
     p.locationCastThisTurn = true;
     cleanupDeaths(g); // HP_ALL leaving can kill units
@@ -612,7 +627,7 @@ function enterPlay(g: Game, p: Player, c: Inst, dieValue: number, viaEcho = fals
     discardCard(g, p, c);
   }
   if (c.def.type === 'Unit' && c.def.onCast) {
-    applyEffect(g, p.id, c.def.onCast, autoTarget(g, p.id, c.def.onCast), c);
+    applyEffect(g, p.id, c.def.onCast, targetIid ?? autoTarget(g, p.id, c.def.onCast), c);
   }
   if (overflowHit && c.def.overflow) {
     g.log.push(`${c.def.name} Overflow triggered.`);
@@ -721,7 +736,7 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
       return true;
     }
   }
-  enterPlay(g, p, c, die.value);
+  enterPlay(g, p, c, die.value, false, targetIid);
   return true;
 }
 
@@ -732,6 +747,7 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
  */
 export function castLocationFree(g: Game, cardIid: string): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   const idx = p.hand.findIndex((c) => c.iid === cardIid);
   if (idx < 0) return false;
   const c = p.hand[idx];
@@ -811,6 +827,7 @@ export function activateUltimate(g: Game, dieIndex: number, targetIid?: string):
 /** Destination 3: complete a staged Twin card (exact same face value). */
 export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
   const idx = p.staging.findIndex((c) => c.iid === cardIid);
   if (!die || idx < 0) return false;

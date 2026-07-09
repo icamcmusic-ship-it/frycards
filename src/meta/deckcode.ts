@@ -1,9 +1,11 @@
-import { CardTemplate } from '../types';
-
 /**
  * Shareable one-line deck codes.
  * Format: FRY1:<leaderId>:<cardId>[*n][,<cardId>[*n]...]
  * Card ids contain only [a-z0-9_-], so ':' ',' '*' are safe separators.
+ *
+ * Generic over any card-lookup map whose values at least carry a `type`
+ * field, so this works for both the legacy CardTemplate pool and the v4.2
+ * CardDef pool.
  */
 const PREFIX = 'FRY1';
 
@@ -19,7 +21,7 @@ export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
 
 export function decodeDeckCode(
   code: string,
-  db: Map<string, CardTemplate>,
+  db: Map<string, { type: string }>,
 ): { leaderId: string; cardIds: string[] } | { error: string } {
   const trimmed = code.trim();
   const parts = trimmed.split(':');
