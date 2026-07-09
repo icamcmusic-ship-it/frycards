@@ -208,7 +208,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     [collection],
   );
 
-  const [name, setName] = useState(deck?.name || 'New Deck');
+  const initialName = deck?.name || 'New Deck';
+  const initialCardIds = useMemo(() => deck?.card_ids || [], [deck]);
+  const [name, setName] = useState(initialName);
   const [leaderId, setLeaderId] = useState<string | null>(deck?.leader_id || null);
   const [cardIds, setCardIds] = useState<string[]>(deck?.card_ids || []);
   const [typeFilter, setTypeFilter] = useState('All');
@@ -350,6 +352,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
   const select = 'px-2 py-1.5 bg-[#F7F7F7] ink-border-sm font-bold text-xs';
 
+  // Unsaved-work guard: only prompt if the draft actually diverges from what
+  // was loaded, so re-opening and immediately leaving an unchanged deck never
+  // nags the player.
+  const isDirty =
+    name !== initialName ||
+    (deck?.leader_id ?? null) !== leaderId ||
+    cardIds.length !== initialCardIds.length ||
+    cardIds.some((id, i) => id !== initialCardIds[i]);
+  const handleBack = () => {
+    if (isDirty && !window.confirm('Discard unsaved changes to this deck?')) return;
+    onDone();
+  };
+
   // Leader pick step
   if (!leader) {
     return (
@@ -402,7 +417,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       {/* Editor header */}
       <div className="flex items-center justify-between gap-3 bg-[#1A1A1A] px-4 py-2.5 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <PopButton onClick={onDone} color="yellow">
+          <PopButton onClick={handleBack} color="yellow">
             &lt; BACK
           </PopButton>
           <input

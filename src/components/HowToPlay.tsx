@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface HowToPlayProps {
   onClose: () => void;
@@ -190,6 +190,15 @@ const SECTIONS = [
 
 export function HowToPlay({ onClose }: HowToPlayProps) {
   const [open, setOpen] = useState(0);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="absolute inset-0 bg-[#1A1A1A]/95 flex items-center justify-center z-50 p-4">
       <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-yellow max-w-3xl w-full flex flex-col max-h-[92vh]">

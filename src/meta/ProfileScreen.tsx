@@ -74,12 +74,29 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
                   <input
                     value={nameDraft}
                     onChange={(e) => setNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRename();
+                      else if (e.key === 'Escape') {
+                        setEditingName(false);
+                        setError('');
+                      }
+                    }}
                     maxLength={24}
                     className="px-2 py-1 bg-[#F7F7F7] ink-border-sm font-black heading-font text-sm"
                     autoFocus
                   />
-                  <PopButton color="red" onClick={handleRename}>
+                  <PopButton color="red" onClick={handleRename} title="Save name">
                     <Check className="w-4 h-4" />
+                  </PopButton>
+                  <PopButton
+                    color="steel"
+                    onClick={() => {
+                      setEditingName(false);
+                      setError('');
+                    }}
+                    title="Cancel"
+                  >
+                    ✕
                   </PopButton>
                 </div>
               ) : (
