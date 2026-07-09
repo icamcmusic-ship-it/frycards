@@ -15,8 +15,14 @@ import { ComboPattern } from '../src/game/v3/cards';
 
 const TRIALS = parseInt(process.argv[2] || '200000', 10);
 const PATTERNS: ComboPattern[] = [
-  'AnyPair', 'TwoPair', 'ThreeKind', 'SmallStraight',
-  'FullHouse', 'LargeStraight', 'FourKind', 'Yahtzee',
+  'AnyPair',
+  'TwoPair',
+  'ThreeKind',
+  'SmallStraight',
+  'FullHouse',
+  'LargeStraight',
+  'FourKind',
+  'Yahtzee',
 ];
 
 const rng = mulberry32(9001);
@@ -56,7 +62,7 @@ function keepMask(dice: number[], pattern: ComboPattern): boolean[] {
       if (pattern === 'TwoPair') {
         // Keep the two largest distinct-value clusters (up to 2 each).
         const keepValues = sorted.slice(0, 2).map(([v]) => Number(v));
-        let usedPerValue: Record<number, number> = {};
+        const usedPerValue: Record<number, number> = {};
         return dice.map((v) => {
           if (!keepValues.includes(v)) return false;
           usedPerValue[v] = (usedPerValue[v] || 0) + 1;
@@ -76,7 +82,9 @@ function keepMask(dice: number[], pattern: ComboPattern): boolean[] {
 }
 
 console.log(`\n=== Directed-reroll Combo pattern hit-rate (${TRIALS} trials, 1 reroll) ===`);
-console.log('(naive = single fresh 5d6 roll with NO reroll; directed = reroll toward the pattern)\n');
+console.log(
+  '(naive = single fresh 5d6 roll with NO reroll; directed = reroll toward the pattern)\n',
+);
 const results: { pattern: ComboPattern; naive: number; directed: number }[] = [];
 for (const pattern of PATTERNS) {
   let naiveHits = 0;
@@ -84,16 +92,28 @@ for (const pattern of PATTERNS) {
   for (let i = 0; i < TRIALS; i++) {
     const dice = roll5();
     if (matchesPattern(dice, pattern)) naiveHits++;
-    if (matchesPattern(dice, pattern)) { directedHits++; continue; } // already hit, no reroll needed
+    if (matchesPattern(dice, pattern)) {
+      directedHits++;
+      continue;
+    } // already hit, no reroll needed
     const mask = keepMask(dice, pattern);
     const rerolled = rerollAt(dice, mask);
     if (matchesPattern(rerolled, pattern)) directedHits++;
   }
-  results.push({ pattern, naive: (100 * naiveHits) / TRIALS, directed: (100 * directedHits) / TRIALS });
+  results.push({
+    pattern,
+    naive: (100 * naiveHits) / TRIALS,
+    directed: (100 * directedHits) / TRIALS,
+  });
 }
 
 results.sort((a, b) => b.directed - a.directed);
-console.log('Pattern'.padEnd(16), 'Naive%'.padStart(8), 'Directed%'.padStart(11), 'Lift'.padStart(8));
+console.log(
+  'Pattern'.padEnd(16),
+  'Naive%'.padStart(8),
+  'Directed%'.padStart(11),
+  'Lift'.padStart(8),
+);
 for (const r of results) {
   const lift = r.directed - r.naive;
   console.log(
@@ -106,6 +126,12 @@ for (const r of results) {
 
 console.log('\n--- Straight-family vs matching-family, same nominal "tier" ---');
 const byName = Object.fromEntries(results.map((r) => [r.pattern, r]));
-console.log(`Large Straight (5 distinct)  directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Yahtzee (5 same)      directed=${byName.Yahtzee.directed.toFixed(1)}%`);
-console.log(`Small Straight (4 distinct)  directed=${byName.SmallStraight.directed.toFixed(1)}%  vs  Three of a Kind      directed=${byName.ThreeKind.directed.toFixed(1)}%`);
-console.log(`Large Straight               directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Full House (3+2)      directed=${byName.FullHouse.directed.toFixed(1)}%`);
+console.log(
+  `Large Straight (5 distinct)  directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Yahtzee (5 same)      directed=${byName.Yahtzee.directed.toFixed(1)}%`,
+);
+console.log(
+  `Small Straight (4 distinct)  directed=${byName.SmallStraight.directed.toFixed(1)}%  vs  Three of a Kind      directed=${byName.ThreeKind.directed.toFixed(1)}%`,
+);
+console.log(
+  `Large Straight               directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Full House (3+2)      directed=${byName.FullHouse.directed.toFixed(1)}%`,
+);

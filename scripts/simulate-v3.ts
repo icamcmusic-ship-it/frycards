@@ -30,8 +30,14 @@ let totalGames = 0;
 let draws = 0;
 let deckouts = 0;
 let timeouts = 0;
-let echoRecasts = 0, twinCompletions = 0, twinAbandons = 0, scraps = 0, rallies = 0,
-  wardBlocks = 0, diceWasted = 0, attacks = 0;
+let echoRecasts = 0,
+  twinCompletions = 0,
+  twinAbandons = 0,
+  scraps = 0,
+  rallies = 0,
+  wardBlocks = 0,
+  diceWasted = 0,
+  attacks = 0;
 const errors: string[] = [];
 
 function invariants(g: Game) {
@@ -44,8 +50,13 @@ function invariants(g: Game) {
     if (p.dice.length > 0 && g.active !== p.id) errors.push('inactive player holds dice');
     if (p.leader.damage < 0) errors.push('negative leader damage');
     const total =
-      p.deck.length + p.hand.length + p.discard.length + p.banished.length +
-      p.staging.length + p.board.length + (p.location ? 1 : 0);
+      p.deck.length +
+      p.hand.length +
+      p.discard.length +
+      p.banished.length +
+      p.staging.length +
+      p.board.length +
+      (p.location ? 1 : 0);
     if (total !== 40) errors.push(`card count drift: ${total} (${p.id})`);
   }
 }
@@ -60,8 +71,14 @@ function runGame(la: string, lb: string, seed: number) {
   }
   totalGames++;
   totalTurns += turns;
-  if (!g.winner) { timeouts++; return; }
-  if (g.winner === 'draw') { draws++; return; }
+  if (!g.winner) {
+    timeouts++;
+    return;
+  }
+  if (g.winner === 'draw') {
+    draws++;
+    return;
+  }
   if (g.log.some((l) => l.includes('decked out'))) deckouts++;
 
   const winnerLeader = g.players[g.winner].leader.def.id;
@@ -69,12 +86,19 @@ function runGame(la: string, lb: string, seed: number) {
   leaderWins[winnerLeader] = (leaderWins[winnerLeader] || 0) + 1;
   leaderGames[winnerLeader] = (leaderGames[winnerLeader] || 0) + 1;
   leaderGames[loserLeader] = (leaderGames[loserLeader] || 0) + 1;
-  pairWins[`${la}>${lb}`] = (pairWins[`${la}>${lb}`] || 0) + (winnerLeader === la && g.players.A.leader.def.id === la ? 0 : 0);
+  pairWins[`${la}>${lb}`] =
+    (pairWins[`${la}>${lb}`] || 0) +
+    (winnerLeader === la && g.players.A.leader.def.id === la ? 0 : 0);
 
   const s = g.stats;
-  echoRecasts += s.echoRecasts; twinCompletions += s.twinCompletions;
-  twinAbandons += s.twinAbandons; scraps += s.scraps; rallies += s.rallies;
-  wardBlocks += s.wardBlocks; diceWasted += s.diceWasted; attacks += s.attacks;
+  echoRecasts += s.echoRecasts;
+  twinCompletions += s.twinCompletions;
+  twinAbandons += s.twinAbandons;
+  scraps += s.scraps;
+  rallies += s.rallies;
+  wardBlocks += s.wardBlocks;
+  diceWasted += s.diceWasted;
+  attacks += s.attacks;
   for (const [id, n] of Object.entries(s.comboTriggers)) {
     comboTriggers[id] = (comboTriggers[id] || 0) + n;
   }
@@ -89,7 +113,13 @@ function runGame(la: string, lb: string, seed: number) {
     }
     if (p.location) deckIds.add(p.location.def.id);
     for (const id of deckIds) {
-      const a = (cardAgg[id] ||= { casts: 0, gamesCast: 0, winsWhenCast: 0, inDeckGames: 0, inDeckWins: 0 });
+      const a = (cardAgg[id] ||= {
+        casts: 0,
+        gamesCast: 0,
+        winsWhenCast: 0,
+        inDeckGames: 0,
+        inDeckWins: 0,
+      });
       a.inDeckGames++;
       if (won) a.inDeckWins++;
     }
@@ -100,10 +130,18 @@ function runGame(la: string, lb: string, seed: number) {
     const won = g.winner === pid;
     const counted = new Set<string>();
     // walk stats.casts is global; recompute per-player casts from zones is imprecise.
-    void p; void won; void counted;
+    void p;
+    void won;
+    void counted;
   }
   for (const [id, n] of Object.entries(s.casts)) {
-    const a = (cardAgg[id] ||= { casts: 0, gamesCast: 0, winsWhenCast: 0, inDeckGames: 0, inDeckWins: 0 });
+    const a = (cardAgg[id] ||= {
+      casts: 0,
+      gamesCast: 0,
+      winsWhenCast: 0,
+      inDeckGames: 0,
+      inDeckWins: 0,
+    });
     a.casts += n;
     a.gamesCast++;
   }
@@ -117,8 +155,12 @@ for (const la of LEADERS) {
 }
 
 console.log(`\n=== v3.0 Playtest: ${totalGames} games (${PER_PAIR}/pairing) ===`);
-console.log(`avg game length: ${(totalTurns / totalGames / 2).toFixed(1)} rounds (${(totalTurns / totalGames).toFixed(1)} turns)`);
-console.log(`draws: ${draws}  deckout losses: ${deckouts}  timeouts(no winner @${MAX_TURNS}t): ${timeouts}`);
+console.log(
+  `avg game length: ${(totalTurns / totalGames / 2).toFixed(1)} rounds (${(totalTurns / totalGames).toFixed(1)} turns)`,
+);
+console.log(
+  `draws: ${draws}  deckout losses: ${deckouts}  timeouts(no winner @${MAX_TURNS}t): ${timeouts}`,
+);
 
 console.log('\n--- Leader win rates ---');
 for (const l of LEADERS) {

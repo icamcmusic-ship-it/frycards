@@ -8,11 +8,36 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Game, Inst, Player, newGame, mulberry32, startTurn, reroll, castFromHand,
-  castLocationFree, activateAbility, activateUltimate, completeTwin, echoRecast,
-  scrap, abandonTwin, comboCheck, attack, endTurn, canAttack, legalTargets,
-  effAtk, effMaxHp, remainingHp, effThreshold, effAbilityThreshold, tollReduction,
-  matchesPattern, rollValues, opponentOf, mulliganRedraw,
+  Game,
+  Inst,
+  Player,
+  newGame,
+  mulberry32,
+  startTurn,
+  reroll,
+  castFromHand,
+  castLocationFree,
+  activateAbility,
+  activateUltimate,
+  completeTwin,
+  echoRecast,
+  scrap,
+  abandonTwin,
+  comboCheck,
+  attack,
+  endTurn,
+  canAttack,
+  legalTargets,
+  effAtk,
+  effMaxHp,
+  remainingHp,
+  effThreshold,
+  effAbilityThreshold,
+  tollReduction,
+  matchesPattern,
+  rollValues,
+  opponentOf,
+  mulliganRedraw,
 } from '../game/v3/engine';
 import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
@@ -30,11 +55,16 @@ function targetsFor(g: Game, pid: string, eff: Effect): Inst[] {
   const p = g.players[pid];
   const opp = opponentOf(g, pid);
   switch (eff.target) {
-    case 'enemyUnit': return [...opp.board];
-    case 'anyTarget': return [...opp.board, opp.leader];
-    case 'friendlyUnit': return [...p.board];
-    case 'friendlyAny': return [...p.board, p.leader];
-    default: return [];
+    case 'enemyUnit':
+      return [...opp.board];
+    case 'anyTarget':
+      return [...opp.board, opp.leader];
+    case 'friendlyUnit':
+      return [...p.board];
+    case 'friendlyAny':
+      return [...p.board, p.leader];
+    default:
+      return [];
   }
 }
 function needsTarget(eff?: Effect): boolean {
@@ -45,9 +75,19 @@ function needsTarget(eff?: Effect): boolean {
 // A unit (or leader) on the battlefield
 // ---------------------------------------------------------------------------
 function BoardUnit({
-  g, u, onClick, highlight, dimmed, isAttacker,
+  g,
+  u,
+  onClick,
+  highlight,
+  dimmed,
+  isAttacker,
 }: {
-  g: Game; u: Inst; onClick?: () => void; highlight?: boolean; dimmed?: boolean; isAttacker?: boolean;
+  g: Game;
+  u: Inst;
+  onClick?: () => void;
+  highlight?: boolean;
+  dimmed?: boolean;
+  isAttacker?: boolean;
 }) {
   const hp = remainingHp(g, u);
   const maxHp = effMaxHp(g, u);
@@ -77,23 +117,51 @@ function BoardUnit({
         <div className="heading-font text-[8px] leading-tight truncate">{u.def.name}</div>
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono font-bold">
-            {atk}<span className="text-[#E53935]">⚔</span>
+            {atk}
+            <span className="text-[#E53935]">⚔</span>
           </span>
           <span className={cn('text-[10px] font-mono font-bold', hp < maxHp && 'text-[#E53935]')}>
-            {hp}/{maxHp}<span className="text-[#43A047]">♥</span>
+            {hp}/{maxHp}
+            <span className="text-[#43A047]">♥</span>
           </span>
         </div>
         <div className="flex flex-wrap gap-0.5 min-h-[9px]">
-          {kwList(u.def).slice(0, 3).map((kw) => (
-            <span key={kw} className="text-[6px] font-bold px-0.5 bg-[#FFD54F] leading-tight">{kw}</span>
-          ))}
+          {kwList(u.def)
+            .slice(0, 3)
+            .map((kw) => (
+              <span key={kw} className="text-[6px] font-bold px-0.5 bg-[#FFD54F] leading-tight">
+                {kw}
+              </span>
+            ))}
         </div>
       </div>
       <div className="absolute -top-1.5 -right-1.5 flex gap-0.5">
-        {wardUp && <span title="Ward available" className="text-[9px] bg-[#29B6F6] ink-border-sm px-0.5">🛡</span>}
-        {u.boundThisTurn && <span title="Bound" className="text-[9px] bg-[#8E44AD] text-white ink-border-sm px-0.5">⛓</span>}
-        {sick && <span title="Just played" className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5">z</span>}
-        {exhausted && !sick && <span title="Exhausted" className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5">✓</span>}
+        {wardUp && (
+          <span title="Ward available" className="text-[9px] bg-[#29B6F6] ink-border-sm px-0.5">
+            🛡
+          </span>
+        )}
+        {u.boundThisTurn && (
+          <span title="Bound" className="text-[9px] bg-[#8E44AD] text-white ink-border-sm px-0.5">
+            ⛓
+          </span>
+        )}
+        {sick && (
+          <span
+            title="Just played"
+            className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5"
+          >
+            z
+          </span>
+        )}
+        {exhausted && !sick && (
+          <span
+            title="Exhausted"
+            className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5"
+          >
+            ✓
+          </span>
+        )}
       </div>
     </button>
   );
@@ -103,12 +171,25 @@ function BoardUnit({
 // Leader panel
 // ---------------------------------------------------------------------------
 function LeaderPanel({
-  g, p, isHuman, onAbility, onUltimate, abilityUsable, ultimateUsable, highlight, onClickTarget,
+  g,
+  p,
+  isHuman,
+  onAbility,
+  onUltimate,
+  abilityUsable,
+  ultimateUsable,
+  highlight,
+  onClickTarget,
 }: {
-  g: Game; p: Player; isHuman: boolean;
-  onAbility?: () => void; onUltimate?: () => void;
-  abilityUsable?: boolean; ultimateUsable?: boolean;
-  highlight?: boolean; onClickTarget?: () => void;
+  g: Game;
+  p: Player;
+  isHuman: boolean;
+  onAbility?: () => void;
+  onUltimate?: () => void;
+  abilityUsable?: boolean;
+  ultimateUsable?: boolean;
+  highlight?: boolean;
+  onClickTarget?: () => void;
 }) {
   const l = p.leader;
   const hp = Math.max(0, remainingHp(g, l));
@@ -133,16 +214,32 @@ function LeaderPanel({
         )}
         <div className="min-w-0">
           <div className="heading-font text-[10px] leading-tight truncate">{l.def.name}</div>
-          <div className={cn('font-mono font-bold text-lg leading-tight', hp <= maxHp / 2 ? 'text-[#E53935]' : 'text-[#FFD54F]')}>
-            {hp}<span className="text-[10px] text-[#F7F7F7]/60">/{maxHp}</span>
+          <div
+            className={cn(
+              'font-mono font-bold text-lg leading-tight',
+              hp <= maxHp / 2 ? 'text-[#E53935]' : 'text-[#FFD54F]',
+            )}
+          >
+            {hp}
+            <span className="text-[10px] text-[#F7F7F7]/60">/{maxHp}</span>
           </div>
           <div className="flex gap-0.5 flex-wrap">
             {l.def.resolve && (
-              <span className={cn('text-[7px] font-bold px-0.5 ink-border-sm', hp * 2 <= maxHp ? 'bg-[#E53935] text-white' : 'bg-[#2C3E50] text-white')}>
-                RESOLVE {l.def.resolve.x}{hp * 2 <= maxHp ? ' ON' : ''}
+              <span
+                className={cn(
+                  'text-[7px] font-bold px-0.5 ink-border-sm',
+                  hp * 2 <= maxHp ? 'bg-[#E53935] text-white' : 'bg-[#2C3E50] text-white',
+                )}
+              >
+                RESOLVE {l.def.resolve.x}
+                {hp * 2 <= maxHp ? ' ON' : ''}
               </span>
             )}
-            {toll > 0 && <span className="text-[7px] font-bold px-0.5 bg-[#29B6F6] ink-border-sm text-[#1A1A1A]">TOLL -{toll}</span>}
+            {toll > 0 && (
+              <span className="text-[7px] font-bold px-0.5 bg-[#29B6F6] ink-border-sm text-[#1A1A1A]">
+                TOLL -{toll}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -152,7 +249,9 @@ function LeaderPanel({
           disabled={!abilityUsable}
           className={cn(
             'w-full mt-1 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-            abilityUsable ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]' : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
+            abilityUsable
+              ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
+              : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
             l.abilityUsed && 'line-through',
           )}
         >
@@ -165,7 +264,9 @@ function LeaderPanel({
           disabled={!ultimateUsable}
           className={cn(
             'w-full mt-0.5 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-            ultimateUsable ? 'btn-pop bg-[#E53935] text-white' : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
+            ultimateUsable
+              ? 'btn-pop bg-[#E53935] text-white'
+              : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
             l.ultimateUsed && 'line-through',
           )}
         >
@@ -175,7 +276,8 @@ function LeaderPanel({
       )}
       {ult && !isHuman && (
         <div className="mt-0.5 text-[7px] font-bold text-[#F7F7F7]/50 leading-tight">
-          ULT{l.ultimateUsed ? ' spent' : ` from turn ${ult.unlockTurn}`}: {describeEffect(ult.effect)}
+          ULT{l.ultimateUsed ? ' spent' : ` from turn ${ult.unlockTurn}`}:{' '}
+          {describeEffect(ult.effect)}
         </div>
       )}
     </div>
@@ -194,7 +296,13 @@ interface Pending {
 }
 
 export function GameV4({
-  humanDeck, cpuDeck, humanLabel, cpuLabel, playerName, onExit, onResult,
+  humanDeck,
+  cpuDeck,
+  humanLabel,
+  cpuLabel,
+  playerName,
+  onExit,
+  onResult,
 }: {
   /** A prebuilt archetype's DeckDef, or a player's own saved deck resolved against the pool. */
   humanDeck: DeckDef;
@@ -246,7 +354,10 @@ export function GameV4({
   const beginHumanTurn = () => {
     startTurn(g);
     bump();
-    if (g.winner) { setStage('over'); return; }
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
     setRerollSel(new Set());
     setSelDie(null);
     setPending(null);
@@ -258,7 +369,10 @@ export function GameV4({
     window.setTimeout(() => {
       playTurn(g);
       bump();
-      if (g.winner) { setStage('over'); return; }
+      if (g.winner) {
+        setStage('over');
+        return;
+      }
       beginHumanTurn();
     }, 1000);
   };
@@ -285,21 +399,25 @@ export function GameV4({
 
   // ---- placement helpers --------------------------------------------------
   const unplaced = me.dice.map((d, i) => ({ ...d, i })).filter((d) => !d.placed);
-  const dieVal = selDie !== null && me.dice[selDie] && !me.dice[selDie].placed ? me.dice[selDie].value : null;
+  const dieVal =
+    selDie !== null && me.dice[selDie] && !me.dice[selDie].placed ? me.dice[selDie].value : null;
 
   const canCastNow = (c: Inst): { ok: boolean; why?: string } => {
     if (c.def.type === 'Location') {
       // Free Location casts are a Placement Phase bonus action (§7) — not
       // available before the reroll window closes, same as every other cast.
-      if (stage === 'preRoll') return { ok: false, why: 'Free Location cast happens during Placement' };
+      if (stage === 'preRoll')
+        return { ok: false, why: 'Free Location cast happens during Placement' };
       if (me.locationCastThisTurn) return { ok: false, why: 'Location already cast this turn' };
       if (me.location?.def.id === c.def.id) return { ok: false, why: 'Same-name Location in play' };
       return { ok: true };
     }
-    if (stage === 'preRoll' && !c.def.snap) return { ok: false, why: 'Only Snap Charms before the reroll' };
+    if (stage === 'preRoll' && !c.def.snap)
+      return { ok: false, why: 'Only Snap Charms before the reroll' };
     if (c.def.comboGate) {
       if (me.comboGateCastThisTurn) return { ok: false, why: 'One Combo-gated card per turn' };
-      if (!matchesPattern(rollValues(me), c.def.comboGate)) return { ok: false, why: `Roll lacks ${c.def.comboGate}` };
+      if (!matchesPattern(rollValues(me), c.def.comboGate))
+        return { ok: false, why: `Roll lacks ${c.def.comboGate}` };
       if (dieVal === null) return { ok: false, why: 'Select a die' };
       return { ok: true };
     }
@@ -311,11 +429,17 @@ export function GameV4({
 
   const tryCast = (c: Inst) => {
     if (c.def.type === 'Location') {
-      if (castLocationFree(g, c.iid)) { bump(); say(`${c.def.name} enters play (free).`); }
+      if (castLocationFree(g, c.iid)) {
+        bump();
+        say(`${c.def.name} enters play (free).`);
+      }
       return;
     }
     const chk = canCastNow(c);
-    if (!chk.ok) { say(chk.why || 'Illegal'); return; }
+    if (!chk.ok) {
+      say(chk.why || 'Illegal');
+      return;
+    }
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
       setPending({ kind: 'cast', cardIid: c.iid, effect: c.def.onCast! });
       return;
@@ -323,7 +447,11 @@ export function GameV4({
     if (castFromHand(g, selDie!, c.iid)) {
       setSelDie(null);
       bump();
-      say(hasKw(c.def, 'Twin') ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later.` : `${c.def.name} resolves.`);
+      say(
+        hasKw(c.def, 'Twin')
+          ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later.`
+          : `${c.def.name} resolves.`,
+      );
     } else say('Illegal placement.');
     // A fixed-target cast (e.g. Sap enemyLeader) never opens the target
     // picker above, so lethal damage can land right here — check for it,
@@ -336,83 +464,160 @@ export function GameV4({
     if (!pending) return;
     let ok = false;
     if (pending.kind === 'cast') ok = castFromHand(g, selDie!, pending.cardIid, targetIid);
-    else if (pending.kind === 'ability') ok = activateAbility(g, selDie!, pending.cardIid, targetIid);
+    else if (pending.kind === 'ability')
+      ok = activateAbility(g, selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ultimate') ok = activateUltimate(g, selDie!, targetIid);
     setPending(null);
-    if (ok) { setSelDie(null); bump(); } else say('Illegal target.');
+    if (ok) {
+      setSelDie(null);
+      bump();
+    } else say('Illegal target.');
     if (g.winner) setStage('over');
   };
 
   const tryAbility = (c: Inst) => {
-    if (stage !== 'placement') { say('Abilities resolve during Placement.'); return; }
+    if (stage !== 'placement') {
+      say('Abilities resolve during Placement.');
+      return;
+    }
     if (!c.def.ability) return;
-    if (c.abilityUsed) { say('Already used this turn.'); return; }
-    if (dieVal === null) { say('Select a die.'); return; }
+    if (c.abilityUsed) {
+      say('Already used this turn.');
+      return;
+    }
+    if (dieVal === null) {
+      say('Select a die.');
+      return;
+    }
     const thr = effAbilityThreshold(g, c);
-    if (dieVal < thr) { say(`Needs ${thr}+.`); return; }
-    if (c.def.type === 'Unit' && c.hasAttacked) { say('Attacked already — abilities locked.'); return; }
-    if (needsTarget(c.def.ability.effect) && targetsFor(g, HUMAN, c.def.ability.effect).length > 0) {
+    if (dieVal < thr) {
+      say(`Needs ${thr}+.`);
+      return;
+    }
+    if (c.def.type === 'Unit' && c.hasAttacked) {
+      say('Attacked already — abilities locked.');
+      return;
+    }
+    if (
+      needsTarget(c.def.ability.effect) &&
+      targetsFor(g, HUMAN, c.def.ability.effect).length > 0
+    ) {
       setPending({ kind: 'ability', cardIid: c.iid, effect: c.def.ability.effect });
       return;
     }
-    if (activateAbility(g, selDie!, c.iid)) { setSelDie(null); bump(); } else say('Illegal.');
+    if (activateAbility(g, selDie!, c.iid)) {
+      setSelDie(null);
+      bump();
+    } else say('Illegal.');
     if (g.winner) setStage('over');
   };
 
   const tryUltimate = () => {
     const ult = me.leader.def.ultimate;
     if (!ult || me.leader.ultimateUsed) return;
-    if (stage !== 'placement') { say('Ultimates resolve during Placement.'); return; }
-    if (me.turnsTaken < ult.unlockTurn) { say(`Unlocks on your turn ${ult.unlockTurn}.`); return; }
-    if (dieVal === null || dieVal < ult.threshold) { say(`Select a die of ${ult.threshold}+.`); return; }
+    if (stage !== 'placement') {
+      say('Ultimates resolve during Placement.');
+      return;
+    }
+    if (me.turnsTaken < ult.unlockTurn) {
+      say(`Unlocks on your turn ${ult.unlockTurn}.`);
+      return;
+    }
+    if (dieVal === null || dieVal < ult.threshold) {
+      say(`Select a die of ${ult.threshold}+.`);
+      return;
+    }
     if (needsTarget(ult.effect) && targetsFor(g, HUMAN, ult.effect).length > 0) {
       setPending({ kind: 'ultimate', cardIid: me.leader.iid, effect: ult.effect });
       return;
     }
-    if (activateUltimate(g, selDie!)) { setSelDie(null); bump(); }
+    if (activateUltimate(g, selDie!)) {
+      setSelDie(null);
+      bump();
+    }
     if (g.winner) setStage('over');
   };
 
   const tryScrap = (c: Inst) => {
-    if (stage !== 'placement') { say('Scrap works during Placement.'); return; }
-    if (selDie === null) { say('Select the die to reroll.'); return; }
-    if (scrap(g, c.iid, selDie)) { bump(); say(`Scrapped ${c.def.name}: die is now ${me.dice[selDie].value}.`); }
+    if (stage !== 'placement') {
+      say('Scrap works during Placement.');
+      return;
+    }
+    if (selDie === null) {
+      say('Select the die to reroll.');
+      return;
+    }
+    if (scrap(g, c.iid, selDie)) {
+      bump();
+      say(`Scrapped ${c.def.name}: die is now ${me.dice[selDie].value}.`);
+    }
   };
 
   const tryCompleteTwin = (s: Inst) => {
     if (stage !== 'placement') return;
-    if (dieVal === null) { say('Select a die.'); return; }
-    if (dieVal !== s.stagedDie) { say(`Needs the exact face ${s.stagedDie}.`); return; }
-    if (completeTwin(g, selDie!, s.iid)) { setSelDie(null); bump(); say(`${s.def.name} completed!`); }
-    else say(g.rules.twinMode === 'oneDiePerTurn' ? 'One die per Twin card per turn.' : 'Illegal.');
+    if (dieVal === null) {
+      say('Select a die.');
+      return;
+    }
+    if (dieVal !== s.stagedDie) {
+      say(`Needs the exact face ${s.stagedDie}.`);
+      return;
+    }
+    if (completeTwin(g, selDie!, s.iid)) {
+      setSelDie(null);
+      bump();
+      say(`${s.def.name} completed!`);
+    } else
+      say(g.rules.twinMode === 'oneDiePerTurn' ? 'One die per Twin card per turn.' : 'Illegal.');
     if (g.winner) setStage('over');
   };
 
   const tryEchoFodder = (fodder: Inst) => {
     if (!echoPick) return;
-    if (selDie === null) { say('Select a die.'); return; }
+    if (selDie === null) {
+      say('Select a die.');
+      return;
+    }
     const target = me.discard.find((c) => c.iid === echoPick);
-    if (!target) { setEchoPick(null); return; }
+    if (!target) {
+      setEchoPick(null);
+      return;
+    }
     if (echoRecast(g, selDie, echoPick, fodder.iid)) {
-      setEchoPick(null); setSelDie(null); setShowDiscard(false); bump();
+      setEchoPick(null);
+      setSelDie(null);
+      setShowDiscard(false);
+      bump();
       say(`${target.def.name} echoes back into play.`);
-    } else { say('Illegal Echo.'); setEchoPick(null); }
+    } else {
+      say('Illegal Echo.');
+      setEchoPick(null);
+    }
     if (g.winner) setStage('over');
   };
 
   const toCombat = () => {
     comboCheck(g);
     bump();
-    if (g.winner) { setStage('over'); return; }
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
     setSelDie(null);
     setPending(null);
     setStage('combat');
   };
 
   const finishTurn = () => {
-    endTurn(g, (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0]);
+    endTurn(
+      g,
+      (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
+    );
     bump();
-    if (g.winner) { setStage('over'); return; }
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
     setAttacker(null);
     runCpuTurn();
   };
@@ -450,29 +655,49 @@ export function GameV4({
     <div className="w-full h-screen bg-[#1A1A1A] flex flex-col overflow-hidden select-none">
       {/* Top bar */}
       <div className="flex items-center gap-2 px-2 py-1 bg-[#2C3E50] ink-border-sm z-30">
-        <button onClick={() => (stage === 'over' || window.confirm('Concede this match?')) && onExit()}
-          className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#F7F7F7] px-2 py-0.5 ink-border-sm">
+        <button
+          onClick={() => (stage === 'over' || window.confirm('Concede this match?')) && onExit()}
+          className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#F7F7F7] px-2 py-0.5 ink-border-sm"
+        >
           ✕ CONCEDE
         </button>
         <span className="heading-font text-[11px] text-[#FFD54F]">
-          TURN {Math.ceil(g.turn / 2) || 1} · {stage === 'cpu' ? "CPU'S TURN" : stage === 'preRoll' ? 'ROLL & SNAP' : stage === 'placement' ? 'PLACEMENT' : stage === 'combat' ? 'COMBAT' : stage.toUpperCase()}
+          TURN {Math.ceil(g.turn / 2) || 1} ·{' '}
+          {stage === 'cpu'
+            ? "CPU'S TURN"
+            : stage === 'preRoll'
+              ? 'ROLL & SNAP'
+              : stage === 'placement'
+                ? 'PLACEMENT'
+                : stage === 'combat'
+                  ? 'COMBAT'
+                  : stage.toUpperCase()}
         </span>
         <span className="text-[9px] font-mono text-[#F7F7F7]/70 truncate">
           {humanLabel} vs {cpuLabel}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {stage === 'placement' && (
-            <button onClick={toCombat} className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm">
+            <button
+              onClick={toCombat}
+              className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm"
+            >
               COMBO CHECK → COMBAT
             </button>
           )}
           {stage === 'combat' && (
-            <button onClick={finishTurn} className="btn-pop heading-font text-[10px] bg-[#E53935] text-white px-2 py-0.5 ink-border-sm">
+            <button
+              onClick={finishTurn}
+              className="btn-pop heading-font text-[10px] bg-[#E53935] text-white px-2 py-0.5 ink-border-sm"
+            >
               END TURN {unplaced.length > 0 ? `(pitch ${unplaced.length}⚄)` : ''}
             </button>
           )}
           {stage === 'preRoll' && (
-            <button onClick={doReroll} className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm">
+            <button
+              onClick={doReroll}
+              className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm"
+            >
               {rerollSel.size > 0 ? `REROLL ${rerollSel.size}` : 'KEEP ALL'} →
             </button>
           )}
@@ -487,14 +712,18 @@ export function GameV4({
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#E53935] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           PICK A TARGET — {describeEffect(pending.effect)}
-          <button onClick={() => setPending(null)} className="bg-[#1A1A1A] px-1">✕</button>
+          <button onClick={() => setPending(null)} className="bg-[#1A1A1A] px-1">
+            ✕
+          </button>
         </div>
       )}
 
       {/* Enemy row */}
       <div className="flex gap-2 px-2 pt-1.5 items-start">
         <LeaderPanel
-          g={g} p={foe} isHuman={false}
+          g={g}
+          p={foe}
+          isHuman={false}
           highlight={
             (!!pending && isPendingTarget(foe.leader.iid)) ||
             (!!attacker && combatTargets.some((t) => t.iid === foe.leader.iid))
@@ -509,16 +738,25 @@ export function GameV4({
         />
         <div className="flex-1 min-w-0">
           <div className="flex gap-1 text-[8px] font-bold text-[#F7F7F7]/70 mb-0.5">
-            <span>CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}</span>
+            <span>
+              CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}
+            </span>
             {foe.location && (
-              <span className="bg-[#2C3E50] px-1 ink-border-sm text-[#F7F7F7] cursor-pointer" onClick={() => setInspect(foe.location!.def)}>
+              <span
+                className="bg-[#2C3E50] px-1 ink-border-sm text-[#F7F7F7] cursor-pointer"
+                onClick={() => setInspect(foe.location!.def)}
+              >
                 📍 {foe.location.def.name}
               </span>
             )}
             {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
           </div>
           <div className="flex gap-1 flex-wrap min-h-[92px]">
-            {foe.board.length === 0 && <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">— empty board —</span>}
+            {foe.board.length === 0 && (
+              <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">
+                — empty board —
+              </span>
+            )}
             {foe.board.map((u) => {
               const targetable =
                 (!!pending && isPendingTarget(u.iid)) ||
@@ -526,11 +764,14 @@ export function GameV4({
               return (
                 <React.Fragment key={u.iid}>
                   <BoardUnit
-                    g={g} u={u}
+                    g={g}
+                    u={u}
                     highlight={targetable}
                     onClick={
-                      pending && isPendingTarget(u.iid) ? () => resolvePendingOn(u.iid)
-                        : attacker && combatTargets.some((t) => t.iid === u.iid) ? () => tryAttackTarget(u.iid)
+                      pending && isPendingTarget(u.iid)
+                        ? () => resolvePendingOn(u.iid)
+                        : attacker && combatTargets.some((t) => t.iid === u.iid)
+                          ? () => tryAttackTarget(u.iid)
                           : () => setInspect(u.def)
                     }
                   />
@@ -555,7 +796,8 @@ export function GameV4({
                   if (stage === 'preRoll') {
                     setRerollSel((s) => {
                       const n = new Set(s);
-                      if (n.has(i)) n.delete(i); else n.add(i);
+                      if (n.has(i)) n.delete(i);
+                      else n.add(i);
                       return n;
                     });
                   } else {
@@ -565,8 +807,12 @@ export function GameV4({
                 }}
                 className={cn(
                   'w-11 h-11 ink-border-md text-3xl leading-none flex items-center justify-center',
-                  d.placed ? 'bg-[#2C3E50]/40 text-[#F7F7F7]/25'
-                    : marked ? (stage === 'preRoll' ? 'bg-[#E53935] text-white -translate-y-1' : 'bg-[#FFD54F] text-[#1A1A1A] -translate-y-1')
+                  d.placed
+                    ? 'bg-[#2C3E50]/40 text-[#F7F7F7]/25'
+                    : marked
+                      ? stage === 'preRoll'
+                        ? 'bg-[#E53935] text-white -translate-y-1'
+                        : 'bg-[#FFD54F] text-[#1A1A1A] -translate-y-1'
                       : 'bg-[#F7F7F7] text-[#1A1A1A]',
                   usable && 'btn-pop',
                 )}
@@ -576,17 +822,33 @@ export function GameV4({
               </button>
             );
           })}
-          {stage === 'cpu' && <span className="text-[10px] font-bold text-[#F7F7F7]/60 animate-pulse ml-1">CPU is thinking…</span>}
-          {stage === 'preRoll' && <span className="text-[9px] font-bold text-[#F7F7F7]/60 ml-1 max-w-[130px] leading-tight">Pick dice to reroll (once). Snap Charms castable now.</span>}
+          {stage === 'cpu' && (
+            <span className="text-[10px] font-bold text-[#F7F7F7]/60 animate-pulse ml-1">
+              CPU is thinking…
+            </span>
+          )}
+          {stage === 'preRoll' && (
+            <span className="text-[9px] font-bold text-[#F7F7F7]/60 ml-1 max-w-[130px] leading-tight">
+              Pick dice to reroll (once). Snap Charms castable now.
+            </span>
+          )}
         </div>
         <div className="flex-1 min-w-0 max-h-[54px] overflow-y-auto bg-[#1A1A1A] px-2 text-[8px] font-mono text-[#F7F7F7]/70 leading-tight">
-          {g.log.slice(-6).map((l, i) => <div key={i}>· {l}</div>)}
+          {g.log.slice(-6).map((l, i) => (
+            <div key={i}>· {l}</div>
+          ))}
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">
-          <button onClick={() => setShowDiscard((s) => !s)} className="btn-pop text-[9px] font-bold bg-[#2C3E50] text-[#F7F7F7] px-1.5 py-0.5 ink-border-sm">
-            DISCARD {me.discard.length}{echoables.length > 0 ? ` · ${echoables.length} ECHO` : ''}
+          <button
+            onClick={() => setShowDiscard((s) => !s)}
+            className="btn-pop text-[9px] font-bold bg-[#2C3E50] text-[#F7F7F7] px-1.5 py-0.5 ink-border-sm"
+          >
+            DISCARD {me.discard.length}
+            {echoables.length > 0 ? ` · ${echoables.length} ECHO` : ''}
           </button>
-          <span className="text-[8px] font-bold text-[#F7F7F7]/50">deck {me.deck.length} · banished {me.banished.length}</span>
+          <span className="text-[8px] font-bold text-[#F7F7F7]/50">
+            deck {me.deck.length} · banished {me.banished.length}
+          </span>
         </div>
       </div>
 
@@ -594,53 +856,114 @@ export function GameV4({
       <div className="flex gap-2 px-2 items-start flex-1 min-h-0">
         <div className="flex flex-col gap-1 shrink-0">
           <LeaderPanel
-            g={g} p={me} isHuman
-            abilityUsable={stage === 'placement' && !me.leader.abilityUsed && dieVal !== null && dieVal >= effAbilityThreshold(g, me.leader)}
+            g={g}
+            p={me}
+            isHuman
+            abilityUsable={
+              stage === 'placement' &&
+              !me.leader.abilityUsed &&
+              dieVal !== null &&
+              dieVal >= effAbilityThreshold(g, me.leader)
+            }
             ultimateUsable={
-              stage === 'placement' && !!me.leader.def.ultimate && !me.leader.ultimateUsed &&
+              stage === 'placement' &&
+              !!me.leader.def.ultimate &&
+              !me.leader.ultimateUsed &&
               me.turnsTaken >= (me.leader.def.ultimate?.unlockTurn ?? 99) &&
-              dieVal !== null && dieVal >= (me.leader.def.ultimate?.threshold ?? 7)
+              dieVal !== null &&
+              dieVal >= (me.leader.def.ultimate?.threshold ?? 7)
             }
             onAbility={() => tryAbility(me.leader)}
             onUltimate={tryUltimate}
             highlight={!!pending && isPendingTarget(me.leader.iid)}
-            onClickTarget={pending && isPendingTarget(me.leader.iid) ? () => resolvePendingOn(me.leader.iid) : undefined}
+            onClickTarget={
+              pending && isPendingTarget(me.leader.iid)
+                ? () => resolvePendingOn(me.leader.iid)
+                : undefined
+            }
           />
           {me.location ? (
             <div className="w-[168px] bg-[#2C3E50] text-[#F7F7F7] ink-border-sm p-1">
-              <div className="text-[8px] font-bold cursor-pointer" onClick={() => setInspect(me.location!.def)}>📍 {me.location.def.name}</div>
-              <div className="text-[7px] text-[#F7F7F7]/70 leading-tight">{cardRules(me.location.def)}</div>
+              <div
+                className="text-[8px] font-bold cursor-pointer"
+                onClick={() => setInspect(me.location!.def)}
+              >
+                📍 {me.location.def.name}
+              </div>
+              <div className="text-[7px] text-[#F7F7F7]/70 leading-tight">
+                {cardRules(me.location.def)}
+              </div>
               {me.location.def.ability && (
                 <button
                   onClick={() => tryAbility(me.location!)}
-                  disabled={!(stage === 'placement' && !me.location.abilityUsed && dieVal !== null && dieVal >= effAbilityThreshold(g, me.location))}
+                  disabled={
+                    !(
+                      stage === 'placement' &&
+                      !me.location.abilityUsed &&
+                      dieVal !== null &&
+                      dieVal >= effAbilityThreshold(g, me.location)
+                    )
+                  }
                   className={cn(
                     'w-full mt-0.5 text-[8px] font-bold px-1 ink-border-sm text-left',
-                    stage === 'placement' && !me.location.abilityUsed && dieVal !== null && dieVal >= effAbilityThreshold(g, me.location)
-                      ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]' : 'bg-[#1A1A1A]/50 text-[#F7F7F7]/40',
+                    stage === 'placement' &&
+                      !me.location.abilityUsed &&
+                      dieVal !== null &&
+                      dieVal >= effAbilityThreshold(g, me.location)
+                      ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
+                      : 'bg-[#1A1A1A]/50 text-[#F7F7F7]/40',
                     me.location.abilityUsed && 'line-through',
                   )}
                 >
-                  {effAbilityThreshold(g, me.location)}+ {describeEffect(me.location.def.ability.effect)}
+                  {effAbilityThreshold(g, me.location)}+{' '}
+                  {describeEffect(me.location.def.ability.effect)}
                 </button>
               )}
             </div>
           ) : (
-            <div className="w-[168px] text-[8px] font-bold text-[#F7F7F7]/30 ink-border-sm border-dashed p-1 text-center">no Location</div>
+            <div className="w-[168px] text-[8px] font-bold text-[#F7F7F7]/30 ink-border-sm border-dashed p-1 text-center">
+              no Location
+            </div>
           )}
           {me.staging.length > 0 && (
             <div className="w-[168px]">
               <div className="text-[8px] font-bold text-[#F7F7F7]/60">STAGING (Twin)</div>
               {me.staging.map((s) => (
-                <div key={s.iid} className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5">
-                  <span className="text-lg leading-none text-[#F7F7F7]">{DIE_FACES[(s.stagedDie ?? 1) - 1]}</span>
+                <div
+                  key={s.iid}
+                  className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5"
+                >
+                  <span className="text-lg leading-none text-[#F7F7F7]">
+                    {DIE_FACES[(s.stagedDie ?? 1) - 1]}
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[8px] font-bold text-[#F7F7F7] truncate cursor-pointer" onClick={() => setInspect(s.def)}>{s.def.name}</div>
-                    <div className="text-[7px] text-[#F7F7F7]/60">match a {s.stagedDie} to complete</div>
+                    <div
+                      className="text-[8px] font-bold text-[#F7F7F7] truncate cursor-pointer"
+                      onClick={() => setInspect(s.def)}
+                    >
+                      {s.def.name}
+                    </div>
+                    <div className="text-[7px] text-[#F7F7F7]/60">
+                      match a {s.stagedDie} to complete
+                    </div>
                   </div>
-                  <button onClick={() => tryCompleteTwin(s)} className="btn-pop text-[8px] font-bold bg-[#FFD54F] px-1 ink-border-sm">SET</button>
+                  <button
+                    onClick={() => tryCompleteTwin(s)}
+                    className="btn-pop text-[8px] font-bold bg-[#FFD54F] px-1 ink-border-sm"
+                  >
+                    SET
+                  </button>
                   {stage === 'preRoll' && (
-                    <button onClick={() => { abandonTwin(g, s.iid); bump(); }} title="Abandon (return to hand)" className="btn-pop text-[8px] font-bold bg-[#E53935] text-white px-1 ink-border-sm">✕</button>
+                    <button
+                      onClick={() => {
+                        abandonTwin(g, s.iid);
+                        bump();
+                      }}
+                      title="Abandon (return to hand)"
+                      className="btn-pop text-[8px] font-bold bg-[#E53935] text-white px-1 ink-border-sm"
+                    >
+                      ✕
+                    </button>
                   )}
                 </div>
               ))}
@@ -650,19 +973,26 @@ export function GameV4({
 
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
           <div className="flex gap-1 flex-wrap min-h-[92px]">
-            {me.board.length === 0 && <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">— empty board —</span>}
+            {me.board.length === 0 && (
+              <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">
+                — empty board —
+              </span>
+            )}
             {me.board.map((u) => {
               const canAtt = stage === 'combat' && canAttack(g, u);
               const targetable = !!pending && isPendingTarget(u.iid);
               return (
                 <div key={u.iid} className="flex flex-col items-center gap-0.5">
                   <BoardUnit
-                    g={g} u={u}
+                    g={g}
+                    u={u}
                     isAttacker={attacker === u.iid}
                     highlight={targetable || (canAtt && attacker !== u.iid)}
                     onClick={
-                      targetable ? () => resolvePendingOn(u.iid)
-                        : canAtt ? () => setAttacker(attacker === u.iid ? null : u.iid)
+                      targetable
+                        ? () => resolvePendingOn(u.iid)
+                        : canAtt
+                          ? () => setAttacker(attacker === u.iid ? null : u.iid)
                           : () => setInspect(u.def)
                     }
                   />
@@ -671,8 +1001,11 @@ export function GameV4({
                       onClick={() => tryAbility(u)}
                       className={cn(
                         'text-[7px] font-bold px-1 ink-border-sm',
-                        dieVal !== null && dieVal >= effAbilityThreshold(g, u) && !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
-                          ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]' : 'bg-[#2C3E50] text-[#F7F7F7]/50',
+                        dieVal !== null &&
+                          dieVal >= effAbilityThreshold(g, u) &&
+                          !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
+                          ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
+                          : 'bg-[#2C3E50] text-[#F7F7F7]/50',
                       )}
                     >
                       {effAbilityThreshold(g, u)}+ ability
@@ -700,8 +1033,10 @@ export function GameV4({
                       dimmed={!chk.ok && !echoPick && !canScrap}
                       highlight={!!echoPick}
                       onClick={
-                        echoPick ? () => tryEchoFodder(c)
-                          : chk.ok ? () => tryCast(c)
+                        echoPick
+                          ? () => tryEchoFodder(c)
+                          : chk.ok
+                            ? () => tryCast(c)
                             : () => setInspect(c.def)
                       }
                       footer={
@@ -711,17 +1046,24 @@ export function GameV4({
                       }
                     />
                     {canScrap && (
-                      <button onClick={() => tryScrap(c)} className="btn-pop text-[7px] font-bold bg-[#E53935] text-white px-1 ink-border-sm">
+                      <button
+                        onClick={() => tryScrap(c)}
+                        className="btn-pop text-[7px] font-bold bg-[#E53935] text-white px-1 ink-border-sm"
+                      >
                         SCRAP → reroll die
                       </button>
                     )}
                     {!chk.ok && chk.why && stage !== 'cpu' && !echoPick && (
-                      <span className="text-[6.5px] font-bold text-[#F7F7F7]/40 text-center leading-tight max-w-[104px]">{chk.why}</span>
+                      <span className="text-[6.5px] font-bold text-[#F7F7F7]/40 text-center leading-tight max-w-[104px]">
+                        {chk.why}
+                      </span>
                     )}
                   </div>
                 );
               })}
-              {me.hand.length === 0 && <span className="text-[9px] text-[#F7F7F7]/30 font-bold">— empty hand —</span>}
+              {me.hand.length === 0 && (
+                <span className="text-[9px] text-[#F7F7F7]/30 font-bold">— empty hand —</span>
+              )}
             </div>
           </div>
         </div>
@@ -732,7 +1074,15 @@ export function GameV4({
         <div className="absolute right-2 top-16 bottom-24 w-[260px] bg-[#1A1A1A] ink-border-md z-40 p-2 overflow-y-auto">
           <div className="flex justify-between items-center mb-1">
             <span className="heading-font text-[10px] text-[#FFD54F]">DISCARD PILE</span>
-            <button onClick={() => { setShowDiscard(false); setEchoPick(null); }} className="btn-pop text-[10px] bg-[#E53935] text-white px-1.5 ink-border-sm">✕</button>
+            <button
+              onClick={() => {
+                setShowDiscard(false);
+                setEchoPick(null);
+              }}
+              className="btn-pop text-[10px] bg-[#E53935] text-white px-1.5 ink-border-sm"
+            >
+              ✕
+            </button>
           </div>
           <div className="text-[8px] text-[#F7F7F7]/60 font-bold mb-1">
             Echo cards can be recast: select a die, click ECHO, then discard one card from hand.
@@ -742,22 +1092,42 @@ export function GameV4({
               const eligible = hasKw(c.def, 'Echo') && !c.echoSpent;
               return (
                 <div key={c.iid} className="flex flex-col gap-0.5">
-                  <CardFace def={c.def} small dimmed={!eligible} onClick={() => setInspect(c.def)} />
+                  <CardFace
+                    def={c.def}
+                    small
+                    dimmed={!eligible}
+                    onClick={() => setInspect(c.def)}
+                  />
                   {eligible && stage === 'placement' && (
                     <button
                       onClick={() => {
-                        if (selDie === null) { say('Select a die first.'); return; }
+                        if (selDie === null) {
+                          say('Select a die first.');
+                          return;
+                        }
                         if (c.def.comboGate) {
-                          if (me.comboGateCastThisTurn) { say('One Combo-gated card per turn.'); return; }
-                          if (!matchesPattern(rollValues(me), c.def.comboGate)) { say(`Roll lacks ${c.def.comboGate}.`); return; }
+                          if (me.comboGateCastThisTurn) {
+                            say('One Combo-gated card per turn.');
+                            return;
+                          }
+                          if (!matchesPattern(rollValues(me), c.def.comboGate)) {
+                            say(`Roll lacks ${c.def.comboGate}.`);
+                            return;
+                          }
                         } else {
                           const thr = effThreshold(g, HUMAN, c.def);
-                          if (dieVal !== null && dieVal < thr) { say(`Needs ${thr}+ to Echo this.`); return; }
+                          if (dieVal !== null && dieVal < thr) {
+                            say(`Needs ${thr}+ to Echo this.`);
+                            return;
+                          }
                         }
                         setEchoPick(c.iid);
                         say('Now pick a hand card to discard.');
                       }}
-                      className={cn('btn-pop text-[8px] font-bold px-1 ink-border-sm', echoPick === c.iid ? 'bg-[#E53935] text-white' : 'bg-[#8E44AD] text-white')}
+                      className={cn(
+                        'btn-pop text-[8px] font-bold px-1 ink-border-sm',
+                        echoPick === c.iid ? 'bg-[#E53935] text-white' : 'bg-[#8E44AD] text-white',
+                      )}
                     >
                       {echoPick === c.iid ? 'PICK FODDER…' : 'ECHO'}
                     </button>
@@ -765,25 +1135,52 @@ export function GameV4({
                 </div>
               );
             })}
-            {me.discard.length === 0 && <span className="text-[9px] text-[#F7F7F7]/30 font-bold">empty</span>}
+            {me.discard.length === 0 && (
+              <span className="text-[9px] text-[#F7F7F7]/30 font-bold">empty</span>
+            )}
           </div>
         </div>
       )}
 
       {/* Card inspector */}
       {inspect && (
-        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center" onClick={() => setInspect(null)}>
-          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]" onClick={(e) => e.stopPropagation()}>
-            {inspect.image && <img src={inspect.image} className="w-full h-[160px] object-cover ink-border-sm mb-2" />}
+        <div
+          className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center"
+          onClick={() => setInspect(null)}
+        >
+          <div
+            className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {inspect.image && (
+              <img
+                src={inspect.image}
+                className="w-full h-[160px] object-cover ink-border-sm mb-2"
+              />
+            )}
             <div className="heading-font text-sm">{inspect.name}</div>
             <div className="text-[10px] font-bold text-[#2C3E50] uppercase">
-              {inspect.type}{inspect.rarity ? ` · ${inspect.rarity}` : ''}
+              {inspect.type}
+              {inspect.rarity ? ` · ${inspect.rarity}` : ''}
               {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
-              {inspect.comboGate ? ` · Combo: ${inspect.comboGate}` : inspect.threshold !== undefined && inspect.type !== 'Location' ? ` · Cast ${inspect.threshold}+` : inspect.type === 'Location' ? ' · casts FREE (1/turn)' : ''}
+              {inspect.comboGate
+                ? ` · Combo: ${inspect.comboGate}`
+                : inspect.threshold !== undefined && inspect.type !== 'Location'
+                  ? ` · Cast ${inspect.threshold}+`
+                  : inspect.type === 'Location'
+                    ? ' · casts FREE (1/turn)'
+                    : ''}
             </div>
             <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
-            {inspect.flavor && <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>}
-            <button onClick={() => setInspect(null)} className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm">CLOSE</button>
+            {inspect.flavor && (
+              <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>
+            )}
+            <button
+              onClick={() => setInspect(null)}
+              className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm"
+            >
+              CLOSE
+            </button>
           </div>
         </div>
       )}
@@ -804,11 +1201,17 @@ export function GameV4({
               ))}
             </div>
             <div className="flex gap-3 justify-center">
-              <button onClick={afterMulligan} className="btn-pop heading-font text-xs bg-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs">
+              <button
+                onClick={afterMulligan}
+                className="btn-pop heading-font text-xs bg-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+              >
                 KEEP HAND
               </button>
               {!mulliganUsed && (
-                <button onClick={doMulligan} className="btn-pop heading-font text-xs bg-[#1A1A1A] text-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs">
+                <button
+                  onClick={doMulligan}
+                  className="btn-pop heading-font text-xs bg-[#1A1A1A] text-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+                >
                   MULLIGAN
                 </button>
               )}
@@ -827,7 +1230,10 @@ export function GameV4({
             <div className="text-[11px] font-bold text-[#2C3E50] mb-4">
               {g.log.slice(-2).join(' · ')}
             </div>
-            <button onClick={onExit} className="btn-pop heading-font text-sm bg-[#FFD54F] px-6 py-2 ink-border-sm shadow-hard-black-xs">
+            <button
+              onClick={onExit}
+              className="btn-pop heading-font text-sm bg-[#FFD54F] px-6 py-2 ink-border-sm shadow-hard-black-xs"
+            >
               BACK TO MENU
             </button>
           </div>

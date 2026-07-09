@@ -33,7 +33,10 @@ test('accepts an exactly-30-card, max-3-copies-per-card deck', () => {
 
 test('rejects more than 3 copies of one card (v4.2 cap, up from legacy 2)', () => {
   const card = units[0];
-  const ids = [...Array(4).fill(card.id), ...fillDeck(DECK_SIZE - 4).filter((id) => id !== card.id)];
+  const ids = [
+    ...Array(4).fill(card.id),
+    ...fillDeck(DECK_SIZE - 4).filter((id) => id !== card.id),
+  ];
   const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
   expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);
 });

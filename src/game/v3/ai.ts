@@ -4,11 +4,33 @@
  * check, sequential combat, end turn.
  */
 import {
-  Game, Inst, Player,
-  reroll, castFromHand, castLocationFree, activateAbility, activateUltimate, activateViaRally,
-  completeTwin, echoRecast, scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
-  canAttack, legalTargets, effAtk, remainingHp, effThreshold, effAbilityThreshold, rollValues,
-  matchesPattern, opponentOf, autoTarget,
+  Game,
+  Inst,
+  Player,
+  reroll,
+  castFromHand,
+  castLocationFree,
+  activateAbility,
+  activateUltimate,
+  activateViaRally,
+  completeTwin,
+  echoRecast,
+  scrap,
+  abandonTwin,
+  comboCheck,
+  attack,
+  endTurn,
+  startTurn,
+  canAttack,
+  legalTargets,
+  effAtk,
+  remainingHp,
+  effThreshold,
+  effAbilityThreshold,
+  rollValues,
+  matchesPattern,
+  opponentOf,
+  autoTarget,
 } from './engine';
 import { hasKw } from './cards';
 
@@ -89,9 +111,19 @@ function playSnaps(g: Game, p: Player) {
     if (dieIdx < 0) continue;
     // Same value-gating as ordinary casts: don't burn Snap on a pointless target.
     const opp = opponentOf(g, p.id);
-    if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
+    if (
+      c.def.onCast?.action === 'sap' &&
+      c.def.onCast.target === 'enemyUnit' &&
+      opp.board.length === 0
+    )
+      continue;
     if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
-    if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
+    if (
+      c.def.onCast?.action === 'mend' &&
+      p.leader.damage === 0 &&
+      !p.board.some((u) => u.damage > 0)
+    )
+      continue;
     castFromHand(g, dieIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
   }
 }
@@ -113,7 +145,9 @@ function chooseReroll(g: Game, p: Player): number[] {
   const wantMatch = gates.some((x) =>
     ['AnyPair', 'TwoPair', 'ThreeKind', 'FourKind', 'FullHouse', 'Yahtzee'].includes(x),
   );
-  const stagedNeeds = new Set(p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined));
+  const stagedNeeds = new Set(
+    p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined),
+  );
 
   const out: number[] = [];
   if (wantStraight && !wantMatch) {
@@ -121,7 +155,10 @@ function chooseReroll(g: Game, p: Player): number[] {
     const seen = new Set<number>();
     p.dice.forEach((d, i) => {
       if (stagedNeeds.has(d.value)) return;
-      if (seen.has(d.value)) { out.push(i); return; }
+      if (seen.has(d.value)) {
+        out.push(i);
+        return;
+      }
       seen.add(d.value);
     });
     return out;
@@ -140,7 +177,10 @@ function chooseReroll(g: Game, p: Player): number[] {
   return out;
 }
 
-function locScore(c: { def: { locPassive?: string; rarity?: string; ability?: unknown } }, goingWide: boolean): number {
+function locScore(
+  c: { def: { locPassive?: string; rarity?: string; ability?: unknown } },
+  goingWide: boolean,
+): number {
   let s = 0;
   if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
   if (c.def.ability) s += 2;
@@ -156,9 +196,7 @@ function playPlacement(g: Game, p: Player) {
   // Location whose passive fits our board (ATK_ALL if we're going wide, HP_ALL
   // if we're defensive), then the higher rarity / one with an Ability Slot.
   if (!p.locationCastThisTurn) {
-    const locs = p.hand.filter(
-      (c) => c.def.type === 'Location' && p.location?.def.id !== c.def.id,
-    );
+    const locs = p.hand.filter((c) => c.def.type === 'Location' && p.location?.def.id !== c.def.id);
     if (locs.length > 0) {
       const goingWide = p.board.length >= 2;
       const best = locs.sort((a, b) => locScore(b, goingWide) - locScore(a, goingWide))[0];
@@ -210,10 +248,25 @@ function playPlacement(g: Game, p: Player) {
       // Hold AoE removal for 2+ targets; don't waste single-target removal on
       // an empty board or spare heals at full hp.
       if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
-      if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
-      if (c.def.onCast?.action === 'destroy' && c.def.onCast.target !== 'allEnemyUnits' && opp.board.length === 0) continue;
+      if (
+        c.def.onCast?.action === 'sap' &&
+        c.def.onCast.target === 'enemyUnit' &&
+        opp.board.length === 0
+      )
+        continue;
+      if (
+        c.def.onCast?.action === 'destroy' &&
+        c.def.onCast.target !== 'allEnemyUnits' &&
+        opp.board.length === 0
+      )
+        continue;
       if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
-      if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
+      if (
+        c.def.onCast?.action === 'mend' &&
+        p.leader.damage === 0 &&
+        !p.board.some((u) => u.damage > 0)
+      )
+        continue;
       // Twin (v4.0): only one die per Placement Phase, so we commit the first
       // slot now and complete on a later turn. Stage a low-ish common value
       // (2-4) so the matching second die is reachable, and only if we aren't
@@ -238,7 +291,9 @@ function playPlacement(g: Game, p: Player) {
           .sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
         if (oIdx !== undefined) useIdx = oIdx;
       }
-      if (castFromHand(g, useIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)) {
+      if (
+        castFromHand(g, useIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)
+      ) {
         progress = true;
         break; // re-evaluate priorities with new state
       }
@@ -256,7 +311,10 @@ function playPlacement(g: Game, p: Player) {
         const fodder = [...p.hand].sort(
           (a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3),
         )[0];
-        if (echoRecast(g, dieIdx, c.iid, fodder.iid)) { progress = true; break; }
+        if (echoRecast(g, dieIdx, c.iid, fodder.iid)) {
+          progress = true;
+          break;
+        }
       }
     }
     if (progress) continue;
@@ -273,12 +331,18 @@ function playPlacement(g: Game, p: Player) {
         (eff.action === 'draw' && p.hand.length >= 6);
       if (!pointless) {
         const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.leader));
-        if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) { progress = true; continue; }
+        if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) {
+          progress = true;
+          continue;
+        }
       }
     }
     if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 6) {
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
-      if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) { progress = true; continue; }
+      if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) {
+        progress = true;
+        continue;
+      }
     }
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
     for (const u of p.board) {
@@ -286,10 +350,14 @@ function playPlacement(g: Game, p: Player) {
       const wouldAttack = canAttack(g, u) && effAtk(g, u) >= 3;
       if (wouldAttack) continue;
       const eff = u.def.ability.effect;
-      if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0)) continue;
+      if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0))
+        continue;
       if (eff.action === 'buff' && p.board.length < 2) continue;
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
-      if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) { progress = true; break; }
+      if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) {
+        progress = true;
+        break;
+      }
     }
     if (progress) continue;
 
@@ -298,12 +366,18 @@ function playPlacement(g: Game, p: Player) {
     const ult = p.leader.def.ultimate;
     if (ult && !p.leader.ultimateUsed && p.turnsTaken >= ult.unlockTurn) {
       const pointless =
-        (ult.effect.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
-        ((ult.effect.action === 'bind' || (ult.effect.action === 'sap' && ult.effect.target === 'enemyUnit')) &&
+        (ult.effect.action === 'mend' &&
+          p.leader.damage === 0 &&
+          !p.board.some((u) => u.damage > 0)) ||
+        ((ult.effect.action === 'bind' ||
+          (ult.effect.action === 'sap' && ult.effect.target === 'enemyUnit')) &&
           opp.board.length === 0);
       if (!pointless) {
         const dieIdx = bestDieFor(p, ult.threshold);
-        if (dieIdx >= 0 && activateUltimate(g, dieIdx)) { progress = true; continue; }
+        if (dieIdx >= 0 && activateUltimate(g, dieIdx)) {
+          progress = true;
+          continue;
+        }
       }
     }
     if (progress) continue;
@@ -311,16 +385,26 @@ function playPlacement(g: Game, p: Player) {
     // 5. Rally: free re-activation using a resting die.
     if (!p.rallyUsedThisTurn) {
       const rallyUnit = p.board.find(
-        (u) => hasKw(u.def, 'Rally') && u.def.ability && !u.abilityUsed && !u.hasAttacked &&
-          !(u.enteredThisTurn && !hasKw(u.def, 'Swift')) && !u.boundThisTurn,
+        (u) =>
+          hasKw(u.def, 'Rally') &&
+          u.def.ability &&
+          !u.abilityUsed &&
+          !u.hasAttacked &&
+          !(u.enteredThisTurn && !hasKw(u.def, 'Swift')) &&
+          !u.boundThisTurn,
       );
       if (rallyUnit) {
         const src = [...p.board, p.leader, p.location].find(
           (x): x is Inst =>
-            !!x && x.iid !== rallyUnit.iid && x.abilityUsed &&
+            !!x &&
+            x.iid !== rallyUnit.iid &&
+            x.abilityUsed &&
             (x.abilityDie ?? 0) >= effAbilityThreshold(g, rallyUnit),
         );
-        if (src && activateViaRally(g, rallyUnit.iid, src.iid)) { progress = true; continue; }
+        if (src && activateViaRally(g, rallyUnit.iid, src.iid)) {
+          progress = true;
+          continue;
+        }
       }
     }
   }
@@ -337,7 +421,11 @@ function playCombat(g: Game, p: Player) {
     const guardsUp = targets.every((t) => t.def.type !== 'Leader');
     const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
     const atk = effAtk(g, att);
-    if (atk === 0) { att.hasAttacked = true; att.attacksMade = 99; continue; }
+    if (atk === 0) {
+      att.hasAttacked = true;
+      att.attacksMade = 99;
+      continue;
+    }
 
     let target: Inst | undefined;
     if (guardsUp) {
@@ -354,9 +442,7 @@ function playCombat(g: Game, p: Player) {
         // Favorable trade: kill an enemy unit without dying, or kill something bigger.
         const kills = opp.board.filter((t) => remainingHp(g, t) <= atk);
         const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
-        const valueKill = kills.find(
-          (t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0),
-        );
+        const valueKill = kills.find((t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0));
         // Threat check: clear big attackers even with a trade.
         const bigThreat = kills.find((t) => effAtk(g, t) >= 5);
         target = safeKill ?? bigThreat ?? valueKill ?? opp.leader;
@@ -389,7 +475,8 @@ export function playTurn(g: Game) {
   if (g.winner) return;
   playCombat(g, p);
   if (g.winner) return;
-  endTurn(g, (hand) =>
-    [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
+  endTurn(
+    g,
+    (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
   );
 }

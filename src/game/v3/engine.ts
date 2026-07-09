@@ -28,7 +28,8 @@ export type Rng = () => number;
 export function mulberry32(seed: number): Rng {
   let a = seed >>> 0;
   return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -139,11 +140,20 @@ function decide(g: Game, pid: string, key: string, by = 1) {
 let iidCounter = 0;
 export function makeInst(def: CardDef, owner: string): Inst {
   return {
-    def, iid: `${def.id}#${++iidCounter}`, owner,
-    damage: 0, permAtk: 0, permHp: 0,
-    hasAttacked: false, attacksMade: 0, abilityUsed: false,
-    enteredThisTurn: false, wardUsed: false,
-    boundThisTurn: false, boundNextTurn: false, echoSpent: false,
+    def,
+    iid: `${def.id}#${++iidCounter}`,
+    owner,
+    damage: 0,
+    permAtk: 0,
+    permHp: 0,
+    hasAttacked: false,
+    attacksMade: 0,
+    abilityUsed: false,
+    enteredThisTurn: false,
+    wardUsed: false,
+    boundThisTurn: false,
+    boundNextTurn: false,
+    echoSpent: false,
     stagedTurns: 0,
   };
 }
@@ -240,17 +250,24 @@ export function matchesPattern(values: number[], pattern: ComboPattern): boolean
     return false;
   };
   switch (pattern) {
-    case 'AnyPair': return cs.some((c) => c >= 2);
-    case 'TwoPair': return cs.filter((c) => c >= 2).length >= 2;
-    case 'ThreeKind': return cs.some((c) => c >= 3);
-    case 'FourKind': return cs.some((c) => c >= 4);
-    case 'Yahtzee': return cs.some((c) => c >= 5);
+    case 'AnyPair':
+      return cs.some((c) => c >= 2);
+    case 'TwoPair':
+      return cs.filter((c) => c >= 2).length >= 2;
+    case 'ThreeKind':
+      return cs.some((c) => c >= 3);
+    case 'FourKind':
+      return cs.some((c) => c >= 4);
+    case 'Yahtzee':
+      return cs.some((c) => c >= 5);
     case 'FullHouse':
       return Object.entries(counts).some(
         ([v, c]) => c >= 3 && Object.entries(counts).some(([w, d]) => w !== v && d >= 2),
       );
-    case 'SmallStraight': return hasRun(4);
-    case 'LargeStraight': return hasRun(5);
+    case 'SmallStraight':
+      return hasRun(4);
+    case 'LargeStraight':
+      return hasRun(5);
   }
 }
 
@@ -278,10 +295,8 @@ export function newGame(
   rng: Rng,
   rules: Partial<RuleConfig> = {},
 ): Game {
-  const deckA: DeckDef = typeof a === 'string'
-    ? { leaderId: a, cards: DECKLISTS_V3[a] } : a;
-  const deckB: DeckDef = typeof b === 'string'
-    ? { leaderId: b, cards: DECKLISTS_V3[b] } : b;
+  const deckA: DeckDef = typeof a === 'string' ? { leaderId: a, cards: DECKLISTS_V3[a] } : a;
+  const deckB: DeckDef = typeof b === 'string' ? { leaderId: b, cards: DECKLISTS_V3[b] } : b;
   const mk = (id: string, dd: DeckDef): Player => {
     const resolve = dd.resolve || ((cid: string) => CARD_DB[cid]);
     const leaderDef = resolve(dd.leaderId);
@@ -290,9 +305,20 @@ export function newGame(
       for (let i = 0; i < n; i++) deck.push(makeInst(resolve(cid), id));
     }
     return {
-      id, leader: makeInst(leaderDef, id), deck, hand: [], discard: [], banished: [],
-      staging: [], board: [], location: null, dice: [], rerollUsed: false,
-      locationCastThisTurn: false, rallyUsedThisTurn: false, turnsTaken: 0,
+      id,
+      leader: makeInst(leaderDef, id),
+      deck,
+      hand: [],
+      discard: [],
+      banished: [],
+      staging: [],
+      board: [],
+      location: null,
+      dice: [],
+      rerollUsed: false,
+      locationCastThisTurn: false,
+      rallyUsedThisTurn: false,
+      turnsTaken: 0,
       comboGateCastThisTurn: false,
     };
   };
@@ -305,10 +331,21 @@ export function newGame(
     rng,
     log: [],
     stats: {
-      casts: {}, comboTriggers: {}, echoRecasts: 0, twinCompletions: 0, twinAbandons: 0,
-      scraps: 0, rallies: 0, wardBlocks: 0, diceWasted: 0, dicePitched: 0, attacks: 0,
-      leaderAbilityUses: {}, decisions: { A: {}, B: {} },
-      bulwarkReduced: 0, tollReduced: 0,
+      casts: {},
+      comboTriggers: {},
+      echoRecasts: 0,
+      twinCompletions: 0,
+      twinAbandons: 0,
+      scraps: 0,
+      rallies: 0,
+      wardBlocks: 0,
+      diceWasted: 0,
+      dicePitched: 0,
+      attacks: 0,
+      leaderAbilityUses: {},
+      decisions: { A: {}, B: {} },
+      bulwarkReduced: 0,
+      tollReduced: 0,
     },
     rules: { ...DEFAULT_RULES, ...rules },
     stage: 'PRE_REROLL',
@@ -345,7 +382,10 @@ export function cleanupDeaths(g: Game) {
     // v4.2 Avenge: state-based, no priority window — every surviving Avenge
     // Unit gets +1/+1 for each friendly Unit that just died, automatically.
     for (const u of survivors) {
-      if (u.def.avenge) { u.permAtk += dead.length; u.permHp += dead.length; }
+      if (u.def.avenge) {
+        u.permAtk += dead.length;
+        u.permHp += dead.length;
+      }
     }
     p.board = survivors;
     for (const u of dead) {
@@ -407,7 +447,13 @@ function drawCards(g: Game, p: Player, n: number) {
  * Apply an effect. `targetIid` selects the specific target where a choice
  * exists; the caller (AI/UI) is responsible for choosing a legal one.
  */
-export function applyEffect(g: Game, ownerId: string, eff: Effect, targetIid?: string, self?: Inst) {
+export function applyEffect(
+  g: Game,
+  ownerId: string,
+  eff: Effect,
+  targetIid?: string,
+  self?: Inst,
+) {
   const p = g.players[ownerId];
   const opp = opponentOf(g, ownerId);
   const v = eff.value || 0;
@@ -453,8 +499,7 @@ export function applyEffect(g: Game, ownerId: string, eff: Effect, targetIid?: s
       break;
     }
     case 'mend': {
-      const t =
-        eff.target === 'friendlyLeader' ? p.leader : (find(targetIid) ?? p.leader);
+      const t = eff.target === 'friendlyLeader' ? p.leader : (find(targetIid) ?? p.leader);
       if (t.owner === ownerId) t.damage = Math.max(0, t.damage - v);
       break;
     }
@@ -471,12 +516,19 @@ export function applyEffect(g: Game, ownerId: string, eff: Effect, targetIid?: s
     }
     case 'buff': {
       if (eff.target === 'allFriendlyUnits') {
-        for (const u of p.board) { u.permAtk += v; u.permHp += v; }
+        for (const u of p.board) {
+          u.permAtk += v;
+          u.permHp += v;
+        }
       } else if (eff.target === 'self' && self) {
-        self.permAtk += v; self.permHp += v;
+        self.permAtk += v;
+        self.permHp += v;
       } else {
         const t = find(targetIid);
-        if (t && t.def.type === 'Unit' && t.owner === ownerId) { t.permAtk += v; t.permHp += v; }
+        if (t && t.def.type === 'Unit' && t.owner === ownerId) {
+          t.permAtk += v;
+          t.permHp += v;
+        }
       }
       break;
     }
@@ -584,7 +636,12 @@ function pickDie(p: Player, dieIndex: number): Die | null {
 }
 
 function enterPlay(
-  g: Game, p: Player, c: Inst, dieValue: number, viaEcho = false, targetIid?: string,
+  g: Game,
+  p: Player,
+  c: Inst,
+  dieValue: number,
+  viaEcho = false,
+  targetIid?: string,
 ) {
   g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
   const eff = effThreshold(g, p.id, c.def);
@@ -652,9 +709,7 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
     }
     case 'anyTarget': {
       const v = eff.value || 0;
-      const killable = opp.board
-        .filter((u) => remainingHp(g, u) <= v)
-        .sort(byAtk)[0];
+      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
       if (killable) return killable.iid;
       const big = [...opp.board].sort(byAtk)[0];
       // Prefer face damage if no good unit target.
@@ -666,9 +721,7 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       return t?.iid;
     }
     case 'friendlyAny': {
-      const hurt = [...p.board]
-        .filter((u) => u.damage > 0)
-        .sort((a, b) => b.damage - a.damage)[0];
+      const hurt = [...p.board].filter((u) => u.damage > 0).sort((a, b) => b.damage - a.damage)[0];
       if (p.leader.damage >= (eff.value || 0)) return p.leader.iid;
       return hurt?.iid ?? p.leader.iid;
     }
@@ -678,7 +731,12 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
 }
 
 /** Destination 1: cast a card from hand. */
-export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetIid?: string): boolean {
+export function castFromHand(
+  g: Game,
+  dieIndex: number,
+  cardIid: string,
+  targetIid?: string,
+): boolean {
   const p = g.players[g.active];
   const die = pickDie(p, dieIndex);
   const idx = p.hand.findIndex((c) => c.iid === cardIid);
@@ -716,7 +774,9 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
     // v4.2 Twin A/B test (errata B, mode 'sameTurn'): if a second unplaced die
     // already matches, complete it immediately in the same Placement Phase.
     if (g.rules.twinMode === 'sameTurn') {
-      const matchIdx = p.dice.findIndex((d, i) => i !== dieIndex && !d.placed && d.value === die.value);
+      const matchIdx = p.dice.findIndex(
+        (d, i) => i !== dieIndex && !d.placed && d.value === die.value,
+      );
       if (matchIdx >= 0) completeTwin(g, matchIdx, c.iid);
     }
     return true;
@@ -728,7 +788,11 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
       applyEffect(g, p.id, withCrescendo(p, c, c.def.onCast), targetIid, c);
       queueAftershock(g, p, c);
       const eff = effThreshold(g, p.id, c.def);
-      if (c.def.overflow && c.def.threshold !== undefined && die.value - eff >= c.def.overflow.amount) {
+      if (
+        c.def.overflow &&
+        c.def.threshold !== undefined &&
+        die.value - eff >= c.def.overflow.amount
+      ) {
         applyEffect(g, p.id, c.def.overflow.effect, autoTarget(g, p.id, c.def.overflow.effect), c);
       }
       discardCard(g, p, c);
@@ -761,7 +825,12 @@ export function castLocationFree(g: Game, cardIid: string): boolean {
 }
 
 /** Destination 2: activate an Ability Slot on a card in play (or the Leader / Location). */
-export function activateAbility(g: Game, dieIndex: number, cardIid: string, targetIid?: string): boolean {
+export function activateAbility(
+  g: Game,
+  dieIndex: number,
+  cardIid: string,
+  targetIid?: string,
+): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
@@ -779,12 +848,23 @@ export function activateAbility(g: Game, dieIndex: number, cardIid: string, targ
     g.stats.leaderAbilityUses[c.def.id] = (g.stats.leaderAbilityUses[c.def.id] || 0) + 1;
     decide(g, p.id, 'leaderAbility');
   }
-  applyEffect(g, p.id, c.def.ability.effect, targetIid ?? autoTarget(g, p.id, c.def.ability.effect), c);
+  applyEffect(
+    g,
+    p.id,
+    c.def.ability.effect,
+    targetIid ?? autoTarget(g, p.id, c.def.ability.effect),
+    c,
+  );
   return true;
 }
 
 /** Rally: activate this card's ability using a die resting on another exhausted friendly Ability Slot. */
-export function activateViaRally(g: Game, rallyIid: string, sourceIid: string, targetIid?: string): boolean {
+export function activateViaRally(
+  g: Game,
+  rallyIid: string,
+  sourceIid: string,
+  targetIid?: string,
+): boolean {
   const p = g.players[g.active];
   if (p.rallyUsedThisTurn) return false;
   const c = p.board.find((x) => x.iid === rallyIid);
@@ -799,7 +879,13 @@ export function activateViaRally(g: Game, rallyIid: string, sourceIid: string, t
   src.abilityDie = undefined; // die moves; source stays exhausted
   p.rallyUsedThisTurn = true;
   g.stats.rallies++;
-  applyEffect(g, p.id, c.def.ability.effect, targetIid ?? autoTarget(g, p.id, c.def.ability.effect), c);
+  applyEffect(
+    g,
+    p.id,
+    c.def.ability.effect,
+    targetIid ?? autoTarget(g, p.id, c.def.ability.effect),
+    c,
+  );
   return true;
 }
 
@@ -849,7 +935,12 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
 }
 
 /** Destination 4: Echo-recast from Discard (die meets threshold + discard one card from hand). */
-export function echoRecast(g: Game, dieIndex: number, cardIid: string, discardIid: string): boolean {
+export function echoRecast(
+  g: Game,
+  dieIndex: number,
+  cardIid: string,
+  discardIid: string,
+): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
@@ -1035,7 +1126,13 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   }
   // v4.2 Tribute: Location bonus if you Pitched 2+ dice this turn.
   if (p.location?.def.tribute && pitchedThisTurn >= 2) {
-    applyEffect(g, p.id, p.location.def.tribute, autoTarget(g, p.id, p.location.def.tribute), p.location);
+    applyEffect(
+      g,
+      p.id,
+      p.location.def.tribute,
+      autoTarget(g, p.id, p.location.def.tribute),
+      p.location,
+    );
     decide(g, p.id, 'tributeTriggered');
   }
   // Discard down to 6.

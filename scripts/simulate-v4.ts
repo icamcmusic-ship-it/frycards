@@ -23,17 +23,32 @@ import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
 const PER_PAIR = parseInt(process.argv[2] || '20', 10);
 const MAX_TURNS = 160;
 
-interface Entry { key: string; label: string; leaderId: string; deck: DeckDef; hasLoc: boolean; }
+interface Entry {
+  key: string;
+  label: string;
+  leaderId: string;
+  deck: DeckDef;
+  hasLoc: boolean;
+}
 
 function buildRoster(): Entry[] {
   const decks: Entry[] = [];
   for (const arch of ARCHETYPES) {
     const d = buildDeck(arch);
-    decks.push({ key: arch.label, label: arch.label, leaderId: arch.leaderId, deck: d, hasLoc: true });
+    decks.push({
+      key: arch.label,
+      label: arch.label,
+      leaderId: arch.leaderId,
+      deck: d,
+      hasLoc: true,
+    });
     const stripped: Record<string, number> = {};
     let removed = 0;
     for (const [id, n] of Object.entries(d.cards)) {
-      if (POOL_BY_ID[id].type === 'Location') { removed += n; continue; }
+      if (POOL_BY_ID[id].type === 'Location') {
+        removed += n;
+        continue;
+      }
       stripped[id] = n;
     }
     if (removed > 0) {
@@ -44,11 +59,15 @@ function buildRoster(): Entry[] {
       for (const u of fillers) {
         if (need <= 0) break;
         const c = Math.min(3, need);
-        stripped[u.id] = c; need -= c;
+        stripped[u.id] = c;
+        need -= c;
       }
       decks.push({
-        key: arch.label + ' [noLoc]', label: arch.label + ' [noLoc]',
-        leaderId: arch.leaderId, deck: { ...d, cards: stripped }, hasLoc: false,
+        key: arch.label + ' [noLoc]',
+        label: arch.label + ' [noLoc]',
+        leaderId: arch.leaderId,
+        deck: { ...d, cards: stripped },
+        hasLoc: false,
       });
     }
   }
@@ -56,37 +75,89 @@ function buildRoster(): Entry[] {
 }
 
 const DECISION_KEYS = [
-  'locationCast', 'faceAttack', 'unitAttack', 'earlyFaceAttack', 'boardWipe',
-  'echoRecast', 'echoRecast_low', 'echoRecast_mid', 'echoRecast_high',
-  'twinComplete', 'twinStagedPassive', 'leaderAbility', 'ultimateUsed',
-  'aftershockQueued', 'aftershockResolved', 'tributeTriggered',
-  'wentFirst', 'mulliganed',
+  'locationCast',
+  'faceAttack',
+  'unitAttack',
+  'earlyFaceAttack',
+  'boardWipe',
+  'echoRecast',
+  'echoRecast_low',
+  'echoRecast_mid',
+  'echoRecast_high',
+  'twinComplete',
+  'twinStagedPassive',
+  'leaderAbility',
+  'ultimateUsed',
+  'aftershockQueued',
+  'aftershockResolved',
+  'tributeTriggered',
+  'wentFirst',
+  'mulliganed',
 ];
 
 interface SuiteResult {
-  games: number; draws: number; timeouts: number; deckouts: number; firstWins: number; totalRounds: number;
+  games: number;
+  draws: number;
+  timeouts: number;
+  deckouts: number;
+  firstWins: number;
+  totalRounds: number;
   roundBuckets: Record<string, number>;
-  leaderW: Record<string, number>; leaderN: Record<string, number>;
-  archW: Record<string, number>; archN: Record<string, number>;
+  leaderW: Record<string, number>;
+  leaderN: Record<string, number>;
+  archW: Record<string, number>;
+  archN: Record<string, number>;
   locW: { loc: number; locN: number; noloc: number; nolocN: number };
-  cardCast: Record<string, number>; cardInWinDeck: Record<string, number>; cardInDeck: Record<string, number>;
+  cardCast: Record<string, number>;
+  cardInWinDeck: Record<string, number>;
+  cardInDeck: Record<string, number>;
   comboTriggers: Record<string, number>;
-  echoRecasts: number; twinCompletions: number; twinAbandons: number; scraps: number; rallies: number;
-  wardBlocks: number; dicePitched: number; diceWasted: number; attacks: number;
-  bulwarkReduced: number; tollReduced: number;
+  echoRecasts: number;
+  twinCompletions: number;
+  twinAbandons: number;
+  scraps: number;
+  rallies: number;
+  wardBlocks: number;
+  dicePitched: number;
+  diceWasted: number;
+  attacks: number;
+  bulwarkReduced: number;
+  tollReduced: number;
   decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
   errors: string[];
 }
 
 function newResult(): SuiteResult {
   return {
-    games: 0, draws: 0, timeouts: 0, deckouts: 0, firstWins: 0, totalRounds: 0,
-    roundBuckets: {}, leaderW: {}, leaderN: {}, archW: {}, archN: {},
+    games: 0,
+    draws: 0,
+    timeouts: 0,
+    deckouts: 0,
+    firstWins: 0,
+    totalRounds: 0,
+    roundBuckets: {},
+    leaderW: {},
+    leaderN: {},
+    archW: {},
+    archN: {},
     locW: { loc: 0, locN: 0, noloc: 0, nolocN: 0 },
-    cardCast: {}, cardInWinDeck: {}, cardInDeck: {}, comboTriggers: {},
-    echoRecasts: 0, twinCompletions: 0, twinAbandons: 0, scraps: 0, rallies: 0,
-    wardBlocks: 0, dicePitched: 0, diceWasted: 0, attacks: 0,
-    bulwarkReduced: 0, tollReduced: 0, decisionAgg: {}, errors: [],
+    cardCast: {},
+    cardInWinDeck: {},
+    cardInDeck: {},
+    comboTriggers: {},
+    echoRecasts: 0,
+    twinCompletions: 0,
+    twinAbandons: 0,
+    scraps: 0,
+    rallies: 0,
+    wardBlocks: 0,
+    dicePitched: 0,
+    diceWasted: 0,
+    attacks: 0,
+    bulwarkReduced: 0,
+    tollReduced: 0,
+    decisionAgg: {},
+    errors: [],
   };
 }
 
@@ -97,29 +168,51 @@ function invariants(g: Game, sizeA: number, sizeB: number, errors: string[]) {
   const sizes: Record<string, number> = { A: sizeA, B: sizeB };
   for (const p of Object.values(g.players)) {
     if (g.winner) break;
-    for (const u of p.board) if (remainingHp(g, u) <= 0) errors.push(`dead unit on board: ${u.def.name}`);
+    for (const u of p.board)
+      if (remainingHp(g, u) <= 0) errors.push(`dead unit on board: ${u.def.name}`);
     if (p.hand.length > 6 && g.active !== p.id) errors.push(`hand overflow ${p.hand.length}`);
     if (p.leader.damage < 0) errors.push('negative leader damage');
-    const total = p.deck.length + p.hand.length + p.discard.length + p.banished.length +
-      p.staging.length + p.board.length + (p.location ? 1 : 0);
+    const total =
+      p.deck.length +
+      p.hand.length +
+      p.discard.length +
+      p.banished.length +
+      p.staging.length +
+      p.board.length +
+      (p.location ? 1 : 0);
     if (total !== sizes[p.id]) errors.push(`card drift ${total}!=${sizes[p.id]}`);
   }
 }
 
-function runGame(r: SuiteResult, decks: Entry[], a: Entry, b: Entry, seed: number, twinMode: TwinMode) {
+function runGame(
+  r: SuiteResult,
+  decks: Entry[],
+  a: Entry,
+  b: Entry,
+  seed: number,
+  twinMode: TwinMode,
+) {
   const rng = mulberry32(seed);
   const g = newGame(a.deck, b.deck, rng, { twinMode });
   const mull = maybeMulligan(g, rng);
-  const sizeA = deckSize(a.deck), sizeB = deckSize(b.deck);
+  const sizeA = deckSize(a.deck),
+    sizeB = deckSize(b.deck);
   const firstPlayer = g.active;
   let rounds = 0;
-  while (!g.winner && rounds < MAX_TURNS) { playTurn(g); invariants(g, sizeA, sizeB, r.errors); rounds++; }
+  while (!g.winner && rounds < MAX_TURNS) {
+    playTurn(g);
+    invariants(g, sizeA, sizeB, r.errors);
+    rounds++;
+  }
   r.games++;
   r.totalRounds += rounds / 2;
   const bucket = rounds / 2 < 4 ? '<4' : rounds / 2 < 7 ? '4-6' : rounds / 2 < 11 ? '7-10' : '11+';
   r.roundBuckets[bucket] = (r.roundBuckets[bucket] || 0) + 1;
 
-  if (!g.winner) { r.timeouts++; return; }
+  if (!g.winner) {
+    r.timeouts++;
+    return;
+  }
   if (g.winner !== 'draw') {
     for (const pid of ['A', 'B'] as const) {
       const won = g.winner === pid;
@@ -130,12 +223,19 @@ function runGame(r: SuiteResult, decks: Entry[], a: Entry, b: Entry, seed: numbe
         else if (key === 'mulliganed') present = !!mull[pid];
         else present = (d[key] || 0) > 0;
         const agg = (r.decisionAgg[key] ||= { pw: 0, pn: 0, aw: 0, an: 0 });
-        if (present) { agg.pn++; if (won) agg.pw++; } else { agg.an++; if (won) agg.aw++; }
+        if (present) {
+          agg.pn++;
+          if (won) agg.pw++;
+        } else {
+          agg.an++;
+          if (won) agg.aw++;
+        }
       }
     }
   }
-  if (g.winner === 'draw') { r.draws++; }
-  else {
+  if (g.winner === 'draw') {
+    r.draws++;
+  } else {
     if (g.winner === firstPlayer) r.firstWins++;
     const winSide = g.winner as 'A' | 'B';
     const winEntry = winSide === 'A' ? a : b;
@@ -149,20 +249,39 @@ function runGame(r: SuiteResult, decks: Entry[], a: Entry, b: Entry, seed: numbe
   r.archN[b.key] = (r.archN[b.key] || 0) + 1;
   if (g.log.some((l) => l.includes('decked out'))) r.deckouts++;
 
-  for (const [entry, side] of [[a, 'A'], [b, 'B']] as const) {
+  for (const [entry, side] of [
+    [a, 'A'],
+    [b, 'B'],
+  ] as const) {
     const won = g.winner === side;
-    if (entry.hasLoc) { r.locW.locN++; if (won) r.locW.loc++; }
-    else { r.locW.nolocN++; if (won) r.locW.noloc++; }
+    if (entry.hasLoc) {
+      r.locW.locN++;
+      if (won) r.locW.loc++;
+    } else {
+      r.locW.nolocN++;
+      if (won) r.locW.noloc++;
+    }
   }
 
   const s = g.stats;
-  r.echoRecasts += s.echoRecasts; r.twinCompletions += s.twinCompletions; r.twinAbandons += s.twinAbandons;
-  r.scraps += s.scraps; r.rallies += s.rallies; r.wardBlocks += s.wardBlocks;
-  r.dicePitched += s.dicePitched; r.diceWasted += s.diceWasted; r.attacks += s.attacks;
-  r.bulwarkReduced += s.bulwarkReduced; r.tollReduced += s.tollReduced;
-  for (const [id, n] of Object.entries(s.comboTriggers)) r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
+  r.echoRecasts += s.echoRecasts;
+  r.twinCompletions += s.twinCompletions;
+  r.twinAbandons += s.twinAbandons;
+  r.scraps += s.scraps;
+  r.rallies += s.rallies;
+  r.wardBlocks += s.wardBlocks;
+  r.dicePitched += s.dicePitched;
+  r.diceWasted += s.diceWasted;
+  r.attacks += s.attacks;
+  r.bulwarkReduced += s.bulwarkReduced;
+  r.tollReduced += s.tollReduced;
+  for (const [id, n] of Object.entries(s.comboTriggers))
+    r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
   for (const [id, n] of Object.entries(s.casts)) r.cardCast[id] = (r.cardCast[id] || 0) + n;
-  for (const [entry, side] of [[a, 'A'], [b, 'B']] as const) {
+  for (const [entry, side] of [
+    [a, 'A'],
+    [b, 'B'],
+  ] as const) {
     const won = g.winner === side;
     for (const id of Object.keys(entry.deck.cards)) {
       r.cardInDeck[id] = (r.cardInDeck[id] || 0) + 1;
@@ -171,7 +290,12 @@ function runGame(r: SuiteResult, decks: Entry[], a: Entry, b: Entry, seed: numbe
   }
 }
 
-function runSuite(decks: Entry[], perPair: number, twinMode: TwinMode, seedBase: number): SuiteResult {
+function runSuite(
+  decks: Entry[],
+  perPair: number,
+  twinMode: TwinMode,
+  seedBase: number,
+): SuiteResult {
   const r = newResult();
   let seed = seedBase;
   for (let i = 0; i < decks.length; i++) {
@@ -196,7 +320,14 @@ const abResults: Record<TwinMode, SuiteResult> = {} as any;
 for (const mode of modes) {
   abResults[mode] = runSuite(roster, abPerPair, mode, 5000 + modes.indexOf(mode) * 100000);
 }
-console.log('Mode'.padEnd(16), 'games'.padStart(7), 'TwinComplete did%'.padStart(19), 'did-not%'.padStart(10), 'delta'.padStart(8), '(n did)');
+console.log(
+  'Mode'.padEnd(16),
+  'games'.padStart(7),
+  'TwinComplete did%'.padStart(19),
+  'did-not%'.padStart(10),
+  'delta'.padStart(8),
+  '(n did)',
+);
 for (const mode of modes) {
   const r = abResults[mode];
   const decisive = r.games - r.draws - r.timeouts;
@@ -213,7 +344,9 @@ for (const mode of modes) {
     `(${d.pn})`,
   );
 }
-console.log(`(Twin completions logged: oneDiePerTurn=${abResults.oneDiePerTurn.twinCompletions}, sameTurn=${abResults.sameTurn.twinCompletions}, stagedPassive=${abResults.stagedPassive.twinCompletions})`);
+console.log(
+  `(Twin completions logged: oneDiePerTurn=${abResults.oneDiePerTurn.twinCompletions}, sameTurn=${abResults.sameTurn.twinCompletions}, stagedPassive=${abResults.stagedPassive.twinCompletions})`,
+);
 console.log('\nTwin-heavy archetype win rate by mode (decks that draft Twin cards):');
 for (const label of ['Abyss Echo-Recursion', 'Mer King Heal-Midrange']) {
   const cells = modes.map((mode) => {
@@ -231,41 +364,65 @@ const deltaOf = (mode: TwinMode) => {
   return d.pn > 0 ? withP - without : -999;
 };
 const winningMode = modes.slice().sort((x, y) => deltaOf(y) - deltaOf(x))[0];
-console.log(`\n=> Selected Twin mode for the full report: '${winningMode}' (highest twinComplete win-delta of the three).`);
+console.log(
+  `\n=> Selected Twin mode for the full report: '${winningMode}' (highest twinComplete win-delta of the three).`,
+);
 
 // ---------------------------------------------------------------------------
 // Pass 2: full report using the winning Twin mode.
 // ---------------------------------------------------------------------------
 const R = runSuite(roster, PER_PAIR, winningMode, 1000);
 
-console.log(`\n\n=== v4.2 Full Playtest Report (twinMode='${winningMode}'): ${R.games} games, ${roster.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins), ${PER_PAIR}/pairing ===`);
-console.log(`avg length: ${(R.totalRounds / R.games).toFixed(1)} rounds   draws: ${R.draws}   deckouts: ${R.deckouts}   timeouts@${MAX_TURNS}t: ${R.timeouts}`);
+console.log(
+  `\n\n=== v4.2 Full Playtest Report (twinMode='${winningMode}'): ${R.games} games, ${roster.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins), ${PER_PAIR}/pairing ===`,
+);
+console.log(
+  `avg length: ${(R.totalRounds / R.games).toFixed(1)} rounds   draws: ${R.draws}   deckouts: ${R.deckouts}   timeouts@${MAX_TURNS}t: ${R.timeouts}`,
+);
 console.log(`first-player win rate: ${pct(R.firstWins, R.games - R.draws - R.timeouts)}%`);
 console.log('game-length distribution (rounds):', R.roundBuckets);
 
-console.log('\n--- Leader win rates (aggregated over that leader\'s archetypes) ---');
-for (const l of Object.keys(R.leaderN).sort((a, b) => (R.leaderW[b] || 0) / R.leaderN[b] - (R.leaderW[a] || 0) / R.leaderN[a])) {
-  console.log(`${POOL_BY_ID[l].name.padEnd(26)} ${pct(R.leaderW[l] || 0, R.leaderN[l])}%  (n=${R.leaderN[l]})`);
+console.log("\n--- Leader win rates (aggregated over that leader's archetypes) ---");
+for (const l of Object.keys(R.leaderN).sort(
+  (a, b) => (R.leaderW[b] || 0) / R.leaderN[b] - (R.leaderW[a] || 0) / R.leaderN[a],
+)) {
+  console.log(
+    `${POOL_BY_ID[l].name.padEnd(26)} ${pct(R.leaderW[l] || 0, R.leaderN[l])}%  (n=${R.leaderN[l]})`,
+  );
 }
 
 console.log('\n--- Archetype win rates (Location decks only) ---');
 for (const a of ARCHETYPES) {
-  console.log(`${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, R.archN[a.label] || 0)}%  (n=${R.archN[a.label] || 0})`);
+  console.log(
+    `${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, R.archN[a.label] || 0)}%  (n=${R.archN[a.label] || 0})`,
+  );
 }
 
 console.log('\n--- ISOLATED Location contribution ---');
 console.log(`Location decks:        ${pct(R.locW.loc, R.locW.locN)}%  (n=${R.locW.locN})`);
 console.log(`Location-stripped:     ${pct(R.locW.noloc, R.locW.nolocN)}%  (n=${R.locW.nolocN})`);
-console.log(`=> Locations are worth ${((100 * R.locW.loc / R.locW.locN) - (100 * R.locW.noloc / R.locW.nolocN)).toFixed(1)} win% vs. filling their slots with cheap Units`);
+console.log(
+  `=> Locations are worth ${((100 * R.locW.loc) / R.locW.locN - (100 * R.locW.noloc) / R.locW.nolocN).toFixed(1)} win% vs. filling their slots with cheap Units`,
+);
 
 console.log('\n--- Mechanic activity (totals) ---');
 console.log({
-  echoRecasts: R.echoRecasts, twinCompletions: R.twinCompletions, twinAbandons: R.twinAbandons,
-  scraps: R.scraps, rallies: R.rallies, wardBlocks: R.wardBlocks, attacks: R.attacks,
-  bulwarkReduced: R.bulwarkReduced, tollReduced: R.tollReduced,
+  echoRecasts: R.echoRecasts,
+  twinCompletions: R.twinCompletions,
+  twinAbandons: R.twinAbandons,
+  scraps: R.scraps,
+  rallies: R.rallies,
+  wardBlocks: R.wardBlocks,
+  attacks: R.attacks,
+  bulwarkReduced: R.bulwarkReduced,
+  tollReduced: R.tollReduced,
 });
-console.log(`Pitch (v4.0): dice pitched for Mend 1 = ${R.dicePitched}; truly wasted (leader full) = ${R.diceWasted}`);
-console.log(`avg dice pitched+wasted per player-turn: ${((R.dicePitched + R.diceWasted) / (R.totalRounds * 2)).toFixed(2)}`);
+console.log(
+  `Pitch (v4.0): dice pitched for Mend 1 = ${R.dicePitched}; truly wasted (leader full) = ${R.diceWasted}`,
+);
+console.log(
+  `avg dice pitched+wasted per player-turn: ${((R.dicePitched + R.diceWasted) / (R.totalRounds * 2)).toFixed(2)}`,
+);
 
 console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
 const decRows = DECISION_KEYS.map((k) => {
@@ -273,34 +430,51 @@ const decRows = DECISION_KEYS.map((k) => {
   const withP = d.pn ? (100 * d.pw) / d.pn : NaN;
   const without = d.an ? (100 * d.aw) / d.an : NaN;
   return { k, withP, without, delta: withP - without, pn: d.pn, an: d.an };
-}).sort((a, b) => Math.abs((isNaN(b.delta) ? 0 : b.delta)) - Math.abs((isNaN(a.delta) ? 0 : a.delta)));
+}).sort((a, b) => Math.abs(isNaN(b.delta) ? 0 : b.delta) - Math.abs(isNaN(a.delta) ? 0 : a.delta));
 for (const r of decRows) {
   const sign = r.delta >= 0 ? '+' : '';
   console.log(
     `${r.k.padEnd(20)} did=${isNaN(r.withP) ? ' n/a' : r.withP.toFixed(1).padStart(5)}%  did-not=${isNaN(r.without) ? ' n/a' : r.without.toFixed(1).padStart(5)}%  delta=${isNaN(r.delta) ? ' n/a' : sign + r.delta.toFixed(1) + 'pt'}  (did n=${r.pn})`,
   );
 }
-console.log('\n(Echo broken out by rarity of the card recast — see echoRecast_low/mid/high above.)');
+console.log(
+  '\n(Echo broken out by rarity of the card recast — see echoRecast_low/mid/high above.)',
+);
 
 console.log('\n--- Combo passive triggers ---');
-console.log(Object.fromEntries(Object.entries(R.comboTriggers).sort((a, b) => b[1] - a[1]).slice(0, 15)
-  .map(([id, n]) => [POOL_BY_ID[id]?.name || id, n])));
+console.log(
+  Object.fromEntries(
+    Object.entries(R.comboTriggers)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([id, n]) => [POOL_BY_ID[id]?.name || id, n]),
+  ),
+);
 
 const rows = Object.keys(R.cardInDeck)
   .filter((id) => POOL_BY_ID[id].type !== 'Leader' && R.cardInDeck[id] >= 40)
   .map((id) => ({
-    name: POOL_BY_ID[id].name, type: POOL_BY_ID[id].type,
+    name: POOL_BY_ID[id].name,
+    type: POOL_BY_ID[id].type,
     winPct: (100 * (R.cardInWinDeck[id] || 0)) / R.cardInDeck[id],
     castsPerGame: (R.cardCast[id] || 0) / R.cardInDeck[id],
     n: R.cardInDeck[id],
   }));
 console.log('\n--- Most likely OP (highest win% in deck, min n=40) ---');
 for (const r of [...rows].sort((a, b) => b.winPct - a.winPct).slice(0, 12))
-  console.log(`${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} casts/g=${r.castsPerGame.toFixed(2)} (n=${r.n})`);
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} casts/g=${r.castsPerGame.toFixed(2)} (n=${r.n})`,
+  );
 console.log('\n--- Most "useless" (lowest cast rate / lowest win%) ---');
-for (const r of [...rows].sort((a, b) => a.castsPerGame - b.castsPerGame || a.winPct - b.winPct).slice(0, 12))
-  console.log(`${r.name.padEnd(26)} ${r.type.padEnd(9)} casts/g=${r.castsPerGame.toFixed(2)} win%=${r.winPct.toFixed(1)} (n=${r.n})`);
+for (const r of [...rows]
+  .sort((a, b) => a.castsPerGame - b.castsPerGame || a.winPct - b.winPct)
+  .slice(0, 12))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} casts/g=${r.castsPerGame.toFixed(2)} win%=${r.winPct.toFixed(1)} (n=${r.n})`,
+  );
 
-console.log(R.errors.length
-  ? `\n!!! ${[...new Set(R.errors)].length} invariant violation types:\n  ${[...new Set(R.errors)].slice(0, 10).join('\n  ')}`
-  : '\nNo invariant violations.');
+console.log(
+  R.errors.length
+    ? `\n!!! ${[...new Set(R.errors)].length} invariant violation types:\n  ${[...new Set(R.errors)].slice(0, 10).join('\n  ')}`
+    : '\nNo invariant violations.',
+);
