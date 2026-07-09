@@ -49,6 +49,41 @@ function addUnit(
   return u;
 }
 
+/** Push a hand-only Event/Charm test card (not a board Unit) with a given effect/cost. */
+function addHandCard(
+  s: GameState,
+  owner: string,
+  overrides: Partial<GameCard> & Pick<GameCard, 'type'>,
+): GameCard {
+  const c: GameCard = {
+    id: 'test_card_' + Math.random().toString(36).slice(2),
+    name: 'Test Card',
+    type: overrides.type,
+    elements: ['Generic'],
+    cost: {},
+    keywords: [],
+    instanceId: 'inst_' + Math.random().toString(36).slice(2),
+    ownerId: owner,
+    damageTaken: 0,
+    bonusDamage: 0,
+    exhausted: false,
+    summoningSickness: false,
+    scorch: 0,
+    frozen: 0,
+    glitched: false,
+    armor: 0,
+    witherAtk: 0,
+    witherHp: 0,
+    tempAtk: 0,
+    tempHp: 0,
+    attacksThisTurn: 0,
+    attachedItems: [],
+    ...overrides,
+  };
+  s.players[owner].hand.push(c);
+  return c;
+}
+
 // --- payCost: generic cost drains the largest pool first --------------------
 {
   const res: Record<string, number> = { Frost: 1, Tech: 3 };
@@ -1061,6 +1096,146 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   assert(
     v.damageTaken === 5 && v.armor === 3,
     'pipeline order: Brittle doubles, Taint adds, Armor reduces last (3→6→8→5)',
+  );
+}
+
+// --- Set 3: Fate bottoms an expensive top-deck card at start of turn --------
+{
+  const s = actionState();
+  addUnit(s, 'p1', 1, 1, ['Fate']);
+  const cheap = makeToken('cheap', 1, 1, 'p1');
+  cheap.cost = { Generic: 1 };
+  const pricey = makeToken('pricey', 1, 1, 'p1');
+  pricey.cost = { Generic: 7 };
+  s.players.p1.deck = [cheap, pricey]; // top of deck = last element (draws use .pop())
+  s.phase = 'TURN_TRANSITION';
+  const c = gameReducer(s, { type: 'ACKNOWLEDGE_TRANSITION' });
+  assert(
+    c.players.p1.deck[c.players.p1.deck.length - 1].id === 'token_cheap',
+    'Fate bottoms a 6+ cost top-decked card',
+  );
+}
+
+// --- Set 3: Freeze-Dry freezes on combat damage -----------------------------
+{
+  const s = actionState();
+  const hitter = addUnit(s, 'p1', 3, 3, ['Freeze-Dry 2']);
+  const victim = addUnit(s, 'p2', 1, 5);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, {
+    type: 'TOGGLE_ATTACKER',
+    instanceId: hitter.instanceId,
+    targetId: victim.instanceId,
+  });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  const v = c.players.p2.board.find((u) => u.instanceId === victim.instanceId)!;
+  assert(v.frozen === 2, 'Freeze-Dry 2 froze the victim for 2 turns on combat damage');
+}
+
+// --- Set 3: Blessed prevents damage instances, then runs dry ----------------
+{
+  const s = actionState();
+  const blessed = addUnit(s, 'p2', 0, 10, ['Blessed 1']);
+  blessed.blessedCharges = 1;
+  const hitter = addUnit(s, 'p1', 4, 4);
+  let c = gameReducer(s, { type: 'ENTER_COMBAT' });
+  c = gameReducer(c, {
+    type: 'TOGGLE_ATTACKER',
+    instanceId: hitter.instanceId,
+    targetId: blessed.instanceId,
+  });
+  c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
+  if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
+  let v = c.players.p2.board.find((u) => u.instanceId === blessed.instanceId)!;
+  assert(v.damageTaken === 0 && v.blessedCharges === 0, 'Blessed 1 prevented the first hit outright');
+}
+
+// --- Set 3: Scorched-Earth Event burns every Unit on both sides -------------
+{
+  const s = actionState();
+  const mine = addUnit(s, 'p1', 1, 5);
+  const theirs = addUnit(s, 'p2', 1, 5);
+  const card = addHandCard(s, 'p1', {
+    type: 'Event',
+    effect: { action: 'scorchedEarth', value: 3 },
+  });
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: card.instanceId });
+  const m = c.players.p1.board.find((u) => u.instanceId === mine.instanceId)!;
+  const t = c.players.p2.board.find((u) => u.instanceId === theirs.instanceId)!;
+  assert(m.damageTaken === 3 && t.damageTaken === 3, 'Scorched-Earth 3 hit both boards for 3');
+}
+
+// --- Set 3: Glaciate freezes every non-Guard enemy Unit ---------------------
+{
+  const s = actionState();
+  const free = addUnit(s, 'p2', 2, 2);
+  const guardUnit = addUnit(s, 'p2', 2, 2, ['Guard']);
+  const card = addHandCard(s, 'p1', { type: 'Event', effect: { action: 'glaciate' } });
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: card.instanceId });
+  const f = c.players.p2.board.find((u) => u.instanceId === free.instanceId)!;
+  const g = c.players.p2.board.find((u) => u.instanceId === guardUnit.instanceId)!;
+  assert(f.frozen > 0 && g.frozen === 0, 'Glaciate freezes non-Guard enemies, spares Guard');
+}
+
+// --- Set 3: Overload grants a random own-element resource + roll penalty ---
+{
+  const s = actionState();
+  s.players.p1.leader.elements = ['Frost', 'Generic'];
+  const card = addHandCard(s, 'p1', { type: 'Charm', keywords: ['Overload 2'], duration: 1 });
+  const before = s.players.p1.overclockPenalty;
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: card.instanceId });
+  assert(
+    (c.players.p1.resources.Frost || 0) === 2 && c.players.p1.overclockPenalty === before + 2,
+    'Overload 2 granted 2 Frost and banked a -2 roll penalty',
+  );
+}
+
+// --- Set 3: X-Cost scales the effect with the named amount ------------------
+{
+  const s = actionState();
+  s.players.p1.resources = { Generic: 5 };
+  s.players.p2.leader.keywords = []; // isolate from the fixture Leader's printed Ward
+  const oppLeaderStart = s.players.p2.leader.damageTaken;
+  const card = addHandCard(s, 'p1', {
+    type: 'Event',
+    xCost: true,
+    cost: {},
+    effect: { action: 'damage', target: 'leader', value: 0 },
+  });
+  const c = gameReducer(s, { type: 'PLAY_CARD', instanceId: card.instanceId, xAmount: 4 });
+  assert(
+    c.players.p2.leader.damageTaken === oppLeaderStart + 4 &&
+      (c.players.p1.resources.Generic || 0) === 1,
+    'X-Cost 4 dealt 4 damage and spent 4 extra Generic',
+  );
+}
+
+// --- Set 3: Sacrifice-cost feeds the sacrificed Unit's attack into the effect ---
+{
+  const s = actionState();
+  s.players.p2.leader.keywords = []; // isolate from the fixture Leader's printed Ward
+  // A real (non-token) board Unit, so the sacrifice exercises the graveyard
+  // path too — makeToken's isToken:true units correctly vanish instead.
+  const fatling = addUnit(s, 'p1', 6, 2);
+  fatling.isToken = false;
+  const oppLeaderStart = s.players.p2.leader.damageTaken;
+  const card = addHandCard(s, 'p1', {
+    type: 'Event',
+    sacrifice: true,
+    cost: {},
+    effect: { action: 'damage', target: 'leader', value: 0 },
+  });
+  const c = gameReducer(s, {
+    type: 'PLAY_CARD',
+    instanceId: card.instanceId,
+    targetId: fatling.instanceId,
+  });
+  assert(
+    c.players.p2.leader.damageTaken === oppLeaderStart + 6 &&
+      c.players.p1.board.every((u) => u.instanceId !== fatling.instanceId) &&
+      c.players.p1.graveyard.some((u) => u.instanceId === fatling.instanceId),
+    'Sacrifice fed the 6-attack Unit into a 6-damage hit and moved it to the graveyard',
   );
 }
 

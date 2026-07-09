@@ -71,6 +71,24 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Codex: 'Codex X: your Units get +X max health while this is active.',
   Discord:
     'At the start of your turn, randomly: gain 1 Generic resource, draw 1 card, or your Leader takes 1 damage.',
+  // Set 3 keywords.
+  Fate: 'At the start of your turn, a top deck card costing 6 or more is automatically moved to the bottom.',
+  'Freeze-Dry':
+    'Freeze-Dry X: whenever this deals combat damage to a Unit, that Unit also gains X turns of Freeze.',
+  Blessed:
+    'Blessed X: the first X instances of damage this card would take each of your turns are prevented outright. Refills at your Ready step.',
+  'Scorched-Earth':
+    'Scorched-Earth X: when this resolves (or this Location is revealed), all Units in play — both players\' — take X damage.',
+  Glaciate: 'Freezes every enemy Unit that does not have Guard.',
+  Overload:
+    'Overload X: gain X of a random one of your resources now; your next roll is reduced by X (as Overclock).',
+};
+
+/** Keywords whose casting requires extra client UI (X-cost amount picker, sacrifice target). */
+export const CASTING_MECHANIC_GLOSSARY: Record<string, string> = {
+  'X-Cost': 'The caster names any amount of extra resources at cast time; the effect scales with that amount.',
+  Sacrifice:
+    'Casting this also requires sacrificing a friendly Unit; the effect scales off that Unit\'s printed attack.',
 };
 
 /** Look up a keyword string like "Armor 2" → its glossary text. */

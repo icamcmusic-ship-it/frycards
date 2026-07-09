@@ -19,7 +19,9 @@ export interface EventEffect {
     | 'manifest'
     | 'buff'
     | 'meltdown'
-    | 'purge';
+    | 'purge'
+    | 'scorchedEarth'
+    | 'glaciate';
   value?: number;
   /** who/what the effect needs: an enemy unit, the enemy leader, a friendly unit, or self. */
   target?: 'unit' | 'leader' | 'friendly' | 'self';
@@ -52,6 +54,20 @@ export interface CardTemplate {
   locEffect?: LocationEffect;
   /** duration for Charm cards (1-3). */
   duration?: number;
+  /**
+   * X-Cost: the caster names any amount of extra Generic resources at cast
+   * time (GameAction.xAmount); that amount both pays into the cost and
+   * becomes (added to) the card's effect value.
+   */
+  xCost?: boolean;
+  /**
+   * Sacrifice-cost: casting requires naming a friendly Unit (via the normal
+   * targetId field) to sacrifice as part of the cost. The sacrificed Unit's
+   * printed attack is added to the card's effect value (e.g. a 'damage'
+   * Event scales off the Unit fed to it). The sacrifice is paid even if
+   * Feedback later negates the effect.
+   */
+  sacrifice?: boolean;
 }
 
 export interface GameCard extends CardTemplate {
@@ -74,6 +90,8 @@ export interface GameCard extends CardTemplate {
   tempHp: number;
   /** Taint [X]: extra damage taken from all sources until Cleanup. */
   tainted?: number;
+  /** Blessed [X]: remaining damage instances prevented this turn; refills to X at the controller's Ready step. */
+  blessedCharges?: number;
   attacksThisTurn: number; // for Overdrive
   /** true once this Unit was readied by Leader Command this turn (once per Unit per turn §2.1). */
   commandedThisTurn?: boolean;

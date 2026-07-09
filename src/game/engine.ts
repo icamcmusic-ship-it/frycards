@@ -14,7 +14,7 @@ export type GameAction =
   | { type: 'MULLIGAN'; playerId: string }
   | { type: 'ROLL_DICE' }
   | { type: 'ALLOCATE_RESOURCES'; allocations: Record<string, number> }
-  | { type: 'PLAY_CARD'; instanceId: string; targetId?: string }
+  | { type: 'PLAY_CARD'; instanceId: string; targetId?: string; xAmount?: number }
   | { type: 'ACTIVATE_ABILITY'; instanceId: string; targetId?: string }
   | { type: 'LEADER_COMMAND'; targetId: string }
   | { type: 'ENTER_COMBAT' }
@@ -319,6 +319,13 @@ function applyDamageToUnit(
   opts: { bypassArmor?: boolean } = {},
 ): number {
   let dmg = amount;
+  // Blessed [X] (new set): the first X damage instances each of the
+  // controller's turns are prevented outright, before Brittle/Armor/Taint —
+  // a full negation, not a reduction. Charges refill at the Ready step.
+  if (dmg > 0 && (card.blessedCharges || 0) > 0) {
+    card.blessedCharges = (card.blessedCharges || 0) - 1;
+    return 0;
+  }
   if (kwActive(card, 'Brittle')) dmg *= 2; // §2.3 Brittle: incoming D becomes 2D
   if (dmg > 0 && card.tainted) dmg += card.tainted; // Taint [X] (new set): +X from all sources until Cleanup
 
@@ -505,6 +512,21 @@ function startOfTurn(next: GameState, player: PlayerState) {
   player.resources = {};
   player.singleColorRoll = false;
 
+  // Fate (new set): a top-decked card costing 6+ resources is automatically
+  // bottomed instead of clogging the draw — an automatic, deterministic
+  // smoothing rule (no "look and choose" UI exists in this engine).
+  const fateActive =
+    kwActive(player.leader, 'Fate') || player.board.some((u) => kwActive(u, 'Fate'));
+  if (fateActive && player.deck.length > 0) {
+    const top = player.deck[player.deck.length - 1];
+    const topCost = Object.values(top.cost || {}).reduce((a, b) => a + b, 0);
+    if (topCost >= 6) {
+      player.deck.pop();
+      player.deck.unshift(top);
+      next.log.push(`Fate: ${player.name} bottomed ${top.name} (cost ${topCost}).`);
+    }
+  }
+
   // Location Shell Game (§3.1): flip a random face-down Location of YOUR OWN
   // at the start of your turn — you control it for the whole turn. (V1.8: the
   // old rule flipped the *opponent's* Location for the active player, which
@@ -530,6 +552,21 @@ function startOfTurn(next: GameState, player: PlayerState) {
           `Hatchling (${next.activeLocation.name}): ${pl.name} created ${hatch} 1/1 token(s).`,
         );
       }
+    }
+  }
+
+  // Scorched-Earth [X] (new set): a revealed Location burns every Unit on
+  // the battlefield — both players' — for X, regardless of Symmetric (it's
+  // inherently a two-sided effect).
+  if (next.activeLocation) {
+    const scorchedEarth = keywordValue(next.activeLocation, 'Scorched-Earth');
+    if (scorchedEarth > 0) {
+      for (const pl of Object.values(next.players)) {
+        for (const u of pl.board) applyDamageToUnit(u, scorchedEarth);
+      }
+      next.log.push(
+        `Scorched-Earth (${next.activeLocation.name}): all Units take ${scorchedEarth} damage.`,
+      );
     }
   }
 
@@ -878,6 +915,26 @@ function resolveEvent(
       }
       break;
     }
+    case 'scorchedEarth': {
+      // Scorched-Earth [X] (new set): symmetric board-wide burn.
+      for (const pl of [caster, opp]) {
+        for (const u of pl.board) applyDamageToUnit(u, val);
+      }
+      next.log.push(`${card.name} Scorched the Earth for ${val} to every Unit.`);
+      break;
+    }
+    case 'glaciate': {
+      // Glaciate (new set): Freeze every enemy Unit that isn't Guarding.
+      let count = 0;
+      for (const u of opp.board) {
+        if (!kwActive(u, 'Guard')) {
+          u.frozen = Math.max(u.frozen, 1);
+          count++;
+        }
+      }
+      next.log.push(`${card.name} Glaciated ${count} enemy Unit(s).`);
+      break;
+    }
   }
   cleanupDeaths(next);
   checkWin(next);
@@ -1090,10 +1147,12 @@ function reduce(state: GameState, action: GameAction): GameState {
         u.attacksThisTurn = 0;
         u.commandedThisTurn = false;
         u.abilityUsedThisTurn = false;
+        u.blessedCharges = kwValueActive(u, 'Blessed');
         for (const it of u.attachedItems) it.abilityUsedThisTurn = false;
       }
       activePlayer.leader.exhausted = false;
       activePlayer.leader.abilityUsedThisTurn = false;
+      activePlayer.leader.blessedCharges = kwValueActive(activePlayer.leader, 'Blessed');
       for (const loc of activePlayer.locations) loc.abilityUsedThisTurn = false;
 
       if ((next.phase as string) !== 'GAME_OVER') next.phase = 'ACTION';
@@ -1120,10 +1179,17 @@ function reduce(state: GameState, action: GameAction): GameState {
       }
       const card = fromGraveyard ? activePlayer.graveyard[cardIdx] : activePlayer.hand[cardIdx];
       // Efficient (new set): a banked discount shrinks the next Unit's cost.
-      const effCost =
+      let effCost =
         card.type === 'Unit'
           ? discountCost(card.cost, activePlayer.deployDiscount || 0)
           : card.cost;
+      // X-Cost (new set): the caster names any amount of extra Generic
+      // resources at cast time; that amount is paid on top of the printed
+      // cost and (below) added to the effect's value.
+      const xAmount = card.xCost ? Math.max(0, Math.floor(action.xAmount || 0)) : 0;
+      if (card.xCost && xAmount > 0) {
+        effCost = { ...(effCost || {}), Generic: (effCost?.Generic || 0) + xAmount };
+      }
       // Glacier (new set): enemy auras surcharge this player's Events.
       const glacierTax = card.type === 'Event' ? auraValue(next, opponentId, 'Glacier') : 0;
       const upfront =
@@ -1148,7 +1214,8 @@ function reduce(state: GameState, action: GameAction): GameState {
           !kwActive(card, 'Wildcast') &&
           card.effect &&
           ['unit', 'friendly'].includes(card.effect.target || '')) ||
-        card.type === 'Item';
+        card.type === 'Item' ||
+        !!card.sacrifice;
       // Events may also legally reference a Leader (e.g. Purge on your own
       // Leader to strip hostile Charms); Items only ever target Units.
       const targetPool =
@@ -1166,11 +1233,17 @@ function reduce(state: GameState, action: GameAction): GameState {
       if (
         card.type === 'Event' &&
         !kwActive(card, 'Wildcast') &&
-        card.effect?.target === 'friendly' &&
+        (card.effect?.target === 'friendly' || card.sacrifice) &&
         targetCard &&
         (targetCard.ownerId !== activePlayer.id || targetCard.type !== 'Unit')
       ) {
         next.log.push(`${card.name} can only target one of your own Units.`);
+        return next;
+      }
+      // Sacrifice-cost (new set): the named Unit must actually be a friendly
+      // Unit on the caster's own board — this is part of the cost, so an
+      // invalid or missing sacrifice target aborts the whole cast up front.
+      if (card.sacrifice && (!targetCard || targetCard.ownerId !== activePlayer.id || targetCard.type !== 'Unit')) {
         return next;
       }
 
@@ -1258,6 +1331,30 @@ function reduce(state: GameState, action: GameAction): GameState {
         activePlayer.hand.splice(cardIdx, 1);
       }
 
+      // Sacrifice-cost (new set): pay the sacrifice now, as part of the cost —
+      // it is NOT refunded even if Feedback later negates the effect. The
+      // sacrificed Unit's printed attack feeds the effect's value.
+      let sacrificeBonus = 0;
+      if (card.sacrifice && targetCard) {
+        sacrificeBonus = targetCard.attack || 0;
+        activePlayer.board = activePlayer.board.filter(
+          (u) => u.instanceId !== targetCard.instanceId,
+        );
+        for (const it of targetCard.attachedItems) {
+          if (!it.isToken) next.players[it.ownerId]?.graveyard.push(it);
+        }
+        targetCard.attachedItems = [];
+        targetCard.glitched = false;
+        targetCard.frozen = 0;
+        targetCard.scorch = 0;
+        targetCard.tainted = 0;
+        if (!targetCard.isToken) activePlayer.graveyard.push(targetCard);
+        next.log.push(`${activePlayer.name} sacrificed ${targetCard.name} to cast ${card.name}.`);
+      }
+      if (card.effect && (xAmount > 0 || sacrificeBonus > 0)) {
+        card.effect = { ...card.effect, value: (card.effect.value || 0) + xAmount + sacrificeBonus };
+      }
+
       // Overclock keyword triggers: grants resource, adds penalty
       const overclockVal = kwValueActive(card, 'Overclock');
       if (overclockVal > 0) {
@@ -1265,6 +1362,23 @@ function reduce(state: GameState, action: GameAction): GameState {
         activePlayer.overclockPenalty += overclockVal;
         next.log.push(
           `${activePlayer.name} triggered Overclock ${overclockVal}: Gained ${overclockVal} resources now, but will suffer -${overclockVal} on next roll.`,
+        );
+      }
+      // Overload [X] (new set): Overclock's random-element sibling — grants X
+      // of a random one of the caster's own Leader elements instead of Generic.
+      const overloadVal = kwValueActive(card, 'Overload');
+      let overloadElement: string | undefined;
+      if (overloadVal > 0) {
+        const elements = activePlayer.leader.elements.filter((e) => e !== 'Generic');
+        overloadElement =
+          elements.length > 0
+            ? elements[Math.floor(Math.random() * elements.length)]
+            : 'Generic';
+        activePlayer.resources[overloadElement] =
+          (activePlayer.resources[overloadElement] || 0) + overloadVal;
+        activePlayer.overclockPenalty += overloadVal;
+        next.log.push(
+          `${activePlayer.name} triggered Overload ${overloadVal}: Gained ${overloadVal} ${overloadElement} now, but will suffer -${overloadVal} on next roll.`,
         );
       }
 
@@ -1288,6 +1402,13 @@ function reduce(state: GameState, action: GameAction): GameState {
               0,
               activePlayer.overclockPenalty - overclockVal,
             );
+          }
+          if (overloadVal > 0 && overloadElement) {
+            activePlayer.resources[overloadElement] = Math.max(
+              0,
+              (activePlayer.resources[overloadElement] || 0) - overloadVal,
+            );
+            activePlayer.overclockPenalty = Math.max(0, activePlayer.overclockPenalty - overloadVal);
           }
           if (fromGraveyard) {
             activePlayer.graveyard.push(card); // negated Graveborn cast returns to the graveyard
@@ -1826,6 +1947,12 @@ function onCombatDamageToUnit(next: GameState, attacker: GameCard, target: GameC
   if (taint > 0 && target.type === 'Unit') {
     target.tainted = (target.tainted || 0) + taint;
     next.log.push(`${target.name} was Tainted ${taint}.`);
+  }
+  // Freeze-Dry [X] (new set): combat damage also Freezes the target for X turns.
+  const freezeDry = kwValueActive(attacker, 'Freeze-Dry');
+  if (freezeDry > 0 && target.type === 'Unit') {
+    target.frozen = Math.max(target.frozen, freezeDry);
+    next.log.push(`${attacker.name}'s Freeze-Dry froze ${target.name} for ${freezeDry} turn(s).`);
   }
   // Inferno (new set): combat damage splashes 1 onto the victim's other Units.
   if (kwActive(attacker, 'Inferno') && target.type === 'Unit') {

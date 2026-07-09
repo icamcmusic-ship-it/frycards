@@ -408,11 +408,40 @@ function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState)
         );
       }
     } else if (card.type === 'Event') {
-      for (const tgt of eventTargets(state, card, me, opp)) {
-        push(
-          { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: tgt || undefined },
-          `${card.id}>${tgt || 'none'}`,
-        );
+      if (card.sacrifice) {
+        // Sacrifice-cost (new set): name a friendly Unit to feed the effect —
+        // prefer the weakest one, since its printed attack becomes the payoff.
+        for (const unit of [...me.board]
+          .filter((u) => u.type === 'Unit')
+          .sort((a, b) => unitValue(a, state) - unitValue(b, state))
+          .slice(0, 2)) {
+          push(
+            { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: unit.instanceId },
+            `${card.id}>sac:${unit.id}`,
+          );
+        }
+      } else if (card.xCost) {
+        // X-Cost (new set): try holding nothing back, spending half the
+        // spare budget, and going all-in on the rest of the floating pool.
+        const floating = Object.values(me.resources).reduce((a, b) => a + b, 0);
+        const baseCost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+        const budget = Math.max(0, floating - baseCost);
+        const options = [...new Set([0, Math.ceil(budget / 2), budget])];
+        for (const x of options) {
+          for (const tgt of eventTargets(state, card, me, opp)) {
+            push(
+              { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: tgt || undefined, xAmount: x },
+              `${card.id}>${tgt || 'none'}>x${x}`,
+            );
+          }
+        }
+      } else {
+        for (const tgt of eventTargets(state, card, me, opp)) {
+          push(
+            { type: 'PLAY_CARD', instanceId: card.instanceId, targetId: tgt || undefined },
+            `${card.id}>${tgt || 'none'}`,
+          );
+        }
       }
     }
   }
