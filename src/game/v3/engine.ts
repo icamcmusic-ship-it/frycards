@@ -548,6 +548,21 @@ export function startTurn(g: Game) {
   p.dice = Array.from({ length: 5 }, () => ({ value: d6(g.rng), placed: false }));
 }
 
+/**
+ * Mulligan (§2 setup): shuffle the player's hand back into their deck and
+ * redraw 5. Once per player, enforced by the caller/UI.
+ */
+export function mulliganRedraw(g: Game, pid: string) {
+  const p = g.players[pid];
+  p.deck.push(...p.hand);
+  p.hand = [];
+  for (let i = p.deck.length - 1; i > 0; i--) {
+    const j = Math.floor(g.rng() * (i + 1));
+    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+  }
+  for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+}
+
 /** Reroll Phase: reroll any subset exactly once. Closes the Snap-only window. */
 export function reroll(g: Game, indices: number[]) {
   const p = g.players[g.active];

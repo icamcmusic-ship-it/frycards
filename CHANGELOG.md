@@ -5,6 +5,35 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (v4.2 frontend — the dice-placement game is now playable in the app)
+
+- **New match UI** (`src/components/GameV4.tsx`): full interactive
+  implementation of Rulebook v4.2 — five-dice tray with reroll selection,
+  Snap-Charm window during the Reroll Phase, all four die destinations
+  (hand Cast Slots with threshold/combo-gate legality hints, Ability Slots on
+  Units/Leader/Location with Resolve/Excavate-adjusted thresholds, Twin
+  staging + completion + abandon, Echo recasting from a discard drawer with
+  fodder selection), free Location casts, Scrap rerolls, Ultimate(N) button,
+  one-combo-gate-per-turn enforcement surfaced in the UI, targeted casting
+  with highlight-and-click target picking, sequential combat with Guard-aware
+  legal-target highlighting, Pitch shown on the End Turn button, mulligan
+  overlay, card inspector, and a live log. CPU opponent plays through the
+  same AI as the headless playtest harness.
+- **Play screen** now offers the twelve v4.2 archetype decks (real card art
+  via the remapped pool); the CPU picks a random different archetype. Match
+  gold payouts still record through Supabase.
+- **How to Play** rewritten as a condensed v4.2 rulebook (turn structure,
+  casting, combat damage order, every keyword incl. the twelve new ones, and
+  the measured combo-pattern hit rates).
+- **Engine**: added `mulliganRedraw()` so the UI's mulligan goes through the
+  engine like every other action.
+- Removed the legacy resource-game match screen (`src/components/Board.tsx`
+  and the old in-App modals); the meta screens (store, collection, deck
+  builder, profile) are unchanged.
+- Verified end-to-end in a real browser (Playwright + bundled Chromium):
+  guest login → archetype select → mulligan → multiple full turns with casts,
+  targeting and combat → game over screen, with zero console/page errors.
+
 ### Added (Rulebook v4.2 — combo-gate cap, Twin A/B/C test, 12 new keywords)
 
 - **Rulebook v4.2** (`docs/RULEBOOK.md`): Combo-gated cards capped at **one
