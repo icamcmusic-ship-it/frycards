@@ -8,6 +8,19 @@
  */
 import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw } from './cards';
 
+/**
+ * v4.2 Twin A/B test modes (errata B): the two isolated fixes for Twin's
+ * -22pt win-correlation are mutually exclusive, tested as separate batches.
+ * - 'oneDiePerTurn' (v4.1 default): the cap that caused the regression.
+ * - 'sameTurn' (fix 1): revert the cap — Twin is "two matching dice, any timing".
+ * - 'stagedPassive' (fix 2): keep the cap, but staged cards do something while parked.
+ */
+export type TwinMode = 'oneDiePerTurn' | 'sameTurn' | 'stagedPassive';
+export interface RuleConfig {
+  twinMode: TwinMode;
+}
+const DEFAULT_RULES: RuleConfig = { twinMode: 'oneDiePerTurn' };
+
 // ---------------------------------------------------------------------------
 // RNG (seeded, for reproducible playtests)
 // ---------------------------------------------------------------------------
@@ -48,6 +61,10 @@ export interface Inst {
   stagedTurns: number;
   /** v4.0: true if this Twin card received its first die this same Placement Phase. */
   stagedThisTurn?: boolean;
+  /** v4.2 Ultimate(N): true once this Leader's second Ability Slot has fired (once per game). */
+  ultimateUsed?: boolean;
+  /** v4.2 Excavate: accumulated per-controller-turn threshold reduction while this Location is in play. */
+  excavateStacks?: number;
 }
 
 export interface Die {
@@ -70,9 +87,13 @@ export interface Player {
   locationCastThisTurn: boolean;
   rallyUsedThisTurn: boolean;
   turnsTaken: number;
+  /** v4.2: at most one Combo-gated card (cast or Echo-recast) per Placement Phase. */
+  comboGateCastThisTurn: boolean;
 }
 
 export type Phase = 'PLACEMENT' | 'COMBAT' | 'DONE';
+/** v4.2 Snap: the Reroll Phase window closes (and the Placement window opens) when reroll() is called. */
+export type TurnStage = 'PRE_REROLL' | 'PLACEMENT';
 
 export interface Game {
   players: Record<string, Player>;
@@ -83,6 +104,10 @@ export interface Game {
   rng: Rng;
   log: string[];
   stats: GameStats;
+  rules: RuleConfig;
+  stage: TurnStage;
+  /** v4.2 Aftershock: queued effects that fire at the start of their owner's next turn, before Draw Phase. */
+  pendingAftershocks: { ownerId: string; effect: Effect }[];
 }
 
 export interface GameStats {
@@ -100,6 +125,9 @@ export interface GameStats {
   leaderAbilityUses: Record<string, number>;
   /** v4.1 decision tracking: per-player counts of notable plays (for win-correlation). */
   decisions: Record<string, Record<string, number>>;
+  /** v4.2 new-keyword sanity counters: total damage prevented by each mechanic. */
+  bulwarkReduced: number;
+  tollReduced: number;
 }
 
 /** Increment a per-player decision counter (v4.1 tracking). */
@@ -120,6 +148,13 @@ export function makeInst(def: CardDef, owner: string): Inst {
   };
 }
 
+/** v4.2: bucket a card's rarity for Echo win-delta breakdown (errata B). */
+export function rarityTier(r?: string): 'low' | 'mid' | 'high' {
+  if (r === 'Legendary' || r === 'Mythic') return 'high';
+  if (r === 'Rare' || r === 'Super-Rare') return 'mid';
+  return 'low';
+}
+
 export function opponentOf(g: Game, pid: string): Player {
   return g.players[g.order[0] === pid ? g.order[1] : g.order[0]];
 }
@@ -127,14 +162,27 @@ export function opponentOf(g: Game, pid: string): Player {
 // ---------------------------------------------------------------------------
 // Stats / derived values
 // ---------------------------------------------------------------------------
+/** v4.2 Contested: a Location's passive doubles while the opponent controls no Location. */
+function locPassiveMultiplier(g: Game, owner: Inst): number {
+  const p = g.players[owner.owner];
+  if (!p.location?.def.contested) return 1;
+  const opp = opponentOf(g, owner.owner);
+  return opp.location ? 1 : 2;
+}
 export function effAtk(g: Game, u: Inst): number {
   const p = g.players[u.owner];
-  const loc = u.def.type === 'Unit' && p.location?.def.locPassive === 'ATK_ALL' ? 1 : 0;
+  let loc = 0;
+  if (u.def.type === 'Unit' && p.location?.def.locPassive === 'ATK_ALL') {
+    loc = 1 * locPassiveMultiplier(g, u);
+  }
   return Math.max(0, (u.def.atk || 0) + u.permAtk + loc);
 }
 export function effMaxHp(g: Game, u: Inst): number {
   const p = g.players[u.owner];
-  const loc = u.def.type === 'Unit' && p.location?.def.locPassive === 'HP_ALL' ? 1 : 0;
+  let loc = 0;
+  if (u.def.type === 'Unit' && p.location?.def.locPassive === 'HP_ALL') {
+    loc = 1 * locPassiveMultiplier(g, u);
+  }
   return Math.max(0, (u.def.hp || 0) + u.permHp + loc);
 }
 export function remainingHp(g: Game, u: Inst): number {
@@ -152,6 +200,27 @@ export function effThreshold(g: Game, pid: string, def: CardDef): number {
   // v4.0: cap the reduction at 2 so Anchor is ramp, not a threshold collapse
   // that lets a wide Anchor board dump its whole hand at threshold 1.
   return Math.max(1, t - Math.min(2, inPlay));
+}
+
+/**
+ * v4.2: effective Ability Slot threshold, covering Resolve X (Leader, while
+ * at/below half HP) and Excavate X (Location, -X per controller turn in play).
+ */
+export function effAbilityThreshold(g: Game, u: Inst): number {
+  let t = u.def.ability?.threshold ?? 1;
+  if (u.def.resolve && u.def.type === 'Leader') {
+    const max = effMaxHp(g, u);
+    if (max > 0 && remainingHp(g, u) * 2 <= max) t -= u.def.resolve.x;
+  }
+  if (u.def.excavate && u.def.type === 'Location') {
+    t -= u.def.excavate.x * (u.excavateStacks || 0);
+  }
+  return Math.max(1, t);
+}
+
+/** v4.2 Toll X: sum of Toll on a player's board, reducing all incoming Leader damage. */
+export function tollReduction(g: Game, ownerId: string): number {
+  return g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +276,7 @@ export function newGame(
   a: string | DeckDef,
   b: string | DeckDef,
   rng: Rng,
+  rules: Partial<RuleConfig> = {},
 ): Game {
   const deckA: DeckDef = typeof a === 'string'
     ? { leaderId: a, cards: DECKLISTS_V3[a] } : a;
@@ -223,6 +293,7 @@ export function newGame(
       id, leader: makeInst(leaderDef, id), deck, hand: [], discard: [], banished: [],
       staging: [], board: [], location: null, dice: [], rerollUsed: false,
       locationCastThisTurn: false, rallyUsedThisTurn: false, turnsTaken: 0,
+      comboGateCastThisTurn: false,
     };
   };
   const g: Game = {
@@ -237,7 +308,11 @@ export function newGame(
       casts: {}, comboTriggers: {}, echoRecasts: 0, twinCompletions: 0, twinAbandons: 0,
       scraps: 0, rallies: 0, wardBlocks: 0, diceWasted: 0, dicePitched: 0, attacks: 0,
       leaderAbilityUses: {}, decisions: { A: {}, B: {} },
+      bulwarkReduced: 0, tollReduced: 0,
     },
+    rules: { ...DEFAULT_RULES, ...rules },
+    stage: 'PRE_REROLL',
+    pendingAftershocks: [],
   };
   for (const p of Object.values(g.players)) {
     shuffle(p.deck, rng);
@@ -265,7 +340,14 @@ function discardCard(g: Game, p: Player, c: Inst) {
 export function cleanupDeaths(g: Game) {
   for (const p of Object.values(g.players)) {
     const dead = p.board.filter((u) => remainingHp(g, u) <= 0);
-    p.board = p.board.filter((u) => remainingHp(g, u) > 0);
+    if (dead.length === 0) continue;
+    const survivors = p.board.filter((u) => remainingHp(g, u) > 0);
+    // v4.2 Avenge: state-based, no priority window — every surviving Avenge
+    // Unit gets +1/+1 for each friendly Unit that just died, automatically.
+    for (const u of survivors) {
+      if (u.def.avenge) { u.permAtk += dead.length; u.permHp += dead.length; }
+    }
+    p.board = survivors;
     for (const u of dead) {
       g.log.push(`${u.def.name} was destroyed.`);
       discardCard(g, p, u);
@@ -299,6 +381,21 @@ function wardCheck(g: Game, target: Inst, hostile: boolean): boolean {
   return false;
 }
 
+/** v4.2 Crescendo X: +X to an Event's numeric effect per die of value 6 placed this turn. */
+function withCrescendo(p: Player, c: Inst, eff: Effect): Effect {
+  if (!c.def.crescendo) return eff;
+  const sixes = p.dice.filter((d) => d.placed && d.value === 6).length;
+  if (sixes <= 0) return eff;
+  return { ...eff, value: (eff.value || 0) + sixes * c.def.crescendo.x };
+}
+
+/** v4.2 Aftershock: queue the delayed half-value repeat for the caster's next startTurn. */
+function queueAftershock(g: Game, p: Player, c: Inst) {
+  if (!c.def.aftershock) return;
+  g.pendingAftershocks.push({ ownerId: p.id, effect: c.def.aftershock });
+  decide(g, p.id, 'aftershockQueued');
+}
+
 function drawCards(g: Game, p: Player, n: number) {
   // Non-Draw-Phase draws never deck anyone out (§9).
   for (let i = 0; i < n; i++) {
@@ -319,7 +416,14 @@ export function applyEffect(g: Game, ownerId: string, eff: Effect, targetIid?: s
 
   const dmg = (t: Inst, amount: number, hostile: boolean) => {
     if (wardCheck(g, t, hostile)) return;
-    t.damage += amount;
+    // v4.2 Toll X: friendly Units reduce ALL incoming Leader damage, any source.
+    if (t.def.type === 'Leader' && hostile) {
+      const toll = Math.min(amount, tollReduction(g, t.owner));
+      g.stats.tollReduced += toll;
+      t.damage += amount - toll;
+    } else {
+      t.damage += amount;
+    }
   };
 
   switch (eff.action) {
@@ -390,6 +494,8 @@ export function startTurn(g: Game) {
   p.rerollUsed = false;
   p.locationCastThisTurn = false;
   p.rallyUsedThisTurn = false;
+  p.comboGateCastThisTurn = false;
+  g.stage = 'PRE_REROLL';
   for (const u of [...p.board, p.leader]) {
     u.hasAttacked = false;
     u.attacksMade = 0;
@@ -399,8 +505,32 @@ export function startTurn(g: Game) {
     u.boundThisTurn = u.boundNextTurn;
     u.boundNextTurn = false;
   }
-  if (p.location) { p.location.abilityUsed = false; p.location.abilityDie = undefined; }
-  for (const s of p.staging) { s.stagedTurns++; s.stagedThisTurn = false; }
+  if (p.location) {
+    p.location.abilityUsed = false;
+    p.location.abilityDie = undefined;
+    // v4.2 Excavate X: Ability Slot threshold drops by X per controller turn in play.
+    if (p.location.def.excavate) p.location.excavateStacks = (p.location.excavateStacks || 0) + 1;
+  }
+  // v4.2 Twin stagedPassive: fires once per controller turn while parked,
+  // starting the turn AFTER the card was staged (it's staged mid-Placement of
+  // the turn it first went to Staging, so the earliest a full "parked turn"
+  // has elapsed is the start of the controller's next turn).
+  for (const s of p.staging) {
+    s.stagedTurns++;
+    s.stagedThisTurn = false;
+    if (s.def.stagedPassive) {
+      applyEffect(g, p.id, s.def.stagedPassive, autoTarget(g, p.id, s.def.stagedPassive), s);
+      decide(g, p.id, 'twinStagedPassive');
+    }
+  }
+
+  // v4.2 Aftershock: delayed effects fire now, before the Draw Phase.
+  const mine = g.pendingAftershocks.filter((a) => a.ownerId === p.id);
+  g.pendingAftershocks = g.pendingAftershocks.filter((a) => a.ownerId !== p.id);
+  for (const a of mine) {
+    applyEffect(g, p.id, a.effect, autoTarget(g, p.id, a.effect), p.leader);
+    decide(g, p.id, 'aftershockResolved');
+  }
 
   // Draw Phase (first player skips on the very first turn).
   const isFirstPlayerFirstTurn = g.turn === 1;
@@ -418,12 +548,16 @@ export function startTurn(g: Game) {
   p.dice = Array.from({ length: 5 }, () => ({ value: d6(g.rng), placed: false }));
 }
 
-/** Reroll Phase: reroll any subset exactly once. */
+/** Reroll Phase: reroll any subset exactly once. Closes the Snap-only window. */
 export function reroll(g: Game, indices: number[]) {
   const p = g.players[g.active];
-  if (p.rerollUsed) return;
+  if (p.rerollUsed) {
+    g.stage = 'PLACEMENT';
+    return;
+  }
   for (const i of indices) if (!p.dice[i].placed) p.dice[i].value = d6(g.rng);
   p.rerollUsed = true;
+  g.stage = 'PLACEMENT';
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +589,11 @@ function enterPlay(g: Game, p: Player, c: Inst, dieValue: number, viaEcho = fals
     cleanupDeaths(g); // HP_ALL leaving can kill units
   } else {
     // Charm / Event: resolve then discard.
-    if (c.def.onCast) applyEffect(g, p.id, c.def.onCast, autoTarget(g, p.id, c.def.onCast), c);
+    if (c.def.onCast) {
+      const eff = withCrescendo(p, c, c.def.onCast);
+      applyEffect(g, p.id, eff, autoTarget(g, p.id, eff), c);
+      queueAftershock(g, p, c);
+    }
     discardCard(g, p, c);
   }
   if (c.def.type === 'Unit' && c.def.onCast) {
@@ -520,7 +658,14 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
   // v4.1: Locations never use a die — they cast free via castLocationFree().
   if (c.def.type === 'Location') return false;
 
+  // v4.2 Snap: everything else must wait for the Placement Phase to open.
+  if (g.stage === 'PRE_REROLL' && !c.def.snap) return false;
+
   if (c.def.comboGate) {
+    // v4.2 systemic fix (errata A): at most one Combo-gated card per turn,
+    // regardless of how many qualify — closes the general chaining failure
+    // mode, not just the one offending card.
+    if (p.comboGateCastThisTurn) return false;
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
     // any die value works
   } else {
@@ -529,21 +674,29 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
 
   die.placed = true;
   p.hand.splice(idx, 1);
+  if (c.def.comboGate) p.comboGateCastThisTurn = true;
 
   if (hasKw(c.def, 'Twin')) {
-    // First Twin slot filled -> Staging Zone. v4.0: one die per Placement Phase.
+    // First Twin slot filled -> Staging Zone.
     c.stagedDie = die.value;
     c.stagedTurns = 0;
     c.stagedThisTurn = true;
     p.staging.push(c);
     g.log.push(`${c.def.name} moved to Staging (die ${die.value}).`);
+    // v4.2 Twin A/B test (errata B, mode 'sameTurn'): if a second unplaced die
+    // already matches, complete it immediately in the same Placement Phase.
+    if (g.rules.twinMode === 'sameTurn') {
+      const matchIdx = p.dice.findIndex((d, i) => i !== dieIndex && !d.placed && d.value === die.value);
+      if (matchIdx >= 0) completeTwin(g, matchIdx, c.iid);
+    }
     return true;
   }
   if (c.def.onCast && targetIid) {
     // Caller-specified target overrides autoTarget: pre-resolve here.
     g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
     if (c.def.type === 'Charm' || c.def.type === 'Event') {
-      applyEffect(g, p.id, c.def.onCast, targetIid, c);
+      applyEffect(g, p.id, withCrescendo(p, c, c.def.onCast), targetIid, c);
+      queueAftershock(g, p, c);
       const eff = effThreshold(g, p.id, c.def);
       if (c.def.overflow && c.def.threshold !== undefined && die.value - eff >= c.def.overflow.amount) {
         applyEffect(g, p.id, c.def.overflow.effect, autoTarget(g, p.id, c.def.overflow.effect), c);
@@ -579,6 +732,7 @@ export function castLocationFree(g: Game, cardIid: string): boolean {
 /** Destination 2: activate an Ability Slot on a card in play (or the Leader / Location). */
 export function activateAbility(g: Game, dieIndex: number, cardIid: string, targetIid?: string): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
   const c = [...p.board, p.leader, p.location].find((x): x is Inst => !!x && x.iid === cardIid);
   if (!die || !c || !c.def.ability || c.abilityUsed) return false;
@@ -586,7 +740,7 @@ export function activateAbility(g: Game, dieIndex: number, cardIid: string, targ
     if (c.hasAttacked || c.boundThisTurn) return false;
     if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
   }
-  if (die.value < c.def.ability.threshold) return false;
+  if (die.value < effAbilityThreshold(g, c)) return false;
   die.placed = true;
   c.abilityUsed = true;
   c.abilityDie = die.value;
@@ -608,13 +762,34 @@ export function activateViaRally(g: Game, rallyIid: string, sourceIid: string, t
   if (c.hasAttacked || c.boundThisTurn) return false;
   if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
   if (src.iid === c.iid || !src.abilityUsed || src.abilityDie === undefined) return false;
-  if (src.abilityDie < c.def.ability.threshold) return false;
+  if (src.abilityDie < effAbilityThreshold(g, c)) return false;
   c.abilityUsed = true;
   c.abilityDie = src.abilityDie;
   src.abilityDie = undefined; // die moves; source stays exhausted
   p.rallyUsedThisTurn = true;
   g.stats.rallies++;
   applyEffect(g, p.id, c.def.ability.effect, targetIid ?? autoTarget(g, p.id, c.def.ability.effect), c);
+  return true;
+}
+
+/**
+ * v4.2 Ultimate(N): a Leader's second, once-per-game Ability Slot, usable
+ * only from the controller's Nth own turn onward. Independent of the
+ * Leader's normal Ability Slot (its own die, its own exhaustion).
+ */
+export function activateUltimate(g: Game, dieIndex: number, targetIid?: string): boolean {
+  const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
+  const leader = p.leader;
+  const ult = leader.def.ultimate;
+  if (!ult || leader.ultimateUsed) return false;
+  if (p.turnsTaken < ult.unlockTurn) return false;
+  const die = pickDie(p, dieIndex);
+  if (!die || die.value < ult.threshold) return false;
+  die.placed = true;
+  leader.ultimateUsed = true;
+  decide(g, p.id, 'ultimateUsed');
+  applyEffect(g, p.id, ult.effect, targetIid ?? autoTarget(g, p.id, ult.effect), leader);
   return true;
 }
 
@@ -626,7 +801,9 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   if (!die || idx < 0) return false;
   const c = p.staging[idx];
   if (die.value !== c.stagedDie) return false;
-  if (c.stagedThisTurn) return false; // v4.0: at most one die per Placement Phase
+  // v4.2 Twin A/B test (errata B): the one-die-per-turn cap only applies in
+  // 'oneDiePerTurn' mode. 'sameTurn' reverts to same-Placement-Phase completion.
+  if (g.rules.twinMode === 'oneDiePerTurn' && c.stagedThisTurn) return false;
   die.placed = true;
   p.staging.splice(idx, 1);
   c.stagedDie = undefined;
@@ -642,6 +819,7 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
 /** Destination 4: Echo-recast from Discard (die meets threshold + discard one card from hand). */
 export function echoRecast(g: Game, dieIndex: number, cardIid: string, discardIid: string): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
   const idx = p.discard.findIndex((c) => c.iid === cardIid);
   const dIdx = p.hand.findIndex((c) => c.iid === discardIid);
@@ -649,17 +827,24 @@ export function echoRecast(g: Game, dieIndex: number, cardIid: string, discardIi
   const c = p.discard[idx];
   if (!hasKw(c.def, 'Echo') || c.echoSpent) return false;
   if (c.def.comboGate) {
+    // v4.2: the one-Combo-gated-card-per-turn cap also covers Echo recasts.
+    if (p.comboGateCastThisTurn) return false;
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
   } else if (die.value < effThreshold(g, p.id, c.def)) {
     return false;
   }
   if (c.def.type === 'Location' && p.locationCastThisTurn) return false;
   die.placed = true;
+  if (c.def.comboGate) p.comboGateCastThisTurn = true;
   p.discard.splice(idx, 1);
   const extra = p.hand.splice(dIdx, 1)[0];
   discardCard(g, p, extra);
   g.stats.echoRecasts++;
   decide(g, p.id, 'echoRecast');
+  // v4.2 errata B: break the Echo win-delta out by what's being recast, so a
+  // "commons drag the average down" story can be told apart from "overpriced
+  // across the board".
+  decide(g, p.id, `echoRecast_${rarityTier(c.def.rarity)}`);
   enterPlay(g, p, c, die.value, true);
   return true;
 }
@@ -667,6 +852,7 @@ export function echoRecast(g: Game, dieIndex: number, cardIid: string, discardIi
 /** Scrap: discard a Scrap card from hand to reroll one unplaced die. */
 export function scrap(g: Game, handIid: string, dieIndex: number): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   const die = pickDie(p, dieIndex);
   const idx = p.hand.findIndex((c) => c.iid === handIid && hasKw(c.def, 'Scrap'));
   if (!die || idx < 0) return false;
@@ -744,8 +930,11 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   decide(g, p.id, tgt.def.type === 'Leader' ? 'faceAttack' : 'unitAttack');
   if (g.turn <= 4 && tgt.def.type === 'Leader') decide(g, p.id, 'earlyFaceAttack');
   if (tgt.def.type === 'Leader') {
-    // One-directional: Leaders have no ATK, no retaliation.
-    tgt.damage += atk;
+    // One-directional: Leaders have no ATK, no retaliation. Toll (v4.2)
+    // reduces this like any other incoming Leader damage.
+    const toll = Math.min(atk, tollReduction(g, tgt.owner));
+    g.stats.tollReduced += toll;
+    tgt.damage += atk - toll;
     g.log.push(`${att.def.name} hit the Leader for ${atk}.`);
     cleanupDeaths(g);
     return true;
@@ -759,9 +948,22 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     tgt.wardUsed = true;
     g.stats.wardBlocks++;
     dmgToTarget = 0;
+  } else if (tgt.def.bulwark) {
+    // v4.2 Bulwark X: flat reduction to damage taken from attacks, checked
+    // Ward (full prevention) -> Bulwark (flat reduction) -> Frenzy (multiplier).
+    const reduced = Math.min(dmgToTarget, tgt.def.bulwark.x);
+    g.stats.bulwarkReduced += reduced;
+    dmgToTarget -= reduced;
   }
   // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
   let retaliation = tgt.boundThisTurn ? 0 : effAtk(g, tgt);
+  // v4.2 Bulwark X: also reduces retaliation damage the attacker itself takes,
+  // before Frenzy's multiplier — same Ward -> Bulwark -> Frenzy sequence.
+  if (att.def.bulwark) {
+    const reduced = Math.min(retaliation, att.def.bulwark.x);
+    g.stats.bulwarkReduced += reduced;
+    retaliation -= reduced;
+  }
   // v4.0 Frenzy: only the SECOND (bonus) swing takes doubled retaliation.
   if (hasKw(att.def, 'Frenzy') && attackNumber === 2) retaliation *= 2;
   const pierceOverflow =
@@ -770,7 +972,10 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   tgt.damage += dmgToTarget;
   att.damage += retaliation; // Ward never protects the attacker on its own attack
   if (pierceOverflow > 0) {
-    opponentOf(g, p.id).leader.damage += pierceOverflow;
+    const oppLeader = opponentOf(g, p.id).leader;
+    const toll = Math.min(pierceOverflow, tollReduction(g, oppLeader.owner));
+    g.stats.tollReduced += toll;
+    oppLeader.damage += pierceOverflow - toll;
     g.log.push(`${att.def.name} Pierced for ${pierceOverflow}.`);
   }
   cleanupDeaths(g);
@@ -785,14 +990,21 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
   // A dead 1 or 2 always has this baseline floor; only a die pitched with the
   // Leader already at full HP is truly "wasted".
+  let pitchedThisTurn = 0;
   for (const d of p.dice) {
     if (d.placed) continue;
     if (p.leader.damage > 0) {
       p.leader.damage = Math.max(0, p.leader.damage - 1);
       g.stats.dicePitched++;
+      pitchedThisTurn++;
     } else {
       g.stats.diceWasted++;
     }
+  }
+  // v4.2 Tribute: Location bonus if you Pitched 2+ dice this turn.
+  if (p.location?.def.tribute && pitchedThisTurn >= 2) {
+    applyEffect(g, p.id, p.location.def.tribute, autoTarget(g, p.id, p.location.def.tribute), p.location);
+    decide(g, p.id, 'tributeTriggered');
   }
   // Discard down to 6.
   while (p.hand.length > 6) {

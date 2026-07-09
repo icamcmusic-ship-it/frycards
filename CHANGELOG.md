@@ -5,6 +5,63 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (Rulebook v4.2 — combo-gate cap, Twin A/B/C test, 12 new keywords)
+
+- **Rulebook v4.2** (`docs/RULEBOOK.md`): Combo-gated cards capped at **one
+  cast per turn** (cast or Echo-recast), closing the general chaining failure
+  mode; the specific Large-Straight face-burn Event retargeted off pure face
+  damage and reduced in power; Bind's retaliation-stop clause (already shipped
+  in engine, now correctly documented). Directed-reroll pattern hit rates
+  measured directly (`scripts/pattern-hitrate.ts`) instead of guessed — the
+  "straight needs a harder tier than matching" hypothesis did **not** hold up
+  (Three of a Kind hits ~54% under directed reroll vs. Small Straight's ~33%;
+  Full House ~18% vs. Large Straight's ~10%, the hardest pattern in its tier).
+- **Twin A/B/C test** (errata B): ran the same deck roster three times, one
+  Twin rule change per run — revert the one-die cap ('sameTurn') vs. keep the
+  cap but add a passive while parked ('stagedPassive'). **stagedPassive won**
+  and ships as the default (`TwinMode` is still an engine-level option for
+  further isolated testing). Holding archetype constant across all three runs
+  showed the original -22pt "completing a Twin" correlation was mostly a
+  **deck-membership confound** (the two Twin-drafting archetypes have the two
+  weakest Leaders in the pool) — the fix is a genuine but modest net positive,
+  not a fix for what was actually a leader-power problem.
+- **Echo win-delta broken out by rarity** of the card being recast: still
+  mildly negative across all three tiers (low/mid/high), not concentrated in
+  commons — so it reads as the die+card cost being uniformly a touch overpriced
+  rather than an AI-misuse artifact, flagged for a future cost trim rather than
+  a keyword rework this pass.
+- **Twelve new v4.2 keywords**, deterministically assigned across the real
+  193-card pool: **Resolve X** and **Ultimate(N)** (Leader — comeback +
+  inevitability tools); **Bulwark X**, **Toll X**, **Avenge** (Unit — scaling
+  defense answers, Ward→Bulwark→Frenzy damage-order specified); **Crescendo X**
+  and **Aftershock** (Event — the preferred "big roll payoff" pattern going
+  forward, and a delayed-effect hook resolving before Draw Phase); **Snap**
+  (Charm — castable during Reroll Phase); **Tribute**, **Excavate X**,
+  **Contested** (Location — Pitch synergy, ramp, and an arms-race passive).
+- **Smarter CPU**: Snap-casting pass before the reroll window closes,
+  Ultimate(N) usage once unlocked, ability-threshold checks now respect
+  Resolve/Excavate reductions everywhere (including Rally's source-die check).
+- Fixed a real bug caught by the harness: the pool generator could assign both
+  Scrap and Snap to the same card, and Snap's "cast it during Reroll" pass ran
+  first every time, silently eating the card's Scrap identity (`scraps: 0`
+  in one run flagged it). Snap and Scrap are now mutually exclusive by
+  construction.
+
+### v4.2 playtest findings (~10,000 games)
+
+- Combo-gate cap verified directly (unit-style engine test): a second
+  qualifying Combo-gated cast in the same turn is now structurally impossible.
+- Bulwark and Toll are both firing (76,922 / 24,278 damage prevented across
+  the run) — neither mechanic is dead on arrival.
+- `ultimateUsed` and `leaderAbility` show large negative win-correlations
+  (-9 to -12pt) that read as a **base-rate confound, not a real effect**: both
+  fire in the large majority of games simply because most games run long
+  enough to reach their unlock turn, so the small "did-not" bucket is mostly
+  games that ended unusually fast (i.e., a decisive early blowout) — not
+  evidence that using the ability caused the loss.
+- No invariant violations across the full run (card-count conservation, no
+  dead units on board, hand cap, no negative damage).
+
 ### Added (Rulebook v4.1 — free Locations, longer games, decision tracking)
 
 - **Rulebook v4.1** (`docs/RULEBOOK.md`): Locations no longer use a die — one

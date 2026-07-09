@@ -5,10 +5,10 @@
  */
 import {
   Game, Inst, Player,
-  reroll, castFromHand, castLocationFree, activateAbility, activateViaRally, completeTwin, echoRecast,
-  scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
-  canAttack, legalTargets, effAtk, remainingHp, effThreshold, rollValues, matchesPattern,
-  opponentOf, autoTarget,
+  reroll, castFromHand, castLocationFree, activateAbility, activateUltimate, activateViaRally,
+  completeTwin, echoRecast, scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
+  canAttack, legalTargets, effAtk, remainingHp, effThreshold, effAbilityThreshold, rollValues,
+  matchesPattern, opponentOf, autoTarget,
 } from './engine';
 import { hasKw } from './cards';
 
@@ -56,6 +56,22 @@ function bestDieFor(p: Player, threshold: number, preferExact = true): number {
   const idxs = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value);
   for (const i of idxs) if (p.dice[i].value >= threshold) return i;
   return -1;
+}
+
+/** v4.2 Snap: cast any Snap-marked Charm during the Reroll Phase, before the window closes. */
+function playSnaps(g: Game, p: Player) {
+  for (const c of [...p.hand]) {
+    if (!c.def.snap || c.def.type !== 'Charm') continue;
+    const thr = effThreshold(g, p.id, c.def);
+    const dieIdx = bestDieFor(p, thr);
+    if (dieIdx < 0) continue;
+    // Same value-gating as ordinary casts: don't burn Snap on a pointless target.
+    const opp = opponentOf(g, p.id);
+    if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
+    if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
+    if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
+    castFromHand(g, dieIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
+  }
 }
 
 function chooseReroll(g: Game, p: Player): number[] {
@@ -234,12 +250,12 @@ function playPlacement(g: Game, p: Player) {
           opp.board.length === 0) ||
         (eff.action === 'draw' && p.hand.length >= 6);
       if (!pointless) {
-        const dieIdx = bestDieFor(p, leaderAb.threshold);
+        const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.leader));
         if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) { progress = true; continue; }
       }
     }
     if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 6) {
-      const dieIdx = bestDieFor(p, p.location.def.ability.threshold);
+      const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) { progress = true; continue; }
     }
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
@@ -250,8 +266,23 @@ function playPlacement(g: Game, p: Player) {
       const eff = u.def.ability.effect;
       if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0)) continue;
       if (eff.action === 'buff' && p.board.length < 2) continue;
-      const dieIdx = bestDieFor(p, u.def.ability.threshold);
+      const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) { progress = true; break; }
+    }
+    if (progress) continue;
+
+    // v4.2 Ultimate(N): fire the Leader's second Ability Slot once unlocked,
+    // once per game, whenever we have a die for it and a sensible target.
+    const ult = p.leader.def.ultimate;
+    if (ult && !p.leader.ultimateUsed && p.turnsTaken >= ult.unlockTurn) {
+      const pointless =
+        (ult.effect.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+        ((ult.effect.action === 'bind' || (ult.effect.action === 'sap' && ult.effect.target === 'enemyUnit')) &&
+          opp.board.length === 0);
+      if (!pointless) {
+        const dieIdx = bestDieFor(p, ult.threshold);
+        if (dieIdx >= 0 && activateUltimate(g, dieIdx)) { progress = true; continue; }
+      }
     }
     if (progress) continue;
 
@@ -265,7 +296,7 @@ function playPlacement(g: Game, p: Player) {
         const src = [...p.board, p.leader, p.location].find(
           (x): x is Inst =>
             !!x && x.iid !== rallyUnit.iid && x.abilityUsed &&
-            (x.abilityDie ?? 0) >= rallyUnit.def.ability!.threshold,
+            (x.abilityDie ?? 0) >= effAbilityThreshold(g, rallyUnit),
         );
         if (src && activateViaRally(g, rallyUnit.iid, src.iid)) { progress = true; continue; }
       }
@@ -328,6 +359,7 @@ export function playTurn(g: Game) {
   startTurn(g);
   if (g.winner) return;
 
+  playSnaps(g, p); // v4.2: Snap Charms may be cast before the Reroll window closes.
   reroll(g, chooseReroll(g, p));
   playPlacement(g, p);
   if (g.winner) return;

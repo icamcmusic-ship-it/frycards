@@ -112,6 +112,9 @@ function mapUnit(c: RawCard): CardDef {
     ]);
     // Twin cards use a modest even threshold so pairs are reachable.
     def.threshold = Math.min(5, Math.max(2, threshold - 1));
+    // v4.2 Twin errata B, fix 2 (stagedPassive test batch): a small passive
+    // while parked in Staging, so the cross-turn cost isn't pure dead tempo.
+    def.stagedPassive = { action: 'mend', value: 1, target: 'friendlyLeader' };
   }
 
   // Some higher-rarity units carry an Ability Slot (utility, not just a body).
@@ -138,6 +141,22 @@ function mapUnit(c: RawCard): CardDef {
   // Overflow reward on a slice, off the effective threshold.
   if (hash(c.id) % 6 === 0) {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
+  }
+
+  // v4.2 new Unit keywords: Bulwark, Toll, Avenge — layered independently of
+  // the primary elemental keyword so reactive shells have scaling defense
+  // beyond raw HP (guidance D's "answers vs. top-end" question, answers side).
+  if (tier >= 1 && hash(c.id) % 7 === 2) {
+    def.bulwark = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
+    def.keywords = [...(def.keywords || []), 'Bulwark'];
+  }
+  if (tier >= 2 && hash(c.id) % 7 === 5) {
+    def.toll = { x: 1 };
+    def.keywords = [...(def.keywords || []), 'Toll'];
+  }
+  if (tier >= 1 && hash(c.id) % 11 === 3) {
+    def.avenge = true;
+    def.keywords = [...(def.keywords || []), 'Avenge'];
   }
   return def;
 }
@@ -195,8 +214,13 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
       tier >= 3 ? (hash(c.id) % 2 ? 'FullHouse' : 'LargeStraight') :
       (hash(c.id) % 2 ? 'ThreeKind' : 'TwoPair');
     base.comboGate = gate;
+    // v4.2 errata A: the Large-Straight gate was hitting most turns under
+    // directed rerolling (keep-distinct-dice is a much stronger completion
+    // strategy than the equivalent matching play), so its Sap-8-to-face line
+    // was a repeatable, near-uncounterable burn spell. Retargeted off pure
+    // face damage AND dropped in power — both levers, not either/or.
     base.onCast = gate === 'LargeStraight'
-      ? { action: 'sap', value: 8, target: 'enemyLeader' }
+      ? { action: 'sap', value: 5, target: 'anyTarget' }
       : gate === 'FullHouse'
         ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
         : { action: 'sap', value: 5, target: 'anyTarget' };
@@ -238,6 +262,29 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   if (asCharm && (el === 'Tech' || el === 'Flame') && hash(c.id) % 2 === 0) {
     base.keywords = [...(base.keywords || []), 'Scrap'];
   }
+  // v4.2 Crescendo X (Event only): the preferred pattern for "big roll payoff"
+  // cards going forward — scales with a hot roll (dice of value 6 placed this
+  // turn) without ever being a dead card, sidestepping the trophy-gate problem
+  // structurally instead of needing rarity guidance to manage it.
+  if (!asCharm && hash(c.id) % 5 === 3) {
+    base.crescendo = { x: 1 + (tier >= 3 ? 1 : 0) };
+    base.keywords = [...(base.keywords || []), 'Crescendo'];
+  }
+  // v4.2 Aftershock (Event only): a delayed half-value echo of the main
+  // effect, resolving at the start of the caster's next turn before Draw.
+  if (!asCharm && tier >= 2 && hash(c.id) % 6 === 4 && base.onCast) {
+    const halfValue = Math.max(1, Math.floor((base.onCast.value || 2) / 2));
+    base.aftershock = { action: base.onCast.action, value: halfValue, target: base.onCast.target };
+    base.keywords = [...(base.keywords || []), 'Aftershock'];
+  }
+  // v4.2 Snap (Charm only): castable during the Reroll Phase, not just Placement.
+  // Mutually exclusive with Scrap — Scrap's whole identity is "discard this
+  // instead of casting it"; if a card also auto-casts via Snap before the
+  // AI's Scrap pass ever sees it in hand, Scrap never fires.
+  if (asCharm && !base.keywords?.includes('Scrap') && hash(c.id) % 4 === 2) {
+    base.snap = true;
+    base.keywords = [...(base.keywords || []), 'Snap'];
+  }
   return base;
 }
 
@@ -263,6 +310,21 @@ function mapLocation(c: RawCard): CardDef {
       { threshold: 4, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
     ]);
   }
+  // v4.2 new Location keywords: Tribute (synergy with Pitch), Excavate
+  // (ramp identity), Contested (arms-race decision) — each on its own slice.
+  if (def.ability && hash(c.id) % 5 === 0) {
+    def.tribute = pick(c.id, 7, [
+      { action: 'draw', value: 1, target: 'none' } as Effect,
+      { action: 'mend', value: 2, target: 'friendlyAny' } as Effect,
+    ]);
+    def.keywords = ['Tribute'];
+  } else if (def.ability && hash(c.id) % 5 === 1) {
+    def.excavate = { x: 1 };
+    def.keywords = ['Excavate'];
+  } else if (tier >= 1 && hash(c.id) % 5 === 2) {
+    def.contested = true;
+    def.keywords = ['Contested'];
+  }
   return def;
 }
 
@@ -283,11 +345,39 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   apex_nanite_shinobi: { threshold: 4, effect: { action: 'buff', value: 2, target: 'friendlyUnit' } },
 };
 
+// v4.2 Resolve X: while at/below half HP, Ability Slot threshold -X. Given to
+// the leaders whose plan is reactive/defensive — a direct answer to the
+// measured +19pt early-face-attack dominance, without touching combat math.
+const LEADER_RESOLVE: Record<string, number> = {
+  mer_king: 2,
+  apex_nanite_shinobi: 2,
+  ethereal_sea_witch: 1,
+};
+
+// v4.2 Ultimate(N): a second, once-per-game Ability Slot from the controller's
+// Nth own turn on — the answer to "reactive leaders lack inevitability".
+// Every Leader gets one; the unlock turn and power are tuned per archetype.
+const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
+  avatar_of_the_abyss: { unlockTurn: 5, threshold: 6, effect: { action: 'sap', value: 8, target: 'anyTarget' } },
+  ethereal_sea_witch: { unlockTurn: 6, threshold: 6, effect: { action: 'bind', target: 'enemyUnit' } },
+  mer_king: { unlockTurn: 4, threshold: 5, effect: { action: 'mend', value: 8, target: 'friendlyAny' } },
+  legendary_diver: { unlockTurn: 5, threshold: 6, effect: { action: 'draw', value: 2, target: 'none' } },
+  crimson_vector_commander: { unlockTurn: 5, threshold: 6, effect: { action: 'sap', value: 6, target: 'enemyLeader' } },
+  apex_nanite_shinobi: { unlockTurn: 4, threshold: 5, effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' } },
+};
+
 function mapLeader(c: RawCard): CardDef {
+  const resolveX = LEADER_RESOLVE[c.id];
   return {
     id: c.id, name: c.name, type: 'Leader', hp: LEADER_HP,
     ability: LEADER_ABILITIES[c.id] ||
       { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
+    resolve: resolveX ? { x: resolveX } : undefined,
+    ultimate: LEADER_ULTIMATE[c.id],
+    keywords: [
+      ...(resolveX ? ['Resolve'] : []),
+      ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : []),
+    ],
     rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
   };
 }

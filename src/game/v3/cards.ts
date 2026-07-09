@@ -67,9 +67,35 @@ export interface CardDef {
   overflow?: { amount: number; effect: Effect };
   /** Twin bonus effect, triggered when the second matched die completes the card. */
   twinBonus?: Effect;
+  /** v4.2: passive effect a Twin card grants once per controller turn while parked in Staging. */
+  stagedPassive?: Effect;
   /** Location passive for the controller's Units. */
   locPassive?: 'ATK_ALL' | 'HP_ALL';
   text?: string;
+
+  // -- v4.2 keywords --
+  /** Resolve X (Leader): while at/below half HP, Ability Slot threshold -X (min 1). */
+  resolve?: { x: number };
+  /** Ultimate(N) (Leader): a second, once-per-game Ability Slot, usable from your Nth turn on. */
+  ultimate?: { unlockTurn: number; threshold: number; effect: Effect };
+  /** Crescendo X (Event): +X to this Event's numeric effect per die of value 6 you placed this turn. */
+  crescendo?: { x: number };
+  /** Bulwark X (Unit): flat reduction to damage this Unit takes from attacks (after Ward, before Frenzy). */
+  bulwark?: { x: number };
+  /** Toll X (Unit): reduces ALL incoming damage to your Leader (any source) by X while this Unit lives. */
+  toll?: { x: number };
+  /** Avenge (Unit): +1/+1 permanently whenever another friendly Unit dies (state-based, no priority window). */
+  avenge?: boolean;
+  /** Aftershock (Event): after resolving, queues this effect to fire at the very start of your next turn, before Draw Phase. */
+  aftershock?: Effect;
+  /** Tribute (Location): triggers at your End Phase if you Pitched 2+ dice this turn. */
+  tribute?: Effect;
+  /** Excavate X (Location): Ability Slot threshold drops by X per controller turn in play (min 1). */
+  excavate?: { x: number };
+  /** Contested (Location): its passive is doubled while the opponent controls no Location. */
+  contested?: boolean;
+  /** Snap (Charm): may be cast during the Reroll Phase (before the reroll window closes), not just Placement. */
+  snap?: boolean;
 }
 
 // v4.1: raised (28 -> 60) to lengthen games by ~4 rounds toward the 8-10 round

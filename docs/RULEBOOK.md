@@ -1,12 +1,25 @@
-# [Working Title] — Definitive Rulebook v4.1
+# [Working Title] — Definitive Rulebook v4.2
 
-Supersedes v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
+Supersedes v4.1, v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
 preserved in `RULEBOOK_V1_LEGACY.md`). The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
-harness).
+harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
+rate under directed rerolling).
+
+**v4.2 errata (applied from an ~8,832-game v4.1 decision-correlation pass):**
+Combo-gated cards are capped at **one cast per turn**, closing the general
+chaining failure mode (not just one card); the specific Large-Straight
+face-burn Event is retargeted off pure face damage and reduced in power;
+**Twin's Staging Zone now grants a small passive while parked** (the winning
+fix of an isolated A/B/C test — see §7); **Bind now also stops retaliation**
+damage the bound Unit would have dealt; twelve new keywords ship across every
+card type (**Resolve**, **Ultimate(N)** for Leaders; **Bulwark**, **Toll**,
+**Avenge** for Units; **Crescendo**, **Aftershock** for Events; **Snap** for
+Charms; **Tribute**, **Excavate**, **Contested** for Locations). See the
+Changelog and §10 for details. Changes are marked *(v4.2)* inline.
 
 **v4.1 errata (applied from a ~10,000-game v4.0 playtest):** Locations no
 longer use a die — one free Location cast per turn as a bonus action; the
@@ -104,6 +117,10 @@ Place your five dice **one at a time**, in any order. Each die may go to exactly
 
 Fully resolve one placement before placing the next. A die you haven't yet placed simply sits available — there's no separate "clear" action to take. Any die still unplaced when Placement Phase ends is automatically cleared (returned to your supply) with no further effect.
 
+**Bonus action, no die *(v4.1)*:** alongside the five die placements above, you may also cast **one Location** from hand for free — see §7. It doesn't consume a die and doesn't compete with anything else you do this turn.
+
+**One Combo-gated card per turn *(v4.2)*:** whether cast from hand or Echo-recast from Discard, you may resolve at most **one** Combo-gated card per turn, regardless of how many qualify against your current roll (see §6).
+
 **Scrap** may be activated at any point during this phase, on any die you haven't placed yet (this includes dice that will simply go unplaced when the phase ends — as long as it's before that happens, it's still eligible). Once a die is placed on any of the four destinations above, it's locked and can't be rerolled by anything, including Scrap.
 
 **Pitch *(v4.0)*:** any die that would otherwise clear unplaced at the end of this phase may instead be pitched for **Mend 1** to your Leader. This requires no card, works on any die value, and is always available — it's the baseline floor for a die that would otherwise do nothing. It's deliberately small (not a draw, not damage) so it never competes with a real play; it just removes the pure-waste feeling of a dead 1 or 2.
@@ -164,6 +181,27 @@ Because this is subset-based rather than tier-based, some rolls legitimately sat
 
 Combo checks only ever read **your own** roll and can only trigger cards **you** control, unless a specific card's text says otherwise.
 
+**One Combo-gated card per turn *(v4.2)*:** you may cast at most **one Combo-gated card per turn**, regardless of how many qualify. This is a systemic cap, not a fix targeted at one card — it closes off any future card that gates on an achievable pattern from chaining with a second one on the same lucky roll. (It also covers Echo-recasting a Combo-gated card from Discard — see §10.)
+
+### Measured hit rate under directed rerolling *(v4.2 design data)*
+
+The table above ranks patterns by rough feel, not a measured number — and the naive single-roll probability is the wrong metric anyway, because a player with one reroll doesn't roll blind: they reroll *toward* their target pattern. `scripts/pattern-hitrate.ts` measures actual hit rate under a directed-reroll strategy (200,000 trials per pattern, keep-and-reroll-toward-the-goal):
+
+| Pattern | Naive (no reroll) | Directed (1 reroll toward it) |
+|---|---:|---:|
+| Any Pair | 90.7% | 99.1% |
+| Two Pair | 27.0% | 56.0% |
+| Three of a Kind | 21.3% | 54.2% |
+| Small Straight | 15.5% | 32.5% |
+| Full House | 3.8% | 18.2% |
+| Four of a Kind | 2.0% | 13.2% |
+| Large Straight | 3.1% | 10.4% |
+| Yahtzee | 0.1% | 1.3% |
+
+**This data does not support "straight-family patterns need a harder tier than matching-family at the same nominal difficulty."** That was the hypothesis behind the v4.1→v4.2 review's recalibration flag, and measuring it directly shows the opposite in most comparisons: Three of a Kind (54.2%) is nearly **double** Small Straight's hit rate (32.5%) under directed rerolling, and Full House (18.2%) is actually *easier* to hit than Large Straight (10.4%) despite sharing the same "big swing" price tag — Large Straight is the single hardest pattern in the "bomb" cluster, harder even than Four of a Kind. If anything, straight-family patterns are *harder* to hit than their nominal matching-family counterpart, not easier. Card design should price off this table, not off intuition about "keeping a run vs. keeping duplicates."
+
+The v4.2 fix to the specific offending Large-Straight-gated Event (see Changelog) wasn't because the gate was too easy — it measures as the hardest pattern in its tier — it's because a repeatable, high-value, face-only burn effect compounds badly over a ~10-round game even at a "only" ~10%-per-turn hit rate, especially with multiple copies in hand (any copy is castable the instant the roll qualifies). The fix (retarget off pure face damage, lower the value, and the new one-Combo-gated-card-per-turn cap) addresses that compounding directly.
+
 ---
 
 ## 7. Casting & Activating
@@ -185,6 +223,10 @@ Some Events have no numeric threshold — their entire cost is "Combo: [Pattern]
 A Twin X card has two Cast Slots. The moment the first is filled, move it face-up into your Staging Zone. **The second die placed must show the exact same face value as the first** — not merely independently meet the printed threshold. The card isn't in play while staged (can't be attacked or targeted) and can sit there across turns. The moment the second slot is filled, it fully enters play, both resting dice immediately return to your supply, and its bonus triggers. Every card with Twin must print its own bonus effect text (e.g. "Twin 1: Draw a card") — Twin has no generic effect on its own.
 
 **One die per Placement Phase *(v4.0)*:** a Twin card may receive **at most one die per Placement Phase**. Its two slots must be filled on two different turns (not necessarily consecutive). This is what makes the Staging Zone and voluntary-abandon rule actually matter — without it, Twin collapses into "cost: two matching dice this turn, with extra steps," which is exactly what 283-completions-vs-12-abandons in v3.0 playtesting showed happening.
+
+**Staged passive *(v4.2)*: while parked, a Twin card isn't doing nothing.** Every card with Twin may print a **staged passive** — a small effect that triggers once at the start of each of your turns for as long as the card sits in your Staging Zone (starting the turn *after* it was first staged, since it's staged mid-Placement-Phase). This is the result of a controlled A/B/C test: the one-die-per-turn cap (above) measured a large negative win-correlation on completing a Twin card. Two isolated fixes were tested against the same deck roster — (1) revert the cap entirely, letting Twin complete in the same Placement Phase, or (2) keep the cap but give staged cards a passive. **Fix 2 won** (best Combo-completion win-delta of the three, and the only one that measurably helped the weakest Twin-drafting archetype). Fix 1 (reverting the cap) is still available as an engine option (`TwinMode: 'sameTurn'`) for further testing, but ships disabled.
+
+*Postscript on the original -22pt reading:* holding archetype composition constant across all three test modes revealed that the raw "win% when completing a Twin" correlation barely moved between modes (roughly 43–46% and 19–23% for the two Twin-drafting archetypes, regardless of which Twin rule was active). That means the original number was measuring **which decks happen to run Twin cards**, not what Twin itself costs — the same "deck membership vs. card power" confound flagged for the OP-card rankings in the v4.0/v4.1 passes. The staged-passive fix is a genuine, if modest, net positive; it was never the primary reason those archetypes were weak.
 
 **Voluntary abandonment:** at the start of any of your turns, before Draw Phase, you may abandon a partially-filled Twin card: return it to your hand and clear its resting die.
 
@@ -245,6 +287,10 @@ You lose immediately if either is true:
 
 **Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 2** *(v4.1)*, minimum threshold 1. See §7 for the printed-vs-effective interaction with Overflow.
 
+**Crescendo X** *(v4.2, Event)* — +X to this Event's numeric effect for each die showing a **6** that you placed this turn (including the die that cast this Event). The preferred pattern for a "big roll payoff" card going forward: it scales with a hot roll but is **never a dead card** on a bad one, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
+
+**Snap** *(v4.2, Charm)* — May be cast during your **Reroll Phase**, before the reroll window closes, instead of waiting for Placement Phase. Still spends a die from your five exactly as an ordinary cast — only the timing changes. Doesn't reopen the no-stack/no-response rule: it's still only ever available on your own turn, before your own reroll decision.
+
 ### Combat keywords
 
 **Guard** — See §8. While you control any Guard Unit, your opponent's attacks must target your Guard Units, resolved one at a time, until all are destroyed.
@@ -257,6 +303,12 @@ You lose immediately if either is true:
 
 **Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. *(v4.0)* Its first attack is normal; **only its second attack** takes doubled retaliation.
 
+**Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
+
+**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop.
+
+**Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own.
+
 ### Utility keywords
 
 **Surge** — Draw a card. See §9 for the empty-deck interaction.
@@ -267,7 +319,23 @@ You lose immediately if either is true:
 
 **Bind** — Target Unit cannot attack, use an Ability Slot, **or deal retaliation damage** *(v4.0)*, during its controller's **next** turn. The retaliation clause turns Bind from "skip a turn" (measured at a weak 41.3% in v3.0) into a genuine tempo tool: it converts a threatening blocker or attacker into a completely safe target for one turn — a real answer to a Guard wall, not a minor speed bump. (By design, self-targeting Bind does nothing on your current turn — it's disruption aimed at an opponent's upcoming turn, so self-targeting is simply useless rather than exploitable.)
 
-**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard. *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard — and is subject to the same **one Combo-gated card per turn** cap as an ordinary cast (§6). *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+
+**Aftershock** *(v4.2, Event)* — After this Event resolves, it leaves behind a delayed, lower-value repeat of its own effect. That delayed effect resolves at the **very start of your next turn, before Draw Phase** — the same timing hook Twin's voluntary-abandon already uses (§7). Turns a big Event into something that feels like a genuine two-turn commitment (and is telegraphed for the opponent to see coming), rather than a single burst.
+
+### Leader keywords
+
+**Resolve X** *(v4.2)* — While your Leader is at or below half its maximum HP, its Ability Slot threshold is reduced by X (reusing the same threshold-reduction language Anchor already established). A comeback mechanic: it directly counters the measured **+19–22pt early-face-attack win-correlation** without touching combat math at all — the worse a Resolve Leader is losing, the cheaper its own answer gets.
+
+**Ultimate(N)** *(v4.2)* — Your Leader gains a **second Ability Slot**, entirely independent of its normal one (its own die, its own threshold, its own exhaustion), but it can only be activated **once per game**, and only starting on your **Nth own turn**. Directly answers the "reactive leaders lack inevitability" gap: a late-game payoff that doesn't require redesigning the Leader's whole early-game plan.
+
+### Location keywords
+
+**Tribute** *(v4.2)* — Triggers at your End Phase if you Pitched 2 or more dice this turn (§3.4). Direct synergy with Pitch: a Location built around your dice going unused instead of a Location built around spending them.
+
+**Excavate X** *(v4.2)* — This Location's Ability Slot threshold drops by X for every one of your turns it has remained continuously in play (minimum 1). A ramp identity: holding a Location long-term instead of replacing it becomes a deliberate payoff, not just inertia.
+
+**Contested** *(v4.2)* — This Location's passive is **doubled** while your opponent controls no Location of their own. Creates a genuine arms-race decision around whether to commit to your own Location or race to deny theirs.
 
 ---
 
@@ -334,10 +402,12 @@ You lose immediately if either is true:
 | Units in play | unlimited |
 | First player | high 1d6 roll; skips first Draw Phase; can't attack their first turn |
 | Combat | sequential targeted-attack, no blocking step; Guard walls until fully destroyed |
-| Twin | *(v4.0)* max 1 die per card per Placement Phase (two slots ⇒ two turns) |
+| Twin | max 1 die per card per Placement Phase (two slots ⇒ two turns); *(v4.2)* staged cards may print a passive that ticks each of your turns while parked |
 | Ward refresh | *(v4.0)* both players, end of every End Phase |
 | Bind | *(v4.0)* stops attack, Ability Slot, **and** retaliation next turn |
 | Frenzy downside | *(v4.0)* only the 2nd attack takes doubled retaliation |
 | Pitch | *(v4.0)* any unplaced die → Mend 1 to your Leader, no card needed |
+| Combo-gated casts | *(v4.2)* max **1 per turn**, cast or Echo-recast, regardless of how many qualify |
+| New v4.2 keywords | Leader: Resolve X, Ultimate(N) · Unit: Bulwark X, Toll X, Avenge · Event: Crescendo X, Aftershock · Charm: Snap · Location: Tribute, Excavate X, Contested |
 
-**Turn order:** Draw → Roll → Reroll → Placement (4 legal die destinations, Scrap + Pitch on unplaced dice) → Combo Check → Combat (sequential) → End (discard to 6, clear exhaustion, refresh Ward both sides, pass turn).
+**Turn order:** Draw (+ any pending Aftershock) → Roll → Reroll (Snap Charms may cast here) → Placement (4 legal die destinations + free Location cast, Scrap + Pitch on unplaced dice, max 1 Combo-gated card) → Combo Check → Combat (sequential) → End (discard to 6, clear exhaustion, refresh Ward both sides, check Tribute, pass turn).

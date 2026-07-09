@@ -1,79 +1,99 @@
 /**
- * v4.0 playtest harness. Plays a round-robin across a wide variety of
+ * v4.2 playtest harness. Plays a round-robin across a wide variety of
  * archetype decks (built from the remapped real card pool), with an advanced
  * CPU (mulligan + deck-aware reroll + combo/lethal-aware placement & combat).
  *
- * Tracks: leader & archetype win rates, first-player edge, game length,
- * per-card usage/impact, keyword/mechanic activity, combo triggers, dice
- * pitch/waste (v4.0 Pitch), and an ISOLATED Location win-rate contribution
- * (each archetype is also run Location-stripped, and the delta is reported).
+ * Two passes:
+ *  1. Twin A/B/C test (errata B): the same deck roster run three times, once
+ *     per TwinMode ('oneDiePerTurn' v4.1 baseline, 'sameTurn' fix 1,
+ *     'stagedPassive' fix 2), isolating which fix actually resolves the
+ *     -22pt Twin regression before picking a default.
+ *  2. Full report using the winning Twin mode: leader/archetype win rates,
+ *     first-player edge, game length, isolated Location contribution,
+ *     per-card usage/impact, decision->win correlation (incl. Echo broken
+ *     out by rarity, and the new v4.2 keywords), combo/mechanic activity.
  *
  * Usage: npx tsx scripts/simulate-v4.ts [gamesPerPairing]
  */
-import { newGame, mulberry32, Game, DeckDef, remainingHp } from '../src/game/v3/engine';
+import { newGame, mulberry32, Game, DeckDef, remainingHp, TwinMode } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
 import { ARCHETYPES, buildDeck } from '../src/game/v3/decks';
 import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
-import { CardDef } from '../src/game/v3/cards';
 
 const PER_PAIR = parseInt(process.argv[2] || '20', 10);
 const MAX_TURNS = 160;
 
-// --- Build the deck roster, plus a Location-stripped twin of each deck. ---
 interface Entry { key: string; label: string; leaderId: string; deck: DeckDef; hasLoc: boolean; }
-const decks: Entry[] = [];
-for (const arch of ARCHETYPES) {
-  const d = buildDeck(arch);
-  decks.push({ key: arch.label, label: arch.label, leaderId: arch.leaderId, deck: d, hasLoc: true });
-  // Location-stripped variant: remove Locations, backfill with best-fit Units.
-  const stripped: Record<string, number> = {};
-  let removed = 0;
-  for (const [id, n] of Object.entries(d.cards)) {
-    if (POOL_BY_ID[id].type === 'Location') { removed += n; continue; }
-    stripped[id] = n;
-  }
-  if (removed > 0) {
-    const fillers = poolByType('Unit')
-      .filter((u) => !stripped[u.id])
-      .sort((a, b) => (a.threshold ?? 3) - (b.threshold ?? 3));
-    let need = removed;
-    for (const u of fillers) {
-      if (need <= 0) break;
-      const c = Math.min(3, need);
-      stripped[u.id] = c; need -= c;
+
+function buildRoster(): Entry[] {
+  const decks: Entry[] = [];
+  for (const arch of ARCHETYPES) {
+    const d = buildDeck(arch);
+    decks.push({ key: arch.label, label: arch.label, leaderId: arch.leaderId, deck: d, hasLoc: true });
+    const stripped: Record<string, number> = {};
+    let removed = 0;
+    for (const [id, n] of Object.entries(d.cards)) {
+      if (POOL_BY_ID[id].type === 'Location') { removed += n; continue; }
+      stripped[id] = n;
     }
-    decks.push({
-      key: arch.label + ' [noLoc]', label: arch.label + ' [noLoc]',
-      leaderId: arch.leaderId, deck: { ...d, cards: stripped }, hasLoc: false,
-    });
+    if (removed > 0) {
+      const fillers = poolByType('Unit')
+        .filter((u) => !stripped[u.id])
+        .sort((a, b) => (a.threshold ?? 3) - (b.threshold ?? 3));
+      let need = removed;
+      for (const u of fillers) {
+        if (need <= 0) break;
+        const c = Math.min(3, need);
+        stripped[u.id] = c; need -= c;
+      }
+      decks.push({
+        key: arch.label + ' [noLoc]', label: arch.label + ' [noLoc]',
+        leaderId: arch.leaderId, deck: { ...d, cards: stripped }, hasLoc: false,
+      });
+    }
   }
+  return decks;
 }
 
-// --- Aggregators ---
-const leaderW: Record<string, number> = {}, leaderN: Record<string, number> = {};
-const archW: Record<string, number> = {}, archN: Record<string, number> = {};
-const locW = { loc: 0, locN: 0, noloc: 0, nolocN: 0 };
-const cardCast: Record<string, number> = {};
-const cardInWinDeck: Record<string, number> = {}, cardInDeck: Record<string, number> = {};
-const comboTriggers: Record<string, number> = {};
-let games = 0, draws = 0, timeouts = 0, deckouts = 0, firstWins = 0, totalRounds = 0;
-let echoRecasts = 0, twinCompletions = 0, twinAbandons = 0, scraps = 0, rallies = 0,
-  wardBlocks = 0, dicePitched = 0, diceWasted = 0, attacks = 0;
-const roundBuckets: Record<string, number> = {};
-const errors: string[] = [];
-// Decision -> {present:[wins,games], absent:[wins,games]} across all decisive player-games.
-const decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }> = {};
-function trackDecision(key: string, present: boolean, won: boolean) {
-  const d = (decisionAgg[key] ||= { pw: 0, pn: 0, aw: 0, an: 0 });
-  if (present) { d.pn++; if (won) d.pw++; } else { d.an++; if (won) d.aw++; }
+const DECISION_KEYS = [
+  'locationCast', 'faceAttack', 'unitAttack', 'earlyFaceAttack', 'boardWipe',
+  'echoRecast', 'echoRecast_low', 'echoRecast_mid', 'echoRecast_high',
+  'twinComplete', 'twinStagedPassive', 'leaderAbility', 'ultimateUsed',
+  'aftershockQueued', 'aftershockResolved', 'tributeTriggered',
+  'wentFirst', 'mulliganed',
+];
+
+interface SuiteResult {
+  games: number; draws: number; timeouts: number; deckouts: number; firstWins: number; totalRounds: number;
+  roundBuckets: Record<string, number>;
+  leaderW: Record<string, number>; leaderN: Record<string, number>;
+  archW: Record<string, number>; archN: Record<string, number>;
+  locW: { loc: number; locN: number; noloc: number; nolocN: number };
+  cardCast: Record<string, number>; cardInWinDeck: Record<string, number>; cardInDeck: Record<string, number>;
+  comboTriggers: Record<string, number>;
+  echoRecasts: number; twinCompletions: number; twinAbandons: number; scraps: number; rallies: number;
+  wardBlocks: number; dicePitched: number; diceWasted: number; attacks: number;
+  bulwarkReduced: number; tollReduced: number;
+  decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
+  errors: string[];
 }
-const DECISION_KEYS = ['locationCast', 'faceAttack', 'unitAttack', 'earlyFaceAttack',
-  'boardWipe', 'echoRecast', 'twinComplete', 'leaderAbility', 'wentFirst', 'mulliganed'];
+
+function newResult(): SuiteResult {
+  return {
+    games: 0, draws: 0, timeouts: 0, deckouts: 0, firstWins: 0, totalRounds: 0,
+    roundBuckets: {}, leaderW: {}, leaderN: {}, archW: {}, archN: {},
+    locW: { loc: 0, locN: 0, noloc: 0, nolocN: 0 },
+    cardCast: {}, cardInWinDeck: {}, cardInDeck: {}, comboTriggers: {},
+    echoRecasts: 0, twinCompletions: 0, twinAbandons: 0, scraps: 0, rallies: 0,
+    wardBlocks: 0, dicePitched: 0, diceWasted: 0, attacks: 0,
+    bulwarkReduced: 0, tollReduced: 0, decisionAgg: {}, errors: [],
+  };
+}
 
 function deckSize(d: DeckDef): number {
   return Object.values(d.cards).reduce((a, b) => a + b, 0);
 }
-function invariants(g: Game, sizeA: number, sizeB: number) {
+function invariants(g: Game, sizeA: number, sizeB: number, errors: string[]) {
   const sizes: Record<string, number> = { A: sizeA, B: sizeB };
   for (const p of Object.values(g.players)) {
     if (g.winner) break;
@@ -86,21 +106,20 @@ function invariants(g: Game, sizeA: number, sizeB: number) {
   }
 }
 
-function runGame(a: Entry, b: Entry, seed: number) {
+function runGame(r: SuiteResult, decks: Entry[], a: Entry, b: Entry, seed: number, twinMode: TwinMode) {
   const rng = mulberry32(seed);
-  const g = newGame(a.deck, b.deck, rng);
+  const g = newGame(a.deck, b.deck, rng, { twinMode });
   const mull = maybeMulligan(g, rng);
-  const sizeA = deckSize(a.deck), sizeB = deckSize(b.deck); // leader lives outside the counted zones
+  const sizeA = deckSize(a.deck), sizeB = deckSize(b.deck);
   const firstPlayer = g.active;
   let rounds = 0;
-  while (!g.winner && rounds < MAX_TURNS) { playTurn(g); invariants(g, sizeA, sizeB); rounds++; }
-  games++;
-  totalRounds += rounds / 2;
+  while (!g.winner && rounds < MAX_TURNS) { playTurn(g); invariants(g, sizeA, sizeB, r.errors); rounds++; }
+  r.games++;
+  r.totalRounds += rounds / 2;
   const bucket = rounds / 2 < 4 ? '<4' : rounds / 2 < 7 ? '4-6' : rounds / 2 < 11 ? '7-10' : '11+';
-  roundBuckets[bucket] = (roundBuckets[bucket] || 0) + 1;
+  r.roundBuckets[bucket] = (r.roundBuckets[bucket] || 0) + 1;
 
-  if (!g.winner) { timeouts++; return; }
-  // Decision -> win correlation, per player, decisive games only.
+  if (!g.winner) { r.timeouts++; return; }
   if (g.winner !== 'draw') {
     for (const pid of ['A', 'B'] as const) {
       const won = g.winner === pid;
@@ -110,109 +129,170 @@ function runGame(a: Entry, b: Entry, seed: number) {
         if (key === 'wentFirst') present = firstPlayer === pid;
         else if (key === 'mulliganed') present = !!mull[pid];
         else present = (d[key] || 0) > 0;
-        trackDecision(key, present, won);
+        const agg = (r.decisionAgg[key] ||= { pw: 0, pn: 0, aw: 0, an: 0 });
+        if (present) { agg.pn++; if (won) agg.pw++; } else { agg.an++; if (won) agg.aw++; }
       }
     }
   }
-  if (g.winner === 'draw') { draws++; }
+  if (g.winner === 'draw') { r.draws++; }
   else {
-    if (g.winner === firstPlayer) firstWins++;
+    if (g.winner === firstPlayer) r.firstWins++;
     const winSide = g.winner as 'A' | 'B';
     const winEntry = winSide === 'A' ? a : b;
     const loseEntry = winSide === 'A' ? b : a;
-    leaderW[winEntry.leaderId] = (leaderW[winEntry.leaderId] || 0) + 1;
-    leaderN[winEntry.leaderId] = (leaderN[winEntry.leaderId] || 0) + 1;
-    leaderN[loseEntry.leaderId] = (leaderN[loseEntry.leaderId] || 0) + 1;
-    archW[winEntry.key] = (archW[winEntry.key] || 0) + 1;
+    r.leaderW[winEntry.leaderId] = (r.leaderW[winEntry.leaderId] || 0) + 1;
+    r.leaderN[winEntry.leaderId] = (r.leaderN[winEntry.leaderId] || 0) + 1;
+    r.leaderN[loseEntry.leaderId] = (r.leaderN[loseEntry.leaderId] || 0) + 1;
+    r.archW[winEntry.key] = (r.archW[winEntry.key] || 0) + 1;
   }
-  archN[a.key] = (archN[a.key] || 0) + 1;
-  archN[b.key] = (archN[b.key] || 0) + 1;
-  if (g.log.some((l) => l.includes('decked out'))) deckouts++;
+  r.archN[a.key] = (r.archN[a.key] || 0) + 1;
+  r.archN[b.key] = (r.archN[b.key] || 0) + 1;
+  if (g.log.some((l) => l.includes('decked out'))) r.deckouts++;
 
-  // Location contribution: tally only games between a Location deck and its
-  // Location-stripped counterpart NOT needed — instead measure each variant's
-  // overall win rate across the full field (below via hasLoc partition).
   for (const [entry, side] of [[a, 'A'], [b, 'B']] as const) {
     const won = g.winner === side;
-    if (entry.hasLoc) { locW.locN++; if (won) locW.loc++; }
-    else { locW.nolocN++; if (won) locW.noloc++; }
+    if (entry.hasLoc) { r.locW.locN++; if (won) r.locW.loc++; }
+    else { r.locW.nolocN++; if (won) r.locW.noloc++; }
   }
 
   const s = g.stats;
-  echoRecasts += s.echoRecasts; twinCompletions += s.twinCompletions; twinAbandons += s.twinAbandons;
-  scraps += s.scraps; rallies += s.rallies; wardBlocks += s.wardBlocks;
-  dicePitched += s.dicePitched; diceWasted += s.diceWasted; attacks += s.attacks;
-  for (const [id, n] of Object.entries(s.comboTriggers)) comboTriggers[id] = (comboTriggers[id] || 0) + n;
-  for (const [id, n] of Object.entries(s.casts)) cardCast[id] = (cardCast[id] || 0) + n;
+  r.echoRecasts += s.echoRecasts; r.twinCompletions += s.twinCompletions; r.twinAbandons += s.twinAbandons;
+  r.scraps += s.scraps; r.rallies += s.rallies; r.wardBlocks += s.wardBlocks;
+  r.dicePitched += s.dicePitched; r.diceWasted += s.diceWasted; r.attacks += s.attacks;
+  r.bulwarkReduced += s.bulwarkReduced; r.tollReduced += s.tollReduced;
+  for (const [id, n] of Object.entries(s.comboTriggers)) r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
+  for (const [id, n] of Object.entries(s.casts)) r.cardCast[id] = (r.cardCast[id] || 0) + n;
   for (const [entry, side] of [[a, 'A'], [b, 'B']] as const) {
     const won = g.winner === side;
     for (const id of Object.keys(entry.deck.cards)) {
-      cardInDeck[id] = (cardInDeck[id] || 0) + 1;
-      if (won) cardInWinDeck[id] = (cardInWinDeck[id] || 0) + 1;
+      r.cardInDeck[id] = (r.cardInDeck[id] || 0) + 1;
+      if (won) r.cardInWinDeck[id] = (r.cardInWinDeck[id] || 0) + 1;
     }
   }
 }
 
-let seed = 1000;
-for (let i = 0; i < decks.length; i++) {
-  for (let j = 0; j < decks.length; j++) {
-    if (i === j) continue;
-    for (let k = 0; k < PER_PAIR; k++) runGame(decks[i], decks[j], seed++);
+function runSuite(decks: Entry[], perPair: number, twinMode: TwinMode, seedBase: number): SuiteResult {
+  const r = newResult();
+  let seed = seedBase;
+  for (let i = 0; i < decks.length; i++) {
+    for (let j = 0; j < decks.length; j++) {
+      if (i === j) continue;
+      for (let k = 0; k < perPair; k++) runGame(r, decks, decks[i], decks[j], seed++, twinMode);
+    }
   }
+  return r;
 }
 
 const pct = (w: number, n: number) => (n ? ((100 * w) / n).toFixed(1) : '—');
-console.log(`\n=== v4.0 Playtest: ${games} games, ${decks.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins), ${PER_PAIR}/pairing ===`);
-console.log(`avg length: ${(totalRounds / games).toFixed(1)} rounds   draws: ${draws}   deckouts: ${deckouts}   timeouts@${MAX_TURNS}t: ${timeouts}`);
-console.log(`first-player win rate: ${pct(firstWins, games - draws - timeouts)}%`);
-console.log('game-length distribution (rounds):', roundBuckets);
+
+// ---------------------------------------------------------------------------
+// Pass 1: Twin A/B/C test (errata B) — isolate which fix actually works.
+// ---------------------------------------------------------------------------
+const roster = buildRoster();
+const abPerPair = Math.max(4, Math.floor(PER_PAIR / 2));
+console.log(`\n=== Twin A/B/C test: ${abPerPair}/pairing per mode, ${roster.length} decks ===`);
+const modes: TwinMode[] = ['oneDiePerTurn', 'sameTurn', 'stagedPassive'];
+const abResults: Record<TwinMode, SuiteResult> = {} as any;
+for (const mode of modes) {
+  abResults[mode] = runSuite(roster, abPerPair, mode, 5000 + modes.indexOf(mode) * 100000);
+}
+console.log('Mode'.padEnd(16), 'games'.padStart(7), 'TwinComplete did%'.padStart(19), 'did-not%'.padStart(10), 'delta'.padStart(8), '(n did)');
+for (const mode of modes) {
+  const r = abResults[mode];
+  const decisive = r.games - r.draws - r.timeouts;
+  const d = r.decisionAgg['twinComplete'] || { pw: 0, pn: 0, aw: 0, an: 0 };
+  const withP = d.pn ? (100 * d.pw) / d.pn : NaN;
+  const without = d.an ? (100 * d.aw) / d.an : NaN;
+  const delta = withP - without;
+  console.log(
+    mode.padEnd(16),
+    `${decisive}`.padStart(7),
+    (isNaN(withP) ? ' n/a' : withP.toFixed(1)).padStart(19),
+    (isNaN(without) ? ' n/a' : without.toFixed(1)).padStart(10),
+    (isNaN(delta) ? ' n/a' : (delta >= 0 ? '+' : '') + delta.toFixed(1)).padStart(8),
+    `(${d.pn})`,
+  );
+}
+console.log(`(Twin completions logged: oneDiePerTurn=${abResults.oneDiePerTurn.twinCompletions}, sameTurn=${abResults.sameTurn.twinCompletions}, stagedPassive=${abResults.stagedPassive.twinCompletions})`);
+console.log('\nTwin-heavy archetype win rate by mode (decks that draft Twin cards):');
+for (const label of ['Abyss Echo-Recursion', 'Mer King Heal-Midrange']) {
+  const cells = modes.map((mode) => {
+    const r = abResults[mode];
+    return `${mode}=${pct(r.archW[label] || 0, r.archN[label] || 0)}%`;
+  });
+  console.log(`  ${label.padEnd(24)} ${cells.join('  ')}`);
+}
+
+// Pick the mode whose twinComplete delta is least negative (closest to neutral/positive).
+const deltaOf = (mode: TwinMode) => {
+  const d = abResults[mode].decisionAgg['twinComplete'] || { pw: 0, pn: 0, aw: 0, an: 0 };
+  const withP = d.pn ? (100 * d.pw) / d.pn : 0;
+  const without = d.an ? (100 * d.aw) / d.an : 0;
+  return d.pn > 0 ? withP - without : -999;
+};
+const winningMode = modes.slice().sort((x, y) => deltaOf(y) - deltaOf(x))[0];
+console.log(`\n=> Selected Twin mode for the full report: '${winningMode}' (highest twinComplete win-delta of the three).`);
+
+// ---------------------------------------------------------------------------
+// Pass 2: full report using the winning Twin mode.
+// ---------------------------------------------------------------------------
+const R = runSuite(roster, PER_PAIR, winningMode, 1000);
+
+console.log(`\n\n=== v4.2 Full Playtest Report (twinMode='${winningMode}'): ${R.games} games, ${roster.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins), ${PER_PAIR}/pairing ===`);
+console.log(`avg length: ${(R.totalRounds / R.games).toFixed(1)} rounds   draws: ${R.draws}   deckouts: ${R.deckouts}   timeouts@${MAX_TURNS}t: ${R.timeouts}`);
+console.log(`first-player win rate: ${pct(R.firstWins, R.games - R.draws - R.timeouts)}%`);
+console.log('game-length distribution (rounds):', R.roundBuckets);
 
 console.log('\n--- Leader win rates (aggregated over that leader\'s archetypes) ---');
-for (const l of Object.keys(leaderN).sort((a, b) => (leaderW[b] || 0) / leaderN[b] - (leaderW[a] || 0) / leaderN[a])) {
-  console.log(`${POOL_BY_ID[l].name.padEnd(26)} ${pct(leaderW[l] || 0, leaderN[l])}%  (n=${leaderN[l]})`);
+for (const l of Object.keys(R.leaderN).sort((a, b) => (R.leaderW[b] || 0) / R.leaderN[b] - (R.leaderW[a] || 0) / R.leaderN[a])) {
+  console.log(`${POOL_BY_ID[l].name.padEnd(26)} ${pct(R.leaderW[l] || 0, R.leaderN[l])}%  (n=${R.leaderN[l]})`);
 }
 
 console.log('\n--- Archetype win rates (Location decks only) ---');
 for (const a of ARCHETYPES) {
-  console.log(`${a.label.padEnd(28)} ${pct(archW[a.label] || 0, archN[a.label] || 0)}%  (n=${archN[a.label] || 0})`);
+  console.log(`${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, R.archN[a.label] || 0)}%  (n=${R.archN[a.label] || 0})`);
 }
 
 console.log('\n--- ISOLATED Location contribution ---');
-console.log(`Location decks:        ${pct(locW.loc, locW.locN)}%  (n=${locW.locN})`);
-console.log(`Location-stripped:     ${pct(locW.noloc, locW.nolocN)}%  (n=${locW.nolocN})`);
-console.log(`=> Locations are worth ${((100 * locW.loc / locW.locN) - (100 * locW.noloc / locW.nolocN)).toFixed(1)} win% vs. filling their slots with cheap Units`);
+console.log(`Location decks:        ${pct(R.locW.loc, R.locW.locN)}%  (n=${R.locW.locN})`);
+console.log(`Location-stripped:     ${pct(R.locW.noloc, R.locW.nolocN)}%  (n=${R.locW.nolocN})`);
+console.log(`=> Locations are worth ${((100 * R.locW.loc / R.locW.locN) - (100 * R.locW.noloc / R.locW.nolocN)).toFixed(1)} win% vs. filling their slots with cheap Units`);
 
 console.log('\n--- Mechanic activity (totals) ---');
-console.log({ echoRecasts, twinCompletions, twinAbandons, scraps, rallies, wardBlocks, attacks });
-console.log(`Pitch (v4.0): dice pitched for Mend 1 = ${dicePitched}; truly wasted (leader full) = ${diceWasted}`);
-console.log(`avg dice pitched+wasted per player-turn: ${((dicePitched + diceWasted) / (totalRounds * 2)).toFixed(2)}`);
+console.log({
+  echoRecasts: R.echoRecasts, twinCompletions: R.twinCompletions, twinAbandons: R.twinAbandons,
+  scraps: R.scraps, rallies: R.rallies, wardBlocks: R.wardBlocks, attacks: R.attacks,
+  bulwarkReduced: R.bulwarkReduced, tollReduced: R.tollReduced,
+});
+console.log(`Pitch (v4.0): dice pitched for Mend 1 = ${R.dicePitched}; truly wasted (leader full) = ${R.diceWasted}`);
+console.log(`avg dice pitched+wasted per player-turn: ${((R.dicePitched + R.diceWasted) / (R.totalRounds * 2)).toFixed(2)}`);
 
 console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
 const decRows = DECISION_KEYS.map((k) => {
-  const d = decisionAgg[k] || { pw: 0, pn: 0, aw: 0, an: 0 };
+  const d = R.decisionAgg[k] || { pw: 0, pn: 0, aw: 0, an: 0 };
   const withP = d.pn ? (100 * d.pw) / d.pn : NaN;
   const without = d.an ? (100 * d.aw) / d.an : NaN;
   return { k, withP, without, delta: withP - without, pn: d.pn, an: d.an };
-}).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+}).sort((a, b) => Math.abs((isNaN(b.delta) ? 0 : b.delta)) - Math.abs((isNaN(a.delta) ? 0 : a.delta)));
 for (const r of decRows) {
   const sign = r.delta >= 0 ? '+' : '';
   console.log(
-    `${r.k.padEnd(16)} did=${isNaN(r.withP) ? ' n/a' : r.withP.toFixed(1).padStart(5)}%  did-not=${isNaN(r.without) ? ' n/a' : r.without.toFixed(1).padStart(5)}%  delta=${sign}${r.delta.toFixed(1)}pt  (did n=${r.pn})`,
+    `${r.k.padEnd(20)} did=${isNaN(r.withP) ? ' n/a' : r.withP.toFixed(1).padStart(5)}%  did-not=${isNaN(r.without) ? ' n/a' : r.without.toFixed(1).padStart(5)}%  delta=${isNaN(r.delta) ? ' n/a' : sign + r.delta.toFixed(1) + 'pt'}  (did n=${r.pn})`,
   );
 }
+console.log('\n(Echo broken out by rarity of the card recast — see echoRecast_low/mid/high above.)');
 
 console.log('\n--- Combo passive triggers ---');
-console.log(Object.fromEntries(Object.entries(comboTriggers).sort((a, b) => b[1] - a[1]).slice(0, 15)
+console.log(Object.fromEntries(Object.entries(R.comboTriggers).sort((a, b) => b[1] - a[1]).slice(0, 15)
   .map(([id, n]) => [POOL_BY_ID[id]?.name || id, n])));
 
-// OP / useless detection: cards with enough sample, ranked by win-correlation.
-const rows = Object.keys(cardInDeck)
-  .filter((id) => POOL_BY_ID[id].type !== 'Leader' && cardInDeck[id] >= 40)
+const rows = Object.keys(R.cardInDeck)
+  .filter((id) => POOL_BY_ID[id].type !== 'Leader' && R.cardInDeck[id] >= 40)
   .map((id) => ({
     name: POOL_BY_ID[id].name, type: POOL_BY_ID[id].type,
-    winPct: (100 * (cardInWinDeck[id] || 0)) / cardInDeck[id],
-    castsPerGame: (cardCast[id] || 0) / cardInDeck[id],
-    n: cardInDeck[id],
+    winPct: (100 * (R.cardInWinDeck[id] || 0)) / R.cardInDeck[id],
+    castsPerGame: (R.cardCast[id] || 0) / R.cardInDeck[id],
+    n: R.cardInDeck[id],
   }));
 console.log('\n--- Most likely OP (highest win% in deck, min n=40) ---');
 for (const r of [...rows].sort((a, b) => b.winPct - a.winPct).slice(0, 12))
@@ -221,4 +301,6 @@ console.log('\n--- Most "useless" (lowest cast rate / lowest win%) ---');
 for (const r of [...rows].sort((a, b) => a.castsPerGame - b.castsPerGame || a.winPct - b.winPct).slice(0, 12))
   console.log(`${r.name.padEnd(26)} ${r.type.padEnd(9)} casts/g=${r.castsPerGame.toFixed(2)} win%=${r.winPct.toFixed(1)} (n=${r.n})`);
 
-console.log(errors.length ? `\n!!! ${[...new Set(errors)].length} invariant violation types:\n  ${[...new Set(errors)].slice(0, 10).join('\n  ')}` : '\nNo invariant violations.');
+console.log(R.errors.length
+  ? `\n!!! ${[...new Set(R.errors)].length} invariant violation types:\n  ${[...new Set(R.errors)].slice(0, 10).join('\n  ')}`
+  : '\nNo invariant violations.');
