@@ -1,6 +1,6 @@
 {
-  "name": "Shifting Multiverse TCG",
-  "description": "A digital implementation of the Shifting Multiverse trading card game in a Monochrome & Pop visual identity.",
+  "name": "FryCards",
+  "description": "A digital implementation of the FryCards trading card game in a Monochrome & Pop visual identity.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

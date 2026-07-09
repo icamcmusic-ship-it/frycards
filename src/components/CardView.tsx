@@ -326,7 +326,7 @@ export function CardView({
 
             {/* Bottom text */}
             <div className="text-[6px] font-mono text-[#F7F7F7] opacity-60 mb-0.5 uppercase tracking-wider">
-              MULTIVERSE TCG
+              FRYCARDS
             </div>
           </div>
         )}

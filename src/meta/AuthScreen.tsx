@@ -81,11 +81,9 @@ export function AuthScreen() {
             BLUE CORAL SET · OPERATIVE TERMINAL
           </div>
           <h1 className="text-4xl heading-font leading-none">
-            SHIFTING
+            FRY
             <br />
-            <span className="bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 inline-block mt-1">
-              MULTIVERSE TCG
-            </span>
+            <span className="bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 inline-block mt-1">CARDS</span>
           </h1>
         </div>
 
@@ -151,11 +149,7 @@ export function AuthScreen() {
             disabled={busy}
             className="btn-pop w-full py-3 bg-[#E53935] text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50"
           >
-            {busy
-              ? 'CONTACTING MULTIVERSE…'
-              : mode === 'signin'
-                ? 'ENTER THE MULTIVERSE'
-                : 'FORGE ACCOUNT'}
+            {busy ? 'CONTACTING FRYCARDS…' : mode === 'signin' ? 'ENTER FRYCARDS' : 'FORGE ACCOUNT'}
           </button>
 
           <div className="flex items-center gap-2 my-1">
