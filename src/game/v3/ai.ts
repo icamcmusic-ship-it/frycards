@@ -5,12 +5,39 @@
  */
 import {
   Game, Inst, Player,
-  reroll, castFromHand, activateAbility, activateViaRally, completeTwin, echoRecast,
-  scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
-  canAttack, legalTargets, effAtk, remainingHp, effThreshold, rollValues, matchesPattern,
-  opponentOf, autoTarget,
+  reroll, castFromHand, castLocationFree, activateAbility, activateUltimate, activateViaRally,
+  completeTwin, echoRecast, scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
+  canAttack, legalTargets, effAtk, remainingHp, effThreshold, effAbilityThreshold, rollValues,
+  matchesPattern, opponentOf, autoTarget,
 } from './engine';
 import { hasKw } from './cards';
+
+/**
+ * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
+ * flooded with expensive cards (no cheap early plays) or has no Units, then
+ * bottom one card (London-style). Called by the harness before turn 1.
+ */
+export function maybeMulligan(g: Game, rng: () => number): Record<string, boolean> {
+  const mulliganed: Record<string, boolean> = {};
+  for (const p of Object.values(g.players)) {
+    const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
+    const units = p.hand.filter((c) => c.def.type === 'Unit').length;
+    if (cheapPlays >= 2 && units >= 1) continue;
+    mulliganed[p.id] = true;
+    // Reshuffle hand into deck, redraw 5, bottom the single worst card.
+    p.deck.push(...p.hand);
+    p.hand = [];
+    for (let i = p.deck.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+    }
+    for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+    const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+    const idx = p.hand.indexOf(worst);
+    if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
+  }
+  return mulliganed;
+}
 
 function unplacedDice(p: Player): number[] {
   return p.dice.map((d, i) => (d.placed ? -1 : i)).filter((i) => i >= 0);
@@ -31,25 +58,91 @@ function bestDieFor(p: Player, threshold: number, preferExact = true): number {
   return -1;
 }
 
+/** v4.2 Snap: cast any Snap-marked Charm during the Reroll Phase, before the window closes. */
+function playSnaps(g: Game, p: Player) {
+  for (const c of [...p.hand]) {
+    if (!c.def.snap || c.def.type !== 'Charm') continue;
+    const thr = effThreshold(g, p.id, c.def);
+    const dieIdx = bestDieFor(p, thr);
+    if (dieIdx < 0) continue;
+    // Same value-gating as ordinary casts: don't burn Snap on a pointless target.
+    const opp = opponentOf(g, p.id);
+    if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
+    if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
+    if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
+    castFromHand(g, dieIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
+  }
+}
+
 function chooseReroll(g: Game, p: Player): number[] {
-  // Keep the most common value (combo chasing) and any die >= 4; reroll the rest.
   const values = rollValues(p);
   const counts: Record<number, number> = {};
   for (const v of values) counts[v] = (counts[v] || 0) + 1;
+
+  // Figure out what this hand actually wants: straight-family or matching-family
+  // combos, and the set of Cast thresholds we'd like at least one die to reach.
+  const gates = [...p.hand, ...p.staging].flatMap((c) => {
+    const g2: string[] = [];
+    if (c.def.comboGate) g2.push(c.def.comboGate);
+    if (c.def.combo) g2.push(c.def.combo.pattern);
+    return g2;
+  });
+  const wantStraight = gates.some((x) => x === 'SmallStraight' || x === 'LargeStraight');
+  const wantMatch = gates.some((x) =>
+    ['AnyPair', 'TwoPair', 'ThreeKind', 'FourKind', 'FullHouse', 'Yahtzee'].includes(x),
+  );
+  const stagedNeeds = new Set(p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined));
+
+  const out: number[] = [];
+  if (wantStraight && !wantMatch) {
+    // Keep distinct values; reroll duplicates and isolated extremes.
+    const seen = new Set<number>();
+    p.dice.forEach((d, i) => {
+      if (stagedNeeds.has(d.value)) return;
+      if (seen.has(d.value)) { out.push(i); return; }
+      seen.add(d.value);
+    });
+    return out;
+  }
+  // Default / matching: keep the mode cluster and any die >= 4 (thresholds),
+  // plus dice matching a staged Twin need; reroll small singletons.
   const modeValue = Number(
     Object.entries(counts).sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]))[0][0],
   );
   const modeCount = counts[modeValue];
-  const out: number[] = [];
   p.dice.forEach((d, i) => {
+    if (stagedNeeds.has(d.value)) return;
     const partOfPair = d.value === modeValue && modeCount >= 2;
     if (!partOfPair && d.value <= 3) out.push(i);
   });
   return out;
 }
 
+function locScore(c: { def: { locPassive?: string; rarity?: string; ability?: unknown } }, goingWide: boolean): number {
+  let s = 0;
+  if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
+  if (c.def.ability) s += 2;
+  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
+  s += tierOrder.indexOf(c.def.rarity || 'Common') * 0.3;
+  return s;
+}
+
 function playPlacement(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
+
+  // v4.1: Locations cast free once per turn — always take it. Prefer the
+  // Location whose passive fits our board (ATK_ALL if we're going wide, HP_ALL
+  // if we're defensive), then the higher rarity / one with an Ability Slot.
+  if (!p.locationCastThisTurn) {
+    const locs = p.hand.filter(
+      (c) => c.def.type === 'Location' && p.location?.def.id !== c.def.id,
+    );
+    if (locs.length > 0) {
+      const goingWide = p.board.length >= 2;
+      const best = locs.sort((a, b) => locScore(b, goingWide) - locScore(a, goingWide))[0];
+      castLocationFree(g, best.iid);
+    }
+  }
 
   // Scrap low dice first if we hold Scrap cards and have low dice.
   for (const c of [...p.hand]) {
@@ -77,42 +170,38 @@ function playPlacement(g: Game, p: Player) {
     for (const c of [...p.hand]) {
       if (!c.def.comboGate) continue;
       if (!matchesPattern(rollValues(p), c.def.comboGate)) continue;
-      // Don't nuke an empty board.
-      if (c.def.id === 'grand_slam' && opp.board.length < 2) continue;
+      // Don't nuke a thin board with an AoE payoff — hold for value.
+      if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
       const dieIdx = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
       if (dieIdx === undefined) break;
       if (castFromHand(g, dieIdx, c.iid, autoTarget(g, p.id, c.def.onCast!))) progress = true;
     }
 
-    // 2. Cast best numeric-threshold card that fits a die.
+    // 2. Cast best numeric-threshold card that fits a die (Locations excluded —
+    //    they cast free above and never use a die in v4.1).
     const castable = [...p.hand]
-      .filter((c) => !c.def.comboGate)
+      .filter((c) => !c.def.comboGate && c.def.type !== 'Location')
       .sort((a, b) => castPriority(g, p, b) - castPriority(g, p, a));
     for (const c of castable) {
       if (g.winner) break;
       const thr = effThreshold(g, p.id, c.def);
-      if (c.def.type === 'Location' && (p.locationCastThisTurn || p.location?.def.id === c.def.id))
-        continue;
-      // Don't waste removal on an empty board / spare heals at full hp.
+      // Hold AoE removal for 2+ targets; don't waste single-target removal on
+      // an empty board or spare heals at full hp.
+      if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
       if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
-      if (c.def.onCast?.action === 'destroy' && opp.board.length === 0) continue;
+      if (c.def.onCast?.action === 'destroy' && c.def.onCast.target !== 'allEnemyUnits' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
-      // Twin: only start if we can complete now (a second matching die) or the
-      // die is high and hand has room to wait.
+      // Twin (v4.0): only one die per Placement Phase, so we commit the first
+      // slot now and complete on a later turn. Stage a low-ish common value
+      // (2-4) so the matching second die is reachable, and only if we aren't
+      // already juggling a staged copy.
       if (hasKw(c.def, 'Twin')) {
-        const idxs = unplacedDice(p).filter((i) => p.dice[i].value >= thr);
-        const pairIdx = idxs.find((i) =>
-          idxs.some((j) => j !== i && p.dice[j].value === p.dice[i].value),
-        );
-        if (pairIdx !== undefined) {
-          const v = p.dice[pairIdx].value;
-          const second = idxs.find((j) => j !== pairIdx && p.dice[j].value === v)!;
-          if (castFromHand(g, pairIdx, c.iid)) {
-            completeTwin(g, second, c.iid);
-            progress = true;
-          }
-        } else if (idxs.length > 0 && p.staging.length === 0) {
+        if (p.staging.some((s) => s.def.id === c.def.id)) continue;
+        const idxs = unplacedDice(p)
+          .filter((i) => p.dice[i].value >= thr)
+          .sort((a, b) => p.dice[a].value - p.dice[b].value);
+        if (idxs.length > 0 && p.hand.length >= 3) {
           if (castFromHand(g, idxs[0], c.iid)) progress = true;
         }
         continue;
@@ -161,12 +250,12 @@ function playPlacement(g: Game, p: Player) {
           opp.board.length === 0) ||
         (eff.action === 'draw' && p.hand.length >= 6);
       if (!pointless) {
-        const dieIdx = bestDieFor(p, leaderAb.threshold);
+        const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.leader));
         if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) { progress = true; continue; }
       }
     }
     if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 6) {
-      const dieIdx = bestDieFor(p, p.location.def.ability.threshold);
+      const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) { progress = true; continue; }
     }
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
@@ -177,8 +266,23 @@ function playPlacement(g: Game, p: Player) {
       const eff = u.def.ability.effect;
       if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0)) continue;
       if (eff.action === 'buff' && p.board.length < 2) continue;
-      const dieIdx = bestDieFor(p, u.def.ability.threshold);
+      const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) { progress = true; break; }
+    }
+    if (progress) continue;
+
+    // v4.2 Ultimate(N): fire the Leader's second Ability Slot once unlocked,
+    // once per game, whenever we have a die for it and a sensible target.
+    const ult = p.leader.def.ultimate;
+    if (ult && !p.leader.ultimateUsed && p.turnsTaken >= ult.unlockTurn) {
+      const pointless =
+        (ult.effect.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+        ((ult.effect.action === 'bind' || (ult.effect.action === 'sap' && ult.effect.target === 'enemyUnit')) &&
+          opp.board.length === 0);
+      if (!pointless) {
+        const dieIdx = bestDieFor(p, ult.threshold);
+        if (dieIdx >= 0 && activateUltimate(g, dieIdx)) { progress = true; continue; }
+      }
     }
     if (progress) continue;
 
@@ -192,7 +296,7 @@ function playPlacement(g: Game, p: Player) {
         const src = [...p.board, p.leader, p.location].find(
           (x): x is Inst =>
             !!x && x.iid !== rallyUnit.iid && x.abilityUsed &&
-            (x.abilityDie ?? 0) >= rallyUnit.def.ability!.threshold,
+            (x.abilityDie ?? 0) >= effAbilityThreshold(g, rallyUnit),
         );
         if (src && activateViaRally(g, rallyUnit.iid, src.iid)) { progress = true; continue; }
       }
@@ -255,6 +359,7 @@ export function playTurn(g: Game) {
   startTurn(g);
   if (g.winner) return;
 
+  playSnaps(g, p); // v4.2: Snap Charms may be cast before the Reroll window closes.
   reroll(g, chooseReroll(g, p));
   playPlacement(g, p);
   if (g.winner) return;

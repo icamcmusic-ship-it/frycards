@@ -4,71 +4,82 @@ interface HowToPlayProps {
   onClose: () => void;
 }
 
+// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.2).
 const SECTIONS = [
   {
     title: '1 · Objective & Setup',
     body: [
       [
         'Win Condition',
-        "Reduce the enemy Leader's health to 0. Your Leader's printed health is your life total. If both Leaders fall simultaneously, the active player loses.",
+        "Reduce the enemy Leader from 64 HP to 0. You also lose if you must draw during your Draw Phase with an empty deck. Simultaneous KOs are a draw.",
       ],
       [
         'Deck',
-        '30 cards led by a Leader that dictates which elements and cards your deck may contain (max 2 copies of any card).',
+        '30 cards (Units, Locations, Charms, Events) plus one Leader kept separate. Max 3 copies of any card.',
       ],
       [
         'Setup',
-        'Leaders are revealed, 2 Location cards from each deck are placed face-down in the Location Zone, and each player draws 5 cards.',
+        'Both players draw 5. One mulligan each (shuffle back, redraw 5). The first player skips their first Draw Phase, and nobody may attack on their own first turn.',
       ],
       [
-        'London Mulligan',
-        'You may shuffle your hand back and redraw 5, as many times as you like. When you finally keep, you must bottom 1 card per mulligan taken. Once kept, your hand is locked — mulligan decisions cannot be revisited later in the match.',
-      ],
-      [
-        'First Turn',
-        'A coin toss decides who goes first. The first player skips their Turn-1 draw, and nobody may attack on Turn 1.',
+        'Dice',
+        'Every turn you roll five six-sided dice and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
       ],
     ],
   },
   {
-    title: '2 · Turn Phases',
+    title: '2 · Turn Structure',
     body: [
+      ['Draw', 'Draw 1 card (any pending Aftershock effects resolve just before this).'],
+      ['Roll', 'Roll your five dice.'],
       [
-        'Resource Roll',
-        'Your leftover resources from last turn are cleared, then you roll a d6 and split the result across the elements your Leader supports. Boost adds to the roll; Fix auto-assigns 1 point to a set element.',
+        'Reroll',
+        'Reroll any subset of your dice exactly once. Charms with Snap may be cast during this window, before you lock your reroll.',
       ],
       [
-        'Draw',
-        'Draw 1 card. Drawing from an empty deck deals 2 damage to your Leader instead (the Deckout Law).',
+        'Placement',
+        'Place dice one at a time onto: a Cast Slot in hand, an Ability Slot in play, the second slot of a staged Twin card, or an Echo card in your Discard. You may also cast ONE Location per turn completely free — no die.',
       ],
       [
-        'Flexible Action Phase',
-        'In any order, repeatedly: deploy Units, set Locations face-down, attach Items, play Charms, cast Events, use Leader Command, and declare combat assaults. Attacking exhausts a Unit, but Leader Command (and Overdrive) can set up a second assault in the same turn. Each Unit can be Commanded at most once per turn.',
+        'Combo Check',
+        'Your five final die values are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
       ],
       [
-        'Cleanup',
-        "Unspent resources persist into the opponent's turn. Your Charms tick down 1. Discard down to 7 cards. Temporary buffs, Glitch and the active Location reset.",
+        'Combat',
+        'Attacks are declared and resolved one at a time. Guard Units must be attacked first. Leaders never retaliate.',
+      ],
+      [
+        'End',
+        'Discard down to 6. Unplaced dice are Pitched: each heals your Leader 1. Ward refreshes for both players.',
       ],
     ],
   },
   {
-    title: '3 · Resources & Persistent Mana',
+    title: '3 · Casting & Dice',
     body: [
       [
-        'Allocation',
-        "The whole roll must be allocated immediately. Splitting is allowed only among your Leader's elements. Any points you leave unallocated are forfeited — they do not carry over.",
+        'Cast Slot',
+        'Every non-Location card prints a threshold 1–6. Place a die of that value OR HIGHER to cast it.',
       ],
       [
-        'Pure',
-        'Cards with Pure get a bonus if, after allocating, exactly one element is lit in your pool. Colors carried over from last turn count against this — Pure rewards a truly mono-colored pool.',
+        'Combo-gated',
+        'Some Events cost a pattern instead of a number (e.g. "Combo: Full House") — any die casts them the moment your roll contains the pattern. Max ONE Combo-gated card per turn.',
       ],
       [
-        'Carry-over',
-        "Resources you don't spend stay in your pool during the opponent's turn — they only clear at the start of your own next Resource Roll.",
+        'Ability Slot',
+        'Cards in play may have a repeatable ability with its own threshold, once per turn. A Unit that uses an ability cannot also attack that turn (and vice versa).',
       ],
       [
-        'Overclock',
-        'Grants instant extra resources now, but your next roll is penalized by the same amount.',
+        'Locations',
+        'Cast FREE once per turn as a bonus action — the only card type that never uses a die. Max one in play; a new one replaces the old.',
+      ],
+      [
+        'Pitch',
+        "Any die you don't use is Pitched at end of turn for Mend 1 to your Leader — a dead 1 or 2 is never a total waste.",
+      ],
+      [
+        'Scrap',
+        'Discard a Scrap card from hand to reroll one unplaced die, any time during Placement.',
       ],
     ],
   },
@@ -76,189 +87,102 @@ const SECTIONS = [
     title: '4 · Combat',
     body: [
       [
-        'Unified Assault',
-        'Declare all your attackers at once; attacking exhausts them. Units with summoning sickness (deployed this turn, unless they have Blitz) and Frozen units cannot attack.',
+        'Attacking',
+        'Pick a ready Unit, pick a target (enemy Unit or Leader). Both deal their ATK simultaneously — except Leaders, who never deal retaliation.',
+      ],
+      ['Guard', 'While the defender controls any Guard Unit, attacks must target a Guard Unit.'],
+      [
+        'Pierce',
+        'If a Pierce attacker destroys its target, the leftover damage carries through to the enemy Leader — even through Guard.',
       ],
       [
-        'Blocking',
-        "The defender assigns ready Units as blockers. Blocking does not exhaust. Each blocker stops one attacker, but several blockers may gang up on a single attacker. Attacking Leaders can be blocked too — they take every blocker's full counter-damage.",
+        'Ward',
+        'Prevents the first instance of damage or removal against this Unit each turn (not retaliation on its own attack). Refreshes every End Phase, both players.',
       ],
       [
-        'Leader Attacks',
-        'Your Leader may attack a Unit (full damage both ways) or the enemy Leader (you deal HALF damage rounded down, min 1 — but take FULL counter-damage). The game blocks a Leader attack that would kill your own Leader.',
+        'Damage order',
+        'Ward (full prevention) → Bulwark (flat reduction) → Frenzy (multiplier). Damage is persistent; a Unit at 0 HP dies immediately.',
       ],
       [
-        'Guard Interlock',
-        "While the defender has a ready Guard Unit, all attacks and targeted enemy Events must go at a Guard Unit. With multiple ready Guards you may split your attackers across them; an attack that doesn't name a specific Guard is auto-redirected to one.",
+        'Frenzy',
+        'May attack twice if it survives its first attack; only the SECOND swing takes doubled retaliation.',
+      ],
+      ['Bind', 'A Bound Unit cannot attack, use abilities, or deal retaliation next turn.'],
+    ],
+  },
+  {
+    title: '5 · Keywords — Units',
+    body: [
+      ['Guard', 'Enemies must attack your Guard Units first.'],
+      ['Swift', 'May attack or use an ability the turn it is played.'],
+      ['Pierce', 'Excess damage from killing a Unit hits the enemy Leader.'],
+      ['Ward', 'Blocks the first hit or hostile effect each turn.'],
+      ['Frenzy', 'Second attack if it survives; doubled retaliation on that second swing only.'],
+      ['Bulwark X', 'Takes X less damage from every attack (after Ward, before Frenzy).'],
+      [
+        'Toll X',
+        'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives.',
+      ],
+      ['Avenge', 'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic.'],
+      [
+        'Twin',
+        'Two Cast Slots needing the SAME face value, placed on different turns; it waits in your Staging Zone in between (and may grant a small passive while parked). Completing it triggers a printed bonus.',
+      ],
+      ['Anchor', 'Threshold −1 per other Anchor card you have in play (max −2, min 1).'],
+      [
+        'Echo',
+        'After it hits your Discard: recast it with a die + discarding one card. Once per copy — the next discard banishes it.',
       ],
       [
-        'Damage',
-        'Damage on Units is permanent (it does not heal at end of turn). Item bonus health absorbs damage first — destroy the Item and the damage stored on it vanishes (the Stripping Rule).',
-      ],
-      [
-        'Death Sweep',
-        'A Unit dies the moment its remaining health reaches 0 — including when a dynamic buff (like Phalanx) shrinks because a friendly card exhausted or left the battlefield. The check runs after every action and re-sweeps until stable, so one Phalanx Unit dying can chain into shrinking and killing another in the same instant.',
-      ],
-      [
-        'Fizzled Attacks',
-        'An attack whose target was already destroyed earlier in the same assault wave fizzles: no damage is dealt either way, and the attacker stays exhausted.',
-      ],
-      [
-        'Targeting Law',
-        'An effect that targets a "friendly Unit" can only ever be aimed at one of your own Units — the game rejects a mis-aimed cast outright, so no resources are wasted. Vengeance triggers only on a declared block, not when a Guard passively absorbs a redirected attack.',
+        'Rally',
+        'Once per turn, activate its ability using a die already resting on another used Ability Slot — free.',
       ],
     ],
   },
   {
-    title: '5 · Locations, Charms & Items',
+    title: '6 · Keywords — Leaders, Events, Charms, Locations',
     body: [
       [
-        'Location Shell Game',
-        'At the start of your turn one of YOUR OWN face-down Locations is flipped at random and you control it for the whole turn. Its passive effect serves only you (Symmetric Locations serve both players); a SCORCH_ALL Location singes enemy Units. It flips back face-down at end of turn. Face-down Location abilities cannot be activated.',
+        'Resolve X (Leader)',
+        "While at or below half HP, your Leader's ability threshold drops by X — the comeback engine.",
       ],
       [
-        'Charms',
-        "Attach to a player and sit dormant until that player's next turn begins, then stay active for their 1–3 turn lifespan. Hostile (Decay) Charms attach to the opponent.",
+        'Ultimate(N) (Leader)',
+        'A second, once-per-game ability slot that unlocks on your Nth turn. Big, late, inevitable.',
       ],
       [
-        'Items',
-        'Attach to your Units for bonus attack, health, Armor and more. A Unit holds at most 2 Items (Modularity raises the cap). Excess Items are destroyed if capacity shrinks.',
+        'Crescendo X (Event)',
+        "The Event's effect grows by X for every die of value 6 you placed this turn. Hot rolls pay off; cold rolls still cast it.",
       ],
+      [
+        'Aftershock (Event)',
+        'After resolving, a delayed half-strength repeat fires at the very start of your next turn.',
+      ],
+      ['Snap (Charm)', 'Castable during your Reroll Phase, before you lock the reroll.'],
+      ['Overflow X', 'Bonus if the die placed beats the threshold by X or more.'],
+      ['Combo: [Pattern]', 'Passive bonus at Combo Check when your roll contains the pattern.'],
+      ['Tribute (Location)', 'Bonus at your End Phase if you Pitched 2+ dice this turn.'],
+      ['Excavate X (Location)', 'Its ability threshold drops by X every turn it stays in play.'],
+      ['Contested (Location)', 'Its passive is doubled while your opponent has no Location.'],
+      ['Surge / Mend / Sap', 'Draw a card / heal X (never past max) / deal X direct damage.'],
     ],
   },
   {
-    title: '6 · Keyword Glossary — Traits',
+    title: '7 · Combo Patterns',
     body: [
-      ['Blitz', 'May attack the turn it is deployed.'],
+      ['Any Pair', 'Two dice with the same value. Hits ~99% of turns if you chase it.'],
+      ['Two Pair / Three Kind', 'Reliable mid-tier payoffs (~54–56% when chased).'],
+      ['Small Straight', 'Four sequential values (~33% chased).'],
+      ['Full House', 'Three of one value + two of another (~18% chased).'],
+      ['4-Kind / Lg Straight', 'Bombs (~10–13% chased).'],
+      ['Yahtzee', 'All five dice equal (~1%) — trophy territory.'],
       [
-        'Armor X',
-        'Every incoming hit is reduced by X (printed + Item Armor), but always deals at least 1 damage. Armor never breaks. Works identically on Units and Leaders, in combat and against Events.',
-      ],
-      ['Pierce', "Blocked damage beyond the blocker's health hits the enemy Leader."],
-      ['Guard', 'Enemy attacks and targeted Events must target this Unit while it is ready.'],
-      ['Ward X', 'Enemies pay X extra resources to target this card.'],
-      [
-        'Command X',
-        'Leader ability: pay X to instantly ready a friendly Unit for another attack. Command Cap: each Unit can be Commanded only once per turn.',
+        'Subset rule',
+        'Your dice satisfy every pattern they genuinely contain — a Yahtzee also counts as a Pair, Three and Four of a Kind, all at once.',
       ],
       [
-        'Rally X',
-        'Leader trait: Units you deploy from hand costing X or less get +1/+1 until Cleanup.',
-      ],
-      [
-        'Lurk',
-        'Cannot be targeted by enemy attacks or Events until it attacks (suppressed by Guard).',
-      ],
-      ['Burden X', 'Attacking with the equipped Unit costs X extra resources.'],
-      [
-        'Symmetric',
-        "Location effects apply to both players (a normal Location's passive serves only its controller).",
-      ],
-      ['Detonate X', 'Expiring Charm deals X damage to all enemy Units.'],
-      ['Siphon', 'Damage dealt heals your Leader for half (rounded up).'],
-      [
-        'Feedback',
-        'When targeted: 4-6 on a d6 negates the effect and refunds the caster exactly what was spent (Ward and Glacier surcharges included).',
-      ],
-      [
-        'Phalanx',
-        'Phalanx X: +X max health for each other READY friendly card on your battlefield.',
-      ],
-      ['Overdrive', 'May attack twice per turn, taking 2 damage at Cleanup if it did.'],
-      ['Wither X', "Combat damage permanently shrinks the target's stats by X."],
-      ['Reap', 'Killing a Unit in combat heals your Leader for its printed attack.'],
-      ['Sustain X', 'Heals X damage at the very start of your turn.'],
-      [
-        'Glitch',
-        "Combat damage disables the target's keywords/abilities until its controller's next Cleanup.",
-      ],
-      ['Brittle', 'Takes double damage from all sources.'],
-      ['Pure', 'Bonus effect if your whole roll went to one element this turn.'],
-      ['Boost X', 'Adds +X to your resource roll.'],
-      ['Fix [Element]', 'One rolled point is automatically allocated to that element.'],
-      ['Echo', 'Cast Event duplicates on a d6 roll of 5-6 (random targets).'],
-      ['Graveborn', 'This Unit may be deployed from your graveyard.'],
-      ['Modularity X', "Raises the host Unit's Item capacity by X (default 1)."],
-      ['Decay X', "Hostile Charm: after the victim's roll, all their Units take X damage."],
-      ['Wildcast X', 'Hits X unique random battlefield targets (Leaders included).'],
-      ['Photosynthesis', 'Charm: an even resource roll grants +1 Nature.'],
-    ],
-  },
-  {
-    title: '7 · Keyword Glossary — Action Verbs',
-    body: [
-      [
-        'Freeze',
-        "Target cannot attack, block or use abilities until the end of its controller's next turn.",
-      ],
-      [
-        'Scorch X',
-        'Target takes X damage at the start of each of its turns (Armor and Brittle apply — Units and Leaders alike); the counter ticks down by 1 each Cleanup.',
-      ],
-      ['Obliterate', 'Destroys a Unit outright, bypassing Armor and death triggers.'],
-      ['Meltdown', "Destroys a target Item, then burns the host Unit for the Item's cost."],
-      ['Purge', 'Strips a target of all Items, Charms, statuses and temporary buffs.'],
-      ['Manifest', 'Creates a token Unit. Tokens vanish when they leave the battlefield.'],
-      ['Overclock X', 'Gain X resources now; your next roll is reduced by X.'],
-      ['Heal X', 'Removes X damage (Leaders cannot exceed their printed health).'],
-    ],
-  },
-  {
-    title: '8 · Crimson Circuit Keywords',
-    body: [
-      [
-        'Vengeance X',
-        'Unit: when this Unit blocks, it deals X extra damage to the attacking Unit on top of its normal counter.',
-      ],
-      ['Solitary X', 'Unit: +X/+X while this is your only Unit on the battlefield.'],
-      [
-        'Efficient X',
-        'Event: the next Unit you deploy this turn costs X fewer resources (Generic first, then colors; unused discounts expire at Cleanup).',
-      ],
-      [
-        'Rummage X',
-        'Event: draw X cards (the Deckout Law applies), then discard 1 card at random.',
-      ],
-      [
-        'Hatchling X',
-        'Location: while revealed, creates X 1/1 tokens for its controller at the start of the turn. Symmetric Hatchling Locations hatch for both players.',
-      ],
-      [
-        'Confluence X',
-        'Location: grants its controller X extra Generic resources at their Resource Roll.',
-      ],
-      [
-        'Overcharge X',
-        'Item: the equipped Unit gets +X/+X. At your Cleanup the upkeep of X is paid automatically if you can afford it — otherwise the Item is destroyed.',
-      ],
-      [
-        'Surge',
-        'Item: whenever the equipped Unit deals combat damage to an enemy, you gain 1 Generic resource.',
-      ],
-      ['Valor X', 'Charm: your Units get +X attack while this is active.'],
-      ['Inspire X', 'Charm: Units you deploy get +X/+X until Cleanup while this is active.'],
-      [
-        'Beacon X',
-        'Light: your Units have Ward X while this is active (stacks with printed Ward).',
-      ],
-      [
-        'Taint X',
-        "Dark: Units this card damages in combat take +X damage from ALL sources until their controller's Cleanup.",
-      ],
-      ['Glacier X', 'Frost: enemy Events cost X extra resources to cast while this is active.'],
-      [
-        'Inferno',
-        "Flame: combat damage this card deals to a Unit splashes 1 damage onto that Unit's other friendly Units.",
-      ],
-      [
-        'Sync X',
-        'Tech: whenever you deploy a Unit, gain X Generic resources while this is active.',
-      ],
-      ['Flourish X', 'Nature: gain X Nature resources at your Resource Roll while this is active.'],
-      ['Codex X', 'Order: your Units get +X max health while this is active.'],
-      [
-        'Discord',
-        'Chaos: at the start of your turn, randomly one of — gain 1 Generic resource, draw 1 card, or your Leader takes 1 damage.',
+        'Rate limit',
+        'No matter how many Combo-gated cards qualify, you may cast only one per turn.',
       ],
     ],
   },
@@ -305,7 +229,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
             </div>
           ))}
           <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
-            SHIFTING MULTIVERSE TCG · COMPREHENSIVE RULEBOOK V1.7
+            DEFINITIVE RULEBOOK V4.2 · docs/RULEBOOK.md
           </div>
         </div>
       </div>

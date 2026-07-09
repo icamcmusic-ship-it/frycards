@@ -1,13 +1,12 @@
-import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { initialGameState, gameReducer } from './game/engine';
-import { getCPUAction } from './game/ai';
-import { getDeckableLeaders, getCard, getAllCards, applyCardData } from './game/cards';
-import { fetchCardTemplates, recordMatchResult, DeckRow } from './lib/supabase';
-import { Board } from './components/Board';
+import React, { useEffect, useState } from 'react';
+import { getAllCards, applyCardData } from './game/cards';
+import { fetchCardTemplates, recordMatchResult } from './lib/supabase';
+import { GameV4 } from './components/GameV4';
 import { HowToPlay } from './components/HowToPlay';
-import { CardTemplate, GameCard, GameState } from './types';
-import { GameAction } from './game/engine';
-import { cn } from './lib/utils';
+import { CardTemplate } from './types';
+import { ARCHETYPES, Archetype } from './game/v3/decks';
+import { POOL_BY_ID } from './game/v3/cardpool';
+import { LEADER_HP } from './game/v3/cards';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
 import { MainMenu, MetaScreen } from './meta/MainMenu';
@@ -19,286 +18,10 @@ import { PopButton } from './meta/ui';
 import { setCardBackImage } from './meta/cardback';
 
 // ---------------------------------------------------------------------------
-// Mulligan (London protocol)
-// ---------------------------------------------------------------------------
-function MulliganModal({
-  state,
-  dispatch,
-}: {
-  state: GameState;
-  dispatch: React.Dispatch<GameAction>;
-}) {
-  const human = state.players[state.player1Id];
-  const [bottoming, setBottoming] = useState<string[]>([]);
-  if (state.phase !== 'MULLIGAN' || human.mulliganKept) return null;
-
-  const needBottom = human.mulliganCount;
-  const toggle = (id: string) =>
-    setBottoming((b) =>
-      b.includes(id) ? b.filter((x) => x !== id) : b.length < needBottom ? [...b, id] : b,
-    );
-
-  const keep = () => {
-    dispatch({ type: 'KEEP_HAND', playerId: human.id, bottomIds: bottoming });
-    setBottoming([]);
-  };
-
-  return (
-    <div className="absolute inset-0 bg-[#1A1A1A]/90 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#F7F7F7] text-[#1A1A1A] p-6 ink-border-md shadow-hard-yellow text-center max-w-4xl w-full">
-        <h2 className="text-2xl heading-font mb-1">Mulligan — {human.name}</h2>
-        <p className="text-[#2C3E50] mb-4 text-sm font-bold">
-          {needBottom > 0
-            ? `You have mulliganed ${needBottom} time(s). Select ${needBottom} card(s) to put on the bottom, then keep.`
-            : 'Keep this hand, or mulligan to shuffle and redraw 5.'}
-        </p>
-        <div className="flex justify-center gap-2 flex-wrap mb-5">
-          {human.hand.map((c: GameCard) => (
-            <CardWithSelect
-              key={c.instanceId}
-              card={c}
-              selected={bottoming.includes(c.instanceId)}
-              onClick={() => needBottom > 0 && toggle(c.instanceId)}
-              selectable={needBottom > 0}
-            />
-          ))}
-        </div>
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={keep}
-            disabled={needBottom > 0 && bottoming.length !== needBottom}
-            className="btn-pop px-6 py-3 bg-[#FFD54F] disabled:bg-[#2C3E50] disabled:text-[#F7F7F7]/40 text-[#1A1A1A] ink-border-sm shadow-hard-black-xs heading-font text-sm"
-          >
-            Keep Hand
-          </button>
-          <button
-            onClick={() => {
-              dispatch({ type: 'MULLIGAN', playerId: human.id });
-              setBottoming([]);
-            }}
-            className="btn-pop px-6 py-3 bg-[#1A1A1A] text-[#FFD54F] ink-border-sm shadow-hard-black-xs heading-font text-sm"
-          >
-            Mulligan ({human.hand.length} → 5)
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CardWithSelect({ card, selected, onClick, selectable }: any) {
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        'cursor-pointer transition-transform',
-        selectable && 'hover:-translate-y-1',
-        selected && '-translate-y-3',
-      )}
-    >
-      <div className={cn(selected && 'outline outline-4 outline-[#E53935]')}>
-        <div className="w-24 h-[134px] overflow-hidden bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col">
-          <div className="text-[9px] heading-font px-1 py-0.5 truncate bg-[#1A1A1A] text-[#FFD54F]">
-            {card.name}
-          </div>
-          {card.image && <img src={card.image} className="w-full aspect-[4/3] object-cover" />}
-          <div className="text-[8px] font-mono font-bold px-1 text-[#2C3E50] mt-auto uppercase">
-            {card.type} · {card.rarity}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Resource roll & allocation
-// ---------------------------------------------------------------------------
-function RollModal({
-  state,
-  dispatch,
-}: {
-  state: GameState;
-  dispatch: React.Dispatch<GameAction>;
-}) {
-  const active = state.players[state.activePlayerId];
-  const isHuman = !active.isCPU;
-  const [allocs, setAllocs] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    setAllocs({});
-  }, [state.pendingRoll, state.turnNumber]);
-
-  if (!isHuman) return null;
-  if (state.phase !== 'ROLL' && state.phase !== 'ALLOCATE') return null;
-
-  const total = (Object.values(allocs) as number[]).reduce((a, b) => a + b, 0);
-  const remaining = (state.pendingRoll || 0) - total;
-
-  const change = (el: string, d: number) => {
-    const cur = allocs[el] || 0;
-    if (d > 0 && remaining <= 0) return;
-    if (d < 0 && cur <= 0) return;
-    setAllocs({ ...allocs, [el]: cur + d });
-  };
-
-  const elements = active.leader.elements.filter((e) => e !== 'Generic');
-
-  return (
-    <div className="absolute inset-0 bg-[#1A1A1A]/85 flex items-center justify-center z-40">
-      <div className="bg-[#F7F7F7] text-[#1A1A1A] p-8 ink-border-md shadow-hard-yellow text-center max-w-md w-full relative overflow-hidden">
-        <div className="absolute inset-0 halftone-pattern pointer-events-none opacity-40" />
-        {state.phase === 'ROLL' ? (
-          <div className="relative">
-            <h2 className="text-2xl heading-font mb-6">Resource Roll Phase</h2>
-            <button
-              onClick={() => dispatch({ type: 'ROLL_DICE' })}
-              className="btn-pop px-10 py-4 bg-[#FFD54F] text-[#1A1A1A] heading-font text-xl ink-border-md shadow-hard-black"
-            >
-              ⚄ Roll d6
-            </button>
-          </div>
-        ) : (
-          <div className="relative">
-            <h2 className="text-2xl heading-font mb-1">Allocate Resources</h2>
-            <p className="text-[#2C3E50] mb-5 text-sm font-bold">
-              Distribute {remaining} more into your elements.
-            </p>
-            <div className="flex flex-col gap-3 mb-6">
-              {elements.map((el) => (
-                <div
-                  key={el}
-                  className="flex items-center justify-between bg-[#F7F7F7] p-3 ink-border-sm shadow-hard-black-xs"
-                >
-                  <span className="heading-font text-sm">{el}</span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => change(el, -1)}
-                      className="btn-pop w-8 h-8 bg-[#1A1A1A] text-[#FFD54F] font-black ink-border-sm"
-                    >
-                      -
-                    </button>
-                    <span className="w-4 font-mono font-black">{allocs[el] || 0}</span>
-                    <button
-                      onClick={() => change(el, 1)}
-                      className="btn-pop w-8 h-8 bg-[#FFD54F] text-[#1A1A1A] font-black ink-border-sm"
-                    >
-                      +
-                    </button>
-                    <button
-                      onClick={() =>
-                        remaining > 0 &&
-                        setAllocs({ ...allocs, [el]: (allocs[el] || 0) + remaining })
-                      }
-                      disabled={remaining <= 0}
-                      className="btn-pop px-2 h-8 bg-[#E53935] disabled:bg-[#2C3E50]/30 text-[#F7F7F7] font-black text-[10px] ink-border-sm"
-                      title={`Put all remaining points into ${el}`}
-                    >
-                      ALL
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => dispatch({ type: 'ALLOCATE_RESOURCES', allocations: allocs })}
-              disabled={remaining !== 0}
-              className="btn-pop w-full py-3 bg-[#E53935] disabled:bg-[#2C3E50] disabled:text-[#F7F7F7]/40 text-[#F7F7F7] heading-font ink-border-sm shadow-hard-black-xs"
-            >
-              Confirm ({remaining} left)
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function GameOverModal({
-  state,
-  onReplay,
-  reward,
-}: {
-  state: GameState;
-  onReplay: () => void;
-  reward: number | null;
-}) {
-  if (!state.winner) return null;
-  const winner = state.players[state.winner];
-  const humanWon = !winner.isCPU;
-  return (
-    <div className="absolute inset-0 bg-[#FFD54F] flex items-center justify-center z-50 overflow-hidden">
-      <div className="absolute inset-0 starburst-ray" />
-      <div className="text-center relative bg-[#F7F7F7] ink-border-lg shadow-hard-black-lg p-12">
-        <h1 className="text-6xl heading-font text-[#1A1A1A] mb-4">
-          {humanWon ? 'Victory' : 'Defeat'}
-        </h1>
-        <p className="text-2xl heading-font text-[#E53935] mb-4">{winner.name} wins the match!</p>
-        {reward !== null && (
-          <div className="heading-font text-sm bg-[#1A1A1A] text-[#FFD54F] inline-block px-4 py-2 ink-border-sm mb-8">
-            +{reward} GOLD EARNED
-          </div>
-        )}
-        <div className="flex gap-3 justify-center">
-          <button
-            onClick={onReplay}
-            className="btn-pop px-8 py-3 bg-[#1A1A1A] text-[#FFD54F] heading-font ink-border-md shadow-hard-yellow"
-          >
-            Back to Menu
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LogPanel({ state }: { state: GameState }) {
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const copyLog = async () => {
-    const header = `Shifting Multiverse match log — turn ${state.turnNumber}`;
-    await navigator.clipboard.writeText([header, ...state.log].join('\n'));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="btn-pop heading-font text-[11px] bg-[#2C3E50] text-[#FFD54F] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
-      >
-        ☰ LOG {open ? '▾' : '▸'}
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 max-h-48 overflow-y-auto bg-[#1A1A1A]/95 ink-border-sm p-2 text-[10px] text-[#F7F7F7]/80 font-mono z-50">
-          <button
-            onClick={copyLog}
-            className="btn-pop heading-font text-[9px] bg-[#FFD54F] text-[#1A1A1A] px-1.5 py-0.5 ink-border-sm mb-1"
-            title="Copy the full match log to the clipboard"
-          >
-            {copied ? '✓ COPIED' : '⧉ COPY FULL LOG'}
-          </button>
-          {state.log
-            .slice(-40)
-            .reverse()
-            .map((l, i) => (
-              <div key={i}>{l}</div>
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Play setup — choose a saved deck (or a prebuilt quick-play deck)
+// Play setup — pick one of the v4.2 archetype decks (Rulebook v4.2)
 // ---------------------------------------------------------------------------
 interface MatchSetup {
-  leaderId: string;
-  customDeck?: string[];
-  deckName: string;
+  archetype: Archetype;
 }
 
 function PlayScreen({
@@ -308,10 +31,6 @@ function PlayScreen({
   onStart: (setup: MatchSetup) => void;
   onBack: () => void;
 }) {
-  const { decks, guest, session } = useMeta();
-  const validDecks = decks.filter((d) => d.is_valid);
-  const leaders = getDeckableLeaders();
-
   return (
     <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
       <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#1A1A1A] px-4 py-2.5">
@@ -319,89 +38,49 @@ function PlayScreen({
           &lt; MENU
         </PopButton>
         <h1 className="heading-font text-xl text-[#FFD54F]">CHOOSE YOUR DECK</h1>
+        <span className="text-[10px] font-bold text-[#F7F7F7]/60">
+          Dice-placement rules v4.2 · 30-card archetype decks · Leaders at {LEADER_HP} HP
+        </span>
       </div>
-      <div className="p-6 max-w-5xl mx-auto">
-        {session && validDecks.length > 0 && (
-          <>
-            <h2 className="heading-font text-base mb-3 bg-[#E53935] text-[#F7F7F7] inline-block px-2 py-0.5">
-              YOUR DECKS
-            </h2>
-            <div className="flex flex-wrap gap-4 mb-8">
-              {validDecks.map((d: DeckRow) => {
-                const leader = getCard(d.leader_id);
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() =>
-                      onStart({ leaderId: d.leader_id, customDeck: d.card_ids, deckName: d.name })
-                    }
-                    className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
-                  >
-                    <div className="px-2 py-1 bg-[#E53935] heading-font text-[10px] text-[#F7F7F7] truncate">
-                      {d.name}
-                    </div>
-                    {leader?.image && (
-                      <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
-                        <img src={leader.image} className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    <div className="p-3 pt-1">
-                      <div className="heading-font text-sm leading-tight">{leader?.name}</div>
-                      <div className="text-[10px] font-bold text-[#2C3E50] mt-0.5 uppercase">
-                        {leader?.elements.join(' / ')}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        <h2 className="heading-font text-base mb-3 bg-[#2C3E50] text-[#F7F7F7] inline-block px-2 py-0.5">
-          QUICK PLAY · PREBUILT DECKS
-        </h2>
-        {guest && (
-          <p className="text-[11px] font-bold text-[#2C3E50] mb-3">
-            Guest mode: prebuilt decks only. Create an account to forge your own.
-          </p>
-        )}
+      <div className="p-6 max-w-6xl mx-auto">
         <div className="flex flex-wrap gap-4">
-          {leaders.map((id) => {
-            const l = getCard(id)!;
+          {ARCHETYPES.map((arch) => {
+            const leader = POOL_BY_ID[arch.leaderId];
             return (
               <button
-                key={id}
-                onClick={() => onStart({ leaderId: id, deckName: `${l.name} (Prebuilt)` })}
+                key={arch.label}
+                onClick={() => onStart({ archetype: arch })}
                 className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
               >
                 <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
-                  <span className="text-[9px] heading-font text-[#FFD54F]">
-                    {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
-                  </span>
-                  <span className="text-[9px] font-mono font-bold text-[#F7F7F7]">
-                    {l.health} HP
+                  <span className="text-[9px] heading-font text-[#FFD54F] truncate">{arch.label}</span>
+                  <span className="text-[9px] font-mono font-bold text-[#F7F7F7] shrink-0">
+                    {LEADER_HP} HP
                   </span>
                 </div>
-                {l.image && (
+                {leader?.image && (
                   <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
-                    <img src={l.image} className="w-full h-full object-cover" />
+                    <img src={leader.image} className="w-full h-full object-cover" />
                   </div>
                 )}
                 <div className="p-3 pt-1">
-                  <div className="heading-font text-base leading-tight">{l.name}</div>
-                  <div className="text-[10px] font-bold text-[#2C3E50] mt-1 uppercase">
-                    {l.elements.join(' / ')} · {l.attack} ATK
+                  <div className="heading-font text-base leading-tight">{leader?.name}</div>
+                  <div className="text-[10px] font-bold text-[#2C3E50] mt-1">
+                    {leader?.ability
+                      ? `Ability ${leader.ability.threshold}+ · Ultimate turn ${leader.ultimate?.unlockTurn ?? '—'}+`
+                      : ''}
                   </div>
                   <div className="flex flex-wrap gap-1 mt-1.5">
-                    {(l.keywords || []).map((kw) => (
-                      <span
-                        key={kw}
-                        className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm"
-                      >
+                    {arch.keywords.map((kw) => (
+                      <span key={kw} className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm">
                         {kw}
                       </span>
                     ))}
+                    {arch.comboFamily && arch.comboFamily !== 'none' && (
+                      <span className="text-[9px] font-bold px-1 bg-[#8E44AD] text-white ink-border-sm">
+                        {arch.comboFamily === 'straight' ? 'STRAIGHTS' : 'MATCHES'}
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>
@@ -418,114 +97,36 @@ function PlayScreen({
 // ---------------------------------------------------------------------------
 function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   const { session, profile, refreshProfile } = useMeta();
-  const leaders = getDeckableLeaders();
-  const cpuLeader = leaders.find((id) => id !== setup.leaderId) || leaders[0];
-  const [state, dispatch] = useReducer(gameReducer, null, () =>
-    initialGameState(
-      true,
-      setup.leaderId,
-      cpuLeader,
-      setup.customDeck,
-      profile?.username || 'Player 1',
-    ),
-  );
-  const [showHelp, setShowHelp] = useState(false);
+  const [cpuArch] = useState(() => {
+    const others = ARCHETYPES.filter((a) => a.label !== setup.archetype.label);
+    return others[Math.floor(Math.random() * others.length)];
+  });
   const [reward, setReward] = useState<number | null>(null);
-  const [fast, setFast] = useState(() => localStorage.getItem('smv_game_speed') === 'fast');
-  const recorded = useRef(false);
 
-  const toggleSpeed = () => {
-    const next = !fast;
-    setFast(next);
-    localStorage.setItem('smv_game_speed', next ? 'fast' : 'normal');
-  };
-
-  // Kick off the mulligan phase once.
-  useEffect(() => {
-    dispatch({ type: 'START_GAME' });
-  }, []);
-
-  // Drive the CPU and auto-advance the human's own turn transitions.
-  useEffect(() => {
-    if (state.phase === 'GAME_OVER' || state.phase === 'INIT') return;
-    const cpuAct = getCPUAction(state);
-    if (cpuAct) {
-      // Human-paced CPU: quick for bookkeeping steps, deliberate for visible
-      // plays so the action toasts have time to read.
-      const slowActions = [
-        'PLAY_CARD',
-        'ACTIVATE_ABILITY',
-        'LEADER_COMMAND',
-        'ENTER_COMBAT',
-        'SUBMIT_ATTACKS',
-        'SUBMIT_BLOCKS',
-        'END_TURN',
-      ];
-      let delay = slowActions.includes(cpuAct.type) ? 1100 + Math.random() * 500 : 600;
-      if (fast) delay = Math.min(delay, 250);
-      const t = setTimeout(() => dispatch(cpuAct), delay);
-      return () => clearTimeout(t);
-    }
-    if (state.phase === 'TURN_TRANSITION' && !state.players[state.activePlayerId].isCPU) {
-      const t = setTimeout(() => dispatch({ type: 'ACKNOWLEDGE_TRANSITION' }), 250);
-      return () => clearTimeout(t);
-    }
-  }, [state, fast]);
-
-  // Record the result + pay out gold once per match (accounts only).
-  useEffect(() => {
-    if (state.phase !== 'GAME_OVER' || !state.winner || recorded.current) return;
-    recorded.current = true;
+  const onResult = (won: boolean) => {
     if (!session) return;
-    const humanWon = !state.players[state.winner].isCPU;
-    recordMatchResult(humanWon).then((res) => {
+    recordMatchResult(won).then((res) => {
       if (res) {
         setReward(res.reward);
         refreshProfile();
       }
     });
-  }, [state.phase, state.winner, session, state.players, refreshProfile]);
+  };
 
   return (
     <div className="relative w-full h-screen">
-      <Board gameState={state} dispatch={dispatch} />
-      <MulliganModal state={state} dispatch={dispatch} />
-      <RollModal state={state} dispatch={dispatch} />
-      <GameOverModal state={state} onReplay={onExit} reward={reward} />
-      <div className="absolute top-2 left-2 z-40 flex gap-1.5 items-start">
-        <button
-          onClick={() => {
-            if (
-              state.phase === 'GAME_OVER' ||
-              window.confirm('Concede this match and return to the menu?')
-            )
-              onExit();
-          }}
-          className="btn-pop heading-font text-[11px] bg-[#1A1A1A] text-[#F7F7F7] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
-          title="Concede and return to menu"
-        >
-          ✕ CONCEDE
-        </button>
-        <button
-          onClick={() => setShowHelp(true)}
-          className="btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
-          title="How to Play"
-        >
-          ? RULES
-        </button>
-        <button
-          onClick={toggleSpeed}
-          className={cn(
-            'btn-pop heading-font text-[11px] px-2.5 py-1 ink-border-sm shadow-hard-black-xs',
-            fast ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#2C3E50] text-[#F7F7F7]',
-          )}
-          title="Toggle CPU turn pacing"
-        >
-          {fast ? '⚡ FAST' : '▸ NORMAL'}
-        </button>
-        <LogPanel state={state} />
-      </div>
-      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
+      <GameV4
+        humanArchetype={setup.archetype}
+        cpuArchetype={cpuArch}
+        playerName={profile?.username || 'Player 1'}
+        onExit={onExit}
+        onResult={onResult}
+      />
+      {reward !== null && (
+        <div className="absolute bottom-2 right-2 z-[60] bg-[#FFD54F] text-[#1A1A1A] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+          +{reward} GOLD
+        </div>
+      )}
     </div>
   );
 }
@@ -598,6 +199,8 @@ export default function App() {
   const [cardPool, setCardPool] = useState<CardTemplate[] | null>(null);
 
   // Load the live card pool from the Supabase backend once at startup.
+  // (Used by the meta screens — collection, store, deck builder. Matches run
+  // on the v4.2 pool, remapped from the same backend card identities.)
   useEffect(() => {
     let cancelled = false;
     fetchCardTemplates().then((templates) => {

@@ -5,6 +5,162 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (v4.2 frontend — the dice-placement game is now playable in the app)
+
+- **New match UI** (`src/components/GameV4.tsx`): full interactive
+  implementation of Rulebook v4.2 — five-dice tray with reroll selection,
+  Snap-Charm window during the Reroll Phase, all four die destinations
+  (hand Cast Slots with threshold/combo-gate legality hints, Ability Slots on
+  Units/Leader/Location with Resolve/Excavate-adjusted thresholds, Twin
+  staging + completion + abandon, Echo recasting from a discard drawer with
+  fodder selection), free Location casts, Scrap rerolls, Ultimate(N) button,
+  one-combo-gate-per-turn enforcement surfaced in the UI, targeted casting
+  with highlight-and-click target picking, sequential combat with Guard-aware
+  legal-target highlighting, Pitch shown on the End Turn button, mulligan
+  overlay, card inspector, and a live log. CPU opponent plays through the
+  same AI as the headless playtest harness.
+- **Play screen** now offers the twelve v4.2 archetype decks (real card art
+  via the remapped pool); the CPU picks a random different archetype. Match
+  gold payouts still record through Supabase.
+- **How to Play** rewritten as a condensed v4.2 rulebook (turn structure,
+  casting, combat damage order, every keyword incl. the twelve new ones, and
+  the measured combo-pattern hit rates).
+- **Engine**: added `mulliganRedraw()` so the UI's mulligan goes through the
+  engine like every other action.
+- Removed the legacy resource-game match screen (`src/components/Board.tsx`
+  and the old in-App modals); the meta screens (store, collection, deck
+  builder, profile) are unchanged.
+- Verified end-to-end in a real browser (Playwright + bundled Chromium):
+  guest login → archetype select → mulligan → multiple full turns with casts,
+  targeting and combat → game over screen, with zero console/page errors.
+
+### Added (Rulebook v4.2 — combo-gate cap, Twin A/B/C test, 12 new keywords)
+
+- **Rulebook v4.2** (`docs/RULEBOOK.md`): Combo-gated cards capped at **one
+  cast per turn** (cast or Echo-recast), closing the general chaining failure
+  mode; the specific Large-Straight face-burn Event retargeted off pure face
+  damage and reduced in power; Bind's retaliation-stop clause (already shipped
+  in engine, now correctly documented). Directed-reroll pattern hit rates
+  measured directly (`scripts/pattern-hitrate.ts`) instead of guessed — the
+  "straight needs a harder tier than matching" hypothesis did **not** hold up
+  (Three of a Kind hits ~54% under directed reroll vs. Small Straight's ~33%;
+  Full House ~18% vs. Large Straight's ~10%, the hardest pattern in its tier).
+- **Twin A/B/C test** (errata B): ran the same deck roster three times, one
+  Twin rule change per run — revert the one-die cap ('sameTurn') vs. keep the
+  cap but add a passive while parked ('stagedPassive'). **stagedPassive won**
+  and ships as the default (`TwinMode` is still an engine-level option for
+  further isolated testing). Holding archetype constant across all three runs
+  showed the original -22pt "completing a Twin" correlation was mostly a
+  **deck-membership confound** (the two Twin-drafting archetypes have the two
+  weakest Leaders in the pool) — the fix is a genuine but modest net positive,
+  not a fix for what was actually a leader-power problem.
+- **Echo win-delta broken out by rarity** of the card being recast: still
+  mildly negative across all three tiers (low/mid/high), not concentrated in
+  commons — so it reads as the die+card cost being uniformly a touch overpriced
+  rather than an AI-misuse artifact, flagged for a future cost trim rather than
+  a keyword rework this pass.
+- **Twelve new v4.2 keywords**, deterministically assigned across the real
+  193-card pool: **Resolve X** and **Ultimate(N)** (Leader — comeback +
+  inevitability tools); **Bulwark X**, **Toll X**, **Avenge** (Unit — scaling
+  defense answers, Ward→Bulwark→Frenzy damage-order specified); **Crescendo X**
+  and **Aftershock** (Event — the preferred "big roll payoff" pattern going
+  forward, and a delayed-effect hook resolving before Draw Phase); **Snap**
+  (Charm — castable during Reroll Phase); **Tribute**, **Excavate X**,
+  **Contested** (Location — Pitch synergy, ramp, and an arms-race passive).
+- **Smarter CPU**: Snap-casting pass before the reroll window closes,
+  Ultimate(N) usage once unlocked, ability-threshold checks now respect
+  Resolve/Excavate reductions everywhere (including Rally's source-die check).
+- Fixed a real bug caught by the harness: the pool generator could assign both
+  Scrap and Snap to the same card, and Snap's "cast it during Reroll" pass ran
+  first every time, silently eating the card's Scrap identity (`scraps: 0`
+  in one run flagged it). Snap and Scrap are now mutually exclusive by
+  construction.
+
+### v4.2 playtest findings (~10,000 games)
+
+- Combo-gate cap verified directly (unit-style engine test): a second
+  qualifying Combo-gated cast in the same turn is now structurally impossible.
+- Bulwark and Toll are both firing (76,922 / 24,278 damage prevented across
+  the run) — neither mechanic is dead on arrival.
+- `ultimateUsed` and `leaderAbility` show large negative win-correlations
+  (-9 to -12pt) that read as a **base-rate confound, not a real effect**: both
+  fire in the large majority of games simply because most games run long
+  enough to reach their unlock turn, so the small "did-not" bucket is mostly
+  games that ended unusually fast (i.e., a decisive early blowout) — not
+  evidence that using the ability caused the loss.
+- No invariant violations across the full run (card-count conservation, no
+  dead units on board, hand cap, no negative damage).
+
+### Added (Rulebook v4.1 — free Locations, longer games, decision tracking)
+
+- **Rulebook v4.1** (`docs/RULEBOOK.md`): Locations no longer use a die — one
+  free Location cast per turn as a bonus action (the free-land-drop move);
+  Anchor −2 cap codified in rules text; Yahtzee/Four-of-a-Kind combo gates
+  demoted to flavor-only (practical ceiling: Full House / Large Straight, with
+  one true trophy card in the pool); Leader HP 28→64 to lengthen games ~4
+  rounds (measured: 5.9 → 10.2 avg rounds).
+- **Elements removed** from all v4 card data — purely cosmetic legacy fields,
+  deleted from `CardDef`, the pool remap, and the deck builder (archetypes now
+  theme on keywords + effect actions instead).
+- **Board wipes added** (guidance D): half of Super-Rare+ Events are now
+  Sap-all-enemies at threshold 6; control archetypes draft them (+19pt
+  win-correlation when fired).
+- **Smarter CPU**: free-Location drops with passive-fit scoring, AoE held for
+  2+ targets, deck-aware combo-family rerolling, cross-turn Twin staging,
+  start-of-game mulligan.
+- **Decision→win tracking**: engine logs per-player plays (face/unit attacks,
+  early aggression, wipes, Echo recasts, Twin completes, Location casts,
+  leader ability, mulligan, went-first); harness reports did-vs-did-not win%
+  deltas across all decisive games.
+- **Balance:** Sea Witch leader Bind 4→6; Ward bodies lose their +2 HP stat
+  bonus (every-End-Phase Ward refresh already soaks ~5 attacks/game).
+
+### v4.1 playtest findings (8,832 games/run, 3 runs)
+
+- Game length 10.2 avg rounds (target hit); first-player win rate 50.0%;
+  Locations now contribute **+8.9–10.9 win%** isolated (up from +0.7%).
+- Decision deltas: board wipe +19pt, early face attack +19pt, mulligan +18pt,
+  Location cast +11pt, Twin completion **−22pt** (a trap), went-first ±0.
+- Remaining outlier: straight-family shells (Sea Witch Bind-Control 93%)
+  powered by Large-Straight-gated Sap-8-face events under the straight-chasing
+  reroll — flagged for the next tuning pass (retarget or rate-limit them).
+
+### Added (Rulebook v4.0 — errata pass + real-card remap)
+
+- **Rulebook v4.0** (`docs/RULEBOOK.md`): applied the errata from the 1,280-game
+  v3.0 playtest. Leader HP 20→28, deck size 40→30, Twin capped at one die per
+  Placement Phase, Ward refreshes for both players every End Phase, Bind also
+  stops retaliation, Frenzy only doubles retaliation on its 2nd swing, new
+  **Pitch** die-waste sink (unplaced die → Mend 1), Echo fodder-discard ruling
+  codified. All enforced in `src/game/v3/engine.ts`.
+- **Real-card remap** (`src/game/v3/cardpool.ts`): all 193 backend cards are now
+  remapped onto v4.0 mechanics, keeping their core identity (name, image, flavor,
+  rarity, type, elements) and deleting the obsolete resource-era data (colored
+  costs, attach bonuses, Overclock/Modularity/Siphon/Phalanx keywords). The
+  dead `Item` type is folded into Charms. 6 real Leaders at 28 HP.
+- **Deck builder** (`src/game/v3/decks.ts`): 12 archetype decks (2 per Leader)
+  built from the pool as legal 30-card / max-3-copy lists, with combo-family
+  coherence (never mixes straight- and matching-gated cards in one shell).
+- **Advanced CPU** (`src/game/v3/ai.ts`): adds a start-of-game mulligan,
+  deck-aware reroll (chases the shell's combo family and staged-Twin needs),
+  and Twin staging across turns under the new one-die rule.
+- **v4.0 harness** (`npm run sim:v4`): round-robin across all 24 decks (12
+  archetypes + Location-stripped twins) with an **isolated Location win-rate
+  contribution** measurement, first-player edge, game-length distribution,
+  per-card OP/useless ranking, Pitch/waste split, and combo/keyword activity.
+
+### Playtest findings (10,000+ v4.0 games)
+
+- Locations contribute only ~+0.7–1.5 win% over filling their slot with cheap
+  Units, and cast 0.3–0.7×/game — they still under-earn a full die even with
+  the passive+Ability-Slot upgrade.
+- Yahtzee/Four-of-a-Kind trophy gates (Submerged Starfall etc.) cast ~0.02×/game
+  — effectively dead even with Echo. Recommend reserving those gates for a tiny
+  trophy count and capping regular-play gates at Full House / Large Straight.
+- Leader/archetype win rates still span ~19–80%; the spread is driven by deck
+  *construction quality* (aggressive/tempo shells beat reactive shells in a fast
+  ~6-round meta), not single-card power. Flagged for a deeper tuning pass.
+
 ### Added (Rulebook v3.0 — dice-placement overhaul)
 
 - **New rules canon:** `docs/RULEBOOK.md` is now the v3.0 dice-placement
