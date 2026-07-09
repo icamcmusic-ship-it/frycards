@@ -8,6 +8,15 @@
    offset shadows, Montserrat 900 uppercase headings, Space Grotesk body.
 --------------------------------------------------------------------------- */
 
+:root {
+  /* Default theme colors (dusty grape) */
+  --theme-primary-1: #5b507aff;
+  --theme-primary-2: #5b618aff;
+  --theme-secondary: #9eadc8ff;
+  --theme-accent: #b9e28cff;
+  --theme-highlight: #d6d84fff;
+}
+
 body {
   font-family: 'Space Grotesk', sans-serif;
   background-color: #1a1a1a;

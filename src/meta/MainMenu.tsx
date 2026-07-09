@@ -1,9 +1,9 @@
 import React from 'react';
-import { Swords, Library, Layers, Store, User, LogOut, BookOpen } from 'lucide-react';
+import { Swords, Library, Layers, Store, User, LogOut, BookOpen, Settings } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { GoldChip, GemChip } from './ui';
 
-export type MetaScreen = 'menu' | 'play' | 'collection' | 'decks' | 'store' | 'profile';
+export type MetaScreen = 'menu' | 'play' | 'collection' | 'decks' | 'store' | 'profile' | 'settings';
 
 export function MainMenu({
   onNavigate,
@@ -118,6 +118,12 @@ export function MainMenu({
             className="btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
             <BookOpen className="w-3.5 h-3.5" /> RULES
+          </button>
+          <button
+            onClick={() => onNavigate('settings')}
+            className="btn-pop heading-font text-[11px] bg-[#2C3E50] text-[#F7F7F7] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+          >
+            <Settings className="w-3.5 h-3.5" /> SETTINGS
           </button>
           <button
             onClick={signOut}
