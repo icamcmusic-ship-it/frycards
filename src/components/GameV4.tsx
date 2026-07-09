@@ -14,10 +14,11 @@ import {
   effAtk, effMaxHp, remainingHp, effThreshold, effAbilityThreshold, tollReduction,
   matchesPattern, rollValues, opponentOf, mulliganRedraw,
 } from '../game/v3/engine';
-import { playTurn } from '../game/v3/ai';
+import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
-import { Archetype, buildDeck } from '../game/v3/decks';
+import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
+import { CardFace, cardRules, describeEffect, kwList } from './CardFaceV4';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -38,76 +39,6 @@ function targetsFor(g: Game, pid: string, eff: Effect): Inst[] {
 }
 function needsTarget(eff?: Effect): boolean {
   return !!eff && ['enemyUnit', 'anyTarget', 'friendlyUnit', 'friendlyAny'].includes(eff.target);
-}
-
-function kwList(def: CardDef): string[] {
-  return def.keywords || [];
-}
-
-// ---------------------------------------------------------------------------
-// Card face
-// ---------------------------------------------------------------------------
-function CardFace({
-  def, small, dimmed, highlight, onClick, footer,
-}: {
-  def: CardDef; small?: boolean; dimmed?: boolean; highlight?: boolean;
-  onClick?: () => void; footer?: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={!onClick}
-      className={cn(
-        'relative bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm text-left shrink-0 transition-transform',
-        small ? 'w-[104px]' : 'w-[128px]',
-        onClick && 'btn-pop cursor-pointer',
-        dimmed && 'opacity-45',
-        highlight && 'ring-4 ring-[#FFD54F] -translate-y-1',
-      )}
-    >
-      <div className="flex items-center justify-between px-1 pt-0.5">
-        <span className="heading-font text-[9px] leading-tight truncate pr-1">{def.name}</span>
-        {def.comboGate ? (
-          <span className="text-[8px] font-bold bg-[#8E44AD] text-white px-0.5 shrink-0">COMBO</span>
-        ) : def.type !== 'Location' && def.threshold !== undefined ? (
-          <span className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-1 shrink-0">
-            {def.threshold}+
-          </span>
-        ) : def.type === 'Location' ? (
-          <span className="text-[8px] font-bold bg-[#2C3E50] text-white px-0.5 shrink-0">FREE</span>
-        ) : null}
-      </div>
-      {def.image && (
-        <div className={cn('ink-border-sm mx-1 mt-0.5 overflow-hidden', small ? 'h-[52px]' : 'h-[66px]')}>
-          <img src={def.image} className="w-full h-full object-cover" draggable={false} />
-        </div>
-      )}
-      <div className="px-1 pb-0.5">
-        <div className="flex flex-wrap gap-0.5 mt-0.5 min-h-[10px]">
-          {kwList(def).slice(0, 4).map((kw) => (
-            <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F] ink-border-sm leading-tight">
-              {kw}
-            </span>
-          ))}
-          {def.comboGate && (
-            <span className="text-[7px] font-bold px-0.5 bg-[#8E44AD] text-white ink-border-sm leading-tight">
-              {def.comboGate}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[8px] font-bold uppercase text-[#2C3E50]">{def.type}</span>
-          {def.type === 'Unit' && (
-            <span className="text-[10px] font-mono font-bold">
-              {def.atk}<span className="text-[#E53935]">⚔</span>/{def.hp}
-              <span className="text-[#43A047]">♥</span>
-            </span>
-          )}
-        </div>
-        {footer}
-      </div>
-    </button>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,44 +182,6 @@ function LeaderPanel({
   );
 }
 
-function describeEffect(eff: Effect): string {
-  const v = eff.value ?? '';
-  switch (eff.action) {
-    case 'sap':
-      return eff.target === 'enemyLeader' ? `Sap ${v} enemy Leader`
-        : eff.target === 'allEnemyUnits' ? `Sap ${v} ALL enemy Units` : `Sap ${v}`;
-    case 'mend': return `Mend ${v}`;
-    case 'draw': return `Surge (draw ${v})`;
-    case 'bind': return 'Bind an enemy Unit';
-    case 'destroy': return eff.target === 'allEnemyUnits' ? 'Destroy ALL enemy Units' : 'Destroy a Unit';
-    case 'buff':
-      return eff.target === 'allFriendlyUnits' ? `All friendly +${v}/+${v}`
-        : eff.target === 'self' ? `This gains +${v}/+${v}` : `A friendly Unit +${v}/+${v}`;
-  }
-}
-
-function cardRules(def: CardDef): string {
-  const bits: string[] = [];
-  if (def.comboGate) bits.push(`Combo ${def.comboGate}: ${def.onCast ? describeEffect(def.onCast) : ''}`);
-  else if (def.onCast) bits.push(`On cast: ${describeEffect(def.onCast)}`);
-  if (def.ability) bits.push(`Ability ${def.ability.threshold}+: ${describeEffect(def.ability.effect)}`);
-  if (def.combo) bits.push(`Combo ${def.combo.pattern}: ${describeEffect(def.combo.effect)}`);
-  if (def.overflow) bits.push(`Overflow ${def.overflow.amount}: ${describeEffect(def.overflow.effect)}`);
-  if (def.twinBonus) bits.push(`Twin bonus: ${describeEffect(def.twinBonus)}`);
-  if (def.stagedPassive) bits.push(`While staged: ${describeEffect(def.stagedPassive)} each turn`);
-  if (def.aftershock) bits.push(`Aftershock: ${describeEffect(def.aftershock)} next turn`);
-  if (def.crescendo) bits.push(`Crescendo ${def.crescendo.x}: +${def.crescendo.x} per 6 placed`);
-  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}`);
-  if (def.toll) bits.push(`Toll ${def.toll.x}`);
-  if (def.avenge) bits.push('Avenge: +1/+1 when another friendly Unit dies');
-  if (def.locPassive) bits.push(def.locPassive === 'ATK_ALL' ? 'Your Units get +1 ATK' : 'Your Units get +1 max HP');
-  if (def.contested) bits.push('Contested: passive doubled while opponent has no Location');
-  if (def.excavate) bits.push(`Excavate ${def.excavate.x}: ability cheapens each turn`);
-  if (def.tribute) bits.push(`Tribute: ${describeEffect(def.tribute)} if you Pitch 2+`);
-  if (def.snap) bits.push('Snap: castable during Reroll Phase');
-  return bits.join(' · ');
-}
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -301,10 +194,13 @@ interface Pending {
 }
 
 export function GameV4({
-  humanArchetype, cpuArchetype, playerName, onExit, onResult,
+  humanDeck, cpuDeck, humanLabel, cpuLabel, playerName, onExit, onResult,
 }: {
-  humanArchetype: Archetype;
-  cpuArchetype: Archetype;
+  /** A prebuilt archetype's DeckDef, or a player's own saved deck resolved against the pool. */
+  humanDeck: DeckDef;
+  cpuDeck: DeckDef;
+  humanLabel: string;
+  cpuLabel: string;
   playerName: string;
   onExit: () => void;
   onResult?: (won: boolean) => void;
@@ -312,13 +208,15 @@ export function GameV4({
   // The engine Game object is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
-  const [g] = useState<Game>(() =>
-    newGame(
-      buildDeck(humanArchetype),
-      buildDeck(cpuArchetype),
-      mulberry32(Date.now() % 2147483647),
-    ),
-  );
+  const [g] = useState<Game>(() => {
+    const game = newGame(humanDeck, cpuDeck, mulberry32(Date.now() % 2147483647));
+    // Give the CPU the same opening-hand judgment the playtest harness always
+    // gave it (maybeMulliganPlayer) — the human's own mulligan stays a manual
+    // UI decision below, but leaving the CPU's hand un-mulliganed made it
+    // meaningfully weaker/more random here than in every simulated game.
+    maybeMulliganPlayer(game, 'B', game.rng);
+    return game;
+  });
   const HUMAN = 'A';
   const CPU = 'B';
   const me = g.players[HUMAN];
@@ -391,6 +289,9 @@ export function GameV4({
 
   const canCastNow = (c: Inst): { ok: boolean; why?: string } => {
     if (c.def.type === 'Location') {
+      // Free Location casts are a Placement Phase bonus action (§7) — not
+      // available before the reroll window closes, same as every other cast.
+      if (stage === 'preRoll') return { ok: false, why: 'Free Location cast happens during Placement' };
       if (me.locationCastThisTurn) return { ok: false, why: 'Location already cast this turn' };
       if (me.location?.def.id === c.def.id) return { ok: false, why: 'Same-name Location in play' };
       return { ok: true };
@@ -424,6 +325,11 @@ export function GameV4({
       bump();
       say(hasKw(c.def, 'Twin') ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later.` : `${c.def.name} resolves.`);
     } else say('Illegal placement.');
+    // A fixed-target cast (e.g. Sap enemyLeader) never opens the target
+    // picker above, so lethal damage can land right here — check for it,
+    // or the game-over screen never appears (the UI would just sit in
+    // Placement with the win already decided internally).
+    if (g.winner) setStage('over');
   };
 
   const resolvePendingOn = (targetIid: string) => {
@@ -552,7 +458,7 @@ export function GameV4({
           TURN {Math.ceil(g.turn / 2) || 1} · {stage === 'cpu' ? "CPU'S TURN" : stage === 'preRoll' ? 'ROLL & SNAP' : stage === 'placement' ? 'PLACEMENT' : stage === 'combat' ? 'COMBAT' : stage.toUpperCase()}
         </span>
         <span className="text-[9px] font-mono text-[#F7F7F7]/70 truncate">
-          {humanArchetype.label} vs {cpuArchetype.label}
+          {humanLabel} vs {cpuLabel}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {stage === 'placement' && (
@@ -841,7 +747,13 @@ export function GameV4({
                     <button
                       onClick={() => {
                         if (selDie === null) { say('Select a die first.'); return; }
-                        if (c.def.comboGate ? me.comboGateCastThisTurn : false) { say('One Combo-gated card per turn.'); return; }
+                        if (c.def.comboGate) {
+                          if (me.comboGateCastThisTurn) { say('One Combo-gated card per turn.'); return; }
+                          if (!matchesPattern(rollValues(me), c.def.comboGate)) { say(`Roll lacks ${c.def.comboGate}.`); return; }
+                        } else {
+                          const thr = effThreshold(g, HUMAN, c.def);
+                          if (dieVal !== null && dieVal < thr) { say(`Needs ${thr}+ to Echo this.`); return; }
+                        }
                         setEchoPick(c.iid);
                         say('Now pick a hand card to discard.');
                       }}

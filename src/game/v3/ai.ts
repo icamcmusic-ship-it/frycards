@@ -17,24 +17,46 @@ import { hasKw } from './cards';
  * flooded with expensive cards (no cheap early plays) or has no Units, then
  * bottom one card (London-style). Called by the harness before turn 1.
  */
+/** True if this hand is worth keeping by the CPU's opening-hand heuristic. */
+function handIsKeepable(p: Player): boolean {
+  const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
+  const units = p.hand.filter((c) => c.def.type === 'Unit').length;
+  return cheapPlays >= 2 && units >= 1;
+}
+
+/** Mulligan a single player's hand (shuffle back, redraw 5, bottom the worst card). */
+function mulliganOne(p: Player, rng: () => number) {
+  p.deck.push(...p.hand);
+  p.hand = [];
+  for (let i = p.deck.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+  }
+  for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+  const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+  const idx = p.hand.indexOf(worst);
+  if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
+}
+
+/**
+ * Run the CPU's opening-hand mulligan heuristic for ONE player (used by the
+ * interactive frontend to give the CPU opponent the same keep/mulligan
+ * judgment the playtest harness always gave it — without touching the
+ * human's own hand, which is a manual UI decision).
+ */
+export function maybeMulliganPlayer(g: Game, pid: string, rng: () => number): boolean {
+  const p = g.players[pid];
+  if (handIsKeepable(p)) return false;
+  mulliganOne(p, rng);
+  return true;
+}
+
 export function maybeMulligan(g: Game, rng: () => number): Record<string, boolean> {
   const mulliganed: Record<string, boolean> = {};
   for (const p of Object.values(g.players)) {
-    const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
-    const units = p.hand.filter((c) => c.def.type === 'Unit').length;
-    if (cheapPlays >= 2 && units >= 1) continue;
+    if (handIsKeepable(p)) continue;
     mulliganed[p.id] = true;
-    // Reshuffle hand into deck, redraw 5, bottom the single worst card.
-    p.deck.push(...p.hand);
-    p.hand = [];
-    for (let i = p.deck.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
-    }
-    for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
-    const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
-    const idx = p.hand.indexOf(worst);
-    if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
+    mulliganOne(p, rng);
   }
   return mulliganed;
 }

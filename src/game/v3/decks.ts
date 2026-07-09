@@ -145,3 +145,14 @@ export const ARCHETYPES: Archetype[] = [
 export function allDecks(): DeckDef[] {
   return ARCHETYPES.map(buildDeck);
 }
+
+/**
+ * Build a DeckDef from a saved custom deck (Supabase `decks` row: a Leader id
+ * plus a flat list of card ids, one entry per copy). Used to play a
+ * player-built deck through the same engine/AI as the prebuilt archetypes.
+ */
+export function deckDefFromCustom(leaderId: string, cardIds: string[], label: string): DeckDef {
+  const cards: Record<string, number> = {};
+  for (const id of cardIds) cards[id] = (cards[id] || 0) + 1;
+  return { leaderId, cards, resolve: (id) => POOL_BY_ID[id], label };
+}

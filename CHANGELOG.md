@@ -5,6 +5,59 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (custom deck building + bug sweep)
+
+- **Deck Builder rewired onto the v4.2 pool** (`src/meta/DeckBuilderScreen.tsx`):
+  30 cards, max 3 copies (was a stale legacy 2), no color-identity
+  restriction (elements were removed from the game in v4.1), Leader picker
+  and card pool now pull from `POOL_V4`/`POOL_LEADERS`, cost filter replaced
+  with a Cast Slot filter (1–6 / Combo-gated / Free). Deck codes
+  (`deckcode.ts`) generalized to work with either card pool. Added
+  `src/meta/DeckBuilderScreen.test.ts` covering the new v4.2 validation rules.
+- **Play screen** now lists the player's own saved, legal decks (via
+  `deckDefFromCustom`) alongside the 12 prebuilt archetypes; the CPU still
+  always plays a prebuilt archetype, since its AI heuristics were tuned
+  against those decks.
+- Extracted the card-face renderer into `src/components/CardFaceV4.tsx` so
+  the match UI and the deck builder share one card presentation instead of
+  drifting into two different "what does this card do" reads.
+
+### Fixed (bug sweep: engine correctness + UI)
+
+- **Echo/Twin recast state leak**: recasting a card via Echo (or completing
+  it via Twin) reuses the same instance object, but it was never reset —
+  permanent stat buffs, "has attacked," "ability used," and a pending Bind
+  from the card's previous stint in play all silently carried over into its
+  new life. `enterPlay` now gives every (re)entering Unit a clean state;
+  Locations similarly lose an unearned Excavate discount on re-entry.
+  Covered by a new regression test in `src/game/v3/engine.test.ts`.
+- **`completeTwin` had no Placement Phase guard** — unlike every other
+  die-placement action, it could be called during the Reroll window. Now
+  consistently gated like `activateAbility`/`echoRecast`/`scrap`.
+- **Unit `onCast` effects with an explicit target were silently ignored** —
+  `castFromHand`'s `targetIid` parameter never reached `enterPlay`, so a
+  caller-chosen target for a Unit's own on-enter effect was dropped in favor
+  of auto-targeting. Not reachable by the current card pool (no Unit prints
+  `onCast` yet) but a real API gap, now fixed.
+- **Frontend: casting a card with a fixed enemy-Leader target (e.g. a
+  Combo-gated burn Event) could win the game without showing the game-over
+  screen** — `tryCast`'s direct-cast path never checked `g.winner` after
+  resolving, unlike every other action handler. The UI would silently sit in
+  Placement with the win already decided internally. Fixed, and verified live
+  in a browser via Playwright.
+- **Frontend: free Location casts were reachable during the Reroll window**
+  (inconsistent with the CPU, which only ever casts them during Placement) —
+  `castLocationFree` now shares the same Placement Phase gate as the other
+  three die destinations, and the UI reflects it instead of silently no-op'ing.
+- **Frontend: Echo's target-die check happened too late** — clicking ECHO
+  with an insufficient die let the player pick a hand card to discard as
+  fodder before being told the recast was illegal. Now checked up front.
+- **The CPU never mulliganed its opening hand in the interactive frontend**,
+  unlike every simulated playtest game (which uses the harness's
+  `maybeMulligan` for both sides) — added `maybeMulliganPlayer` so the CPU
+  opponent gets the same keep/mulligan judgment in real matches that all the
+  balance data assumes it has.
+
 ### Added (v4.2 frontend — the dice-placement game is now playable in the app)
 
 - **New match UI** (`src/components/GameV4.tsx`): full interactive
