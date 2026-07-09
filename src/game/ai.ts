@@ -787,6 +787,12 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
     }
   }
   const lethal = incoming >= defender.health;
+  // Critical Life Preservation: when a big enough slice of remaining life is
+  // on the line, a pure chump block (no kill, doesn't survive) that saves the
+  // Leader is still worth taking — the old scoring only rewarded chumps that
+  // killed or survived, so a low-health CPU would eat easily-blockable face
+  // damage rather than sac a small Unit to buy a turn.
+  const critical = defender.health <= 8 || incoming / Math.max(1, defender.health) >= 0.4;
 
   const unblocked = combat.attackers
     .filter((a) => !blockedAttackers.has(a.instanceId))
@@ -816,7 +822,12 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
       let s = 0;
       if (kills) s += unitValue(card, state) + 2;
       if (survives) s += unitValue(b, state) * 0.5;
-      if (!kills && !survives) s -= unitValue(b, state); // pure chump
+      if (!kills && !survives) {
+        s -= unitValue(b, state); // pure chump
+        // At critical life, a cheap chump that saves the Leader from a hit
+        // it can't otherwise avoid is worth taking even though the blocker dies.
+        if (critical && savesLeader) s += atkVal * 0.6 - unitValue(b, state) * 0.3;
+      }
       // Soaking a Leader hit is worth something even without a kill — chip
       // damage adds up. Pierce overflow negates most of that value.
       if (savesLeader && (kills || survives)) s += atkVal * 0.35;

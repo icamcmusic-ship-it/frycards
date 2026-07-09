@@ -99,6 +99,7 @@ function BoardUnit({
     <button
       onClick={onClick}
       disabled={!onClick}
+      aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
         'relative w-[92px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm text-left shrink-0',
         onClick && 'btn-pop cursor-pointer',
@@ -389,6 +390,21 @@ export function GameV4({
       if (g.winner !== 'draw') onResult?.(g.winner === HUMAN);
     }
   }, [stage, g.winner, onResult]);
+
+  // Escape closes whatever overlay is frontmost, and backs out of a pending
+  // targeting/attack selection — the same "cancel" affordance as the visible
+  // ✕ buttons, just reachable without a mouse.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (inspect) setInspect(null);
+      else if (showDiscard) setShowDiscard(false);
+      else if (pending) setPending(null);
+      else if (attacker) setAttacker(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [inspect, showDiscard, pending, attacker]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -712,7 +728,23 @@ export function GameV4({
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#E53935] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           PICK A TARGET — {describeEffect(pending.effect)}
-          <button onClick={() => setPending(null)} className="bg-[#1A1A1A] px-1">
+          <button
+            onClick={() => setPending(null)}
+            aria-label="Cancel targeting"
+            className="bg-[#1A1A1A] px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {!pending && attacker && stage === 'combat' && (
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#FFD54F] text-[#1A1A1A] heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
+          SELECT AN ATTACK TARGET
+          <button
+            onClick={() => setAttacker(null)}
+            aria-label="Cancel attack"
+            className="bg-[#1A1A1A] text-white px-1"
+          >
             ✕
           </button>
         </div>
@@ -817,6 +849,8 @@ export function GameV4({
                   usable && 'btn-pop',
                 )}
                 title={d.placed ? 'Placed' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'}
+                aria-label={`Die ${i + 1}: value ${d.value}${d.placed ? ' (placed)' : marked ? ' (selected)' : ''}`}
+                aria-pressed={marked}
               >
                 {DIE_FACES[d.value - 1]}
               </button>
@@ -956,10 +990,13 @@ export function GameV4({
                   {stage === 'preRoll' && (
                     <button
                       onClick={() => {
+                        if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`))
+                          return;
                         abandonTwin(g, s.iid);
                         bump();
                       }}
                       title="Abandon (return to hand)"
+                      aria-label={`Abandon ${s.def.name} and return it to hand`}
                       className="btn-pop text-[8px] font-bold bg-[#E53935] text-white px-1 ink-border-sm"
                     >
                       ✕
@@ -1079,6 +1116,7 @@ export function GameV4({
                 setShowDiscard(false);
                 setEchoPick(null);
               }}
+              aria-label="Close discard pile"
               className="btn-pop text-[10px] bg-[#E53935] text-white px-1.5 ink-border-sm"
             >
               ✕
