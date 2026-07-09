@@ -14,6 +14,7 @@
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
     "sim": "tsx scripts/simulate.ts",
+    "sim:v3": "tsx scripts/simulate-v3.ts",
     "fuzz": "tsx scripts/fuzz.ts",
     "test:engine": "tsx scripts/engine-tests.ts"
   },

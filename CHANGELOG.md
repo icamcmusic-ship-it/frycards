@@ -5,6 +5,27 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (Rulebook v3.0 — dice-placement overhaul)
+
+- **New rules canon:** `docs/RULEBOOK.md` is now the v3.0 dice-placement
+  rulebook (5d6, one reroll, four placement destinations, Combo patterns,
+  sequential targeted combat). The old Shifting Multiverse V1.9 rules moved to
+  `docs/RULEBOOK_V1_LEGACY.md` and still power the current UI.
+- **New engine** (`src/game/v3/engine.ts`): full v3.0 turn structure —
+  Draw/Roll/Reroll/Placement/Combo Check/Combat/End — with Twin staging, Echo
+  recasting (incl. banish-on-second-discard), Scrap, Rally, Anchor thresholds,
+  Overflow off effective thresholds, Guard walls, Pierce leftover overflow,
+  Ward-before-Frenzy ordering, Leader with no ATK/retaliation, deck-out and
+  simultaneous-loss rules.
+- **New card set** (`src/game/v3/cards.ts`): 4 Leaders + 38 cards covering
+  every v3.0 keyword, with 40-card decklists per Leader (max 3 copies).
+- **Playtest harness** (`npm run sim:v3`): seeded CPU-vs-CPU round-robin with
+  invariant checks, leader win rates, per-card usage/impact and mechanic
+  activity. Balance pass validated over 800 games (three leaders at
+  52.5–53.3%; Shadow Duelist 41.3% flagged for follow-up).
+- **Follow-up needed:** the React UI (`src/components`, `src/App.tsx`) still
+  renders the legacy resource game and needs a redesign for dice placement.
+
 ### Changed (Rulebook V1.9)
 
 - **Leader rebalance** (validated over 900 simulated games; all six leaders
