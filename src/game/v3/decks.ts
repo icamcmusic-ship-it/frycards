@@ -13,10 +13,10 @@ const MAX_COPIES = 3;
 export interface Archetype {
   label: string;
   leaderId: string;
-  /** preferred elements (soft filter). */
-  elements: string[];
-  /** keyword themes to over-weight. */
+  /** keyword themes to over-weight (v4.1: elements removed from the system). */
   keywords: string[];
+  /** effect actions to over-weight (aggro=sap, control=bind/destroy, etc.). */
+  effects?: string[];
   /** rough composition targets (they sum to <= 30; remainder auto-filled). */
   units: number;
   spells: number;
@@ -27,8 +27,12 @@ export interface Archetype {
 
 function score(c: CardDef, arch: Archetype): number {
   let s = 0;
-  for (const el of c.elements || []) if (arch.elements.includes(el)) s += 3;
   for (const kw of c.keywords || []) if (arch.keywords.includes(kw)) s += 4;
+  // Reward on-theme effect actions so keyword-light spells still sort sensibly.
+  const act = c.onCast?.action || c.ability?.effect.action;
+  if (act && arch.effects?.includes(act)) s += 3;
+  // Board wipes are premium answers for control/reactive shells (v4.1 guidance D).
+  if (c.onCast?.target === 'allEnemyUnits' && arch.effects?.includes('destroy')) s += 6;
   // Combo-family coherence (guidance F2: don't mix straight & matching gates).
   if (c.comboGate) {
     const isStraight = c.comboGate === 'SmallStraight' || c.comboGate === 'LargeStraight';
@@ -96,45 +100,45 @@ export function buildDeck(arch: Archetype): DeckDef {
 // ---------------------------------------------------------------------------
 export const ARCHETYPES: Archetype[] = [
   { label: 'Abyss Echo-Recursion', leaderId: 'avatar_of_the_abyss',
-    elements: ['Dark', 'Nature'], keywords: ['Echo', 'Twin'],
+    keywords: ['Echo', 'Twin'], effects: ['draw', 'sap'],
     units: 17, spells: 9, locations: 4, comboFamily: 'match' },
   { label: 'Abyss Sap Burn', leaderId: 'avatar_of_the_abyss',
-    elements: ['Dark', 'Flame'], keywords: ['Frenzy', 'Pierce'],
+    keywords: ['Frenzy', 'Pierce'], effects: ['sap', 'destroy'],
     units: 15, spells: 12, locations: 3, comboFamily: 'none' },
 
   { label: 'Sea Witch Bind-Control', leaderId: 'ethereal_sea_witch',
-    elements: ['Frost', 'Tech'], keywords: ['Ward', 'Anchor'],
+    keywords: ['Ward', 'Anchor'], effects: ['bind', 'destroy', 'draw'],
     units: 16, spells: 11, locations: 3, comboFamily: 'straight' },
   { label: 'Sea Witch Anchor-Ramp', leaderId: 'ethereal_sea_witch',
-    elements: ['Tech', 'Frost'], keywords: ['Anchor', 'Ward'],
+    keywords: ['Anchor', 'Ward'], effects: ['draw', 'bind'],
     units: 18, spells: 8, locations: 4, comboFamily: 'none' },
 
   { label: 'Mer King Guard-Wall', leaderId: 'mer_king',
-    elements: ['Light', 'Order'], keywords: ['Guard', 'Ward'],
+    keywords: ['Guard', 'Ward'], effects: ['mend', 'destroy'],
     units: 18, spells: 8, locations: 4, comboFamily: 'none' },
   { label: 'Mer King Heal-Midrange', leaderId: 'mer_king',
-    elements: ['Light', 'Nature'], keywords: ['Guard', 'Twin'],
+    keywords: ['Guard', 'Twin'], effects: ['mend', 'buff'],
     units: 16, spells: 10, locations: 4, comboFamily: 'match' },
 
   { label: 'Diver Straight-Combo', leaderId: 'legendary_diver',
-    elements: ['Flame', 'Chaos'], keywords: ['Swift', 'Frenzy'],
+    keywords: ['Swift', 'Frenzy'], effects: ['sap', 'draw'],
     units: 15, spells: 12, locations: 3, comboFamily: 'straight' },
   { label: 'Diver Aggro-Swift', leaderId: 'legendary_diver',
-    elements: ['Flame', 'Chaos'], keywords: ['Frenzy', 'Swift', 'Pierce'],
+    keywords: ['Frenzy', 'Swift', 'Pierce'], effects: ['sap'],
     units: 19, spells: 8, locations: 3, comboFamily: 'none' },
 
   { label: 'Crimson Frenzy-Aggro', leaderId: 'crimson_vector_commander',
-    elements: ['Flame', 'Order'], keywords: ['Frenzy', 'Pierce', 'Guard'],
+    keywords: ['Frenzy', 'Pierce', 'Guard'], effects: ['sap'],
     units: 19, spells: 8, locations: 3, comboFamily: 'none' },
   { label: 'Crimson Match-Combo', leaderId: 'crimson_vector_commander',
-    elements: ['Flame', 'Order'], keywords: ['Guard', 'Frenzy'],
+    keywords: ['Guard', 'Frenzy'], effects: ['sap', 'buff'],
     units: 16, spells: 11, locations: 3, comboFamily: 'match' },
 
   { label: 'Shinobi Tempo-Anchor', leaderId: 'apex_nanite_shinobi',
-    elements: ['Tech', 'Dark'], keywords: ['Anchor', 'Echo', 'Swift'],
+    keywords: ['Anchor', 'Echo', 'Swift'], effects: ['buff', 'sap'],
     units: 17, spells: 10, locations: 3, comboFamily: 'none' },
   { label: 'Shinobi Echo-Straight', leaderId: 'apex_nanite_shinobi',
-    elements: ['Tech', 'Dark'], keywords: ['Echo', 'Anchor'],
+    keywords: ['Echo', 'Anchor'], effects: ['draw', 'sap'],
     units: 16, spells: 11, locations: 3, comboFamily: 'straight' },
 ];
 

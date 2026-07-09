@@ -5,6 +5,40 @@ changes are also tracked in the Change Log section of `docs/RULEBOOK.md`.
 
 ## Unreleased
 
+### Added (Rulebook v4.1 — free Locations, longer games, decision tracking)
+
+- **Rulebook v4.1** (`docs/RULEBOOK.md`): Locations no longer use a die — one
+  free Location cast per turn as a bonus action (the free-land-drop move);
+  Anchor −2 cap codified in rules text; Yahtzee/Four-of-a-Kind combo gates
+  demoted to flavor-only (practical ceiling: Full House / Large Straight, with
+  one true trophy card in the pool); Leader HP 28→64 to lengthen games ~4
+  rounds (measured: 5.9 → 10.2 avg rounds).
+- **Elements removed** from all v4 card data — purely cosmetic legacy fields,
+  deleted from `CardDef`, the pool remap, and the deck builder (archetypes now
+  theme on keywords + effect actions instead).
+- **Board wipes added** (guidance D): half of Super-Rare+ Events are now
+  Sap-all-enemies at threshold 6; control archetypes draft them (+19pt
+  win-correlation when fired).
+- **Smarter CPU**: free-Location drops with passive-fit scoring, AoE held for
+  2+ targets, deck-aware combo-family rerolling, cross-turn Twin staging,
+  start-of-game mulligan.
+- **Decision→win tracking**: engine logs per-player plays (face/unit attacks,
+  early aggression, wipes, Echo recasts, Twin completes, Location casts,
+  leader ability, mulligan, went-first); harness reports did-vs-did-not win%
+  deltas across all decisive games.
+- **Balance:** Sea Witch leader Bind 4→6; Ward bodies lose their +2 HP stat
+  bonus (every-End-Phase Ward refresh already soaks ~5 attacks/game).
+
+### v4.1 playtest findings (8,832 games/run, 3 runs)
+
+- Game length 10.2 avg rounds (target hit); first-player win rate 50.0%;
+  Locations now contribute **+8.9–10.9 win%** isolated (up from +0.7%).
+- Decision deltas: board wipe +19pt, early face attack +19pt, mulligan +18pt,
+  Location cast +11pt, Twin completion **−22pt** (a trap), went-first ±0.
+- Remaining outlier: straight-family shells (Sea Witch Bind-Control 93%)
+  powered by Large-Straight-gated Sap-8-face events under the straight-chasing
+  reroll — flagged for the next tuning pass (retarget or rate-limit them).
+
 ### Added (Rulebook v4.0 — errata pass + real-card remap)
 
 - **Rulebook v4.0** (`docs/RULEBOOK.md`): applied the errata from the 1,280-game

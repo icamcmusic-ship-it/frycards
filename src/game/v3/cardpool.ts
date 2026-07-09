@@ -85,7 +85,9 @@ function mapUnit(c: RawCard): CardDef {
   // bigger HP bump; Frenzy's ATK bump is trimmed now that its downside is
   // softer (only the 2nd swing doubles retaliation).
   if (primaryKw === 'Guard') { hp += 3; }
-  if (primaryKw === 'Ward') { hp += 2; }
+  // v4.1 balance: Ward refreshing every End Phase (v4.0 A1) already makes a
+  // Ward body soak ~one attack per round for free; the extra +2 HP on top made
+  // Ward-stacked shells (Sea Witch) dominate at 82-96%. No stat bonus needed.
   if (primaryKw === 'Frenzy' && hash(c.id) % 2 === 0) { atk += 1; }
   if (primaryKw) keywords.push(primaryKw);
 
@@ -98,7 +100,7 @@ function mapUnit(c: RawCard): CardDef {
   const def: CardDef = {
     id: c.id, name: c.name, type: 'Unit', threshold, atk, hp,
     keywords: keywords.length ? keywords : undefined,
-    elements: c.elements as any, rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
   };
 
   // Twin units carry a printed Twin bonus (required by §7).
@@ -151,28 +153,53 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   const type = asCharm ? 'Charm' : 'Event';
   const base: CardDef = {
     id: c.id, name: c.name, type,
-    elements: c.elements as any, rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
   };
 
-  // Combo-gated Events at higher rarity (the trophy slot); respect real odds:
-  // reserve Yahtzee/FourKind for Mythic/Legendary only, and make them Echo-able.
+  // v4.1 guidance B: Yahtzee/Four-of-a-Kind are FLAVOUR-ONLY rarity, not a
+  // functional cost tier. The practical Combo-gate ceiling is Full House /
+  // Large Straight. Anything that "wants a Yahtzee payoff" is printed at a high
+  // numeric threshold with a Combo BONUS (not a requirement) so it's never a
+  // dead card. Exactly one true trophy card in the whole pool keeps a Yahtzee
+  // gate as a "once in fifty games" moment.
+  const TROPHY_ID = 'submerged_starfall'; // the single Mythic trophy
+  if (!asCharm && c.id === TROPHY_ID) {
+    base.comboGate = 'Yahtzee';
+    base.onCast = { action: 'sap', value: 20, target: 'enemyLeader' };
+    base.flavor = c.text;
+    return base;
+  }
+  // v4.1: reactive-support answer — half of all Super-Rare+ Events are board
+  // wipes (Sap X to all enemy Units), the removal density reactive shells need.
+  if (!asCharm && tier >= 3 && hash(c.id) % 2 === 0) {
+    base.onCast = { action: 'sap', value: 2 + tier, target: 'allEnemyUnits' };
+    base.threshold = 6;
+    base.flavor = c.text;
+    return base;
+  }
+  if (!asCharm && tier >= 4) {
+    // Would-be trophy bomb -> high numeric threshold + Combo bonus rider.
+    base.threshold = 6;
+    base.onCast = { action: 'sap', value: 6, target: 'anyTarget' };
+    base.combo = {
+      pattern: hash(c.id) % 2 ? 'FourKind' : 'LargeStraight',
+      effect: { action: 'sap', value: 6, target: 'enemyLeader' },
+    };
+    base.keywords = ['Echo'];
+    base.flavor = c.text;
+    return base;
+  }
+  // Practical Combo-gated Events cap at Full House / Large Straight.
   if (!asCharm && tier >= 2 && hash(c.id) % 3 === 0) {
     const gate: ComboPattern =
-      tier >= 5 ? 'Yahtzee' :
-      tier >= 4 ? (hash(c.id) % 2 ? 'FourKind' : 'LargeStraight') :
-      tier >= 3 ? (hash(c.id) % 2 ? 'FullHouse' : 'SmallStraight') :
+      tier >= 3 ? (hash(c.id) % 2 ? 'FullHouse' : 'LargeStraight') :
       (hash(c.id) % 2 ? 'ThreeKind' : 'TwoPair');
     base.comboGate = gate;
-    if (tier >= 4) base.keywords = ['Echo']; // bricked bombs aren't pure loss
-    base.onCast = gate === 'Yahtzee'
-      ? { action: 'sap', value: 12, target: 'enemyLeader' }
-      : gate === 'FourKind'
-        ? { action: 'destroy', target: 'allEnemyUnits' }
-        : gate === 'LargeStraight'
-          ? { action: 'sap', value: 8, target: 'enemyLeader' }
-          : gate === 'FullHouse'
-            ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
-            : { action: 'sap', value: 5, target: 'anyTarget' };
+    base.onCast = gate === 'LargeStraight'
+      ? { action: 'sap', value: 8, target: 'enemyLeader' }
+      : gate === 'FullHouse'
+        ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
+        : { action: 'sap', value: 5, target: 'anyTarget' };
     base.flavor = c.text;
     return base;
   }
@@ -219,14 +246,13 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
 // ---------------------------------------------------------------------------
 function mapLocation(c: RawCard): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
-  const threshold = Math.min(5, 2 + Math.min(2, tier));
+  // v4.1: Locations no longer print a Cast Slot threshold at all — they cast
+  // free once per turn as a bonus action (castLocationFree). They keep a
+  // passive and (at higher rarity) an Ability Slot, which still costs a die.
   const def: CardDef = {
-    id: c.id, name: c.name, type: 'Location', threshold,
-    elements: c.elements as any, rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    id: c.id, name: c.name, type: 'Location',
+    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
   };
-  // v4.0 guidance F: Locations must earn a full die. Every Location gets a
-  // passive AND (at higher rarity) its own Ability Slot, so the casting die
-  // isn't the only value it ever returns.
   const el = primaryElement(c);
   def.locPassive = el === 'Flame' || el === 'Chaos' || el === 'Dark' ? 'ATK_ALL' : 'HP_ALL';
   if (tier >= 1) {
@@ -245,7 +271,10 @@ function mapLocation(c: RawCard): CardDef {
 // ---------------------------------------------------------------------------
 const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 3, target: 'anyTarget' } },
-  ethereal_sea_witch: { threshold: 4, effect: { action: 'bind', target: 'enemyUnit' } },
+  // v4.1 balance: Bind's retaliation-stop buff + 64 HP long games made an
+  // every-turn threshold-4 leader Bind a permanent board lock (96.6% archetype
+  // win rate) — raised to 6 so it's a high roll, not a routine.
+  ethereal_sea_witch: { threshold: 6, effect: { action: 'bind', target: 'enemyUnit' } },
   // v4.0 balance: Mer King and Apex were the two weakest leaders (~24%); make
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
   mer_king: { threshold: 4, effect: { action: 'mend', value: 4, target: 'friendlyAny' } },
@@ -259,7 +288,7 @@ function mapLeader(c: RawCard): CardDef {
     id: c.id, name: c.name, type: 'Leader', hp: LEADER_HP,
     ability: LEADER_ABILITIES[c.id] ||
       { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
-    elements: c.elements as any, rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
   };
 }
 
@@ -284,9 +313,6 @@ export const POOL_BY_ID: Record<string, CardDef> = Object.fromEntries(
 export const POOL_LEADERS = POOL_V4.filter((c) => c.type === 'Leader');
 export function poolByType(t: string): CardDef[] {
   return POOL_V4.filter((c) => c.type === t);
-}
-export function poolByElement(el: string): CardDef[] {
-  return POOL_V4.filter((c) => c.elements?.includes(el as any));
 }
 export function poolHasKeyword(kw: string): CardDef[] {
   return POOL_V4.filter((c) => c.keywords?.includes(kw));

@@ -1,4 +1,4 @@
-# [Working Title] — Definitive Rulebook v4.0
+# [Working Title] — Definitive Rulebook v4.1
 
 Supersedes v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
 preserved in `RULEBOOK_V1_LEGACY.md`). The executable version of this document
@@ -7,6 +7,14 @@ is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness).
+
+**v4.1 errata (applied from a ~10,000-game v4.0 playtest):** Locations no
+longer use a die — one free Location cast per turn as a bonus action; the
+Anchor −2 cap is codified in rules text; Yahtzee/Four-of-a-Kind combo gates
+are demoted to flavor-only rarity (practical gate ceiling: Full House / Large
+Straight); Leader HP 28→64 to lengthen games ~4 rounds toward the 8–10 round
+target; card elements removed entirely (the game never referenced them).
+Changes are marked *(v4.1)* inline.
 
 **v4.0 errata (applied from a 1,280-game v3.0 playtest):** Leader HP 20→28;
 deck size 40→30; Twin capped at one die per Placement Phase; Ward now refreshes
@@ -165,10 +173,13 @@ Every non-Leader card prints a **Cast Slot** (threshold 1–6). A die of that va
 Cards in play may print one or more **Ability Slots** — repeatable thresholds. **Exhaustion is tracked per Ability Slot**, not per card: a card with two different Ability Slots can have both activated in the same turn, each once. However, **activating any Ability Slot and attacking are mutually exclusive on the same Unit in the same turn** — a Unit that has used an Ability Slot this turn cannot also attack this turn, and vice versa.
 
 - **Default is one Cast Slot per card**, unless it has Twin.
+- **Locations *(v4.1)*: no die, no Cast Slot.** Once per turn, you may cast one Location from hand **for free, as a bonus action** alongside your normal five die placements. This doesn't consume a die and doesn't compete with anything else you do this turn. Location cards no longer print a threshold number at all — just their passive and (optionally) an Ability Slot, which still costs a die to activate as normal. *(Rationale: a Location competing for a die had to beat a Unit's entire value with a passive alone — an opportunity-cost fight it structurally loses, as v4.0's +0.7–1.5% isolated contribution showed. This is the free-land-drop move: it takes Locations out of the die economy instead of trying to make them competitive inside it.)*
 - A Location entering play replaces whatever Location you currently control, sending the old one to Discard. **You may not cast a Location sharing a name with the one you control, and you may cast at most one Location total per turn** — this second restriction closes a loophole where alternating between two differently-named Locations could otherwise reset an Ability Slot repeatedly in one turn.
 
 ### Combo-gated Events
 Some Events have no numeric threshold — their entire cost is "Combo: [Pattern]." Casting one still requires placing one of your five dice onto it during Placement Phase (any value — only your live roll qualifying matters).
+
+**Gate calibration *(v4.1 design guidance)*:** with one reroll, Yahtzee is a ~1–2% roll and Four of a Kind not much better — cards gated behind them are dead in hand essentially every game (measured at 0.02×/game in v4.0), and Echo can't rescue them because bricking-in-hand was never the problem. So: **Full House and Large Straight are the practical ceiling** for any Combo-gated card meant to see regular play. Yahtzee/Four-of-a-Kind gates are flavor-only rarity — a tiny handful of true trophy cards (1–3 in the whole pool) is fine as a memorable once-in-fifty-games moment, but don't budget deck slots around them. If a design wants a Yahtzee payoff to *matter*, don't gate it behind Yahtzee: print a high numeric threshold and put the Yahtzee reward on a **Combo bonus** (a rider, not a requirement) so the card is never dead.
 
 ### Twin cards and the Staging Zone
 A Twin X card has two Cast Slots. The moment the first is filled, move it face-up into your Staging Zone. **The second die placed must show the exact same face value as the first** — not merely independently meet the printed threshold. The card isn't in play while staged (can't be attacked or targeted) and can sit there across turns. The moment the second slot is filled, it fully enters play, both resting dice immediately return to your supply, and its bonus triggers. Every card with Twin must print its own bonus effect text (e.g. "Twin 1: Draw a card") — Twin has no generic effect on its own.
@@ -178,7 +189,7 @@ A Twin X card has two Cast Slots. The moment the first is filled, move it face-u
 **Voluntary abandonment:** at the start of any of your turns, before Draw Phase, you may abandon a partially-filled Twin card: return it to your hand and clear its resting die.
 
 ### Anchor
-Anchor counts only cards you control **already in play**, never cards in hand. Only reduces Cast Slot thresholds, never Ability Slots. *Design constraint:* Anchor provides no benefit on a card already printed at threshold 1, since that's the minimum possible.
+Anchor counts only cards you control **already in play**, never cards in hand. Only reduces Cast Slot thresholds, never Ability Slots. *(v4.1)* The total reduction is **capped at 2**, regardless of how many Anchor cards are in play — v4.0's uncapped text was exactly the "collapses to 1 with barely any investment" problem playtesting found. *Design constraint:* Anchor provides no benefit on a card already printed at threshold 1, since that's the minimum possible.
 
 ---
 
@@ -202,7 +213,7 @@ Combat uses a **targeted-attack model**. Attacks are **declared and resolved one
 Prevention effects (Ward) apply before multiplication effects (Frenzy). If Ward fully prevents an instance of damage, there's nothing left for Frenzy to double.
 
 ### HP maximums
-A Unit's or **Leader's** maximum HP is always its printed/starting value, unless a card effect explicitly and permanently raises it. Mend can never heal past the current maximum. *(v4.0: Leader starting/max HP is **28**, raised from 20 — 5.3-round v3.0 games were short of the 8–10 round target window.)*
+A Unit's or **Leader's** maximum HP is always its printed/starting value, unless a card effect explicitly and permanently raises it. Mend can never heal past the current maximum. *(v4.1: Leader starting/max HP is **64** — raised from v4.0's 28 after ~6-round games proved still short of the 8–10 round target; 64 lands the simulated average at ~9–10 rounds and gives reactive decks the turns they need to stabilize.)*
 
 ---
 
@@ -232,7 +243,7 @@ You lose immediately if either is true:
 
 **Scrap** — Discard this card from hand to reroll one **unplaced** die of your choice, at any point during Placement Phase.
 
-**Anchor** — This card's effective Cast Slot threshold is reduced by 1 (min. 1) for each other card you control in play with Anchor. See §7 for the printed-vs-effective interaction with Overflow.
+**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 2** *(v4.1)*, minimum threshold 1. See §7 for the printed-vs-effective interaction with Overflow.
 
 ### Combat keywords
 
@@ -278,11 +289,11 @@ You lose immediately if either is true:
 
 **Slot** — generic term covering Cast Slots and Ability Slots.
 
-**Leader** — your one persistent, non-deck card; **28** starting/max HP *(v4.0)*, one Ability Slot, no ATK, can never change zones.
+**Leader** — your one persistent, non-deck card; **64** starting/max HP *(v4.1)*, one Ability Slot, no ATK, can never change zones.
 
 **Pitch *(v4.0)*** — the baseline use for an otherwise-unplaced die: Mend 1 to your Leader, no card required. See §3.4.
 
-**Location** — persistent field card; max one in play, max one cast per turn.
+**Location** — persistent field card; max one in play, max one cast per turn. *(v4.1)* The **one card type that never uses a Cast Slot**: it casts free once per turn as a bonus action (§7). Its Ability Slot, if any, still costs a die.
 
 **Unit** — persistent board card with ATK/HP that can attack and be attacked.
 
@@ -310,13 +321,16 @@ You lose immediately if either is true:
 | Setting | Value |
 |---|---|
 | Players | 2 |
-| Leader starting/max HP | **28** *(v4.0, was 20)*, no ATK, cannot change zones |
+| Leader starting/max HP | **64** *(v4.1; was 28 in v4.0, 20 in v3.0)*, no ATK, cannot change zones |
 | Deck size | **30** *(v4.0, was 40)* (Leader separate) |
 | Max copies per card | 3 |
 | Starting hand | 5 (one mulligan allowed, first player decides first, both execute together) |
 | Hand size cap | 6 |
 | Dice per turn | 5d6 from your own supply (10+ recommended total), one reroll of any subset |
-| Locations in play | 1 max, 1 cast per turn max, no same-name replacement |
+| Locations in play | 1 max, 1 cast per turn max, no same-name replacement; *(v4.1)* cast **free** — no die, no Cast Slot |
+| Anchor | *(v4.1)* −1 per other Anchor card in play, **max total −2**, min threshold 1 |
+| Combo gates | *(v4.1)* practical ceiling Full House / Large Straight; Yahtzee/4-Kind = trophy-only |
+| Elements | *(v4.1)* removed from all cards — purely cosmetic legacy data, deleted |
 | Units in play | unlimited |
 | First player | high 1d6 roll; skips first Draw Phase; can't attack their first turn |
 | Combat | sequential targeted-attack, no blocking step; Guard walls until fully destroyed |

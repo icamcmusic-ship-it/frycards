@@ -35,16 +35,16 @@ export interface Effect {
 
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
-export type ElementColor =
-  | 'Light' | 'Dark' | 'Frost' | 'Flame' | 'Tech' | 'Nature' | 'Order' | 'Chaos' | 'Generic';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Legendary' | 'Mythic';
 
 export interface CardDef {
   id: string;
   name: string;
   type: CardType;
-  /** Core identity preserved from the backend card data (v4.0 remap). */
-  elements?: ElementColor[];
+  /**
+   * Core identity preserved from the backend card data (v4.x remap).
+   * v4.1: elements were removed entirely — the game no longer cares about them.
+   */
   rarity?: Rarity;
   set?: string;
   image?: string;
@@ -72,7 +72,11 @@ export interface CardDef {
   text?: string;
 }
 
-export const LEADER_HP = 28; // v4.0: raised from 20 to hit the 8-10 round target window.
+// v4.1: raised (28 -> 60) to lengthen games by ~4 rounds toward the 8-10 round
+// target — a ~6-round meta at 28 HP was ending before reactive decks could
+// stabilize. 60 HP lands the average near ~10 rounds in the sim's length
+// distribution while keeping deck-out rare on 30-card decks.
+export const LEADER_HP = 64;
 
 const U = (
   id: string,

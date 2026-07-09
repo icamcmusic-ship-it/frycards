@@ -98,6 +98,14 @@ export interface GameStats {
   dicePitched: number;
   attacks: number;
   leaderAbilityUses: Record<string, number>;
+  /** v4.1 decision tracking: per-player counts of notable plays (for win-correlation). */
+  decisions: Record<string, Record<string, number>>;
+}
+
+/** Increment a per-player decision counter (v4.1 tracking). */
+function decide(g: Game, pid: string, key: string, by = 1) {
+  const d = (g.stats.decisions[pid] ||= {});
+  d[key] = (d[key] || 0) + by;
 }
 
 let iidCounter = 0;
@@ -228,7 +236,7 @@ export function newGame(
     stats: {
       casts: {}, comboTriggers: {}, echoRecasts: 0, twinCompletions: 0, twinAbandons: 0,
       scraps: 0, rallies: 0, wardBlocks: 0, diceWasted: 0, dicePitched: 0, attacks: 0,
-      leaderAbilityUses: {},
+      leaderAbilityUses: {}, decisions: { A: {}, B: {} },
     },
   };
   for (const p of Object.values(g.players)) {
@@ -316,6 +324,12 @@ export function applyEffect(g: Game, ownerId: string, eff: Effect, targetIid?: s
 
   switch (eff.action) {
     case 'sap': {
+      if (eff.target === 'allEnemyUnits') {
+        // v4.1: board-wipe answer for reactive decks (guidance D).
+        if (opp.board.length >= 2) decide(g, ownerId, 'boardWipe');
+        for (const u of [...opp.board]) dmg(u, v, true);
+        break;
+      }
       let t: Inst | undefined;
       if (eff.target === 'enemyLeader') t = opp.leader;
       else if (eff.target === 'self') t = self;
@@ -503,8 +517,8 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
   if (!die || idx < 0) return false;
   const c = p.hand[idx];
 
-  if (c.def.type === 'Location' && p.locationCastThisTurn) return false;
-  if (c.def.type === 'Location' && p.location?.def.id === c.def.id) return false;
+  // v4.1: Locations never use a die — they cast free via castLocationFree().
+  if (c.def.type === 'Location') return false;
 
   if (c.def.comboGate) {
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
@@ -543,6 +557,25 @@ export function castFromHand(g: Game, dieIndex: number, cardIid: string, targetI
   return true;
 }
 
+/**
+ * v4.1 free Location cast: once per turn, cast one Location from hand for free
+ * as a bonus action — no die, no threshold. All Location restrictions still
+ * apply (max 1 in play, no same-name replacement, max 1 cast per turn).
+ */
+export function castLocationFree(g: Game, cardIid: string): boolean {
+  const p = g.players[g.active];
+  const idx = p.hand.findIndex((c) => c.iid === cardIid);
+  if (idx < 0) return false;
+  const c = p.hand[idx];
+  if (c.def.type !== 'Location') return false;
+  if (p.locationCastThisTurn) return false;
+  if (p.location?.def.id === c.def.id) return false;
+  p.hand.splice(idx, 1);
+  enterPlay(g, p, c, 0); // dieValue unused for Locations
+  decide(g, p.id, 'locationCast');
+  return true;
+}
+
 /** Destination 2: activate an Ability Slot on a card in play (or the Leader / Location). */
 export function activateAbility(g: Game, dieIndex: number, cardIid: string, targetIid?: string): boolean {
   const p = g.players[g.active];
@@ -559,6 +592,7 @@ export function activateAbility(g: Game, dieIndex: number, cardIid: string, targ
   c.abilityDie = die.value;
   if (c.def.type === 'Leader') {
     g.stats.leaderAbilityUses[c.def.id] = (g.stats.leaderAbilityUses[c.def.id] || 0) + 1;
+    decide(g, p.id, 'leaderAbility');
   }
   applyEffect(g, p.id, c.def.ability.effect, targetIid ?? autoTarget(g, p.id, c.def.ability.effect), c);
   return true;
@@ -597,6 +631,7 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   p.staging.splice(idx, 1);
   c.stagedDie = undefined;
   g.stats.twinCompletions++;
+  decide(g, p.id, 'twinComplete');
   enterPlay(g, p, c, die.value);
   if (c.def.twinBonus) {
     applyEffect(g, p.id, c.def.twinBonus, autoTarget(g, p.id, c.def.twinBonus), c);
@@ -624,6 +659,7 @@ export function echoRecast(g: Game, dieIndex: number, cardIid: string, discardIi
   const extra = p.hand.splice(dIdx, 1)[0];
   discardCard(g, p, extra);
   g.stats.echoRecasts++;
+  decide(g, p.id, 'echoRecast');
   enterPlay(g, p, c, die.value, true);
   return true;
 }
@@ -705,6 +741,8 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   att.attacksMade++;
 
   const atk = effAtk(g, att);
+  decide(g, p.id, tgt.def.type === 'Leader' ? 'faceAttack' : 'unitAttack');
+  if (g.turn <= 4 && tgt.def.type === 'Leader') decide(g, p.id, 'earlyFaceAttack');
   if (tgt.def.type === 'Leader') {
     // One-directional: Leaders have no ATK, no retaliation.
     tgt.damage += atk;

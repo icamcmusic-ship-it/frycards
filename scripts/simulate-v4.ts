@@ -61,6 +61,14 @@ let echoRecasts = 0, twinCompletions = 0, twinAbandons = 0, scraps = 0, rallies 
   wardBlocks = 0, dicePitched = 0, diceWasted = 0, attacks = 0;
 const roundBuckets: Record<string, number> = {};
 const errors: string[] = [];
+// Decision -> {present:[wins,games], absent:[wins,games]} across all decisive player-games.
+const decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }> = {};
+function trackDecision(key: string, present: boolean, won: boolean) {
+  const d = (decisionAgg[key] ||= { pw: 0, pn: 0, aw: 0, an: 0 });
+  if (present) { d.pn++; if (won) d.pw++; } else { d.an++; if (won) d.aw++; }
+}
+const DECISION_KEYS = ['locationCast', 'faceAttack', 'unitAttack', 'earlyFaceAttack',
+  'boardWipe', 'echoRecast', 'twinComplete', 'leaderAbility', 'wentFirst', 'mulliganed'];
 
 function deckSize(d: DeckDef): number {
   return Object.values(d.cards).reduce((a, b) => a + b, 0);
@@ -81,7 +89,7 @@ function invariants(g: Game, sizeA: number, sizeB: number) {
 function runGame(a: Entry, b: Entry, seed: number) {
   const rng = mulberry32(seed);
   const g = newGame(a.deck, b.deck, rng);
-  maybeMulligan(g, rng);
+  const mull = maybeMulligan(g, rng);
   const sizeA = deckSize(a.deck), sizeB = deckSize(b.deck); // leader lives outside the counted zones
   const firstPlayer = g.active;
   let rounds = 0;
@@ -92,6 +100,20 @@ function runGame(a: Entry, b: Entry, seed: number) {
   roundBuckets[bucket] = (roundBuckets[bucket] || 0) + 1;
 
   if (!g.winner) { timeouts++; return; }
+  // Decision -> win correlation, per player, decisive games only.
+  if (g.winner !== 'draw') {
+    for (const pid of ['A', 'B'] as const) {
+      const won = g.winner === pid;
+      const d = g.stats.decisions[pid] || {};
+      for (const key of DECISION_KEYS) {
+        let present: boolean;
+        if (key === 'wentFirst') present = firstPlayer === pid;
+        else if (key === 'mulliganed') present = !!mull[pid];
+        else present = (d[key] || 0) > 0;
+        trackDecision(key, present, won);
+      }
+    }
+  }
   if (g.winner === 'draw') { draws++; }
   else {
     if (g.winner === firstPlayer) firstWins++;
@@ -164,6 +186,20 @@ console.log('\n--- Mechanic activity (totals) ---');
 console.log({ echoRecasts, twinCompletions, twinAbandons, scraps, rallies, wardBlocks, attacks });
 console.log(`Pitch (v4.0): dice pitched for Mend 1 = ${dicePitched}; truly wasted (leader full) = ${diceWasted}`);
 console.log(`avg dice pitched+wasted per player-turn: ${((dicePitched + diceWasted) / (totalRounds * 2)).toFixed(2)}`);
+
+console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
+const decRows = DECISION_KEYS.map((k) => {
+  const d = decisionAgg[k] || { pw: 0, pn: 0, aw: 0, an: 0 };
+  const withP = d.pn ? (100 * d.pw) / d.pn : NaN;
+  const without = d.an ? (100 * d.aw) / d.an : NaN;
+  return { k, withP, without, delta: withP - without, pn: d.pn, an: d.an };
+}).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+for (const r of decRows) {
+  const sign = r.delta >= 0 ? '+' : '';
+  console.log(
+    `${r.k.padEnd(16)} did=${isNaN(r.withP) ? ' n/a' : r.withP.toFixed(1).padStart(5)}%  did-not=${isNaN(r.without) ? ' n/a' : r.without.toFixed(1).padStart(5)}%  delta=${sign}${r.delta.toFixed(1)}pt  (did n=${r.pn})`,
+  );
+}
 
 console.log('\n--- Combo passive triggers ---');
 console.log(Object.fromEntries(Object.entries(comboTriggers).sort((a, b) => b[1] - a[1]).slice(0, 15)

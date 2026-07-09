@@ -5,7 +5,7 @@
  */
 import {
   Game, Inst, Player,
-  reroll, castFromHand, activateAbility, activateViaRally, completeTwin, echoRecast,
+  reroll, castFromHand, castLocationFree, activateAbility, activateViaRally, completeTwin, echoRecast,
   scrap, abandonTwin, comboCheck, attack, endTurn, startTurn,
   canAttack, legalTargets, effAtk, remainingHp, effThreshold, rollValues, matchesPattern,
   opponentOf, autoTarget,
@@ -17,11 +17,13 @@ import { hasKw } from './cards';
  * flooded with expensive cards (no cheap early plays) or has no Units, then
  * bottom one card (London-style). Called by the harness before turn 1.
  */
-export function maybeMulligan(g: Game, rng: () => number) {
+export function maybeMulligan(g: Game, rng: () => number): Record<string, boolean> {
+  const mulliganed: Record<string, boolean> = {};
   for (const p of Object.values(g.players)) {
     const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
     const units = p.hand.filter((c) => c.def.type === 'Unit').length;
     if (cheapPlays >= 2 && units >= 1) continue;
+    mulliganed[p.id] = true;
     // Reshuffle hand into deck, redraw 5, bottom the single worst card.
     p.deck.push(...p.hand);
     p.hand = [];
@@ -34,6 +36,7 @@ export function maybeMulligan(g: Game, rng: () => number) {
     const idx = p.hand.indexOf(worst);
     if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
   }
+  return mulliganed;
 }
 
 function unplacedDice(p: Player): number[] {
@@ -99,8 +102,31 @@ function chooseReroll(g: Game, p: Player): number[] {
   return out;
 }
 
+function locScore(c: { def: { locPassive?: string; rarity?: string; ability?: unknown } }, goingWide: boolean): number {
+  let s = 0;
+  if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
+  if (c.def.ability) s += 2;
+  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
+  s += tierOrder.indexOf(c.def.rarity || 'Common') * 0.3;
+  return s;
+}
+
 function playPlacement(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
+
+  // v4.1: Locations cast free once per turn — always take it. Prefer the
+  // Location whose passive fits our board (ATK_ALL if we're going wide, HP_ALL
+  // if we're defensive), then the higher rarity / one with an Ability Slot.
+  if (!p.locationCastThisTurn) {
+    const locs = p.hand.filter(
+      (c) => c.def.type === 'Location' && p.location?.def.id !== c.def.id,
+    );
+    if (locs.length > 0) {
+      const goingWide = p.board.length >= 2;
+      const best = locs.sort((a, b) => locScore(b, goingWide) - locScore(a, goingWide))[0];
+      castLocationFree(g, best.iid);
+    }
+  }
 
   // Scrap low dice first if we hold Scrap cards and have low dice.
   for (const c of [...p.hand]) {
@@ -128,25 +154,26 @@ function playPlacement(g: Game, p: Player) {
     for (const c of [...p.hand]) {
       if (!c.def.comboGate) continue;
       if (!matchesPattern(rollValues(p), c.def.comboGate)) continue;
-      // Don't nuke an empty board.
-      if (c.def.id === 'grand_slam' && opp.board.length < 2) continue;
+      // Don't nuke a thin board with an AoE payoff — hold for value.
+      if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
       const dieIdx = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
       if (dieIdx === undefined) break;
       if (castFromHand(g, dieIdx, c.iid, autoTarget(g, p.id, c.def.onCast!))) progress = true;
     }
 
-    // 2. Cast best numeric-threshold card that fits a die.
+    // 2. Cast best numeric-threshold card that fits a die (Locations excluded —
+    //    they cast free above and never use a die in v4.1).
     const castable = [...p.hand]
-      .filter((c) => !c.def.comboGate)
+      .filter((c) => !c.def.comboGate && c.def.type !== 'Location')
       .sort((a, b) => castPriority(g, p, b) - castPriority(g, p, a));
     for (const c of castable) {
       if (g.winner) break;
       const thr = effThreshold(g, p.id, c.def);
-      if (c.def.type === 'Location' && (p.locationCastThisTurn || p.location?.def.id === c.def.id))
-        continue;
-      // Don't waste removal on an empty board / spare heals at full hp.
+      // Hold AoE removal for 2+ targets; don't waste single-target removal on
+      // an empty board or spare heals at full hp.
+      if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
       if (c.def.onCast?.action === 'sap' && c.def.onCast.target === 'enemyUnit' && opp.board.length === 0) continue;
-      if (c.def.onCast?.action === 'destroy' && opp.board.length === 0) continue;
+      if (c.def.onCast?.action === 'destroy' && c.def.onCast.target !== 'allEnemyUnits' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
       if (c.def.onCast?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) continue;
       // Twin (v4.0): only one die per Placement Phase, so we commit the first
