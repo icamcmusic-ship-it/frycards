@@ -357,6 +357,24 @@ export function projectedDamage(card: GameCard, amount: number): number {
 }
 
 /**
+ * Pierce (§5.3): the smallest raw (pre-pipeline) attack value that fully
+ * consumes a blocker's remaining health, honoring Brittle's doubling and
+ * Armor's flat reduction — Brittle in particular means less raw ATK is
+ * needed to be lethal than `remaining` alone would suggest, so a naive
+ * `remaining + armor` estimate over-assigns ATK to a Brittle blocker and
+ * shortchanges Pierce's overflow to the Leader. Capped at `cap` (the
+ * attacker's remaining ATK) — if even the full cap can't kill the target,
+ * all of it is spent here and nothing overflows.
+ */
+function minAssignedToDestroy(card: GameCard, remaining: number, cap: number): number {
+  if (remaining <= 0 || cap <= 0) return 0;
+  for (let x = 1; x <= cap; x++) {
+    if (projectedDamage(card, x) >= remaining) return x;
+  }
+  return cap;
+}
+
+/**
  * Deal DAMAGE to a Leader through the standard pipeline (§5.4): Brittle,
  * Taint and Armor all apply, exactly as they do for Units (keyword
  * uniformity). Returns the damage that actually landed. Loss-of-life
@@ -1872,8 +1890,11 @@ function resolveCombat(
         const blocker = entityMap.get(block.blockerId);
         if (!blocker || isDead(blocker, next)) continue; // died earlier in the wave
         const blockerRemaining = totalRemaining(blocker, next);
-        // Assign enough to chew through Armor + remaining health, capped by what's left.
-        const assigned = Math.min(dmgLeft, blockerRemaining + effArmor(blocker));
+        // Assign the minimal raw ATK that fully consumes the blocker's
+        // remaining health, honoring Brittle/Armor (§5.3/§5.4) — not a flat
+        // `remaining + armor` estimate, which over-assigns ATK to a Brittle
+        // blocker and shortchanges Pierce's overflow to the Leader.
+        const assigned = minAssignedToDestroy(blocker, blockerRemaining, dmgLeft);
         const dealt = assigned > 0 ? applyDamageToUnit(blocker, assigned) : 0;
         dmgLeft -= assigned;
         siphonHeal(attacker, playerOf(next, attacker), dealt, blocker);
@@ -1951,7 +1972,7 @@ function resolveCombat(
         // answer whenever the defender declines to also submit a formal
         // block with that same Guard Unit.
         const targetRemaining = totalRemaining(target, next);
-        const assigned = Math.max(0, Math.min(attackerAtk, targetRemaining + effArmor(target)));
+        const assigned = minAssignedToDestroy(target, targetRemaining, attackerAtk);
         const dealt = assigned > 0 ? applyDamageToUnit(target, assigned) : 0;
         siphonHeal(attacker, playerOf(next, attacker), dealt, target);
         if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
