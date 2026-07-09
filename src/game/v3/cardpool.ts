@@ -34,12 +34,17 @@ function hash(s: string): number {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  return (h >>> 0);
+  return h >>> 0;
 }
 const pick = <T>(id: string, salt: number, arr: T[]): T => arr[(hash(id) + salt) % arr.length];
 
 const RARITY_TIER: Record<string, number> = {
-  Common: 0, Uncommon: 1, Rare: 2, 'Super-Rare': 3, Legendary: 4, Mythic: 5,
+  Common: 0,
+  Uncommon: 1,
+  Rare: 2,
+  'Super-Rare': 3,
+  Legendary: 4,
+  Mythic: 5,
 };
 
 // Element -> the v4 keyword flavor it leans into.
@@ -70,7 +75,12 @@ function mapUnit(c: RawCard): CardDef {
   // Stat budget scales with threshold; split by a hashed bias.
   const budget = 2 + threshold * 2 + (tier >= 4 ? 2 : 0);
   const bias = (hash(c.id) >> 3) % 3; // 0 aggro, 1 balanced, 2 defensive
-  let atk = bias === 0 ? Math.ceil(budget * 0.62) : bias === 2 ? Math.floor(budget * 0.35) : Math.round(budget * 0.5);
+  let atk =
+    bias === 0
+      ? Math.ceil(budget * 0.62)
+      : bias === 2
+        ? Math.floor(budget * 0.35)
+        : Math.round(budget * 0.5);
   let hp = Math.max(1, budget - atk);
   atk = Math.max(1, atk);
 
@@ -84,23 +94,35 @@ function mapUnit(c: RawCard): CardDef {
   // v4.0 balance: Guard bodies were too soft to wall aggro, so they get a
   // bigger HP bump; Frenzy's ATK bump is trimmed now that its downside is
   // softer (only the 2nd swing doubles retaliation).
-  if (primaryKw === 'Guard') { hp += 3; }
+  if (primaryKw === 'Guard') {
+    hp += 3;
+  }
   // v4.1 balance: Ward refreshing every End Phase (v4.0 A1) already makes a
   // Ward body soak ~one attack per round for free; the extra +2 HP on top made
   // Ward-stacked shells (Sea Witch) dominate at 82-96%. No stat bonus needed.
-  if (primaryKw === 'Frenzy' && hash(c.id) % 2 === 0) { atk += 1; }
+  if (primaryKw === 'Frenzy' && hash(c.id) % 2 === 0) {
+    atk += 1;
+  }
   if (primaryKw) keywords.push(primaryKw);
 
   // Secondary element / higher rarity grants a second keyword sometimes.
   if (tier >= 2 && el2 && ELEMENT_KEYWORD[el2] && ELEMENT_KEYWORD[el2] !== primaryKw) {
     keywords.push(ELEMENT_KEYWORD[el2]);
   }
-  if (tier >= 3 && !keywords.includes('Pierce') && (hash(c.id) % 3 === 0)) keywords.push('Pierce');
+  if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
 
   const def: CardDef = {
-    id: c.id, name: c.name, type: 'Unit', threshold, atk, hp,
+    id: c.id,
+    name: c.name,
+    type: 'Unit',
+    threshold,
+    atk,
+    hp,
     keywords: keywords.length ? keywords : undefined,
-    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    rarity: c.rarity as any,
+    set: c.set,
+    image: c.image,
+    flavor: c.text,
   };
 
   // Twin units carry a printed Twin bonus (required by §7).
@@ -131,11 +153,14 @@ function mapUnit(c: RawCard): CardDef {
   // A Combo passive on a slice of units (points toward archetypes).
   if (tier >= 1 && hash(c.id) % 5 === 0) {
     const pat = pick(c.id, 3, ['AnyPair', 'ThreeKind', 'SmallStraight'] as ComboPattern[]);
-    def.combo = { pattern: pat, effect: pick(c.id, 4, [
-      { action: 'buff', value: 1, target: 'self' } as Effect,
-      { action: 'sap', value: 2, target: 'anyTarget' } as Effect,
-      { action: 'mend', value: 2, target: 'friendlyLeader' } as Effect,
-    ]) };
+    def.combo = {
+      pattern: pat,
+      effect: pick(c.id, 4, [
+        { action: 'buff', value: 1, target: 'self' } as Effect,
+        { action: 'sap', value: 2, target: 'anyTarget' } as Effect,
+        { action: 'mend', value: 2, target: 'friendlyLeader' } as Effect,
+      ]),
+    };
   }
 
   // Overflow reward on a slice, off the effective threshold.
@@ -171,8 +196,13 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   const el = primaryElement(c);
   const type = asCharm ? 'Charm' : 'Event';
   const base: CardDef = {
-    id: c.id, name: c.name, type,
-    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    id: c.id,
+    name: c.name,
+    type,
+    rarity: c.rarity as any,
+    set: c.set,
+    image: c.image,
+    flavor: c.text,
   };
 
   // v4.1 guidance B: Yahtzee/Four-of-a-Kind are FLAVOUR-ONLY rarity, not a
@@ -211,19 +241,25 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   // Practical Combo-gated Events cap at Full House / Large Straight.
   if (!asCharm && tier >= 2 && hash(c.id) % 3 === 0) {
     const gate: ComboPattern =
-      tier >= 3 ? (hash(c.id) % 2 ? 'FullHouse' : 'LargeStraight') :
-      (hash(c.id) % 2 ? 'ThreeKind' : 'TwoPair');
+      tier >= 3
+        ? hash(c.id) % 2
+          ? 'FullHouse'
+          : 'LargeStraight'
+        : hash(c.id) % 2
+          ? 'ThreeKind'
+          : 'TwoPair';
     base.comboGate = gate;
     // v4.2 errata A: the Large-Straight gate was hitting most turns under
     // directed rerolling (keep-distinct-dice is a much stronger completion
     // strategy than the equivalent matching play), so its Sap-8-to-face line
     // was a repeatable, near-uncounterable burn spell. Retargeted off pure
     // face damage AND dropped in power — both levers, not either/or.
-    base.onCast = gate === 'LargeStraight'
-      ? { action: 'sap', value: 5, target: 'anyTarget' }
-      : gate === 'FullHouse'
-        ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
-        : { action: 'sap', value: 5, target: 'anyTarget' };
+    base.onCast =
+      gate === 'LargeStraight'
+        ? { action: 'sap', value: 5, target: 'anyTarget' }
+        : gate === 'FullHouse'
+          ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
+          : { action: 'sap', value: 5, target: 'anyTarget' };
     base.flavor = c.text;
     return base;
   }
@@ -241,7 +277,7 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   } else if (el === 'Frost' || el === 'Dark' || kind === 1) {
     base.onCast = { action: 'bind', target: 'enemyUnit' };
     if (asCharm) base.threshold = Math.min(4, threshold + 1);
-  } else if ((el === 'Order') && !asCharm) {
+  } else if (el === 'Order' && !asCharm) {
     base.onCast = { action: 'destroy', target: 'enemyUnit' };
     base.threshold = 6;
   } else if (kind === 2 && !asCharm) {
@@ -297,8 +333,13 @@ function mapLocation(c: RawCard): CardDef {
   // free once per turn as a bonus action (castLocationFree). They keep a
   // passive and (at higher rarity) an Ability Slot, which still costs a die.
   const def: CardDef = {
-    id: c.id, name: c.name, type: 'Location',
-    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    id: c.id,
+    name: c.name,
+    type: 'Location',
+    rarity: c.rarity as any,
+    set: c.set,
+    image: c.image,
+    flavor: c.text,
   };
   const el = primaryElement(c);
   def.locPassive = el === 'Flame' || el === 'Chaos' || el === 'Dark' ? 'ATK_ALL' : 'HP_ALL';
@@ -341,8 +382,14 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
   mer_king: { threshold: 4, effect: { action: 'mend', value: 4, target: 'friendlyAny' } },
   legendary_diver: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
-  crimson_vector_commander: { threshold: 5, effect: { action: 'sap', value: 3, target: 'enemyLeader' } },
-  apex_nanite_shinobi: { threshold: 4, effect: { action: 'buff', value: 2, target: 'friendlyUnit' } },
+  crimson_vector_commander: {
+    threshold: 5,
+    effect: { action: 'sap', value: 3, target: 'enemyLeader' },
+  },
+  apex_nanite_shinobi: {
+    threshold: 4,
+    effect: { action: 'buff', value: 2, target: 'friendlyUnit' },
+  },
 };
 
 // v4.2 Resolve X: while at/below half HP, Ability Slot threshold -X. Given to
@@ -358,27 +405,56 @@ const LEADER_RESOLVE: Record<string, number> = {
 // Nth own turn on — the answer to "reactive leaders lack inevitability".
 // Every Leader gets one; the unlock turn and power are tuned per archetype.
 const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
-  avatar_of_the_abyss: { unlockTurn: 5, threshold: 6, effect: { action: 'sap', value: 8, target: 'anyTarget' } },
-  ethereal_sea_witch: { unlockTurn: 6, threshold: 6, effect: { action: 'bind', target: 'enemyUnit' } },
-  mer_king: { unlockTurn: 4, threshold: 5, effect: { action: 'mend', value: 8, target: 'friendlyAny' } },
-  legendary_diver: { unlockTurn: 5, threshold: 6, effect: { action: 'draw', value: 2, target: 'none' } },
-  crimson_vector_commander: { unlockTurn: 5, threshold: 6, effect: { action: 'sap', value: 6, target: 'enemyLeader' } },
-  apex_nanite_shinobi: { unlockTurn: 4, threshold: 5, effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' } },
+  avatar_of_the_abyss: {
+    unlockTurn: 5,
+    threshold: 6,
+    effect: { action: 'sap', value: 8, target: 'anyTarget' },
+  },
+  ethereal_sea_witch: {
+    unlockTurn: 6,
+    threshold: 6,
+    effect: { action: 'bind', target: 'enemyUnit' },
+  },
+  mer_king: {
+    unlockTurn: 4,
+    threshold: 5,
+    effect: { action: 'mend', value: 8, target: 'friendlyAny' },
+  },
+  legendary_diver: {
+    unlockTurn: 5,
+    threshold: 6,
+    effect: { action: 'draw', value: 2, target: 'none' },
+  },
+  crimson_vector_commander: {
+    unlockTurn: 5,
+    threshold: 6,
+    effect: { action: 'sap', value: 6, target: 'enemyLeader' },
+  },
+  apex_nanite_shinobi: {
+    unlockTurn: 4,
+    threshold: 5,
+    effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' },
+  },
 };
 
 function mapLeader(c: RawCard): CardDef {
   const resolveX = LEADER_RESOLVE[c.id];
   return {
-    id: c.id, name: c.name, type: 'Leader', hp: LEADER_HP,
-    ability: LEADER_ABILITIES[c.id] ||
-      { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
+    id: c.id,
+    name: c.name,
+    type: 'Leader',
+    hp: LEADER_HP,
+    ability: LEADER_ABILITIES[c.id] || {
+      threshold: 5,
+      effect: { action: 'sap', value: 2, target: 'anyTarget' },
+    },
     resolve: resolveX ? { x: resolveX } : undefined,
     ultimate: LEADER_ULTIMATE[c.id],
-    keywords: [
-      ...(resolveX ? ['Resolve'] : []),
-      ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : []),
-    ],
-    rarity: c.rarity as any, set: c.set, image: c.image, flavor: c.text,
+    keywords: [...(resolveX ? ['Resolve'] : []), ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : [])],
+    rarity: c.rarity as any,
+    set: c.set,
+    image: c.image,
+    flavor: c.text,
   };
 }
 
@@ -387,13 +463,20 @@ function mapLeader(c: RawCard): CardDef {
 // ---------------------------------------------------------------------------
 export const POOL_V4: CardDef[] = (GENERATED_CARDS as RawCard[]).map((c) => {
   switch (c.type) {
-    case 'Leader': return mapLeader(c);
-    case 'Unit': return mapUnit(c);
-    case 'Location': return mapLocation(c);
-    case 'Charm': return mapSpell(c, true);
-    case 'Event': return mapSpell(c, false);
-    case 'Item': return mapSpell(c, true); // obsolete type folded into Charms
-    default: return mapUnit(c);
+    case 'Leader':
+      return mapLeader(c);
+    case 'Unit':
+      return mapUnit(c);
+    case 'Location':
+      return mapLocation(c);
+    case 'Charm':
+      return mapSpell(c, true);
+    case 'Event':
+      return mapSpell(c, false);
+    case 'Item':
+      return mapSpell(c, true); // obsolete type folded into Charms
+    default:
+      return mapUnit(c);
   }
 });
 

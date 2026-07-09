@@ -60,9 +60,7 @@ export function SettingsScreen({
                 </div>
 
                 <div className="text-left">
-                  <div className="heading-font text-sm text-[#1A1A1A]">
-                    {theme.label}
-                  </div>
+                  <div className="heading-font text-sm text-[#1A1A1A]">{theme.label}</div>
                 </div>
 
                 {currentTheme === theme.name && (

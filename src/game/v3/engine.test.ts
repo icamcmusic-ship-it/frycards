@@ -1,7 +1,14 @@
 import { test, expect } from 'vitest';
 import {
-  newGame, mulberry32, makeInst, startTurn, reroll, echoRecast, completeTwin,
-  castLocationFree, applyEffect,
+  newGame,
+  mulberry32,
+  makeInst,
+  startTurn,
+  reroll,
+  echoRecast,
+  completeTwin,
+  castLocationFree,
+  applyEffect,
 } from './engine';
 import { CardDef } from './cards';
 import { ARCHETYPES, buildDeck } from './decks';
@@ -12,8 +19,13 @@ function freshGame() {
 }
 
 const echoUnit: CardDef = {
-  id: 'test_echo_unit', name: 'Test Echo Unit', type: 'Unit',
-  threshold: 1, atk: 2, hp: 3, keywords: ['Echo'],
+  id: 'test_echo_unit',
+  name: 'Test Echo Unit',
+  type: 'Unit',
+  threshold: 1,
+  atk: 2,
+  hp: 3,
+  keywords: ['Echo'],
 };
 
 test('Echo-recast resets stat buffs and exhaustion accumulated in a previous life', () => {
