@@ -1917,12 +1917,14 @@ function resolveCombat(
       if (attacker.type === 'Unit' && isDead(attacker, next)) continue; // attacker died to an earlier counter
       // Guard Interlock (§2.1/§5.2): while a ready Guard Unit stands, every
       // enemy attack (Leader strikes included) is forced onto a Guard Unit.
+      let guardRedirected = false;
       if (target.ownerId === opponent.id && !kwActive(target, 'Guard')) {
         const guard = opponent.board.find(
           (u) => kwActive(u, 'Guard') && !u.exhausted && u.frozen === 0 && !isDead(u, next),
         );
         if (guard) {
           target = guard;
+          guardRedirected = true;
           next.log.push(`${attacker.name} is forced to strike the Guard unit ${guard.name}.`);
         }
       }
@@ -1940,6 +1942,32 @@ function resolveCombat(
           const dealt = damageLeader(next, target, attackerAtk);
           siphonHeal(attacker, playerOf(next, attacker), dealt, target);
           if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
+        }
+      } else if (guardRedirected && kwActive(attacker, 'Pierce')) {
+        // Pierce vs a Guard Interlock redirect (§4/§5.3): a Guard forcibly
+        // intercepting an attack is functionally a block, so Pierce still
+        // sends unassigned overflow to the defending Leader — otherwise
+        // Pierce would do nothing against the Guard walls it exists to
+        // answer whenever the defender declines to also submit a formal
+        // block with that same Guard Unit.
+        const targetRemaining = totalRemaining(target, next);
+        const assigned = Math.max(0, Math.min(attackerAtk, targetRemaining + effArmor(target)));
+        const dealt = assigned > 0 ? applyDamageToUnit(target, assigned) : 0;
+        siphonHeal(attacker, playerOf(next, attacker), dealt, target);
+        if (dealt > 0) onCombatDamageToUnit(next, attacker, target);
+        const counter = effAttack(target, next);
+        if (attacker.type === 'Leader') {
+          damageLeader(next, attacker, counter);
+        } else {
+          const counterDealt = applyDamageToUnit(attacker, counter);
+          if (counterDealt > 0) onCombatDamageToUnit(next, target, attacker);
+        }
+        if (dealt > 0 && isDead(target, next)) reapHeal(next, attacker, target);
+        const overflow = attackerAtk - assigned;
+        if (overflow > 0 && !isDead(attacker, next)) {
+          const overflowDealt = damageLeader(next, opponent.leader, overflow);
+          siphonHeal(attacker, playerOf(next, attacker), overflowDealt, opponent.leader);
+          next.log.push(`${attacker.name} Pierced ${overflow} to ${opponent.name}'s Leader.`);
         }
       } else {
         // Leader (or unit) attacking a Unit: full both ways (§5.2).
