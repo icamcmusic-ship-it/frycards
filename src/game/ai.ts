@@ -430,7 +430,10 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
     let bestBlend = -Infinity;
     for (let i = 0; i < K; i++) {
       const after = gameReducer(state, scored[i].cand.action);
-      const blend = 0.5 * scored[i].score + 0.5 * rolloutCombat(after, aiId);
+      const blend =
+        0.35 * scored[i].score +
+        0.35 * rolloutCombat(after, aiId) +
+        0.3 * replyEval(after, aiId);
       if (blend > bestBlend) {
         bestBlend = blend;
         best = scored[i].cand;
@@ -470,7 +473,10 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
 /** Simulate an action through the real reducer; average over samples. */
 function simulateAction(state: GameState, action: GameAction, aiId: string): number | null {
   const isStochastic = action.type === 'PLAY_CARD' || action.type === 'ACTIVATE_ABILITY';
-  const samples = isStochastic ? 3 : 1;
+  // 5 samples (up from 3): candidate selection takes a max over sampled
+  // scores, so fewer samples systematically over-rate high-variance plays
+  // (Feedback negation alone is a coin flip).
+  const samples = isStochastic ? 5 : 1;
   let total = 0;
   let changed = false;
   for (let i = 0; i < samples; i++) {
@@ -512,6 +518,69 @@ function rolloutCombat(start: GameState, aiId: string): number {
     s = nxt;
   }
   return evaluate(s, aiId);
+}
+
+/**
+ * Opponent-reply rollout: resolve our combat, end the turn, and let the
+ * opponent's board swing back into ours (their attack planner attacking, our
+ * block solver defending) — all through the real reducer. This surfaces the
+ * cliff the 1-ply eval cannot see: a "winning" line that leaves us dead or
+ * crippled by the counter-swing. Opponent card plays are not modeled (hidden
+ * hand); dice/draw randomness is sampled once.
+ */
+function replyEval(start: GameState, aiId: string): number {
+  let s = start;
+  const oppId = aiId === s.player1Id ? s.player2Id : s.player1Id;
+  // Resolve our own combat first (same walk as rolloutCombat).
+  if (s.phase === 'ACTION' && !s.combat && !s.winner) {
+    if (planAttackWave(s, s.players[aiId], s.players[oppId]).length > 0) {
+      s = gameReducer(s, { type: 'ENTER_COMBAT' });
+      s = walkCombat(s, aiId, oppId);
+    }
+  }
+  if (s.winner || s.phase !== 'ACTION') return evaluate(s, aiId);
+  // Hand the turn over and walk the opponent to their counter-attack.
+  s = gameReducer(s, { type: 'END_TURN' });
+  for (let i = 0; i < 4 && s.phase === 'TURN_TRANSITION'; i++)
+    s = gameReducer(s, { type: 'ACKNOWLEDGE_TRANSITION' });
+  if (s.phase === 'ROLL') s = gameReducer(s, { type: 'ROLL_DICE' });
+  if (s.phase === 'ALLOCATE')
+    s = gameReducer(s, { type: 'ALLOCATE_RESOURCES', allocations: allocateResources(s) });
+  if (s.phase !== 'ACTION' || s.activePlayerId !== oppId || s.winner) return evaluate(s, aiId);
+  if (planAttackWave(s, s.players[oppId], s.players[aiId]).length === 0) return evaluate(s, aiId);
+  s = gameReducer(s, { type: 'ENTER_COMBAT' });
+  s = walkCombat(s, oppId, aiId);
+  return evaluate(s, aiId);
+}
+
+/** Drive a declared combat to resolution: attacker declares, defender blocks. */
+function walkCombat(start: GameState, attackerId: string, defenderId: string): GameState {
+  let s = start;
+  for (let i = 0; i < 16 && s.phase === 'COMBAT_DECLARE'; i++) {
+    const act = declareAttacks(s, s.players[attackerId], s.players[defenderId]);
+    const nxt = gameReducer(s, act);
+    if (
+      nxt.phase === s.phase &&
+      (nxt.combat?.attackers.length ?? 0) === (s.combat?.attackers.length ?? 0)
+    ) {
+      s = gameReducer(s, { type: 'SUBMIT_ATTACKS' });
+      break;
+    }
+    s = nxt;
+  }
+  for (let i = 0; i < 16 && s.phase === 'COMBAT_BLOCK'; i++) {
+    const act = cpuBlock(s, s.players[defenderId]);
+    const nxt = gameReducer(s, act);
+    if (
+      nxt.phase === s.phase &&
+      (nxt.combat?.blockers.length ?? 0) === (s.combat?.blockers.length ?? 0)
+    ) {
+      s = gameReducer(s, { type: 'SUBMIT_BLOCKS' });
+      break;
+    }
+    s = nxt;
+  }
+  return s;
 }
 
 function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState): Candidate[] {

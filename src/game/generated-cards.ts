@@ -27,7 +27,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 2
     },
     "attack": 4,
-    "health": 5
+    "health": 4
   },
   {
     "id": "chrono_phalanx",
@@ -70,7 +70,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 1
     },
     "attach": {
-      "attack": 1,
+      "attack": 2,
       "health": 2
     }
   },
@@ -91,7 +91,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Flame": 1,
       "Chaos": 1,
-      "Generic": 3
+      "Generic": 1
     },
     "effect": {
       "action": "draw",
@@ -350,7 +350,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Order": 1,
       "Light": 1,
-      "Generic": 2
+      "Generic": 1
     },
     "effect": {
       "action": "damage",
@@ -461,9 +461,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Command 2",
       "Ward 2",
       "Sustain 1",
-      "Rally 1"
+      "Rally 2"
     ],
-    "text": "The ocean incarnate, commanding the tides. Rally 1: Units you deploy from hand costing 1 or less get +1/+1 until Cleanup.",
+    "text": "The ocean incarnate, commanding the tides. Rally 2: Units you deploy from hand costing 2 or less get +1/+1 until Cleanup.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
     "health": 24,
     "attack": 3
@@ -489,7 +489,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Order": 1,
       "Generic": 2
     },
-    "locEffect": "SCORCH_ALL"
+    "locEffect": "HP_ALL"
   },
   {
     "id": "mirror_hatchetfish",
@@ -665,7 +665,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Order": 1,
       "Generic": 3
     },
-    "attack": 5,
+    "attack": 4,
     "health": 3
   },
   {
@@ -706,8 +706,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_cluster_of_eggs_that_look_like_glowing_nebula_clouds_inside_72f7f85f-bfe9-43fa-9c4e-ad1923daf616_2_result.webp?updatedAt=1778240809926",
     "cost": {
       "Order": 1,
-      "Light": 1,
-      "Generic": 1
+      "Light": 1
     },
     "duration": 2
   },
@@ -753,8 +752,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 3
     },
     "attach": {
-      "attack": 2,
-      "health": 2
+      "attack": 1,
+      "health": 1
     }
   },
   {
@@ -929,7 +928,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 4
     },
     "attack": 5,
-    "health": 6
+    "health": 5
   },
   {
     "id": "trench_gateway",
@@ -1383,7 +1382,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Light": 1,
       "Order": 1,
-      "Generic": 3
+      "Generic": 2
     },
     "attach": {
       "attack": 1,
@@ -1495,7 +1494,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame": 1,
       "Generic": 2
     },
-    "attack": 4,
+    "attack": 3,
     "health": 3
   },
   {
@@ -1554,8 +1553,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "The ocean's wrath unleashed. Scorched-Earth 1: all Units in play, both players', take 1 damage.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_tsunami_wave_forming_viewed_as_a_massive_towering_wall_of_d_69ec0d39-3e05-4cab-b911-2a6c5112ef6a_3_result.webp?updatedAt=1778240807141",
     "cost": {
-      "Light": 1,
-      "Generic": 2
+      "Light": 1
     },
     "effect": {
       "action": "scorchedEarth",
@@ -2009,7 +2007,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Frost": 1,
       "Generic": 1
     },
-    "attack": 2,
+    "attack": 3,
     "health": 5
   },
   {
@@ -2217,8 +2215,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame": 1,
       "Generic": 2
     },
-    "attack": 3,
-    "health": 5
+    "attack": 2,
+    "health": 4
   },
   {
     "id": "mist_ghost_ship",
@@ -2253,17 +2251,16 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Echo"
     ],
-    "text": "The ocean stops in its tracks. Heal 4 damage from your Leader.",
+    "text": "The ocean stops in its tracks. Heal 6 damage from your Leader.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_flash-freezing_event_in_the_deep_where_a_pocket_of_supercoo_f684b1bf-637b-4cd1-9302-3fb50ff28df4_0_result.webp?updatedAt=1778240803069",
     "cost": {
-      "Dark": 1,
-      "Generic": 1
+      "Dark": 1
     },
     "effect": {
       "action": "heal",
-      "value": 4,
+      "value": 6,
       "target": "self",
-      "text": "Heal 4 damage from your Leader."
+      "text": "Heal 6 damage from your Leader."
     }
   },
   {
@@ -2505,9 +2502,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Confluence 1"
+      "Confluence 2"
     ],
-    "text": "A place of worship for the merfolk. Confluence 1: grants you 1 extra Generic resource at your Resource Roll.",
+    "text": "A place of worship for the merfolk. Confluence 2: grants you 2 extra Generic resources at your Resource Roll.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_wide_shot_of_a_Coral_Cathedral--a_massive_hollowed-out_reef_1adbbe9f-3d1c-412c-9b7b-a234853d06f8_3_result.webp?updatedAt=1778240801788",
     "cost": {
       "Nature": 1
@@ -3005,14 +3002,14 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Ward 1"
+      "Ward 2"
     ],
     "text": "A fragile beauty.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_crystalline_flower_growing_out_of_a_rusted_anchor_chain._--_6de8e75d-5a4d-45d3-82e1-2b93c3d66a5c_2_result.webp?updatedAt=1778240798701",
     "cost": {
       "Nature": 1
     },
-    "duration": 1
+    "duration": 2
   },
   {
     "id": "frosted_isopod",
@@ -3256,9 +3253,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Uncommon",
     "set": "Crimson Circuit",
     "keywords": [
-      "Discord"
+      "Discord",
+      "Boost 1"
     ],
-    "text": "What Kinetix hides underground, the underground keeps.",
+    "text": "What Kinetix hides underground, the underground keeps. Boost 1: adds +1 to your resource roll.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Secure_cavern_hiding_secret_Kinetix_operations._--chaos_5_--a_2925d666-027b-4487-9478-f46c8e4fe9ca_3.png?updatedAt=1783333969030",
     "cost": {
       "Tech": 1,
@@ -3331,7 +3329,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "cost": {
       "Flame": 1
     },
-    "attack": 2,
+    "attack": 1,
     "health": 1
   },
   {
@@ -3508,7 +3506,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Chaos": 1,
       "Generic": 1
     },
-    "attack": 4,
+    "attack": 3,
     "health": 3
   },
   {
@@ -3521,7 +3519,6 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Rare",
     "set": "Crimson Circuit",
     "keywords": [
-      "Boost 1",
       "Valor 1"
     ],
     "text": "The city breathes when it beats.",
@@ -3530,7 +3527,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Flame": 1,
       "Generic": 2
     },
-    "locEffect": "ATK_ALL"
+    "locEffect": "HP_ALL"
   },
   {
     "id": "nanite_culture_lab",
@@ -3655,17 +3652,16 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Crimson Circuit",
     "keywords": [
-      "Heal 2"
+      "Heal 3"
     ],
     "text": "Heal 3: surplus current, routed back into the one who commands it.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ninja_Generates_endless_kinetic_current._--chaos_5_--ar_43_--_fdff127f-65fd-454f-9cf5-ec4c3084c3d9_1.png?updatedAt=1783333969056",
     "cost": {
-      "Tech": 1,
-      "Generic": 1
+      "Tech": 1
     },
     "effect": {
       "action": "heal",
-      "value": 2
+      "value": 3
     }
   },
   {
@@ -3844,10 +3840,9 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Every deployment feeds the current; the current feeds the next.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Generates_endless_kinetic_current._--chaos_5_--ar_43_--raw_--_e152a325-58a9-46a0-bec3-6ca458c0ec53_0.png?updatedAt=1783333969031",
     "cost": {
-      "Tech": 1,
-      "Generic": 1
+      "Tech": 1
     },
-    "duration": 3
+    "duration": 4
   },
   {
     "id": "violet_haze_kunoichi",
@@ -3870,7 +3865,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Dark": 1,
       "Generic": 1
     },
-    "attack": 3,
+    "attack": 2,
     "health": 2
   },
   {
@@ -4026,11 +4021,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Every blow you land is a deposit.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/High-tech_metal_glove_glowing_with_stored_energy._--no_text_w_76e853bc-0374-4637-8ff1-ea4a9c78ee56_1.png?updatedAt=1783333968989",
     "cost": {
-      "Tech": 1,
-      "Generic": 1
+      "Tech": 1
     },
     "attach": {
-      "attack": 1,
+      "attack": 2,
       "health": 1
     }
   },
@@ -4121,7 +4115,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Tech": 1,
       "Generic": 1
     },
-    "attack": 2,
+    "attack": 3,
     "health": 5
   },
   {
