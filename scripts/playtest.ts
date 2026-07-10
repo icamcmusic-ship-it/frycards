@@ -142,6 +142,14 @@ function runGame(leaders: [string, string], stallLog: string[]): GameOutcome {
         if (KEYWORD_GLOSSARY[name]) keywords.add(name);
       }
     }
+    // Leader-innate keywords (Command, Boost, Sustain, Codex, ...) are live
+    // every game that Leader is in play — playedCards() deliberately skips
+    // the Leader card itself (it isn't "cast"), so credit them separately or
+    // every Leader-only keyword reads as permanently unfielded.
+    for (const kw of p.leader.keywords || []) {
+      const { name } = parseKeyword(kw);
+      if (KEYWORD_GLOSSARY[name]) keywords.add(name);
+    }
     players.push({
       leader: pid === 'p1' ? leaders[0] : leaders[1],
       won: !stalled && state.winner === pid,
