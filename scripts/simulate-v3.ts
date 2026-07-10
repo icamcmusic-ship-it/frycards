@@ -1,4 +1,9 @@
 /**
+ * ⚠️  PROTOTYPE-ONLY HARNESS — this does NOT test the shipped game.
+ * It runs the experimental src/game/v3/ engine with its own card definitions.
+ * Balance conclusions drawn here do not apply to src/game/engine.ts play.
+ * For the real game use `npm run sim` or `npm run playtest`.
+ *
  * Headless playtest harness for the v3.0 dice-placement engine.
  * Runs a round-robin of all leader pairings and reports win rates, game
  * length, card usage/impact, keyword activity and rule-level anomalies.

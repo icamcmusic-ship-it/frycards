@@ -1,4 +1,12 @@
 /**
+ * ⚠️  PROTOTYPE-ONLY HARNESS — this does NOT test the shipped game.
+ * It runs the experimental src/game/v3/ engine, whose cardpool.ts re-derives
+ * every card's stats/keywords from a hash of its id and IGNORES the real
+ * mechanical data in generated-cards.ts. Balance conclusions drawn here do
+ * not apply to src/game/engine.ts play. For the real game use:
+ *   npm run sim       (seeded leader round-robin)
+ *   npm run playtest  (seeded round-robin + per-keyword/card analytics)
+ *
  * v4.2 playtest harness. Plays a round-robin across a wide variety of
  * archetype decks (built from the remapped real card pool), with an advanced
  * CPU (mulligan + deck-aware reroll + combo/lethal-aware placement & combat).
