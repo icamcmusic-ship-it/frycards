@@ -288,7 +288,10 @@ export function detachItem(unit: GameCard, itemId: string, graveyard: GameCard[]
 }
 
 export function enforceItemCapacity(unit: GameCard, graveyard: GameCard[], log: string[]) {
-  const cap = maxItemCapacity(unit);
+  // Recompute capacity every iteration (bugfix): the FIFO eviction can itself
+  // remove a Modularity item, shrinking capacity mid-sweep — a stale snapshot
+  // let the unit end the action over-capacity (Capacity Law §5.3).
+  let cap = maxItemCapacity(unit);
   while (unit.attachedItems.length > cap) {
     const excess = unit.attachedItems.shift()!;
     graveyard.push(excess);
@@ -297,6 +300,7 @@ export function enforceItemCapacity(unit: GameCard, graveyard: GameCard[], log: 
     log.push(
       `Item Capacity Overrun: ${excess.name} was destroyed because ${unit.name}'s Item capacity dropped to ${cap}.`,
     );
+    cap = maxItemCapacity(unit);
   }
 }
 

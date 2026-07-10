@@ -1242,6 +1242,37 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   );
 }
 
+// --- Capacity Law: cascade when eviction removes a Modularity item (bugfix) ---
+{
+  // A capacity shrink can evict (FIFO) a non-glitched Modularity item, which
+  // shrinks capacity again mid-sweep. A stale capacity snapshot let the unit
+  // end the action over-capacity; the sweep must recompute after each eviction.
+  const s = actionState();
+  const host = addUnit(s, 'p1', 2, 9);
+  const mkItem = (kws: string[], name: string): GameCard => {
+    const it = makeToken(name, 0, 0, 'p1');
+    it.type = 'Item';
+    it.isToken = false;
+    it.keywords = kws;
+    it.attach = { attack: 0, health: 0 };
+    return it;
+  };
+  const modA = mkItem(['Modularity 1'], 'ModA'); // oldest item: evicted first
+  const modB = mkItem(['Modularity 1'], 'ModB');
+  host.attachedItems.push(modA, modB, mkItem([], 'A'), mkItem([], 'B')); // cap 4, len 4
+  modB.glitched = true; // capacity drops to 3 -> eviction of ModA drops it to 2
+  const c = gameReducer(s, { type: 'ENTER_COMBAT' }); // any action triggers the sweep
+  const h = c.players.p1.board.find((u) => u.instanceId === host.instanceId)!;
+  assert(
+    h.attachedItems.length <= maxItemCapacity(h),
+    'capacity sweep cascades when it evicts a Modularity item',
+  );
+  assert(
+    h.attachedItems.length === 2 && c.players.p1.graveyard.filter((g) => g.type === 'Item').length === 2,
+    'exactly two items evicted (ModA then the next-oldest), both to the graveyard',
+  );
+}
+
 const passed = results.filter((r) => r.pass).length;
 const failed = results.length - passed;
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -19,9 +19,19 @@ export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
   return `${PREFIX}:${leaderId}:${body}`;
 }
 
+/**
+ * Card lookup: accepts either a Map (legacy CardTemplate pool) or a plain
+ * Record (v4.2 POOL_BY_ID). DeckBuilderScreen passes the latter — treating a
+ * Record as a Map crashes at runtime with "db.get is not a function".
+ */
+type CardDb = Map<string, { type: string }> | Record<string, { type: string }>;
+function dbGet(db: CardDb, id: string): { type: string } | undefined {
+  return db instanceof Map ? db.get(id) : db[id];
+}
+
 export function decodeDeckCode(
   code: string,
-  db: Map<string, { type: string }>,
+  db: CardDb,
 ): { leaderId: string; cardIds: string[] } | { error: string } {
   const trimmed = code.trim();
   const parts = trimmed.split(':');
@@ -29,13 +39,13 @@ export function decodeDeckCode(
     return { error: 'Not a valid deck code (expected FRY1:<leader>:<cards>).' };
   }
   const [, leaderId, body] = parts;
-  const leader = db.get(leaderId);
+  const leader = dbGet(db, leaderId);
   if (!leader || leader.type !== 'Leader') return { error: `Unknown Leader id: ${leaderId}` };
   const cardIds: string[] = [];
   for (const entry of body.split(',').filter(Boolean)) {
     const [id, nStr] = entry.split('*');
     const n = nStr ? parseInt(nStr, 10) : 1;
-    if (!db.has(id)) return { error: `Unknown card id: ${id}` };
+    if (!dbGet(db, id)) return { error: `Unknown card id: ${id}` };
     if (!Number.isFinite(n) || n < 1 || n > 30) return { error: `Bad count for ${id}` };
     for (let i = 0; i < n; i++) cardIds.push(id);
   }

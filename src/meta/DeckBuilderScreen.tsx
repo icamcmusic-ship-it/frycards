@@ -74,7 +74,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const handleImport = () => {
     const code = window.prompt('Paste a deck code (FRY1:…):');
     if (!code) return;
-    const res = decodeDeckCode(code, POOL_BY_ID as unknown as Map<string, { type: string }>);
+    const res = decodeDeckCode(code, POOL_BY_ID);
     if ('error' in res) {
       setImportError(res.error);
       return;
