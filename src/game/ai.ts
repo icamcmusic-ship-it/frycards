@@ -78,10 +78,19 @@ function cpuMulligan(cpu: PlayerState): GameAction {
   const cheapPlays = cpu.hand.filter((c) => costTotal(c) <= 3 && c.type !== 'Location').length;
   const units = cpu.hand.filter((c) => c.type === 'Unit').length;
   const locations = cpu.hand.filter((c) => c.type === 'Location').length;
+  // Curve awareness: the 2-3 drop slot decides who owns the early board — a
+  // hand of only 1-drops and 5+ bombs still stumbles out of the gate.
+  const earlyUnits = cpu.hand.filter(
+    (c) => c.type === 'Unit' && costTotal(c) >= 1 && costTotal(c) <= 3,
+  ).length;
   // Mull once for an unplayable-early hand, a hand with no board presence at
-  // all (all Events/Items/Locations loses the board before it can act), or a
-  // Location-flooded hand (the zone already starts stocked with 2).
-  if (cpu.mulliganCount === 0 && (cheapPlays === 0 || units === 0 || locations >= 3)) {
+  // all (all Events/Items/Locations loses the board before it can act), a
+  // Location-flooded hand (the zone already starts stocked with 2), or a
+  // curve with no early Unit to contest the board.
+  if (
+    cpu.mulliganCount === 0 &&
+    (cheapPlays === 0 || units === 0 || locations >= 3 || earlyUnits === 0)
+  ) {
     return { type: 'MULLIGAN', playerId: cpu.id };
   }
   // Bottom the most expensive cards when a mulligan was taken.
@@ -220,6 +229,13 @@ function unitValue(u: GameCard, state: GameState): number {
   if (kwActive(u, 'Ward')) v += 0.5;
   v += kwActive(u, 'Wither') ? keywordValue(u, 'Wither') * 0.8 : 0;
   v += kwActive(u, 'Sustain') ? keywordValue(u, 'Sustain') * 0.5 : 0;
+  // New-set keyword premiums. Blessed charges each negate a full damage
+  // instance (refilled at Ready), so they act like extra virtual health.
+  v += (u.blessedCharges || 0) * 1.1;
+  // Freeze-Dry riders every combat hit with a Freeze — recurring tempo.
+  if (kwActive(u, 'Freeze-Dry')) v += keywordValue(u, 'Freeze-Dry') * 0.8;
+  // Fate filters 6+ cost top-decks to the bottom — a mild card-quality engine.
+  if (kwActive(u, 'Fate')) v += 0.7;
   if (u.glitched) v *= 0.8; // temporarily keyword-dead
   v += effArmor(u) * 0.8;
   // Location Adaptation Layer: under a hostile SCORCH_ALL Location, units
@@ -274,6 +290,9 @@ function eventUrgency(state: GameState, me: PlayerState, card: GameCard): number
 // ---------------------------------------------------------------------------
 /** Raw damage a single hit needs to destroy `card` outright. */
 function damageToKill(card: GameCard, state: GameState): number {
+  // Blessed (new set) negates whole damage instances: no single hit can kill
+  // while a charge remains, so attacking into it just burns the hit.
+  if ((card.blessedCharges || 0) > 0) return Infinity;
   const need = totalRemaining(card, state) + effArmor(card);
   return kwActive(card, 'Brittle') ? Math.ceil(need / 2) : need;
 }
@@ -322,8 +341,7 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
   }
 
   const candidates = generateCandidates(state, me, opp);
-  let best: Candidate | null = null;
-  let bestScore = baseline + 0.05;
+  const scored: { cand: Candidate; score: number }[] = [];
 
   for (const cand of candidates) {
     const score = simulateAction(state, cand.action, aiId);
@@ -335,9 +353,27 @@ function chooseAction(state: GameState, me: PlayerState, opp: PlayerState): Game
       const played = me.hand.find((c) => c.instanceId === (cand.action as any).instanceId);
       if (played && played.type !== 'Unit' && costTotal(played) >= floating - 1) adjusted -= 0.6;
     }
-    if (adjusted > bestScore) {
-      bestScore = adjusted;
-      best = cand;
+    if (adjusted > baseline + 0.05) scored.push({ cand, score: adjusted });
+  }
+  scored.sort((a, b) => b.score - a.score);
+
+  // Second-ply combat lookahead: the 1-ply score can't see that a freshly
+  // buffed/frozen/killed board changes THIS turn's attack wave. For the top
+  // few candidates, also roll the follow-up combat through the real reducer
+  // (our planner attacking, our own block solver defending) and blend that
+  // post-combat value in — cheap (a handful of reducer calls each) and it
+  // breaks ties toward plays that convert into damage now.
+  let best: Candidate | null = scored[0]?.cand ?? null;
+  if (scored.length > 1 && state.turnNumber > 1 && !state.combat) {
+    const K = Math.min(3, scored.length);
+    let bestBlend = -Infinity;
+    for (let i = 0; i < K; i++) {
+      const after = gameReducer(state, scored[i].cand.action);
+      const blend = 0.5 * scored[i].score + 0.5 * rolloutCombat(after, aiId);
+      if (blend > bestBlend) {
+        bestBlend = blend;
+        best = scored[i].cand;
+      }
     }
   }
   if (best) return best.action;
@@ -383,6 +419,38 @@ function simulateAction(state: GameState, action: GameAction, aiId: string): num
   }
   if (!changed) return null; // reducer rejected it — prune
   return total / samples;
+}
+
+/**
+ * Roll the rest of the turn's combat from an ACTION-phase state: declare our
+ * planned wave, let our own block solver play the defender, resolve, and
+ * score. Step-capped so a disagreeing reducer can never loop.
+ */
+function rolloutCombat(start: GameState, aiId: string): number {
+  let s = start;
+  if (s.phase !== 'ACTION' || s.combat || s.winner) return evaluate(s, aiId);
+  const oppId = aiId === s.player1Id ? s.player2Id : s.player1Id;
+  if (planAttackWave(s, s.players[aiId], s.players[oppId]).length === 0) return evaluate(s, aiId);
+  s = gameReducer(s, { type: 'ENTER_COMBAT' });
+  for (let i = 0; i < 16 && s.phase === 'COMBAT_DECLARE'; i++) {
+    const act = declareAttacks(s, s.players[aiId], s.players[oppId]);
+    const nxt = gameReducer(s, act);
+    if (nxt.phase === s.phase && (nxt.combat?.attackers.length ?? 0) === (s.combat?.attackers.length ?? 0)) {
+      s = gameReducer(s, { type: 'SUBMIT_ATTACKS' });
+      break;
+    }
+    s = nxt;
+  }
+  for (let i = 0; i < 16 && s.phase === 'COMBAT_BLOCK'; i++) {
+    const act = cpuBlock(s, s.players[oppId]);
+    const nxt = gameReducer(s, act);
+    if (nxt.phase === s.phase && (nxt.combat?.blockers.length ?? 0) === (s.combat?.blockers.length ?? 0)) {
+      s = gameReducer(s, { type: 'SUBMIT_BLOCKS' });
+      break;
+    }
+    s = nxt;
+  }
+  return evaluate(s, aiId);
 }
 
 function generateCandidates(state: GameState, me: PlayerState, opp: PlayerState): Candidate[] {
@@ -569,6 +637,35 @@ function eventTargets(state: GameState, ev: GameCard, me: PlayerState, opp: Play
       return me.deck.length > (eff.value || 1) ? [''] : [];
     case 'manifest':
       return [''];
+    case 'scorchedEarth': {
+      // Symmetric board burn: only light the match when it torches clearly
+      // more of their board value than ours (armor/Blessed/Brittle honored
+      // via projectedDamage — a Blessed charge eats the whole instance).
+      const burned = (p: PlayerState) =>
+        p.board
+          .filter(
+            (u) =>
+              u.type === 'Unit' &&
+              (u.blessedCharges || 0) === 0 &&
+              projectedDamage(u, val) >= totalRemaining(u, state),
+          )
+          .reduce((s, u) => s + unitValue(u, state), 0);
+      return burned(opp) > burned(me) + 2 ? [''] : [];
+    }
+    case 'glaciate': {
+      // Tempo spell: value scales with the number of READY non-Guard enemy
+      // Units it actually turns off — nearly dead against exhausted, frozen
+      // or empty boards, so hold it until it blanks a real attack wave.
+      const chilled = opp.board.filter(
+        (u) =>
+          u.type === 'Unit' &&
+          !kwActive(u, 'Guard') &&
+          u.frozen === 0 &&
+          !u.exhausted &&
+          effAttack(u, state) > 0,
+      );
+      return chilled.length >= 2 || chilled.some((u) => effAttack(u, state) >= 4) ? [''] : [];
+    }
     default:
       return eff.target === 'unit' ? byThreat.slice(0, 1).map((u) => u.instanceId) : [''];
   }
@@ -632,7 +729,9 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
   // closest-to-dead one first so multiple Guards can die in the same wave.
   // Track remaining effective health per Guard; each declared hit contributes
   // its projected (post-Armor/Brittle) damage, since Armor shaves EVERY hit.
+  // A Blessed Guard eats the first hit(s) outright — budget the wasted hits.
   const guardNeed = new Map(guards.map((g) => [g.instanceId, totalRemaining(g, state)]));
+  const guardBless = new Map(guards.map((g) => [g.instanceId, g.blessedCharges || 0]));
   const pickGuardTarget = (): GameCard | undefined => {
     const alive = guards.filter((g) => (guardNeed.get(g.instanceId) ?? 0) > 0);
     if (alive.length === 0) return guards[0];
@@ -651,8 +750,10 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
     const interceptor = guards.length > 0 ? pickGuardTarget() : undefined;
     if (interceptor) {
       const need = guardNeed.get(interceptor.instanceId) ?? totalRemaining(interceptor, state);
+      const blessLeft = guardBless.get(interceptor.instanceId) ?? 0;
       const dieToCounter = effAttack(interceptor, state) >= uHp && !kwActive(u, 'Lurk');
-      const killsGuard = projectedDamage(interceptor, atk) >= need;
+      // A remaining Blessed charge blanks this whole hit (§ new set).
+      const killsGuard = blessLeft === 0 && projectedDamage(interceptor, atk) >= need;
       if (dieToCounter && !killsGuard && unitValue(u, state) > unitValue(interceptor, state) * 0.8)
         continue;
     } else if (!lethalPush && readyBlockers.length > 0) {
@@ -669,18 +770,42 @@ function planAttackWave(state: GameState, me: PlayerState, opp: PlayerState): At
     let targetId = opp.leader.instanceId;
     if (interceptor) {
       targetId = interceptor.instanceId;
-      guardNeed.set(
-        interceptor.instanceId,
-        (guardNeed.get(interceptor.instanceId) ?? 0) - projectedDamage(interceptor, atk),
-      );
+      const blessLeft = guardBless.get(interceptor.instanceId) ?? 0;
+      if (blessLeft > 0) {
+        // This hit is fully negated by a Blessed charge — it only strips one.
+        guardBless.set(interceptor.instanceId, blessLeft - 1);
+      } else {
+        guardNeed.set(
+          interceptor.instanceId,
+          (guardNeed.get(interceptor.instanceId) ?? 0) - projectedDamage(interceptor, atk),
+        );
+      }
     } else if (!lethalPush) {
+      // Freeze-Dry attackers freeze whatever they hit — a non-lethal strike
+      // on a big enemy Unit is still a tempo win, so they may also pick a
+      // target they cannot kill outright.
+      const fdry = kwActive(u, 'Freeze-Dry');
       const trades = opp.board
-        .filter((e) => e.type === 'Unit' && !lurkProtected(e) && atk >= damageToKill(e, state))
-        .map((e) => ({ e, counter: effAttack(e, state) }))
         .filter(
-          ({ e, counter }) => counter < uHp || unitValue(e, state) > unitValue(u, state) * 1.2,
+          (e) =>
+            e.type === 'Unit' &&
+            !lurkProtected(e) &&
+            (atk >= damageToKill(e, state) || (fdry && e.frozen === 0)),
         )
-        .sort((x, y) => unitValue(y.e, state) - unitValue(x.e, state));
+        .map((e) => ({ e, counter: effAttack(e, state), kills: atk >= damageToKill(e, state) }))
+        .filter(
+          ({ e, counter, kills }) =>
+            (counter < uHp || unitValue(e, state) > unitValue(u, state) * 1.2) &&
+            // A Freeze-Dry chip that doesn't kill must at least out-tempo the
+            // hit: never ram into a bigger counter just to apply Freeze.
+            (kills || counter < uHp),
+        )
+        .sort(
+          (x, y) =>
+            unitValue(y.e, state) +
+            (y.kills ? 0 : -2) -
+            (unitValue(x.e, state) + (x.kills ? 0 : -2)),
+        );
       const bestTrade = trades[0];
       if (bestTrade && unitValue(bestTrade.e, state) >= 3.5) {
         targetId = bestTrade.e.instanceId;
@@ -827,7 +952,18 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
     .filter((a) => !blockedAttackers.has(a.instanceId))
     .map((a) => ({ a, card: entity(a.instanceId)! }))
     .filter((x) => !!x.card)
-    .sort((x, y) => effAttack(y.card, state) - effAttack(x.card, state));
+    .sort((x, y) => {
+      // Facing lethal, only blocks that shrink the incoming face damage keep
+      // us alive — handle Leader-targeting attackers first (biggest hit
+      // first), or a chump on the largest attacker can leave a smaller
+      // unblocked one to finish the job anyway.
+      if (lethal) {
+        const atLeader = (t: { a: (typeof combat.attackers)[number] }) =>
+          t.a.targetId === defender.leader.instanceId ? 1 : 0;
+        if (atLeader(y) !== atLeader(x)) return atLeader(y) - atLeader(x);
+      }
+      return effAttack(y.card, state) - effAttack(x.card, state);
+    });
 
   for (const { a, card } of unblocked) {
     const atkVal = effAttack(card, state);
@@ -895,6 +1031,25 @@ function cpuBlock(state: GameState, defender: PlayerState): GameAction {
       );
       if (helper) {
         return { type: 'TOGGLE_BLOCKER', attackerId: a.instanceId, blockerId: helper.instanceId };
+      }
+      // No single helper finishes it, but the two biggest remaining counters
+      // together would: commit the bigger one now and let the next decision
+      // point add its partner (one toggle per call). Only worth it when the
+      // attacker's value clearly exceeds the pair being fed in, or we're
+      // staring down lethal anyway.
+      if (available.length >= 2) {
+        const byCounter = [...available].sort(
+          (x, y) => blockCounter(y, state) - blockCounter(x, state),
+        );
+        const [b1, b2] = byCounter;
+        const pairCounter = blockCounter(b1, state) + blockCounter(b2, state);
+        const pairValue = unitValue(b1, state) + unitValue(b2, state);
+        if (
+          counterSoFar + pairCounter >= need &&
+          (unitValue(card, state) > pairValue * 0.8 || lethal)
+        ) {
+          return { type: 'TOGGLE_BLOCKER', attackerId: a.instanceId, blockerId: b1.instanceId };
+        }
       }
     }
   }
