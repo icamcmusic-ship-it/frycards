@@ -1147,7 +1147,7 @@ function makeItem(owner: string, keywords: string[]): GameCard {
   });
   c = gameReducer(c, { type: 'SUBMIT_ATTACKS' });
   if (c.phase === 'COMBAT_BLOCK') c = gameReducer(c, { type: 'SUBMIT_BLOCKS' });
-  let v = c.players.p2.board.find((u) => u.instanceId === blessed.instanceId)!;
+  const v = c.players.p2.board.find((u) => u.instanceId === blessed.instanceId)!;
   assert(v.damageTaken === 0 && v.blessedCharges === 0, 'Blessed 1 prevented the first hit outright');
 }
 

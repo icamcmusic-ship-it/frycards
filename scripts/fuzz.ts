@@ -15,8 +15,14 @@ import { getCPUAction } from '../src/game/ai';
 import { getDeckableLeaders } from '../src/game/cards';
 import { GameCard, GameState } from '../src/types';
 
-const GAMES = parseInt(process.argv[2] || '40', 10);
+const args = process.argv.slice(2);
+const ADVERSARIAL = args.includes('--adversarial');
+const GAMES = parseInt(args.find((a) => /^\d+$/.test(a)) || '40', 10);
 const MAX_ACTIONS = 3000;
+// Adversarial mode: ~30% deliberately-hostile actions (including NaN/Infinity
+// payloads and cross-zone/cross-player ids) mixed into a mostly-legal driver,
+// asserting every rejected action is a pure no-op on state integrity.
+const HOSTILE_RATE = ADVERSARIAL ? 0.3 : 0.5;
 
 function rnd<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -86,7 +92,61 @@ function randomIllegalAction(state: GameState): GameAction {
     () => ({ type: 'START_GAME' }),
     () => ({ type: 'ACKNOWLEDGE_TRANSITION' }),
   ];
+  if (ADVERSARIAL) {
+    const weird = () => rnd([NaN, Infinity, -Infinity, -5, 1e15, 0.5, -0.5, 2 ** 31]);
+    // The ALLOCATE window is one action per turn: when we are in it, strike
+    // it directly half the time or hostile allocations almost never land.
+    if (state.phase === 'ALLOCATE' && Math.random() < 0.5) {
+      const els = state.players[state.activePlayerId].leader.elements.filter(
+        (e) => e !== 'Generic',
+      );
+      const allocations: Record<string, number> = {};
+      for (let i = 0; i < 3; i++) allocations[rnd(els.length ? els : ['Flame'])] = weird();
+      return { type: 'ALLOCATE_RESOURCES', allocations };
+    }
+    kinds.push(
+      // Hostile xAmount on any card (xCost or not — must be ignored on non-xCost).
+      () => ({ type: 'PLAY_CARD', instanceId: anyId(), targetId: anyId(), xAmount: weird() }),
+      () => ({ type: 'PLAY_CARD', instanceId: anyId(), xAmount: weird() }),
+      // NaN/Infinity/negative allocations on the ACTIVE Leader's real
+      // elements — the only ones that pass the reducer's legality filter.
+      (): GameAction => {
+        const leaderEls = state.players[state.activePlayerId].leader.elements.filter(
+          (e) => e !== 'Generic',
+        );
+        const els = leaderEls.length ? leaderEls : ['Flame'];
+        const allocations: Record<string, number> = {};
+        for (let i = 0; i < 3; i++) allocations[rnd(els)] = weird();
+        return { type: 'ALLOCATE_RESOURCES', allocations };
+      },
+      // Self-targeted attacks / attacking with the opponent's cards.
+      () => ({ type: 'TOGGLE_ATTACKER', instanceId: anyId(), targetId: anyId() }),
+      () => ({ type: 'LEADER_COMMAND', targetId: anyId() }),
+      () => ({ type: 'ACTIVATE_ABILITY', instanceId: anyId() }),
+      () => ({ type: 'KEEP_HAND', playerId: rnd(['p1', 'p2']), bottomIds: [anyId(), anyId(), anyId()] }),
+    );
+  }
   return rnd(kinds)();
+}
+
+/**
+ * Integrity snapshot for no-op detection: resources, health, counts per zone.
+ * A hostile action the reducer REJECTED (log & phase unchanged) must leave
+ * this snapshot identical.
+ */
+function integrityKey(state: GameState): string {
+  const parts: unknown[] = [];
+  for (const p of Object.values(state.players)) {
+    parts.push(p.resources, p.health, p.deck.length, p.hand.length, p.graveyard.length,
+      p.board.length, p.locations.length, p.charms.length, p.overclockPenalty,
+      p.deployDiscount || 0);
+    for (const c of [...p.board, p.leader]) {
+      parts.push(c.instanceId, c.damageTaken, c.bonusDamage, c.frozen, c.scorch,
+        c.exhausted, c.effect?.value ?? null, c.attachedItems.length);
+    }
+    for (const c of [...p.hand, ...p.deck]) parts.push(c.effect?.value ?? null);
+  }
+  return JSON.stringify(parts);
 }
 
 function invariants(state: GameState, errors: string[]) {
@@ -106,7 +166,34 @@ function invariants(state: GameState, errors: string[]) {
     for (const c of p.hand) {
       if (c.damageTaken > 0 || c.exhausted) errors.push(`hand card ${c.name} carries state`);
     }
+    // Status counters must never go negative or non-finite anywhere.
+    for (const c of [p.leader, ...p.board, ...p.hand, ...p.deck, ...p.graveyard]) {
+      for (const [k, v] of Object.entries({
+        damageTaken: c.damageTaken, bonusDamage: c.bonusDamage, frozen: c.frozen,
+        scorch: c.scorch, armor: c.armor, witherAtk: c.witherAtk, witherHp: c.witherHp,
+        blessed: c.blessedCharges || 0,
+      })) {
+        if (v < 0 || !Number.isFinite(v)) errors.push(`${p.name}'s ${c.name} ${k}=${v}`);
+      }
+      // Effect values on cards at rest (hand/deck) must match no cast-time
+      // mutation leakage: they must at least stay finite.
+      if (c.effect && c.effect.value !== undefined && !Number.isFinite(c.effect.value))
+        errors.push(`${c.name} non-finite effect value ${c.effect.value}`);
+    }
+    if (p.overclockPenalty < 0 || !Number.isFinite(p.overclockPenalty))
+      errors.push(`${p.name} bad overclockPenalty ${p.overclockPenalty}`);
+    if ((p.deployDiscount || 0) < 0) errors.push(`${p.name} negative deployDiscount`);
+    if (!Number.isFinite(p.health)) errors.push(`${p.name} non-finite health`);
+    // Hand limit is enforced at Cleanup: at the moment a turn hands over
+    // (TURN_TRANSITION) the just-cleaned-up player must hold <= 7 cards.
+    if (state.phase === 'TURN_TRANSITION' && p.hand.length > 7)
+      errors.push(`${p.name} has ${p.hand.length} cards after cleanup (>7)`);
   }
+  if (state.pendingRoll !== null && !Number.isFinite(state.pendingRoll))
+    errors.push(`non-finite pendingRoll ${state.pendingRoll}`);
+  // winner <=> GAME_OVER coherence.
+  if (state.winner && state.phase !== 'GAME_OVER') errors.push('winner set but phase not GAME_OVER');
+  if (state.phase === 'GAME_OVER' && !state.winner) errors.push('GAME_OVER without a winner');
   // Instance uniqueness: the same non-token instance must not exist twice.
   const ids = allInstanceIds(state);
   const seen = new Set<string>();
@@ -127,12 +214,13 @@ for (let g = 0; g < GAMES; g++) {
   try {
     while (state.phase !== 'GAME_OVER' && actions < MAX_ACTIONS) {
       actions++;
-      // 50%: hostile garbage. 50%: the legal CPU action (to make progress).
-      const hostile = Math.random() < 0.5;
+      // Hostile garbage vs the legal CPU action (to make progress).
+      const hostile = Math.random() < HOSTILE_RATE;
       const action = hostile ? randomIllegalAction(state) : getCPUAction(state);
       if (!action) break;
       const beforeKey = conservationKey(state);
       const beforeRes = JSON.stringify(Object.values(state.players).map((p) => p.resources));
+      const beforeIntegrity = hostile && ADVERSARIAL ? integrityKey(state) : '';
       const next = gameReducer(state, action);
       invariants(next, errors);
       if (hostile) {
@@ -148,6 +236,16 @@ for (let g = 0; g < GAMES; g++) {
           if (afterRes !== beforeRes)
             errors.push(`silent no-op changed resources: ${JSON.stringify(action)}`);
         }
+        // Adversarial mode: a rejected action (log & phase unchanged) must be
+        // a pure no-op across the whole integrity snapshot, not just resources.
+        if (
+          ADVERSARIAL &&
+          next.log.length === state.log.length &&
+          next.phase === state.phase &&
+          integrityKey(next) !== beforeIntegrity
+        ) {
+          errors.push(`rejected action corrupted state: ${JSON.stringify(action)}`);
+        }
       }
       state = next;
       if (errors.length > 5) break;
@@ -161,5 +259,5 @@ for (let g = 0; g < GAMES; g++) {
     for (const e of errors.slice(0, 6)) console.error('  - ' + e);
   }
 }
-console.log(`\nFuzz: ${GAMES - failed}/${GAMES} games clean.`);
+console.log(`\nFuzz${ADVERSARIAL ? ' (adversarial)' : ''}: ${GAMES - failed}/${GAMES} games clean.`);
 process.exit(failed > 0 ? 1 : 0);

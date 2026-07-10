@@ -1102,6 +1102,9 @@ function reduce(state: GameState, action: GameAction): GameState {
       let budget = next.pendingRoll || 0;
       for (const [element, amount] of Object.entries(action.allocations)) {
         if (!legalElements.includes(element as any)) continue;
+        // NaN guard (bugfix): Math.floor(NaN) propagates through min/max and
+        // would poison both the budget and the resource pool with NaN.
+        if (!Number.isFinite(amount)) continue;
         const granted = Math.max(0, Math.min(Math.floor(amount), budget));
         if (granted <= 0) continue;
         budget -= granted;
@@ -1351,10 +1354,6 @@ function reduce(state: GameState, action: GameAction): GameState {
         if (!targetCard.isToken) activePlayer.graveyard.push(targetCard);
         next.log.push(`${activePlayer.name} sacrificed ${targetCard.name} to cast ${card.name}.`);
       }
-      if (card.effect && (xAmount > 0 || sacrificeBonus > 0)) {
-        card.effect = { ...card.effect, value: (card.effect.value || 0) + xAmount + sacrificeBonus };
-      }
-
       // Overclock keyword triggers: grants resource, adds penalty
       const overclockVal = kwValueActive(card, 'Overclock');
       if (overclockVal > 0) {
@@ -1418,6 +1417,14 @@ function reduce(state: GameState, action: GameAction): GameState {
           }
           return next;
         }
+      }
+
+      // X-Cost / Sacrifice scaling is applied only AFTER the Feedback window:
+      // a negated cast returns the card to hand/graveyard UNMODIFIED —
+      // mutating card.effect before negation permanently inflated the card's
+      // value on every negated cast (bugfix).
+      if (card.effect && (xAmount > 0 || sacrificeBonus > 0)) {
+        card.effect = { ...card.effect, value: (card.effect.value || 0) + xAmount + sacrificeBonus };
       }
 
       if (card.type === 'Unit') {
