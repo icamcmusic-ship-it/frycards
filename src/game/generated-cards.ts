@@ -26,8 +26,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Nature": 1,
       "Generic": 2
     },
-    "attack": 3,
-    "health": 4
+    "attack": 4,
+    "health": 5
   },
   {
     "id": "chrono_phalanx",
@@ -136,7 +136,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Wildcast 3: Deals 1 damage to 3 unique random enemy units.",
     "cost": {
       "Frost": 2,
-      "Generic": 3
+      "Generic": 2
     },
     "effect": {
       "action": "damage",
@@ -278,9 +278,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Siphon"
+      "Siphon",
+      "Boost 1"
     ],
-    "text": "A wandering sanctuary for the lost.",
+    "text": "A wandering sanctuary for the lost. Boost 1: adds +1 to your resource roll.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_ancient_turtle_with_a_miniature_forest_of_glowing_k_0b28c470-63e2-410e-9a7c-0e0e6586ee62_1_result.webp?updatedAt=1778240811182",
     "cost": {
       "Dark": 1
@@ -459,9 +460,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Command 2",
       "Ward 2",
-      "Sustain 1"
+      "Sustain 1",
+      "Rally 1"
     ],
-    "text": "The ocean incarnate, commanding the tides.",
+    "text": "The ocean incarnate, commanding the tides. Rally 1: Units you deploy from hand costing 1 or less get +1/+1 until Cleanup.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp?updatedAt=1778240810664",
     "health": 24,
     "attack": 3
@@ -1384,7 +1386,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "Generic": 3
     },
     "attach": {
-      "attack": 2,
+      "attack": 1,
       "health": 3
     }
   },
@@ -1444,8 +1446,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "text": "Gathering fuel for the deep-sea cities. Freeze target enemy Unit.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/The_Gas_Bubble_Harvest--divers_collecting_giant_glowing_bubbl_11874af8-95d4-428d-9476-cd30818077aa_0_result.webp?updatedAt=1778240807415",
     "cost": {
-      "Nature": 1,
-      "Generic": 1
+      "Nature": 1
     },
     "effect": {
       "action": "freeze",
@@ -1961,7 +1962,8 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_mermaid_with_multiple_arms_like_an_anemone_braiding_strings_99d00ed0-e2ef-497e-a2ad-c8ca04b12694_1_result.webp?updatedAt=1778240805244",
     "cost": {
       "Order": 1,
-      "Light": 1
+      "Light": 1,
+      "Generic": 1
     },
     "attack": 2,
     "health": 1
@@ -2255,7 +2257,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_flash-freezing_event_in_the_deep_where_a_pocket_of_supercoo_f684b1bf-637b-4cd1-9302-3fb50ff28df4_0_result.webp?updatedAt=1778240803069",
     "cost": {
       "Dark": 1,
-      "Generic": 2
+      "Generic": 1
     },
     "effect": {
       "action": "heal",
@@ -2448,7 +2450,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_gulper_eel_with_an_impossibly_large_mouth_lined_with_tiny_g_3bbd23c2-3122-4ac0-acd1-ae0c621f4728_1_result.webp?updatedAt=1778240802180",
     "cost": {
       "Light": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attack": 2,
     "health": 2
@@ -2503,14 +2505,14 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Symmetric"
+      "Confluence 1"
     ],
-    "text": "A place of worship for the merfolk.",
+    "text": "A place of worship for the merfolk. Confluence 1: grants you 1 extra Generic resource at your Resource Roll.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_wide_shot_of_a_Coral_Cathedral--a_massive_hollowed-out_reef_1adbbe9f-3d1c-412c-9b7b-a234853d06f8_3_result.webp?updatedAt=1778240801788",
     "cost": {
       "Nature": 1
     },
-    "locEffect": "ATK_ALL"
+    "locEffect": "HP_ALL"
   },
   {
     "id": "galaxy_jellyfish",
@@ -2755,9 +2757,10 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "rarity": "Common",
     "set": "Blue Coral",
     "keywords": [
-      "Siphon"
+      "Siphon",
+      "Boost 1"
     ],
-    "text": "An endless pour into the abyss.",
+    "text": "An endless pour into the abyss. Boost 1: adds +1 to your resource roll.",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_underwater_waterfall_of_sand_pouring_into_a_dark_bottomles_d80ccad2-df25-48fa-9c03-39b45dd44849_1_result.webp?updatedAt=1778240800585",
     "cost": {
       "Dark": 1
@@ -3274,13 +3277,12 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "set": "Crimson Circuit",
     "keywords": [
       "Purge",
-      "Rummage 1"
+      "Rummage 2"
     ],
-    "text": "Purge a target of all modifications. Rummage 1: draw 1, then discard 1 at random.",
+    "text": "Purge a target of all modifications. Rummage 2: draw 2, then discard 1 at random.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Initiates_massive_nanite_purge._--chaos_5_--ar_43_--raw_--sre_9f950050-e05b-4f65-aebd-4e09503206c7_1.png?updatedAt=1783333968991",
     "cost": {
-      "Tech": 1,
-      "Generic": 1
+      "Tech": 1
     },
     "effect": {
       "action": "purge",
@@ -3585,16 +3587,16 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "keywords": [
       "Wildcast 3"
     ],
-    "text": "Wildcast 3: deals 2 damage to 3 unique random battlefield targets.",
+    "text": "Wildcast 3: deals 3 damage to 3 unique random battlefield targets.",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Absolute_volcanic_energy_eruption._--ar_43_--raw_--sref_22084_d9f16813-c068-490b-9e4a-5abd193f8a4e_2.png?updatedAt=1783333968955",
     "cost": {
       "Flame": 2,
       "Chaos": 1,
-      "Generic": 2
+      "Generic": 1
     },
     "effect": {
       "action": "damage",
-      "value": 2,
+      "value": 3,
       "target": "unit"
     }
   },
@@ -3636,8 +3638,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Massive_ash_cloud_consuming_the_landscape._--chaos_5_--ar_43__818954ab-3d44-4fe8-9c84-32f997eb350c_3.png?updatedAt=1783333969049",
     "cost": {
       "Flame": 1,
-      "Chaos": 1,
-      "Generic": 1
+      "Chaos": 1
     },
     "effect": {
       "action": "freeze",
@@ -4269,7 +4270,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Sharp_throwing_star_emitting_sound_waves._--no_text_words_--c_2010384a-a332-4ab5-87c7-441b9fc6892e_1.png?updatedAt=1783333968992",
     "cost": {
       "Tech": 1,
-      "Generic": 1
+      "Generic": 2
     },
     "attach": {
       "attack": 1,

@@ -147,13 +147,33 @@ function allocationScore(state: GameState, me: PlayerState, alloc: Record<string
   const ranked = [...me.hand].sort(
     (a, b) => cardPlayValue(state, me, b) - cardPlayValue(state, me, a),
   );
+  // X-Cost budgeting: a hand card that wants "as much floating Generic as
+  // possible" is starved if the greedy fill zeroes the pool out on marginal
+  // plays first. Identify it (against the pre-knapsack pool, i.e. is its
+  // printed base cost payable at all) so the fill below can hold back on
+  // low-value buys and the leftover bonus can reward allocations that leave
+  // it room.
+  const xCard = me.hand.find((c) => c.xCost && canAfford(c.cost, pool));
   let weight = 0;
   for (const card of ranked) {
     if (canAfford(card.cost, pool)) {
+      if (xCard && card.instanceId !== xCard.instanceId && cardPlayValue(state, me, card) < 1.8) {
+        const remaining = Object.values(pool).reduce((a, b) => a + b, 0);
+        // Marginal play would eat into the X-Cost card's spare budget — skip
+        // it rather than fully committing the dice to a low-value fill.
+        if (remaining - costTotal(card) < 2) continue;
+      }
       payCost(card.cost, pool);
       weight += cardPlayValue(state, me, card);
       if (hasKeyword(card, 'Pure') && singleColor) weight += 2; // Pure bonus lights up
     }
+  }
+  // Reward allocations that leave a hand X-Cost card more floating budget to
+  // convert into effect value — a great X payoff shouldn't get starved by
+  // fully committing dice to marginal plays.
+  if (xCard) {
+    const leftover = Object.values(pool).reduce((a, b) => a + b, 0);
+    weight += leftover * 0.3;
   }
   // Small tiebreak: concentrating a color preserves future Pure plays.
   const colors = Object.values(alloc).filter((v) => v > 0).length;
@@ -260,11 +280,11 @@ function cardPlayValue(state: GameState, me: PlayerState, card: GameCard): numbe
     case 'Unit':
       return base + ((card.attack || 0) + (card.health || 0)) * 0.3 + 1;
     case 'Item':
-      return me.board.length > 0 ? base + 0.5 : 0;
+      return me.board.length > 0 ? base + 0.5 + overloadBonus(card) : 0;
     case 'Event':
       return base + eventUrgency(state, me, card);
     case 'Charm':
-      return base + 0.5;
+      return base + 0.5 + overloadBonus(card);
     case 'Location':
       // Own Locations pay out every turn under the §3.1 Shell Game; the zone
       // caps at 3, and the engine rejects a 4th.
@@ -274,14 +294,55 @@ function cardPlayValue(state: GameState, me: PlayerState, card: GameCard): numbe
   }
 }
 
+/**
+ * Overload [X] partially self-funds a Charm/Item: it grants X of a random own
+ * element back the instant it resolves (at the cost of a smaller next roll),
+ * so the effective net cost is lower than the sticker price suggests.
+ */
+function overloadBonus(card: GameCard): number {
+  return hasKeyword(card, 'Overload') ? keywordValue(card, 'Overload') * 0.25 : 0;
+}
+
 function eventUrgency(state: GameState, me: PlayerState, card: GameCard): number {
   const eff = card.effect;
   if (!eff) return 0;
+  const oppId = me.id === state.player1Id ? state.player2Id : state.player1Id;
+  const opp = state.players[oppId];
   const decayed = me.charms.some(
     (c) => c.charmActivated && hasKeyword(c, 'Decay') && c.ownerId !== me.id,
   );
   if (eff.action === 'heal' && (me.leader.damageTaken > 4 || decayed)) return 2.5;
   if (eff.action === 'purge' && decayed) return 3;
+  if (eff.action === 'scorchedEarth') {
+    // Same board-value comparison the cast-time gate uses (see
+    // eventTargets/'scorchedEarth'): only urgent to hold dice open for this
+    // when it clearly torches more of the opponent's board than our own.
+    const val = eff.value || 0;
+    const burned = (p: PlayerState) =>
+      p.board
+        .filter(
+          (u) =>
+            u.type === 'Unit' &&
+            (u.blessedCharges || 0) === 0 &&
+            projectedDamage(u, val) >= totalRemaining(u, state),
+        )
+        .reduce((s, u) => s + unitValue(u, state), 0);
+    const diff = burned(opp) - burned(me);
+    return diff > 2 ? Math.min(3, 0.5 + diff * 0.3) : 0.3;
+  }
+  if (eff.action === 'glaciate') {
+    // Tempo spell: the more ready non-Guard enemy attackers stand right now,
+    // the more urgent it is to hold dice for this instead of a marginal play.
+    const chilled = opp.board.filter(
+      (u) =>
+        u.type === 'Unit' &&
+        !kwActive(u, 'Guard') &&
+        u.frozen === 0 &&
+        !u.exhausted &&
+        effAttack(u, state) > 0,
+    );
+    return chilled.length > 0 ? Math.min(3, 0.7 + chilled.length * 0.5) : 0.3;
+  }
   return 0.5;
 }
 
@@ -891,10 +952,15 @@ function considerCommand(state: GameState, me: PlayerState, opp: PlayerState): G
   }
 
   // Value line: the readied Unit must out-hit the Command cost, and against a
-  // ready Guard a small swing just feeds the interceptor.
+  // ready Guard a small swing just feeds the interceptor. A Unit that already
+  // attacked and carries Freeze-Dry is worth re-readying even at a modest
+  // attack value — the second swing is a second Freeze application (tempo
+  // denial), not just the raw damage, so it gets a bonus in the comparison.
+  const cmdValue = (u: GameCard): number =>
+    effAttack(u, state) + (u.attacksThisTurn > 0 && kwActive(u, 'Freeze-Dry') ? 2.5 : 0);
   const target = eligible
-    .filter((u) => effAttack(u, state) > x)
-    .sort((a, b) => effAttack(b, state) - effAttack(a, state))[0];
+    .filter((u) => cmdValue(u) > x)
+    .sort((a, b) => cmdValue(b) - cmdValue(a))[0];
   if (!target) return null;
   if (readyGuard && effAttack(target, state) < 3) return null;
   // Don't burn the whole reserve hasting a unit that would die pointlessly

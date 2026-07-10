@@ -674,6 +674,9 @@ function makeItem(owner: string, keywords: string[]): GameCard {
 // --- Inspire / Sync: deploy triggers -------------------------------------------
 {
   const s = actionState();
+  // Isolate this test from whichever Leader keywords the default p1 leader
+  // happens to carry (e.g. Rally X also grants +1/+1 on qualifying deploys).
+  s.players.p1.leader = { ...s.players.p1.leader, keywords: [] };
   s.players.p1.charms.push(makeCharm('p1', ['Inspire']));
   s.players.p1.charms.push(makeCharm('p1', ['Sync 2']));
   s.players.p1.resources = {};
