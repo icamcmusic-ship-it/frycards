@@ -14,6 +14,7 @@
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
     "sim": "tsx scripts/simulate.ts",
+    "playtest": "tsx scripts/playtest.ts",
     "sim:v3": "tsx scripts/simulate-v3.ts",
     "sim:v4": "tsx scripts/simulate-v4.ts",
     "pattern-hitrate": "tsx scripts/pattern-hitrate.ts",

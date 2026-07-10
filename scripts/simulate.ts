@@ -1,14 +1,32 @@
 /**
  * Headless CPU-vs-CPU simulation harness.
  * Runs full games through the real reducer + AI and asserts engine invariants.
- * Usage: npx tsx scripts/simulate.ts [games]
+ * Usage: npx tsx scripts/simulate.ts [games] [--seed=N]
  */
+// --- Deterministic seeding: override Math.random with mulberry32 BEFORE the
+// engine/AI modules are ever exercised (they call Math.random directly).
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const cliArgs = process.argv.slice(2);
+const seedArg = cliArgs.find((a) => a.startsWith('--seed='));
+const SEED = seedArg ? parseInt(seedArg.split('=')[1], 10) : 12345;
+globalThis.Math.random = mulberry32(SEED);
+
 import { initialGameState, gameReducer, totalRemaining, maxItemCapacity } from '../src/game/engine';
 import { getCPUAction } from '../src/game/ai';
 import { getDeckableLeaders } from '../src/game/cards';
 import { GameState } from '../src/types';
 
-const GAMES = parseInt(process.argv[2] || '60', 10);
+const positional = cliArgs.filter((a) => !a.startsWith('--'));
+const GAMES = parseInt(positional[0] || '60', 10);
 const MAX_ACTIONS = 2000;
 
 function check(cond: boolean, msg: string, state: GameState, errors: string[]) {
@@ -58,7 +76,6 @@ function runGame(
   state = gameReducer(state, { type: 'START_GAME' });
 
   let actions = 0;
-  let lastLogLen = -1;
   let stuckCount = 0;
   while (state.phase !== 'GAME_OVER' && actions < MAX_ACTIONS) {
     const act = getCPUAction(state);
@@ -93,7 +110,6 @@ function runGame(
     invariants(state, errors);
     if (errors.length > 8) break;
     actions++;
-    lastLogLen = state.log.length;
   }
   if (actions >= MAX_ACTIONS)
     errors.push(
@@ -165,7 +181,7 @@ for (let g = 0; g < GAMES; g++) {
   }
 }
 console.log(
-  `\n${GAMES - failed}/${GAMES} games passed. Avg turns: ${(totalTurns / GAMES).toFixed(1)}`,
+  `\n[seed=${SEED}] ${GAMES - failed}/${GAMES} games passed. Avg turns: ${(totalTurns / GAMES).toFixed(1)}`,
 );
 console.log('Wins by leader:', wins);
 console.log('Win rate by leader:');
