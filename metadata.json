@@ -1,6 +1,0 @@
-{
-  "name": "FryCards",
-  "description": "A digital implementation of the FryCards trading card game in a Monochrome & Pop visual identity.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
