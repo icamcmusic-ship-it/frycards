@@ -297,9 +297,12 @@ export function CardFace({
         ) : null}
       </div>
 
-      {/* Art — a fixed 4:3 window matching the authored art ratio, so the
-          full illustration is always visible (object-contain, never cropped). */}
-      <div className="relative aspect-[4/3] w-auto shrink-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px] bg-[var(--c-steel)]">
+      {/* Art — fills all remaining space in the fixed-height card (flex-1,
+          exactly like before) but the image itself uses object-contain so
+          the full 4:3 illustration always shows, letterboxed, never
+          cropped — a fixed aspect-ratio box here would fight the card's
+          fixed total height and squash/overflow the rest of the layout. */}
+      <div className="relative flex-1 min-h-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px] bg-[var(--c-steel)]">
         <CardArt def={def} />
         {def.rarity && (
           <span

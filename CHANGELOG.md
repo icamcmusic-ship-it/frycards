@@ -7,6 +7,21 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Fixed (card layout regression)
+
+- The "never crop art" change from the previous entry had a bug: giving the
+  art window a fixed `aspect-[4/3]` box inside a fixed-height card fought
+  the card's own layout, squashing/overflowing text-heavy cards. Reverted
+  the art container to fill the remaining space (`flex-1`, as it always
+  did) and kept `object-contain` on the image itself — art is still never
+  cropped (it letterboxes instead), but the card's overall proportions are
+  correct again regardless of how much rules text a card prints.
+- Match board: hand cards render at `size="lg"` (the same big size used in
+  Collection/Deck Builder) instead of a cramped `md`, board units grew
+  150px→wider, and the board-units row is now `flex-1` instead of a bare
+  `min-height` — it actually consumes the leftover vertical space above the
+  hand instead of leaving a dead gap at the bottom of the screen.
+
 ### Changed (real card art)
 
 - **All card art now served from Supabase Storage** (`Card Images` bucket,

@@ -104,7 +104,7 @@ function BoardUnit({
       disabled={!onClick}
       aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
-        'relative w-[124px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
+        'relative w-[150px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
         onClick && 'btn-pop cursor-pointer',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
@@ -1149,7 +1149,11 @@ export function GameV4({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <div className="flex gap-2 flex-wrap min-h-[150px] content-start">
+          {/* flex-1 here (not just a min-height) so this row actually
+              consumes all the leftover vertical space above the hand —
+              a min-height alone left a dead gap under the hand when the
+              board had few units. */}
+          <div className="flex-1 min-h-[150px] overflow-y-auto flex gap-2 flex-wrap content-start items-start">
             {me.board.length === 0 && (
               <div className="w-full h-[140px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
@@ -1199,9 +1203,10 @@ export function GameV4({
             })}
           </div>
 
-          {/* Hand */}
-          <div className="mt-auto pb-1.5">
-            <div className="text-[8px] font-bold text-[var(--c-paper)]/60 mb-0.5">
+          {/* Hand — shrink-0 and pinned under the flex-1 board row above,
+              so it always sits at the true bottom of the row with no gap. */}
+          <div className="shrink-0 pt-2 pb-1.5">
+            <div className="text-[9px] font-bold text-[var(--c-paper)]/60 mb-1">
               HAND {me.hand.length}/6 {echoPick ? '— pick a card to DISCARD for Echo' : ''}
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1212,7 +1217,7 @@ export function GameV4({
                   <div key={c.iid} className="flex flex-col gap-0.5 shrink-0">
                     <CardFace
                       def={c.def}
-                      size="md"
+                      size="lg"
                       dimmed={!chk.ok && !echoPick && !canScrap}
                       highlight={!!echoPick}
                       onClick={
@@ -1232,7 +1237,7 @@ export function GameV4({
                       </button>
                     )}
                     {!chk.ok && chk.why && stage !== 'cpu' && !echoPick && (
-                      <span className="text-[6.5px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[104px]">
+                      <span className="text-[8px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[240px]">
                         {chk.why}
                       </span>
                     )}
