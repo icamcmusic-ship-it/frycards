@@ -21,10 +21,10 @@ export function PopButton({
   title?: string;
 }) {
   const palette = {
-    yellow: 'bg-[#FFD54F] text-[#1A1A1A]',
-    black: 'bg-[#1A1A1A] text-[#FFD54F]',
-    red: 'bg-[#E53935] text-[#F7F7F7]',
-    steel: 'bg-[#2C3E50] text-[#F7F7F7]',
+    yellow: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+    black: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+    red: 'bg-[var(--c-red)] text-[var(--c-paper)]',
+    steel: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
   }[color];
   return (
     <button
@@ -44,17 +44,17 @@ export function PopButton({
 }
 
 export const RARITY_CHIP: Record<string, string> = {
-  Common: 'bg-[#1A1A1A] text-[#F7F7F7]',
-  Uncommon: 'bg-[#2C3E50] text-[#F7F7F7]',
-  Rare: 'bg-[#E53935] text-[#F7F7F7]',
-  'Super-Rare': 'bg-[#1A1A1A] text-[#FFD54F]',
-  'Ultra-Rare': 'bg-gradient-to-r from-[#2C3E50] to-[#E53935] text-[#F7F7F7]',
-  Mythic: 'bg-gradient-to-r from-[#E53935] to-[#FFD54F] text-[#1A1A1A]',
+  Common: 'bg-[var(--c-ink)] text-[var(--c-paper)]',
+  Uncommon: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+  Rare: 'bg-[var(--c-red)] text-[var(--c-paper)]',
+  'Super-Rare': 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+  'Ultra-Rare': 'bg-gradient-to-r from-[var(--c-steel)] to-[var(--c-red)] text-[var(--c-paper)]',
+  Mythic: 'bg-gradient-to-r from-[var(--c-red)] to-[var(--c-yellow)] text-[var(--c-ink)]',
 };
 
 export function GoldChip({ amount }: { amount: number }) {
   return (
-    <span className="flex items-center gap-1 bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm heading-font text-xs">
+    <span className="flex items-center gap-1 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm heading-font text-xs">
       <Coins className="w-3.5 h-3.5" /> {amount.toLocaleString()}
     </span>
   );
@@ -62,7 +62,7 @@ export function GoldChip({ amount }: { amount: number }) {
 
 export function GemChip({ amount }: { amount: number }) {
   return (
-    <span className="flex items-center gap-1 bg-[#2C3E50] text-[#F7F7F7] px-2 py-0.5 ink-border-sm heading-font text-xs">
+    <span className="flex items-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm heading-font text-xs">
       <Gem className="w-3.5 h-3.5" /> {amount.toLocaleString()}
     </span>
   );
@@ -72,12 +72,12 @@ export function GemChip({ amount }: { amount: number }) {
 export function MetaHeader({ title, onBack }: { title: string; onBack: () => void }) {
   const { profile } = useMeta();
   return (
-    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-[#1A1A1A] px-4 py-2.5 border-b-4 border-[#1A1A1A]">
+    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-ink)]">
       <div className="flex items-center gap-3">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[#FFD54F]">{title}</h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)]">{title}</h1>
       </div>
       {profile && (
         <div className="flex items-center gap-2">
@@ -96,7 +96,9 @@ export function Notice({ text, kind = 'error' }: { text: string; kind?: 'error' 
     <div
       className={cn(
         'text-xs font-bold px-3 py-1.5 ink-border-sm inline-block',
-        kind === 'error' ? 'bg-[#E53935] text-[#F7F7F7]' : 'bg-[#FFD54F] text-[#1A1A1A]',
+        kind === 'error'
+          ? 'bg-[var(--c-red)] text-[var(--c-paper)]'
+          : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       )}
     >
       {text}

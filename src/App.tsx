@@ -42,24 +42,24 @@ function PlayScreen({
   const legalDecks = decks.filter((d) => d.is_valid);
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#1A1A1A] px-4 py-2.5">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[#FFD54F]">CHOOSE YOUR DECK</h1>
-        <span className="text-[10px] font-bold text-[#F7F7F7]/60">
+        <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR DECK</h1>
+        <span className="text-[10px] font-bold text-[var(--c-paper)]/60">
           Dice-placement rules v4.2 · 30-card decks · Leaders at {LEADER_HP} HP
         </span>
       </div>
       <div className="p-6 max-w-6xl mx-auto">
         {!guest && (
           <>
-            <h2 className="heading-font text-base mb-3 bg-[#E53935] text-[#F7F7F7] inline-block px-2 py-0.5">
+            <h2 className="heading-font text-base mb-3 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
               YOUR DECKS
             </h2>
             {legalDecks.length === 0 ? (
-              <p className="text-[11px] font-bold text-[#2C3E50] mb-8">
+              <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8">
                 No legal decks yet — build one in the Deck Builder (30 cards, max 3 copies each).
               </p>
             ) : (
@@ -70,9 +70,9 @@ function PlayScreen({
                     <button
                       key={d.id}
                       onClick={() => onStart({ kind: 'custom', deck: d })}
-                      className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
+                      className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
                     >
-                      <div className="px-2 py-1 bg-[#E53935] heading-font text-[10px] text-[#F7F7F7] truncate">
+                      <div className="px-2 py-1 bg-[var(--c-red)] heading-font text-[10px] text-[var(--c-paper)] truncate">
                         {d.name}
                       </div>
                       {leader?.image && (
@@ -82,7 +82,7 @@ function PlayScreen({
                       )}
                       <div className="p-3 pt-1">
                         <div className="heading-font text-sm leading-tight">{leader?.name}</div>
-                        <div className="text-[10px] font-bold text-[#2C3E50] mt-0.5">
+                        <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
                           {d.card_ids.length} cards
                         </div>
                       </div>
@@ -94,11 +94,11 @@ function PlayScreen({
           </>
         )}
 
-        <h2 className="heading-font text-base mb-3 bg-[#2C3E50] text-[#F7F7F7] inline-block px-2 py-0.5">
+        <h2 className="heading-font text-base mb-3 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
           PREBUILT ARCHETYPES
         </h2>
         {guest && (
-          <p className="text-[11px] font-bold text-[#2C3E50] mb-3">
+          <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
             Guest mode: prebuilt decks only. Create an account to forge your own.
           </p>
         )}
@@ -109,13 +109,13 @@ function PlayScreen({
               <button
                 key={arch.label}
                 onClick={() => onStart({ kind: 'archetype', archetype: arch })}
-                className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
+                className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
               >
-                <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
-                  <span className="text-[9px] heading-font text-[#FFD54F] truncate">
+                <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
+                  <span className="text-[9px] heading-font text-[var(--c-yellow)] truncate">
                     {arch.label}
                   </span>
-                  <span className="text-[9px] font-mono font-bold text-[#F7F7F7] shrink-0">
+                  <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] shrink-0">
                     {LEADER_HP} HP
                   </span>
                 </div>
@@ -126,7 +126,7 @@ function PlayScreen({
                 )}
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{leader?.name}</div>
-                  <div className="text-[10px] font-bold text-[#2C3E50] mt-1">
+                  <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
                     {leader?.ability
                       ? `Ability ${leader.ability.threshold}+ · Ultimate turn ${leader.ultimate?.unlockTurn ?? '—'}+`
                       : ''}
@@ -135,7 +135,7 @@ function PlayScreen({
                     {arch.keywords.map((kw) => (
                       <span
                         key={kw}
-                        className="text-[9px] font-bold px-1 bg-[#FFD54F] ink-border-sm"
+                        className="text-[9px] font-bold px-1 bg-[var(--c-yellow)] ink-border-sm"
                       >
                         {kw}
                       </span>
@@ -200,7 +200,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         onResult={onResult}
       />
       {reward !== null && (
-        <div className="absolute bottom-2 right-2 z-[60] bg-[#FFD54F] text-[#1A1A1A] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+        <div className="absolute bottom-2 right-2 z-[60] bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
           +{reward} GOLD
         </div>
       )}
@@ -227,8 +227,8 @@ function AppInner() {
 
   if (loading || !themeLoaded) {
     return (
-      <div className="w-full h-screen bg-[#1A1A1A] flex items-center justify-center">
-        <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+      <div className="w-full h-screen bg-[var(--c-ink)] flex items-center justify-center">
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
           FRYCARDS
         </div>
       </div>
@@ -303,11 +303,11 @@ export default function App() {
 
   if (!poolReady) {
     return (
-      <div className="w-full h-screen bg-[#1A1A1A] flex flex-col items-center justify-center gap-4">
-        <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
           FRYCARDS
         </div>
-        <div className="text-[#F7F7F7] font-mono text-xs">FETCHING CARD DATABASE…</div>
+        <div className="text-[var(--c-paper)] font-mono text-xs">FETCHING CARD DATABASE…</div>
       </div>
     );
   }

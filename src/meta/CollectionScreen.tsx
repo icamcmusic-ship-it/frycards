@@ -34,7 +34,7 @@ export function StaticCard({
       onClick={onClick}
       title={rules}
       className={cn(
-        'w-[240px] h-[336px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-black flex flex-col overflow-hidden relative select-none',
+        'w-[240px] h-[336px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black flex flex-col overflow-hidden relative select-none',
         onClick && 'cursor-pointer hover:-translate-y-1.5 transition-transform duration-200',
         dimmed && 'opacity-40 saturate-50',
       )}
@@ -54,7 +54,7 @@ export function StaticCard({
           <span className="shrink-0">🎲 {card.threshold}+</span>
         ) : null}
       </div>
-      <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative border-b-2 border-[#1A1A1A]">
+      <div className="aspect-[4/3] bg-[var(--c-steel)] overflow-hidden relative border-b-2 border-[var(--c-ink)]">
         {card.image ? (
           <img
             src={card.image}
@@ -63,18 +63,18 @@ export function StaticCard({
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-lg heading-font">
+          <div className="w-full h-full flex items-center justify-center text-[var(--c-paper)] text-lg heading-font">
             {card.type}
           </div>
         )}
         {(foilCount || 0) > 0 && (
-          <span className="absolute top-2 right-2 bg-[#FFD54F] text-[#1A1A1A] text-xs font-black px-1.5 py-0.5 ink-border-sm flex items-center gap-1">
+          <span className="absolute top-2 right-2 bg-[var(--c-yellow)] text-[var(--c-ink)] text-xs font-black px-1.5 py-0.5 ink-border-sm flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5" />
             {foilCount}
           </span>
         )}
         {badge && (
-          <span className="absolute top-2 left-2 bg-[#E53935] text-[#F7F7F7] text-xs font-black px-1.5 py-0.5 ink-border-sm">
+          <span className="absolute top-2 left-2 bg-[var(--c-red)] text-[var(--c-paper)] text-xs font-black px-1.5 py-0.5 ink-border-sm">
             {badge}
           </span>
         )}
@@ -83,7 +83,7 @@ export function StaticCard({
         <div className="heading-font text-base font-black leading-tight truncate" title={card.name}>
           {card.name}
         </div>
-        <div className="text-[10px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between mt-0.5">
+        <div className="text-[10px] font-mono font-bold text-[var(--c-steel)] uppercase flex justify-between mt-0.5">
           <span>
             {card.type}
             {card.set ? ` · ${card.set}` : ''}
@@ -96,12 +96,12 @@ export function StaticCard({
           {card.type === 'Leader' && <span className="font-mono font-black">{card.hp} HP</span>}
         </div>
         {rules && (
-          <p className="text-[10px] font-bold leading-snug text-[#1A1A1A]/80 line-clamp-3 my-1">
+          <p className="text-[10px] font-bold leading-snug text-[var(--c-ink)]/80 line-clamp-3 my-1">
             {rules}
           </p>
         )}
         {card.flavor && (
-          <p className="text-[10px] leading-snug text-[#2C3E50] italic line-clamp-2 my-0.5">
+          <p className="text-[10px] leading-snug text-[var(--c-steel)] italic line-clamp-2 my-0.5">
             {card.flavor}
           </p>
         )}
@@ -110,7 +110,7 @@ export function StaticCard({
             {card.keywords.slice(0, 5).map((kw) => (
               <span
                 key={kw}
-                className="text-[9px] font-black px-1.5 py-0.5 bg-[#FFD54F] ink-border-sm"
+                className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-yellow)] ink-border-sm"
               >
                 {kw}
               </span>
@@ -119,7 +119,7 @@ export function StaticCard({
         )}
       </div>
       {count !== undefined && (
-        <div className="px-3 py-1 border-t-2 border-[#1A1A1A] text-xs font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
+        <div className="px-3 py-1 border-t-2 border-[var(--c-ink)] text-xs font-black heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] text-center shrink-0">
           OWNED ×{count}
         </div>
       )}
@@ -153,15 +153,15 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
 
-  const select = 'px-2 py-1.5 bg-[#F7F7F7] ink-border-sm font-bold text-xs';
+  const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="COLLECTION" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <input
-            className={cn(select, 'w-44 placeholder:text-[#2C3E50]/50')}
+            className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
             placeholder="Search cards…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -182,7 +182,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           >
             {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
           </PopButton>
-          <div className="ml-auto text-[11px] font-bold text-[#2C3E50]">
+          <div className="ml-auto text-[11px] font-bold text-[var(--c-steel)]">
             {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
           </div>
         </div>
@@ -202,7 +202,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             );
           })}
           {filtered.length === 0 && (
-            <div className="w-full text-center font-bold text-[#2C3E50] py-14">
+            <div className="w-full text-center font-bold text-[var(--c-steel)] py-14">
               No cards match these filters. Crack some packs in the Store!
             </div>
           )}

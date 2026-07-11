@@ -103,10 +103,10 @@ function BoardUnit({
       disabled={!onClick}
       aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
-        'relative w-[92px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm text-left shrink-0',
+        'relative w-[92px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
         onClick && 'btn-pop cursor-pointer',
-        highlight && 'ring-4 ring-[#E53935] -translate-y-1',
-        isAttacker && 'ring-4 ring-[#FFD54F] -translate-y-1',
+        highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1',
+        isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         dimmed && 'opacity-45',
         (exhausted || sick) && 'saturate-50',
       )}
@@ -121,9 +121,11 @@ function BoardUnit({
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono font-bold">
             {atk}
-            <span className="text-[#E53935]">⚔</span>
+            <span className="text-[var(--c-red)]">⚔</span>
           </span>
-          <span className={cn('text-[10px] font-mono font-bold', hp < maxHp && 'text-[#E53935]')}>
+          <span
+            className={cn('text-[10px] font-mono font-bold', hp < maxHp && 'text-[var(--c-red)]')}
+          >
             {hp}/{maxHp}
             <span className="text-[#43A047]">♥</span>
           </span>
@@ -132,7 +134,10 @@ function BoardUnit({
           {kwList(u.def)
             .slice(0, 3)
             .map((kw) => (
-              <span key={kw} className="text-[6px] font-bold px-0.5 bg-[#FFD54F] leading-tight">
+              <span
+                key={kw}
+                className="text-[6px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
+              >
                 {kw}
               </span>
             ))}
@@ -152,7 +157,7 @@ function BoardUnit({
         {sick && (
           <span
             title="Just played"
-            className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5"
+            className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             z
           </span>
@@ -160,7 +165,7 @@ function BoardUnit({
         {exhausted && !sick && (
           <span
             title="Exhausted"
-            className="text-[9px] bg-[#2C3E50] text-white ink-border-sm px-0.5"
+            className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             ✓
           </span>
@@ -205,8 +210,8 @@ function LeaderPanel({
     <div
       onClick={onClickTarget}
       className={cn(
-        'w-[168px] bg-[#1A1A1A] text-[#F7F7F7] ink-border-md p-1.5 shrink-0',
-        highlight && 'ring-4 ring-[#E53935] cursor-pointer',
+        'w-[168px] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md p-1.5 shrink-0',
+        highlight && 'ring-4 ring-[var(--c-red)] cursor-pointer',
       )}
     >
       <div className="flex gap-1.5">
@@ -220,18 +225,20 @@ function LeaderPanel({
           <div
             className={cn(
               'font-mono font-bold text-lg leading-tight',
-              hp <= maxHp / 2 ? 'text-[#E53935]' : 'text-[#FFD54F]',
+              hp <= maxHp / 2 ? 'text-[var(--c-red)]' : 'text-[var(--c-yellow)]',
             )}
           >
             {hp}
-            <span className="text-[10px] text-[#F7F7F7]/60">/{maxHp}</span>
+            <span className="text-[10px] text-[var(--c-paper)]/60">/{maxHp}</span>
           </div>
           <div className="flex gap-0.5 flex-wrap">
             {l.def.resolve && (
               <span
                 className={cn(
                   'text-[7px] font-bold px-0.5 ink-border-sm',
-                  hp * 2 <= maxHp ? 'bg-[#E53935] text-white' : 'bg-[#2C3E50] text-white',
+                  hp * 2 <= maxHp
+                    ? 'bg-[var(--c-red)] text-white'
+                    : 'bg-[var(--c-steel)] text-white',
                 )}
               >
                 RESOLVE {l.def.resolve.x}
@@ -239,7 +246,7 @@ function LeaderPanel({
               </span>
             )}
             {toll > 0 && (
-              <span className="text-[7px] font-bold px-0.5 bg-[#29B6F6] ink-border-sm text-[#1A1A1A]">
+              <span className="text-[7px] font-bold px-0.5 bg-[#29B6F6] ink-border-sm text-[var(--c-ink)]">
                 TOLL -{toll}
               </span>
             )}
@@ -253,8 +260,8 @@ function LeaderPanel({
           className={cn(
             'w-full mt-1 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
             abilityUsable
-              ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
-              : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
+              ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+              : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
             l.abilityUsed && 'line-through',
           )}
         >
@@ -268,8 +275,8 @@ function LeaderPanel({
           className={cn(
             'w-full mt-0.5 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
             ultimateUsable
-              ? 'btn-pop bg-[#E53935] text-white'
-              : 'bg-[#2C3E50]/60 text-[#F7F7F7]/50',
+              ? 'btn-pop bg-[var(--c-red)] text-white'
+              : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
             l.ultimateUsed && 'line-through',
           )}
         >
@@ -278,7 +285,7 @@ function LeaderPanel({
         </button>
       )}
       {ult && !isHuman && (
-        <div className="mt-0.5 text-[7px] font-bold text-[#F7F7F7]/50 leading-tight">
+        <div className="mt-0.5 text-[7px] font-bold text-[var(--c-paper)]/50 leading-tight">
           ULT{l.ultimateUsed ? ' spent' : ` from turn ${ult.unlockTurn}`}:{' '}
           {describeEffect(ult.effect)}
         </div>
@@ -781,20 +788,20 @@ export function GameV4({
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="w-full h-screen bg-[#1A1A1A] flex flex-col overflow-hidden select-none">
+    <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col overflow-hidden select-none">
       {/* Top bar */}
-      <div className="flex items-center gap-2 px-2 py-1 bg-[#2C3E50] ink-border-sm z-30">
+      <div className="flex items-center gap-2 px-2 py-1 bg-[var(--c-steel)] ink-border-sm z-30">
         <button
           onClick={() =>
             (stage === 'over' ||
               window.confirm('Concede this match? This will count as a loss.')) &&
             concede()
           }
-          className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#F7F7F7] px-2 py-0.5 ink-border-sm"
+          className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
         >
           ✕ CONCEDE
         </button>
-        <span className="heading-font text-[11px] text-[#FFD54F]">
+        <span className="heading-font text-[11px] text-[var(--c-yellow)]">
           TURN {Math.ceil(g.turn / 2) || 1} ·{' '}
           {stage === 'cpu'
             ? "CPU'S TURN"
@@ -806,14 +813,14 @@ export function GameV4({
                   ? 'COMBAT'
                   : stage.toUpperCase()}
         </span>
-        <span className="text-[9px] font-mono text-[#F7F7F7]/70 truncate">
+        <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate">
           {humanLabel} vs {cpuLabel}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {stage === 'placement' && (
             <button
               onClick={toCombat}
-              className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
             >
               COMBO CHECK → COMBAT
             </button>
@@ -821,7 +828,7 @@ export function GameV4({
           {stage === 'combat' && (
             <button
               onClick={attemptFinishTurn}
-              className="btn-pop heading-font text-[10px] bg-[#E53935] text-white px-2 py-0.5 ink-border-sm"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm"
             >
               END TURN {unplaced.length > 0 ? `(pitch ${unplaced.length}⚄)` : ''}
             </button>
@@ -829,7 +836,7 @@ export function GameV4({
           {stage === 'preRoll' && (
             <button
               onClick={doReroll}
-              className="btn-pop heading-font text-[10px] bg-[#FFD54F] text-[#1A1A1A] px-2 py-0.5 ink-border-sm"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
             >
               {rerollSel.size > 0 ? `REROLL ${rerollSel.size}` : 'KEEP ALL'} →
             </button>
@@ -838,29 +845,29 @@ export function GameV4({
       </div>
 
       {banner && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#FFD54F] text-[#1A1A1A] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
           {banner}
         </div>
       )}
       {pending && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#E53935] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           PICK A TARGET — {describeEffect(pending.effect)}
           <button
             onClick={() => setPending(null)}
             aria-label="Cancel targeting"
-            className="bg-[#1A1A1A] px-1"
+            className="bg-[var(--c-ink)] px-1"
           >
             ✕
           </button>
         </div>
       )}
       {!pending && attacker && stage === 'combat' && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#FFD54F] text-[#1A1A1A] heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           SELECT AN ATTACK TARGET
           <button
             onClick={() => setAttacker(null)}
             aria-label="Cancel attack"
-            className="bg-[#1A1A1A] text-white px-1"
+            className="bg-[var(--c-ink)] text-white px-1"
           >
             ✕
           </button>
@@ -886,13 +893,13 @@ export function GameV4({
           }
         />
         <div className="flex-1 min-w-0">
-          <div className="flex gap-1 text-[8px] font-bold text-[#F7F7F7]/70 mb-0.5">
+          <div className="flex gap-1 text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
             <span>
               CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}
             </span>
             {foe.location && (
               <span
-                className="bg-[#2C3E50] px-1 ink-border-sm text-[#F7F7F7] cursor-pointer"
+                className="bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer"
                 onClick={() => setInspect(foe.location!.def)}
               >
                 📍 {foe.location.def.name}
@@ -902,7 +909,7 @@ export function GameV4({
           </div>
           <div className="flex gap-1 flex-wrap min-h-[92px]">
             {foe.board.length === 0 && (
-              <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">
+              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold self-center">
                 — empty board —
               </span>
             )}
@@ -932,7 +939,7 @@ export function GameV4({
       </div>
 
       {/* Midline: dice tray + log */}
-      <div className="flex items-center gap-3 px-2 py-1.5 border-y-2 border-[#F7F7F7]/10 my-1">
+      <div className="flex items-center gap-3 px-2 py-1.5 border-y-2 border-[var(--c-paper)]/10 my-1">
         <div className="flex gap-1.5 items-center">
           {me.dice.map((d, i) => {
             const usable = !d.placed && (stage === 'placement' || stage === 'preRoll');
@@ -957,12 +964,12 @@ export function GameV4({
                 className={cn(
                   'w-11 h-11 ink-border-md text-3xl leading-none flex items-center justify-center',
                   d.placed
-                    ? 'bg-[#2C3E50]/40 text-[#F7F7F7]/25'
+                    ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
                     : marked
                       ? stage === 'preRoll'
-                        ? 'bg-[#E53935] text-white -translate-y-1'
-                        : 'bg-[#FFD54F] text-[#1A1A1A] -translate-y-1'
-                      : 'bg-[#F7F7F7] text-[#1A1A1A]',
+                        ? 'bg-[var(--c-red)] text-white -translate-y-1'
+                        : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1'
+                      : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
                   usable && 'btn-pop',
                 )}
                 title={d.placed ? 'Placed' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'}
@@ -975,24 +982,24 @@ export function GameV4({
           })}
           {stage === 'cpu' && (
             <>
-              <span className="text-[10px] font-bold text-[#F7F7F7]/60 animate-pulse ml-1">
+              <span className="text-[10px] font-bold text-[var(--c-paper)]/60 animate-pulse ml-1">
                 CPU is thinking…
               </span>
               <button
                 onClick={skipCpuDelay}
-                className="btn-pop text-[9px] font-bold bg-[#2C3E50] text-[#F7F7F7] px-1.5 py-0.5 ink-border-sm ml-1"
+                className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm ml-1"
               >
                 SKIP ▸▸
               </button>
             </>
           )}
           {stage === 'preRoll' && (
-            <span className="text-[9px] font-bold text-[#F7F7F7]/60 ml-1 max-w-[130px] leading-tight">
+            <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[130px] leading-tight">
               Pick dice to reroll (once). Snap Charms castable now.
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0 max-h-[54px] overflow-y-auto bg-[#1A1A1A] px-2 text-[8px] font-mono text-[#F7F7F7]/70 leading-tight">
+        <div className="flex-1 min-w-0 max-h-[54px] overflow-y-auto bg-[var(--c-ink)] px-2 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
           {g.log.slice(-40).map((l, i) => (
             <div key={i}>· {l}</div>
           ))}
@@ -1000,12 +1007,12 @@ export function GameV4({
         <div className="flex flex-col gap-0.5 text-right shrink-0">
           <button
             onClick={() => setShowDiscard((s) => !s)}
-            className="btn-pop text-[9px] font-bold bg-[#2C3E50] text-[#F7F7F7] px-1.5 py-0.5 ink-border-sm"
+            className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
           >
             DISCARD {me.discard.length}
             {echoables.length > 0 ? ` · ${echoables.length} ECHO` : ''}
           </button>
-          <span className="text-[8px] font-bold text-[#F7F7F7]/50">
+          <span className="text-[8px] font-bold text-[var(--c-paper)]/50">
             deck {me.deck.length} · banished {me.banished.length}
           </span>
         </div>
@@ -1042,14 +1049,14 @@ export function GameV4({
             }
           />
           {me.location ? (
-            <div className="w-[168px] bg-[#2C3E50] text-[#F7F7F7] ink-border-sm p-1">
+            <div className="w-[168px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1">
               <div
                 className="text-[8px] font-bold cursor-pointer"
                 onClick={() => setInspect(me.location!.def)}
               >
                 📍 {me.location.def.name}
               </div>
-              <div className="text-[7px] text-[#F7F7F7]/70 leading-tight">
+              <div className="text-[7px] text-[var(--c-paper)]/70 leading-tight">
                 {cardRules(me.location.def)}
               </div>
               {me.location.def.ability && (
@@ -1069,8 +1076,8 @@ export function GameV4({
                       !me.location.abilityUsed &&
                       dieVal !== null &&
                       dieVal >= effAbilityThreshold(g, me.location)
-                      ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
-                      : 'bg-[#1A1A1A]/50 text-[#F7F7F7]/40',
+                      ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                      : 'bg-[var(--c-ink)]/50 text-[var(--c-paper)]/40',
                     me.location.abilityUsed && 'line-through',
                   )}
                 >
@@ -1080,35 +1087,35 @@ export function GameV4({
               )}
             </div>
           ) : (
-            <div className="w-[168px] text-[8px] font-bold text-[#F7F7F7]/30 ink-border-sm border-dashed p-1 text-center">
+            <div className="w-[168px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 text-center">
               no Location
             </div>
           )}
           {me.staging.length > 0 && (
             <div className="w-[168px]">
-              <div className="text-[8px] font-bold text-[#F7F7F7]/60">STAGING (Twin)</div>
+              <div className="text-[8px] font-bold text-[var(--c-paper)]/60">STAGING (Twin)</div>
               {me.staging.map((s) => (
                 <div
                   key={s.iid}
                   className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5"
                 >
-                  <span className="text-lg leading-none text-[#F7F7F7]">
+                  <span className="text-lg leading-none text-[var(--c-paper)]">
                     {DIE_FACES[(s.stagedDie ?? 1) - 1]}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div
-                      className="text-[8px] font-bold text-[#F7F7F7] truncate cursor-pointer"
+                      className="text-[8px] font-bold text-[var(--c-paper)] truncate cursor-pointer"
                       onClick={() => setInspect(s.def)}
                     >
                       {s.def.name}
                     </div>
-                    <div className="text-[7px] text-[#F7F7F7]/60">
+                    <div className="text-[7px] text-[var(--c-paper)]/60">
                       match a {s.stagedDie} to complete
                     </div>
                   </div>
                   <button
                     onClick={() => tryCompleteTwin(s)}
-                    className="btn-pop text-[8px] font-bold bg-[#FFD54F] px-1 ink-border-sm"
+                    className="btn-pop text-[8px] font-bold bg-[var(--c-yellow)] px-1 ink-border-sm"
                   >
                     SET
                   </button>
@@ -1121,7 +1128,7 @@ export function GameV4({
                       }}
                       title="Abandon (return to hand)"
                       aria-label={`Abandon ${s.def.name} and return it to hand`}
-                      className="btn-pop text-[8px] font-bold bg-[#E53935] text-white px-1 ink-border-sm"
+                      className="btn-pop text-[8px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
                     >
                       ✕
                     </button>
@@ -1135,7 +1142,7 @@ export function GameV4({
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
           <div className="flex gap-1 flex-wrap min-h-[92px]">
             {me.board.length === 0 && (
-              <span className="text-[9px] text-[#F7F7F7]/30 font-bold self-center">
+              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold self-center">
                 — empty board —
               </span>
             )}
@@ -1169,8 +1176,8 @@ export function GameV4({
                           dieVal !== null &&
                             dieVal >= effAbilityThreshold(g, u) &&
                             !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
-                            ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
-                            : 'bg-[#2C3E50] text-[#F7F7F7]/50',
+                            ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                            : 'bg-[var(--c-steel)] text-[var(--c-paper)]/50',
                         )}
                       >
                         {effAbilityThreshold(g, u)}+ ability
@@ -1183,7 +1190,7 @@ export function GameV4({
 
           {/* Hand */}
           <div className="mt-auto pb-1.5">
-            <div className="text-[8px] font-bold text-[#F7F7F7]/60 mb-0.5">
+            <div className="text-[8px] font-bold text-[var(--c-paper)]/60 mb-0.5">
               HAND {me.hand.length}/6 {echoPick ? '— pick a card to DISCARD for Echo' : ''}
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1205,7 +1212,7 @@ export function GameV4({
                             : () => setInspect(c.def)
                       }
                       footer={
-                        <div className="text-[6.5px] leading-tight text-[#2C3E50] font-bold min-h-[16px]">
+                        <div className="text-[6.5px] leading-tight text-[var(--c-steel)] font-bold min-h-[16px]">
                           {cardRules(c.def).slice(0, 64)}
                         </div>
                       }
@@ -1213,13 +1220,13 @@ export function GameV4({
                     {canScrap && (
                       <button
                         onClick={() => tryScrap(c)}
-                        className="btn-pop text-[7px] font-bold bg-[#E53935] text-white px-1 ink-border-sm"
+                        className="btn-pop text-[7px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
                       >
                         SCRAP → reroll die
                       </button>
                     )}
                     {!chk.ok && chk.why && stage !== 'cpu' && !echoPick && (
-                      <span className="text-[6.5px] font-bold text-[#F7F7F7]/40 text-center leading-tight max-w-[104px]">
+                      <span className="text-[6.5px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[104px]">
                         {chk.why}
                       </span>
                     )}
@@ -1227,7 +1234,9 @@ export function GameV4({
                 );
               })}
               {me.hand.length === 0 && (
-                <span className="text-[9px] text-[#F7F7F7]/30 font-bold">— empty hand —</span>
+                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">
+                  — empty hand —
+                </span>
               )}
             </div>
           </div>
@@ -1236,21 +1245,21 @@ export function GameV4({
 
       {/* Discard drawer */}
       {showDiscard && (
-        <div className="absolute right-2 top-16 bottom-24 w-[260px] bg-[#1A1A1A] ink-border-md z-40 p-2 overflow-y-auto">
+        <div className="absolute right-2 top-16 bottom-24 w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
           <div className="flex justify-between items-center mb-1">
-            <span className="heading-font text-[10px] text-[#FFD54F]">DISCARD PILE</span>
+            <span className="heading-font text-[10px] text-[var(--c-yellow)]">DISCARD PILE</span>
             <button
               onClick={() => {
                 setShowDiscard(false);
                 setEchoPick(null);
               }}
               aria-label="Close discard pile"
-              className="btn-pop text-[10px] bg-[#E53935] text-white px-1.5 ink-border-sm"
+              className="btn-pop text-[10px] bg-[var(--c-red)] text-white px-1.5 ink-border-sm"
             >
               ✕
             </button>
           </div>
-          <div className="text-[8px] text-[#F7F7F7]/60 font-bold mb-1">
+          <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
             Echo cards can be recast: select a die, click ECHO, then discard one card from hand.
           </div>
           <div className="flex flex-wrap gap-1">
@@ -1301,7 +1310,7 @@ export function GameV4({
                       className={cn(
                         'btn-pop text-[8px] font-bold px-1 ink-border-sm',
                         echoPick?.cardIid === c.iid
-                          ? 'bg-[#E53935] text-white'
+                          ? 'bg-[var(--c-red)] text-white'
                           : 'bg-[#8E44AD] text-white',
                       )}
                     >
@@ -1312,7 +1321,7 @@ export function GameV4({
               );
             })}
             {me.discard.length === 0 && (
-              <span className="text-[9px] text-[#F7F7F7]/30 font-bold">empty</span>
+              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">empty</span>
             )}
           </div>
         </div>
@@ -1321,11 +1330,11 @@ export function GameV4({
       {/* Card inspector */}
       {inspect && (
         <div
-          className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center"
+          className="absolute inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center"
           onClick={() => setInspect(null)}
         >
           <div
-            className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
             onClick={(e) => e.stopPropagation()}
           >
             {inspect.image && (
@@ -1335,7 +1344,7 @@ export function GameV4({
               />
             )}
             <div className="heading-font text-sm">{inspect.name}</div>
-            <div className="text-[10px] font-bold text-[#2C3E50] uppercase">
+            <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
               {inspect.type}
               {inspect.rarity ? ` · ${inspect.rarity}` : ''}
               {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
@@ -1349,11 +1358,11 @@ export function GameV4({
             </div>
             <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
             {inspect.flavor && (
-              <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>
+              <div className="text-[9px] italic text-[var(--c-steel)] mt-1">{inspect.flavor}</div>
             )}
             <button
               onClick={() => setInspect(null)}
-              className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm"
+              className="btn-pop mt-2 text-[10px] heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1 ink-border-sm"
             >
               CLOSE
             </button>
@@ -1363,10 +1372,10 @@ export function GameV4({
 
       {/* Forced discard (hand size &gt; 6 at End Phase) — player picks which cards */}
       {forcedDiscard && (
-        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/90 flex items-center justify-center p-4">
-          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-4 text-center max-w-3xl">
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl">
             <div className="heading-font text-xl mb-1">Discard Down to 6</div>
-            <div className="text-[11px] font-bold text-[#2C3E50] mb-3">
+            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
               Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
               {forcedDiscard.picks.length}/{forcedDiscard.needed} selected).
             </div>
@@ -1382,7 +1391,9 @@ export function GameV4({
                       dimmed={!picked && forcedDiscard.picks.length >= forcedDiscard.needed}
                       onClick={() => toggleForcedDiscardPick(c.iid)}
                     />
-                    {picked && <span className="text-[8px] font-bold text-[#E53935]">DISCARD</span>}
+                    {picked && (
+                      <span className="text-[8px] font-bold text-[var(--c-red)]">DISCARD</span>
+                    )}
                   </div>
                 );
               })}
@@ -1393,8 +1404,8 @@ export function GameV4({
               className={cn(
                 'heading-font text-xs px-5 py-2 ink-border-sm shadow-hard-black-xs',
                 forcedDiscard.picks.length === forcedDiscard.needed
-                  ? 'btn-pop bg-[#E53935] text-white'
-                  : 'bg-[#2C3E50]/40 text-[#F7F7F7]/50 cursor-not-allowed',
+                  ? 'btn-pop bg-[var(--c-red)] text-white'
+                  : 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/50 cursor-not-allowed',
               )}
             >
               CONFIRM DISCARD
@@ -1405,10 +1416,10 @@ export function GameV4({
 
       {/* Mulligan overlay */}
       {stage === 'mulligan' && (
-        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/90 flex items-center justify-center p-4">
-          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-4 text-center max-w-3xl">
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl">
             <div className="heading-font text-xl mb-1">Opening Hand — {playerName}</div>
-            <div className="text-[11px] font-bold text-[#2C3E50] mb-3">
+            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
               Keep this hand, or mulligan once to shuffle and redraw 5.
             </div>
             <div className="flex gap-1.5 justify-center flex-wrap mb-4">
@@ -1421,14 +1432,14 @@ export function GameV4({
             <div className="flex gap-3 justify-center">
               <button
                 onClick={afterMulligan}
-                className="btn-pop heading-font text-xs bg-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font text-xs bg-[var(--c-yellow)] px-5 py-2 ink-border-sm shadow-hard-black-xs"
               >
                 KEEP HAND
               </button>
               {!mulliganUsed && (
                 <button
                   onClick={doMulligan}
-                  className="btn-pop heading-font text-xs bg-[#1A1A1A] text-[#FFD54F] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+                  className="btn-pop heading-font text-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-5 py-2 ink-border-sm shadow-hard-black-xs"
                 >
                   MULLIGAN
                 </button>
@@ -1440,17 +1451,17 @@ export function GameV4({
 
       {/* Game over */}
       {stage === 'over' && g.winner && (
-        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/90 flex items-center justify-center">
-          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-6 text-center">
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center">
             <div className="heading-font text-3xl mb-2">
               {g.winner === 'draw' ? 'DRAW' : g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
             </div>
-            <div className="text-[11px] font-bold text-[#2C3E50] mb-4">
+            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
               {g.log.slice(-2).join(' · ')}
             </div>
             <button
               onClick={onExit}
-              className="btn-pop heading-font text-sm bg-[#FFD54F] px-6 py-2 ink-border-sm shadow-hard-black-xs"
+              className="btn-pop heading-font text-sm bg-[var(--c-yellow)] px-6 py-2 ink-border-sm shadow-hard-black-xs"
             >
               BACK TO MENU
             </button>

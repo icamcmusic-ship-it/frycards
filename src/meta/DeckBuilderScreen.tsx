@@ -101,7 +101,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="DECK BUILDER" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -116,7 +116,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
             </span>
           </PopButton>
           {importError && (
-            <span className="text-[11px] font-bold text-[#E53935]">⚠ {importError}</span>
+            <span className="text-[11px] font-bold text-[var(--c-red)]">⚠ {importError}</span>
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -125,17 +125,19 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
             return (
               <div
                 key={d.id}
-                className="bg-[#F7F7F7] ink-border-md shadow-hard-black-sm overflow-hidden"
+                className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm overflow-hidden"
               >
-                <div className="flex justify-between items-center px-3 py-1.5 bg-[#1A1A1A]">
-                  <span className="heading-font text-xs text-[#FFD54F] truncate">{d.name}</span>
+                <div className="flex justify-between items-center px-3 py-1.5 bg-[var(--c-ink)]">
+                  <span className="heading-font text-xs text-[var(--c-yellow)] truncate">
+                    {d.name}
+                  </span>
                   {d.is_valid ? (
-                    <span className="text-[9px] font-black text-[#F7F7F7] bg-[#2C3E50] px-1 flex items-center gap-0.5">
+                    <span className="text-[9px] font-black text-[var(--c-paper)] bg-[var(--c-steel)] px-1 flex items-center gap-0.5">
                       <Check className="w-3 h-3" />
                       LEGAL
                     </span>
                   ) : (
-                    <span className="text-[9px] font-black text-[#1A1A1A] bg-[#FFD54F] px-1 flex items-center gap-0.5">
+                    <span className="text-[9px] font-black text-[var(--c-ink)] bg-[var(--c-yellow)] px-1 flex items-center gap-0.5">
                       <AlertTriangle className="w-3 h-3" />
                       INCOMPLETE
                     </span>
@@ -146,7 +148,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     <img src={leader.image} className="w-full h-full object-cover" loading="lazy" />
                   </div>
                 )}
-                <div className="px-3 text-[11px] font-bold text-[#2C3E50]">
+                <div className="px-3 text-[11px] font-bold text-[var(--c-steel)]">
                   {leader?.name || 'Unknown Leader'} · {d.card_ids.length}/{DECK_SIZE} cards
                 </div>
                 <div className="flex gap-2 p-3">
@@ -169,7 +171,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
             );
           })}
           {decks.length === 0 && (
-            <div className="col-span-full text-center font-bold text-[#2C3E50] py-14">
+            <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14">
               No decks yet. Forge your first deck — you already own a full starter collection.
             </div>
           )}
@@ -349,7 +351,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     else onDone();
   };
 
-  const select = 'px-2 py-1.5 bg-[#F7F7F7] ink-border-sm font-bold text-xs';
+  const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   // Unsaved-work guard: only prompt if the draft actually diverges from what
   // was loaded, so re-opening and immediately leaving an unchanged deck never
@@ -367,25 +369,27 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   // Leader pick step
   if (!leader) {
     return (
-      <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
-        <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#1A1A1A] px-4 py-2.5">
+      <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+        <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
           <PopButton onClick={onDone} color="yellow">
             &lt; BACK
           </PopButton>
-          <h1 className="heading-font text-xl text-[#FFD54F]">CHOOSE YOUR LEADER</h1>
+          <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR LEADER</h1>
         </div>
         <div className="p-6 flex flex-wrap gap-5 justify-center">
           {ownedLeaders.map((l) => (
             <button
               key={l.id}
               onClick={() => setLeaderId(l.id)}
-              className="btn-pop w-56 overflow-hidden bg-[#F7F7F7] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
+              className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
             >
-              <div className="flex justify-between items-center px-2 py-1 bg-[#1A1A1A]">
-                <span className="text-[9px] heading-font text-[#FFD54F]">
+              <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
+                <span className="text-[9px] heading-font text-[var(--c-yellow)]">
                   {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
                 </span>
-                <span className="text-[9px] font-mono font-bold text-[#F7F7F7]">{l.hp} HP</span>
+                <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
+                  {l.hp} HP
+                </span>
               </div>
               {l.image && (
                 <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
@@ -394,7 +398,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               )}
               <div className="p-3 pt-1">
                 <div className="heading-font text-base leading-tight">{l.name}</div>
-                <div className="text-[10px] font-bold text-[#2C3E50] mt-1">
+                <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
                   {l.ability ? `Ability ${l.ability.threshold}+` : ''}
                   {l.ultimate ? ` · Ultimate turn ${l.ultimate.unlockTurn}+` : ''}
                 </div>
@@ -402,7 +406,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             </button>
           ))}
           {ownedLeaders.length === 0 && (
-            <div className="text-center font-bold text-[#2C3E50] py-14">
+            <div className="text-center font-bold text-[var(--c-steel)] py-14">
               You don't own any Leaders yet. Open packs to find one!
             </div>
           )}
@@ -412,9 +416,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   }
 
   return (
-    <div className="w-full h-screen flex flex-col bg-[#F7F7F7] text-[#1A1A1A]">
+    <div className="w-full h-screen flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)]">
       {/* Editor header */}
-      <div className="flex items-center justify-between gap-3 bg-[#1A1A1A] px-4 py-2.5 shrink-0">
+      <div className="flex items-center justify-between gap-3 bg-[var(--c-ink)] px-4 py-2.5 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <PopButton onClick={handleBack} color="yellow">
             &lt; BACK
@@ -423,17 +427,17 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={40}
-            className="px-2 py-1.5 bg-[#F7F7F7] ink-border-sm font-black heading-font text-sm w-48"
+            className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-48"
           />
-          <span className="heading-font text-sm text-[#F7F7F7] truncate">{leader.name}</span>
+          <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span
             className={cn(
               'heading-font text-sm px-2 py-1 ink-border-sm',
               cardIds.length === DECK_SIZE
-                ? 'bg-[#FFD54F] text-[#1A1A1A]'
-                : 'bg-[#E53935] text-[#F7F7F7]',
+                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                : 'bg-[var(--c-red)] text-[var(--c-paper)]',
             )}
           >
             {cardIds.length}/{DECK_SIZE}
@@ -459,8 +463,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       </div>
 
       {(issues.length > 0 || saveError) && (
-        <div className="bg-[#FFD54F] border-b-4 border-[#1A1A1A] px-4 py-1.5 text-[10px] font-bold flex flex-wrap gap-x-4 gap-y-0.5 shrink-0">
-          {saveError && <span className="text-[#E53935]">SAVE FAILED: {saveError}</span>}
+        <div className="bg-[var(--c-yellow)] border-b-4 border-[var(--c-ink)] px-4 py-1.5 text-[10px] font-bold flex flex-wrap gap-x-4 gap-y-0.5 shrink-0">
+          {saveError && <span className="text-[var(--c-red)]">SAVE FAILED: {saveError}</span>}
           {issues.slice(0, 4).map((i) => (
             <span key={i.text}>⚠ {i.text}</span>
           ))}
@@ -473,7 +477,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex gap-2 items-center p-3 pb-2 shrink-0 flex-wrap">
             <input
-              className={cn(select, 'w-44 placeholder:text-[#2C3E50]/50')}
+              className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
               placeholder="Search…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -504,7 +508,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 </option>
               ))}
             </select>
-            <span className="text-[10px] font-bold text-[#2C3E50] ml-auto">
+            <span className="text-[10px] font-bold text-[var(--c-steel)] ml-auto">
               POOL: OWNED CARDS · {pool.length} MATCH
             </span>
           </div>
@@ -525,7 +529,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                           e.stopPropagation();
                           setInspect(c);
                         }}
-                        className="text-[6.5px] font-bold text-[#2C3E50]/70 underline mt-0.5"
+                        className="text-[6.5px] font-bold text-[var(--c-steel)]/70 underline mt-0.5"
                       >
                         details
                       </button>
@@ -535,7 +539,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               );
             })}
             {pool.length === 0 && (
-              <div className="w-full text-center font-bold text-[#2C3E50] py-10">
+              <div className="w-full text-center font-bold text-[var(--c-steel)] py-10">
                 No owned cards match.
               </div>
             )}
@@ -543,10 +547,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         </div>
 
         {/* Deck list */}
-        <div className="w-72 shrink-0 border-l-4 border-[#1A1A1A] bg-[#2C3E50] flex flex-col">
+        <div className="w-72 shrink-0 border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
           {/* Deck stats: cast-slot curve, type breakdown, top keywords */}
-          <div className="px-3 py-2.5 border-b-2 border-[#1A1A1A]/40 shrink-0">
-            <div className="heading-font text-[10px] text-[#FFD54F] mb-1.5">DECK STATS</div>
+          <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0">
+            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK STATS</div>
             <div className="flex items-end gap-1 h-12 mb-1.5">
               {['1', '2', '3', '4', '5', '6', 'Combo', 'Free'].map((bucket) => {
                 const n = deckStats.curve[bucket] || 0;
@@ -554,11 +558,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 return (
                   <div key={bucket} className="flex-1 flex flex-col items-center gap-0.5">
                     <div
-                      className="w-full bg-[#FFD54F] ink-border-sm min-h-[2px]"
+                      className="w-full bg-[var(--c-yellow)] ink-border-sm min-h-[2px]"
                       style={{ height: `${Math.max(h, n > 0 ? 8 : 2)}%` }}
                       title={`${n} card${n === 1 ? '' : 's'} at ${bucket === 'Combo' ? 'Combo-gate' : bucket === 'Free' ? 'Free (Location)' : `Cast ${bucket}`}`}
                     />
-                    <span className="text-[7px] font-mono font-bold text-[#F7F7F7]/70">
+                    <span className="text-[7px] font-mono font-bold text-[var(--c-paper)]/70">
                       {bucket === 'Combo' ? 'CB' : bucket === 'Free' ? 'FR' : bucket}
                     </span>
                   </div>
@@ -569,7 +573,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               {Object.entries(typeCounts).map(([t, n]) => (
                 <span
                   key={t}
-                  className="text-[9px] font-bold text-[#F7F7F7] bg-[#1A1A1A]/50 px-1.5 py-0.5"
+                  className="text-[9px] font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
                 >
                   {n} {t}
                   {n === 1 ? '' : 's'}
@@ -581,7 +585,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 {deckStats.topKeywords.map(([kw, n]) => (
                   <span
                     key={kw}
-                    className="text-[8px] font-black px-1 py-0.5 bg-[#FFD54F] text-[#1A1A1A] ink-border-sm"
+                    className="text-[8px] font-black px-1 py-0.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm"
                   >
                     {kw} ×{n}
                   </span>
@@ -590,14 +594,16 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             )}
           </div>
 
-          <div className="px-3 py-2 heading-font text-xs text-[#FFD54F] shrink-0">DECK LIST</div>
+          <div className="px-3 py-2 heading-font text-xs text-[var(--c-yellow)] shrink-0">
+            DECK LIST
+          </div>
           <div className="flex-1 overflow-y-auto px-2 pb-3 flex flex-col gap-1">
             {grouped.map(({ card, n }) => (
               <button
                 key={card.id}
                 onClick={() => removeCard(card.id)}
                 title="Click to remove one copy"
-                className="flex items-center gap-1.5 bg-[#F7F7F7] ink-border-sm px-1.5 py-1 text-left hover:bg-[#E53935] hover:text-[#F7F7F7] transition-colors group"
+                className="flex items-center gap-1.5 bg-[var(--c-paper)] ink-border-sm px-1.5 py-1 text-left hover:bg-[var(--c-red)] hover:text-[var(--c-paper)] transition-colors group"
               >
                 <span
                   className={cn(
@@ -616,7 +622,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               </button>
             ))}
             {grouped.length === 0 && (
-              <div className="text-[10px] font-bold text-[#F7F7F7]/60 text-center py-8">
+              <div className="text-[10px] font-bold text-[var(--c-paper)]/60 text-center py-8">
                 Click cards in the pool to add them.
               </div>
             )}
@@ -627,11 +633,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       {/* Card inspector */}
       {inspect && (
         <div
-          className="absolute inset-0 z-50 bg-[#1A1A1A]/80 flex items-center justify-center"
+          className="absolute inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center"
           onClick={() => setInspect(null)}
         >
           <div
-            className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-3 max-w-[320px]"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
             onClick={(e) => e.stopPropagation()}
           >
             {inspect.image && (
@@ -641,18 +647,18 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               />
             )}
             <div className="heading-font text-sm">{inspect.name}</div>
-            <div className="text-[10px] font-bold text-[#2C3E50] uppercase">
+            <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
               {inspect.type}
               {inspect.rarity ? ` · ${inspect.rarity}` : ''}
               {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
             </div>
             <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
             {inspect.flavor && (
-              <div className="text-[9px] italic text-[#2C3E50] mt-1">{inspect.flavor}</div>
+              <div className="text-[9px] italic text-[var(--c-steel)] mt-1">{inspect.flavor}</div>
             )}
             <button
               onClick={() => setInspect(null)}
-              className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm"
+              className="btn-pop mt-2 text-[10px] heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1 ink-border-sm"
             >
               CLOSE
             </button>

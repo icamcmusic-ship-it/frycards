@@ -70,12 +70,12 @@ export function cardRules(def: CardDef): string {
 
 /** Rarity accent colors, shared between the deck builder and match UI. */
 export const RARITY_COLOR: Record<string, string> = {
-  Common: 'bg-[#2C3E50] text-[#F7F7F7]',
+  Common: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
   Uncommon: 'bg-[#43A047] text-white',
-  Rare: 'bg-[#29B6F6] text-[#1A1A1A]',
+  Rare: 'bg-[#29B6F6] text-[var(--c-ink)]',
   'Super-Rare': 'bg-[#8E44AD] text-white',
-  'Ultra-Rare': 'bg-[#FFD54F] text-[#1A1A1A]',
-  Mythic: 'bg-[#E53935] text-white',
+  'Ultra-Rare': 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+  Mythic: 'bg-[var(--c-red)] text-white',
 };
 
 export function CardFace({
@@ -118,11 +118,11 @@ export function CardFace({
         }
       }}
       className={cn(
-        'relative bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm text-left shrink-0 transition-transform',
+        'relative bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0 transition-transform',
         small ? 'w-[104px]' : 'w-[128px]',
         onClick && 'btn-pop cursor-pointer',
         dimmed && 'opacity-45',
-        highlight && 'ring-4 ring-[#FFD54F] -translate-y-1',
+        highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
       )}
     >
       <div className="flex items-center justify-between px-1 pt-0.5">
@@ -132,11 +132,13 @@ export function CardFace({
             COMBO
           </span>
         ) : def.type !== 'Location' && def.threshold !== undefined ? (
-          <span className="text-[10px] font-mono font-bold bg-[#1A1A1A] text-[#FFD54F] px-1 shrink-0">
+          <span className="text-[10px] font-mono font-bold bg-[var(--c-ink)] text-[var(--c-yellow)] px-1 shrink-0">
             {def.threshold}+
           </span>
         ) : def.type === 'Location' ? (
-          <span className="text-[8px] font-bold bg-[#2C3E50] text-white px-0.5 shrink-0">FREE</span>
+          <span className="text-[8px] font-bold bg-[var(--c-steel)] text-white px-0.5 shrink-0">
+            FREE
+          </span>
         ) : null}
       </div>
       {def.image && (
@@ -163,12 +165,12 @@ export function CardFace({
             </span>
           )}
           {badge && (
-            <span className="absolute top-0.5 left-0.5 bg-[#E53935] text-white text-[7px] font-black px-1">
+            <span className="absolute top-0.5 left-0.5 bg-[var(--c-red)] text-white text-[7px] font-black px-1">
               {badge}
             </span>
           )}
           {count !== undefined && count > 0 && (
-            <span className="absolute bottom-0.5 right-0.5 bg-[#1A1A1A] text-[#FFD54F] text-[8px] font-black px-1">
+            <span className="absolute bottom-0.5 right-0.5 bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1">
               ×{count}
             </span>
           )}
@@ -181,7 +183,7 @@ export function CardFace({
             .map((kw) => (
               <span
                 key={kw}
-                className="text-[7px] font-bold px-0.5 bg-[#FFD54F] ink-border-sm leading-tight"
+                className="text-[7px] font-bold px-0.5 bg-[var(--c-yellow)] ink-border-sm leading-tight"
               >
                 {kw}
               </span>
@@ -193,11 +195,11 @@ export function CardFace({
           )}
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[8px] font-bold uppercase text-[#2C3E50]">{def.type}</span>
+          <span className="text-[8px] font-bold uppercase text-[var(--c-steel)]">{def.type}</span>
           {def.type === 'Unit' && (
             <span className="text-[10px] font-mono font-bold">
               {def.atk}
-              <span className="text-[#E53935]">⚔</span>/{def.hp}
+              <span className="text-[var(--c-red)]">⚔</span>/{def.hp}
               <span className="text-[#43A047]">♥</span>
             </span>
           )}

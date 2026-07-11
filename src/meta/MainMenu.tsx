@@ -40,14 +40,14 @@ export function MainMenu({
       label: 'PLAY',
       desc: 'Battle the CPU',
       icon: <Swords className="w-8 h-8" />,
-      color: 'bg-[#E53935] text-[#F7F7F7]',
+      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
     },
     {
       key: 'collection',
       label: 'COLLECTION',
       desc: guest ? 'Requires an account' : 'Browse your cards',
       icon: <Library className="w-8 h-8" />,
-      color: 'bg-[#F7F7F7] text-[#1A1A1A]',
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
       disabled: guest,
     },
     {
@@ -55,7 +55,7 @@ export function MainMenu({
       label: 'DECK BUILDER',
       desc: guest ? 'Requires an account' : 'Forge 30-card decks',
       icon: <Layers className="w-8 h-8" />,
-      color: 'bg-[#FFD54F] text-[#1A1A1A]',
+      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       disabled: guest,
     },
     {
@@ -63,7 +63,7 @@ export function MainMenu({
       label: 'STORE',
       desc: guest ? 'Requires an account' : 'Packs & cosmetics',
       icon: <Store className="w-8 h-8" />,
-      color: 'bg-[#2C3E50] text-[#F7F7F7]',
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
       disabled: guest,
     },
     {
@@ -71,15 +71,15 @@ export function MainMenu({
       label: 'PROFILE',
       desc: guest ? 'Requires an account' : 'Stats & customization',
       icon: <User className="w-8 h-8" />,
-      color: 'bg-[#F7F7F7] text-[#1A1A1A]',
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
       disabled: guest,
     },
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A] relative overflow-hidden">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)] relative overflow-hidden">
       <div
-        className="absolute inset-0 bg-[#FFD54F] pointer-events-none"
+        className="absolute inset-0 bg-[var(--c-yellow)] pointer-events-none"
         style={{ clipPath: 'polygon(85% 0, 100% 0, 100% 100%, 70% 100%)' }}
       />
       <div className="absolute inset-0 halftone-pattern pointer-events-none opacity-30" />
@@ -88,7 +88,7 @@ export function MainMenu({
       <div className="relative z-10 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
           <div
-            className="w-14 h-14 ink-border-md shadow-hard-black-xs bg-[#2C3E50] overflow-hidden shrink-0"
+            className="w-14 h-14 ink-border-md shadow-hard-black-xs bg-[var(--c-steel)] overflow-hidden shrink-0"
             style={
               banner && !avatar
                 ? { backgroundImage: `url(${banner.image_url})`, backgroundSize: 'cover' }
@@ -98,7 +98,7 @@ export function MainMenu({
             {avatar?.image_url ? (
               <img src={avatar.image_url} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center heading-font text-[#FFD54F] text-xl">
+              <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-xl">
                 {(profile?.username || 'G')[0].toUpperCase()}
               </div>
             )}
@@ -111,13 +111,13 @@ export function MainMenu({
               <div className="flex gap-2 mt-1.5">
                 <GoldChip amount={profile.gold} />
                 <GemChip amount={profile.gems} />
-                <span className="text-[10px] font-bold text-[#2C3E50] self-center">
+                <span className="text-[10px] font-bold text-[var(--c-steel)] self-center">
                   {profile.wins}W · {profile.losses}L
                 </span>
               </div>
             )}
             {guest && (
-              <div className="text-[10px] font-bold text-[#2C3E50] mt-1">
+              <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
                 Progress is not saved in guest mode.
               </div>
             )}
@@ -126,25 +126,25 @@ export function MainMenu({
         <div className="flex gap-2">
           <button
             onClick={onHelp}
-            className="btn-pop heading-font text-[11px] bg-[#FFD54F] text-[#1A1A1A] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+            className="btn-pop heading-font text-[11px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
             <BookOpen className="w-3.5 h-3.5" /> RULES
           </button>
           <button
             onClick={() => onNavigate('changelog')}
-            className="btn-pop heading-font text-[11px] bg-[#F7F7F7] text-[#1A1A1A] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+            className="btn-pop heading-font text-[11px] bg-[var(--c-paper)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
             <ScrollText className="w-3.5 h-3.5" /> CHANGELOG
           </button>
           <button
             onClick={() => onNavigate('settings')}
-            className="btn-pop heading-font text-[11px] bg-[#2C3E50] text-[#F7F7F7] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+            className="btn-pop heading-font text-[11px] bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
             <Settings className="w-3.5 h-3.5" /> SETTINGS
           </button>
           <button
             onClick={signOut}
-            className="btn-pop heading-font text-[11px] bg-[#1A1A1A] text-[#F7F7F7] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+            className="btn-pop heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
             <LogOut className="w-3.5 h-3.5" /> {guest ? 'EXIT GUEST' : 'SIGN OUT'}
           </button>
@@ -153,13 +153,15 @@ export function MainMenu({
 
       {/* Title */}
       <div className="relative z-10 text-center mt-6 mb-10">
-        <div className="bg-[#E53935] text-[#F7F7F7] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs inline-block mb-3">
+        <div className="bg-[var(--c-red)] text-[var(--c-paper)] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs inline-block mb-3">
           STARK COMIC STANDARD · BLUE CORAL SET
         </div>
         <h1 className="text-5xl sm:text-7xl heading-font leading-none">
           FRY
           <br />
-          <span className="bg-[#1A1A1A] text-[#FFD54F] px-4 py-1 inline-block mt-2">CARDS</span>
+          <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] px-4 py-1 inline-block mt-2">
+            CARDS
+          </span>
         </h1>
       </div>
 
@@ -168,7 +170,7 @@ export function MainMenu({
         <div className="relative z-10 flex justify-center px-6 mb-6">
           <button
             onClick={() => onNavigate('store')}
-            className="btn-pop bg-[#E53935] text-[#F7F7F7] heading-font text-sm px-5 py-3 ink-border-md shadow-hard-black hover:-translate-y-0.5 transition-transform"
+            className="btn-pop bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-sm px-5 py-3 ink-border-md shadow-hard-black hover:-translate-y-0.5 transition-transform"
           >
             🎁 CLAIM YOUR FREE STARTER DECK IN THE STORE ▸
           </button>

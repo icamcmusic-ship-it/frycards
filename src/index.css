@@ -9,18 +9,20 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  /* Default theme colors (dusty grape) */
-  --theme-primary-1: #5b507aff;
-  --theme-primary-2: #5b618aff;
-  --theme-secondary: #9eadc8ff;
-  --theme-accent: #b9e28cff;
-  --theme-highlight: #d6d84fff;
+  /* Theme roles every component builds on via bg-[var(--c-ink)] etc.
+     (src/meta/themes.ts). Defaults match the classic Monochrome & Pop
+     palette; applyTheme() overwrites these at runtime. */
+  --c-ink: #1a1a1a;
+  --c-paper: #f7f7f7;
+  --c-yellow: #ffd54f;
+  --c-red: #e53935;
+  --c-steel: #2c3e50;
 }
 
 body {
   font-family: 'Space Grotesk', sans-serif;
-  background-color: #1a1a1a;
-  color: #f7f7f7;
+  background-color: var(--c-ink);
+  color: var(--c-paper);
 }
 
 h1,
@@ -36,30 +38,30 @@ h4,
 
 /* Solid ink borders */
 .ink-border-lg {
-  border: 10px solid #1a1a1a;
+  border: 10px solid var(--c-ink);
 }
 .ink-border-md {
-  border: 4px solid #1a1a1a;
+  border: 4px solid var(--c-ink);
 }
 .ink-border-sm {
-  border: 2px solid #1a1a1a;
+  border: 2px solid var(--c-ink);
 }
 
 /* Flat graphic drop shadows */
 .shadow-hard-yellow {
-  box-shadow: 6px 6px 0px 0px #ffd54f;
+  box-shadow: 6px 6px 0px 0px var(--c-yellow);
 }
 .shadow-hard-black-xs {
-  box-shadow: 3px 3px 0px 0px #1a1a1a;
+  box-shadow: 3px 3px 0px 0px var(--c-ink);
 }
 .shadow-hard-black-sm {
-  box-shadow: 5px 5px 0px 0px #1a1a1a;
+  box-shadow: 5px 5px 0px 0px var(--c-ink);
 }
 .shadow-hard-black {
-  box-shadow: 8px 8px 0px 0px #1a1a1a;
+  box-shadow: 8px 8px 0px 0px var(--c-ink);
 }
 .shadow-hard-black-lg {
-  box-shadow: 14px 14px 0px 0px #1a1a1a;
+  box-shadow: 14px 14px 0px 0px var(--c-ink);
 }
 
 /* Pop button active states */
@@ -70,12 +72,15 @@ h4,
 }
 .btn-pop:active {
   transform: translate(4px, 4px);
-  box-shadow: 0px 0px 0px 0px #1a1a1a !important;
+  box-shadow: 0px 0px 0px 0px var(--c-ink) !important;
 }
 
 /* Halftone overlay pattern */
 .halftone-pattern {
-  background-image: radial-gradient(rgba(26, 26, 26, 0.3) 15%, transparent 16%);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--c-ink) 30%, transparent) 15%,
+    transparent 16%
+  );
   background-size: 8px 8px;
 }
 
@@ -125,16 +130,30 @@ h4,
     40% 0,
     50% 0
   );
-  background-color: #ffd54f;
+  background-color: var(--c-yellow);
   opacity: 0.15;
 }
 
 /* Classic black card back for face-down cards */
 .classic-black-back {
-  background-color: #1a1a1a;
+  background-color: var(--c-ink);
   background-image:
-    linear-gradient(45deg, #2c3e50 25%, transparent 25%, transparent 75%, #2c3e50 75%, #2c3e50),
-    linear-gradient(45deg, #2c3e50 25%, #1a1a1a 25%, #1a1a1a 75%, #2c3e50 75%, #2c3e50);
+    linear-gradient(
+      45deg,
+      var(--c-steel) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--c-steel) 75%,
+      var(--c-steel)
+    ),
+    linear-gradient(
+      45deg,
+      var(--c-steel) 25%,
+      var(--c-ink) 25%,
+      var(--c-ink) 75%,
+      var(--c-steel) 75%,
+      var(--c-steel)
+    );
   background-size: 30px 30px;
   background-position:
     0 0,

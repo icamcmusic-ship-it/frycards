@@ -200,35 +200,35 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
   }, [onClose]);
 
   return (
-    <div className="absolute inset-0 bg-[#1A1A1A]/95 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-yellow max-w-3xl w-full flex flex-col max-h-[92vh]">
-        <div className="flex justify-between items-center px-6 py-3 border-b-4 border-[#1A1A1A] bg-[#FFD54F]">
+    <div className="absolute inset-0 bg-[var(--c-ink)]/95 flex items-center justify-center z-50 p-4">
+      <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full flex flex-col max-h-[92vh]">
+        <div className="flex justify-between items-center px-6 py-3 border-b-4 border-[var(--c-ink)] bg-[var(--c-yellow)]">
           <h2 className="text-2xl heading-font">How to Play</h2>
           <button
             onClick={onClose}
-            className="btn-pop bg-[#E53935] text-[#F7F7F7] px-4 py-1.5 font-black ink-border-sm shadow-hard-black-xs heading-font text-sm"
+            className="btn-pop bg-[var(--c-red)] text-[var(--c-paper)] px-4 py-1.5 font-black ink-border-sm shadow-hard-black-xs heading-font text-sm"
           >
             Close [X]
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
           {SECTIONS.map((sec, i) => (
-            <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[#F7F7F7]">
+            <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
               <button
                 onClick={() => setOpen(open === i ? -1 : i)}
-                className="w-full text-left px-4 py-2 heading-font text-sm flex justify-between items-center bg-[#2C3E50] text-[#F7F7F7] hover:bg-[#1A1A1A]"
+                className="w-full text-left px-4 py-2 heading-font text-sm flex justify-between items-center bg-[var(--c-steel)] text-[var(--c-paper)] hover:bg-[var(--c-ink)]"
               >
                 <span>{sec.title}</span>
-                <span className="text-[#FFD54F]">{open === i ? '▾' : '▸'}</span>
+                <span className="text-[var(--c-yellow)]">{open === i ? '▾' : '▸'}</span>
               </button>
               {open === i && (
                 <dl className="px-4 py-3 grid gap-2 text-sm">
                   {sec.body.map(([term, desc]) => (
                     <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
-                      <dt className="font-black text-[11px] bg-[#FFD54F] px-1.5 py-0.5 justify-self-start">
+                      <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start">
                         {term}
                       </dt>
-                      <dd className="text-[12px] font-medium text-[#1A1A1A]/90 leading-snug">
+                      <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
                         {desc}
                       </dd>
                     </div>
@@ -237,7 +237,7 @@ export function HowToPlay({ onClose }: HowToPlayProps) {
               )}
             </div>
           ))}
-          <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2">
+          <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2">
             DEFINITIVE RULEBOOK V4.2 · docs/RULEBOOK.md
           </div>
         </div>

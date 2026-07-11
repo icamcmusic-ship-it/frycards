@@ -97,7 +97,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   const cosmeticItems = shopItems.filter((s) => s.item_type === tab && !s.is_season_pass_exclusive);
 
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="FRYCARDS STORE" onBack={onBack} />
 
       <div className="p-5 max-w-6xl mx-auto">
@@ -122,14 +122,14 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         )}
 
         {tab === 'packs' && profile && !profile.starter_claimed && (
-          <div className="mb-6 bg-[#1A1A1A] ink-border-md shadow-hard-yellow p-4">
+          <div className="mb-6 bg-[var(--c-ink)] ink-border-md shadow-hard-yellow p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Gift className="w-5 h-5 text-[#FFD54F]" />
-              <span className="heading-font text-base text-[#FFD54F]">
+              <Gift className="w-5 h-5 text-[var(--c-yellow)]" />
+              <span className="heading-font text-base text-[var(--c-yellow)]">
                 FREE STARTER DECK — ONE TIME ONLY
               </span>
             </div>
-            <p className="text-[11px] font-bold text-[#F7F7F7]/80 mb-3">
+            <p className="text-[11px] font-bold text-[var(--c-paper)]/80 mb-3">
               Pick a Leader and instantly receive that Leader plus a complete, ready-to-play 30-card
               deck.
             </p>
@@ -139,7 +139,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   key={l.id}
                   disabled={!!busyId}
                   onClick={() => handleClaimStarter(l.id, l.name)}
-                  className="btn-pop bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs text-left overflow-hidden hover:-translate-y-0.5 transition-transform"
+                  className="btn-pop bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs text-left overflow-hidden hover:-translate-y-0.5 transition-transform"
                 >
                   {l.image && (
                     <img
@@ -150,7 +150,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   )}
                   <div className="p-2">
                     <div className="heading-font text-[11px] leading-tight truncate">{l.name}</div>
-                    <div className="text-[9px] font-bold text-[#2C3E50] uppercase">
+                    <div className="text-[9px] font-bold text-[var(--c-steel)] uppercase">
                       {l.hp} HP{l.ability ? ` · Ability ${l.ability.threshold}+` : ''}
                     </div>
                     <div
@@ -161,7 +161,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     >
                       {(l.rarity || 'Common').toUpperCase()}
                     </div>
-                    <div className="heading-font text-[10px] mt-1 text-[#E53935]">
+                    <div className="heading-font text-[10px] mt-1 text-[var(--c-red)]">
                       {busyId === 'starter:' + l.id ? 'CLAIMING…' : 'CLAIM FREE ▸'}
                     </div>
                   </div>
@@ -176,13 +176,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
             {packTypes.map((pack) => (
               <div
                 key={pack.id}
-                className="bg-[#F7F7F7] ink-border-md shadow-hard-black flex flex-col overflow-hidden"
+                className="bg-[var(--c-paper)] ink-border-md shadow-hard-black flex flex-col overflow-hidden"
               >
-                <div className="flex justify-between items-center px-3 py-1.5 bg-[#1A1A1A]">
-                  <span className="heading-font text-[11px] text-[#FFD54F] truncate">
+                <div className="flex justify-between items-center px-3 py-1.5 bg-[var(--c-ink)]">
+                  <span className="heading-font text-[11px] text-[var(--c-yellow)] truncate">
                     {pack.name}
                   </span>
-                  <span className="text-[9px] font-mono font-bold text-[#F7F7F7] uppercase shrink-0">
+                  <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
                     {pack.pack_tier.replace('_', ' ')}
                   </span>
                 </div>
@@ -193,7 +193,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
-                    <span className="absolute bottom-1 left-1 bg-[#FFD54F] text-[#1A1A1A] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
+                    <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
                       <Package className="w-3 h-3" /> {pack.card_count} CARDS
                     </span>
                     {pack.guaranteed_rarity && (
@@ -208,7 +208,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     )}
                   </div>
                 )}
-                <p className="text-[11px] font-bold text-[#2C3E50] px-3 flex-1">
+                <p className="text-[11px] font-bold text-[var(--c-steel)] px-3 flex-1">
                   {pack.description}
                 </p>
                 <div className="flex gap-2 p-3">
@@ -243,11 +243,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               return (
                 <div
                   key={item.id}
-                  className="bg-[#F7F7F7] ink-border-md shadow-hard-black-sm flex flex-col overflow-hidden"
+                  className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm flex flex-col overflow-hidden"
                 >
                   <div
                     className={cn(
-                      'overflow-hidden ink-border-sm m-2 bg-[#2C3E50]',
+                      'overflow-hidden ink-border-sm m-2 bg-[var(--c-steel)]',
                       item.aspect_ratio === 'landscape'
                         ? 'aspect-[16/9]'
                         : item.aspect_ratio === 'square'
@@ -275,13 +275,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         {item.rarity.toUpperCase()}
                       </span>
                     </div>
-                    <p className="text-[10px] font-bold text-[#2C3E50] mt-1 line-clamp-2">
+                    <p className="text-[10px] font-bold text-[var(--c-steel)] mt-1 line-clamp-2">
                       {item.description}
                     </p>
                   </div>
                   <div className="flex gap-2 p-3">
                     {owned ? (
-                      <div className="flex-1 text-center heading-font text-[11px] py-2 bg-[#2C3E50] text-[#F7F7F7] ink-border-sm">
+                      <div className="flex-1 text-center heading-font text-[11px] py-2 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                         OWNED
                       </div>
                     ) : (
@@ -312,7 +312,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         )}
                         {item.cost_gold == null &&
                           (item.cost_gems == null || item.cost_gems === 0) && (
-                            <div className="flex-1 text-center heading-font text-[10px] py-2 bg-[#1A1A1A] text-[#F7F7F7]/60 ink-border-sm">
+                            <div className="flex-1 text-center heading-font text-[10px] py-2 bg-[var(--c-ink)] text-[var(--c-paper)]/60 ink-border-sm">
                               SEASON EXCLUSIVE
                             </div>
                           )}
@@ -323,7 +323,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               );
             })}
             {cosmeticItems.length === 0 && (
-              <div className="col-span-full text-center font-bold text-[#2C3E50] py-10">
+              <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
                 Nothing in stock here yet.
               </div>
             )}
@@ -365,14 +365,14 @@ function CardBack({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'w-full h-full bg-[#1A1A1A] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center',
+        'w-full h-full bg-[var(--c-ink)] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center',
         className,
       )}
     >
       {back ? (
         <img src={back} className="w-full h-full object-cover" draggable={false} />
       ) : (
-        <div className="heading-font text-[#FFD54F] text-xl rotate-[-8deg]">FRYCARDS</div>
+        <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRYCARDS</div>
       )}
     </div>
   );
@@ -435,12 +435,12 @@ function PackRevealModal({
     const rarityCounts = new Map<string, number>();
     for (const p of pulls) rarityCounts.set(p.rarity, (rarityCounts.get(p.rarity) || 0) + 1);
     return (
-      <div className="fixed inset-0 bg-[#1A1A1A]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
+      <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
         <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
-        <h2 className="heading-font text-2xl text-[#FFD54F] mb-1 relative">
+        <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 relative">
           {packName.toUpperCase()}
         </h2>
-        <p className="text-[#F7F7F7]/70 text-xs font-bold mb-6 relative">
+        <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-6 relative">
           Your haul — {pulls.length} card{pulls.length === 1 ? '' : 's'}
         </p>
 
@@ -496,15 +496,15 @@ function PackRevealModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-[#1A1A1A]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
       <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
-      <h2 className="heading-font text-2xl text-[#FFD54F] mb-1 relative">
+      <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 relative">
         {packName.toUpperCase()}
       </h2>
-      <p className="text-[#F7F7F7]/70 text-xs font-bold mb-1 relative">
+      <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-1 relative">
         {currentShown ? 'Nice! Tap NEXT to continue.' : 'Tap the card to reveal it.'}
       </p>
-      <div className="text-[10px] font-mono font-bold text-[#F7F7F7]/50 mb-6 relative">
+      <div className="text-[10px] font-mono font-bold text-[var(--c-paper)]/50 mb-6 relative">
         CARD {index + 1} / {pulls.length}
       </div>
 
@@ -563,8 +563,8 @@ function PackRevealModal({
               key={i}
               onClick={() => setIndex(i)}
               className={cn(
-                'w-8 h-11 shrink-0 ink-border-sm cursor-pointer overflow-hidden bg-[#1A1A1A]',
-                i === index ? 'ring-2 ring-[#FFD54F]' : 'opacity-60 hover:opacity-90',
+                'w-8 h-11 shrink-0 ink-border-sm cursor-pointer overflow-hidden bg-[var(--c-ink)]',
+                i === index ? 'ring-2 ring-[var(--c-yellow)]' : 'opacity-60 hover:opacity-90',
               )}
             >
               {shown && p.image_url && (

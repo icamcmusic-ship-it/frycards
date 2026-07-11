@@ -72,33 +72,33 @@ const ENTRIES: ChangelogEntry[] = [
 
 export function ChangelogScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="w-full min-h-screen bg-[#F7F7F7] text-[#1A1A1A]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[#1A1A1A] px-4 py-2.5">
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[#FFD54F]">CHANGELOG</h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHANGELOG</h1>
       </div>
 
       <div className="p-6 max-w-3xl mx-auto flex flex-col gap-5">
         {ENTRIES.map((entry) => (
           <div
             key={entry.version}
-            className="bg-[#F7F7F7] ink-border-md shadow-hard-black-xs overflow-hidden"
+            className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-2 bg-[#2C3E50]">
-              <span className="heading-font text-sm text-[#FFD54F]">{entry.version}</span>
+            <div className="flex items-center justify-between px-4 py-2 bg-[var(--c-steel)]">
+              <span className="heading-font text-sm text-[var(--c-yellow)]">{entry.version}</span>
             </div>
             <ul className="px-5 py-3 flex flex-col gap-1.5 list-disc">
               {entry.items.map((item, i) => (
-                <li key={i} className="text-[12px] font-bold text-[#1A1A1A]/85 leading-snug">
+                <li key={i} className="text-[12px] font-bold text-[var(--c-ink)]/85 leading-snug">
                   {item}
                 </li>
               ))}
             </ul>
           </div>
         ))}
-        <div className="text-center text-[10px] font-mono font-bold text-[#2C3E50]/70 mt-2 mb-6">
+        <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
           FULL DETAILS · CHANGELOG.md
         </div>
       </div>
