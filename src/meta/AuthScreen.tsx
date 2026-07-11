@@ -51,7 +51,10 @@ export function AuthScreen() {
     setBusy(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
-      options: { redirectTo: window.location.origin },
+      // window.location.origin alone drops the GitHub Pages project subpath
+      // (e.g. /frycards/) — BASE_URL restores it, so the redirect lands back
+      // on the app itself instead of the bare domain root.
+      options: { redirectTo: window.location.origin + (import.meta as any).env.BASE_URL },
     });
     if (error) {
       setError(error.message);
