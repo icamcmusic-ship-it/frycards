@@ -18,7 +18,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm run test:engine
-      - run: npm run fuzz -- 15
       - run: npm test
+      - run: npm run sim:v4 -- 20
       - run: npm run build
