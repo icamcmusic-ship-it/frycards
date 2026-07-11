@@ -5,6 +5,7 @@ import { getCard } from '../game/cards';
 import { CardTemplate } from '../types';
 import { MetaHeader, PopButton, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
+import { POOL_BY_ID } from '../game/v3/cardpool';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Event', 'Item', 'Charm', 'Location'];
 const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
@@ -29,6 +30,11 @@ export function StaticCard({
   large?: boolean;
 }) {
   const cost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
+  // The Deck Builder resolves cards from the live match card pool, not this
+  // (possibly stale) catalog snapshot — flag any card that can't actually be
+  // put in a deck rather than letting it look playable here and then
+  // silently vanishing from the builder.
+  const deckBuildable = !!POOL_BY_ID[card.id];
 
   if (large) {
     return (
@@ -72,6 +78,14 @@ export function StaticCard({
           {badge && (
             <span className="absolute top-2 left-2 bg-[#E53935] text-[#F7F7F7] text-xs font-black px-1.5 py-0.5 ink-border-sm">
               {badge}
+            </span>
+          )}
+          {!deckBuildable && (
+            <span
+              title="Not in the current Deck Builder card pool"
+              className="absolute bottom-2 left-2 right-2 bg-[#2C3E50] text-[#F7F7F7] text-[9px] font-black px-1.5 py-0.5 ink-border-sm text-center"
+            >
+              NOT DECK-BUILDABLE YET
             </span>
           )}
         </div>
@@ -162,6 +176,14 @@ export function StaticCard({
         {badge && (
           <span className="absolute top-1 left-1 bg-[#E53935] text-[#F7F7F7] text-[9px] font-black px-1 ink-border-sm">
             {badge}
+          </span>
+        )}
+        {!deckBuildable && (
+          <span
+            title="Not in the current Deck Builder card pool"
+            className="absolute bottom-1 left-1 right-1 bg-[#2C3E50] text-[#F7F7F7] text-[6px] font-black px-1 ink-border-sm text-center leading-tight"
+          >
+            NOT DECK-BUILDABLE
           </span>
         )}
       </div>

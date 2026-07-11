@@ -31,6 +31,7 @@ import {
   matchesPattern,
   opponentOf,
   autoTarget,
+  defaultDiscardChoice,
 } from './engine';
 import { hasKw } from './cards';
 
@@ -475,8 +476,5 @@ export function playTurn(g: Game) {
   if (g.winner) return;
   playCombat(g, p);
   if (g.winner) return;
-  endTurn(
-    g,
-    (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
-  );
+  endTurn(g, defaultDiscardChoice);
 }

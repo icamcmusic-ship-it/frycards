@@ -230,7 +230,11 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
 
 /** v4.2 Toll X: sum of Toll on a player's board, reducing all incoming Leader damage. */
 export function tollReduction(g: Game, ownerId: string): number {
-  return g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
+  const total = g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
+  // Same "ramp, not a collapse" cap Anchor uses: uncapped, a wide Toll board
+  // could zero out an entire class of face damage (Sap, Pierce overflow,
+  // Crescendo burn) at once rather than just blunting it.
+  return Math.min(3, total);
 }
 
 // ---------------------------------------------------------------------------
@@ -678,7 +682,7 @@ function enterPlay(
     // Charm / Event: resolve then discard.
     if (c.def.onCast) {
       const eff = withCrescendo(p, c, c.def.onCast);
-      applyEffect(g, p.id, eff, autoTarget(g, p.id, eff), c);
+      applyEffect(g, p.id, eff, targetIid ?? autoTarget(g, p.id, eff), c);
       queueAftershock(g, p, c);
     }
     discardCard(g, p, c);
@@ -940,6 +944,7 @@ export function echoRecast(
   dieIndex: number,
   cardIid: string,
   discardIid: string,
+  targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
@@ -968,7 +973,7 @@ export function echoRecast(
   // "commons drag the average down" story can be told apart from "overpriced
   // across the board".
   decide(g, p.id, `echoRecast_${rarityTier(c.def.rarity)}`);
-  enterPlay(g, p, c, die.value, true);
+  enterPlay(g, p, c, die.value, true, targetIid);
   return true;
 }
 
@@ -1108,6 +1113,20 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
 // ---------------------------------------------------------------------------
 // End Phase (§3.7)
 // ---------------------------------------------------------------------------
+/**
+ * Fallback discard choice when nobody supplied an explicit pick: discard a
+ * duplicate copy if the hand holds one (a spare of something you're already
+ * holding is the safest cut), otherwise discard the highest-threshold card
+ * (the one least likely to be castable soon), not the cheapest.
+ */
+export function defaultDiscardChoice(hand: Inst[]): Inst {
+  const idCounts = new Map<string, number>();
+  for (const c of hand) idCounts.set(c.def.id, (idCounts.get(c.def.id) || 0) + 1);
+  const dupes = hand.filter((c) => (idCounts.get(c.def.id) || 0) > 1);
+  const pool = dupes.length > 0 ? dupes : hand;
+  return [...pool].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+}
+
 export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   const p = g.players[g.active];
   // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
@@ -1137,7 +1156,7 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   }
   // Discard down to 6.
   while (p.hand.length > 6) {
-    const pick = discardChooser ? discardChooser(p.hand) : p.hand[p.hand.length - 1];
+    const pick = discardChooser ? discardChooser(p.hand) : defaultDiscardChoice(p.hand);
     const idx = p.hand.indexOf(pick);
     const c = p.hand.splice(idx >= 0 ? idx : p.hand.length - 1, 1)[0];
     discardCard(g, p, c);

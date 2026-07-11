@@ -38,6 +38,7 @@ import {
   rollValues,
   opponentOf,
   mulliganRedraw,
+  defaultDiscardChoice,
 } from '../game/v3/engine';
 import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
@@ -291,7 +292,7 @@ function LeaderPanel({
 type Stage = 'mulligan' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
 
 interface Pending {
-  kind: 'cast' | 'ability' | 'ultimate';
+  kind: 'cast' | 'ability' | 'ultimate' | 'echo';
   cardIid: string;
   effect: Effect;
 }
@@ -340,7 +341,8 @@ export function GameV4({
   const [rerollSel, setRerollSel] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
   const [attacker, setAttacker] = useState<string | null>(null);
-  const [echoPick, setEchoPick] = useState<string | null>(null); // discard card awaiting fodder
+  // Echo card awaiting fodder — targetIid is set first if the recast effect needs one.
+  const [echoPick, setEchoPick] = useState<{ cardIid: string; targetIid?: string } | null>(null);
   const [showDiscard, setShowDiscard] = useState(false);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -382,18 +384,28 @@ export function GameV4({
     setStage('preRoll');
   };
 
+  const resolveCpuTurn = () => {
+    cpuTimeoutRef.current = null;
+    playTurn(g);
+    bump();
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
+    beginHumanTurn();
+  };
+
   const runCpuTurn = () => {
     setStage('cpu');
-    cpuTimeoutRef.current = window.setTimeout(() => {
-      cpuTimeoutRef.current = null;
-      playTurn(g);
-      bump();
-      if (g.winner) {
-        setStage('over');
-        return;
-      }
-      beginHumanTurn();
-    }, 1000);
+    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, 1000);
+  };
+
+  // Lets an impatient player skip the fixed thinking-delay and resolve the
+  // CPU's turn immediately instead of waiting out the pacing timer.
+  const skipCpuDelay = () => {
+    if (cpuTimeoutRef.current === null) return;
+    window.clearTimeout(cpuTimeoutRef.current);
+    resolveCpuTurn();
   };
 
   // Conceding is a resignation, not a free way to dodge a loss on the
@@ -509,6 +521,15 @@ export function GameV4({
 
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
+    if (pending.kind === 'echo') {
+      // Echo still needs a fodder discard from hand — stash the chosen
+      // target and hand off to the fodder-picking step instead of resolving
+      // immediately.
+      setEchoPick({ cardIid: pending.cardIid, targetIid });
+      setPending(null);
+      say('Now pick a hand card to discard.');
+      return;
+    }
     let ok = false;
     if (pending.kind === 'cast') ok = castFromHand(g, selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ability')
@@ -629,12 +650,12 @@ export function GameV4({
       say('Select a die.');
       return;
     }
-    const target = me.discard.find((c) => c.iid === echoPick);
+    const target = me.discard.find((c) => c.iid === echoPick.cardIid);
     if (!target) {
       setEchoPick(null);
       return;
     }
-    if (echoRecast(g, selDie, echoPick, fodder.iid)) {
+    if (echoRecast(g, selDie, echoPick.cardIid, fodder.iid, echoPick.targetIid)) {
       setEchoPick(null);
       setSelDie(null);
       setShowDiscard(false);
@@ -667,7 +688,7 @@ export function GameV4({
         const found = hand.find((c) => c.iid === iid);
         if (found) return found;
       }
-      return [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0];
+      return defaultDiscardChoice(hand);
     });
     bump();
     if (g.winner) {
@@ -932,9 +953,17 @@ export function GameV4({
             );
           })}
           {stage === 'cpu' && (
-            <span className="text-[10px] font-bold text-[#F7F7F7]/60 animate-pulse ml-1">
-              CPU is thinking…
-            </span>
+            <>
+              <span className="text-[10px] font-bold text-[#F7F7F7]/60 animate-pulse ml-1">
+                CPU is thinking…
+              </span>
+              <button
+                onClick={skipCpuDelay}
+                className="btn-pop text-[9px] font-bold bg-[#2C3E50] text-[#F7F7F7] px-1.5 py-0.5 ink-border-sm ml-1"
+              >
+                SKIP ▸▸
+              </button>
+            </>
           )}
           {stage === 'preRoll' && (
             <span className="text-[9px] font-bold text-[#F7F7F7]/60 ml-1 max-w-[130px] leading-tight">
@@ -1237,15 +1266,24 @@ export function GameV4({
                             return;
                           }
                         }
-                        setEchoPick(c.iid);
+                        if (
+                          needsTarget(c.def.onCast) &&
+                          targetsFor(g, HUMAN, c.def.onCast!).length > 0
+                        ) {
+                          setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast! });
+                          return;
+                        }
+                        setEchoPick({ cardIid: c.iid });
                         say('Now pick a hand card to discard.');
                       }}
                       className={cn(
                         'btn-pop text-[8px] font-bold px-1 ink-border-sm',
-                        echoPick === c.iid ? 'bg-[#E53935] text-white' : 'bg-[#8E44AD] text-white',
+                        echoPick?.cardIid === c.iid
+                          ? 'bg-[#E53935] text-white'
+                          : 'bg-[#8E44AD] text-white',
                       )}
                     >
-                      {echoPick === c.iid ? 'PICK FODDER…' : 'ECHO'}
+                      {echoPick?.cardIid === c.iid ? 'PICK FODDER…' : 'ECHO'}
                     </button>
                   )}
                 </div>
