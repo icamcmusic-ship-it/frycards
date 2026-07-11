@@ -13,12 +13,9 @@
     "format": "prettier --write src scripts",
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
-    "sim": "tsx scripts/simulate.ts",
     "sim:v3": "tsx scripts/simulate-v3.ts",
     "sim:v4": "tsx scripts/simulate-v4.ts",
-    "pattern-hitrate": "tsx scripts/pattern-hitrate.ts",
-    "fuzz": "tsx scripts/fuzz.ts",
-    "test:engine": "tsx scripts/engine-tests.ts"
+    "pattern-hitrate": "tsx scripts/pattern-hitrate.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

@@ -74,7 +74,7 @@ export const RARITY_COLOR: Record<string, string> = {
   Uncommon: 'bg-[#43A047] text-white',
   Rare: 'bg-[#29B6F6] text-[#1A1A1A]',
   'Super-Rare': 'bg-[#8E44AD] text-white',
-  Legendary: 'bg-[#FFD54F] text-[#1A1A1A]',
+  'Ultra-Rare': 'bg-[#FFD54F] text-[#1A1A1A]',
   Mythic: 'bg-[#E53935] text-white',
 };
 

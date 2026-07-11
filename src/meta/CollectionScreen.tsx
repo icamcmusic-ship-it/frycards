@@ -1,16 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { getCard } from '../game/cards';
-import { CardTemplate } from '../types';
 import { MetaHeader, PopButton, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
-import { POOL_BY_ID } from '../game/v3/cardpool';
+import { cardRules } from '../components/CardFaceV4';
+import { CardDef } from '../game/v3/cards';
+import { POOL_V4 } from '../game/v3/cardpool';
+import { RARITIES } from '../types';
 
-const TYPES = ['All', 'Leader', 'Unit', 'Event', 'Item', 'Charm', 'Location'];
-const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
+const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
+const RARITY_FILTERS = ['All', ...RARITIES];
 
-/** Static card face for out-of-game browsing (collection & deck builder). */
+/** Static v4.2 card face for out-of-game browsing (collection). */
 export function StaticCard({
   card,
   count,
@@ -18,143 +19,42 @@ export function StaticCard({
   dimmed,
   onClick,
   badge,
-  large = false,
 }: {
   key?: React.Key;
-  card: CardTemplate;
+  card: CardDef;
   count?: number;
   foilCount?: number;
   dimmed?: boolean;
   onClick?: () => void;
   badge?: string;
-  large?: boolean;
 }) {
-  const cost = Object.values(card.cost || {}).reduce((a, b) => a + b, 0);
-  // The Deck Builder resolves cards from the live match card pool, not this
-  // (possibly stale) catalog snapshot — flag any card that can't actually be
-  // put in a deck rather than letting it look playable here and then
-  // silently vanishing from the builder.
-  const deckBuildable = !!POOL_BY_ID[card.id];
-
-  if (large) {
-    return (
-      <div
-        onClick={onClick}
-        title={card.text}
-        className={cn(
-          'w-[240px] h-[336px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-black flex flex-col overflow-hidden relative select-none',
-          onClick && 'cursor-pointer hover:-translate-y-1.5 transition-transform duration-200',
-          dimmed && 'opacity-40 saturate-50',
-        )}
-      >
-        <div
-          className={cn(
-            'px-3 py-1 flex justify-between items-center text-xs font-black heading-font',
-            RARITY_CHIP[card.rarity || 'Common'],
-          )}
-        >
-          <span className="truncate">{(card.rarity || card.type).toUpperCase()}</span>
-          {card.cost && <span className="shrink-0">⚡ {cost}</span>}
-        </div>
-        <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative border-b-2 border-[#1A1A1A]">
-          {card.image ? (
-            <img
-              src={card.image}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              draggable={false}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-lg heading-font">
-              {card.type}
-            </div>
-          )}
-          {(foilCount || 0) > 0 && (
-            <span className="absolute top-2 right-2 bg-[#FFD54F] text-[#1A1A1A] text-xs font-black px-1.5 py-0.5 ink-border-sm flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" />
-              {foilCount}
-            </span>
-          )}
-          {badge && (
-            <span className="absolute top-2 left-2 bg-[#E53935] text-[#F7F7F7] text-xs font-black px-1.5 py-0.5 ink-border-sm">
-              {badge}
-            </span>
-          )}
-          {!deckBuildable && (
-            <span
-              title="Not in the current Deck Builder card pool"
-              className="absolute bottom-2 left-2 right-2 bg-[#2C3E50] text-[#F7F7F7] text-[9px] font-black px-1.5 py-0.5 ink-border-sm text-center"
-            >
-              NOT DECK-BUILDABLE YET
-            </span>
-          )}
-        </div>
-        <div className="px-3 py-2 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
-          <div>
-            <div
-              className="heading-font text-base font-black leading-tight truncate"
-              title={card.name}
-            >
-              {card.name}
-            </div>
-            <div className="text-[10px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between mt-0.5">
-              <span>
-                {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
-              </span>
-              {card.attack !== undefined && (
-                <span className="font-mono font-black">
-                  {card.attack}/{card.health}
-                </span>
-              )}
-            </div>
-          </div>
-          {card.text && (
-            <p className="text-[11px] font-bold leading-snug text-[#1A1A1A]/80 line-clamp-3 italic my-1">
-              {card.text}
-            </p>
-          )}
-          {card.keywords && card.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-auto pt-1">
-              {card.keywords.map((kw) => (
-                <span
-                  key={kw}
-                  className="text-[9px] font-black px-1.5 py-0.5 bg-[#FFD54F] ink-border-sm"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-        {count !== undefined && (
-          <div className="px-3 py-1 border-t-2 border-[#1A1A1A] text-xs font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
-            OWNED ×{count}
-          </div>
-        )}
-      </div>
-    );
-  }
-
+  const rules = cardRules(card);
   return (
     <div
       onClick={onClick}
-      title={card.text}
+      title={rules}
       className={cn(
-        'w-[130px] h-[182px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm shadow-hard-black-xs flex flex-col overflow-hidden relative select-none',
-        onClick && 'cursor-pointer hover:-translate-y-1 transition-transform',
+        'w-[240px] h-[336px] bg-[#F7F7F7] text-[#1A1A1A] ink-border-md shadow-hard-black flex flex-col overflow-hidden relative select-none',
+        onClick && 'cursor-pointer hover:-translate-y-1.5 transition-transform duration-200',
         dimmed && 'opacity-40 saturate-50',
       )}
     >
       <div
         className={cn(
-          'px-1.5 py-0.5 flex justify-between items-center text-[8px] font-black heading-font',
+          'px-3 py-1 flex justify-between items-center text-xs font-black heading-font',
           RARITY_CHIP[card.rarity || 'Common'],
         )}
       >
         <span className="truncate">{(card.rarity || card.type).toUpperCase()}</span>
-        {card.cost && <span className="shrink-0">⚡{cost}</span>}
+        {card.comboGate ? (
+          <span className="shrink-0">COMBO: {card.comboGate}</span>
+        ) : card.type === 'Location' ? (
+          <span className="shrink-0">FREE</span>
+        ) : card.type !== 'Leader' && card.threshold !== undefined ? (
+          <span className="shrink-0">🎲 {card.threshold}+</span>
+        ) : null}
       </div>
-      <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative">
+      <div className="aspect-[4/3] bg-[#2C3E50] overflow-hidden relative border-b-2 border-[#1A1A1A]">
         {card.image ? (
           <img
             src={card.image}
@@ -163,48 +63,58 @@ export function StaticCard({
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-[10px] heading-font">
+          <div className="w-full h-full flex items-center justify-center text-[#F7F7F7] text-lg heading-font">
             {card.type}
           </div>
         )}
         {(foilCount || 0) > 0 && (
-          <span className="absolute top-1 right-1 bg-[#FFD54F] text-[#1A1A1A] text-[8px] font-black px-1 ink-border-sm flex items-center gap-0.5">
-            <Sparkles className="w-2.5 h-2.5" />
+          <span className="absolute top-2 right-2 bg-[#FFD54F] text-[#1A1A1A] text-xs font-black px-1.5 py-0.5 ink-border-sm flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" />
             {foilCount}
           </span>
         )}
         {badge && (
-          <span className="absolute top-1 left-1 bg-[#E53935] text-[#F7F7F7] text-[9px] font-black px-1 ink-border-sm">
+          <span className="absolute top-2 left-2 bg-[#E53935] text-[#F7F7F7] text-xs font-black px-1.5 py-0.5 ink-border-sm">
             {badge}
           </span>
         )}
-        {!deckBuildable && (
-          <span
-            title="Not in the current Deck Builder card pool"
-            className="absolute bottom-1 left-1 right-1 bg-[#2C3E50] text-[#F7F7F7] text-[6px] font-black px-1 ink-border-sm text-center leading-tight"
-          >
-            NOT DECK-BUILDABLE
-          </span>
-        )}
       </div>
-      <div className="px-1.5 py-1 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
-        <div>
-          <div className="heading-font text-[9px] leading-tight truncate">{card.name}</div>
-          <div className="text-[8px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between">
-            <span className="truncate">
-              {card.type} · {card.elements.filter((e) => e !== 'Generic').join('/') || 'Generic'}
-            </span>
-            {card.attack !== undefined && (
-              <span className="shrink-0">
-                {card.attack}/{card.health}
-              </span>
-            )}
-          </div>
+      <div className="px-3 py-2 flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div
+          className="heading-font text-base font-black leading-tight truncate"
+          title={card.name}
+        >
+          {card.name}
         </div>
+        <div className="text-[10px] font-mono font-bold text-[#2C3E50] uppercase flex justify-between mt-0.5">
+          <span>
+            {card.type}
+            {card.set ? ` · ${card.set}` : ''}
+          </span>
+          {card.type === 'Unit' && (
+            <span className="font-mono font-black">
+              {card.atk}⚔/{card.hp}♥
+            </span>
+          )}
+          {card.type === 'Leader' && <span className="font-mono font-black">{card.hp} HP</span>}
+        </div>
+        {rules && (
+          <p className="text-[10px] font-bold leading-snug text-[#1A1A1A]/80 line-clamp-3 my-1">
+            {rules}
+          </p>
+        )}
+        {card.flavor && (
+          <p className="text-[10px] leading-snug text-[#2C3E50] italic line-clamp-2 my-0.5">
+            {card.flavor}
+          </p>
+        )}
         {card.keywords && card.keywords.length > 0 && (
-          <div className="flex flex-wrap gap-0.5 mt-auto pt-1">
-            {card.keywords.slice(0, 3).map((kw) => (
-              <span key={kw} className="text-[7px] font-bold px-0.5 bg-[#FFD54F]">
+          <div className="flex flex-wrap gap-1 mt-auto pt-1">
+            {card.keywords.slice(0, 5).map((kw) => (
+              <span
+                key={kw}
+                className="text-[9px] font-black px-1.5 py-0.5 bg-[#FFD54F] ink-border-sm"
+              >
                 {kw}
               </span>
             ))}
@@ -212,7 +122,7 @@ export function StaticCard({
         )}
       </div>
       {count !== undefined && (
-        <div className="px-1.5 py-0.5 border-t-2 border-[#1A1A1A] text-[9px] font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
+        <div className="px-3 py-1 border-t-2 border-[#1A1A1A] text-xs font-black heading-font bg-[#1A1A1A] text-[#FFD54F] text-center shrink-0">
           OWNED ×{count}
         </div>
       )}
@@ -220,17 +130,10 @@ export function StaticCard({
   );
 }
 
-export function CollectionScreen({
-  onBack,
-  allCards,
-}: {
-  onBack: () => void;
-  allCards: CardTemplate[];
-}) {
+export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const { collection } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
-  const [element, setElement] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -240,19 +143,12 @@ export function CollectionScreen({
     return m;
   }, [collection]);
 
-  const elements = useMemo(() => {
-    const s = new Set<string>();
-    for (const c of allCards) c.elements.forEach((e) => e !== 'Generic' && s.add(e));
-    return ['All', ...Array.from(s).sort()];
-  }, [allCards]);
-
-  const filtered = allCards.filter((c) => {
+  const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
     const total = (o?.q || 0) + (o?.f || 0);
     if (ownedOnly && total === 0) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
-    if (element !== 'All' && !c.elements.includes(element as any)) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -279,13 +175,8 @@ export function CollectionScreen({
             ))}
           </select>
           <select className={select} value={rarity} onChange={(e) => setRarity(e.target.value)}>
-            {RARITIES.map((r) => (
+            {RARITY_FILTERS.map((r) => (
               <option key={r}>{r}</option>
-            ))}
-          </select>
-          <select className={select} value={element} onChange={(e) => setElement(e.target.value)}>
-            {elements.map((el) => (
-              <option key={el}>{el}</option>
             ))}
           </select>
           <PopButton
@@ -295,7 +186,7 @@ export function CollectionScreen({
             {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
           </PopButton>
           <div className="ml-auto text-[11px] font-bold text-[#2C3E50]">
-            {uniqueOwned}/{allCards.length} UNIQUE · {totalOwned} TOTAL CARDS
+            {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
           </div>
         </div>
 
@@ -310,7 +201,6 @@ export function CollectionScreen({
                 count={total}
                 foilCount={o?.f || 0}
                 dimmed={total === 0}
-                large={true}
               />
             );
           })}

@@ -1,11 +1,23 @@
 # FryCards — Monochrome & Pop
 
-A digital implementation of the **FryCards** trading card game
-(Comprehensive Rulebook V1.7 + Master Keyword Glossary — see
-[`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full Rules Bible), built with React +
-Vite + TypeScript in the **Monochrome & Pop** visual identity (stark comic
-standard: ink borders, flat offset shadows, Montserrat 900 headings, 5:7 card
-frames with 4:3 art panels). Play a full match against a CPU opponent.
+A digital implementation of the **FryCards** dice-placement trading card game
+(Definitive Rulebook v4.2 — see [`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the
+full Rules Bible), built with React + Vite + TypeScript in the **Monochrome &
+Pop** visual identity (stark comic standard: ink borders, flat offset shadows,
+Montserrat 900 headings). Play a full match against a CPU opponent, build
+decks, open packs and grow a collection.
+
+## The Game (v4.2, one paragraph)
+
+Two players duel with 30-card decks of Units, Charms, Events and Locations,
+each led by a 64-HP Leader. Every turn you roll five d6, reroll any subset
+once, then place dice one at a time onto Cast Slots (play a card whose
+threshold your die meets), Ability Slots, a Twin card's second slot, or an
+Echo recast from Discard — plus one free Location per turn. Dice patterns
+(pairs, straights, full houses…) gate Combo cards and trigger Combo bonuses.
+Sequential targeted combat, Guard walls, Pierce overflow. Reduce the enemy
+Leader to 0 HP to win. There are no resources, mana or elements — the five
+dice are the entire economy.
 
 ## Run Locally
 
@@ -17,130 +29,49 @@ npm run dev              # dev server on http://localhost:3000
 npm run build            # production build
 npm run lint             # eslint
 npm run typecheck        # tsc --noEmit
-npm run test:engine      # rules regression suite
-npm run sim -- 300       # CPU-vs-CPU balance simulation
-npm run fuzz -- 30       # negative-path fuzzer (server authority)
+npm run test             # vitest suite (engine rules + deck validation)
+npm run sim:v4 -- 20     # CPU-vs-CPU balance simulation (per-archetype)
+npm run pattern-hitrate  # measured Combo-pattern hit rates under rerolling
 ```
 
 ## Card Data & Supabase Backend
 
 Cards live in the **Supabase** project `dnngihsbqxccqvvedvjc`, table
-`public.cards` (RLS enabled, public read-only). Each row stores the raw CSV
-fields (name, flavor, type, rarity, image URL, set, color costs, keywords)
-plus an engine-ready `template` JSON. The app fetches the live pool at
-startup via `src/lib/supabase.ts` and falls back to the bundled
-[`src/game/generated-cards.ts`](src/game/generated-cards.ts) when offline —
-the start screen shows which source is active.
+`public.cards` (RLS enabled, public read-only). Each row stores only the
+card's **universal identity** — name, type, rarity, set, art URL and pure
+flavor text (`template` JSON) — no mechanics. The app fetches the live
+catalog at startup via `src/lib/supabase.ts` and falls back to the bundled
+[`src/game/generated-cards.ts`](src/game/generated-cards.ts) when offline.
 
-The card pool spans two sets: **Blue Coral** (146 cards) and **Crimson
-Circuit** (47 cards, part 1) — a volcanic Kinetix industrial complex of
-nanite swarms, magma harvesters and shadow ninjas. Crimson Circuit prints
-all 18 Set-2 keywords plus the seven Blue Coral glossary keywords that had
-no printing (Brittle, Decay, Freeze, Heal, Manifest, Overdrive,
-Photosynthesis), and adds two Mythic Leaders: Crimson Vector Commander
-(Flame/Order — Command 2, Ward 2, Boost 1, 35 HP) and Apex Nanite Shinobi
-(Tech/Dark — Command 2, Ward 2, Sustain 1, 33 HP), giving every card in the
-new set at least one Leader whose color pair can run it.
+All v4.2 game mechanics (Cast Slot thresholds, ATK/HP, keywords, effects,
+Leader abilities/Ultimates) are assigned **deterministically client-side** by
+[`src/game/v3/cardpool.ts`](src/game/v3/cardpool.ts) from a hash of each
+card's id plus its type and rarity — identical on every client, and rebalance
+ships as a code change, not a data migration.
 
-The bundled pool in `src/game/generated-cards.ts` and the Supabase
-`public.cards` rows are kept in sync: balance changes are edited in the
-bundled file, validated with `npm run sim`, and the changed rows are
-re-seeded to Supabase (the `template` JSON column is what the app consumes).
+**Rarities:** Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
+Rarity shapes pack odds and gently scales a card's stat/threshold budget;
+it carries no other rules weight.
 
-There are 6 Leaders — Avatar of the Abyss (Dark/Nature), Ethereal Sea
-Witch (Frost/Tech), Mer-King (Light/Order), Legendary Diver (Flame/Chaos),
-Crimson Vector Commander (Flame/Order) and Apex Nanite Shinobi (Tech/Dark) —
-whose element pairs cover all 8 elements and every dual color cost across
-both sets. Each gets an auto-built legal 30-card deck (max 2 copies per
-name, ≥2 Locations) in `src/game/deckbuilder.ts`. Decks are built value-first along a
-mana curve (best-scoring cards per cost bucket: ~50% cheap / 30% mid / 20%
-top-end). Leader stats carry per-pool balance counterweights (re-tuned for
-Rulebook V1.8's Shell Game / Location / Armor reworks): every Leader is
-3 ATK; Avatar of the Abyss (20 HP, Sustain 1 — a per-turn heal compounds
-hard over a ~18-turn game, so it needs the lowest life total) and Ethereal
-Sea Witch (26 HP, Boost 1 — a permanent extra resource every turn) run
-leaner than Mer-King (44 HP, Codex 1) and Crimson Vector Commander (38 HP,
-Boost 1); Legendary Diver sits at 35 HP with Boost 1 and Apex Nanite
-Shinobi at 33 HP with Sustain 1. Always-on attack auras (Valor) proved too
-strong on Leaders at any HP in simulation, so no Leader carries one.
-Balance is tuned with `npx tsx scripts/simulate.ts <games>`, which reports a
-per-leader win rate (wins ÷ appearances) and holds every leader between
-roughly 44% and 55% over large (1000+ game) headless CPU-vs-CPU samples —
-smaller samples swing several points on variance alone, so re-tune against
-at least a couple thousand games, not a few hundred.
+There are 6 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
+Legendary Diver, Crimson Vector Commander and Apex Nanite Shinobi — each
+with an Ability Slot, a once-per-game Ultimate, and (on the reactive ones)
+Resolve. Twelve prebuilt archetype decks plus a randomized-deck generator
+live in `src/game/v3/decks.ts`; players build their own 30-card decks (max 3
+copies) in the Deck Builder, backed by the `decks` table.
 
-## Rules Coverage
+## Meta-game
 
-Implemented from the rulebook:
+Accounts (Supabase auth), profiles with gold/gems, a one-time free starter
+deck per account, card packs with rarity-slot configs (all opened
+server-side via SECURITY DEFINER RPCs), foils, cosmetics (card backs,
+banners, avatars), a collection browser and match rewards.
 
-- **Setup & decks (§1)** — 30-card decks, ≤2 copies per name, 1 Leader,
-  starting health from the Leader, 2 face-down Locations per player (4
-  total), 5-card opening hand, **London Mulligan** (redraw 5, bottom X on
-  keep), coin-toss first turn.
-- **Turn phases (§2)** — Resource Roll (clears unspent resources first, d6 +
-  Boost, Fix auto-allocation from Leader/Location/Charms, Overclock penalty,
-  single-color tracking for Pure), Draw (first player skips Turn 1;
-  **Deckout Law** = 2 damage per failed draw; no attacks Turn 1), Flexible
-  Action, Cleanup (resources persist into the opponent's turn, Charms tick,
-  Overdrive self-damage, Scorch/Freeze/Glitch decay, discard to 7).
-- **Location Shell Game (§3.1)** — the active player flips a random
-  face-down opponent Location each turn; it applies globally and flips back
-  at end of turn; the active player is its controller (Siphon / "your
-  Leader" attribution).
-- **Charms (§3.2)** — attach to a player profile, dormant until the affected
-  player's next turn, 1-3 turn lifespans ticking in that player's Cleanup;
-  Detonate strikes the charm-caster's enemies on expiry.
-- **Combat (§5)** — unified assault wave, summoning sickness, Blitz,
-  blocking without exhausting, Leader-vs-Leader half damage (rounded down,
-  min 1) with full counter, Leader-vs-Unit attacks, **Guard Interlock**
-  (combat and targeted Events), **Survival Caveat**, permanent wounds, and
-  the Layer / **Stripping Rule** for Item bonus health.
-- **Keywords** — Blitz, Guard, Pierce, Armor [X], Ward [X] (surcharge +
-  target lock), Burden [X] (attack surcharge), Command [X] (Leader activated
-  ability with UI), Symmetric, Detonate [X], Brittle, Siphon, Reap,
-  Wither [X], Sustain [X], Overdrive, Glitch (ability shutdown until
-  Cleanup), Boost [X], Fix [Element], Feedback (d6 negate + exact refund
-  incl. Ward surcharge), Echo (d6 duplication), Pure (single-color roll
-  bonus), plus action verbs Freeze, Scorch [X], Obliterate, Meltdown, Purge,
-  Heal, Draw, Manifest.
-- **Crimson Circuit keywords** — 18 engine-driven Set-2 keywords, all
-  printed in Crimson Circuit: per card type —
-  Vengeance [X] / Solitary [X] (Units), Efficient [X] / Rummage [X]
-  (Events), Hatchling [X] / Confluence [X] (Locations), Overcharge [X] /
-  Surge (Items), Valor [X] / Inspire [X] (Charms) — and one per color —
-  Beacon [X] (Light), Taint [X] (Dark), Glacier [X] (Frost), Inferno
-  (Flame), Sync [X] (Tech), Flourish [X] (Nature), Codex [X] (Order),
-  Discord (Chaos). Aura keywords (Valor, Codex, Beacon, Inspire, Sync,
-  Glacier, Flourish, Discord) radiate from a player's Leader, active Charms,
-  and the active Location while they control it (Symmetric Locations radiate
-  to both players); a bare aura keyword counts as 1. Rules text lives in the
-  in-game rulebook (§8) and `src/game/keywords.ts`; each keyword has an
-  engine regression test.
-- **CPU** — mulligans, rolls/allocates, deploys units, attaches items, casts
-  events with targets (incl. Meltdown/Purge), plays charms, respects Burden
-  affordability, declares attackers, and assigns blocks (prioritizing lethal
-  saves and favorable trades). Against multiple simultaneous ready Guards it
-  spreads lethal attackers across them to clear the board instead of
-  dog-piling every attack onto a single Guard and leaving the rest
-  untouched forever. Its evaluation values Charms as permanents (own charms
-  are assets, hostile Decay charms are liabilities — without this the
-  hand-size weight made every Charm play look like a loss and the CPU never
-  cast one) and values face-down Locations, preferring Symmetric ones since
-  the Shell Game hands control of a flipped Location to the flipper.
-  Verified with headless CPU-vs-CPU simulations.
+## Engine & Balance
 
-### Documented simplifications
-
-The full interactive **Stack / priority** (APNAP response windows) resolves
-effects immediately rather than through passed priority — timing rules are
-deterministic instead: Armor absorbs before health, Brittle doubles before
-Armor, the Stripping Rule fills Item bonus health first, and a state-based
-**Death Sweep** runs after every action and re-sweeps to a fixpoint (so
-dynamic buffs like Phalanx can never leave a 0-HP Unit on the battlefield,
-even when one Phalanx Unit's death shrinks another's max health enough to
-kill it in the same instant). A hit larger than a card's total
-Armor breaks ALL of its Armor — printed and Item-granted alike. Keywords with
-no printing in the Blue Coral set (Fate, Freeze-Dry, Blessed, Scorched-Earth,
-Glaciate, Exhume) are not engine-driven. The core game loop, combat and
-every keyword printed in Blue Coral and Crimson Circuit are functional; see
-`scripts/engine-tests.ts` for the executable rules bible.
+The rules engine is `src/game/v3/engine.ts` (pure, headless, seedable), the
+CPU opponent is `src/game/v3/ai.ts`, and `scripts/simulate-v4.ts` runs
+CPU-vs-CPU playtests across all archetype matchups with invariant checks
+(no negative HP, legal die placements, deck conservation). Rulebook v4.0 →
+v4.2 was tuned from ~20k simulated games; see the errata notes at the top of
+`docs/RULEBOOK.md` and `docs/ROADMAP.md` for what changed and why.

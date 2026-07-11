@@ -9,11 +9,12 @@ import {
   ShopItem,
   PackPull,
 } from '../lib/supabase';
-import { getLeaders, getCard } from '../game/cards';
 import { MetaHeader, PopButton, Notice, RARITY_CHIP } from './ui';
 import { cn } from '../lib/utils';
-import { CardView } from '../components/CardView';
-import { GameCard } from '../types';
+import { POOL_LEADERS, POOL_BY_ID } from '../game/v3/cardpool';
+import { CardDef } from '../game/v3/cards';
+import { StaticCard } from './CollectionScreen';
+import { getCardBackImage } from './cardback';
 
 type Tab = 'packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
@@ -133,7 +134,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               deck.
             </p>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {getLeaders().map((l) => (
+              {POOL_LEADERS.map((l) => (
                 <button
                   key={l.id}
                   disabled={!!busyId}
@@ -150,7 +151,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   <div className="p-2">
                     <div className="heading-font text-[11px] leading-tight truncate">{l.name}</div>
                     <div className="text-[9px] font-bold text-[#2C3E50] uppercase">
-                      {l.elements.join(' / ')}
+                      {l.hp} HP{l.ability ? ` · Ability ${l.ability.threshold}+` : ''}
                     </div>
                     <div
                       className={cn(
@@ -345,48 +346,46 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-function pullToGameCard(pull: PackPull): GameCard {
-  const template = getCard(pull.card_id);
-
-  const baseTemplate = template || {
-    id: pull.card_id,
-    name: pull.name,
-    type: pull.card_type as any,
-    rarity: pull.rarity as any,
-    image: pull.image_url || undefined,
-    elements: ['Generic'],
-    keywords: [],
-  };
-
-  return {
-    ...baseTemplate,
-    instanceId: pull.card_id + '-' + pull.slot,
-    ownerId: 'player',
-    damageTaken: 0,
-    bonusDamage: 0,
-    exhausted: false,
-    summoningSickness: false,
-    scorch: 0,
-    frozen: 0,
-    glitched: false,
-    armor: 0,
-    witherAtk: 0,
-    witherHp: 0,
-    tempAtk: 0,
-    tempHp: 0,
-    attacksThisTurn: 0,
-    attachedItems: [],
-  };
+/** Resolve a pack pull to its v4.2 card definition (with a minimal fallback). */
+function pullToDef(pull: PackPull): CardDef {
+  return (
+    POOL_BY_ID[pull.card_id] || {
+      id: pull.card_id,
+      name: pull.name,
+      type: pull.card_type as CardDef['type'],
+      rarity: pull.rarity as CardDef['rarity'],
+      image: pull.image_url || undefined,
+    }
+  );
 }
 
-const BIG_RARITIES = new Set(['Mythic', 'Legendary', 'Super-Rare']);
+/** Face-down card showing the player's equipped card back. */
+function CardBack({ className }: { className?: string }) {
+  const back = getCardBackImage();
+  return (
+    <div
+      className={cn(
+        'w-full h-full bg-[#1A1A1A] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center',
+        className,
+      )}
+    >
+      {back ? (
+        <img src={back} className="w-full h-full object-cover" draggable={false} />
+      ) : (
+        <div className="heading-font text-[#FFD54F] text-xl rotate-[-8deg]">FRYCARDS</div>
+      )}
+    </div>
+  );
+}
+
+const BIG_RARITIES = new Set(['Mythic', 'Ultra-Rare', 'Super-Rare']);
 
 /** Rarity-tinted glow behind the spotlight card — bigger pulls get a bigger halo. */
 function rarityGlow(rarity: string): string {
   switch (rarity) {
     case 'Mythic':
       return 'shadow-[0_0_70px_22px_rgba(255,213,79,0.55)]';
-    case 'Legendary':
+    case 'Ultra-Rare':
       return 'shadow-[0_0_55px_16px_rgba(229,57,53,0.45)]';
     case 'Super-Rare':
       return 'shadow-[0_0_45px_13px_rgba(255,213,79,0.35)]';
@@ -420,7 +419,7 @@ function PackRevealModal({
 
   const current = pulls[index];
   const currentShown = !done && revealed.has(index);
-  const currentCard = current ? pullToGameCard(current) : null;
+  const currentCard = current ? pullToDef(current) : null;
 
   const handleFlip = () => {
     if (done || currentShown) return;
@@ -447,7 +446,7 @@ function PackRevealModal({
 
         <div className="flex flex-wrap justify-center gap-4 max-w-5xl relative mb-6">
           {pulls.map((pull, i) => {
-            const gameCard = pullToGameCard(pull);
+            const def = pullToDef(pull);
             return (
               <div
                 key={i}
@@ -458,8 +457,8 @@ function PackRevealModal({
                 )}
                 style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
               >
-                <div className="relative w-full h-full">
-                  <CardView card={gameCard} className="shadow-hard-yellow" />
+                <div className="relative w-[240px] h-[336px] origin-top-left scale-[0.4583]">
+                  <StaticCard card={def} />
                   {pull.foil && (
                     <div
                       className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
@@ -518,15 +517,15 @@ function PackRevealModal({
         style={{ perspective: '800px' }}
       >
         {!currentShown ? (
-          <CardView card={currentCard!} faceDown={true} className="shadow-hard-yellow" />
+          <CardBack />
         ) : (
           <div
             className={cn(
-              'relative w-full h-full animate-[flipIn_.4s_ease-out] rounded-sm',
+              'relative w-[240px] h-[336px] -ml-[10px] -mt-[14px] animate-[flipIn_.4s_ease-out] rounded-sm',
               rarityGlow(current.rarity),
             )}
           >
-            <CardView card={currentCard!} />
+            <StaticCard card={currentCard!} />
             {current.foil && (
               <div
                 className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"

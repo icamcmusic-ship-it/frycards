@@ -35,16 +35,13 @@ export interface Effect {
 
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
-export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Legendary' | 'Mythic';
+export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Mythic';
 
 export interface CardDef {
   id: string;
   name: string;
   type: CardType;
-  /**
-   * Core identity preserved from the backend card data (v4.x remap).
-   * v4.1: elements were removed entirely — the game no longer cares about them.
-   */
+  /** Core identity preserved from the backend card catalog. */
   rarity?: Rarity;
   set?: string;
   image?: string;

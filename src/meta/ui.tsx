@@ -48,7 +48,7 @@ export const RARITY_CHIP: Record<string, string> = {
   Uncommon: 'bg-[#2C3E50] text-[#F7F7F7]',
   Rare: 'bg-[#E53935] text-[#F7F7F7]',
   'Super-Rare': 'bg-[#1A1A1A] text-[#FFD54F]',
-  Legendary: 'bg-gradient-to-r from-[#2C3E50] to-[#E53935] text-[#F7F7F7]',
+  'Ultra-Rare': 'bg-gradient-to-r from-[#2C3E50] to-[#E53935] text-[#F7F7F7]',
   Mythic: 'bg-gradient-to-r from-[#E53935] to-[#FFD54F] text-[#1A1A1A]',
 };
 

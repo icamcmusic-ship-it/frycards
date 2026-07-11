@@ -1,31 +1,17 @@
 /**
- * v4.0 card pool, remapped from the real backend card data.
+ * v4.2 card pool, built from the universal card catalog (live Supabase
+ * `cards` table, or the bundled fallback in `generated-cards.ts`).
  *
- * We keep each card's CORE IDENTITY untouched — name, image URL, flavor text,
- * rarity, type, elements — and delete the obsolete resource-era mechanical
- * data (colored costs, attach bonuses, legacy keywords like Overclock/Modularity/
- * Siphon/Phalanx). Every card is then reassigned v4.0 mechanics (Cast Slot
- * threshold, ATK/HP, v4 keywords, effects) deterministically from its type,
- * rarity and elements, so the whole 193-card set becomes playable under the
- * dice-placement rules with a wide spread of keywords and archetypes.
- *
- * The obsolete `Item` type has no home in v4.0 (decks are Locations, Units,
- * Charms, Events) — Items are folded into Charms (one-shot buffs/utility) so
- * their art and names survive, rather than being deleted outright.
+ * Each card's CORE IDENTITY is untouched — name, image URL, flavor text,
+ * rarity, set. Every card is assigned its v4.2 dice-placement mechanics
+ * (Cast Slot threshold, ATK/HP, keywords, effects) deterministically from a
+ * hash of its id plus its type and rarity, so the whole set is playable
+ * under the rulebook with a wide spread of keywords and archetypes — and the
+ * assignment is identical on every client.
  */
 import { CardDef, ComboPattern, Effect, EffectTarget, LEADER_HP } from './cards';
+import { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
-
-interface RawCard {
-  id: string;
-  name: string;
-  type: string;
-  elements?: string[];
-  rarity?: string;
-  set?: string;
-  image?: string;
-  text?: string;
-}
 
 // Deterministic small hash so mechanical assignment is stable per card id.
 function hash(s: string): number {
@@ -43,33 +29,18 @@ const RARITY_TIER: Record<string, number> = {
   Uncommon: 1,
   Rare: 2,
   'Super-Rare': 3,
-  Legendary: 4,
+  'Ultra-Rare': 4,
   Mythic: 5,
 };
 
-// Element -> the v4 keyword flavor it leans into.
-const ELEMENT_KEYWORD: Record<string, string> = {
-  Frost: 'Ward',
-  Order: 'Guard',
-  Light: 'Guard',
-  Flame: 'Frenzy',
-  Chaos: 'Swift',
-  Dark: 'Echo',
-  Nature: 'Twin',
-  Tech: 'Anchor',
-};
-
-function primaryElement(c: RawCard): string {
-  return c.elements?.[0] || 'Generic';
-}
+// The primary keyword wheel each Unit draws from (weights via repetition).
+const UNIT_KEYWORDS = ['Ward', 'Guard', 'Guard', 'Frenzy', 'Swift', 'Echo', 'Twin', 'Anchor'];
 
 // ---------------------------------------------------------------------------
 // Unit mapping
 // ---------------------------------------------------------------------------
-function mapUnit(c: RawCard): CardDef {
+function mapUnit(c: CardTemplate): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
-  const el = primaryElement(c);
-  const el2 = c.elements?.[1];
   // Threshold scales gently with rarity (bombs cost more to land).
   const threshold = Math.min(6, 1 + Math.min(4, tier) + (hash(c.id) % 2 === 0 ? 1 : 0));
   // Stat budget scales with threshold; split by a hashed bias.
@@ -85,29 +56,27 @@ function mapUnit(c: RawCard): CardDef {
   atk = Math.max(1, atk);
 
   const keywords: string[] = [];
-  let primaryKw = ELEMENT_KEYWORD[el];
+  let primaryKw = pick(c.id, 9, UNIT_KEYWORDS);
   // v4.0 balance: Swift (haste) on cheap bodies was the dominant aggro engine.
   // On a threshold <= 2 Unit it becomes Guard instead (a cheap early wall),
   // so Swift only shows up where paying for a real tempo body is a choice.
   if (primaryKw === 'Swift' && threshold <= 2) primaryKw = 'Guard';
-  // Guard/Ward want more HP; Frenzy/Pierce want more ATK — nudge the split.
-  // v4.0 balance: Guard bodies were too soft to wall aggro, so they get a
-  // bigger HP bump; Frenzy's ATK bump is trimmed now that its downside is
-  // softer (only the 2nd swing doubles retaliation).
+  // Guard wants more HP to actually wall aggro; Frenzy wants a nudged ATK
+  // now that its downside is softer (only the 2nd swing doubles retaliation).
   if (primaryKw === 'Guard') {
     hp += 3;
   }
-  // v4.1 balance: Ward refreshing every End Phase (v4.0 A1) already makes a
-  // Ward body soak ~one attack per round for free; the extra +2 HP on top made
-  // Ward-stacked shells (Sea Witch) dominate at 82-96%. No stat bonus needed.
+  // Ward refreshing every End Phase already soaks ~one attack per round for
+  // free — no stat bonus on top (Ward-stacked shells dominated with one).
   if (primaryKw === 'Frenzy' && hash(c.id) % 2 === 0) {
     atk += 1;
   }
-  if (primaryKw) keywords.push(primaryKw);
+  keywords.push(primaryKw);
 
-  // Secondary element / higher rarity grants a second keyword sometimes.
-  if (tier >= 2 && el2 && ELEMENT_KEYWORD[el2] && ELEMENT_KEYWORD[el2] !== primaryKw) {
-    keywords.push(ELEMENT_KEYWORD[el2]);
+  // Higher rarity grants a second keyword sometimes.
+  if (tier >= 2 && hash(c.id) % 3 !== 0) {
+    const secondary = pick(c.id, 13, UNIT_KEYWORDS);
+    if (secondary !== primaryKw) keywords.push(secondary);
   }
   if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
 
@@ -118,11 +87,11 @@ function mapUnit(c: RawCard): CardDef {
     threshold,
     atk,
     hp,
-    keywords: keywords.length ? keywords : undefined,
-    rarity: c.rarity as any,
+    keywords,
+    rarity: c.rarity,
     set: c.set,
     image: c.image,
-    flavor: c.text,
+    flavor: c.flavor,
   };
 
   // Twin units carry a printed Twin bonus (required by §7).
@@ -168,9 +137,8 @@ function mapUnit(c: RawCard): CardDef {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 
-  // v4.2 new Unit keywords: Bulwark, Toll, Avenge — layered independently of
-  // the primary elemental keyword so reactive shells have scaling defense
-  // beyond raw HP (guidance D's "answers vs. top-end" question, answers side).
+  // v4.2 Unit keywords: Bulwark, Toll, Avenge — layered independently of the
+  // primary keyword so reactive shells have scaling defense beyond raw HP.
   if (tier >= 1 && hash(c.id) % 7 === 2) {
     def.bulwark = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
     def.keywords = [...(def.keywords || []), 'Bulwark'];
@@ -187,22 +155,21 @@ function mapUnit(c: RawCard): CardDef {
 }
 
 // ---------------------------------------------------------------------------
-// Charm / Event / Item mapping (one-shots)
+// Charm / Event mapping (one-shots)
 // ---------------------------------------------------------------------------
 const SAP_TARGETS: EffectTarget[] = ['anyTarget', 'enemyUnit', 'enemyLeader'];
 
-function mapSpell(c: RawCard, asCharm: boolean): CardDef {
+function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
-  const el = primaryElement(c);
   const type = asCharm ? 'Charm' : 'Event';
   const base: CardDef = {
     id: c.id,
     name: c.name,
     type,
-    rarity: c.rarity as any,
+    rarity: c.rarity,
     set: c.set,
     image: c.image,
-    flavor: c.text,
+    flavor: c.flavor,
   };
 
   // v4.1 guidance B: Yahtzee/Four-of-a-Kind are FLAVOUR-ONLY rarity, not a
@@ -215,7 +182,6 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   if (!asCharm && c.id === TROPHY_ID) {
     base.comboGate = 'Yahtzee';
     base.onCast = { action: 'sap', value: 20, target: 'enemyLeader' };
-    base.flavor = c.text;
     return base;
   }
   // v4.1: reactive-support answer — half of all Super-Rare+ Events are board
@@ -223,7 +189,6 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   if (!asCharm && tier >= 3 && hash(c.id) % 2 === 0) {
     base.onCast = { action: 'sap', value: 2 + tier, target: 'allEnemyUnits' };
     base.threshold = 6;
-    base.flavor = c.text;
     return base;
   }
   if (!asCharm && tier >= 4) {
@@ -235,7 +200,6 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
       effect: { action: 'sap', value: 6, target: 'enemyLeader' },
     };
     base.keywords = ['Echo'];
-    base.flavor = c.text;
     return base;
   }
   // Practical Combo-gated Events cap at Full House / Large Straight.
@@ -249,18 +213,15 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
           ? 'ThreeKind'
           : 'TwoPair';
     base.comboGate = gate;
-    // v4.2 errata A: the Large-Straight gate was hitting most turns under
-    // directed rerolling (keep-distinct-dice is a much stronger completion
-    // strategy than the equivalent matching play), so its Sap-8-to-face line
-    // was a repeatable, near-uncounterable burn spell. Retargeted off pure
-    // face damage AND dropped in power — both levers, not either/or.
+    // v4.2 errata A: repeatable face-only burn compounds badly over a ~10-round
+    // game — the Large-Straight line is retargeted off pure face damage AND
+    // dropped in power (both levers, not either/or).
     base.onCast =
       gate === 'LargeStraight'
         ? { action: 'sap', value: 5, target: 'anyTarget' }
         : gate === 'FullHouse'
           ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
           : { action: 'sap', value: 5, target: 'anyTarget' };
-    base.flavor = c.text;
     return base;
   }
 
@@ -272,16 +233,18 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
 
   const kind = hash(c.id) % 5;
   const power = (asCharm ? 2 : 3) + tier;
-  if (el === 'Light' || el === 'Nature' || kind === 0) {
+  if (kind === 0) {
     base.onCast = { action: 'mend', value: power, target: 'friendlyAny' };
-  } else if (el === 'Frost' || el === 'Dark' || kind === 1) {
+  } else if (kind === 1) {
     base.onCast = { action: 'bind', target: 'enemyUnit' };
     if (asCharm) base.threshold = Math.min(4, threshold + 1);
-  } else if (el === 'Order' && !asCharm) {
-    base.onCast = { action: 'destroy', target: 'enemyUnit' };
-    base.threshold = 6;
   } else if (kind === 2 && !asCharm) {
-    base.onCast = { action: 'draw', value: 1 + Math.floor(tier / 2), target: 'none' };
+    if (hash(c.id) % 2 === 0) {
+      base.onCast = { action: 'destroy', target: 'enemyUnit' };
+      base.threshold = 6;
+    } else {
+      base.onCast = { action: 'draw', value: 1 + Math.floor(tier / 2), target: 'none' };
+    }
   } else {
     base.onCast = { action: 'sap', value: power, target: pick(c.id, 5, SAP_TARGETS) };
   }
@@ -290,12 +253,12 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
   if (hash(c.id) % 4 === 0) {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
-  // Echo on some Dark/Chaos utility so recursion exists outside bombs.
-  if ((el === 'Dark' || el === 'Chaos') && hash(c.id) % 3 === 1 && !base.keywords) {
+  // Echo on a slice of utility so recursion exists outside bombs.
+  if (hash(c.id) % 5 === 1 && !base.keywords) {
     base.keywords = ['Echo'];
   }
-  // Scrap on cheap Tech/Flame charms (dice smoothing).
-  if (asCharm && (el === 'Tech' || el === 'Flame') && hash(c.id) % 2 === 0) {
+  // Scrap on a slice of cheap charms (dice smoothing).
+  if (asCharm && base.threshold <= 2 && hash(c.id) % 3 === 0) {
     base.keywords = [...(base.keywords || []), 'Scrap'];
   }
   // v4.2 Crescendo X (Event only): the preferred pattern for "big roll payoff"
@@ -327,7 +290,7 @@ function mapSpell(c: RawCard, asCharm: boolean): CardDef {
 // ---------------------------------------------------------------------------
 // Location mapping
 // ---------------------------------------------------------------------------
-function mapLocation(c: RawCard): CardDef {
+function mapLocation(c: CardTemplate): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   // v4.1: Locations no longer print a Cast Slot threshold at all — they cast
   // free once per turn as a bonus action (castLocationFree). They keep a
@@ -336,13 +299,12 @@ function mapLocation(c: RawCard): CardDef {
     id: c.id,
     name: c.name,
     type: 'Location',
-    rarity: c.rarity as any,
+    rarity: c.rarity,
     set: c.set,
     image: c.image,
-    flavor: c.text,
+    flavor: c.flavor,
   };
-  const el = primaryElement(c);
-  def.locPassive = el === 'Flame' || el === 'Chaos' || el === 'Dark' ? 'ATK_ALL' : 'HP_ALL';
+  def.locPassive = hash(c.id) % 2 === 0 ? 'ATK_ALL' : 'HP_ALL';
   if (tier >= 1) {
     def.ability = pick(c.id, 6, [
       { threshold: 3, effect: { action: 'draw', value: 1, target: 'none' } },
@@ -351,8 +313,8 @@ function mapLocation(c: RawCard): CardDef {
       { threshold: 4, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
     ]);
   }
-  // v4.2 new Location keywords: Tribute (synergy with Pitch), Excavate
-  // (ramp identity), Contested (arms-race decision) — each on its own slice.
+  // v4.2 Location keywords: Tribute (synergy with Pitch), Excavate (ramp
+  // identity), Contested (arms-race decision) — each on its own slice.
   if (def.ability && hash(c.id) % 5 === 0) {
     def.tribute = pick(c.id, 7, [
       { action: 'draw', value: 1, target: 'none' } as Effect,
@@ -370,7 +332,7 @@ function mapLocation(c: RawCard): CardDef {
 }
 
 // ---------------------------------------------------------------------------
-// Leader mapping (6 real leaders, 28 HP, one Ability Slot, no ATK)
+// Leader mapping (64 HP, one Ability Slot + one Ultimate, no ATK)
 // ---------------------------------------------------------------------------
 const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 3, target: 'anyTarget' } },
@@ -437,7 +399,7 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   },
 };
 
-function mapLeader(c: RawCard): CardDef {
+function mapLeader(c: CardTemplate): CardDef {
   const resolveX = LEADER_RESOLVE[c.id];
   return {
     id: c.id,
@@ -451,17 +413,17 @@ function mapLeader(c: RawCard): CardDef {
     resolve: resolveX ? { x: resolveX } : undefined,
     ultimate: LEADER_ULTIMATE[c.id],
     keywords: [...(resolveX ? ['Resolve'] : []), ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : [])],
-    rarity: c.rarity as any,
+    rarity: c.rarity,
     set: c.set,
     image: c.image,
-    flavor: c.text,
+    flavor: c.flavor,
   };
 }
 
 // ---------------------------------------------------------------------------
 // Build the pool
 // ---------------------------------------------------------------------------
-export const POOL_V4: CardDef[] = (GENERATED_CARDS as RawCard[]).map((c) => {
+function mapCard(c: CardTemplate): CardDef {
   switch (c.type) {
     case 'Leader':
       return mapLeader(c);
@@ -473,17 +435,35 @@ export const POOL_V4: CardDef[] = (GENERATED_CARDS as RawCard[]).map((c) => {
       return mapSpell(c, true);
     case 'Event':
       return mapSpell(c, false);
-    case 'Item':
-      return mapSpell(c, true); // obsolete type folded into Charms
     default:
       return mapUnit(c);
   }
-});
+}
 
-export const POOL_BY_ID: Record<string, CardDef> = Object.fromEntries(
-  POOL_V4.map((c) => [c.id, c]),
-);
-export const POOL_LEADERS = POOL_V4.filter((c) => c.type === 'Leader');
+export const POOL_V4: CardDef[] = [];
+export const POOL_BY_ID: Record<string, CardDef> = {};
+export const POOL_LEADERS: CardDef[] = [];
+
+/**
+ * (Re)build the pool from a universal card catalog. Called once at startup
+ * with the live Supabase catalog; falls back to the bundled data below.
+ * Refuses a pool with no Leaders (a broken fetch shouldn't brick the game).
+ */
+export function applyCardPool(templates: CardTemplate[]): boolean {
+  const defs = templates.map(mapCard);
+  if (!defs.some((d) => d.type === 'Leader')) return false;
+  POOL_V4.length = 0;
+  POOL_V4.push(...defs);
+  for (const k of Object.keys(POOL_BY_ID)) delete POOL_BY_ID[k];
+  for (const d of defs) POOL_BY_ID[d.id] = d;
+  POOL_LEADERS.length = 0;
+  POOL_LEADERS.push(...defs.filter((d) => d.type === 'Leader'));
+  return true;
+}
+
+// Bundled fallback pool, active until/unless the live catalog loads.
+applyCardPool(GENERATED_CARDS);
+
 export function poolByType(t: string): CardDef[] {
   return POOL_V4.filter((c) => c.type === t);
 }

@@ -1,7 +1,6 @@
 # FryCards — Definitive Rulebook v4.2
 
-Supersedes v4.1, v3.0 and v2.0 (and the legacy Shifting Multiverse V1.x rules,
-preserved in `RULEBOOK_V1_LEGACY.md`). The executable version of this document
+Supersedes v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
@@ -61,6 +60,9 @@ This pass closed every remaining gap: two genuinely broken placement rules (Stag
 Two players duel using a deck of Locations, Units, Charms, and Events, each led by a Leader. On your turn you roll five six-sided dice and spend them — one die per action — to cast cards, activate abilities, and chase bonus combos. Reduce your opponent's Leader to 0 HP to win.
 
 **Format:** 2 players. **Mean game length target:** ~15 minutes.
+
+**Card rarities** (collection/economy only — rarity carries no rules weight):
+Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
 
 ---
 

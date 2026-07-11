@@ -13,7 +13,7 @@ export const MAX_COPIES = 3;
 export interface Archetype {
   label: string;
   leaderId: string;
-  /** keyword themes to over-weight (v4.1: elements removed from the system). */
+  /** keyword themes to over-weight. */
   keywords: string[];
   /** effect actions to over-weight (aggro=sap, control=bind/destroy, etc.). */
   effects?: string[];

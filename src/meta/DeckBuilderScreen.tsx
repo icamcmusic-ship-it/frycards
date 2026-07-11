@@ -248,8 +248,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     if (idx >= 0) setCardIds([...cardIds.slice(0, idx), ...cardIds.slice(idx + 1)]);
   };
 
-  /** Auto-fills a legal 30-card deck from owned cards — no color-identity
-   * restriction, since v4.1 removed elements from the game entirely. */
+  /** Auto-fills a legal 30-card deck from owned cards — any mix of cards
+   * is legal (30 cards, max 3 copies). */
   const handleQuickbuild = () => {
     const eligible = poolByType('Unit')
       .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
@@ -281,8 +281,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     setCardIds(picked);
   };
 
-  // Pool: owned, non-Leader cards from the v4.2 pool. No color-identity
-  // restriction — elements were removed from the game entirely (v4.1).
+  // Pool: owned, non-Leader cards from the v4.2 pool. Any mix is legal.
   const pool = poolByType('Unit')
     .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
