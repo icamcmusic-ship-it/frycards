@@ -61,5 +61,5 @@ test('enforces collection ownership limits when a collection is supplied', () =>
   const ids = fillDeck(DECK_SIZE);
   const collection = [{ card_id: card.id, quantity: 1, foil_quantity: 0 }];
   const issues = validateDeckList(leader, ids, db, collection);
-  expect(issues.some((i) => i.text.includes(`only own`))).toBe(true);
+  expect(issues.some((i) => i.text.includes(`available`))).toBe(true);
 });

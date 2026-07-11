@@ -5,9 +5,10 @@
  * proportions: 2.5" × 3.5" (5:7).
  */
 import React, { useState } from 'react';
+import { Dices } from 'lucide-react';
 import { CardDef, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
-import { rarityChip, rarityBorder, rarityGlow } from '../meta/rarity';
+import { rarityChip, rarityBorder, rarityGlow, RARITY_HEX } from '../meta/rarity';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -138,6 +139,7 @@ export function CardFace({
   large,
   dimmed,
   highlight,
+  foil,
   onClick,
   footer,
   badge,
@@ -154,6 +156,8 @@ export function CardFace({
   large?: boolean;
   dimmed?: boolean;
   highlight?: boolean;
+  /** Renders the built-in foil treatment: shimmering sheen + pulsing glow ring. */
+  foil?: boolean;
   onClick?: () => void;
   footer?: React.ReactNode;
   badge?: string;
@@ -166,7 +170,8 @@ export function CardFace({
   const rules = cardRuleLines(def);
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
-  const label = `${def.name}, ${def.type}${atkHp}`;
+  const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
+  const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -195,14 +200,16 @@ export function CardFace({
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         isLg ? 'shadow-hard-black' : 'shadow-hard-black-xs',
         isLg && !dimmed && rarityGlow(def.rarity),
+        foil && !dimmed && 'foil-glow',
       )}
     >
-      {/* Header: name + cost */}
+      {/* Header: name + dice-medallion cost badge, tinted per rarity. */}
       <div
         className={cn(
-          'flex items-center justify-between gap-1 px-1.5 shrink-0',
+          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 border-[var(--c-ink)]/15',
           isLg ? 'py-1' : 'py-0.5',
         )}
+        style={{ backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }}
       >
         <span
           className={cn(
@@ -216,26 +223,28 @@ export function CardFace({
         {def.comboGate ? (
           <span
             className={cn(
-              'font-bold bg-[#A855F7] text-white px-1 shrink-0 rounded-sm',
-              isLg ? 'text-[10px]' : 'text-[7px]',
+              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white',
+              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
             )}
           >
+            {isLg && <Dices className="w-3 h-3" />}
             COMBO
           </span>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
           <span
             className={cn(
-              'font-mono font-bold bg-[var(--c-ink)] text-[var(--c-yellow)] px-1 shrink-0 rounded-sm',
-              isLg ? 'text-[13px]' : 'text-[10px]',
+              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-ink)] text-[var(--c-yellow)]',
+              isLg ? 'text-[13px] w-7 h-7' : 'text-[9px] w-4 h-4',
             )}
+            title={`Cast Slot ${def.threshold}+`}
           >
-            {def.threshold}+
+            {def.threshold}
           </span>
         ) : def.type === 'Location' ? (
           <span
             className={cn(
-              'font-bold bg-[var(--c-steel)] text-white px-1 shrink-0 rounded-sm',
-              isLg ? 'text-[10px]' : 'text-[7px]',
+              'heading-font shrink-0 rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-steel)] text-white',
+              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
             )}
           >
             FREE
@@ -244,13 +253,13 @@ export function CardFace({
       </div>
 
       {/* Art — fills all remaining space, cropped to fit (never a fixed 4:3 box). */}
-      <div className="relative flex-1 min-h-0 mx-1.5 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
+      <div className="relative flex-1 min-h-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
         <CardArt def={def} />
         {def.rarity && (
           <span
             className={cn(
-              'absolute top-1 right-1 font-black px-1 rounded-sm leading-tight',
-              isLg ? 'text-[9px]' : 'text-[6px]',
+              'absolute top-1 right-1 font-black rounded-full leading-tight',
+              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1',
               rarityChip(def.rarity),
             )}
           >
@@ -260,20 +269,30 @@ export function CardFace({
         {badge && (
           <span
             className={cn(
-              'absolute top-1 left-1 bg-[var(--c-red)] text-white font-black px-1 rounded-sm',
+              'absolute top-1 left-1 bg-[var(--c-red)] text-white font-black px-1 rounded-full',
               isLg ? 'text-[9px]' : 'text-[7px]',
             )}
           >
             {badge}
           </span>
         )}
+        {foil && (
+          <span
+            className={cn(
+              'absolute top-1 left-1 bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
+              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1',
+            )}
+          >
+            ✦ FOIL
+          </span>
+        )}
         {(foilCount || 0) > 0 && (
-          <span className="absolute bottom-1 right-1 bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-sm">
+          <span className="absolute bottom-1 right-1 bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
             ✦ {foilCount}
           </span>
         )}
         {count !== undefined && count > 0 && (
-          <span className="absolute bottom-1 left-1 bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-sm">
+          <span className="absolute bottom-1 left-1 bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
             ×{count}
           </span>
         )}
@@ -323,8 +342,8 @@ export function CardFace({
               <span
                 key={kw}
                 className={cn(
-                  'font-bold px-1 bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-sm',
-                  isLg ? 'text-[9px]' : 'text-[6.5px]',
+                  'font-bold px-1.5 bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full',
+                  isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
                 )}
               >
                 {kw}
@@ -333,8 +352,8 @@ export function CardFace({
           {def.comboGate && (
             <span
               className={cn(
-                'font-bold px-1 bg-[#A855F7] text-white border border-[var(--c-ink)] leading-tight rounded-sm',
-                isLg ? 'text-[9px]' : 'text-[6.5px]',
+                'font-bold px-1.5 bg-[#A855F7] text-white border border-[var(--c-ink)] leading-tight rounded-full',
+                isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
               )}
             >
               {def.comboGate}
@@ -367,6 +386,48 @@ export function CardFace({
       {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}
       {def.set && <div className={cn('h-[3px] w-full shrink-0', set.bar)} title={def.set} />}
       {footer}
+
+      {foil && <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />}
+    </div>
+  );
+}
+
+/**
+ * Universal expanded/zoomed card view — same CardFace used everywhere else,
+ * just large and centered in a modal. Pass `actions` for context-specific
+ * controls (e.g. quicksell buttons in the Collection).
+ */
+export function CardInspectorModal({
+  def,
+  foil,
+  onClose,
+  actions,
+}: {
+  def: CardDef;
+  foil?: boolean;
+  onClose: () => void;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col items-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <CardFace def={def} size="lg" foil={foil} />
+        {actions}
+        <button
+          onClick={onClose}
+          className="btn-pop heading-font text-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-4 py-2 ink-border-sm shadow-hard-black-xs"
+        >
+          CLOSE
+        </button>
+      </div>
     </div>
   );
 }

@@ -246,22 +246,54 @@ export async function recordMatchResult(
   return data as { reward: number; gold: number };
 }
 
+/**
+ * Server-authoritative deck save: the `save_deck` RPC re-checks that every
+ * copy of every card is actually available (owned minus whatever the
+ * player's *other* decks already reserve) before committing, so the same
+ * physical copy can never be locked into two decks at once. Deleting a deck
+ * (below) needs no matching "unconsume" step — availability is always
+ * computed live from whichever decks still exist.
+ */
 export async function saveDeck(deck: {
   id?: string;
-  user_id: string;
   name: string;
   leader_id: string;
   card_ids: string[];
-  is_valid: boolean;
 }): Promise<{ data: DeckRow | null; error: string | null }> {
-  const payload = { ...deck, updated_at: new Date().toISOString() };
-  const { data, error } = deck.id
-    ? await supabase.from('decks').update(payload).eq('id', deck.id).select().single()
-    : await supabase.from('decks').insert(payload).select().single();
-  return { data: (data as DeckRow) || null, error: error ? error.message : null };
+  const { data, error } = await supabase.rpc('save_deck', {
+    p_deck_id: deck.id ?? null,
+    p_name: deck.name,
+    p_leader_id: deck.leader_id,
+    p_card_ids: deck.card_ids,
+  });
+  return { data: (data as DeckRow) || null, error: rpcError(error) };
 }
 
 export async function deleteDeck(deckId: string): Promise<string | null> {
   const { error } = await supabase.from('decks').delete().eq('id', deckId);
   return error ? error.message : null;
+}
+
+export interface QuicksellResult {
+  ok: boolean;
+  gold: number;
+  card_id: string;
+  sold: number;
+  foil: boolean;
+  unit_price: number;
+  total: number;
+}
+
+/** Sell owned copies of a card for a fixed rarity-based gold price (foils pay 2.5x). */
+export async function quicksellCards(
+  cardId: string,
+  quantity: number,
+  foil: boolean,
+): Promise<{ data: QuicksellResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('quicksell_cards', {
+    p_card_id: cardId,
+    p_quantity: quantity,
+    p_foil: foil,
+  });
+  return { data: (data as QuicksellResult) || null, error: rpcError(error) };
 }
