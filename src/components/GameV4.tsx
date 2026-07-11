@@ -25,7 +25,8 @@ import {
   abandonTwin,
   comboCheck,
   attack,
-  endTurn,
+  resolveEndPhasePreDiscard,
+  finishEndPhase,
   canAttack,
   legalTargets,
   effAtk,
@@ -438,11 +439,11 @@ export function GameV4({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (inspect) setInspect(null);
+      else if (pending) setPending(null);
       else if (showDiscard) {
         setShowDiscard(false);
         setEchoPick(null);
       } else if (echoPick) setEchoPick(null);
-      else if (pending) setPending(null);
       else if (attacker) setAttacker(null);
     };
     window.addEventListener('keydown', onKey);
@@ -483,6 +484,8 @@ export function GameV4({
     if (dieVal === null) return { ok: false, why: 'Select a die' };
     const thr = effThreshold(g, HUMAN, c.def);
     if (dieVal < thr) return { ok: false, why: `Needs ${thr}+` };
+    if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
+      return { ok: false, why: 'No legal target' };
     return { ok: true };
   };
 
@@ -570,10 +573,15 @@ export function GameV4({
       say(`Bound — can't act this turn.`);
       return;
     }
-    if (
-      needsTarget(c.def.ability.effect) &&
-      targetsFor(g, HUMAN, c.def.ability.effect).length > 0
-    ) {
+    if (c.def.type === 'Unit' && c.enteredThisTurn && !hasKw(c.def, 'Swift')) {
+      say('Just played — can’t act yet.');
+      return;
+    }
+    if (needsTarget(c.def.ability.effect)) {
+      if (targetsFor(g, HUMAN, c.def.ability.effect).length === 0) {
+        say('No legal target.');
+        return;
+      }
       setPending({ kind: 'ability', cardIid: c.iid, effect: c.def.ability.effect });
       return;
     }
@@ -599,7 +607,11 @@ export function GameV4({
       say(`Select a die of ${ult.threshold}+.`);
       return;
     }
-    if (needsTarget(ult.effect) && targetsFor(g, HUMAN, ult.effect).length > 0) {
+    if (needsTarget(ult.effect)) {
+      if (targetsFor(g, HUMAN, ult.effect).length === 0) {
+        say('No legal target.');
+        return;
+      }
       setPending({ kind: 'ultimate', cardIid: me.leader.iid, effect: ult.effect });
       return;
     }
@@ -682,7 +694,7 @@ export function GameV4({
 
   const finishTurn = (picks?: string[]) => {
     const queue = picks ? [...picks] : undefined;
-    endTurn(g, (hand) => {
+    finishEndPhase(g, (hand) => {
       if (queue && queue.length) {
         const iid = queue.shift()!;
         const found = hand.find((c) => c.iid === iid);
@@ -701,8 +713,17 @@ export function GameV4({
 
   // End Phase discards down to hand size 6 (§3.7) — the rulebook gives the
   // player the choice of which cards, so route through a picker modal
-  // whenever ending the turn would otherwise force a discard.
+  // whenever ending the turn would otherwise force a discard. Pitch/Tribute
+  // are resolved first since Tribute can draw a card and push the hand over
+  // the limit even when it wasn't before — the picker needs the post-draw
+  // hand size, not the pre-draw one.
   const attemptFinishTurn = () => {
+    resolveEndPhasePreDiscard(g);
+    bump();
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
     const needed = me.hand.length - 6;
     if (needed > 0) {
       setForcedDiscard({ needed, picks: [] });
@@ -1266,10 +1287,11 @@ export function GameV4({
                             return;
                           }
                         }
-                        if (
-                          needsTarget(c.def.onCast) &&
-                          targetsFor(g, HUMAN, c.def.onCast!).length > 0
-                        ) {
+                        if (needsTarget(c.def.onCast)) {
+                          if (targetsFor(g, HUMAN, c.def.onCast!).length === 0) {
+                            say('No legal target.');
+                            return;
+                          }
                           setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast! });
                           return;
                         }

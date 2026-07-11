@@ -34,12 +34,19 @@ export function decodeDeckCode(
   const leader = db.get(leaderId);
   if (!leader || leader.type !== 'Leader') return { error: `Unknown Leader id: ${leaderId}` };
   const cardIds: string[] = [];
+  const totals = new Map<string, number>();
   for (const entry of body.split(',').filter(Boolean)) {
     const [id, nStr] = entry.split('*');
     const n = nStr ? parseInt(nStr, 10) : 1;
     if (!db.has(id)) return { error: `Unknown card id: ${id}` };
     if (!Number.isFinite(n) || n < 1 || n > MAX_COPIES)
       return { error: `Bad count for ${id} (max ${MAX_COPIES} copies).` };
+    // A code can spell the same id across more than one entry (e.g. a
+    // hand-edited or concatenated code) — cap the aggregate, not just
+    // each individual entry's own count.
+    const total = (totals.get(id) || 0) + n;
+    if (total > MAX_COPIES) return { error: `Too many total copies of ${id} (max ${MAX_COPIES}).` };
+    totals.set(id, total);
     for (let i = 0; i < n; i++) cardIds.push(id);
   }
   return { leaderId, cardIds };

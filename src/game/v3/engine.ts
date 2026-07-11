@@ -708,6 +708,12 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
   const byAtk = (a: Inst, b: Inst) => effAtk(g, b) - effAtk(g, a);
   switch (eff.target) {
     case 'enemyUnit': {
+      // Prefer a kill (matches the anyTarget heuristic below) over always
+      // chipping the biggest body — otherwise removal wastes value chipping
+      // a tough unit while a nearly-dead one survives untouched.
+      const v = eff.value || 0;
+      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      if (killable) return killable.iid;
       const t = [...opp.board].sort(byAtk)[0];
       return t?.iid;
     }
@@ -725,9 +731,16 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       return t?.iid;
     }
     case 'friendlyAny': {
-      const hurt = [...p.board].filter((u) => u.damage > 0).sort((a, b) => b.damage - a.damage)[0];
-      if (p.leader.damage >= (eff.value || 0)) return p.leader.iid;
-      return hurt?.iid ?? p.leader.iid;
+      // Compare the Leader against board Units on actual damage taken,
+      // rather than always defaulting to the Leader — otherwise a Unit
+      // sitting at near-lethal damage gets ignored in favor of topping off
+      // a Leader with only a point or two of damage.
+      const v = eff.value || 0;
+      const hurtPool = [p.leader, ...p.board].filter((u) => u.damage > 0);
+      if (hurtPool.length === 0) return p.leader.iid;
+      const noWaste = hurtPool.filter((u) => u.damage >= v).sort((a, b) => b.damage - a.damage)[0];
+      if (noWaste) return noWaste.iid;
+      return [...hurtPool].sort((a, b) => b.damage - a.damage)[0].iid;
     }
     default:
       return undefined;
@@ -961,7 +974,10 @@ export function echoRecast(
   } else if (die.value < effThreshold(g, p.id, c.def)) {
     return false;
   }
-  if (c.def.type === 'Location' && p.locationCastThisTurn) return false;
+  if (c.def.type === 'Location') {
+    if (p.locationCastThisTurn) return false;
+    if (p.location?.def.id === c.def.id) return false;
+  }
   die.placed = true;
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
   p.discard.splice(idx, 1);
@@ -1127,7 +1143,14 @@ export function defaultDiscardChoice(hand: Inst[]): Inst {
   return [...pool].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
 }
 
-export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+/**
+ * First half of End Phase: Pitch unplaced dice for Mend 1, then Tribute if 2+
+ * were pitched. Split out from the discard step so callers that need to
+ * *know the final hand size before offering a discard choice* (a Tribute
+ * effect can draw a card) can resolve this first and only then decide
+ * whether a discard picker is needed.
+ */
+export function resolveEndPhasePreDiscard(g: Game) {
   const p = g.players[g.active];
   // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
   // A dead 1 or 2 always has this baseline floor; only a die pitched with the
@@ -1154,6 +1177,11 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
     );
     decide(g, p.id, 'tributeTriggered');
   }
+}
+
+/** Second half of End Phase: discard down to 6, then reset/pass the turn. */
+export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+  const p = g.players[g.active];
   // Discard down to 6.
   while (p.hand.length > 6) {
     const pick = discardChooser ? discardChooser(p.hand) : defaultDiscardChoice(p.hand);
@@ -1168,4 +1196,9 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   }
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
+}
+
+export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+  resolveEndPhasePreDiscard(g);
+  finishEndPhase(g, discardChooser);
 }

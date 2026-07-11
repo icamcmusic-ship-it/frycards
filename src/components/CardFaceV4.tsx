@@ -97,10 +97,26 @@ export function CardFace({
   badge?: string;
   count?: number;
 }) {
+  const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
+  const label = `${def.name}, ${def.type}${atkHp}`;
   return (
-    <button
+    // A plain <div role="button"> rather than a <button>: the footer can
+    // carry its own interactive control (e.g. a "details" button), and
+    // nested <button> elements are invalid HTML / break screen-reader and
+    // keyboard navigation.
+    <div
+      role="button"
+      tabIndex={onClick ? 0 : -1}
+      aria-disabled={!onClick}
+      aria-label={label}
       onClick={onClick}
-      disabled={!onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
         'relative bg-[#F7F7F7] text-[#1A1A1A] ink-border-sm text-left shrink-0 transition-transform',
         small ? 'w-[104px]' : 'w-[128px]',
@@ -188,6 +204,6 @@ export function CardFace({
         </div>
         {footer}
       </div>
-    </button>
+    </div>
   );
 }
