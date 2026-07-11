@@ -344,12 +344,29 @@ export function GameV4({
   const [showDiscard, setShowDiscard] = useState(false);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [forcedDiscard, setForcedDiscard] = useState<{ needed: number; picks: string[] } | null>(
+    null,
+  );
   const resultSent = useRef(false);
+  const cpuTimeoutRef = useRef<number | null>(null);
+  const bannerTimeoutRef = useRef<number | null>(null);
 
   const say = (msg: string) => {
     setBanner(msg);
-    window.setTimeout(() => setBanner((b) => (b === msg ? null : b)), 2200);
+    if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
+    bannerTimeoutRef.current = window.setTimeout(() => {
+      setBanner((b) => (b === msg ? null : b));
+      bannerTimeoutRef.current = null;
+    }, 2200);
   };
+
+  useEffect(
+    () => () => {
+      if (cpuTimeoutRef.current !== null) window.clearTimeout(cpuTimeoutRef.current);
+      if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
+    },
+    [],
+  );
 
   // ---- turn driving -------------------------------------------------------
   const beginHumanTurn = () => {
@@ -367,7 +384,8 @@ export function GameV4({
 
   const runCpuTurn = () => {
     setStage('cpu');
-    window.setTimeout(() => {
+    cpuTimeoutRef.current = window.setTimeout(() => {
+      cpuTimeoutRef.current = null;
       playTurn(g);
       bump();
       if (g.winner) {
@@ -376,6 +394,16 @@ export function GameV4({
       }
       beginHumanTurn();
     }, 1000);
+  };
+
+  // Conceding is a resignation, not a free way to dodge a loss on the
+  // record — report it the same as an in-game defeat before exiting.
+  const concede = () => {
+    if (stage !== 'over' && !resultSent.current) {
+      resultSent.current = true;
+      onResult?.(false);
+    }
+    onExit();
   };
 
   const afterMulligan = () => {
@@ -398,13 +426,16 @@ export function GameV4({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (inspect) setInspect(null);
-      else if (showDiscard) setShowDiscard(false);
+      else if (showDiscard) {
+        setShowDiscard(false);
+        setEchoPick(null);
+      } else if (echoPick) setEchoPick(null);
       else if (pending) setPending(null);
       else if (attacker) setAttacker(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, pending, attacker]);
+  }, [inspect, showDiscard, echoPick, pending, attacker]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -512,6 +543,10 @@ export function GameV4({
     }
     if (c.def.type === 'Unit' && c.hasAttacked) {
       say('Attacked already — abilities locked.');
+      return;
+    }
+    if (c.def.type === 'Unit' && c.boundThisTurn) {
+      say(`Bound — can't act this turn.`);
       return;
     }
     if (
@@ -624,11 +659,16 @@ export function GameV4({
     setStage('combat');
   };
 
-  const finishTurn = () => {
-    endTurn(
-      g,
-      (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
-    );
+  const finishTurn = (picks?: string[]) => {
+    const queue = picks ? [...picks] : undefined;
+    endTurn(g, (hand) => {
+      if (queue && queue.length) {
+        const iid = queue.shift()!;
+        const found = hand.find((c) => c.iid === iid);
+        if (found) return found;
+      }
+      return [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0];
+    });
     bump();
     if (g.winner) {
       setStage('over');
@@ -636,6 +676,37 @@ export function GameV4({
     }
     setAttacker(null);
     runCpuTurn();
+  };
+
+  // End Phase discards down to hand size 6 (§3.7) — the rulebook gives the
+  // player the choice of which cards, so route through a picker modal
+  // whenever ending the turn would otherwise force a discard.
+  const attemptFinishTurn = () => {
+    const needed = me.hand.length - 6;
+    if (needed > 0) {
+      setForcedDiscard({ needed, picks: [] });
+      return;
+    }
+    finishTurn();
+  };
+
+  const toggleForcedDiscardPick = (iid: string) => {
+    setForcedDiscard((fd) => {
+      if (!fd) return fd;
+      const picks = fd.picks.includes(iid)
+        ? fd.picks.filter((x) => x !== iid)
+        : fd.picks.length < fd.needed
+          ? [...fd.picks, iid]
+          : fd.picks;
+      return { ...fd, picks };
+    });
+  };
+
+  const confirmForcedDiscard = () => {
+    if (!forcedDiscard || forcedDiscard.picks.length !== forcedDiscard.needed) return;
+    const picks = forcedDiscard.picks;
+    setForcedDiscard(null);
+    finishTurn(picks);
   };
 
   const doReroll = () => {
@@ -672,7 +743,11 @@ export function GameV4({
       {/* Top bar */}
       <div className="flex items-center gap-2 px-2 py-1 bg-[#2C3E50] ink-border-sm z-30">
         <button
-          onClick={() => (stage === 'over' || window.confirm('Concede this match?')) && onExit()}
+          onClick={() =>
+            (stage === 'over' ||
+              window.confirm('Concede this match? This will count as a loss.')) &&
+            concede()
+          }
           className="btn-pop heading-font text-[10px] bg-[#1A1A1A] text-[#F7F7F7] px-2 py-0.5 ink-border-sm"
         >
           ✕ CONCEDE
@@ -703,7 +778,7 @@ export function GameV4({
           )}
           {stage === 'combat' && (
             <button
-              onClick={finishTurn}
+              onClick={attemptFinishTurn}
               className="btn-pop heading-font text-[10px] bg-[#E53935] text-white px-2 py-0.5 ink-border-sm"
             >
               END TURN {unplaced.length > 0 ? `(pitch ${unplaced.length}⚄)` : ''}
@@ -868,7 +943,7 @@ export function GameV4({
           )}
         </div>
         <div className="flex-1 min-w-0 max-h-[54px] overflow-y-auto bg-[#1A1A1A] px-2 text-[8px] font-mono text-[#F7F7F7]/70 leading-tight">
-          {g.log.slice(-6).map((l, i) => (
+          {g.log.slice(-40).map((l, i) => (
             <div key={i}>· {l}</div>
           ))}
         </div>
@@ -990,8 +1065,7 @@ export function GameV4({
                   {stage === 'preRoll' && (
                     <button
                       onClick={() => {
-                        if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`))
-                          return;
+                        if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`)) return;
                         abandonTwin(g, s.iid);
                         bump();
                       }}
@@ -1033,21 +1107,25 @@ export function GameV4({
                           : () => setInspect(u.def)
                     }
                   />
-                  {stage === 'placement' && u.def.ability && !u.abilityUsed && !u.hasAttacked && (
-                    <button
-                      onClick={() => tryAbility(u)}
-                      className={cn(
-                        'text-[7px] font-bold px-1 ink-border-sm',
-                        dieVal !== null &&
-                          dieVal >= effAbilityThreshold(g, u) &&
-                          !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
-                          ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
-                          : 'bg-[#2C3E50] text-[#F7F7F7]/50',
-                      )}
-                    >
-                      {effAbilityThreshold(g, u)}+ ability
-                    </button>
-                  )}
+                  {stage === 'placement' &&
+                    u.def.ability &&
+                    !u.abilityUsed &&
+                    !u.hasAttacked &&
+                    !u.boundThisTurn && (
+                      <button
+                        onClick={() => tryAbility(u)}
+                        className={cn(
+                          'text-[7px] font-bold px-1 ink-border-sm',
+                          dieVal !== null &&
+                            dieVal >= effAbilityThreshold(g, u) &&
+                            !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
+                            ? 'btn-pop bg-[#FFD54F] text-[#1A1A1A]'
+                            : 'bg-[#2C3E50] text-[#F7F7F7]/50',
+                        )}
+                      >
+                        {effAbilityThreshold(g, u)}+ ability
+                      </button>
+                    )}
                 </div>
               );
             })}
@@ -1218,6 +1296,48 @@ export function GameV4({
               className="btn-pop mt-2 text-[10px] heading-font bg-[#1A1A1A] text-[#FFD54F] px-3 py-1 ink-border-sm"
             >
               CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Forced discard (hand size &gt; 6 at End Phase) — player picks which cards */}
+      {forcedDiscard && (
+        <div className="absolute inset-0 z-50 bg-[#1A1A1A]/90 flex items-center justify-center p-4">
+          <div className="bg-[#F7F7F7] text-[#1A1A1A] ink-border-md p-4 text-center max-w-3xl">
+            <div className="heading-font text-xl mb-1">Discard Down to 6</div>
+            <div className="text-[11px] font-bold text-[#2C3E50] mb-3">
+              Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
+              {forcedDiscard.picks.length}/{forcedDiscard.needed} selected).
+            </div>
+            <div className="flex gap-1.5 justify-center flex-wrap mb-4">
+              {me.hand.map((c) => {
+                const picked = forcedDiscard.picks.includes(c.iid);
+                return (
+                  <div key={c.iid} className="flex flex-col gap-0.5">
+                    <CardFace
+                      def={c.def}
+                      small
+                      highlight={picked}
+                      dimmed={!picked && forcedDiscard.picks.length >= forcedDiscard.needed}
+                      onClick={() => toggleForcedDiscardPick(c.iid)}
+                    />
+                    {picked && <span className="text-[8px] font-bold text-[#E53935]">DISCARD</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={confirmForcedDiscard}
+              disabled={forcedDiscard.picks.length !== forcedDiscard.needed}
+              className={cn(
+                'heading-font text-xs px-5 py-2 ink-border-sm shadow-hard-black-xs',
+                forcedDiscard.picks.length === forcedDiscard.needed
+                  ? 'btn-pop bg-[#E53935] text-white'
+                  : 'bg-[#2C3E50]/40 text-[#F7F7F7]/50 cursor-not-allowed',
+              )}
+            >
+              CONFIRM DISCARD
             </button>
           </div>
         </div>

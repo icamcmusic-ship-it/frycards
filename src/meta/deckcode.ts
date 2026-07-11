@@ -7,6 +7,8 @@
  * field, so this works for both the legacy CardTemplate pool and the v4.2
  * CardDef pool.
  */
+import { MAX_COPIES } from '../game/v3/decks';
+
 const PREFIX = 'FRY1';
 
 export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
@@ -36,7 +38,8 @@ export function decodeDeckCode(
     const [id, nStr] = entry.split('*');
     const n = nStr ? parseInt(nStr, 10) : 1;
     if (!db.has(id)) return { error: `Unknown card id: ${id}` };
-    if (!Number.isFinite(n) || n < 1 || n > 30) return { error: `Bad count for ${id}` };
+    if (!Number.isFinite(n) || n < 1 || n > MAX_COPIES)
+      return { error: `Bad count for ${id} (max ${MAX_COPIES} copies).` };
     for (let i = 0; i < n; i++) cardIds.push(id);
   }
   return { leaderId, cardIds };
