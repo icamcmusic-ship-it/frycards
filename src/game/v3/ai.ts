@@ -31,6 +31,7 @@ import {
   matchesPattern,
   opponentOf,
   autoTarget,
+  defaultDiscardChoice,
 } from './engine';
 import { hasKw } from './cards';
 
@@ -96,7 +97,7 @@ function castPriority(g: Game, p: Player, c: Inst): number {
 }
 
 /** Pick the cheapest sufficient die index for a threshold, or -1. */
-function bestDieFor(p: Player, threshold: number, preferExact = true): number {
+function bestDieFor(p: Player, threshold: number): number {
   const idxs = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value);
   for (const i of idxs) if (p.dice[i].value >= threshold) return i;
   return -1;
@@ -308,9 +309,7 @@ function playPlacement(g: Game, p: Player) {
       for (const c of echoes) {
         const dieIdx = bestDieFor(p, effThreshold(g, p.id, c.def));
         if (dieIdx < 0) continue;
-        const fodder = [...p.hand].sort(
-          (a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3),
-        )[0];
+        const fodder = defaultDiscardChoice(p.hand);
         if (echoRecast(g, dieIdx, c.iid, fodder.iid)) {
           progress = true;
           break;
@@ -475,8 +474,5 @@ export function playTurn(g: Game) {
   if (g.winner) return;
   playCombat(g, p);
   if (g.winner) return;
-  endTurn(
-    g,
-    (hand) => [...hand].sort((a, b) => (a.def.threshold ?? 3) - (b.def.threshold ?? 3))[0],
-  );
+  endTurn(g, defaultDiscardChoice);
 }

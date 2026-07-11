@@ -8,7 +8,7 @@ import { DeckDef } from './engine';
 import { POOL_BY_ID, POOL_V4, poolByType } from './cardpool';
 
 const DECK_SIZE = 30; // v4.0
-const MAX_COPIES = 3;
+export const MAX_COPIES = 3;
 
 export interface Archetype {
   label: string;

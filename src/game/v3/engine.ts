@@ -230,7 +230,11 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
 
 /** v4.2 Toll X: sum of Toll on a player's board, reducing all incoming Leader damage. */
 export function tollReduction(g: Game, ownerId: string): number {
-  return g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
+  const total = g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
+  // Same "ramp, not a collapse" cap Anchor uses: uncapped, a wide Toll board
+  // could zero out an entire class of face damage (Sap, Pierce overflow,
+  // Crescendo burn) at once rather than just blunting it.
+  return Math.min(3, total);
 }
 
 // ---------------------------------------------------------------------------
@@ -678,7 +682,7 @@ function enterPlay(
     // Charm / Event: resolve then discard.
     if (c.def.onCast) {
       const eff = withCrescendo(p, c, c.def.onCast);
-      applyEffect(g, p.id, eff, autoTarget(g, p.id, eff), c);
+      applyEffect(g, p.id, eff, targetIid ?? autoTarget(g, p.id, eff), c);
       queueAftershock(g, p, c);
     }
     discardCard(g, p, c);
@@ -704,6 +708,12 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
   const byAtk = (a: Inst, b: Inst) => effAtk(g, b) - effAtk(g, a);
   switch (eff.target) {
     case 'enemyUnit': {
+      // Prefer a kill (matches the anyTarget heuristic below) over always
+      // chipping the biggest body — otherwise removal wastes value chipping
+      // a tough unit while a nearly-dead one survives untouched.
+      const v = eff.value || 0;
+      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      if (killable) return killable.iid;
       const t = [...opp.board].sort(byAtk)[0];
       return t?.iid;
     }
@@ -721,9 +731,16 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       return t?.iid;
     }
     case 'friendlyAny': {
-      const hurt = [...p.board].filter((u) => u.damage > 0).sort((a, b) => b.damage - a.damage)[0];
-      if (p.leader.damage >= (eff.value || 0)) return p.leader.iid;
-      return hurt?.iid ?? p.leader.iid;
+      // Compare the Leader against board Units on actual damage taken,
+      // rather than always defaulting to the Leader — otherwise a Unit
+      // sitting at near-lethal damage gets ignored in favor of topping off
+      // a Leader with only a point or two of damage.
+      const v = eff.value || 0;
+      const hurtPool = [p.leader, ...p.board].filter((u) => u.damage > 0);
+      if (hurtPool.length === 0) return p.leader.iid;
+      const noWaste = hurtPool.filter((u) => u.damage >= v).sort((a, b) => b.damage - a.damage)[0];
+      if (noWaste) return noWaste.iid;
+      return [...hurtPool].sort((a, b) => b.damage - a.damage)[0].iid;
     }
     default:
       return undefined;
@@ -940,6 +957,7 @@ export function echoRecast(
   dieIndex: number,
   cardIid: string,
   discardIid: string,
+  targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
@@ -956,7 +974,10 @@ export function echoRecast(
   } else if (die.value < effThreshold(g, p.id, c.def)) {
     return false;
   }
-  if (c.def.type === 'Location' && p.locationCastThisTurn) return false;
+  if (c.def.type === 'Location') {
+    if (p.locationCastThisTurn) return false;
+    if (p.location?.def.id === c.def.id) return false;
+  }
   die.placed = true;
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
   p.discard.splice(idx, 1);
@@ -968,7 +989,7 @@ export function echoRecast(
   // "commons drag the average down" story can be told apart from "overpriced
   // across the board".
   decide(g, p.id, `echoRecast_${rarityTier(c.def.rarity)}`);
-  enterPlay(g, p, c, die.value, true);
+  enterPlay(g, p, c, die.value, true, targetIid);
   return true;
 }
 
@@ -1108,7 +1129,28 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
 // ---------------------------------------------------------------------------
 // End Phase (§3.7)
 // ---------------------------------------------------------------------------
-export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+/**
+ * Fallback discard choice when nobody supplied an explicit pick: discard a
+ * duplicate copy if the hand holds one (a spare of something you're already
+ * holding is the safest cut), otherwise discard the highest-threshold card
+ * (the one least likely to be castable soon), not the cheapest.
+ */
+export function defaultDiscardChoice(hand: Inst[]): Inst {
+  const idCounts = new Map<string, number>();
+  for (const c of hand) idCounts.set(c.def.id, (idCounts.get(c.def.id) || 0) + 1);
+  const dupes = hand.filter((c) => (idCounts.get(c.def.id) || 0) > 1);
+  const pool = dupes.length > 0 ? dupes : hand;
+  return [...pool].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+}
+
+/**
+ * First half of End Phase: Pitch unplaced dice for Mend 1, then Tribute if 2+
+ * were pitched. Split out from the discard step so callers that need to
+ * *know the final hand size before offering a discard choice* (a Tribute
+ * effect can draw a card) can resolve this first and only then decide
+ * whether a discard picker is needed.
+ */
+export function resolveEndPhasePreDiscard(g: Game) {
   const p = g.players[g.active];
   // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
   // A dead 1 or 2 always has this baseline floor; only a die pitched with the
@@ -1135,9 +1177,14 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
     );
     decide(g, p.id, 'tributeTriggered');
   }
+}
+
+/** Second half of End Phase: discard down to 6, then reset/pass the turn. */
+export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+  const p = g.players[g.active];
   // Discard down to 6.
   while (p.hand.length > 6) {
-    const pick = discardChooser ? discardChooser(p.hand) : p.hand[p.hand.length - 1];
+    const pick = discardChooser ? discardChooser(p.hand) : defaultDiscardChoice(p.hand);
     const idx = p.hand.indexOf(pick);
     const c = p.hand.splice(idx >= 0 ? idx : p.hand.length - 1, 1)[0];
     discardCard(g, p, c);
@@ -1149,4 +1196,9 @@ export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   }
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
+}
+
+export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
+  resolveEndPhasePreDiscard(g);
+  finishEndPhase(g, discardChooser);
 }
