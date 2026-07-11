@@ -3,8 +3,10 @@ import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-
 import { encodeDeckCode, decodeDeckCode } from './deckcode';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
+import { SafeImage } from './SafeImage';
 import { MetaHeader, PopButton } from './ui';
-import { CardFace, RARITY_COLOR, cardRules } from '../components/CardFaceV4';
+import { CardFace, cardRules } from '../components/CardFaceV4';
+import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { cn } from '../lib/utils';
@@ -143,11 +145,13 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     </span>
                   )}
                 </div>
-                {leader?.image && (
-                  <div className="aspect-[16/7] overflow-hidden ink-border-sm m-2">
-                    <img src={leader.image} className="w-full h-full object-cover" loading="lazy" />
-                  </div>
-                )}
+                <div className="aspect-[16/7] overflow-hidden ink-border-sm m-2">
+                  <SafeImage
+                    src={leader?.image}
+                    className="w-full h-full object-cover"
+                    fallbackText={leader?.name}
+                  />
+                </div>
                 <div className="px-3 text-[11px] font-bold text-[var(--c-steel)]">
                   {leader?.name || 'Unknown Leader'} · {d.card_ids.length}/{DECK_SIZE} cards
                 </div>
@@ -391,11 +395,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   {l.hp} HP
                 </span>
               </div>
-              {l.image && (
-                <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
-                  <img src={l.image} className="w-full h-full object-cover" />
-                </div>
-              )}
+              <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
+                <SafeImage
+                  src={l.image}
+                  className="w-full h-full object-cover"
+                  fallbackText={l.name}
+                />
+              </div>
               <div className="p-3 pt-1">
                 <div className="heading-font text-base leading-tight">{l.name}</div>
                 <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
@@ -607,8 +613,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               >
                 <span
                   className={cn(
-                    'text-[8px] font-black px-1 shrink-0',
-                    RARITY_COLOR[card.rarity || 'Common'],
+                    'text-[8px] font-black px-1 shrink-0 rounded-sm',
+                    rarityChip(card.rarity),
                   )}
                 >
                   {castBucket(card) === 'Free'
@@ -640,12 +646,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
             onClick={(e) => e.stopPropagation()}
           >
-            {inspect.image && (
-              <img
-                src={inspect.image}
-                className="w-full h-[160px] object-cover ink-border-sm mb-2"
-              />
-            )}
+            <div className="w-full h-[160px] ink-border-sm mb-2 overflow-hidden">
+              <SafeImage src={inspect.image} className="w-full h-full object-cover" />
+            </div>
             <div className="heading-font text-sm">{inspect.name}</div>
             <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
               {inspect.type}

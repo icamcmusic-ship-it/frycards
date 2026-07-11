@@ -10,7 +10,8 @@ import {
   randomArchetype,
 } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
-import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
+import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
+import { preloadImages } from './lib/preload';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
@@ -23,6 +24,7 @@ import { ProfileScreen } from './meta/ProfileScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { ChangelogScreen } from './meta/ChangelogScreen';
 import { PopButton } from './meta/ui';
+import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 
@@ -75,11 +77,13 @@ function PlayScreen({
                       <div className="px-2 py-1 bg-[var(--c-red)] heading-font text-[10px] text-[var(--c-paper)] truncate">
                         {d.name}
                       </div>
-                      {leader?.image && (
-                        <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
-                          <img src={leader.image} className="w-full h-full object-cover" />
-                        </div>
-                      )}
+                      <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
+                        <SafeImage
+                          src={leader?.image}
+                          className="w-full h-full object-cover"
+                          fallbackText={leader?.name}
+                        />
+                      </div>
                       <div className="p-3 pt-1">
                         <div className="heading-font text-sm leading-tight">{leader?.name}</div>
                         <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
@@ -119,11 +123,13 @@ function PlayScreen({
                     {LEADER_HP} HP
                   </span>
                 </div>
-                {leader?.image && (
-                  <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
-                    <img src={leader.image} className="w-full h-full object-cover" />
-                  </div>
-                )}
+                <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
+                  <SafeImage
+                    src={leader?.image}
+                    className="w-full h-full object-cover"
+                    fallbackText={leader?.name}
+                  />
+                </div>
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{leader?.name}</div>
                   <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
@@ -285,29 +291,50 @@ function AppInner() {
 
 export default function App() {
   const [poolReady, setPoolReady] = useState(false);
+  const [progress, setProgress] = useState({ loaded: 0, total: 0 });
 
   // Load the universal card catalog from the Supabase backend once at
-  // startup and build the v4.2 card pool from it (mechanics are assigned
-  // deterministically client-side). Falls back to the bundled catalog.
+  // startup, build the v4.2 card pool from it (mechanics are assigned
+  // deterministically client-side), then preload every card image so
+  // nothing pops in mid-browse once the app is up. Falls back to the
+  // bundled catalog if the fetch fails.
   useEffect(() => {
     let cancelled = false;
-    fetchCardTemplates().then((templates) => {
-      if (cancelled) return;
-      if (templates) applyCardPool(templates);
-      setPoolReady(true);
-    });
+    fetchCardTemplates()
+      .then((templates) => {
+        if (cancelled) return;
+        if (templates) applyCardPool(templates);
+        const images = POOL_V4.map((c) => c.image);
+        return preloadImages(images, (loaded, total) => {
+          if (!cancelled) setProgress({ loaded, total });
+        });
+      })
+      .then(() => {
+        if (!cancelled) setPoolReady(true);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
   if (!poolReady) {
+    const pct = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
           FRYCARDS
         </div>
-        <div className="text-[var(--c-paper)] font-mono text-xs">FETCHING CARD DATABASE…</div>
+        <div className="text-[var(--c-paper)] font-mono text-xs">
+          {progress.total > 0
+            ? `LOADING CARD ART… ${progress.loaded}/${progress.total}`
+            : 'FETCHING CARD DATABASE…'}
+        </div>
+        <div className="w-64 h-2 ink-border-sm bg-[var(--c-paper)]/10 overflow-hidden">
+          <div
+            className="h-full bg-[var(--c-yellow)] transition-all duration-150"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       </div>
     );
   }

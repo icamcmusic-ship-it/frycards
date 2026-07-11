@@ -9,12 +9,14 @@ import {
   ShopItem,
   PackPull,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, RARITY_CHIP } from './ui';
+import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_LEADERS, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
-import { StaticCard } from './CollectionScreen';
+import { CardFace } from '../components/CardFaceV4';
+import { RARITY_CHIP, rarityGlow } from './rarity';
 import { getCardBackImage } from './cardback';
+import { SafeImage } from './SafeImage';
 
 type Tab = 'packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
@@ -141,13 +143,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   onClick={() => handleClaimStarter(l.id, l.name)}
                   className="btn-pop bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs text-left overflow-hidden hover:-translate-y-0.5 transition-transform"
                 >
-                  {l.image && (
-                    <img
-                      src={l.image}
-                      className="w-full aspect-[16/9] object-cover"
-                      loading="lazy"
-                    />
-                  )}
+                  <div className="w-full aspect-[16/9]">
+                    <SafeImage src={l.image} alt={l.name} className="w-full h-full object-cover" />
+                  </div>
                   <div className="p-2">
                     <div className="heading-font text-[11px] leading-tight truncate">{l.name}</div>
                     <div className="text-[9px] font-bold text-[var(--c-steel)] uppercase">
@@ -186,28 +184,27 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     {pack.pack_tier.replace('_', ' ')}
                   </span>
                 </div>
-                {pack.image_url && (
-                  <div className="aspect-[16/9] overflow-hidden ink-border-sm m-2 relative">
-                    <img
-                      src={pack.image_url}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
-                      <Package className="w-3 h-3" /> {pack.card_count} CARDS
+                <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative">
+                  <SafeImage
+                    src={pack.image_url}
+                    alt={pack.name}
+                    className="w-full h-full object-cover"
+                    fallbackText={pack.name}
+                  />
+                  <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
+                    <Package className="w-3 h-3" /> {pack.card_count} CARDS
+                  </span>
+                  {pack.guaranteed_rarity && (
+                    <span
+                      className={cn(
+                        'absolute bottom-1 right-1 heading-font text-[9px] px-1.5 ink-border-sm',
+                        RARITY_CHIP[pack.guaranteed_rarity],
+                      )}
+                    >
+                      {pack.guaranteed_rarity}+ GUARANTEED
                     </span>
-                    {pack.guaranteed_rarity && (
-                      <span
-                        className={cn(
-                          'absolute bottom-1 right-1 heading-font text-[9px] px-1.5 ink-border-sm',
-                          RARITY_CHIP[pack.guaranteed_rarity],
-                        )}
-                      >
-                        {pack.guaranteed_rarity}+ GUARANTEED
-                      </span>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
                 <p className="text-[11px] font-bold text-[var(--c-steel)] px-3 flex-1">
                   {pack.description}
                 </p>
@@ -255,13 +252,12 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                           : 'aspect-[3/4]',
                     )}
                   >
-                    {item.image_url && (
-                      <img
-                        src={item.image_url}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    )}
+                    <SafeImage
+                      src={item.image_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      fallbackText={item.name}
+                    />
                   </div>
                   <div className="px-3 flex-1">
                     <div className="flex items-center justify-between gap-1">
@@ -380,22 +376,6 @@ function CardBack({ className }: { className?: string }) {
 
 const BIG_RARITIES = new Set(['Mythic', 'Ultra-Rare', 'Super-Rare']);
 
-/** Rarity-tinted glow behind the spotlight card — bigger pulls get a bigger halo. */
-function rarityGlow(rarity: string): string {
-  switch (rarity) {
-    case 'Mythic':
-      return 'shadow-[0_0_70px_22px_rgba(255,213,79,0.55)]';
-    case 'Ultra-Rare':
-      return 'shadow-[0_0_55px_16px_rgba(229,57,53,0.45)]';
-    case 'Super-Rare':
-      return 'shadow-[0_0_45px_13px_rgba(255,213,79,0.35)]';
-    case 'Rare':
-      return 'shadow-[0_0_30px_8px_rgba(229,57,53,0.25)]';
-    default:
-      return '';
-  }
-}
-
 /** Cinematic one-at-a-time pack reveal: spotlight flip, rarity flourishes, thumbnail
  * strip for context, and a final haul summary. "REVEAL ALL" skips straight there. */
 function PackRevealModal({
@@ -451,24 +431,22 @@ function PackRevealModal({
               <div
                 key={i}
                 className={cn(
-                  'w-[110px] h-[154px] animate-[flipIn_.3s_ease-out]',
+                  'relative animate-[flipIn_.3s_ease-out]',
                   BIG_RARITIES.has(pull.rarity) && 'scale-105',
                   rarityGlow(pull.rarity),
                 )}
                 style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
               >
-                <div className="relative w-[240px] h-[336px] origin-top-left scale-[0.4583]">
-                  <StaticCard card={def} />
-                  {pull.foil && (
-                    <div
-                      className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
-                      style={{
-                        background:
-                          'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
-                      }}
-                    />
-                  )}
-                </div>
+                <CardFace def={def} size="sm" />
+                {pull.foil && (
+                  <div
+                    className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
+                    style={{
+                      background:
+                        'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
+                    }}
+                  />
+                )}
               </div>
             );
           })}
@@ -511,7 +489,7 @@ function PackRevealModal({
       <div
         onClick={handleFlip}
         className={cn(
-          'relative w-[220px] h-[308px] transition-transform duration-300',
+          'relative w-[240px] h-[336px] transition-transform duration-300',
           !currentShown && 'cursor-pointer hover:-translate-y-2',
         )}
         style={{ perspective: '800px' }}
@@ -521,11 +499,11 @@ function PackRevealModal({
         ) : (
           <div
             className={cn(
-              'relative w-[240px] h-[336px] -ml-[10px] -mt-[14px] animate-[flipIn_.4s_ease-out] rounded-sm',
+              'relative animate-[flipIn_.4s_ease-out] rounded-sm',
               rarityGlow(current.rarity),
             )}
           >
-            <StaticCard card={currentCard!} />
+            <CardFace def={currentCard!} size="lg" />
             {current.foil && (
               <div
                 className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
@@ -567,9 +545,7 @@ function PackRevealModal({
                 i === index ? 'ring-2 ring-[var(--c-yellow)]' : 'opacity-60 hover:opacity-90',
               )}
             >
-              {shown && p.image_url && (
-                <img src={p.image_url} className="w-full h-full object-cover" />
-              )}
+              {shown && <SafeImage src={p.image_url} className="w-full h-full object-cover" />}
             </div>
           );
         })}

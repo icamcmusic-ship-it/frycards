@@ -1,5 +1,15 @@
 export type ThemeName =
-  'classic' | 'dusty' | 'watermelon' | 'amber' | 'purple' | 'neutral' | 'warm' | 'lilac';
+  | 'classic'
+  | 'dusty'
+  | 'watermelon'
+  | 'amber'
+  | 'purple'
+  | 'neutral'
+  | 'warm'
+  | 'lilac'
+  | 'desert'
+  | 'aurora'
+  | 'garnet';
 
 /**
  * The five color roles the whole UI is built from (see src/index.css):
@@ -110,6 +120,39 @@ export const THEMES: Record<ThemeName, Theme> = {
       yellow: '#d7d3eb',
       red: '#6e6d7b',
       steel: '#868784',
+    },
+  },
+  desert: {
+    name: 'desert',
+    label: 'DESERT DUSK',
+    colors: {
+      ink: '#000000',
+      paper: '#f1eee3',
+      yellow: '#e9ded0',
+      red: '#764134',
+      steel: '#2a1a1f',
+    },
+  },
+  aurora: {
+    name: 'aurora',
+    label: 'AURORA TIDE',
+    colors: {
+      ink: '#593959',
+      paper: '#b7f3c8',
+      yellow: '#92e5d5',
+      red: '#2e5eaa',
+      steel: '#5b4e77',
+    },
+  },
+  garnet: {
+    name: 'garnet',
+    label: 'GARNET FORGE',
+    colors: {
+      ink: '#001514',
+      paper: '#fbfffe',
+      yellow: '#f0cf82',
+      red: '#a3320b',
+      steel: '#6b0504',
     },
   },
 };

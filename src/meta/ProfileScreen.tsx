@@ -4,6 +4,7 @@ import { useMeta } from './MetaContext';
 import { equipCosmetic, setUsername, ShopItem } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
+import { SafeImage } from './SafeImage';
 
 export function ProfileScreen({ onBack }: { onBack: () => void }) {
   const { profile, shopItems, cosmetics, refreshProfile } = useMeta();
@@ -53,9 +54,7 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
       <div className="max-w-4xl mx-auto p-5">
         <div className="ink-border-md shadow-hard-black overflow-hidden bg-[var(--c-steel)] relative">
           <div className="h-40 relative">
-            {banner?.image_url && (
-              <img src={banner.image_url} className="w-full h-full object-cover" />
-            )}
+            <SafeImage src={banner?.image_url} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[var(--c-ink)]/80 to-transparent" />
           </div>
           <div className="absolute bottom-3 left-4 flex items-end gap-3">
@@ -171,13 +170,11 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
                               : 'aspect-[3/4]',
                         )}
                       >
-                        {item.image_url && (
-                          <img
-                            src={item.image_url}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        )}
+                        <SafeImage
+                          src={item.image_url}
+                          className="w-full h-full object-cover"
+                          fallbackText={item.name}
+                        />
                       </div>
                       <div className="px-2 py-1 flex justify-between items-center gap-1">
                         <span className="text-[9px] font-black truncate">{item.name}</span>

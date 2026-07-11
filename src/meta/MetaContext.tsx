@@ -15,6 +15,7 @@ import {
   fetchCosmetics,
   fetchDecks,
 } from '../lib/supabase';
+import { preloadImages } from '../lib/preload';
 
 export interface MetaState {
   session: Session | null;
@@ -46,7 +47,8 @@ export function useMeta(): MetaState {
 export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [guest, setGuest] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [assetsLoading, setAssetsLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [packTypes, setPackTypes] = useState<PackType[]>([]);
@@ -58,16 +60,29 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setLoading(false);
+      setSessionLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Static store data (public, no auth needed).
+  // Static store data (public, no auth needed) — preload every pack/cosmetic
+  // image up front so the Store never shows art popping in mid-browse.
   useEffect(() => {
-    fetchShopItems().then(setShopItems);
-    fetchPackTypes().then(setPackTypes);
+    let cancelled = false;
+    Promise.all([fetchShopItems(), fetchPackTypes()])
+      .then(([items, packs]) => {
+        if (cancelled) return;
+        setShopItems(items);
+        setPackTypes(packs);
+        return preloadImages([...items.map((i) => i.image_url), ...packs.map((p) => p.image_url)]);
+      })
+      .then(() => {
+        if (!cancelled) setAssetsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const userId = session?.user?.id;
@@ -114,7 +129,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       value={{
         session,
         guest,
-        loading,
+        loading: sessionLoading || assetsLoading,
         profile,
         shopItems,
         packTypes,

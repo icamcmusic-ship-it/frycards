@@ -43,15 +43,6 @@ export function PopButton({
   );
 }
 
-export const RARITY_CHIP: Record<string, string> = {
-  Common: 'bg-[var(--c-ink)] text-[var(--c-paper)]',
-  Uncommon: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
-  Rare: 'bg-[var(--c-red)] text-[var(--c-paper)]',
-  'Super-Rare': 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-  'Ultra-Rare': 'bg-gradient-to-r from-[var(--c-steel)] to-[var(--c-red)] text-[var(--c-paper)]',
-  Mythic: 'bg-gradient-to-r from-[var(--c-red)] to-[var(--c-yellow)] text-[var(--c-ink)]',
-};
-
 export function GoldChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm heading-font text-xs">

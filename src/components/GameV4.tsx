@@ -46,6 +46,7 @@ import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
 import { CardFace, cardRules, describeEffect, kwList } from './CardFaceV4';
+import { SafeImage } from '../meta/SafeImage';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -111,11 +112,9 @@ function BoardUnit({
         (exhausted || sick) && 'saturate-50',
       )}
     >
-      {u.def.image && (
-        <div className="h-[44px] overflow-hidden ink-border-sm m-0.5">
-          <img src={u.def.image} className="w-full h-full object-cover" draggable={false} />
-        </div>
-      )}
+      <div className="h-[44px] overflow-hidden ink-border-sm m-0.5">
+        <SafeImage src={u.def.image} className="w-full h-full object-cover" />
+      </div>
       <div className="px-0.5 pb-0.5">
         <div className="heading-font text-[8px] leading-tight truncate">{u.def.name}</div>
         <div className="flex items-center justify-between">
@@ -215,11 +214,9 @@ function LeaderPanel({
       )}
     >
       <div className="flex gap-1.5">
-        {l.def.image && (
-          <div className="w-[46px] h-[46px] overflow-hidden ink-border-sm shrink-0">
-            <img src={l.def.image} className="w-full h-full object-cover" draggable={false} />
-          </div>
-        )}
+        <div className="w-[46px] h-[46px] overflow-hidden ink-border-sm shrink-0">
+          <SafeImage src={l.def.image} className="w-full h-full object-cover" />
+        </div>
         <div className="min-w-0">
           <div className="heading-font text-[10px] leading-tight truncate">{l.def.name}</div>
           <div
@@ -788,9 +785,14 @@ export function GameV4({
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col overflow-hidden select-none">
+    <div
+      className="w-full h-screen flex flex-col overflow-hidden select-none"
+      style={{
+        background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
+      }}
+    >
       {/* Top bar */}
-      <div className="flex items-center gap-2 px-2 py-1 bg-[var(--c-steel)] ink-border-sm z-30">
+      <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
         <button
           onClick={() =>
             (stage === 'over' ||
@@ -875,7 +877,8 @@ export function GameV4({
       )}
 
       {/* Enemy row */}
-      <div className="flex gap-2 px-2 pt-1.5 items-start">
+      <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
+      <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25">
         <LeaderPanel
           g={g}
           p={foe}
@@ -909,9 +912,11 @@ export function GameV4({
           </div>
           <div className="flex gap-1 flex-wrap min-h-[92px]">
             {foe.board.length === 0 && (
-              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold self-center">
-                — empty board —
-              </span>
+              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
+                  Empty Board
+                </span>
+              </div>
             )}
             {foe.board.map((u) => {
               const targetable =
@@ -939,7 +944,7 @@ export function GameV4({
       </div>
 
       {/* Midline: dice tray + log */}
-      <div className="flex items-center gap-3 px-2 py-1.5 border-y-2 border-[var(--c-paper)]/10 my-1">
+      <div className="flex items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
         <div className="flex gap-1.5 items-center">
           {me.dice.map((d, i) => {
             const usable = !d.placed && (stage === 'placement' || stage === 'preRoll');
@@ -962,14 +967,14 @@ export function GameV4({
                   }
                 }}
                 className={cn(
-                  'w-11 h-11 ink-border-md text-3xl leading-none flex items-center justify-center',
+                  'w-12 h-12 ink-border-md rounded-md text-3xl leading-none flex items-center justify-center transition-transform',
                   d.placed
                     ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
                     : marked
                       ? stage === 'preRoll'
-                        ? 'bg-[var(--c-red)] text-white -translate-y-1'
-                        : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1'
-                      : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+                        ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
+                        : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
+                      : 'bg-[var(--c-paper)] text-[var(--c-ink)] shadow-hard-black-xs',
                   usable && 'btn-pop',
                 )}
                 title={d.placed ? 'Placed' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'}
@@ -999,7 +1004,10 @@ export function GameV4({
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0 max-h-[54px] overflow-y-auto bg-[var(--c-ink)] px-2 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+        <div className="flex-1 min-w-0 max-h-[58px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+          <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
+            Battle Log
+          </div>
           {g.log.slice(-40).map((l, i) => (
             <div key={i}>· {l}</div>
           ))}
@@ -1019,7 +1027,8 @@ export function GameV4({
       </div>
 
       {/* My row */}
-      <div className="flex gap-2 px-2 items-start flex-1 min-h-0">
+      <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
+      <div className="flex gap-2 px-2 pt-1.5 items-start flex-1 min-h-0 bg-[var(--c-ink)]/25">
         <div className="flex flex-col gap-1 shrink-0">
           <LeaderPanel
             g={g}
@@ -1142,9 +1151,11 @@ export function GameV4({
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
           <div className="flex gap-1 flex-wrap min-h-[92px]">
             {me.board.length === 0 && (
-              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold self-center">
-                — empty board —
-              </span>
+              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
+                  Empty Board
+                </span>
+              </div>
             )}
             {me.board.map((u) => {
               const canAtt = stage === 'combat' && canAttack(g, u);
@@ -1210,11 +1221,6 @@ export function GameV4({
                           : chk.ok
                             ? () => tryCast(c)
                             : () => setInspect(c.def)
-                      }
-                      footer={
-                        <div className="text-[6.5px] leading-tight text-[var(--c-steel)] font-bold min-h-[16px]">
-                          {cardRules(c.def).slice(0, 64)}
-                        </div>
                       }
                     />
                     {canScrap && (
@@ -1337,12 +1343,9 @@ export function GameV4({
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
             onClick={(e) => e.stopPropagation()}
           >
-            {inspect.image && (
-              <img
-                src={inspect.image}
-                className="w-full h-[160px] object-cover ink-border-sm mb-2"
-              />
-            )}
+            <div className="w-full h-[160px] ink-border-sm mb-2 overflow-hidden">
+              <SafeImage src={inspect.image} className="w-full h-full object-cover" />
+            </div>
             <div className="heading-font text-sm">{inspect.name}</div>
             <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
               {inspect.type}
