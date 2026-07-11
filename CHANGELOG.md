@@ -7,6 +7,41 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Added (universal card template, quicksell, foil glow, deck consumption)
+
+- **New universal card template** (`src/components/CardFaceV4.tsx`): rarity-tinted
+  header, a dice-medallion cost badge, and rounded pill-style rarity/keyword/combo
+  chips, inspired by a dice-medallion card mockup. It's the single `CardFace`
+  component already shared by every screen (match, Collection, Deck Builder,
+  Store/pack opening) — restyling it in one place updates the whole app. Added a
+  new shared `CardInspectorModal` for expanded/zoomed card viewing, reused by
+  both the Collection (tap a card) and Deck Builder ("details").
+- **Quicksell**: new `quicksell_cards` RPC + `card_sell_price(rarity)` DB
+  function let players sell spare card copies for a fixed gold price by
+  rarity — Common 10g, Uncommon 25g, Rare 60g, Super-Rare 150g, Ultra-Rare
+  400g, Mythic 1000g. Foil copies always sell for **2.5x** that price. Cards
+  currently committed to a deck can't be sold out from under it. Wired into
+  the Collection screen's new card inspector.
+- **Foil glow**: `CardFace` now has a built-in `foil` prop that renders a real
+  shimmering sheen + pulsing glow ring (`.foil-shimmer` / `.foil-glow` in
+  `src/index.css`), replacing the ad-hoc gradient overlay that used to be
+  hand-rolled only inside the Store's pack-reveal modal. Every pack pull still
+  rolls its existing per-pack `foil_chance` on every card slot (already
+  applied universally, not just "chase" slots), so foils can drop for any
+  card in any pack.
+- **Deck card consumption**: new server-authoritative `save_deck` RPC checks
+  that a card copy isn't already reserved by one of the player's *other*
+  decks before letting it be added to this one (max 3 copies/deck, can't
+  exceed total owned across all decks combined). Deleting a deck needs no
+  special "unconsume" step — availability is always computed live from
+  whichever decks still exist, so a deleted deck's cards are immediately free
+  again. The Deck Builder UI mirrors this live so it never lets you overcommit
+  in the first place.
+- **Pack price rebalance**: gold-priced packs (excluding the free-onboarding
+  Starter Pack) are priced roughly 10% higher to offset the new quicksell
+  gold faucet — e.g. Standard Pack 200g → 225g, Standard Box 5,000g → 5,500g.
+  Gem prices are unchanged.
+
 ### Changed (full old-game purge + universal card catalog)
 
 - **The legacy resource game ("Shifting Multiverse") is fully deleted** —

@@ -437,16 +437,7 @@ function PackRevealModal({
                 )}
                 style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
               >
-                <CardFace def={def} size="sm" />
-                {pull.foil && (
-                  <div
-                    className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
-                    style={{
-                      background:
-                        'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
-                    }}
-                  />
-                )}
+                <CardFace def={def} size="sm" foil={pull.foil} />
               </div>
             );
           })}
@@ -503,16 +494,7 @@ function PackRevealModal({
               rarityGlow(current.rarity),
             )}
           >
-            <CardFace def={currentCard!} size="lg" />
-            {current.foil && (
-              <div
-                className="absolute inset-0 pointer-events-none opacity-40 mix-blend-color-dodge rounded-sm"
-                style={{
-                  background:
-                    'linear-gradient(115deg, transparent 30%, rgba(255,213,79,.9) 45%, rgba(229,57,53,.5) 55%, transparent 70%)',
-                }}
-              />
-            )}
+            <CardFace def={currentCard!} size="lg" foil={current.foil} />
             {BIG_RARITIES.has(current.rarity) && (
               <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-70 -z-10" />
             )}

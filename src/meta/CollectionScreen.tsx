@@ -1,26 +1,40 @@
 import React, { useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton } from './ui';
+import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
-import { CardFace } from '../components/CardFaceV4';
+import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { POOL_V4 } from '../game/v3/cardpool';
+import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
+import { quicksellCards } from '../lib/supabase';
+import { quicksellPrice } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { collection } = useMeta();
+  const { collection, refreshCollection, refreshProfile, decks } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
+  const [inspect, setInspect] = useState<CardDef | null>(null);
+  const [sellError, setSellError] = useState('');
+  const [selling, setSelling] = useState(false);
 
   const owned = useMemo(() => {
     const m = new Map<string, { q: number; f: number }>();
     for (const pc of collection) m.set(pc.card_id, { q: pc.quantity, f: pc.foil_quantity });
     return m;
   }, [collection]);
+
+  // Copies locked into any of the player's decks can't be quicksold until
+  // they're removed from every deck — mirrors the quicksell_cards RPC check.
+  const lockedByDecks = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    return m;
+  }, [decks]);
 
   const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
@@ -36,6 +50,25 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
+
+  const inspectOwned = inspect ? owned.get(inspect.id) : undefined;
+  const inspectLocked = inspect ? lockedByDecks.get(inspect.id) || 0 : 0;
+  const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
+  const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
+
+  const handleSell = async (foil: boolean, quantity: number) => {
+    if (!inspect || selling || quantity < 1) return;
+    setSelling(true);
+    setSellError('');
+    const { error } = await quicksellCards(inspect.id, quantity, foil);
+    setSelling(false);
+    if (error) {
+      setSellError(error);
+      return;
+    }
+    refreshCollection();
+    refreshProfile();
+  };
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -68,6 +101,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
           </div>
         </div>
+        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          Tap an owned card to inspect it and quicksell spare copies for gold.
+        </p>
 
         <div className="flex flex-wrap gap-3">
           {filtered.map((c) => {
@@ -78,9 +114,18 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                 key={c.id}
                 def={c}
                 size="lg"
-                count={total}
+                count={o?.q || 0}
                 foilCount={o?.f || 0}
+                foil={(o?.f || 0) > 0 && (o?.q || 0) === 0}
                 dimmed={total === 0}
+                onClick={
+                  total > 0
+                    ? () => {
+                        setInspect(c);
+                        setSellError('');
+                      }
+                    : undefined
+                }
               />
             );
           })}
@@ -91,6 +136,66 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
+
+      {inspect && (
+        <CardInspectorModal
+          def={inspect}
+          onClose={() => setInspect(null)}
+          actions={
+            inspect.type === 'Leader' ? undefined : (
+              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+                <div className="heading-font text-xs text-center">QUICKSELL</div>
+                {inspectLocked > 0 && (
+                  <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                    {inspectLocked} cop{inspectLocked === 1 ? 'y' : 'ies'} locked in your decks
+                  </div>
+                )}
+                {sellError && <Notice text={sellError} />}
+                <div className="flex items-center justify-between text-[10px] font-bold">
+                  <span>Normal ×{inspectOwned?.q || 0}</span>
+                  <span>{quicksellPrice(inspect.rarity, false)}g each</span>
+                </div>
+                <PopButton
+                  color="yellow"
+                  className="w-full"
+                  disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                  onClick={() => handleSell(false, 1)}
+                >
+                  SELL 1 NORMAL
+                </PopButton>
+                {(inspectOwned?.q || 0) > 1 && (
+                  <PopButton
+                    color="black"
+                    className="w-full"
+                    disabled={selling || inspectSellable <= 0}
+                    onClick={() =>
+                      handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))
+                    }
+                  >
+                    SELL ALL NORMAL
+                  </PopButton>
+                )}
+                {(inspectOwned?.f || 0) > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-[10px] font-bold mt-1">
+                      <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
+                      <span>{quicksellPrice(inspect.rarity, true)}g each</span>
+                    </div>
+                    <PopButton
+                      color="red"
+                      className="w-full"
+                      disabled={selling || inspectSellable <= 0}
+                      onClick={() => handleSell(true, 1)}
+                    >
+                      SELL 1 FOIL
+                    </PopButton>
+                  </>
+                )}
+              </div>
+            )
+          }
+        />
+      )}
     </div>
   );
 }

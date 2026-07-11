@@ -5,7 +5,7 @@ import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
 import { MetaHeader, PopButton } from './ui';
-import { CardFace, cardRules } from '../components/CardFaceV4';
+import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
@@ -19,12 +19,17 @@ export interface DeckIssue {
   text: string;
 }
 
-/** Rulebook v4.2 §2 deck validity + (optional) collection-ownership limits. */
+/** Rulebook v4.2 §2 deck validity + (optional) collection-ownership limits.
+ * `lockedByOtherDecks` — copies already reserved by the player's *other*
+ * decks — is subtracted from ownership so the same physical copy can never
+ * be counted as available to two decks at once (enforced for real by the
+ * `save_deck` RPC; this just gives the editor the same picture live). */
 export function validateDeckList(
   leader: CardDef | undefined,
   cardIds: string[],
   db: Map<string, CardDef>,
   collection?: PlayerCard[],
+  lockedByOtherDecks?: Map<string, number>,
 ): DeckIssue[] {
   const issues: DeckIssue[] = [];
   if (!leader) {
@@ -54,11 +59,11 @@ export function validateDeckList(
   if (collection) {
     const owned = new Map(collection.map((pc) => [pc.card_id, pc.quantity + pc.foil_quantity]));
     for (const [id, n] of byId) {
-      const have = owned.get(id) || 0;
+      const have = (owned.get(id) || 0) - (lockedByOtherDecks?.get(id) || 0);
       if (n > have) {
         const c = db.get(id);
         issues.push({
-          text: `You only own ${have} cop${have === 1 ? 'y' : 'ies'} of ${c?.name || id}.`,
+          text: `Only ${Math.max(have, 0)} cop${have === 1 ? 'y' : 'ies'} of ${c?.name || id} available (some may be used in your other decks).`,
         });
       }
     }
@@ -207,12 +212,29 @@ function shuffleArr<T>(arr: T[]): T[] {
 }
 
 function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void }) {
-  const { session, collection } = useMeta();
+  const { session, collection, decks } = useMeta();
   const db = useMemo(() => new Map(POOL_V4.map((c) => [c.id, c])), []);
   const ownedQty = useMemo(
     () => new Map(collection.map((pc) => [pc.card_id, pc.quantity + pc.foil_quantity])),
     [collection],
   );
+  // Copies committed to any of the player's OTHER decks — consumed, and
+  // unavailable here until that deck is edited/deleted. Deleting a deck
+  // frees its cards automatically since this is recomputed live.
+  const lockedByOtherDecks = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of decks) {
+      if (deck && d.id === deck.id) continue;
+      for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    }
+    return m;
+  }, [decks, deck]);
+  // What's actually available to put in THIS deck right now.
+  const availableQty = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [id, n] of ownedQty) m.set(id, Math.max(0, n - (lockedByOtherDecks.get(id) || 0)));
+    return m;
+  }, [ownedQty, lockedByOtherDecks]);
 
   const initialName = deck?.name || 'New Deck';
   const initialCardIds = useMemo(() => deck?.card_ids || [], [deck]);
@@ -237,7 +259,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const ownedLeaders = POOL_LEADERS.filter((c) => (ownedQty.get(c.id) || 0) > 0);
   const leader = leaderId ? db.get(leaderId) : undefined;
 
-  const issues = validateDeckList(leader, cardIds, db, collection);
+  const issues = validateDeckList(leader, cardIds, db, collection, lockedByOtherDecks);
   const isValid = issues.length === 0;
 
   const countOf = (id: string) => cardIds.filter((x) => x === id).length;
@@ -246,7 +268,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     if (!leader) return;
     if (cardIds.length >= DECK_SIZE) return;
     if (countOf(card.id) >= MAX_COPIES) return;
-    if (countOf(card.id) >= (ownedQty.get(card.id) || 0)) return;
+    if (countOf(card.id) >= (availableQty.get(card.id) || 0)) return;
     setCardIds([...cardIds, card.id]);
   };
   const removeCard = (id: string) => {
@@ -259,7 +281,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const handleQuickbuild = () => {
     const eligible = poolByType('Unit')
       .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
-      .filter((c) => (ownedQty.get(c.id) || 0) > 0);
+      .filter((c) => (availableQty.get(c.id) || 0) > 0);
     const shuffled = shuffleArr(eligible);
 
     const picked: string[] = [];
@@ -268,7 +290,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       if (picked.length >= DECK_SIZE) return false;
       const cur = countMap.get(c.id) || 0;
       if (cur >= MAX_COPIES) return false;
-      if (cur >= (ownedQty.get(c.id) || 0)) return false;
+      if (cur >= (availableQty.get(c.id) || 0)) return false;
       picked.push(c.id);
       countMap.set(c.id, cur + 1);
       return true;
@@ -287,11 +309,12 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     setCardIds(picked);
   };
 
-  // Pool: owned, non-Leader cards from the v4.2 pool. Any mix is legal.
+  // Pool: available (owned minus locked-in-other-decks), non-Leader cards
+  // from the v4.2 pool. Any mix is legal.
   const pool = poolByType('Unit')
     .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
-      if ((ownedQty.get(c.id) || 0) === 0) return false;
+      if ((availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
       if (castFilter !== 'All' && castBucket(c) !== castFilter) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -344,11 +367,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     setSaveError('');
     const { error } = await saveDeck({
       id: deck?.id,
-      user_id: session.user.id,
       name: name.trim() || 'New Deck',
       leader_id: leaderId,
       card_ids: cardIds,
-      is_valid: isValid,
     });
     setSaving(false);
     if (error) setSaveError(error);
@@ -521,7 +542,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           <div className="flex-1 overflow-y-auto p-3 pt-0 flex flex-wrap gap-2.5 content-start">
             {pool.map((c) => {
               const inDeck = countOf(c.id);
-              const maxAddable = Math.min(MAX_COPIES - inDeck, (ownedQty.get(c.id) || 0) - inDeck);
+              const maxAddable = Math.min(
+                MAX_COPIES - inDeck,
+                (availableQty.get(c.id) || 0) - inDeck,
+              );
               return (
                 <React.Fragment key={c.id}>
                   <CardFace
@@ -636,38 +660,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         </div>
       </div>
 
-      {/* Card inspector */}
-      {inspect && (
-        <div
-          className="absolute inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center"
-          onClick={() => setInspect(null)}
-        >
-          <div
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full h-[160px] ink-border-sm mb-2 overflow-hidden">
-              <SafeImage src={inspect.image} className="w-full h-full object-cover" />
-            </div>
-            <div className="heading-font text-sm">{inspect.name}</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
-              {inspect.type}
-              {inspect.rarity ? ` · ${inspect.rarity}` : ''}
-              {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
-            </div>
-            <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
-            {inspect.flavor && (
-              <div className="text-[9px] italic text-[var(--c-steel)] mt-1">{inspect.flavor}</div>
-            )}
-            <button
-              onClick={() => setInspect(null)}
-              className="btn-pop mt-2 text-[10px] heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1 ink-border-sm"
-            >
-              CLOSE
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Card inspector — the same universal card face used everywhere else. */}
+      {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
     </div>
   );
 }
