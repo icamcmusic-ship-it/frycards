@@ -7,6 +7,17 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Changed (real card art)
+
+- **All card art now served from Supabase Storage** (`Card Images` bucket,
+  made public) instead of the old ImageKit CDN — matched to each card by
+  filename. 187 of 193 cards had a matching upload; the 6 that never had art
+  (`Abyssal Soul-Eater`, `Chrono-Phalanx`, `Lurking Coral-Prowler`,
+  `Modularity Core`, `Quantum Overclocker`, `Starfall Wildcaster` — none were
+  Leaders, none were owned by any player or used in any deck) were removed
+  from the catalog. The bundled offline fallback catalog
+  (`src/game/generated-cards.ts`) was regenerated to match exactly.
+
 ### Added (Economy 2.0 — rarity tiers, pity, shards, packs, disclosure)
 
 Implements the economy design document end to end (marketplace/trading and

@@ -14,6 +14,7 @@ const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Unreleased',
     items: [
+      'All card art now comes from our own image storage instead of the old external host, matched to each card. A handful of cards that never had real art (6 of 193) were retired from the game.',
       'Economy 2.0: new 7-tier rarity ladder with the new FULL-ART tier, a fully rebuilt pack lineup (Standard, Deluxe, Set Spotlight, Event, Mythic Vault, Collector Booster Box), and transparent in-store pull rates — tap "VIEW PULL RATES & PITY" on any pack.',
       'Pity timers & duplicate protection: a Full-Art or better is guaranteed within 10 packs and a Mythic within 60 (the Mythic Vault has its own hard 20-box pity); premium slots prefer cards you still need, and spare copies past the collection cap auto-convert to Shards.',
       'Shards crafting: disenchant spare cards into Shards and craft ANY card directly — including foils — so nothing is permanently locked behind pack luck. Craft/melt from the card inspector in your Collection.',
