@@ -6,14 +6,14 @@ import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
-import { quicksellCards } from '../lib/supabase';
-import { quicksellPrice } from './economy';
+import { quicksellCards, craftCard, disenchantCard } from '../lib/supabase';
+import { quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { collection, refreshCollection, refreshProfile, decks } = useMeta();
+  const { collection, refreshCollection, refreshProfile, decks, profile } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
@@ -61,6 +61,34 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     setSelling(true);
     setSellError('');
     const { error } = await quicksellCards(inspect.id, quantity, foil);
+    setSelling(false);
+    if (error) {
+      setSellError(error);
+      return;
+    }
+    refreshCollection();
+    refreshProfile();
+  };
+
+  const handleCraft = async (foil: boolean) => {
+    if (!inspect || selling) return;
+    setSelling(true);
+    setSellError('');
+    const { error } = await craftCard(inspect.id, foil);
+    setSelling(false);
+    if (error) {
+      setSellError(error);
+      return;
+    }
+    refreshCollection();
+    refreshProfile();
+  };
+
+  const handleDisenchant = async (foil: boolean) => {
+    if (!inspect || selling) return;
+    setSelling(true);
+    setSellError('');
+    const { error } = await disenchantCard(inspect.id, 1, foil);
     setSelling(false);
     if (error) {
       setSellError(error);
@@ -118,14 +146,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                 foilCount={o?.f || 0}
                 foil={(o?.f || 0) > 0 && (o?.q || 0) === 0}
                 dimmed={total === 0}
-                onClick={
-                  total > 0
-                    ? () => {
-                        setInspect(c);
-                        setSellError('');
-                      }
-                    : undefined
-                }
+                onClick={() => {
+                  setInspect(c);
+                  setSellError('');
+                }}
               />
             );
           })}
@@ -143,54 +167,88 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setInspect(null)}
           actions={
             inspect.type === 'Leader' ? undefined : (
-              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
-                <div className="heading-font text-xs text-center">QUICKSELL</div>
+              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[260px] flex flex-col gap-2 max-h-[40vh] overflow-y-auto">
                 {inspectLocked > 0 && (
                   <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
                     {inspectLocked} cop{inspectLocked === 1 ? 'y' : 'ies'} locked in your decks
                   </div>
                 )}
                 {sellError && <Notice text={sellError} />}
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>Normal ×{inspectOwned?.q || 0}</span>
-                  <span>{quicksellPrice(inspect.rarity, false)}g each</span>
-                </div>
-                <PopButton
-                  color="yellow"
-                  className="w-full"
-                  disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
-                  onClick={() => handleSell(false, 1)}
-                >
-                  SELL 1 NORMAL
-                </PopButton>
-                {(inspectOwned?.q || 0) > 1 && (
-                  <PopButton
-                    color="black"
-                    className="w-full"
-                    disabled={selling || inspectSellable <= 0}
-                    onClick={() =>
-                      handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))
-                    }
-                  >
-                    SELL ALL NORMAL
-                  </PopButton>
-                )}
-                {(inspectOwned?.f || 0) > 0 && (
+
+                {inspectTotal > 0 && (
                   <>
-                    <div className="flex items-center justify-between text-[10px] font-bold mt-1">
-                      <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                      <span>{quicksellPrice(inspect.rarity, true)}g each</span>
+                    <div className="heading-font text-xs text-center">QUICKSELL (GOLD)</div>
+                    <div className="flex gap-2">
+                      <PopButton
+                        color="yellow"
+                        className="flex-1"
+                        disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                        onClick={() => handleSell(false, 1)}
+                      >
+                        1 × {quicksellPrice(inspect.rarity, false)}G
+                      </PopButton>
+                      {(inspectOwned?.f || 0) > 0 && (
+                        <PopButton
+                          color="red"
+                          className="flex-1"
+                          disabled={selling || inspectSellable <= 0}
+                          onClick={() => handleSell(true, 1)}
+                        >
+                          ✦ 1 × {quicksellPrice(inspect.rarity, true)}G
+                        </PopButton>
+                      )}
                     </div>
-                    <PopButton
-                      color="red"
-                      className="w-full"
-                      disabled={selling || inspectSellable <= 0}
-                      onClick={() => handleSell(true, 1)}
-                    >
-                      SELL 1 FOIL
-                    </PopButton>
                   </>
                 )}
+
+                <div className="heading-font text-xs text-center mt-1">SHARDS</div>
+                <div className="flex gap-2">
+                  <PopButton
+                    color="steel"
+                    className="flex-1"
+                    disabled={selling || (profile?.shards ?? 0) < shardCraftCost(inspect.rarity, false)}
+                    onClick={() => handleCraft(false)}
+                    title="Craft a normal copy"
+                  >
+                    CRAFT {shardCraftCost(inspect.rarity, false)}✨
+                  </PopButton>
+                  <PopButton
+                    color="steel"
+                    className="flex-1"
+                    disabled={selling || (profile?.shards ?? 0) < shardCraftCost(inspect.rarity, true)}
+                    onClick={() => handleCraft(true)}
+                    title="Craft a foil copy"
+                  >
+                    ✦ {shardCraftCost(inspect.rarity, true)}✨
+                  </PopButton>
+                </div>
+                {inspectTotal > 0 && (
+                  <div className="flex gap-2">
+                    <PopButton
+                      color="black"
+                      className="flex-1"
+                      disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                      onClick={() => handleDisenchant(false)}
+                      title="Disenchant a normal copy into shards"
+                    >
+                      MELT → {shardDisenchantValue(inspect.rarity, false)}✨
+                    </PopButton>
+                    {(inspectOwned?.f || 0) > 0 && (
+                      <PopButton
+                        color="black"
+                        className="flex-1"
+                        disabled={selling || inspectSellable <= 0}
+                        onClick={() => handleDisenchant(true)}
+                        title="Disenchant a foil copy into shards"
+                      >
+                        ✦ MELT → {shardDisenchantValue(inspect.rarity, true)}✨
+                      </PopButton>
+                    )}
+                  </div>
+                )}
+                <div className="text-[8.5px] font-bold text-[var(--c-steel)] text-center">
+                  Every card is craftable — nothing is locked behind pack RNG.
+                </div>
               </div>
             )
           }

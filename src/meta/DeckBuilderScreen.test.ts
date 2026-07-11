@@ -1,15 +1,16 @@
 import { test, expect } from 'vitest';
-import { validateDeckList, DECK_SIZE, MAX_COPIES } from './DeckBuilderScreen';
+import { validateDeckList, DECK_SIZE, rarityCopyCap } from './DeckBuilderScreen';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 
 const db = new Map(POOL_V4.map((c) => [c.id, c]));
 const leader = POOL_BY_ID['avatar_of_the_abyss'];
 const units = POOL_V4.filter((c) => c.type !== 'Leader');
 
-function fillDeck(n: number, maxPerCard = MAX_COPIES): string[] {
+function fillDeck(n: number): string[] {
   const ids: string[] = [];
   for (const c of units) {
-    for (let i = 0; i < maxPerCard && ids.length < n; i++) ids.push(c.id);
+    // Respect the rarity copy cap (3 / 2 / 1) so the fixture deck is legal.
+    for (let i = 0; i < rarityCopyCap(c.rarity) && ids.length < n; i++) ids.push(c.id);
     if (ids.length >= n) break;
   }
   return ids.slice(0, n);
@@ -25,18 +26,26 @@ test('flags a deck that is not exactly 30 cards', () => {
   expect(issues.some((i) => i.text.includes('exactly 30'))).toBe(true);
 });
 
-test('accepts an exactly-30-card, max-3-copies-per-card deck', () => {
+test('accepts an exactly-30-card deck within rarity copy caps', () => {
   const ids = fillDeck(DECK_SIZE);
   const issues = validateDeckList(leader, ids, db);
   expect(issues).toEqual([]);
 });
 
-test('rejects more than 3 copies of one card (v4.2 cap, up from legacy 2)', () => {
-  const card = units[0];
+test('rejects more copies of one card than its rarity cap allows', () => {
+  const card = units.find((c) => rarityCopyCap(c.rarity) === 3)!;
   const ids = [
     ...Array(4).fill(card.id),
     ...fillDeck(DECK_SIZE - 4).filter((id) => id !== card.id),
   ];
+  const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
+  expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);
+});
+
+test('caps Full-Art and Mythic cards at a single copy', () => {
+  const bomb = units.find((c) => c.rarity === 'Mythic' || c.rarity === 'Full-Art');
+  if (!bomb) return;
+  const ids = [bomb.id, bomb.id, ...fillDeck(DECK_SIZE - 2).filter((id) => id !== bomb.id)];
   const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
   expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);
 });

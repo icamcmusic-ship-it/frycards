@@ -706,23 +706,30 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
   const p = g.players[ownerId];
   const opp = opponentOf(g, ownerId);
   const byAtk = (a: Inst, b: Inst) => effAtk(g, b) - effAtk(g, a);
+  // A fresh Ward eats the whole hostile effect — such a unit is never
+  // actually "killable" by targeted removal this instant.
+  const warded = (u: Inst) => hasKw(u.def, 'Ward') && !u.wardUsed;
   switch (eff.target) {
     case 'enemyUnit': {
       // Prefer a kill (matches the anyTarget heuristic below) over always
       // chipping the biggest body — otherwise removal wastes value chipping
       // a tough unit while a nearly-dead one survives untouched.
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      const killable = opp.board
+        .filter((u) => !warded(u) && remainingHp(g, u) <= v)
+        .sort(byAtk)[0];
       if (killable) return killable.iid;
-      const t = [...opp.board].sort(byAtk)[0];
+      const t = [...opp.board].sort((a, b) => Number(warded(a)) - Number(warded(b)) || byAtk(a, b))[0];
       return t?.iid;
     }
     case 'anyTarget': {
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      const killable = opp.board
+        .filter((u) => !warded(u) && remainingHp(g, u) <= v)
+        .sort(byAtk)[0];
       if (killable) return killable.iid;
-      const big = [...opp.board].sort(byAtk)[0];
-      // Prefer face damage if no good unit target.
+      const big = opp.board.filter((u) => !warded(u)).sort(byAtk)[0];
+      // Prefer face damage if no good (un-warded) unit target.
       if (big && effAtk(g, big) >= 3) return big.iid;
       return opp.leader.iid;
     }

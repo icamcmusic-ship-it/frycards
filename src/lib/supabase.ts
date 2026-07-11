@@ -30,6 +30,7 @@ export interface Profile {
   username: string;
   gold: number;
   gems: number;
+  shards: number;
   wins: number;
   losses: number;
   games_played: number;
@@ -37,6 +38,11 @@ export interface Profile {
   equipped_banner: string | null;
   equipped_avatar: string | null;
   starter_claimed: boolean;
+  /** Pity counters (disclosed in the Store): Full-Art guaranteed within 10 packs, Mythic within 60. */
+  packs_since_fullart: number;
+  packs_since_mythic: number;
+  foil_pity: number;
+  last_free_pack_at: string | null;
 }
 
 export interface ShopItem {
@@ -56,7 +62,18 @@ export interface ShopItem {
 }
 
 export interface PackSlot {
-  type: string;
+  /** Legacy slot shape. */
+  type?: string;
+  /** Economy-v2 slot grammar. */
+  slot_type?: string;
+  count?: number;
+  guaranteed_min_rarity?: string;
+  rarity_weights?: Record<string, number>;
+  foil_eligible?: boolean;
+  foil_chance_override?: number | null;
+  pity_key?: string;
+  pity_cap?: number;
+  dupe_protected?: boolean;
 }
 
 export interface PackType {
@@ -72,6 +89,11 @@ export interface PackType {
   price_gems: number | null;
   pack_tier: string;
   slot_config: PackSlot[];
+  is_active: boolean;
+  /** 'purchase' | 'daily_free' | 'pass_tier_reward' */
+  acquisition: string;
+  time_limited: boolean;
+  pity_note: string | null;
 }
 
 export interface PlayerCard {
@@ -103,12 +125,17 @@ export interface PackPull {
   image_url: string | null;
   foil: boolean;
   slot: string;
+  /** True when the copy exceeded the collection cap and became shards instead. */
+  converted_to_shards?: boolean;
+  shards?: number;
 }
 
 export interface OpenPackResult {
   cards: PackPull[];
   gold: number;
   gems: number;
+  shards?: number;
+  shards_gained?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +177,7 @@ export async function fetchShopItems(): Promise<ShopItem[]> {
 }
 
 export async function fetchPackTypes(): Promise<PackType[]> {
-  const { data } = await supabase.from('pack_types').select('*');
+  const { data } = await supabase.from('pack_types').select('*').eq('is_active', true);
   const packs = (data as PackType[]) || [];
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
@@ -282,6 +309,39 @@ export interface QuicksellResult {
   foil: boolean;
   unit_price: number;
   total: number;
+}
+
+/** Claim the free Daily Pack (20h cooldown, server-enforced). */
+export async function claimDailyPack(): Promise<{
+  data: OpenPackResult | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('claim_daily_pack');
+  return { data: (data as OpenPackResult) || null, error: rpcError(error) };
+}
+
+/** Craft any card directly with shards (targeted acquisition — no card is RNG-gated). */
+export async function craftCard(
+  cardId: string,
+  foil: boolean,
+): Promise<{ shards: number | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('craft_card', { p_card_id: cardId, p_foil: foil });
+  return { shards: (data as { shards: number })?.shards ?? null, error: rpcError(error) };
+}
+
+/** Disenchant spare copies into shards (1/4 of craft cost; deck-locked copies protected). */
+export async function disenchantCard(
+  cardId: string,
+  quantity: number,
+  foil: boolean,
+): Promise<{ shards: number | null; gained: number | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('disenchant_card', {
+    p_card_id: cardId,
+    p_quantity: quantity,
+    p_foil: foil,
+  });
+  const d = data as { shards: number; gained: number } | null;
+  return { shards: d?.shards ?? null, gained: d?.gained ?? null, error: rpcError(error) };
 }
 
 /** Sell owned copies of a card for a fixed rarity-based gold price (foils pay 2.5x). */

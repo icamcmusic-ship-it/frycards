@@ -29,12 +29,11 @@ import {
   effAbilityThreshold,
   rollValues,
   matchesPattern,
-  tollReduction,
   opponentOf,
   autoTarget,
   defaultDiscardChoice,
-} from './engine';
-import { hasKw } from './cards';
+} from '../src/game/v3/engine';
+import { hasKw } from '../src/game/v3/cards';
 
 /**
  * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
@@ -165,37 +164,16 @@ function chooseReroll(g: Game, p: Player): number[] {
     });
     return out;
   }
-
-  // Threshold coverage: greedily assign each castable hand card (best first)
-  // the SMALLEST unassigned die that meets its effective threshold. Dice that
-  // are actually spendable on a held card are worth keeping even when low —
-  // a 3 that casts a threshold-3 Unit is not a "small singleton".
-  const wantedCards = [...p.hand]
-    .filter((c) => !c.def.comboGate && c.def.type !== 'Location')
-    .sort((a, b) => castPriority(g, p, b) - castPriority(g, p, a));
-  const assigned = new Set<number>();
-  for (const c of wantedCards) {
-    const thr = effThreshold(g, p.id, c.def);
-    const pickIdx = p.dice
-      .map((d, i) => i)
-      .filter((i) => !assigned.has(i) && p.dice[i].value >= thr)
-      .sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
-    if (pickIdx !== undefined) assigned.add(pickIdx);
-  }
-
-  // Default / matching: keep the mode cluster, dice assigned to castable
-  // cards, staged-Twin matches, and 5-6s (Leader ability / Ultimate fodder);
-  // reroll the leftover low singletons.
+  // Default / matching: keep the mode cluster and any die >= 4 (thresholds),
+  // plus dice matching a staged Twin need; reroll small singletons.
   const modeValue = Number(
     Object.entries(counts).sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]))[0][0],
   );
   const modeCount = counts[modeValue];
   p.dice.forEach((d, i) => {
     if (stagedNeeds.has(d.value)) return;
-    if (assigned.has(i)) return;
-    if (d.value >= 5) return;
-    const partOfPair = wantMatch && d.value === modeValue && modeCount >= 2;
-    if (!partOfPair) out.push(i);
+    const partOfPair = d.value === modeValue && modeCount >= 2;
+    if (!partOfPair && d.value <= 3) out.push(i);
   });
   return out;
 }
@@ -431,121 +409,53 @@ function playPlacement(g: Game, p: Player) {
   }
 }
 
-/** Damage an attack from `att` actually deals to unit `tgt` (Ward absorbs, Bulwark reduces). */
-function attackDamage(g: Game, att: Inst, tgt: Inst): number {
-  if (hasKw(tgt.def, 'Ward') && !tgt.wardUsed) return 0;
-  let d = effAtk(g, att);
-  if (tgt.def.bulwark) d = Math.max(0, d - tgt.def.bulwark.x);
-  return d;
-}
-
-/** Retaliation `att` takes when swinging into `tgt` (Bulwark on the attacker reduces it). */
-function retaliationTaken(g: Game, att: Inst, tgt: Inst): number {
-  if (tgt.boundThisTurn) return 0;
-  let r = effAtk(g, tgt);
-  if (att.def.bulwark) r = Math.max(0, r - att.def.bulwark.x);
-  if (hasKw(att.def, 'Frenzy') && att.attacksMade === 1) r *= 2; // this would be the 2nd swing
-  return r;
-}
-
-/** Face damage a single swing from `att` deals through Toll. */
-function faceDamage(g: Game, p: Player, att: Inst): number {
-  const opp = opponentOf(g, p.id);
-  return Math.max(0, effAtk(g, att) - tollReduction(g, opp.leader.owner));
-}
-
 function playCombat(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
   let guard = 60; // safety valve
   while (!g.winner && guard-- > 0) {
     const attackers = p.board.filter((u) => canAttack(g, u));
     if (attackers.length === 0) break;
+    // Lethal check: if total available ATK >= leader hp and no guards, go face.
     const targets = legalTargets(g, p.id);
     const guardsUp = targets.every((t) => t.def.type !== 'Leader');
-
-    // Retire 0-ATK attackers immediately.
-    const zero = attackers.find((u) => effAtk(g, u) === 0);
-    if (zero) {
-      zero.hasAttacked = true;
-      zero.attacksMade = 99;
+    const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
+    const atk = effAtk(g, att);
+    if (atk === 0) {
+      att.hasAttacked = true;
+      att.attacksMade = 99;
       continue;
     }
 
-    // Lethal check through Toll and remaining swings (Frenzy = 2).
-    if (!guardsUp) {
-      const totalFace = attackers.reduce((s, u) => {
-        const swings = (hasKw(u.def, 'Frenzy') ? 2 : 1) - u.attacksMade;
-        return s + faceDamage(g, p, u) * Math.max(0, swings);
-      }, 0);
-      if (totalFace >= remainingHp(g, opp.leader)) {
-        const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
-        if (!attack(g, att.iid, opp.leader.iid)) {
-          att.hasAttacked = true;
-          att.attacksMade = 99;
-        }
-        continue;
+    let target: Inst | undefined;
+    if (guardsUp) {
+      // Must hit a guard: pick the one we kill, else the biggest threat.
+      target =
+        targets.find((t) => remainingHp(g, t) <= atk) ??
+        [...targets].sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
+    } else {
+      const totalAtk = attackers.reduce((s, u) => s + effAtk(g, u), 0);
+      const lethal = totalAtk >= remainingHp(g, opp.leader);
+      if (lethal) {
+        target = opp.leader;
+      } else {
+        // Favorable trade: kill an enemy unit without dying, or kill something bigger.
+        const kills = opp.board.filter((t) => remainingHp(g, t) <= atk);
+        const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
+        const valueKill = kills.find((t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0));
+        // Threat check: clear big attackers even with a trade.
+        const bigThreat = kills.find((t) => effAtk(g, t) >= 5);
+        target = safeKill ?? bigThreat ?? valueKill ?? opp.leader;
       }
     }
-
-    // Score every attacker->target pair; pick the best single action.
-    // Positive score = worth doing now. Kills score by the victim's value;
-    // suiciding the attacker subtracts its own value; face damage scores by
-    // actual damage through Toll.
-    const unitValue = (u: Inst) => effAtk(g, u) + remainingHp(g, u) * 0.5 + (u.def.threshold ?? 3) * 0.3;
-    let best: { att: Inst; tgt: Inst; score: number } | null = null;
-    const consider = (att: Inst, tgt: Inst, score: number) => {
-      if (!best || score > best.score) best = { att, tgt, score };
-    };
-    for (const att of attackers) {
-      for (const tgt of targets) {
-        if (tgt.def.type === 'Leader') {
-          consider(att, tgt, faceDamage(g, p, att) * 0.9);
-          continue;
-        }
-        const dmg = attackDamage(g, att, tgt);
-        const ret = retaliationTaken(g, att, tgt);
-        const kills = dmg >= remainingHp(g, tgt);
-        const dies = ret >= remainingHp(g, att);
-        let score: number;
-        if (kills) {
-          score = unitValue(tgt) * 1.6 + (dies ? -unitValue(att) : 0);
-          // Don't trade down badly unless the target is a real threat.
-          if (dies && unitValue(tgt) < unitValue(att) && effAtk(g, tgt) < 5) score -= 3;
-        } else if (dmg === 0) {
-          // Ward poke: enables later attackers/removal. Cheapest attacker should do it.
-          score = hasKw(tgt.def, 'Ward') && !tgt.wardUsed ? 1.5 - effAtk(g, att) * 0.3 - (dies ? unitValue(att) : 0) : -99;
-        } else {
-          // Chip damage: only worth it if we don't die for nothing.
-          score = dmg * 0.5 - (dies ? unitValue(att) : ret * 0.25);
-        }
-        consider(att, tgt, score);
-      }
-    }
-    if (!best) break;
-    const chosen: { att: Inst; tgt: Inst; score: number } = best;
-    if (chosen.score <= 0 && guardsUp) break; // hold attackers rather than feed the wall
-    if (chosen.score <= 0 && !guardsUp) {
-      // Nothing profitable on the board — remaining attackers just go face.
-      const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
-      if (!attack(g, att.iid, opp.leader.iid)) {
-        att.hasAttacked = true;
-        att.attacksMade = 99;
-      }
-      continue;
-    }
-    if (!attack(g, chosen.att.iid, chosen.tgt.iid)) {
-      chosen.att.hasAttacked = true; // avoid infinite loop on illegal picks
-      chosen.att.attacksMade = 99;
+    if (!attack(g, att.iid, target.iid)) {
+      att.hasAttacked = true; // avoid infinite loop on illegal picks
+      att.attacksMade = 99;
     }
   }
 }
 
-/**
- * Play one full turn for the active player.
- * `onRoll` (optional, used by analysis harnesses) observes the raw dealt
- * roll immediately after the Roll Phase, before any reroll decision.
- */
-export function playTurn(g: Game, onRoll?: (values: number[]) => void) {
+/** Play one full turn for the active player. */
+export function playTurn(g: Game) {
   const p = g.players[g.active];
 
   // Pre-draw: abandon stale Twin cards (staged 2+ turns without completing).
@@ -555,7 +465,6 @@ export function playTurn(g: Game, onRoll?: (values: number[]) => void) {
 
   startTurn(g);
   if (g.winner) return;
-  onRoll?.(p.dice.map((d) => d.value));
 
   playSnaps(g, p); // v4.2: Snap Charms may be cast before the Reroll window closes.
   reroll(g, chooseReroll(g, p));

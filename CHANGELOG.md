@@ -7,6 +7,68 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Added (Economy 2.0 — rarity tiers, pity, shards, packs, disclosure)
+
+Implements the economy design document end to end (marketplace/trading and
+battle-pass progression deliberately deferred — the former is the doc's
+"third rail" legal-risk subsystem and both need multiplayer infrastructure).
+
+- **7-tier rarity ladder**: new **Full-Art** tier between Ultra-Rare and
+  Mythic (8 existing top cards promoted deterministically, teal color code,
+  mirrored in the bundled fallback catalog and the `cards` table).
+- **Slot grammar** (`pack_types.slot_config`): slots now carry
+  `slot_type, count, guaranteed_min_rarity, rarity_weights, foil_eligible,
+  foil_chance_override, pity_key, pity_cap, dupe_protected` — the server
+  rolls rarities from per-slot weight tables (`roll_weighted_rarity`) with
+  the legacy string slots still supported.
+- **New pack catalog** (8 types): Standard Booster, Deluxe Booster,
+  Set Spotlight, Event Pack, Mythic Vault (hard 20-box Mythic pity),
+  Collector Booster Box, Daily Free Pack (20h cooldown, `claim_daily_pack`
+  RPC) and Season Pass Reward Pack (present, not purchasable). Old catalog
+  rows deactivated via new `pack_types.is_active`.
+- **Pity + duplicate protection** (`grant_pack_contents`): Full-Art-or-better
+  guaranteed within 10 packs, Mythic within 60 (global counters on
+  `profiles`), escalating foil soft-pity that resets on hit, per-slot hard
+  pity caps (`player_pity` table), and dupe-protected slots that prefer
+  cards below the collection cap.
+- **Shards crafting** (4:1 craft:disenchant, doc §5): `craft_card` /
+  `disenchant_card` RPCs, craft costs 40/100/400/800/1600/3200/6400
+  (foil 2x); copies past the rarity copy cap + 1 auto-convert to shards on
+  pack opening; deck-locked copies can't be disenchanted. Craft/melt UI in
+  the Collection card inspector; shards balance in every meta header.
+- **Rarity copy caps** (doc §3): 3 copies (Common–Rare), 2 (Super-Rare /
+  Ultra-Rare), 1 (Full-Art/Mythic) — enforced in the deck builder client-side
+  and in the `save_deck` RPC.
+- **In-client odds disclosure**: every pack has a "VIEW PULL RATES & PITY"
+  modal rendering exact per-slot percentages, foil chances and pity caps
+  straight from `slot_config`; the Store header shows live personal pity
+  status.
+
+### Added (board UI, keyword explainers, sim study, smarter CPU)
+
+- **Match board fills the screen**: larger board units (124px, uncropped 4:3
+  art), bigger dice/log/leader panels, hand cards at md size, and the player
+  row stretches so the hand sits at the bottom of the viewport.
+- **Card art is never cropped**: the card face art window is a fixed 4:3
+  frame with `object-contain` (letterboxed if off-ratio), matching the
+  authored art.
+- **Universal expanded view**: `CardInspectorModal` now renders a pure
+  1.4x scale-up of the same lg card face (no re-typesetting), and GameV4's
+  legacy raw inspect modal was replaced with it.
+- **Clickable keyword explainers**: every keyword chip on every card face is
+  a tap target opening a glossary popup (`src/meta/keywords.ts`,
+  mirrored from HowToPlay).
+- **Simulation study** (`docs/SIM_REPORT.md`, `scripts/card-coverage.ts`,
+  `scripts/luck-analysis.ts`): all 193 cards verified functional (318/318
+  mechanic checks, 0 broken); luck-vs-skill quantified — strong AI beats
+  naive-legal 88/12 (skill-dominant), dice-total luck worth only ~±6pt, but
+  the second player wins ~58% of mirrors (turn-order is the biggest balance
+  lever); 6 new keyword proposals and 6 rule improvements included.
+- **Smarter CPU** (`src/game/v3/ai.ts`): threshold-aware rerolling, full
+  pair-search combat scoring with Ward/Bulwark/Frenzy/Toll math, Ward pokes,
+  stops feeding Guard walls, Toll-aware lethal. Beats the previous AI 56.7%
+  head-to-head.
+
 ### Added (universal card template, quicksell, foil glow, deck consumption)
 
 - **New universal card template** (`src/components/CardFaceV4.tsx`): rarity-tinted

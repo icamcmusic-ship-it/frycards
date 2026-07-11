@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Gift, Package } from 'lucide-react';
+import { Gift, Package, Percent, Timer } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   openPack,
   buyShopItem,
   claimStarterPack,
+  claimDailyPack,
   PackType,
+  PackSlot,
   ShopItem,
   PackPull,
 } from '../lib/supabase';
@@ -37,8 +39,35 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   const [pulls, setPulls] = useState<PackPull[] | null>(null);
   const [openedPackName, setOpenedPackName] = useState('');
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [oddsFor, setOddsFor] = useState<PackType | null>(null);
 
   const ownedCosmetics = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
+
+  // Snapshot the clock once per mount — good enough for an ~hours countdown.
+  const [now] = useState(() => Date.now());
+  const purchasablePacks = packTypes.filter((p) => p.acquisition === 'purchase');
+  const dailyPack = packTypes.find((p) => p.acquisition === 'daily_free');
+  const dailyReadyAt = profile?.last_free_pack_at
+    ? new Date(profile.last_free_pack_at).getTime() + 20 * 3600 * 1000
+    : 0;
+  const dailyReady = now >= dailyReadyAt;
+
+  const handleDailyPack = async () => {
+    if (!profile || busyId) return;
+    setError('');
+    setBusyId('daily');
+    const { data, error } = await claimDailyPack();
+    setBusyId(null);
+    if (error || !data) {
+      setError(error || 'Daily pack claim failed.');
+      return;
+    }
+    setOpenedPackName('Daily Free Pack');
+    setPulls(data.cards);
+    setRevealed(new Set());
+    refreshProfile();
+    refreshCollection();
+  };
 
   const handleOpenPack = async (pack: PackType, currency: 'gold' | 'gems') => {
     if (!profile || busyId) return;
@@ -169,9 +198,39 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
+        {tab === 'packs' && dailyPack && profile && (
+          <div className="mb-6 bg-[var(--c-steel)] ink-border-md shadow-hard-black-sm p-4 flex flex-wrap items-center gap-3">
+            <Timer className="w-5 h-5 text-[var(--c-yellow)]" />
+            <div className="flex-1 min-w-[200px]">
+              <div className="heading-font text-sm text-[var(--c-yellow)]">DAILY FREE PACK</div>
+              <div className="text-[10px] font-bold text-[var(--c-paper)]/80">
+                {dailyPack.card_count} free cards every 20 hours.
+                {!dailyReady &&
+                  ` Next pack in ~${Math.max(1, Math.ceil((dailyReadyAt - now) / 3600000))}h.`}
+              </div>
+            </div>
+            <PopButton
+              color={dailyReady ? 'red' : 'steel'}
+              disabled={!dailyReady || busyId === 'daily'}
+              onClick={handleDailyPack}
+            >
+              {busyId === 'daily' ? 'OPENING…' : dailyReady ? 'CLAIM FREE PACK ▸' : 'NOT READY'}
+            </PopButton>
+          </div>
+        )}
+
+        {tab === 'packs' && profile && (
+          <div className="mb-4 text-[10px] font-bold text-[var(--c-steel)]">
+            PITY STATUS · Full-Art or better guaranteed within 10 packs (
+            {10 - Math.min(9, profile.packs_since_fullart ?? 0)} to go) · Mythic within 60 (
+            {60 - Math.min(59, profile.packs_since_mythic ?? 0)} to go) · duplicate protection on
+            all premium slots · spares past the copy cap auto-convert to shards.
+          </div>
+        )}
+
         {tab === 'packs' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {packTypes.map((pack) => (
+            {purchasablePacks.map((pack) => (
               <div
                 key={pack.id}
                 className="bg-[var(--c-paper)] ink-border-md shadow-hard-black flex flex-col overflow-hidden"
@@ -208,6 +267,12 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                 <p className="text-[11px] font-bold text-[var(--c-steel)] px-3 flex-1">
                   {pack.description}
                 </p>
+                <button
+                  onClick={() => setOddsFor(pack)}
+                  className="mx-3 mt-1 self-start flex items-center gap-1 text-[9px] font-black text-[var(--c-steel)] underline decoration-dotted"
+                >
+                  <Percent className="w-3 h-3" /> VIEW PULL RATES &amp; PITY
+                </button>
                 <div className="flex gap-2 p-3">
                   {pack.price_gold != null && (
                     <PopButton
@@ -327,6 +392,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
+      {/* In-client odds disclosure (per-slot pull rates + pity caps) */}
+      {oddsFor && <PackOddsModal pack={oddsFor} onClose={() => setOddsFor(null)} />}
+
       {/* Pack opening reveal */}
       {pulls && (
         <PackRevealModal
@@ -338,6 +406,70 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setPulls(null)}
         />
       )}
+    </div>
+  );
+}
+
+/** Transparent, in-client odds disclosure: per-slot pull rates, foil chances
+ * and pity caps, rendered straight from the pack's slot_config (the same data
+ * the server rolls against — nothing hand-maintained). */
+function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
+  const slots = (pack.slot_config || []).filter((s: PackSlot) => s.slot_type || s.type);
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-black p-4 max-w-lg w-full max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="heading-font text-base mb-1">{pack.name} — PULL RATES</div>
+        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          Exact per-slot odds. Base foil chance {Math.round((pack.foil_chance || 0) * 100)}% per
+          card (rises each pack without a foil, resets on hit).
+        </p>
+        {slots.map((s: PackSlot, i: number) => (
+          <div key={i} className="mb-2 ink-border-sm p-2">
+            <div className="flex justify-between text-[10px] font-black uppercase">
+              <span>
+                {(s.slot_type || s.type || 'slot').replace(/_/g, ' ')} ×{s.count ?? 1}
+              </span>
+              <span className="text-[var(--c-steel)]">
+                {s.foil_chance_override != null
+                  ? s.foil_chance_override >= 1
+                    ? 'ALWAYS FOIL'
+                    : `foil ${Math.round(s.foil_chance_override * 100)}%`
+                  : ''}
+                {s.dupe_protected ? ' · dupe-protected' : ''}
+              </span>
+            </div>
+            {s.rarity_weights && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {Object.entries(s.rarity_weights).map(([r, w]) => (
+                  <span
+                    key={r}
+                    className={cn('text-[9px] font-black px-1 rounded-sm', RARITY_CHIP[r] || '')}
+                  >
+                    {r} {(w * 100).toFixed(1).replace(/\.0$/, '')}%
+                  </span>
+                ))}
+              </div>
+            )}
+            {s.pity_cap && (
+              <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">
+                Hard pity: guaranteed at most every {s.pity_cap} packs.
+              </div>
+            )}
+          </div>
+        ))}
+        {pack.pity_note && (
+          <div className="text-[10px] font-bold text-[var(--c-steel)] mt-2">{pack.pity_note}</div>
+        )}
+        <PopButton color="black" className="mt-3" onClick={onClose}>
+          CLOSE
+        </PopButton>
+      </div>
     </div>
   );
 }
@@ -438,6 +570,11 @@ function PackRevealModal({
                 style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
               >
                 <CardFace def={def} size="sm" foil={pull.foil} />
+                {pull.converted_to_shards && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#14B8A6] text-[#052E2B] text-[8px] font-black px-1 rounded-full ink-border-sm">
+                    → {pull.shards} ✨
+                  </span>
+                )}
               </div>
             );
           })}
@@ -511,6 +648,7 @@ function PackRevealModal({
         >
           {current.rarity.toUpperCase()}
           {current.foil ? ' · FOIL' : ''}
+          {current.converted_to_shards ? ` · SPARE → ${current.shards} SHARDS` : ''}
         </div>
       )}
 

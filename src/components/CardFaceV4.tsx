@@ -9,6 +9,7 @@ import { Dices } from 'lucide-react';
 import { CardDef, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
 import { rarityChip, rarityBorder, rarityGlow, RARITY_HEX } from '../meta/rarity';
+import { keywordExplainer } from '../meta/keywords';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -115,14 +116,58 @@ function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
     );
   }
   return (
+    // object-contain: card art is authored at 4:3 and must NEVER be cropped —
+    // the frame letterboxes anything off-ratio instead of clipping it.
     <img
       src={def.image}
-      className="w-full h-full object-cover"
+      className="w-full h-full object-contain"
       draggable={false}
       loading="lazy"
       onError={() => setBroken(true)}
       onLoad={onLoaded}
     />
+  );
+}
+
+/** Click-to-explain keyword chip; shows a small popup with the glossary text. */
+function KeywordChip({
+  kw,
+  className,
+  chipClassName,
+}: {
+  key?: React.Key;
+  kw: string;
+  className?: string;
+  chipClassName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const text = keywordExplainer(kw);
+  return (
+    <span className={cn('relative', className)}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (text) setOpen((o) => !o);
+        }}
+        className={cn(chipClassName, text && 'cursor-help underline decoration-dotted')}
+        title={text ? 'Tap for details' : undefined}
+      >
+        {kw}
+      </button>
+      {open && text && (
+        <span
+          className="absolute bottom-full left-0 mb-1 z-40 w-44 bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] font-bold normal-case leading-snug p-2 rounded-sm shadow-hard-black-xs banner-pop block"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(false);
+          }}
+        >
+          <span className="text-[var(--c-yellow)] heading-font block mb-0.5">{kw}</span>
+          {text}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -252,8 +297,9 @@ export function CardFace({
         ) : null}
       </div>
 
-      {/* Art — fills all remaining space, cropped to fit (never a fixed 4:3 box). */}
-      <div className="relative flex-1 min-h-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
+      {/* Art — a fixed 4:3 window matching the authored art ratio, so the
+          full illustration is always visible (object-contain, never cropped). */}
+      <div className="relative aspect-[4/3] w-auto shrink-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px] bg-[var(--c-steel)]">
         <CardArt def={def} />
         {def.rarity && (
           <span
@@ -339,15 +385,14 @@ export function CardFace({
           {kwList(def)
             .slice(0, isLg ? 8 : 3)
             .map((kw) => (
-              <span
+              <KeywordChip
                 key={kw}
-                className={cn(
+                kw={kw}
+                chipClassName={cn(
                   'font-bold px-1.5 bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full',
                   isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
                 )}
-              >
-                {kw}
-              </span>
+              />
             ))}
           {def.comboGate && (
             <span
@@ -419,7 +464,13 @@ export function CardInspectorModal({
         role="dialog"
         aria-modal="true"
       >
-        <CardFace def={def} size="lg" foil={foil} />
+        {/* Pure enlargement of the exact same global template — a scaled-up
+            lg card, so the expanded view can never drift out of sync. */}
+        <div className="w-[336px] h-[470px] flex items-center justify-center">
+          <div style={{ transform: 'scale(1.4)' }}>
+            <CardFace def={def} size="lg" foil={foil} />
+          </div>
+        </div>
         {actions}
         <button
           onClick={onClose}

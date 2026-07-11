@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/utils';
-import { Coins, Gem } from 'lucide-react';
+import { Coins, Gem, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 
 /** Comic-pop button used across all meta screens. */
@@ -51,6 +51,17 @@ export function GoldChip({ amount }: { amount: number }) {
   );
 }
 
+export function ShardChip({ amount }: { amount: number }) {
+  return (
+    <span
+      className="flex items-center gap-1 bg-[#14B8A6] text-[#052E2B] px-2 py-0.5 ink-border-sm heading-font text-xs"
+      title="Shards — craft any card directly, earned by disenchanting spares"
+    >
+      <Sparkles className="w-3.5 h-3.5" /> {amount.toLocaleString()}
+    </span>
+  );
+}
+
 export function GemChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm heading-font text-xs">
@@ -74,6 +85,7 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
         <div className="flex items-center gap-2">
           <GoldChip amount={profile.gold} />
           <GemChip amount={profile.gems} />
+          <ShardChip amount={profile.shards ?? 0} />
         </div>
       )}
     </div>

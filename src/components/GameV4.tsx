@@ -45,7 +45,7 @@ import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
-import { CardFace, cardRules, describeEffect, kwList } from './CardFaceV4';
+import { CardFace, CardInspectorModal, cardRules, describeEffect, kwList } from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ function BoardUnit({
       disabled={!onClick}
       aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
-        'relative w-[92px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
+        'relative w-[124px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
         onClick && 'btn-pop cursor-pointer',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
@@ -112,30 +112,30 @@ function BoardUnit({
         (exhausted || sick) && 'saturate-50',
       )}
     >
-      <div className="h-[44px] overflow-hidden ink-border-sm m-0.5">
-        <SafeImage src={u.def.image} className="w-full h-full object-cover" />
+      <div className="aspect-[4/3] overflow-hidden ink-border-sm m-0.5">
+        <SafeImage src={u.def.image} className="w-full h-full object-contain bg-[var(--c-steel)]" />
       </div>
-      <div className="px-0.5 pb-0.5">
-        <div className="heading-font text-[8px] leading-tight truncate">{u.def.name}</div>
+      <div className="px-1 pb-0.5">
+        <div className="heading-font text-[10px] leading-tight truncate">{u.def.name}</div>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono font-bold">
+          <span className="text-[12px] font-mono font-bold">
             {atk}
             <span className="text-[var(--c-red)]">⚔</span>
           </span>
           <span
-            className={cn('text-[10px] font-mono font-bold', hp < maxHp && 'text-[var(--c-red)]')}
+            className={cn('text-[12px] font-mono font-bold', hp < maxHp && 'text-[var(--c-red)]')}
           >
             {hp}/{maxHp}
             <span className="text-[#43A047]">♥</span>
           </span>
         </div>
-        <div className="flex flex-wrap gap-0.5 min-h-[9px]">
+        <div className="flex flex-wrap gap-0.5 min-h-[11px]">
           {kwList(u.def)
             .slice(0, 3)
             .map((kw) => (
               <span
                 key={kw}
-                className="text-[6px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
+                className="text-[7.5px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
               >
                 {kw}
               </span>
@@ -209,12 +209,12 @@ function LeaderPanel({
     <div
       onClick={onClickTarget}
       className={cn(
-        'w-[168px] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md p-1.5 shrink-0',
+        'w-[220px] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md p-1.5 shrink-0',
         highlight && 'ring-4 ring-[var(--c-red)] cursor-pointer',
       )}
     >
       <div className="flex gap-1.5">
-        <div className="w-[46px] h-[46px] overflow-hidden ink-border-sm shrink-0">
+        <div className="w-[64px] h-[64px] overflow-hidden ink-border-sm shrink-0">
           <SafeImage src={l.def.image} className="w-full h-full object-cover" />
         </div>
         <div className="min-w-0">
@@ -878,7 +878,7 @@ export function GameV4({
 
       {/* Enemy row */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25">
+      <div className="flex gap-3 px-3 pt-2 pb-2 items-start bg-[var(--c-ink)]/25 min-h-[220px]">
         <LeaderPanel
           g={g}
           p={foe}
@@ -910,9 +910,9 @@ export function GameV4({
             )}
             {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
           </div>
-          <div className="flex gap-1 flex-wrap min-h-[92px]">
+          <div className="flex gap-2 flex-wrap min-h-[150px] content-start">
             {foe.board.length === 0 && (
-              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[140px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -967,7 +967,7 @@ export function GameV4({
                   }
                 }}
                 className={cn(
-                  'w-12 h-12 ink-border-md rounded-md text-3xl leading-none flex items-center justify-center transition-transform',
+                  'w-16 h-16 ink-border-md rounded-md text-4xl leading-none flex items-center justify-center transition-transform',
                   d.placed
                     ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
                     : marked
@@ -1004,7 +1004,7 @@ export function GameV4({
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0 max-h-[58px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+        <div className="flex-1 min-w-0 max-h-[76px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[9px] font-mono text-[var(--c-paper)]/70 leading-tight">
           <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
             Battle Log
           </div>
@@ -1028,7 +1028,7 @@ export function GameV4({
 
       {/* My row */}
       <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-1.5 items-start flex-1 min-h-0 bg-[var(--c-ink)]/25">
+      <div className="flex gap-3 px-3 pt-2 items-stretch flex-1 min-h-0 bg-[var(--c-ink)]/25">
         <div className="flex flex-col gap-1 shrink-0">
           <LeaderPanel
             g={g}
@@ -1058,7 +1058,7 @@ export function GameV4({
             }
           />
           {me.location ? (
-            <div className="w-[168px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1">
+            <div className="w-[220px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1">
               <div
                 className="text-[8px] font-bold cursor-pointer"
                 onClick={() => setInspect(me.location!.def)}
@@ -1096,12 +1096,12 @@ export function GameV4({
               )}
             </div>
           ) : (
-            <div className="w-[168px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 text-center">
+            <div className="w-[220px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 text-center">
               no Location
             </div>
           )}
           {me.staging.length > 0 && (
-            <div className="w-[168px]">
+            <div className="w-[220px]">
               <div className="text-[8px] font-bold text-[var(--c-paper)]/60">STAGING (Twin)</div>
               {me.staging.map((s) => (
                 <div
@@ -1149,9 +1149,9 @@ export function GameV4({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <div className="flex gap-1 flex-wrap min-h-[92px]">
+          <div className="flex gap-2 flex-wrap min-h-[150px] content-start">
             {me.board.length === 0 && (
-              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[140px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1212,7 +1212,7 @@ export function GameV4({
                   <div key={c.iid} className="flex flex-col gap-0.5 shrink-0">
                     <CardFace
                       def={c.def}
-                      small
+                      size="md"
                       dimmed={!chk.ok && !echoPick && !canScrap}
                       highlight={!!echoPick}
                       onClick={
@@ -1334,44 +1334,7 @@ export function GameV4({
       )}
 
       {/* Card inspector */}
-      {inspect && (
-        <div
-          className="absolute inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center"
-          onClick={() => setInspect(null)}
-        >
-          <div
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full h-[160px] ink-border-sm mb-2 overflow-hidden">
-              <SafeImage src={inspect.image} className="w-full h-full object-cover" />
-            </div>
-            <div className="heading-font text-sm">{inspect.name}</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
-              {inspect.type}
-              {inspect.rarity ? ` · ${inspect.rarity}` : ''}
-              {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
-              {inspect.comboGate
-                ? ` · Combo: ${inspect.comboGate}`
-                : inspect.threshold !== undefined && inspect.type !== 'Location'
-                  ? ` · Cast ${inspect.threshold}+`
-                  : inspect.type === 'Location'
-                    ? ' · casts FREE (1/turn)'
-                    : ''}
-            </div>
-            <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
-            {inspect.flavor && (
-              <div className="text-[9px] italic text-[var(--c-steel)] mt-1">{inspect.flavor}</div>
-            )}
-            <button
-              onClick={() => setInspect(null)}
-              className="btn-pop mt-2 text-[10px] heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1 ink-border-sm"
-            >
-              CLOSE
-            </button>
-          </div>
-        </div>
-      )}
+      {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
 
       {/* Forced discard (hand size &gt; 6 at End Phase) — player picks which cards */}
       {forcedDiscard && (

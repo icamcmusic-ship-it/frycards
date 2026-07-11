@@ -78,7 +78,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "chrono_tide",
     "name": "Chrono-Tide",
     "type": "Event",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Blue Coral",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_magical_Rewinding--a_scene_where_debris_from_a_shipwreck_is_1b002426-719e-443e-9aae-e8bfdafef730_2_result.webp?updatedAt=1778240811008",
     "flavor": "Time flows backwards in the deep currents."
@@ -177,7 +177,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "crystalline_metropolis",
     "name": "Crystalline Metropolis",
     "type": "Location",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Blue Coral",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_city_of_crystalline_spires_built_inside_a_massive_air-fille_5a94c8d8-c7b0-4293-8b33-8bf6db250d5e_3_result.webp?updatedAt=1778240810555",
     "flavor": "A fragile empire within a bubble."
@@ -302,7 +302,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "submerged_archives",
     "name": "Submerged Archives",
     "type": "Location",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Blue Coral",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/An_ancient_library_of_stone_tablets_buried_under_a_mountain_o_1691e7a5-82d0-42a7-9657-132520f185c2_3_result.webp?updatedAt=1778240809532",
     "flavor": "Knowledge lost to the tides of time."
@@ -356,7 +356,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "spectral_leviathan",
     "name": "Spectral Leviathan",
     "type": "Unit",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Blue Coral",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_massive_skeletal_fish_frame_made_of_glowing_blue_energy._--_b47e18ab-cbe2-4844-844e-24f5ebcc1af6_3_result.webp?updatedAt=1778240809144",
     "flavor": "The ghost of a predator long gone."
@@ -536,7 +536,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "obsidian_trident",
     "name": "Obsidian Trident",
     "type": "Charm",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Blue Coral",
     "image": "https://ik.imagekit.io/zusyw2yie/midjourney_session/A_trident_forged_from_obsidian_its_points_dripping_with_cold__6870a022-aa83-4909-9b92-f7af6f2fa303_0_result.webp?updatedAt=1778240807496",
     "flavor": "A weapon of dark tides."
@@ -1397,7 +1397,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "volcanic_nanite_core",
     "name": "Volcanic Nanite Core",
     "type": "Charm",
-    "rarity": "Ultra-Rare",
+    "rarity": "Full-Art",
     "set": "Crimson Circuit",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Ultimate_volcanic_nanite_power_source._--ar_43_--raw_--sref_2_910511a1-5832-45e9-9236-abf8e0e80b40_2.png?updatedAt=1783333969058",
     "flavor": "Unlimited power, invoiced nightly."
@@ -1450,7 +1450,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "absolute_eruption",
     "name": "Absolute Eruption",
     "type": "Event",
-    "rarity": "Ultra-Rare",
+    "rarity": "Full-Art",
     "set": "Crimson Circuit",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Absolute_volcanic_energy_eruption._--ar_43_--raw_--sref_22084_d9f16813-c068-490b-9e4a-5abd193f8a4e_2.png?updatedAt=1783333968955"
   },
@@ -1500,7 +1500,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "id": "nanite_division_marshal",
     "name": "Nanite Division Marshal",
     "type": "Unit",
-    "rarity": "Super-Rare",
+    "rarity": "Full-Art",
     "set": "Crimson Circuit",
     "image": "https://ik.imagekit.io/zusyw2yie/SET2/Specialized_leader_commanding_armored_nanite_divisions._--cha_5ac2c09c-bb9b-41c2-9f2e-d69a6b2098bd_1.png?updatedAt=1783333969088",
     "flavor": "A billion machines, one salute."

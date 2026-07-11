@@ -14,6 +14,15 @@ const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Unreleased',
     items: [
+      'Economy 2.0: new 7-tier rarity ladder with the new FULL-ART tier, a fully rebuilt pack lineup (Standard, Deluxe, Set Spotlight, Event, Mythic Vault, Collector Booster Box), and transparent in-store pull rates — tap "VIEW PULL RATES & PITY" on any pack.',
+      'Pity timers & duplicate protection: a Full-Art or better is guaranteed within 10 packs and a Mythic within 60 (the Mythic Vault has its own hard 20-box pity); premium slots prefer cards you still need, and spare copies past the collection cap auto-convert to Shards.',
+      'Shards crafting: disenchant spare cards into Shards and craft ANY card directly — including foils — so nothing is permanently locked behind pack luck. Craft/melt from the card inspector in your Collection.',
+      'Daily Free Pack: claim a free 3-card pack in the Store every 20 hours.',
+      'Deck copy limits now scale with rarity: 3 copies (Common–Rare), 2 (Super-Rare/Ultra-Rare), 1 (Full-Art/Mythic).',
+      'Every keyword on every card is now tappable — tap a keyword chip for a plain-language explainer popup.',
+      'Card art is never cropped any more: every card face shows the full 4:3 illustration, and expanding a card shows a straight enlargement of the same universal template everywhere (match, Collection, Deck Builder).',
+      'Bigger, bolder match board: larger units, dice, hand cards and battle log so the game fills your screen.',
+      'Smarter CPU opponent: threshold-aware rerolling, much better combat targeting (it respects Ward, Bulwark, Frenzy and Toll math), and it no longer feeds attacks into Guard walls. It beats its old self 57/43.',
       'New universal card template with a dice-medallion cost badge, rounded rarity/keyword pill styling and a rarity-tinted header — used everywhere a card is shown: match, Collection, Deck Builder, pack opening and the new expanded card viewer.',
       'Quicksell: sell spare cards straight from the Collection for a fixed gold price by rarity (Common 10g, Uncommon 25g, Rare 60g, Super-Rare 150g, Ultra-Rare 400g, Mythic 1000g). Foil copies always sell for 2.5x. Pack gold prices raised roughly 10% to balance the new gold faucet.',
       'Foil cards now render with a real built-in glowing/shimmering foil effect (previously only a flat overlay in pack reveals); every pack pull still has its existing per-pack chance to come out foil.',
