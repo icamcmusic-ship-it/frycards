@@ -7,6 +7,31 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Changed (full old-game purge + universal card catalog)
+
+- **The legacy resource game ("Shifting Multiverse") is fully deleted** —
+  engine, CPU, keywords, deck builder, card instantiation and their scripts
+  (`src/game/engine.ts`, `ai.ts`, `cards.ts`, `keywords.ts`,
+  `deckbuilder.ts`, `scripts/simulate.ts`, `fuzz.ts`, `engine-tests.ts`) and
+  the legacy card face (`src/components/CardView.tsx`). The v4.2
+  dice-placement game (`src/game/v3/*`) is now the only game in the repo.
+- **Universal card catalog**: `src/types.ts` and the Supabase
+  `cards.template` JSON now carry only universal identity — id, name, type,
+  rarity, set, art, flavor. All obsolete mechanical data (colored costs,
+  elements, attack/health, legacy keywords, event effects, item attach
+  bonuses) is wiped from both the bundled data and the backend; old rules
+  sentences are scrubbed out of flavor text. Mechanics are assigned
+  deterministically by `src/game/v3/cardpool.ts` (now hash-seeded instead of
+  element-seeded, and rebuilt in place from the live catalog at startup).
+- **New rarity ladder**: Common, Uncommon, Rare, Super-Rare, **Ultra-Rare**
+  (replaces Legendary), Mythic — renamed across the client, the `cards` /
+  pack-odds backend functions and all existing rows; the obsolete `Item`
+  card type is folded into Charm in the backend as well.
+- **Collection & Store rebuilt on the v4.2 card face** — cast-slot
+  thresholds, ATK/HP, v4.2 keywords and rules text instead of costs/elements;
+  pack reveals show real v4.2 cards; `claim_starter_pack` rebuilt without
+  color identity (deterministic per-Leader 30-card starter).
+
 ### Added (custom deck building + bug sweep)
 
 - **Deck Builder rewired onto the v4.2 pool** (`src/meta/DeckBuilderScreen.tsx`):

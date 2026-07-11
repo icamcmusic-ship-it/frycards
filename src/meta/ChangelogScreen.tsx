@@ -14,11 +14,14 @@ const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Unreleased',
     items: [
+      'The old resource/elements game is fully retired — FryCards now runs the v4.2 dice-placement rules everywhere: match, Collection, Store and Deck Builder.',
+      'New rarity ladder: Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic (Ultra-Rare replaces Legendary on all cards and pack odds).',
+      'Collection and pack reveals now show real v4.2 card faces — cast-slot thresholds, ATK/HP and the current keywords instead of the old costs and elements.',
       'Renamed the game to FryCards across the whole app.',
       'New Settings page: pick from 7 color themes, saved locally on your device.',
       'New Changelog page (you are here!).',
       'CPU opponents now build a freshly randomized deck every match instead of picking from a fixed list.',
-      'Deck Builder: added a QUICKBUILD button to auto-fill a legal deck from your collection, plus a live stats panel (mana curve, card types, keywords).',
+      'Deck Builder: added a QUICKBUILD button to auto-fill a legal deck from your collection, plus a live stats panel (cast-slot curve, card types, keywords).',
       'Pack opening redesigned: cinematic one-at-a-time reveal with rarity glow effects and an end-of-pack summary screen.',
     ],
   },

@@ -185,7 +185,7 @@ function locScore(
   let s = 0;
   if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
   if (c.def.ability) s += 2;
-  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Legendary', 'Mythic'];
+  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'];
   s += tierOrder.indexOf(c.def.rarity || 'Common') * 0.3;
   return s;
 }

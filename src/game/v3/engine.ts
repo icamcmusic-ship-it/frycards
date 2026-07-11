@@ -160,7 +160,7 @@ export function makeInst(def: CardDef, owner: string): Inst {
 
 /** v4.2: bucket a card's rarity for Echo win-delta breakdown (errata B). */
 export function rarityTier(r?: string): 'low' | 'mid' | 'high' {
-  if (r === 'Legendary' || r === 'Mythic') return 'high';
+  if (r === 'Ultra-Rare' || r === 'Mythic') return 'high';
   if (r === 'Rare' || r === 'Super-Rare') return 'mid';
   return 'low';
 }

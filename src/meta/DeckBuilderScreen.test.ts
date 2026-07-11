@@ -47,7 +47,7 @@ test('rejects a Leader card sitting inside the 30-card list', () => {
   expect(issues.some((i) => i.text.includes('Leaders cannot be in the 30-card deck'))).toBe(true);
 });
 
-test('does NOT enforce any color-identity restriction (elements were removed in v4.1)', () => {
+test('does NOT enforce any color-identity restriction — decks may mix any cards', () => {
   // Deliberately mix cards that would have failed a legacy color check.
   const mixed = [...units].sort((a, b) => a.id.localeCompare(b.id));
   const ids = fillDeck(DECK_SIZE);

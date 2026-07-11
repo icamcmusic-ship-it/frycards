@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getAllCards, applyCardData } from './game/cards';
 import { fetchCardTemplates, recordMatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
 import { HowToPlay } from './components/HowToPlay';
-import { CardTemplate } from './types';
 import {
   ARCHETYPES,
   Archetype,
@@ -12,7 +10,7 @@ import {
   randomArchetype,
 } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
-import { POOL_BY_ID } from './game/v3/cardpool';
+import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
@@ -213,7 +211,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
 // ---------------------------------------------------------------------------
 // App shell
 // ---------------------------------------------------------------------------
-function AppInner({ allCards }: { allCards: CardTemplate[] }) {
+function AppInner() {
   const { session, guest, loading, profile, shopItems } = useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const [screen, setScreen] = useState<MetaScreen>('menu');
@@ -260,7 +258,7 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
     case 'store':
       return <StoreScreen onBack={() => setScreen('menu')} />;
     case 'collection':
-      return <CollectionScreen onBack={() => setScreen('menu')} allCards={allCards} />;
+      return <CollectionScreen onBack={() => setScreen('menu')} />;
     case 'decks':
       return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
     case 'profile':
@@ -286,25 +284,24 @@ function AppInner({ allCards }: { allCards: CardTemplate[] }) {
 }
 
 export default function App() {
-  const [cardPool, setCardPool] = useState<CardTemplate[] | null>(null);
+  const [poolReady, setPoolReady] = useState(false);
 
-  // Load the live card pool from the Supabase backend once at startup.
-  // (Used by the meta screens — collection, store, deck builder. Matches run
-  // on the v4.2 pool, remapped from the same backend card identities.)
+  // Load the universal card catalog from the Supabase backend once at
+  // startup and build the v4.2 card pool from it (mechanics are assigned
+  // deterministically client-side). Falls back to the bundled catalog.
   useEffect(() => {
     let cancelled = false;
     fetchCardTemplates().then((templates) => {
       if (cancelled) return;
-      if (templates) applyCardData(templates);
-      // Snapshot whatever pool is now active (live or bundled fallback).
-      setCardPool(getAllCards());
+      if (templates) applyCardPool(templates);
+      setPoolReady(true);
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (!cardPool) {
+  if (!poolReady) {
     return (
       <div className="w-full h-screen bg-[#1A1A1A] flex flex-col items-center justify-center gap-4">
         <div className="bg-[#FFD54F] text-[#1A1A1A] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
@@ -317,7 +314,7 @@ export default function App() {
 
   return (
     <MetaProvider>
-      <AppInner allCards={cardPool} />
+      <AppInner />
     </MetaProvider>
   );
 }
