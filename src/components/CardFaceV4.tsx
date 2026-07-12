@@ -101,7 +101,10 @@ function setStyle(set?: string): { label: string; className: string; bar: string
   }
 }
 
-/** Card art with a graceful fallback if the image 404s or never loads. */
+/** Card art with a graceful fallback if the image 404s or never loads. Uses
+ * object-contain (not cover) so the full 4:3 art is always visible — never
+ * cropped — inside its fixed-aspect box; art narrower than 4:3 letterboxes
+ * instead of losing its edges. */
 function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
   const [broken, setBroken] = useState(false);
   if (!def.image || broken) {
@@ -117,7 +120,7 @@ function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
   return (
     <img
       src={def.image}
-      className="w-full h-full object-cover"
+      className="w-full h-full object-contain bg-[var(--c-ink)]"
       draggable={false}
       loading="lazy"
       onError={() => setBroken(true)}
@@ -252,8 +255,10 @@ export function CardFace({
         ) : null}
       </div>
 
-      {/* Art — fills all remaining space, cropped to fit (never a fixed 4:3 box). */}
-      <div className="relative flex-1 min-h-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
+      {/* Art — fixed 4:3 box so the full uploaded image always shows, never
+          cropped; any leftover card height is absorbed by the flex-1 spacer
+          further down instead of stretching the art. */}
+      <div className="relative w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
         <CardArt def={def} />
         {def.rarity && (
           <span
