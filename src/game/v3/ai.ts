@@ -317,7 +317,7 @@ function playPlacement(g: Game, p: Player) {
       // cardpool.ts) — prefer a die that clears the Overflow amount when one's
       // cheaply available. Every other numeric cost format (exact/sum) goes
       // through the general bestSelectionFor picker below.
-      let sel: number[] | null = null;
+      let sel: number[] | null;
       if (c.def.overflow && (c.def.castCostKind ?? 'atLeast') === 'atLeast') {
         const dieIdx = bestDieFor(p, thr);
         if (dieIdx < 0) continue;
@@ -329,7 +329,9 @@ function playPlacement(g: Game, p: Player) {
         sel = bestSelectionFor(g, p, c.def);
       }
       if (!sel) continue;
-      if (castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)) {
+      if (
+        castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)
+      ) {
         progress = true;
         break; // re-evaluate priorities with new state
       }

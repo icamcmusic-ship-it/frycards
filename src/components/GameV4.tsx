@@ -255,7 +255,9 @@ function LeaderPanel({
         size="md"
         maxHp={maxHp}
         onClick={onClickTarget ?? onInspect}
-        badge={resolveOn ? `RESOLVE ${l.def.resolve!.x} ON` : toll > 0 ? `TOLL -${toll}` : undefined}
+        badge={
+          resolveOn ? `RESOLVE ${l.def.resolve!.x} ON` : toll > 0 ? `TOLL -${toll}` : undefined
+        }
         footer={
           isHuman && (ab || ult) ? (
             <div
@@ -304,7 +306,8 @@ function LeaderPanel({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type Stage = 'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
+type Stage =
+  'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
 
 const ROLL_ANIM_MS = 650;
 // v4.3: much slower, narrated CPU turns — a "thinking" beat before it acts,
@@ -594,7 +597,8 @@ export function GameV4({
     const thr = effThreshold(g, HUMAN, c.def);
     if (c.def.castCostKind === 'sum') {
       const available = unplaced.reduce((s, d) => s + d.value, 0);
-      if (available < thr) return { ok: false, why: `Needs dice totalling ${thr}+ (have ${available})` };
+      if (available < thr)
+        return { ok: false, why: `Needs dice totalling ${thr}+ (have ${available})` };
       if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
         return { ok: false, why: 'No legal target' };
       return { ok: true };
@@ -1293,7 +1297,13 @@ export function GameV4({
                   usable && 'btn-pop',
                 )}
                 title={
-                  d.placed ? 'Placed' : inSumMode ? 'Toggle into sum' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'
+                  d.placed
+                    ? 'Placed'
+                    : inSumMode
+                      ? 'Toggle into sum'
+                      : stage === 'preRoll'
+                        ? 'Toggle reroll'
+                        : 'Select die'
                 }
                 aria-label={
                   faceDown
