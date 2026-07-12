@@ -18,6 +18,7 @@ import {
   castFromHand,
   castLocationFree,
   activateAbility,
+  activateViaRally,
   activateUltimate,
   completeTwin,
   echoRecast,
@@ -72,6 +73,21 @@ function targetsFor(g: Game, pid: string, eff: Effect): Inst[] {
 }
 function needsTarget(eff?: Effect): boolean {
   return !!eff && ['enemyUnit', 'anyTarget', 'friendlyUnit', 'friendlyAny'].includes(eff.target);
+}
+
+/** Friendly permanents whose Ability Slot is already spent this turn and
+ * whose resting die is high enough to Rally into `unit`'s ability. */
+function rallySourcesFor(g: Game, pid: string, unit: Inst): Inst[] {
+  const p = g.players[pid];
+  const thr = effAbilityThreshold(g, unit);
+  return [...p.board, p.leader, p.location].filter(
+    (x): x is Inst =>
+      !!x &&
+      x.iid !== unit.iid &&
+      x.abilityUsed === true &&
+      x.abilityDie !== undefined &&
+      x.abilityDie >= thr,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +316,9 @@ interface Pending {
   kind: 'cast' | 'ability' | 'ultimate' | 'echo';
   cardIid: string;
   effect: Effect;
+  /** Set when this ability activation is a Rally (donated die from another
+   * already-exhausted permanent) rather than the card's own die. */
+  rallySourceIid?: string;
 }
 
 export function GameV4({
@@ -345,6 +364,10 @@ export function GameV4({
   const [selDie, setSelDie] = useState<number | null>(null);
   const [rerollSel, setRerollSel] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
+  // A Rally activation in progress: the card whose ability is being
+  // triggered for free, awaiting the player to pick a donor permanent
+  // (an already-exhausted ability user with a high-enough resting die).
+  const [rallyPick, setRallyPick] = useState<string | null>(null);
   const [attacker, setAttacker] = useState<string | null>(null);
   // Echo card awaiting fodder — targetIid is set first if the recast effect needs one.
   const [echoPick, setEchoPick] = useState<{ cardIid: string; targetIid?: string } | null>(null);
@@ -444,6 +467,7 @@ export function GameV4({
       if (e.key !== 'Escape') return;
       if (inspect) setInspect(null);
       else if (pending) setPending(null);
+      else if (rallyPick) setRallyPick(null);
       else if (showDiscard) {
         setShowDiscard(false);
         setEchoPick(null);
@@ -452,7 +476,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, echoPick, pending, attacker]);
+  }, [inspect, showDiscard, echoPick, pending, rallyPick, attacker]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -540,7 +564,9 @@ export function GameV4({
     let ok = false;
     if (pending.kind === 'cast') ok = castFromHand(g, selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ability')
-      ok = activateAbility(g, selDie!, pending.cardIid, targetIid);
+      ok = pending.rallySourceIid
+        ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
+        : activateAbility(g, selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ultimate') ok = activateUltimate(g, selDie!, targetIid);
     setPending(null);
     if (ok) {
@@ -593,6 +619,66 @@ export function GameV4({
       setSelDie(null);
       bump();
     } else say('Illegal.');
+    if (g.winner) setStage('over');
+  };
+
+  const tryRally = (u: Inst) => {
+    if (stage !== 'placement') {
+      say('Rally resolves during Placement.');
+      return;
+    }
+    if (me.rallyUsedThisTurn) {
+      say('Rally already used this turn.');
+      return;
+    }
+    if (!u.def.ability || u.abilityUsed) return;
+    if (u.hasAttacked || u.boundThisTurn) {
+      say(`Can't Rally — exhausted or bound.`);
+      return;
+    }
+    if (u.enteredThisTurn && !hasKw(u.def, 'Swift')) {
+      say('Just played — can’t act yet.');
+      return;
+    }
+    if (rallySourcesFor(g, HUMAN, u).length === 0) {
+      say('No exhausted permanent has a high-enough resting die.');
+      return;
+    }
+    if (
+      needsTarget(u.def.ability.effect) &&
+      targetsFor(g, HUMAN, u.def.ability.effect).length === 0
+    ) {
+      say('No legal target.');
+      return;
+    }
+    setRallyPick(u.iid);
+    setPending(null);
+    say('Pick a donor — an exhausted permanent with a high-enough resting die.');
+  };
+
+  const resolveRallySource = (sourceIid: string) => {
+    if (!rallyPick) return;
+    const u = [...me.board, me.leader, me.location].find(
+      (x): x is Inst => !!x && x.iid === rallyPick,
+    );
+    if (!u || !u.def.ability) {
+      setRallyPick(null);
+      return;
+    }
+    if (needsTarget(u.def.ability.effect)) {
+      setPending({
+        kind: 'ability',
+        cardIid: u.iid,
+        effect: u.def.ability.effect,
+        rallySourceIid: sourceIid,
+      });
+      setRallyPick(null);
+      return;
+    }
+    if (activateViaRally(g, u.iid, sourceIid)) {
+      bump();
+    } else say('Illegal Rally.');
+    setRallyPick(null);
     if (g.winner) setStage('over');
   };
 
@@ -779,6 +865,12 @@ export function GameV4({
   const pendingTargets = pending ? targetsFor(g, HUMAN, pending.effect) : [];
   const isPendingTarget = (iid: string) => pendingTargets.some((t) => t.iid === iid);
 
+  const rallyUnit = rallyPick
+    ? [...me.board, me.leader, me.location].find((x): x is Inst => !!x && x.iid === rallyPick)
+    : null;
+  const rallySources = rallyUnit ? rallySourcesFor(g, HUMAN, rallyUnit) : [];
+  const isRallySource = (iid: string) => rallySources.some((s) => s.iid === iid);
+
   const echoables = me.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
 
   // ---------------------------------------------------------------------------
@@ -857,6 +949,18 @@ export function GameV4({
           <button
             onClick={() => setPending(null)}
             aria-label="Cancel targeting"
+            className="bg-[var(--c-ink)] px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {rallyPick && (
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#8E44AD] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
+          PICK A DONOR — an exhausted permanent with a high-enough resting die
+          <button
+            onClick={() => setRallyPick(null)}
+            aria-label="Cancel Rally"
             className="bg-[var(--c-ink)] px-1"
           >
             ✕
@@ -1050,18 +1154,38 @@ export function GameV4({
             }
             onAbility={() => tryAbility(me.leader)}
             onUltimate={tryUltimate}
-            highlight={!!pending && isPendingTarget(me.leader.iid)}
+            highlight={
+              (!!pending && isPendingTarget(me.leader.iid)) ||
+              (!!rallyPick && isRallySource(me.leader.iid))
+            }
             onClickTarget={
               pending && isPendingTarget(me.leader.iid)
                 ? () => resolvePendingOn(me.leader.iid)
-                : undefined
+                : rallyPick && isRallySource(me.leader.iid)
+                  ? () => resolveRallySource(me.leader.iid)
+                  : undefined
             }
           />
           {me.location ? (
-            <div className="w-[168px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1">
+            <div
+              className={cn(
+                'w-[168px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1',
+                rallyPick &&
+                  isRallySource(me.location.iid) &&
+                  'ring-4 ring-[var(--c-red)] cursor-pointer',
+              )}
+              onClick={
+                rallyPick && isRallySource(me.location.iid)
+                  ? () => resolveRallySource(me.location!.iid)
+                  : undefined
+              }
+            >
               <div
                 className="text-[8px] font-bold cursor-pointer"
-                onClick={() => setInspect(me.location!.def)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setInspect(me.location!.def);
+                }}
               >
                 📍 {me.location.def.name}
               </div>
@@ -1160,40 +1284,54 @@ export function GameV4({
             {me.board.map((u) => {
               const canAtt = stage === 'combat' && canAttack(g, u);
               const targetable = !!pending && isPendingTarget(u.iid);
+              const isSource = !!rallyPick && isRallySource(u.iid);
+              const abilityReady =
+                stage === 'placement' &&
+                u.def.ability &&
+                !u.abilityUsed &&
+                !u.hasAttacked &&
+                !u.boundThisTurn &&
+                !(u.enteredThisTurn && !hasKw(u.def, 'Swift'));
+              const rallyReady = abilityReady && hasKw(u.def, 'Rally') && !me.rallyUsedThisTurn;
               return (
                 <div key={u.iid} className="flex flex-col items-center gap-0.5">
                   <BoardUnit
                     g={g}
                     u={u}
                     isAttacker={attacker === u.iid}
-                    highlight={targetable || (canAtt && attacker !== u.iid)}
+                    highlight={targetable || isSource || (canAtt && attacker !== u.iid)}
                     onClick={
                       targetable
                         ? () => resolvePendingOn(u.iid)
-                        : canAtt
-                          ? () => setAttacker(attacker === u.iid ? null : u.iid)
-                          : () => setInspect(u.def)
+                        : isSource
+                          ? () => resolveRallySource(u.iid)
+                          : canAtt
+                            ? () => setAttacker(attacker === u.iid ? null : u.iid)
+                            : () => setInspect(u.def)
                     }
                   />
-                  {stage === 'placement' &&
-                    u.def.ability &&
-                    !u.abilityUsed &&
-                    !u.hasAttacked &&
-                    !u.boundThisTurn && (
-                      <button
-                        onClick={() => tryAbility(u)}
-                        className={cn(
-                          'text-[7px] font-bold px-1 ink-border-sm',
-                          dieVal !== null &&
-                            dieVal >= effAbilityThreshold(g, u) &&
-                            !(u.enteredThisTurn && !hasKw(u.def, 'Swift'))
-                            ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                            : 'bg-[var(--c-steel)] text-[var(--c-paper)]/50',
-                        )}
-                      >
-                        {effAbilityThreshold(g, u)}+ ability
-                      </button>
-                    )}
+                  {abilityReady && (
+                    <button
+                      onClick={() => tryAbility(u)}
+                      className={cn(
+                        'text-[7px] font-bold px-1 ink-border-sm',
+                        dieVal !== null && dieVal >= effAbilityThreshold(g, u)
+                          ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                          : 'bg-[var(--c-steel)] text-[var(--c-paper)]/50',
+                      )}
+                    >
+                      {effAbilityThreshold(g, u)}+ ability
+                    </button>
+                  )}
+                  {rallyReady && (
+                    <button
+                      onClick={() => tryRally(u)}
+                      title="Rally: trigger this ability for free using another exhausted permanent's resting die"
+                      className="btn-pop text-[7px] font-bold px-1 ink-border-sm bg-[#8E44AD] text-white"
+                    >
+                      ⚡ RALLY
+                    </button>
+                  )}
                 </div>
               );
             })}
