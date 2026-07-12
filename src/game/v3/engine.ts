@@ -18,8 +18,10 @@ import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw } from './c
 export type TwinMode = 'oneDiePerTurn' | 'sameTurn' | 'stagedPassive';
 export interface RuleConfig {
   twinMode: TwinMode;
+  /** v4.3: number of Reroll Phase rerolls allowed per turn (was always 1). */
+  rerollsAllowed: number;
 }
-const DEFAULT_RULES: RuleConfig = { twinMode: 'oneDiePerTurn' };
+const DEFAULT_RULES: RuleConfig = { twinMode: 'oneDiePerTurn', rerollsAllowed: 2 };
 
 // ---------------------------------------------------------------------------
 // RNG (seeded, for reproducible playtests)
@@ -84,7 +86,8 @@ export interface Player {
   board: Inst[];
   location: Inst | null;
   dice: Die[];
-  rerollUsed: boolean;
+  /** v4.3: number of Reroll Phase rerolls spent this turn (cap: rules.rerollsAllowed). */
+  rerollsUsed: number;
   locationCastThisTurn: boolean;
   rallyUsedThisTurn: boolean;
   turnsTaken: number;
@@ -319,7 +322,7 @@ export function newGame(
       board: [],
       location: null,
       dice: [],
-      rerollUsed: false,
+      rerollsUsed: 0,
       locationCastThisTurn: false,
       rallyUsedThisTurn: false,
       turnsTaken: 0,
@@ -547,7 +550,7 @@ export function startTurn(g: Game) {
   g.turn++;
   const p = g.players[g.active];
   p.turnsTaken++;
-  p.rerollUsed = false;
+  p.rerollsUsed = 0;
   p.locationCastThisTurn = false;
   p.rallyUsedThisTurn = false;
   p.comboGateCastThisTurn = false;
@@ -619,16 +622,30 @@ export function mulliganRedraw(g: Game, pid: string) {
   for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
 }
 
-/** Reroll Phase: reroll any subset exactly once. Closes the Snap-only window. */
+/**
+ * Reroll Phase: reroll any subset of unplaced dice. May be called up to
+ * `rules.rerollsAllowed` times per turn (v4.3: default 2, was always 1) —
+ * each call spends one reroll. The Placement window opens once the
+ * allowance is exhausted, or the caller passes an empty selection to end
+ * the Reroll Phase voluntarily before then.
+ */
 export function reroll(g: Game, indices: number[]) {
   const p = g.players[g.active];
-  if (p.rerollUsed) {
+  if (p.rerollsUsed >= g.rules.rerollsAllowed) {
     g.stage = 'PLACEMENT';
     return;
   }
   for (const i of indices) if (!p.dice[i].placed) p.dice[i].value = d6(g.rng);
-  p.rerollUsed = true;
-  g.stage = 'PLACEMENT';
+  p.rerollsUsed++;
+  if (indices.length === 0 || p.rerollsUsed >= g.rules.rerollsAllowed) {
+    g.stage = 'PLACEMENT';
+  }
+}
+
+/** Rerolls still available this Reroll Phase. */
+export function rerollsRemaining(g: Game, pid: string): number {
+  const p = g.players[pid];
+  return Math.max(0, g.rules.rerollsAllowed - p.rerollsUsed);
 }
 
 // ---------------------------------------------------------------------------

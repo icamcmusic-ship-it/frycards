@@ -467,7 +467,14 @@ export function playTurn(g: Game) {
   if (g.winner) return;
 
   playSnaps(g, p); // v4.2: Snap Charms may be cast before the Reroll window closes.
-  reroll(g, chooseReroll(g, p));
+  // v4.3: up to rerollsAllowed rerolls — keep re-evaluating and rerolling
+  // toward the hand's wants until nothing's left worth touching or the
+  // allowance runs out.
+  while (g.stage === 'PRE_REROLL') {
+    const picks = chooseReroll(g, p);
+    reroll(g, picks);
+    if (picks.length === 0) break;
+  }
   playPlacement(g, p);
   if (g.winner) return;
   comboCheck(g);

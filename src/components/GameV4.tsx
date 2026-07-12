@@ -41,6 +41,7 @@ import {
   opponentOf,
   mulliganRedraw,
   defaultDiscardChoice,
+  rerollsRemaining,
 } from '../game/v3/engine';
 import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
@@ -310,7 +311,9 @@ function LeaderPanel({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type Stage = 'mulligan' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
+type Stage = 'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
+
+const ROLL_ANIM_MS = 650;
 
 interface Pending {
   kind: 'cast' | 'ability' | 'ultimate' | 'echo';
@@ -380,6 +383,11 @@ export function GameV4({
   const resultSent = useRef(false);
   const cpuTimeoutRef = useRef<number | null>(null);
   const bannerTimeoutRef = useRef<number | null>(null);
+  const rollTimeoutRef = useRef<number | null>(null);
+  // Which die indices are mid-animation (spinning through random faces)
+  // right now — driven by a rolling stage or a reroll, cleared once the
+  // settle timeout fires.
+  const [rollingDice, setRollingDice] = useState<Set<number>>(new Set());
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -394,11 +402,16 @@ export function GameV4({
     () => () => {
       if (cpuTimeoutRef.current !== null) window.clearTimeout(cpuTimeoutRef.current);
       if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
+      if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
     },
     [],
   );
 
   // ---- turn driving -------------------------------------------------------
+  // Values are rolled by the engine immediately (startTurn), but they stay
+  // hidden (face-down) until the human player clicks ROLL DICE themselves —
+  // that click is what triggers the reveal animation, so it reads as the
+  // player's own roll rather than numbers just appearing.
   const beginHumanTurn = () => {
     startTurn(g);
     bump();
@@ -409,7 +422,18 @@ export function GameV4({
     setRerollSel(new Set());
     setSelDie(null);
     setPending(null);
-    setStage('preRoll');
+    setStage('awaitRoll');
+  };
+
+  const doRollDice = () => {
+    setStage('rolling');
+    setRollingDice(new Set([0, 1, 2, 3, 4]));
+    if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
+    rollTimeoutRef.current = window.setTimeout(() => {
+      rollTimeoutRef.current = null;
+      setRollingDice(new Set());
+      setStage('preRoll');
+    }, ROLL_ANIM_MS);
   };
 
   const resolveCpuTurn = () => {
@@ -842,10 +866,19 @@ export function GameV4({
   };
 
   const doReroll = () => {
-    reroll(g, [...rerollSel]);
-    bump();
-    setStage('placement');
+    const picks = [...rerollSel];
+    reroll(g, picks);
     setRerollSel(new Set());
+    if (picks.length > 0) {
+      setRollingDice(new Set(picks));
+      if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
+      rollTimeoutRef.current = window.setTimeout(() => {
+        rollTimeoutRef.current = null;
+        setRollingDice(new Set());
+      }, ROLL_ANIM_MS);
+    }
+    bump();
+    setStage(g.stage === 'PLACEMENT' ? 'placement' : 'preRoll');
   };
 
   // ---- combat helpers -----------------------------------------------------
@@ -899,13 +932,17 @@ export function GameV4({
           TURN {Math.ceil(g.turn / 2) || 1} ·{' '}
           {stage === 'cpu'
             ? "CPU'S TURN"
-            : stage === 'preRoll'
-              ? 'ROLL & SNAP'
-              : stage === 'placement'
-                ? 'PLACEMENT'
-                : stage === 'combat'
-                  ? 'COMBAT'
-                  : stage.toUpperCase()}
+            : stage === 'awaitRoll'
+              ? 'YOUR ROLL'
+              : stage === 'rolling'
+                ? 'ROLLING…'
+                : stage === 'preRoll'
+                  ? 'REROLL & SNAP'
+                  : stage === 'placement'
+                    ? 'PLACEMENT'
+                    : stage === 'combat'
+                      ? 'COMBAT'
+                      : stage.toUpperCase()}
         </span>
         <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate">
           {humanLabel} vs {cpuLabel}
@@ -927,12 +964,23 @@ export function GameV4({
               END TURN {unplaced.length > 0 ? `(pitch ${unplaced.length}⚄)` : ''}
             </button>
           )}
+          {stage === 'awaitRoll' && (
+            <button
+              onClick={doRollDice}
+              className="btn-pop heading-font text-[11px] bg-[var(--c-red)] text-white px-3 py-1 ink-border-sm animate-pulse"
+            >
+              🎲 ROLL DICE
+            </button>
+          )}
           {stage === 'preRoll' && (
             <button
               onClick={doReroll}
               className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
             >
-              {rerollSel.size > 0 ? `REROLL ${rerollSel.size}` : 'KEEP ALL'} →
+              {rerollSel.size > 0
+                ? `REROLL ${rerollSel.size} (${rerollsRemaining(g, HUMAN)} left)`
+                : 'KEEP ALL'}{' '}
+              →
             </button>
           )}
         </div>
@@ -1051,7 +1099,9 @@ export function GameV4({
       <div className="flex items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
         <div className="flex gap-1.5 items-center">
           {me.dice.map((d, i) => {
-            const usable = !d.placed && (stage === 'placement' || stage === 'preRoll');
+            const isRolling = rollingDice.has(i);
+            const faceDown = stage === 'awaitRoll';
+            const usable = !d.placed && !isRolling && (stage === 'placement' || stage === 'preRoll');
             const marked = stage === 'preRoll' ? rerollSel.has(i) : selDie === i;
             return (
               <button
@@ -1072,23 +1122,35 @@ export function GameV4({
                 }}
                 className={cn(
                   'w-12 h-12 ink-border-md rounded-md text-3xl leading-none flex items-center justify-center transition-transform',
-                  d.placed
-                    ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
-                    : marked
-                      ? stage === 'preRoll'
-                        ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
-                        : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
-                      : 'bg-[var(--c-paper)] text-[var(--c-ink)] shadow-hard-black-xs',
+                  isRolling && 'die-rolling',
+                  faceDown
+                    ? 'bg-[var(--c-steel)] text-[var(--c-paper)]/40'
+                    : d.placed
+                      ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
+                      : marked
+                        ? stage === 'preRoll'
+                          ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
+                          : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
+                        : 'bg-[var(--c-paper)] text-[var(--c-ink)] shadow-hard-black-xs',
                   usable && 'btn-pop',
                 )}
                 title={d.placed ? 'Placed' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'}
-                aria-label={`Die ${i + 1}: value ${d.value}${d.placed ? ' (placed)' : marked ? ' (selected)' : ''}`}
+                aria-label={
+                  faceDown
+                    ? `Die ${i + 1}: not yet rolled`
+                    : `Die ${i + 1}: value ${d.value}${d.placed ? ' (placed)' : marked ? ' (selected)' : ''}`
+                }
                 aria-pressed={marked}
               >
-                {DIE_FACES[d.value - 1]}
+                {faceDown ? '🎲' : DIE_FACES[d.value - 1]}
               </button>
             );
           })}
+          {stage === 'awaitRoll' && (
+            <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[150px] leading-tight">
+              Click ROLL DICE to roll your five dice.
+            </span>
+          )}
           {stage === 'cpu' && (
             <>
               <span className="text-[10px] font-bold text-[var(--c-paper)]/60 animate-pulse ml-1">

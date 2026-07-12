@@ -248,3 +248,95 @@ h4,
 .foil-glow {
   animation: foil-glow-kf 2.1s ease-in-out infinite;
 }
+
+/* Rolling die — spin + scale while its value is mid-reveal. */
+@keyframes die-rolling-kf {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(120deg) scale(1.15);
+  }
+  50% {
+    transform: rotate(240deg) scale(0.9);
+  }
+  75% {
+    transform: rotate(340deg) scale(1.1);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.die-rolling {
+  animation: die-rolling-kf 0.4s ease-in-out infinite;
+  filter: blur(0.5px);
+}
+
+/* Rarity card treatments — Rare tint background, Super-Rare sheen, Ultra-Rare
+   pulsing gradient, Mythic full animated frame. See src/meta/rarity.ts. */
+@keyframes rarity-sheen-kf {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+.rarity-sheen {
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 45%,
+    transparent 60%
+  );
+  background-size: 260% 100%;
+  animation: rarity-sheen-kf 3.2s ease-in-out infinite;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+@keyframes rarity-pulse-kf {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+}
+.rarity-pulse {
+  animation: rarity-pulse-kf 2.4s ease-in-out infinite;
+}
+@keyframes mythic-border-kf {
+  0%,
+  100% {
+    box-shadow:
+      0 0 18px 4px rgba(225, 29, 46, 0.55),
+      0 0 40px 12px rgba(255, 179, 0, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 30px 8px rgba(255, 179, 0, 0.75),
+      0 0 60px 20px rgba(225, 29, 46, 0.55);
+  }
+}
+.mythic-frame {
+  animation: mythic-border-kf 2.6s ease-in-out infinite;
+}
+@keyframes mythic-bg-kf {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+.mythic-bg {
+  background: linear-gradient(120deg, #1a0505, #3a0a12, #7a1420, #e11d2e, #ffb300, #7a1420, #1a0505);
+  background-size: 300% 300%;
+  animation: mythic-bg-kf 6s ease-in-out infinite;
+}
