@@ -121,7 +121,7 @@ function BoardUnit({
       disabled={!onClick}
       aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
-        'relative w-[92px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
+        'relative w-[92px] sm:w-[120px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
         onClick && 'btn-pop cursor-pointer',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
@@ -129,30 +129,35 @@ function BoardUnit({
         (exhausted || sick) && 'saturate-50',
       )}
     >
-      <div className="h-[44px] overflow-hidden ink-border-sm m-0.5">
+      <div className="h-[44px] sm:h-[62px] overflow-hidden ink-border-sm m-0.5">
         <SafeImage src={u.def.image} className="w-full h-full object-cover" />
       </div>
       <div className="px-0.5 pb-0.5">
-        <div className="heading-font text-[8px] leading-tight truncate">{u.def.name}</div>
+        <div className="heading-font text-[8px] sm:text-[10px] leading-tight truncate">
+          {u.def.name}
+        </div>
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono font-bold">
+          <span className="text-[10px] sm:text-[13px] font-mono font-bold">
             {atk}
             <span className="text-[var(--c-red)]">⚔</span>
           </span>
           <span
-            className={cn('text-[10px] font-mono font-bold', hp < maxHp && 'text-[var(--c-red)]')}
+            className={cn(
+              'text-[10px] sm:text-[13px] font-mono font-bold',
+              hp < maxHp && 'text-[var(--c-red)]',
+            )}
           >
             {hp}/{maxHp}
             <span className="text-[#43A047]">♥</span>
           </span>
         </div>
-        <div className="flex flex-wrap gap-0.5 min-h-[9px]">
+        <div className="flex flex-wrap gap-0.5 min-h-[9px] sm:min-h-[13px]">
           {kwList(u.def)
             .slice(0, 3)
             .map((kw) => (
               <span
                 key={kw}
-                className="text-[6px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
+                className="text-[6px] sm:text-[8px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
               >
                 {kw}
               </span>
@@ -204,6 +209,7 @@ function LeaderPanel({
   ultimateUsable,
   highlight,
   onClickTarget,
+  onInspect,
 }: {
   g: Game;
   p: Player;
@@ -214,6 +220,7 @@ function LeaderPanel({
   ultimateUsable?: boolean;
   highlight?: boolean;
   onClickTarget?: () => void;
+  onInspect?: () => void;
 }) {
   const l = p.leader;
   const hp = Math.max(0, remainingHp(g, l));
@@ -222,88 +229,59 @@ function LeaderPanel({
   const ult = l.def.ultimate;
   const abThr = effAbilityThreshold(g, l);
   const toll = tollReduction(g, p.id);
+  const resolveOn = !!l.def.resolve && hp * 2 <= maxHp;
+  // Interactive controls (human only) replace the ability/ultimate text the
+  // shared rules section would otherwise print, so it isn't duplicated.
+  const liveDef = { ...l.def, hp, ...(isHuman ? { ability: undefined, ultimate: undefined } : {}) };
   return (
-    <div
-      onClick={onClickTarget}
-      className={cn(
-        'w-[168px] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md p-1.5 shrink-0',
-        highlight && 'ring-4 ring-[var(--c-red)] cursor-pointer',
-      )}
-    >
-      <div className="flex gap-1.5">
-        <div className="w-[46px] h-[46px] overflow-hidden ink-border-sm shrink-0">
-          <SafeImage src={l.def.image} className="w-full h-full object-cover" />
-        </div>
-        <div className="min-w-0">
-          <div className="heading-font text-[10px] leading-tight truncate">{l.def.name}</div>
-          <div
-            className={cn(
-              'font-mono font-bold text-lg leading-tight',
-              hp <= maxHp / 2 ? 'text-[var(--c-red)]' : 'text-[var(--c-yellow)]',
-            )}
-          >
-            {hp}
-            <span className="text-[10px] text-[var(--c-paper)]/60">/{maxHp}</span>
-          </div>
-          <div className="flex gap-0.5 flex-wrap">
-            {l.def.resolve && (
-              <span
-                className={cn(
-                  'text-[7px] font-bold px-0.5 ink-border-sm',
-                  hp * 2 <= maxHp
-                    ? 'bg-[var(--c-red)] text-white'
-                    : 'bg-[var(--c-steel)] text-white',
-                )}
-              >
-                RESOLVE {l.def.resolve.x}
-                {hp * 2 <= maxHp ? ' ON' : ''}
-              </span>
-            )}
-            {toll > 0 && (
-              <span className="text-[7px] font-bold px-0.5 bg-[#29B6F6] ink-border-sm text-[var(--c-ink)]">
-                TOLL -{toll}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-      {ab && (
-        <button
-          onClick={onAbility}
-          disabled={!abilityUsable}
-          className={cn(
-            'w-full mt-1 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-            abilityUsable
-              ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-              : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
-            l.abilityUsed && 'line-through',
-          )}
-        >
-          {abThr}+ {describeEffect(ab.effect)}
-        </button>
-      )}
-      {ult && isHuman && (
-        <button
-          onClick={onUltimate}
-          disabled={!ultimateUsable}
-          className={cn(
-            'w-full mt-0.5 text-[8px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-            ultimateUsable
-              ? 'btn-pop bg-[var(--c-red)] text-white'
-              : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
-            l.ultimateUsed && 'line-through',
-          )}
-        >
-          ULT (turn {ult.unlockTurn}+, {ult.threshold}+): {describeEffect(ult.effect)}
-          {l.ultimateUsed ? ' — SPENT' : ''}
-        </button>
-      )}
-      {ult && !isHuman && (
-        <div className="mt-0.5 text-[7px] font-bold text-[var(--c-paper)]/50 leading-tight">
-          ULT{l.ultimateUsed ? ' spent' : ` from turn ${ult.unlockTurn}`}:{' '}
-          {describeEffect(ult.effect)}
-        </div>
-      )}
+    <div className={cn('shrink-0', highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]')}>
+      <CardFace
+        def={liveDef}
+        size="md"
+        maxHp={maxHp}
+        onClick={onClickTarget ?? onInspect}
+        badge={resolveOn ? `RESOLVE ${l.def.resolve!.x} ON` : toll > 0 ? `TOLL -${toll}` : undefined}
+        footer={
+          isHuman && (ab || ult) ? (
+            <div
+              className="px-1.5 pb-1.5 flex flex-col gap-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {ab && (
+                <button
+                  onClick={onAbility}
+                  disabled={!abilityUsable}
+                  className={cn(
+                    'w-full text-[9px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
+                    abilityUsable
+                      ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
+                    l.abilityUsed && 'line-through',
+                  )}
+                >
+                  {abThr}+ {describeEffect(ab.effect)}
+                </button>
+              )}
+              {ult && (
+                <button
+                  onClick={onUltimate}
+                  disabled={!ultimateUsable}
+                  className={cn(
+                    'w-full text-[9px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
+                    ultimateUsable
+                      ? 'btn-pop bg-[var(--c-red)] text-white'
+                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
+                    l.ultimateUsed && 'line-through',
+                  )}
+                >
+                  ULT (turn {ult.unlockTurn}+, {ult.threshold}+): {describeEffect(ult.effect)}
+                  {l.ultimateUsed ? ' — SPENT' : ''}
+                </button>
+              )}
+            </div>
+          ) : undefined
+        }
+      />
     </div>
   );
 }
@@ -1141,6 +1119,7 @@ export function GameV4({
                 ? () => tryAttackTarget(foe.leader.iid)
                 : undefined
           }
+          onInspect={() => setInspect(foe.leader.def)}
         />
         <div className="flex-1 min-w-0">
           <div className="flex gap-1 text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
@@ -1157,9 +1136,9 @@ export function GameV4({
             )}
             {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
           </div>
-          <div className="flex gap-1 flex-wrap min-h-[92px]">
+          <div className="flex gap-1 flex-wrap min-h-[92px] sm:min-h-[130px]">
             {foe.board.length === 0 && (
-              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[80px] sm:h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1442,9 +1421,9 @@ export function GameV4({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <div className="flex gap-1 flex-wrap min-h-[92px]">
+          <div className="flex gap-1 flex-wrap min-h-[92px] sm:min-h-[130px]">
             {me.board.length === 0 && (
-              <div className="w-full h-[80px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[80px] sm:h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1640,45 +1619,10 @@ export function GameV4({
         </div>
       )}
 
-      {/* Card inspector */}
-      {inspect && (
-        <div
-          className="absolute inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center"
-          onClick={() => setInspect(null)}
-        >
-          <div
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 max-w-[320px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full h-[160px] ink-border-sm mb-2 overflow-hidden">
-              <SafeImage src={inspect.image} className="w-full h-full object-cover" />
-            </div>
-            <div className="heading-font text-sm">{inspect.name}</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] uppercase">
-              {inspect.type}
-              {inspect.rarity ? ` · ${inspect.rarity}` : ''}
-              {inspect.type === 'Unit' ? ` · ${inspect.atk}⚔ / ${inspect.hp}♥` : ''}
-              {inspect.comboGate
-                ? ` · Combo: ${inspect.comboGate}`
-                : inspect.threshold !== undefined && inspect.type !== 'Location'
-                  ? ` · Cast ${inspect.threshold}+`
-                  : inspect.type === 'Location'
-                    ? ' · casts FREE (1/turn)'
-                    : ''}
-            </div>
-            <div className="text-[10px] font-bold mt-1">{cardRules(inspect) || '—'}</div>
-            {inspect.flavor && (
-              <div className="text-[9px] italic text-[var(--c-steel)] mt-1">{inspect.flavor}</div>
-            )}
-            <button
-              onClick={() => setInspect(null)}
-              className="btn-pop mt-2 text-[10px] heading-font bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1 ink-border-sm"
-            >
-              CLOSE
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Card inspector — the same universal template used everywhere else
+          (deck builder, collection, pack reveals), so a card reads
+          identically no matter where it's inspected from. */}
+      {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
 
       {/* Forced discard (hand size &gt; 6 at End Phase) — player picks which cards */}
       {forcedDiscard && (

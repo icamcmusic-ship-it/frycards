@@ -180,6 +180,7 @@ export function CardFace({
   badge,
   count,
   foilCount,
+  maxHp,
 }: {
   key?: React.Key;
   def: CardDef;
@@ -198,6 +199,8 @@ export function CardFace({
   badge?: string;
   count?: number;
   foilCount?: number;
+  /** Leader template only: shows `${def.hp}/${maxHp}` instead of just current HP. */
+  maxHp?: number;
 }) {
   const resolvedSize = large ? 'lg' : small ? 'sm' : size;
   const { w, h } = SIZES[resolvedSize];
@@ -363,9 +366,18 @@ export function CardFace({
         )}
         {def.type === 'Leader' && (
           <span
-            className={cn('font-mono font-black shrink-0', isLg ? 'text-[13px]' : 'text-[9px]')}
+            className={cn(
+              'font-mono font-black shrink-0',
+              isLg ? 'text-[15px]' : 'text-[11px]',
+              maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
+                ? 'text-[var(--c-red)]'
+                : '',
+            )}
           >
             {def.hp}
+            {maxHp !== undefined && (
+              <span className="text-[var(--c-steel)]">/{maxHp}</span>
+            )}
             <span className="text-[#22C55E]">♥</span>
           </span>
         )}
