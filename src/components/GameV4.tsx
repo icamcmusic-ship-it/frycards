@@ -47,7 +47,15 @@ import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
-import { CardFace, CardInspectorModal, cardRules, costBadge, describeEffect, kwList } from './CardFaceV4';
+import {
+  CardFace,
+  CardInspectorModal,
+  KeywordChip,
+  cardRules,
+  costBadge,
+  describeEffect,
+  kwList,
+} from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
 
 // ---------------------------------------------------------------------------
@@ -116,9 +124,21 @@ function BoardUnit({
   const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
   const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
   return (
-    <button
+    // A div, not a <button>: keyword pills below render their own <button>
+    // for the click-to-open glossary popover, and nested buttons are invalid
+    // HTML / break keyboard navigation (same reasoning as CardFace).
+    <div
+      role="button"
+      tabIndex={onClick ? 0 : -1}
+      aria-disabled={!onClick}
       onClick={onClick}
-      disabled={!onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
       className={cn(
         'relative w-[92px] sm:w-[120px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
@@ -155,12 +175,7 @@ function BoardUnit({
           {kwList(u.def)
             .slice(0, 3)
             .map((kw) => (
-              <span
-                key={kw}
-                className="text-[6px] sm:text-[8px] font-bold px-0.5 bg-[var(--c-yellow)] leading-tight"
-              >
-                {kw}
-              </span>
+              <KeywordChip key={kw} kw={kw} small />
             ))}
         </div>
       </div>
@@ -192,7 +207,7 @@ function BoardUnit({
           </span>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

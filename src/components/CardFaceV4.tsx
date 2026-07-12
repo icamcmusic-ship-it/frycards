@@ -14,6 +14,31 @@ export function kwList(def: CardDef): string[] {
   return def.keywords || [];
 }
 
+/** v4.3: short rules explainer per keyword, shown in a click-to-open popover. */
+export const KEYWORD_GLOSSARY: Record<string, string> = {
+  Guard: 'While you control any Guard Unit, your opponent must attack a Guard Unit first — resolved one at a time until none remain.',
+  Swift: "May attack or use an Ability Slot the turn it's cast, instead of waiting a turn.",
+  Pierce: "Leftover damage past what's needed to destroy the target Unit carries through to the enemy Leader.",
+  Ward: 'Prevents the first instance of damage or Removal against this card each turn (not retaliation from its own attack). Refreshes every End Phase.',
+  Frenzy: 'May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation.',
+  Anchor: 'This card\'s effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -2.',
+  Echo: 'After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand.',
+  Scrap: 'Discard this card from hand to reroll one of your unplaced dice, any time during Placement Phase.',
+  Rally: "Once per turn, activate this card's Ability Slot for free using a die already resting on another exhausted friendly Ability Slot.",
+  Twin: 'Has two Cast Slots requiring an identical rolled face value. Filling the first parks it in your Staging Zone until a matching die completes it.',
+  Bulwark: 'Flat reduction to damage this Unit takes from attacks — both when defending and when it deals/takes retaliation while attacking.',
+  Toll: "While this Unit is in play, ALL incoming damage to your Leader (any source) is reduced.",
+  Avenge: 'Permanently gains +1/+1 whenever another friendly Unit dies — an automatic trigger, no priority window.',
+  Crescendo: 'Adds bonus value to this Event per die showing a 6 that you placed this turn.',
+  Aftershock: 'After this Event resolves, it queues a smaller repeat of its effect to fire at the very start of your next turn.',
+  Snap: "May be cast during your Reroll Phase, before the reroll window closes, instead of waiting for Placement.",
+  Tribute: 'Triggers at your End Phase if you Pitched 2 or more dice this turn.',
+  Excavate: 'This Location\'s Ability Slot threshold drops the longer it stays continuously in play.',
+  Contested: 'This Location\'s passive doubles while your opponent controls no Location of their own.',
+  Resolve: 'While your Leader is at or below half HP, its Ability Slot threshold drops.',
+  Ultimate: 'A second, once-per-game Leader Ability Slot, usable starting on a specific turn of yours.',
+};
+
 /** v4.3: player-facing display label for each dice-pattern gate. */
 export const GATE_LABEL: Record<string, string> = {
   AnyPair: 'PAIRS',
@@ -107,6 +132,58 @@ export function cardRuleLines(def: CardDef): string[] {
 /** Flat rules text — used for tooltips/inline text that just want one string. */
 export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
+}
+
+/**
+ * v4.3: a keyword pill that opens a small popover with its rules text on
+ * click — used anywhere a keyword chip is shown (card template, board
+ * Units) so players never have to guess what a keyword does.
+ */
+export function KeywordChip({
+  kw,
+  small,
+}: {
+  key?: React.Key;
+  kw: string;
+  small?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const text = KEYWORD_GLOSSARY[kw];
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className={cn(
+          'font-bold bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full cursor-help',
+          small ? 'text-[6.5px] px-1' : 'text-[9px] px-1.5',
+        )}
+      >
+        {kw}
+      </button>
+      {open && text && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
+          <div
+            className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-[61] w-[180px] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+            {text}
+          </div>
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Per-set flavor-text styling — a distinct "print run" identity per set. */
@@ -394,15 +471,7 @@ export function CardFace({
           {kwList(def)
             .slice(0, isLg ? 8 : 3)
             .map((kw) => (
-              <span
-                key={kw}
-                className={cn(
-                  'font-bold px-1.5 bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full',
-                  isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
-                )}
-              >
-                {kw}
-              </span>
+              <KeywordChip key={kw} kw={kw} small={!isLg} />
             ))}
         </div>
       )}
