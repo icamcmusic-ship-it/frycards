@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local export of `select jsonb_agg(template) from public.cards;` used by
+# scripts/simulate-live.ts / analyze-costs.ts — a point-in-time snapshot,
+# not source data.
+scripts/live-cards.json

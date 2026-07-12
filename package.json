@@ -15,6 +15,8 @@
     "test": "vitest run",
     "sim:v3": "tsx scripts/simulate-v3.ts",
     "sim:v4": "tsx scripts/simulate-v4.ts",
+    "sim:live": "tsx scripts/simulate-live.ts",
+    "analyze:costs": "tsx scripts/analyze-costs.ts",
     "pattern-hitrate": "tsx scripts/pattern-hitrate.ts"
   },
   "dependencies": {
