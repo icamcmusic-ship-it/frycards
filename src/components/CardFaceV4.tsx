@@ -5,8 +5,8 @@
  * proportions: 2.5" × 3.5" (5:7).
  */
 import React, { useState } from 'react';
-import { Dices } from 'lucide-react';
-import { CardDef, Effect } from '../game/v3/cards';
+import { Dices, Swords, Heart, Crown, MapPin, Wand2, Zap } from 'lucide-react';
+import { CardDef, CardType, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
 import {
   rarityChip,
@@ -21,6 +21,15 @@ import {
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
 }
+
+/** Small per-type glyph shown next to the name — a quick visual "what is this" cue. */
+const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> = {
+  Leader: Crown,
+  Unit: Swords,
+  Location: MapPin,
+  Charm: Wand2,
+  Event: Zap,
+};
 
 /** v4.3: short rules explainer per keyword, shown in a click-to-open popover. */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
@@ -154,6 +163,40 @@ export function cardRuleLines(def: CardDef): string[] {
 /** Flat rules text — used for tooltips/inline text that just want one string. */
 export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
+}
+
+/** A small tinted, icon-led stat pill (ATK/HP) — replaces plain emoji text
+ * with a proper badge so the stat line reads as UI, not a caption. */
+function StatChip({
+  icon: Icon,
+  value,
+  maxValue,
+  isLg,
+  tint,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value?: number;
+  maxValue?: number;
+  isLg: boolean;
+  tint: string;
+}) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-full font-mono font-black border',
+        isLg ? 'text-[12px] px-1.5 py-0.5' : 'text-[8px] px-1',
+      )}
+      style={{
+        color: tint,
+        borderColor: `color-mix(in srgb, ${tint} 45%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${tint} 12%, transparent)`,
+      }}
+    >
+      <Icon className={isLg ? 'w-3 h-3' : 'w-2 h-2'} />
+      {value}
+      {maxValue !== undefined && <span className="opacity-60 font-bold">/{maxValue}</span>}
+    </span>
+  );
 }
 
 /**
@@ -308,6 +351,7 @@ export function CardFace({
   const mythic = isMythic(def.rarity);
   const animatedFx = rarityAnimated(def.rarity) || mythic;
   const bg = rarityBg(def.rarity);
+  const TypeIcon = TYPE_ICON[def.type];
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -339,6 +383,19 @@ export function CardFace({
         foil && !dimmed && 'foil-glow',
       )}
     >
+      {/* Corner gem — a small decorative flourish marking Rare+ prints,
+          echoing the rarity color at a glance even before reading text.
+          Positioned at the corner (not negative-offset) since the card
+          wrapper clips overflow — the rotated square's tips peek past the
+          edge for a "corner tag" look instead of being invisible. */}
+      {isLg && def.rarity && def.rarity !== 'Common' && def.rarity !== 'Uncommon' && (
+        <span
+          aria-hidden
+          className="absolute top-0 left-0 w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-[var(--c-ink)] z-10"
+          style={{ backgroundColor: rarityHex }}
+        />
+      )}
+
       {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
           gold-on-red name banner instead of the shared tinted-paper header. */}
       <div
@@ -355,13 +412,20 @@ export function CardFace({
       >
         <span
           className={cn(
-            'heading-font leading-tight truncate pr-1',
+            'flex items-center gap-1 min-w-0 heading-font leading-tight',
             mythic && 'text-[var(--c-yellow)]',
             isLg ? 'text-[13px]' : 'text-[9px]',
           )}
           title={def.name}
         >
-          {def.name}
+          <TypeIcon
+            className={cn(
+              'shrink-0 opacity-70',
+              isLg ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5',
+              mythic && 'opacity-90',
+            )}
+          />
+          <span className="truncate">{def.name}</span>
         </span>
         {def.comboGate ? (
           <span
@@ -403,9 +467,22 @@ export function CardFace({
 
       {/* Art — fixed 4:3 box so the full uploaded image always shows, never
           cropped; any leftover card height is absorbed by the flex-1 spacer
-          further down instead of stretching the art. */}
-      <div className="relative w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 border-2 border-[var(--c-ink)] overflow-hidden rounded-[2px]">
+          further down instead of stretching the art. A rarity-tinted double
+          bezel + inner vignette gives the art a "framed" feel instead of a
+          flat crop. */}
+      <div
+        className={cn(
+          'relative w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 overflow-hidden rounded-[2px]',
+          isLg ? 'border-[3px]' : 'border-2',
+          'border-[var(--c-ink)]',
+        )}
+        style={isLg ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
+      >
         <CardArt def={def} />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }}
+        />
         {def.rarity && (
           <span
             className={cn(
@@ -461,67 +538,76 @@ export function CardFace({
           {isLg && def.set ? ` · ${def.set}` : ''}
         </span>
         {def.type === 'Unit' && (
-          <span
-            className={cn('font-mono font-black shrink-0', isLg ? 'text-[13px]' : 'text-[9px]')}
-          >
-            {def.atk}
-            <span className="text-[var(--c-red)]">⚔</span>/{def.hp}
-            <span className="text-[#22C55E]">♥</span>
+          <span className="flex items-center gap-1 shrink-0">
+            <StatChip icon={Swords} value={def.atk} isLg={isLg} tint="var(--c-red)" />
+            <StatChip icon={Heart} value={def.hp} isLg={isLg} tint="#22C55E" />
           </span>
         )}
         {def.type === 'Leader' && (
-          <span
-            className={cn(
-              'font-mono font-black shrink-0',
-              isLg ? 'text-[15px]' : 'text-[11px]',
-              maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
-                ? 'text-[var(--c-red)]'
-                : '',
-            )}
-          >
-            {def.hp}
-            {maxHp !== undefined && <span className="text-[var(--c-steel)]">/{maxHp}</span>}
-            <span className="text-[#22C55E]">♥</span>
+          <span className="shrink-0">
+            <StatChip
+              icon={Heart}
+              value={def.hp}
+              maxValue={maxHp}
+              isLg={isLg}
+              tint={
+                maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
+                  ? 'var(--c-red)'
+                  : '#22C55E'
+              }
+            />
           </span>
         )}
       </div>
 
-      {/* Keywords */}
-      {kwList(def).length > 0 && (
-        <div
-          className={cn(
-            'flex flex-wrap gap-0.5 px-1.5 shrink-0',
-            isLg ? 'mt-1' : 'mt-0.5 min-h-[9px]',
-          )}
-        >
-          {kwList(def)
-            .slice(0, isLg ? 8 : 3)
-            .map((kw) => (
-              <KeywordChip key={kw} kw={kw} small={!isLg} />
-            ))}
-        </div>
-      )}
+      {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
+          panel (a real "text box" like a printed card) instead of floating
+          directly on the paper background. flex-1 so it fills the remaining
+          height and pushes the footer to the bottom. */}
+      <div
+        className={cn(
+          'flex-1 min-h-0 flex flex-col mx-1.5 mt-1 mb-1 rounded-[3px] border',
+          isLg ? 'p-1.5' : 'p-1',
+          mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
+        )}
+        style={{
+          backgroundColor: mythic
+            ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
+            : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
+        }}
+      >
+        {kwList(def).length > 0 && (
+          <div className={cn('flex flex-wrap gap-0.5 shrink-0', !isLg && 'min-h-[9px]')}>
+            {kwList(def)
+              .slice(0, isLg ? 8 : 3)
+              .map((kw) => (
+                <KeywordChip key={kw} kw={kw} small={!isLg} />
+              ))}
+          </div>
+        )}
 
-      {/* Rules text — every ability/effect on its own line. */}
-      {rules.length > 0 && (
-        <div
-          className={cn(
-            'px-1.5 shrink-0 leading-snug',
-            isLg ? 'mt-1 text-[9.5px] space-y-0.5' : 'mt-0.5 text-[6.5px] line-clamp-2',
-          )}
-        >
-          {isLg ? rules.map((r, i) => <div key={i}>{r}</div>) : <div>{rules.join(' · ')}</div>}
-        </div>
-      )}
+        {rules.length > 0 && (
+          <div
+            className={cn(
+              'shrink-0 leading-snug',
+              isLg ? 'mt-1 text-[9.5px] space-y-0.5' : 'mt-0.5 text-[6.5px] line-clamp-2',
+              kwList(def).length === 0 && 'mt-0',
+            )}
+          >
+            {isLg ? rules.map((r, i) => <div key={i}>{r}</div>) : <div>{rules.join(' · ')}</div>}
+          </div>
+        )}
 
-      {/* Flavor text — styled per set (only room for it at the large size). */}
-      {isLg && def.flavor && (
-        <div className="mt-1 px-1.5 pt-1 border-t border-[var(--c-ink)]/15">
-          <p className={cn('text-[9px] leading-snug line-clamp-2', set.className)}>{def.flavor}</p>
-        </div>
-      )}
+        {isLg && def.flavor && (
+          <div className="mt-1 pt-1 border-t border-[var(--c-ink)]/15">
+            <p className={cn('text-[9px] leading-snug line-clamp-2', set.className)}>
+              {def.flavor}
+            </p>
+          </div>
+        )}
 
-      <div className="flex-1" />
+        <div className="flex-1" />
+      </div>
 
       {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}
       {def.set && <div className={cn('h-[3px] w-full shrink-0', set.bar)} title={def.set} />}
