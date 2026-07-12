@@ -47,7 +47,7 @@ import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
-import { CardFace, cardRules, describeEffect, kwList } from './CardFaceV4';
+import { CardFace, CardInspectorModal, cardRules, costBadge, describeEffect, kwList } from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
 
 // ---------------------------------------------------------------------------
@@ -322,6 +322,14 @@ interface Pending {
   /** Set when this ability activation is a Rally (donated die from another
    * already-exhausted permanent) rather than the card's own die. */
   rallySourceIid?: string;
+  /** v4.3: multi-die selection for a 'sum'-cost card, in place of selDie. */
+  dieIndices?: number[];
+}
+
+/** v4.3: in-progress "build a dice sum" cast for a 'sum'-cost hand card. */
+interface SumCast {
+  cardIid: string;
+  sel: Set<number>;
 }
 
 export function GameV4({
@@ -367,6 +375,8 @@ export function GameV4({
   const [selDie, setSelDie] = useState<number | null>(null);
   const [rerollSel, setRerollSel] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
+  // v4.3: 'sum'-cost card whose dice selection is currently being built.
+  const [sumCast, setSumCast] = useState<SumCast | null>(null);
   // A Rally activation in progress: the card whose ability is being
   // triggered for free, awaiting the player to pick a donor permanent
   // (an already-exhausted ability user with a high-enough resting die).
@@ -491,6 +501,7 @@ export function GameV4({
       if (e.key !== 'Escape') return;
       if (inspect) setInspect(null);
       else if (pending) setPending(null);
+      else if (sumCast) setSumCast(null);
       else if (rallyPick) setRallyPick(null);
       else if (showDiscard) {
         setShowDiscard(false);
@@ -500,7 +511,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, echoPick, pending, rallyPick, attacker]);
+  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -533,9 +544,20 @@ export function GameV4({
       if (dieVal === null) return { ok: false, why: 'Select a die' };
       return { ok: true };
     }
-    if (dieVal === null) return { ok: false, why: 'Select a die' };
     const thr = effThreshold(g, HUMAN, c.def);
-    if (dieVal < thr) return { ok: false, why: `Needs ${thr}+` };
+    if (c.def.castCostKind === 'sum') {
+      const available = unplaced.reduce((s, d) => s + d.value, 0);
+      if (available < thr) return { ok: false, why: `Needs dice totalling ${thr}+ (have ${available})` };
+      if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
+        return { ok: false, why: 'No legal target' };
+      return { ok: true };
+    }
+    if (dieVal === null) return { ok: false, why: 'Select a die' };
+    if (c.def.castCostKind === 'exact') {
+      if (dieVal !== thr) return { ok: false, why: `Needs exactly ${thr}` };
+    } else if (dieVal < thr) {
+      return { ok: false, why: `Needs ${thr}+` };
+    }
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
       return { ok: false, why: 'No legal target' };
     return { ok: true };
@@ -552,6 +574,15 @@ export function GameV4({
     const chk = canCastNow(c);
     if (!chk.ok) {
       say(chk.why || 'Illegal');
+      return;
+    }
+    // 'sum'-cost cards (no comboGate) are cast by building a dice selection,
+    // not by picking a single die first — arm the sum-select overlay instead
+    // of casting immediately.
+    if (c.def.castCostKind === 'sum' && !c.def.comboGate) {
+      setSumCast({ cardIid: c.iid, sel: new Set() });
+      setSelDie(null);
+      say('Click dice to build the sum, then CAST.');
       return;
     }
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
@@ -574,6 +605,40 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
+  // ---- 'sum'-cost casting: build a multi-die selection, then confirm ------
+  const cancelSumCast = () => setSumCast(null);
+
+  const toggleSumDie = (i: number) => {
+    setSumCast((sc) => {
+      if (!sc) return sc;
+      const sel = new Set(sc.sel);
+      if (sel.has(i)) sel.delete(i);
+      else sel.add(i);
+      return { ...sc, sel };
+    });
+  };
+
+  const confirmSumCast = () => {
+    if (!sumCast || sumCast.sel.size === 0) return;
+    const c = me.hand.find((h) => h.iid === sumCast.cardIid);
+    if (!c) {
+      setSumCast(null);
+      return;
+    }
+    const dieIndices = [...sumCast.sel];
+    if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
+      setPending({ kind: 'cast', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
+      setSumCast(null);
+      return;
+    }
+    if (castFromHand(g, dieIndices, c.iid)) {
+      say(`${c.def.name} resolves.`);
+      bump();
+    } else say('Illegal placement.');
+    setSumCast(null);
+    if (g.winner) setStage('over');
+  };
+
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
     if (pending.kind === 'echo') {
@@ -586,7 +651,8 @@ export function GameV4({
       return;
     }
     let ok = false;
-    if (pending.kind === 'cast') ok = castFromHand(g, selDie!, pending.cardIid, targetIid);
+    if (pending.kind === 'cast')
+      ok = castFromHand(g, pending.dieIndices ?? selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ability')
       ok = pending.rallySourceIid
         ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
@@ -1015,6 +1081,35 @@ export function GameV4({
           </button>
         </div>
       )}
+      {sumCast &&
+        (() => {
+          const c = me.hand.find((h) => h.iid === sumCast.cardIid);
+          const target = c ? effThreshold(g, HUMAN, c.def) : 0;
+          const total = [...sumCast.sel].reduce((s, i) => s + (me.dice[i]?.value ?? 0), 0);
+          const met = total >= target;
+          return (
+            <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#B45309] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
+              SUM CAST — {c?.def.name}: Σ {total}/{target}
+              <button
+                onClick={confirmSumCast}
+                disabled={!met}
+                className={cn(
+                  'px-1.5 py-0.5',
+                  met ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-ink)]/40',
+                )}
+              >
+                CAST
+              </button>
+              <button
+                onClick={cancelSumCast}
+                aria-label="Cancel sum cast"
+                className="bg-[var(--c-ink)] px-1"
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })()}
       {!pending && attacker && stage === 'combat' && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           SELECT AN ATTACK TARGET
@@ -1101,14 +1196,22 @@ export function GameV4({
           {me.dice.map((d, i) => {
             const isRolling = rollingDice.has(i);
             const faceDown = stage === 'awaitRoll';
-            const usable = !d.placed && !isRolling && (stage === 'placement' || stage === 'preRoll');
-            const marked = stage === 'preRoll' ? rerollSel.has(i) : selDie === i;
+            const inSumMode = !!sumCast;
+            const usable =
+              !d.placed && !isRolling && (stage === 'placement' || stage === 'preRoll');
+            const marked = inSumMode
+              ? sumCast!.sel.has(i)
+              : stage === 'preRoll'
+                ? rerollSel.has(i)
+                : selDie === i;
             return (
               <button
                 key={i}
                 disabled={!usable}
                 onClick={() => {
-                  if (stage === 'preRoll') {
+                  if (inSumMode) {
+                    toggleSumDie(i);
+                  } else if (stage === 'preRoll') {
                     setRerollSel((s) => {
                       const n = new Set(s);
                       if (n.has(i)) n.delete(i);
@@ -1128,13 +1231,17 @@ export function GameV4({
                     : d.placed
                       ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
                       : marked
-                        ? stage === 'preRoll'
-                          ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
-                          : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
+                        ? inSumMode
+                          ? 'bg-[#B45309] text-white -translate-y-1 shadow-hard-black-xs'
+                          : stage === 'preRoll'
+                            ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
+                            : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
                         : 'bg-[var(--c-paper)] text-[var(--c-ink)] shadow-hard-black-xs',
                   usable && 'btn-pop',
                 )}
-                title={d.placed ? 'Placed' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'}
+                title={
+                  d.placed ? 'Placed' : inSumMode ? 'Toggle into sum' : stage === 'preRoll' ? 'Toggle reroll' : 'Select die'
+                }
                 aria-label={
                   faceDown
                     ? `Die ${i + 1}: not yet rolled`

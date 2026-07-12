@@ -14,6 +14,38 @@ export function kwList(def: CardDef): string[] {
   return def.keywords || [];
 }
 
+/** v4.3: player-facing display label for each dice-pattern gate. */
+export const GATE_LABEL: Record<string, string> = {
+  AnyPair: 'PAIRS',
+  TwoPair: 'TWO PAIR',
+  ThreeKind: '3 OF A KIND',
+  FourKind: '4 OF A KIND',
+  Yahtzee: '5 OF A KIND',
+  FullHouse: 'FULL HOUSE',
+  SmallStraight: 'SM. STRAIGHT',
+  LargeStraight: 'LG. STRAIGHT',
+  ThreeOdds: '3 ODDS',
+  ThreeEvens: '3 EVENS',
+};
+
+/** v4.3: short badge text for this card's Cast Slot cost, any format. */
+export function costBadge(def: CardDef): string | null {
+  if (def.comboGate) return GATE_LABEL[def.comboGate] || def.comboGate;
+  if (def.threshold === undefined) return null;
+  if (def.castCostKind === 'exact') return `=${def.threshold}`;
+  if (def.castCostKind === 'sum') return `Σ${def.threshold}`;
+  return `${def.threshold}+`;
+}
+
+/** v4.3: one-line plain-English summary of this card's Cast Slot cost. */
+export function costSummary(def: CardDef): string | null {
+  if (def.comboGate) return `Cast: roll ${GATE_LABEL[def.comboGate] || def.comboGate}`;
+  if (def.threshold === undefined) return null;
+  if (def.castCostKind === 'exact') return `Cast: one die showing exactly ${def.threshold}`;
+  if (def.castCostKind === 'sum') return `Cast: dice totalling ${def.threshold}+`;
+  return `Cast: one die ${def.threshold}+`;
+}
+
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
   switch (eff.action) {
@@ -43,8 +75,8 @@ export function describeEffect(eff: Effect): string {
 /** Every rules line this card prints, one entry per ability/keyword effect. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
-  if (def.comboGate)
-    bits.push(`Combo ${def.comboGate}: ${def.onCast ? describeEffect(def.onCast) : ''}`);
+  if (def.comboGate && def.onCast)
+    bits.push(`Cast (${GATE_LABEL[def.comboGate] || def.comboGate}): ${describeEffect(def.onCast)}`);
   else if (def.onCast) bits.push(`On cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
     bits.push(`Ability ${def.ability.threshold}+: ${describeEffect(def.ability.effect)}`);
@@ -226,22 +258,28 @@ export function CardFace({
         {def.comboGate ? (
           <span
             className={cn(
-              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white',
+              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
               isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
             )}
+            title={costSummary(def) || undefined}
           >
             {isLg && <Dices className="w-3 h-3" />}
-            COMBO
+            {GATE_LABEL[def.comboGate] || def.comboGate}
           </span>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
           <span
             className={cn(
-              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-ink)] text-[var(--c-yellow)]',
-              isLg ? 'text-[13px] w-7 h-7' : 'text-[9px] w-4 h-4',
+              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
+              def.castCostKind === 'exact'
+                ? 'bg-[#0E7490] text-white'
+                : def.castCostKind === 'sum'
+                  ? 'bg-[#B45309] text-white'
+                  : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+              isLg ? 'text-[11px] px-1.5 h-7 min-w-7' : 'text-[8px] px-1 h-4 min-w-4',
             )}
-            title={`Cast Slot ${def.threshold}+`}
+            title={costSummary(def) || undefined}
           >
-            {def.threshold}
+            {costBadge(def)}
           </span>
         ) : def.type === 'Location' ? (
           <span
@@ -354,16 +392,6 @@ export function CardFace({
                 {kw}
               </span>
             ))}
-          {def.comboGate && (
-            <span
-              className={cn(
-                'font-bold px-1.5 bg-[#A855F7] text-white border border-[var(--c-ink)] leading-tight rounded-full',
-                isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
-              )}
-            >
-              {def.comboGate}
-            </span>
-          )}
         </div>
       )}
 
