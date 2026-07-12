@@ -7,6 +7,57 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Added (progression, battle pass, marketplace, social)
+
+- **Level system**: every match grants XP (+60 win / +25 loss). Levels follow a
+  quadratic curve (`level_for_xp` in SQL, mirrored by `xpForLevel` in
+  `src/meta/ui.tsx`); each level pays 100 gold and every 5th level 10 gems.
+  Level + XP bar shown on the main menu and Profile.
+- **Battle Pass — Season 1 “Blue Coral”** (`BattlePassScreen`): a free 25-tier
+  pass. Match play (+50 win / +20 loss) and mission rewards grant season XP;
+  100 XP per tier. Rewards include gold, gems, shards and free packs, with the
+  **The Voyager** card back at tier 20 and the **Nebula Soul** banner at
+  tier 25 — both removed from the shop and made pass exclusives.
+- **Missions & Achievements** (`AchievementsScreen`): daily/weekly missions
+  (auto-resetting, with gold/gem/pass-XP rewards) and 22 permanent achievements
+  across battle, collection, progression, social and market categories, some
+  paying out free packs. Progress is tracked server-side by a generic
+  `track_stat` hook wired into match results, pack openings, purchases,
+  quicksells, friendships, trades and market sales — with a one-time backfill
+  for existing accounts.
+- **Pack inventory** (Store ▸ MY PACKS): packs can now be bought *without*
+  opening (“BUY & SAVE FOR LATER”) and stored; battle pass and achievement
+  reward packs land here too. Open them any time with the usual reveal.
+- **Card marketplace & auctions** (`MarketplaceScreen`): player-to-player
+  fixed-price listings and timed auctions (with optional buyout, 5% minimum
+  bid raises, anti-snipe end-time extension, and gold escrow for bids).
+  Listed cards are escrowed out of the collection; sellers pay a 5% fee.
+  Expired listings settle lazily whenever anyone opens the marketplace.
+- **Friends & trading** (`SocialScreen`): username search, friend requests
+  (auto-accept when both sides ask), and friend-to-friend trades of cards
+  and/or gold with server-side revalidation of both sides at accept time.
+- **Transparent pack odds**: every pack in the store has a “VIEW DROP ODDS”
+  breakdown showing the exact per-slot rarity weights, foil chances, dupe
+  protection, pity rules and expected cards per rarity, mirrored from the
+  server's roll tables (`src/meta/packodds.ts`).
+- **Collection progress**: the Collection screen now shows overall and
+  per-rarity completion bars.
+
+### Fixed
+
+- **Some packs couldn't be bought**: the store rendered every `pack_types`
+  row — including inactive and reward-only packs — so their buy buttons always
+  failed with "This pack is no longer available". The store now only shelves
+  active, purchasable packs; the duplicate legacy “Collector Booster Box” row
+  was deleted and Starter Pack, Premium Elite Box and Ultra Pack were
+  re-activated.
+- **Daily Free Pack was unclaimable**: the `claim_daily_pack` RPC existed but
+  had no UI. The store now shows a claim card with its 20-hour cooldown.
+- **Battle-pass-exclusive cosmetics with a 0-gem price** (e.g. “Into the
+  Pines”) were equippable by everyone from the Profile screen without being
+  owned, and `buy_shop_item` would sell pass exclusives that had leftover
+  prices. Both paths now respect `is_season_pass_exclusive`.
+
 ### Added (universal card template, quicksell, foil glow, deck consumption)
 
 - **New universal card template** (`src/components/CardFaceV4.tsx`): rarity-tinted

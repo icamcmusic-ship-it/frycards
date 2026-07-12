@@ -8,12 +8,14 @@ import {
   PlayerCard,
   PlayerCosmetic,
   DeckRow,
+  InventoryEntry,
   fetchProfile,
   fetchShopItems,
   fetchPackTypes,
   fetchCollection,
   fetchCosmetics,
   fetchDecks,
+  fetchInventory,
 } from '../lib/supabase';
 import { preloadImages } from '../lib/preload';
 
@@ -28,11 +30,13 @@ export interface MetaState {
   collection: PlayerCard[];
   cosmetics: PlayerCosmetic[];
   decks: DeckRow[];
+  inventory: InventoryEntry[];
   setGuest: (g: boolean) => void;
   refreshProfile: () => Promise<void>;
   refreshCollection: () => Promise<void>;
   refreshCosmetics: () => Promise<void>;
   refreshDecks: () => Promise<void>;
+  refreshInventory: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -55,6 +59,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [collection, setCollection] = useState<PlayerCard[]>([]);
   const [cosmetics, setCosmetics] = useState<PlayerCosmetic[]>([]);
   const [decks, setDecks] = useState<DeckRow[]>([]);
+  const [inventory, setInventory] = useState<InventoryEntry[]>([]);
 
   // Session bootstrap + subscription.
   useEffect(() => {
@@ -103,6 +108,10 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return;
     setDecks(await fetchDecks(userId));
   }, [userId]);
+  const refreshInventory = useCallback(async () => {
+    if (!userId) return;
+    setInventory(await fetchInventory(userId));
+  }, [userId]);
 
   // Load per-user data when a session appears.
   useEffect(() => {
@@ -111,13 +120,15 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       setCollection([]);
       setCosmetics([]);
       setDecks([]);
+      setInventory([]);
       return;
     }
     refreshProfile();
     refreshCollection();
     refreshCosmetics();
     refreshDecks();
-  }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks]);
+    refreshInventory();
+  }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, refreshInventory]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -136,11 +147,13 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         collection,
         cosmetics,
         decks,
+        inventory,
         setGuest,
         refreshProfile,
         refreshCollection,
         refreshCosmetics,
         refreshDecks,
+        refreshInventory,
         signOut,
       }}
     >

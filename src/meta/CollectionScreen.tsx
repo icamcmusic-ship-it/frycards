@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { POOL_V4 } from '../game/v3/cardpool';
@@ -49,6 +49,24 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
 
+  // Per-rarity completion for the progress panel.
+  const rarityProgress = useMemo(() => {
+    const totals = new Map<string, { total: number; owned: number }>();
+    for (const c of POOL_V4) {
+      const r = c.rarity || 'Common';
+      const e = totals.get(r) || { total: 0, owned: 0 };
+      e.total += 1;
+      const o = owned.get(c.id);
+      if ((o?.q || 0) + (o?.f || 0) > 0) e.owned += 1;
+      totals.set(r, e);
+    }
+    return RARITIES.map((r) => ({
+      rarity: r,
+      ...(totals.get(r) || { total: 0, owned: 0 }),
+    })).filter((e) => e.total > 0);
+  }, [owned]);
+  const [showProgress, setShowProgress] = useState(true);
+
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const inspectOwned = inspect ? owned.get(inspect.id) : undefined;
@@ -74,6 +92,37 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="COLLECTION" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
+        {/* Collection progress */}
+        <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
+          <button
+            className="w-full flex items-center justify-between gap-2"
+            onClick={() => setShowProgress((s) => !s)}
+          >
+            <span className="heading-font text-sm">COLLECTION PROGRESS</span>
+            <span className="text-[10px] font-black">
+              {uniqueOwned}/{POOL_V4.length} (
+              {POOL_V4.length > 0 ? Math.round((uniqueOwned / POOL_V4.length) * 100) : 0}%){' '}
+              {showProgress ? '▴' : '▾'}
+            </span>
+          </button>
+          <ProgressBar value={uniqueOwned} max={POOL_V4.length} className="mt-2" />
+          {showProgress && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
+              {rarityProgress.map((e) => (
+                <div key={e.rarity}>
+                  <div className="flex justify-between text-[9px] font-black mb-0.5">
+                    <span>{e.rarity.toUpperCase()}</span>
+                    <span className="font-mono">
+                      {e.owned}/{e.total}
+                    </span>
+                  </div>
+                  <ProgressBar value={e.owned} max={e.total} className="h-1.5" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <input
             className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}

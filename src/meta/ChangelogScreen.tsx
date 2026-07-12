@@ -12,6 +12,21 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Season 1 Update',
+    items: [
+      'Battle Pass — Season 1 "Blue Coral": a free 25-tier pass. Earn season XP from matches and missions; rewards include gold, gems, shards, free packs, The Voyager card back (tier 20) and the Nebula Soul banner (tier 25). Both are now pass exclusives and left the shop.',
+      'Level system: every match grants XP; each level pays 100 gold and every 5th level 10 gems.',
+      'Missions & Achievements: daily and weekly missions plus 22 permanent achievements with gold, gem and free-pack rewards.',
+      'Card Marketplace: list your spare cards at a fixed price or run timed auctions with bids and buyouts. Sellers pay a 5% fee.',
+      'Friends & Trading: search players, send friend requests and trade cards and gold directly with friends.',
+      'Pack inventory: buy packs without opening them ("BUY & SAVE FOR LATER") and store reward packs — open everything from the new MY PACKS tab in the Store.',
+      'Transparent pack odds: every pack now has a VIEW DROP ODDS panel showing the exact per-slot rarity percentages, foil chances and pity rules.',
+      'Daily Free Pack is now claimable from the Store (every 20 hours).',
+      'Fixed: several packs showed in the store but could never be bought; the shelf now only shows purchasable packs, and Starter Pack, Premium Elite Box and Ultra Pack returned to sale.',
+      'Collection screen now shows overall and per-rarity completion progress.',
+    ],
+  },
+  {
     version: 'Unreleased',
     items: [
       'New universal card template with a dice-medallion cost badge, rounded rarity/keyword pill styling and a rarity-tinted header — used everywhere a card is shown: match, Collection, Deck Builder, pack opening and the new expanded card viewer.',

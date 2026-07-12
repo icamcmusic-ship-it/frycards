@@ -30,6 +30,9 @@ export interface Profile {
   username: string;
   gold: number;
   gems: number;
+  shards: number;
+  xp: number;
+  level: number;
   wins: number;
   losses: number;
   games_played: number;
@@ -37,6 +40,7 @@ export interface Profile {
   equipped_banner: string | null;
   equipped_avatar: string | null;
   starter_claimed: boolean;
+  last_free_pack_at: string | null;
 }
 
 export interface ShopItem {
@@ -55,8 +59,20 @@ export interface ShopItem {
   author: string | null;
 }
 
+/** slot_config entries come in two shapes: legacy `{type}` slots whose odds
+ * live in the `roll_slot_rarity` SQL function, and the newer explicit shape
+ * with `rarity_weights`. The odds viewer understands both. */
 export interface PackSlot {
-  type: string;
+  type?: string;
+  slot_type?: string;
+  count?: number;
+  rarity_weights?: Record<string, number>;
+  guaranteed_min_rarity?: string;
+  foil_chance_override?: number;
+  foil_eligible?: boolean;
+  dupe_protected?: boolean;
+  pity_key?: string;
+  pity_cap?: number;
 }
 
 export interface PackType {
@@ -72,6 +88,8 @@ export interface PackType {
   price_gems: number | null;
   pack_tier: string;
   slot_config: PackSlot[];
+  is_active: boolean;
+  acquisition: string;
 }
 
 export interface PlayerCard {
@@ -238,12 +256,10 @@ export async function setUsername(name: string): Promise<string | null> {
   return rpcError(error);
 }
 
-export async function recordMatchResult(
-  won: boolean,
-): Promise<{ reward: number; gold: number } | null> {
+export async function recordMatchResult(won: boolean): Promise<MatchResult | null> {
   const { data, error } = await supabase.rpc('record_match_result', { p_won: won });
   if (error) return null;
-  return data as { reward: number; gold: number };
+  return data as MatchResult;
 }
 
 /**
@@ -282,6 +298,391 @@ export interface QuicksellResult {
   foil: boolean;
   unit_price: number;
   total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Levels, battle pass, achievements, missions, inventory
+// ---------------------------------------------------------------------------
+export interface MatchResult {
+  reward: number;
+  gold: number;
+  wins: number;
+  losses: number;
+  xp_gained: number;
+  xp: number;
+  level: number;
+  leveled_up: boolean;
+  level_gold_bonus: number;
+  level_gems_bonus: number;
+  bp_xp_gained: number;
+}
+
+export interface Season {
+  id: string;
+  number: number;
+  name: string;
+  is_active: boolean;
+  is_free: boolean;
+  starts_at: string;
+  ends_at: string | null;
+}
+
+export interface BattlePassTier {
+  id: string;
+  season_id: string;
+  tier: number;
+  reward_type: 'gold' | 'gems' | 'shards' | 'pack' | 'cosmetic';
+  amount: number;
+  pack_type_id: string | null;
+  shop_item_id: string | null;
+  label: string;
+}
+
+export interface PlayerBattlePass {
+  season_id: string;
+  xp: number;
+  claimed_tiers: number[];
+}
+
+/** XP required to unlock a battle pass tier — keep in sync with claim_bp_tier. */
+export const BP_XP_PER_TIER = 100;
+
+export async function fetchActiveSeason(): Promise<{
+  season: Season | null;
+  tiers: BattlePassTier[];
+}> {
+  const { data: season } = await supabase
+    .from('seasons')
+    .select('*')
+    .eq('is_active', true)
+    .maybeSingle();
+  if (!season) return { season: null, tiers: [] };
+  const { data: tiers } = await supabase
+    .from('battle_pass_tiers')
+    .select('*')
+    .eq('season_id', (season as Season).id)
+    .order('tier');
+  return { season: season as Season, tiers: (tiers as BattlePassTier[]) || [] };
+}
+
+export async function fetchBattlePassProgress(
+  userId: string,
+  seasonId: string,
+): Promise<PlayerBattlePass> {
+  const { data } = await supabase
+    .from('player_battle_pass')
+    .select('season_id, xp, claimed_tiers')
+    .eq('user_id', userId)
+    .eq('season_id', seasonId)
+    .maybeSingle();
+  return (data as PlayerBattlePass) || { season_id: seasonId, xp: 0, claimed_tiers: [] };
+}
+
+export async function claimBpTier(seasonId: string, tier: number): Promise<string | null> {
+  const { error } = await supabase.rpc('claim_bp_tier', { p_season_id: seasonId, p_tier: tier });
+  return rpcError(error);
+}
+
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  stat_key: string;
+  target: number;
+  reward_gold: number;
+  reward_gems: number;
+  reward_pack_id: string | null;
+  sort: number;
+}
+
+export interface PlayerAchievement {
+  achievement_id: string;
+  progress: number;
+  claimed: boolean;
+}
+
+export async function fetchAchievements(
+  userId: string,
+): Promise<{ all: Achievement[]; mine: PlayerAchievement[] }> {
+  const [{ data: all }, { data: mine }] = await Promise.all([
+    supabase.from('achievements').select('*').order('sort'),
+    supabase
+      .from('player_achievements')
+      .select('achievement_id, progress, claimed')
+      .eq('user_id', userId),
+  ]);
+  return { all: (all as Achievement[]) || [], mine: (mine as PlayerAchievement[]) || [] };
+}
+
+export async function claimAchievement(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('claim_achievement', { p_id: id });
+  return rpcError(error);
+}
+
+export interface Mission {
+  id: string;
+  name: string;
+  description: string;
+  stat_key: string;
+  target: number;
+  cadence: 'daily' | 'weekly';
+  reward_gold: number;
+  reward_gems: number;
+  reward_bp_xp: number;
+  progress: number;
+  claimed: boolean;
+}
+
+export async function fetchMissions(): Promise<Mission[]> {
+  const { data, error } = await supabase.rpc('get_missions');
+  if (error || !data) return [];
+  return data as Mission[];
+}
+
+export async function claimMission(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('claim_mission', { p_id: id });
+  return rpcError(error);
+}
+
+export interface InventoryEntry {
+  pack_type_id: string;
+  quantity: number;
+}
+
+export async function fetchInventory(userId: string): Promise<InventoryEntry[]> {
+  const { data } = await supabase
+    .from('player_inventory')
+    .select('pack_type_id, quantity')
+    .eq('user_id', userId)
+    .gt('quantity', 0);
+  return (data as InventoryEntry[]) || [];
+}
+
+export async function buyPackToInventory(
+  packId: string,
+  currency: 'gold' | 'gems',
+  quantity = 1,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('buy_pack_to_inventory', {
+    p_pack_id: packId,
+    p_currency: currency,
+    p_quantity: quantity,
+  });
+  return rpcError(error);
+}
+
+export async function openInventoryPack(
+  packId: string,
+): Promise<{ data: OpenPackResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('open_inventory_pack', { p_pack_id: packId });
+  return { data: (data as OpenPackResult) || null, error: rpcError(error) };
+}
+
+export async function claimDailyPack(): Promise<{
+  data: OpenPackResult | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('claim_daily_pack');
+  return { data: (data as OpenPackResult) || null, error: rpcError(error) };
+}
+
+// ---------------------------------------------------------------------------
+// Friends & trading
+// ---------------------------------------------------------------------------
+export interface PublicProfile {
+  id: string;
+  username: string;
+  level: number;
+  wins: number;
+  losses: number;
+  equipped_avatar: string | null;
+  equipped_banner: string | null;
+}
+
+export interface Friendship {
+  id: string;
+  requester: string;
+  addressee: string;
+  status: 'pending' | 'accepted';
+  created_at: string;
+}
+
+export async function fetchFriendships(): Promise<Friendship[]> {
+  const { data } = await supabase.from('friendships').select('*').order('created_at');
+  return (data as Friendship[]) || [];
+}
+
+export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[]> {
+  if (ids.length === 0) return [];
+  const { data } = await supabase.rpc('get_public_profiles', { p_ids: ids });
+  return (data as PublicProfile[]) || [];
+}
+
+export async function searchPlayers(query: string): Promise<PublicProfile[]> {
+  const { data, error } = await supabase.rpc('search_players', { p_query: query });
+  if (error || !data) return [];
+  return data as PublicProfile[];
+}
+
+export async function sendFriendRequest(username: string): Promise<string | null> {
+  const { error } = await supabase.rpc('send_friend_request', { p_username: username });
+  return rpcError(error);
+}
+
+export async function respondFriendRequest(id: string, accept: boolean): Promise<string | null> {
+  const { error } = await supabase.rpc('respond_friend_request', { p_id: id, p_accept: accept });
+  return rpcError(error);
+}
+
+export async function removeFriend(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('remove_friend', { p_id: id });
+  return rpcError(error);
+}
+
+export interface TradeCardItem {
+  card_id: string;
+  quantity: number;
+  foil: boolean;
+}
+
+export interface Trade {
+  id: string;
+  proposer: string;
+  recipient: string;
+  proposer_cards: TradeCardItem[];
+  recipient_cards: TradeCardItem[];
+  proposer_gold: number;
+  recipient_gold: number;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+  created_at: string;
+}
+
+export async function fetchTrades(): Promise<Trade[]> {
+  const { data } = await supabase
+    .from('trades')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+  return (data as Trade[]) || [];
+}
+
+export async function fetchFriendCollection(friendId: string): Promise<PlayerCard[]> {
+  const { data, error } = await supabase.rpc('get_friend_collection', { p_friend: friendId });
+  if (error || !data) return [];
+  return (data as { card_id: string; quantity: number; foil_quantity: number }[]).map((r) => ({
+    card_id: r.card_id,
+    quantity: r.quantity,
+    foil_quantity: r.foil_quantity,
+  }));
+}
+
+export async function createTrade(
+  recipient: string,
+  offerCards: TradeCardItem[],
+  requestCards: TradeCardItem[],
+  offerGold: number,
+  requestGold: number,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('create_trade', {
+    p_recipient: recipient,
+    p_offer_cards: offerCards,
+    p_request_cards: requestCards,
+    p_offer_gold: offerGold,
+    p_request_gold: requestGold,
+  });
+  return rpcError(error);
+}
+
+export async function respondTrade(tradeId: string, accept: boolean): Promise<string | null> {
+  const { error } = await supabase.rpc('respond_trade', { p_trade_id: tradeId, p_accept: accept });
+  return rpcError(error);
+}
+
+export async function cancelTrade(tradeId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('cancel_trade', { p_trade_id: tradeId });
+  return rpcError(error);
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace & auctions
+// ---------------------------------------------------------------------------
+export interface MarketListing {
+  id: string;
+  seller: string;
+  card_id: string;
+  foil: boolean;
+  quantity: number;
+  listing_type: 'fixed' | 'auction';
+  price: number;
+  buyout: number | null;
+  current_bid: number | null;
+  current_bidder: string | null;
+  bid_count: number;
+  status: 'active' | 'sold' | 'cancelled' | 'expired';
+  created_at: string;
+  ends_at: string;
+}
+
+/** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
+export const MARKET_FEE = 0.05;
+
+export async function fetchMarketListings(): Promise<MarketListing[]> {
+  // settle anything past its end time first so browsers see fresh state
+  await supabase.rpc('settle_expired_listings');
+  const { data } = await supabase
+    .from('market_listings')
+    .select('*')
+    .eq('status', 'active')
+    .order('ends_at')
+    .limit(200);
+  return (data as MarketListing[]) || [];
+}
+
+export async function fetchMyMarketActivity(userId: string): Promise<MarketListing[]> {
+  const { data } = await supabase
+    .from('market_listings')
+    .select('*')
+    .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  return (data as MarketListing[]) || [];
+}
+
+export async function createListing(opts: {
+  cardId: string;
+  foil: boolean;
+  quantity: number;
+  type: 'fixed' | 'auction';
+  price: number;
+  buyout?: number | null;
+  hours?: number;
+}): Promise<string | null> {
+  const { error } = await supabase.rpc('create_listing', {
+    p_card_id: opts.cardId,
+    p_foil: opts.foil,
+    p_quantity: opts.quantity,
+    p_type: opts.type,
+    p_price: opts.price,
+    p_buyout: opts.buyout ?? null,
+    p_hours: opts.hours ?? 24,
+  });
+  return rpcError(error);
+}
+
+export async function cancelListing(listingId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('cancel_listing', { p_listing_id: listingId });
+  return rpcError(error);
+}
+
+export async function buyListing(listingId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('buy_listing', { p_listing_id: listingId });
+  return rpcError(error);
+}
+
+export async function placeBid(listingId: string, amount: number): Promise<string | null> {
+  const { error } = await supabase.rpc('place_bid', { p_listing_id: listingId, p_amount: amount });
+  return rpcError(error);
 }
 
 /** Sell owned copies of a card for a fixed rarity-based gold price (foils pay 2.5x). */

@@ -18,6 +18,10 @@ import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
 import { MainMenu, MetaScreen } from './meta/MainMenu';
 import { StoreScreen } from './meta/StoreScreen';
+import { BattlePassScreen } from './meta/BattlePassScreen';
+import { AchievementsScreen } from './meta/AchievementsScreen';
+import { SocialScreen } from './meta/SocialScreen';
+import { MarketplaceScreen } from './meta/MarketplaceScreen';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
@@ -182,13 +186,13 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   // fixed archetype presets — keeps every match legal even when the human's
   // own custom deck is still a work in progress.
   const [cpuArch] = useState(() => randomArchetype());
-  const [reward, setReward] = useState<number | null>(null);
+  const [reward, setReward] = useState<Awaited<ReturnType<typeof recordMatchResult>>>(null);
 
   const onResult = (won: boolean) => {
     if (!session) return;
     recordMatchResult(won).then((res) => {
       if (res) {
-        setReward(res.reward);
+        setReward(res);
         refreshProfile();
       }
     });
@@ -206,8 +210,16 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         onResult={onResult}
       />
       {reward !== null && (
-        <div className="absolute bottom-2 right-2 z-[60] bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
-          +{reward} GOLD
+        <div className="absolute bottom-2 right-2 z-[60] flex flex-col items-end gap-1">
+          <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+            +{reward.reward} GOLD · +{reward.xp_gained} XP · +{reward.bp_xp_gained} PASS XP
+          </div>
+          {reward.leveled_up && (
+            <div className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs animate-pulse">
+              LEVEL UP! NOW LV {reward.level} · +{reward.level_gold_bonus} GOLD
+              {reward.level_gems_bonus > 0 ? ` · +${reward.level_gems_bonus} GEMS` : ''}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -263,6 +275,14 @@ function AppInner() {
       return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
     case 'store':
       return <StoreScreen onBack={() => setScreen('menu')} />;
+    case 'battlepass':
+      return <BattlePassScreen onBack={() => setScreen('menu')} />;
+    case 'achievements':
+      return <AchievementsScreen onBack={() => setScreen('menu')} />;
+    case 'social':
+      return <SocialScreen onBack={() => setScreen('menu')} />;
+    case 'market':
+      return <MarketplaceScreen onBack={() => setScreen('menu')} />;
     case 'collection':
       return <CollectionScreen onBack={() => setScreen('menu')} />;
     case 'decks':
