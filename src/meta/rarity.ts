@@ -61,3 +61,33 @@ export function rarityBorder(rarity?: string): string {
 export function rarityGlow(rarity?: string): string {
   return RARITY_GLOW[rarity || 'Common'] || '';
 }
+
+// ---------------------------------------------------------------------------
+// v4.3 per-rarity card treatments — special backgrounds/effects for Rare and
+// up, culminating in a distinct Mythic template. See CardFaceV4.tsx and the
+// .rarity-*/.mythic-* keyframes in index.css.
+// ---------------------------------------------------------------------------
+
+/** Card-body background gradient, tinted from the rarity color. Common/Uncommon get none (plain paper). */
+export const RARITY_BG: Record<string, string> = {
+  Rare: 'linear-gradient(160deg, color-mix(in srgb, #3B82F6 16%, var(--c-paper)) 0%, var(--c-paper) 55%)',
+  'Super-Rare':
+    'linear-gradient(160deg, color-mix(in srgb, #A855F7 22%, var(--c-paper)) 0%, var(--c-paper) 55%)',
+  'Ultra-Rare':
+    'linear-gradient(145deg, color-mix(in srgb, #D4AF37 30%, var(--c-paper)) 0%, color-mix(in srgb, #D4AF37 10%, var(--c-paper)) 45%, var(--c-paper) 80%)',
+  Mythic:
+    'linear-gradient(150deg, color-mix(in srgb, #E11D2E 26%, var(--c-paper)) 0%, color-mix(in srgb, #FFB300 14%, var(--c-paper)) 50%, var(--c-paper) 85%)',
+};
+
+export function rarityBg(rarity?: string): string | undefined {
+  return RARITY_BG[rarity || ''];
+}
+
+/** True from Super-Rare up — these rarities also get an animated effect layer. */
+export function rarityAnimated(rarity?: string): boolean {
+  return rarity === 'Super-Rare' || rarity === 'Ultra-Rare';
+}
+
+export function isMythic(rarity?: string): boolean {
+  return rarity === 'Mythic';
+}

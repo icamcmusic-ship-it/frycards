@@ -8,7 +8,15 @@ import React, { useState } from 'react';
 import { Dices } from 'lucide-react';
 import { CardDef, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
-import { rarityChip, rarityBorder, rarityGlow, RARITY_HEX } from '../meta/rarity';
+import {
+  rarityChip,
+  rarityBorder,
+  rarityGlow,
+  rarityBg,
+  rarityAnimated,
+  isMythic,
+  RARITY_HEX,
+} from '../meta/rarity';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -287,6 +295,12 @@ export function CardFace({
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
+  // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
+  // animated sheen; Mythic additionally gets a pulsing frame and a distinct
+  // gold-on-red name banner instead of the shared tinted-paper header.
+  const mythic = isMythic(def.rarity);
+  const animatedFx = rarityAnimated(def.rarity) || mythic;
+  const bg = rarityBg(def.rarity);
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -306,7 +320,7 @@ export function CardFace({
           onClick();
         }
       }}
-      style={{ width: w, height: h }}
+      style={{ width: w, height: h, backgroundImage: bg }}
       className={cn(
         'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-hidden rounded-[4px]',
         rarityBorder(def.rarity),
@@ -314,21 +328,26 @@ export function CardFace({
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         isLg ? 'shadow-hard-black' : 'shadow-hard-black-xs',
-        isLg && !dimmed && rarityGlow(def.rarity),
+        !dimmed && (mythic ? 'mythic-frame' : isLg && rarityGlow(def.rarity)),
         foil && !dimmed && 'foil-glow',
       )}
     >
-      {/* Header: name + dice-medallion cost badge, tinted per rarity. */}
+      {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
+          gold-on-red name banner instead of the shared tinted-paper header. */}
       <div
         className={cn(
-          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 border-[var(--c-ink)]/15',
+          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2',
           isLg ? 'py-1' : 'py-0.5',
+          mythic ? 'mythic-bg border-[#7A1420]' : 'border-[var(--c-ink)]/15',
         )}
-        style={{ backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }}
+        style={
+          mythic ? undefined : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
+        }
       >
         <span
           className={cn(
             'heading-font leading-tight truncate pr-1',
+            mythic && 'text-[var(--c-yellow)]',
             isLg ? 'text-[13px]' : 'text-[9px]',
           )}
           title={def.name}
@@ -502,6 +521,11 @@ export function CardFace({
       {footer}
 
       {foil && <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />}
+      {!foil && animatedFx && !dimmed && (
+        <div
+          className={cn('rarity-sheen absolute inset-0 pointer-events-none', mythic ? 'opacity-80' : 'opacity-50')}
+        />
+      )}
     </div>
   );
 }
