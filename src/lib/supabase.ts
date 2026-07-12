@@ -519,6 +519,21 @@ export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[
   return (data as PublicProfile[]) || [];
 }
 
+export interface CardsLeaderboardEntry {
+  id: string;
+  username: string;
+  level: number;
+  total_cards: number;
+  equipped_avatar: string | null;
+  equipped_banner: string | null;
+}
+
+/** Top players by total owned cards (quantity + foil_quantity, summed across every card). */
+export async function fetchCardsLeaderboard(limit = 50): Promise<CardsLeaderboardEntry[]> {
+  const { data } = await supabase.rpc('get_cards_leaderboard', { p_limit: limit });
+  return (data as CardsLeaderboardEntry[]) || [];
+}
+
 export async function searchPlayers(query: string): Promise<PublicProfile[]> {
   const { data, error } = await supabase.rpc('search_players', { p_query: query });
   if (error || !data) return [];

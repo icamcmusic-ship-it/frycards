@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, UserPlus, ArrowLeftRight, Search, Coins, X } from 'lucide-react';
+import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchFriendships,
   fetchPublicProfiles,
   fetchTrades,
   fetchFriendCollection,
+  fetchCardsLeaderboard,
   searchPlayers,
   sendFriendRequest,
   respondFriendRequest,
@@ -18,13 +19,14 @@ import {
   Trade,
   TradeCardItem,
   PlayerCard,
+  CardsLeaderboardEntry,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { RARITY_CHIP } from './rarity';
 
-type Tab = 'friends' | 'trades';
+type Tab = 'friends' | 'trades' | 'leaderboard';
 
 function cardName(id: string): string {
   return POOL_BY_ID[id]?.name || id;
@@ -88,6 +90,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PublicProfile[] | null>(null);
   const [tradePartner, setTradePartner] = useState<PublicProfile | null>(null);
+  const [leaderboard, setLeaderboard] = useState<CardsLeaderboardEntry[] | null>(null);
+
+  useEffect(() => {
+    if (tab !== 'leaderboard' || leaderboard !== null) return;
+    fetchCardsLeaderboard(50).then(setLeaderboard);
+  }, [tab, leaderboard]);
 
   const reload = useCallback(async () => {
     const [fs, ts] = await Promise.all([fetchFriendships(), fetchTrades()]);
@@ -168,6 +176,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
               {pendingTrades.length > 0 ? ` (${pendingTrades.length})` : ''}
             </span>
           </PopButton>
+          <PopButton
+            color={tab === 'leaderboard' ? 'black' : 'yellow'}
+            onClick={() => setTab('leaderboard')}
+          >
+            <span className="flex items-center gap-1">
+              <Trophy className="w-3.5 h-3.5" /> LEADERBOARD
+            </span>
+          </PopButton>
         </div>
 
         {error && (
@@ -181,7 +197,44 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {tab === 'friends' ? (
+        {tab === 'leaderboard' && (
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3">
+            <div className="heading-font text-xs mb-2 flex items-center gap-1.5">
+              <Trophy className="w-4 h-4" /> MOST CARDS OWNED
+            </div>
+            {leaderboard === null ? (
+              <p className="text-[11px] font-bold text-[var(--c-steel)]">Loading…</p>
+            ) : leaderboard.length === 0 ? (
+              <p className="text-[11px] font-bold text-[var(--c-steel)]">No players yet.</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {leaderboard.map((row, i) => (
+                  <div
+                    key={row.id}
+                    className={cn(
+                      'flex items-center gap-3 px-2 py-1.5 ink-border-sm',
+                      row.id === userId ? 'bg-[var(--c-yellow)]' : 'bg-[var(--c-paper)]',
+                    )}
+                  >
+                    <span className="heading-font text-xs w-7 text-right shrink-0">#{i + 1}</span>
+                    <span className="flex-1 min-w-0 text-[11px] font-bold truncate">
+                      {row.username}
+                      {row.id === userId ? ' (you)' : ''}
+                    </span>
+                    <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">
+                      Lv {row.level}
+                    </span>
+                    <span className="font-mono font-black text-sm shrink-0">
+                      {row.total_cards.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {tab !== 'leaderboard' &&
+          (tab === 'friends' ? (
           <>
             {/* Find players */}
             <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-6">
@@ -459,7 +512,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
               </>
             )}
           </>
-        )}
+          ))}
       </div>
 
       {tradePartner && profile && (

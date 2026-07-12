@@ -18,8 +18,10 @@ import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw } from './c
 export type TwinMode = 'oneDiePerTurn' | 'sameTurn' | 'stagedPassive';
 export interface RuleConfig {
   twinMode: TwinMode;
+  /** v4.3: number of Reroll Phase rerolls allowed per turn (was always 1). */
+  rerollsAllowed: number;
 }
-const DEFAULT_RULES: RuleConfig = { twinMode: 'oneDiePerTurn' };
+const DEFAULT_RULES: RuleConfig = { twinMode: 'oneDiePerTurn', rerollsAllowed: 2 };
 
 // ---------------------------------------------------------------------------
 // RNG (seeded, for reproducible playtests)
@@ -84,7 +86,8 @@ export interface Player {
   board: Inst[];
   location: Inst | null;
   dice: Die[];
-  rerollUsed: boolean;
+  /** v4.3: number of Reroll Phase rerolls spent this turn (cap: rules.rerollsAllowed). */
+  rerollsUsed: number;
   locationCastThisTurn: boolean;
   rallyUsedThisTurn: boolean;
   turnsTaken: number;
@@ -272,6 +275,10 @@ export function matchesPattern(values: number[], pattern: ComboPattern): boolean
       return hasRun(4);
     case 'LargeStraight':
       return hasRun(5);
+    case 'ThreeOdds':
+      return values.filter((v) => v % 2 === 1).length >= 3;
+    case 'ThreeEvens':
+      return values.filter((v) => v % 2 === 0).length >= 3;
   }
 }
 
@@ -319,7 +326,7 @@ export function newGame(
       board: [],
       location: null,
       dice: [],
-      rerollUsed: false,
+      rerollsUsed: 0,
       locationCastThisTurn: false,
       rallyUsedThisTurn: false,
       turnsTaken: 0,
@@ -547,7 +554,7 @@ export function startTurn(g: Game) {
   g.turn++;
   const p = g.players[g.active];
   p.turnsTaken++;
-  p.rerollUsed = false;
+  p.rerollsUsed = 0;
   p.locationCastThisTurn = false;
   p.rallyUsedThisTurn = false;
   p.comboGateCastThisTurn = false;
@@ -619,16 +626,30 @@ export function mulliganRedraw(g: Game, pid: string) {
   for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
 }
 
-/** Reroll Phase: reroll any subset exactly once. Closes the Snap-only window. */
+/**
+ * Reroll Phase: reroll any subset of unplaced dice. May be called up to
+ * `rules.rerollsAllowed` times per turn (v4.3: default 2, was always 1) —
+ * each call spends one reroll. The Placement window opens once the
+ * allowance is exhausted, or the caller passes an empty selection to end
+ * the Reroll Phase voluntarily before then.
+ */
 export function reroll(g: Game, indices: number[]) {
   const p = g.players[g.active];
-  if (p.rerollUsed) {
+  if (p.rerollsUsed >= g.rules.rerollsAllowed) {
     g.stage = 'PLACEMENT';
     return;
   }
   for (const i of indices) if (!p.dice[i].placed) p.dice[i].value = d6(g.rng);
-  p.rerollUsed = true;
-  g.stage = 'PLACEMENT';
+  p.rerollsUsed++;
+  if (indices.length === 0 || p.rerollsUsed >= g.rules.rerollsAllowed) {
+    g.stage = 'PLACEMENT';
+  }
+}
+
+/** Rerolls still available this Reroll Phase. */
+export function rerollsRemaining(g: Game, pid: string): number {
+  const p = g.players[pid];
+  return Math.max(0, g.rules.rerollsAllowed - p.rerollsUsed);
 }
 
 // ---------------------------------------------------------------------------
@@ -747,17 +768,48 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
   }
 }
 
-/** Destination 1: cast a card from hand. */
+/**
+ * v4.3: normalize a single die index or a multi-die selection (needed for
+ * 'sum' cast costs) into an array of that player's still-unplaced Die
+ * objects, or null if the selection is invalid (missing/already-placed/
+ * duplicate index).
+ */
+function pickDice(p: Player, dieIndex: number | number[]): Die[] | null {
+  const idxs = Array.isArray(dieIndex) ? dieIndex : [dieIndex];
+  if (idxs.length === 0 || new Set(idxs).size !== idxs.length) return null;
+  const dice = idxs.map((i) => pickDie(p, i));
+  return dice.every((d): d is Die => !!d) ? dice : null;
+}
+
+/**
+ * v4.3: does this die selection legally pay a card's Cast Slot cost? Covers
+ * the two numeric cost formats — the three pattern-based formats (Pairs and
+ * every kind/straight/house/parity pattern) are already handled by the
+ * pre-existing `comboGate` check at each call site, since `comboGate` is
+ * usable on any card type now, not just Events.
+ */
+function payableNumeric(g: Game, pid: string, def: CardDef, dice: Die[]): boolean {
+  const eff = effThreshold(g, pid, def);
+  if (def.castCostKind === 'sum') {
+    return dice.reduce((s, d) => s + d.value, 0) >= eff;
+  }
+  if (def.castCostKind === 'exact') {
+    return dice.length === 1 && dice[0].value === eff;
+  }
+  return dice.length === 1 && dice[0].value >= eff;
+}
+
+/** Destination 1: cast a card from hand. `dieIndex` is an array for 'sum'-cost cards. */
 export function castFromHand(
   g: Game,
-  dieIndex: number,
+  dieIndex: number | number[],
   cardIid: string,
   targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
-  const die = pickDie(p, dieIndex);
+  const dice = pickDice(p, dieIndex);
   const idx = p.hand.findIndex((c) => c.iid === cardIid);
-  if (!die || idx < 0) return false;
+  if (!dice || idx < 0) return false;
   const c = p.hand[idx];
 
   // v4.1: Locations never use a die — they cast free via castLocationFree().
@@ -771,28 +823,35 @@ export function castFromHand(
     // regardless of how many qualify — closes the general chaining failure
     // mode, not just the one offending card.
     if (p.comboGateCastThisTurn) return false;
+    if (dice.length !== 1) return false;
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
     // any die value works
   } else {
-    if (die.value < effThreshold(g, p.id, c.def)) return false;
+    if (!payableNumeric(g, p.id, c.def, dice)) return false;
   }
 
-  die.placed = true;
+  for (const die of dice) die.placed = true;
+  // The die whose value drives Twin staging / Overflow math: for 'sum'-cost
+  // cards this is the total of every die spent (Twin never uses 'sum' — see
+  // cardpool.ts), otherwise the one die placed.
+  const primaryValue =
+    c.def.castCostKind === 'sum' ? dice.reduce((s, d) => s + d.value, 0) : dice[0].value;
   p.hand.splice(idx, 1);
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
 
   if (hasKw(c.def, 'Twin')) {
     // First Twin slot filled -> Staging Zone.
-    c.stagedDie = die.value;
+    c.stagedDie = primaryValue;
     c.stagedTurns = 0;
     c.stagedThisTurn = true;
     p.staging.push(c);
-    g.log.push(`${c.def.name} moved to Staging (die ${die.value}).`);
+    g.log.push(`${c.def.name} moved to Staging (die ${primaryValue}).`);
     // v4.2 Twin A/B test (errata B, mode 'sameTurn'): if a second unplaced die
     // already matches, complete it immediately in the same Placement Phase.
     if (g.rules.twinMode === 'sameTurn') {
+      const placedIdx = Array.isArray(dieIndex) ? dieIndex[0] : dieIndex;
       const matchIdx = p.dice.findIndex(
-        (d, i) => i !== dieIndex && !d.placed && d.value === die.value,
+        (d, i) => i !== placedIdx && !d.placed && d.value === primaryValue,
       );
       if (matchIdx >= 0) completeTwin(g, matchIdx, c.iid);
     }
@@ -808,7 +867,7 @@ export function castFromHand(
       if (
         c.def.overflow &&
         c.def.threshold !== undefined &&
-        die.value - eff >= c.def.overflow.amount
+        primaryValue - eff >= c.def.overflow.amount
       ) {
         applyEffect(g, p.id, c.def.overflow.effect, autoTarget(g, p.id, c.def.overflow.effect), c);
       }
@@ -817,7 +876,7 @@ export function castFromHand(
       return true;
     }
   }
-  enterPlay(g, p, c, die.value, false, targetIid);
+  enterPlay(g, p, c, primaryValue, false, targetIid);
   return true;
 }
 
@@ -952,34 +1011,37 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   return true;
 }
 
-/** Destination 4: Echo-recast from Discard (die meets threshold + discard one card from hand). */
+/** Destination 4: Echo-recast from Discard (die meets threshold + discard one card from hand). `dieIndex` is an array for 'sum'-cost cards. */
 export function echoRecast(
   g: Game,
-  dieIndex: number,
+  dieIndex: number | number[],
   cardIid: string,
   discardIid: string,
   targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
-  const die = pickDie(p, dieIndex);
+  const dice = pickDice(p, dieIndex);
   const idx = p.discard.findIndex((c) => c.iid === cardIid);
   const dIdx = p.hand.findIndex((c) => c.iid === discardIid);
-  if (!die || idx < 0 || dIdx < 0) return false;
+  if (!dice || idx < 0 || dIdx < 0) return false;
   const c = p.discard[idx];
   if (!hasKw(c.def, 'Echo') || c.echoSpent) return false;
   if (c.def.comboGate) {
     // v4.2: the one-Combo-gated-card-per-turn cap also covers Echo recasts.
     if (p.comboGateCastThisTurn) return false;
+    if (dice.length !== 1) return false;
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
-  } else if (die.value < effThreshold(g, p.id, c.def)) {
+  } else if (!payableNumeric(g, p.id, c.def, dice)) {
     return false;
   }
   if (c.def.type === 'Location') {
     if (p.locationCastThisTurn) return false;
     if (p.location?.def.id === c.def.id) return false;
   }
-  die.placed = true;
+  for (const die of dice) die.placed = true;
+  const primaryValue =
+    c.def.castCostKind === 'sum' ? dice.reduce((s, d) => s + d.value, 0) : dice[0].value;
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
   p.discard.splice(idx, 1);
   const extra = p.hand.splice(dIdx, 1)[0];
@@ -990,7 +1052,7 @@ export function echoRecast(
   // "commons drag the average down" story can be told apart from "overpriced
   // across the board".
   decide(g, p.id, `echoRecast_${rarityTier(c.def.rarity)}`);
-  enterPlay(g, p, c, die.value, true, targetIid);
+  enterPlay(g, p, c, primaryValue, true, targetIid);
   return true;
 }
 

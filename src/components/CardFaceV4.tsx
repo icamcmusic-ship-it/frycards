@@ -8,10 +8,75 @@ import React, { useState } from 'react';
 import { Dices } from 'lucide-react';
 import { CardDef, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
-import { rarityChip, rarityBorder, rarityGlow, RARITY_HEX } from '../meta/rarity';
+import {
+  rarityChip,
+  rarityBorder,
+  rarityGlow,
+  rarityBg,
+  rarityAnimated,
+  isMythic,
+  RARITY_HEX,
+} from '../meta/rarity';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
+}
+
+/** v4.3: short rules explainer per keyword, shown in a click-to-open popover. */
+export const KEYWORD_GLOSSARY: Record<string, string> = {
+  Guard: 'While you control any Guard Unit, your opponent must attack a Guard Unit first — resolved one at a time until none remain.',
+  Swift: "May attack or use an Ability Slot the turn it's cast, instead of waiting a turn.",
+  Pierce: "Leftover damage past what's needed to destroy the target Unit carries through to the enemy Leader.",
+  Ward: 'Prevents the first instance of damage or Removal against this card each turn (not retaliation from its own attack). Refreshes every End Phase.',
+  Frenzy: 'May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation.',
+  Anchor: 'This card\'s effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -2.',
+  Echo: 'After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand.',
+  Scrap: 'Discard this card from hand to reroll one of your unplaced dice, any time during Placement Phase.',
+  Rally: "Once per turn, activate this card's Ability Slot for free using a die already resting on another exhausted friendly Ability Slot.",
+  Twin: 'Has two Cast Slots requiring an identical rolled face value. Filling the first parks it in your Staging Zone until a matching die completes it.',
+  Bulwark: 'Flat reduction to damage this Unit takes from attacks — both when defending and when it deals/takes retaliation while attacking.',
+  Toll: "While this Unit is in play, ALL incoming damage to your Leader (any source) is reduced.",
+  Avenge: 'Permanently gains +1/+1 whenever another friendly Unit dies — an automatic trigger, no priority window.',
+  Crescendo: 'Adds bonus value to this Event per die showing a 6 that you placed this turn.',
+  Aftershock: 'After this Event resolves, it queues a smaller repeat of its effect to fire at the very start of your next turn.',
+  Snap: "May be cast during your Reroll Phase, before the reroll window closes, instead of waiting for Placement.",
+  Tribute: 'Triggers at your End Phase if you Pitched 2 or more dice this turn.',
+  Excavate: 'This Location\'s Ability Slot threshold drops the longer it stays continuously in play.',
+  Contested: 'This Location\'s passive doubles while your opponent controls no Location of their own.',
+  Resolve: 'While your Leader is at or below half HP, its Ability Slot threshold drops.',
+  Ultimate: 'A second, once-per-game Leader Ability Slot, usable starting on a specific turn of yours.',
+};
+
+/** v4.3: player-facing display label for each dice-pattern gate. */
+export const GATE_LABEL: Record<string, string> = {
+  AnyPair: 'PAIRS',
+  TwoPair: 'TWO PAIR',
+  ThreeKind: '3 OF A KIND',
+  FourKind: '4 OF A KIND',
+  Yahtzee: '5 OF A KIND',
+  FullHouse: 'FULL HOUSE',
+  SmallStraight: 'SM. STRAIGHT',
+  LargeStraight: 'LG. STRAIGHT',
+  ThreeOdds: '3 ODDS',
+  ThreeEvens: '3 EVENS',
+};
+
+/** v4.3: short badge text for this card's Cast Slot cost, any format. */
+export function costBadge(def: CardDef): string | null {
+  if (def.comboGate) return GATE_LABEL[def.comboGate] || def.comboGate;
+  if (def.threshold === undefined) return null;
+  if (def.castCostKind === 'exact') return `=${def.threshold}`;
+  if (def.castCostKind === 'sum') return `Σ${def.threshold}`;
+  return `${def.threshold}+`;
+}
+
+/** v4.3: one-line plain-English summary of this card's Cast Slot cost. */
+export function costSummary(def: CardDef): string | null {
+  if (def.comboGate) return `Cast: roll ${GATE_LABEL[def.comboGate] || def.comboGate}`;
+  if (def.threshold === undefined) return null;
+  if (def.castCostKind === 'exact') return `Cast: one die showing exactly ${def.threshold}`;
+  if (def.castCostKind === 'sum') return `Cast: dice totalling ${def.threshold}+`;
+  return `Cast: one die ${def.threshold}+`;
 }
 
 export function describeEffect(eff: Effect): string {
@@ -43,8 +108,8 @@ export function describeEffect(eff: Effect): string {
 /** Every rules line this card prints, one entry per ability/keyword effect. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
-  if (def.comboGate)
-    bits.push(`Combo ${def.comboGate}: ${def.onCast ? describeEffect(def.onCast) : ''}`);
+  if (def.comboGate && def.onCast)
+    bits.push(`Cast (${GATE_LABEL[def.comboGate] || def.comboGate}): ${describeEffect(def.onCast)}`);
   else if (def.onCast) bits.push(`On cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
     bits.push(`Ability ${def.ability.threshold}+: ${describeEffect(def.ability.effect)}`);
@@ -75,6 +140,58 @@ export function cardRuleLines(def: CardDef): string[] {
 /** Flat rules text — used for tooltips/inline text that just want one string. */
 export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
+}
+
+/**
+ * v4.3: a keyword pill that opens a small popover with its rules text on
+ * click — used anywhere a keyword chip is shown (card template, board
+ * Units) so players never have to guess what a keyword does.
+ */
+export function KeywordChip({
+  kw,
+  small,
+}: {
+  key?: React.Key;
+  kw: string;
+  small?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const text = KEYWORD_GLOSSARY[kw];
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        className={cn(
+          'font-bold bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full cursor-help',
+          small ? 'text-[6.5px] px-1' : 'text-[9px] px-1.5',
+        )}
+      >
+        {kw}
+      </button>
+      {open && text && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
+          <div
+            className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-[61] w-[180px] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+            {text}
+          </div>
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Per-set flavor-text styling — a distinct "print run" identity per set. */
@@ -148,6 +265,7 @@ export function CardFace({
   badge,
   count,
   foilCount,
+  maxHp,
 }: {
   key?: React.Key;
   def: CardDef;
@@ -166,6 +284,8 @@ export function CardFace({
   badge?: string;
   count?: number;
   foilCount?: number;
+  /** Leader template only: shows `${def.hp}/${maxHp}` instead of just current HP. */
+  maxHp?: number;
 }) {
   const resolvedSize = large ? 'lg' : small ? 'sm' : size;
   const { w, h } = SIZES[resolvedSize];
@@ -175,6 +295,12 @@ export function CardFace({
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
+  // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
+  // animated sheen; Mythic additionally gets a pulsing frame and a distinct
+  // gold-on-red name banner instead of the shared tinted-paper header.
+  const mythic = isMythic(def.rarity);
+  const animatedFx = rarityAnimated(def.rarity) || mythic;
+  const bg = rarityBg(def.rarity);
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -194,7 +320,7 @@ export function CardFace({
           onClick();
         }
       }}
-      style={{ width: w, height: h }}
+      style={{ width: w, height: h, backgroundImage: bg }}
       className={cn(
         'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-hidden rounded-[4px]',
         rarityBorder(def.rarity),
@@ -202,21 +328,26 @@ export function CardFace({
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         isLg ? 'shadow-hard-black' : 'shadow-hard-black-xs',
-        isLg && !dimmed && rarityGlow(def.rarity),
+        !dimmed && (mythic ? 'mythic-frame' : isLg && rarityGlow(def.rarity)),
         foil && !dimmed && 'foil-glow',
       )}
     >
-      {/* Header: name + dice-medallion cost badge, tinted per rarity. */}
+      {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
+          gold-on-red name banner instead of the shared tinted-paper header. */}
       <div
         className={cn(
-          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 border-[var(--c-ink)]/15',
+          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2',
           isLg ? 'py-1' : 'py-0.5',
+          mythic ? 'mythic-bg border-[#7A1420]' : 'border-[var(--c-ink)]/15',
         )}
-        style={{ backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }}
+        style={
+          mythic ? undefined : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
+        }
       >
         <span
           className={cn(
             'heading-font leading-tight truncate pr-1',
+            mythic && 'text-[var(--c-yellow)]',
             isLg ? 'text-[13px]' : 'text-[9px]',
           )}
           title={def.name}
@@ -226,22 +357,28 @@ export function CardFace({
         {def.comboGate ? (
           <span
             className={cn(
-              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white',
+              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
               isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
             )}
+            title={costSummary(def) || undefined}
           >
             {isLg && <Dices className="w-3 h-3" />}
-            COMBO
+            {GATE_LABEL[def.comboGate] || def.comboGate}
           </span>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
           <span
             className={cn(
-              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-ink)] text-[var(--c-yellow)]',
-              isLg ? 'text-[13px] w-7 h-7' : 'text-[9px] w-4 h-4',
+              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
+              def.castCostKind === 'exact'
+                ? 'bg-[#0E7490] text-white'
+                : def.castCostKind === 'sum'
+                  ? 'bg-[#B45309] text-white'
+                  : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+              isLg ? 'text-[11px] px-1.5 h-7 min-w-7' : 'text-[8px] px-1 h-4 min-w-4',
             )}
-            title={`Cast Slot ${def.threshold}+`}
+            title={costSummary(def) || undefined}
           >
-            {def.threshold}
+            {costBadge(def)}
           </span>
         ) : def.type === 'Location' ? (
           <span
@@ -325,9 +462,18 @@ export function CardFace({
         )}
         {def.type === 'Leader' && (
           <span
-            className={cn('font-mono font-black shrink-0', isLg ? 'text-[13px]' : 'text-[9px]')}
+            className={cn(
+              'font-mono font-black shrink-0',
+              isLg ? 'text-[15px]' : 'text-[11px]',
+              maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
+                ? 'text-[var(--c-red)]'
+                : '',
+            )}
           >
             {def.hp}
+            {maxHp !== undefined && (
+              <span className="text-[var(--c-steel)]">/{maxHp}</span>
+            )}
             <span className="text-[#22C55E]">♥</span>
           </span>
         )}
@@ -344,26 +490,8 @@ export function CardFace({
           {kwList(def)
             .slice(0, isLg ? 8 : 3)
             .map((kw) => (
-              <span
-                key={kw}
-                className={cn(
-                  'font-bold px-1.5 bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full',
-                  isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
-                )}
-              >
-                {kw}
-              </span>
+              <KeywordChip key={kw} kw={kw} small={!isLg} />
             ))}
-          {def.comboGate && (
-            <span
-              className={cn(
-                'font-bold px-1.5 bg-[#A855F7] text-white border border-[var(--c-ink)] leading-tight rounded-full',
-                isLg ? 'text-[9px]' : 'text-[6.5px] px-1',
-              )}
-            >
-              {def.comboGate}
-            </span>
-          )}
         </div>
       )}
 
@@ -393,6 +521,11 @@ export function CardFace({
       {footer}
 
       {foil && <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />}
+      {!foil && animatedFx && !dimmed && (
+        <div
+          className={cn('rarity-sheen absolute inset-0 pointer-events-none', mythic ? 'opacity-80' : 'opacity-50')}
+        />
+      )}
     </div>
   );
 }
