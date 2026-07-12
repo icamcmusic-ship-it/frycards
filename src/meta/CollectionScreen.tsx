@@ -35,6 +35,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decks]);
+  // Leaders aren't consumed per-copy like deck card_ids — a deck just
+  // references one leader_id, so a Leader in use by any deck needs exactly
+  // 1 copy reserved, not a count of appearances. Mirrors the RPC.
+  const leadersInUse = useMemo(() => new Set(decks.map((d) => d.leader_id)), [decks]);
 
   const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
@@ -70,7 +74,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const inspectOwned = inspect ? owned.get(inspect.id) : undefined;
-  const inspectLocked = inspect ? lockedByDecks.get(inspect.id) || 0 : 0;
+  const inspectLocked = inspect
+    ? inspect.type === 'Leader'
+      ? leadersInUse.has(inspect.id)
+        ? 1
+        : 0
+      : lockedByDecks.get(inspect.id) || 0
+    : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
   const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
 
@@ -191,57 +201,61 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           def={inspect}
           onClose={() => setInspect(null)}
           actions={
-            inspect.type === 'Leader' ? undefined : (
-              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
-                <div className="heading-font text-xs text-center">QUICKSELL</div>
-                {inspectLocked > 0 && (
-                  <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
-                    {inspectLocked} cop{inspectLocked === 1 ? 'y' : 'ies'} locked in your decks
-                  </div>
-                )}
-                {sellError && <Notice text={sellError} />}
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span>Normal ×{inspectOwned?.q || 0}</span>
-                  <span>{quicksellPrice(inspect.rarity, false)}g each</span>
+            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+              <div className="heading-font text-xs text-center">QUICKSELL</div>
+              {inspect.type === 'Leader' && (
+                <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
+                  Leaders can be sold like any other card — one copy stays reserved while a saved
+                  deck still uses it.
                 </div>
+              )}
+              {inspectLocked > 0 && (
+                <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                  {inspect.type === 'Leader'
+                    ? 'In use by a saved deck — 1 copy reserved'
+                    : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
+                </div>
+              )}
+              {sellError && <Notice text={sellError} />}
+              <div className="flex items-center justify-between text-[10px] font-bold">
+                <span>Normal ×{inspectOwned?.q || 0}</span>
+                <span>{quicksellPrice(inspect.rarity, false)}g each</span>
+              </div>
+              <PopButton
+                color="yellow"
+                className="w-full"
+                disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                onClick={() => handleSell(false, 1)}
+              >
+                SELL 1 NORMAL
+              </PopButton>
+              {(inspectOwned?.q || 0) > 1 && (
                 <PopButton
-                  color="yellow"
+                  color="black"
                   className="w-full"
-                  disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
-                  onClick={() => handleSell(false, 1)}
+                  disabled={selling || inspectSellable <= 0}
+                  onClick={() => handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))}
                 >
-                  SELL 1 NORMAL
+                  SELL ALL NORMAL
                 </PopButton>
-                {(inspectOwned?.q || 0) > 1 && (
+              )}
+              {(inspectOwned?.f || 0) > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-[10px] font-bold mt-1">
+                    <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
+                    <span>{quicksellPrice(inspect.rarity, true)}g each</span>
+                  </div>
                   <PopButton
-                    color="black"
+                    color="red"
                     className="w-full"
                     disabled={selling || inspectSellable <= 0}
-                    onClick={() =>
-                      handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))
-                    }
+                    onClick={() => handleSell(true, 1)}
                   >
-                    SELL ALL NORMAL
+                    SELL 1 FOIL
                   </PopButton>
-                )}
-                {(inspectOwned?.f || 0) > 0 && (
-                  <>
-                    <div className="flex items-center justify-between text-[10px] font-bold mt-1">
-                      <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                      <span>{quicksellPrice(inspect.rarity, true)}g each</span>
-                    </div>
-                    <PopButton
-                      color="red"
-                      className="w-full"
-                      disabled={selling || inspectSellable <= 0}
-                      onClick={() => handleSell(true, 1)}
-                    >
-                      SELL 1 FOIL
-                    </PopButton>
-                  </>
-                )}
-              </div>
-            )
+                </>
+              )}
+            </div>
           }
         />
       )}
