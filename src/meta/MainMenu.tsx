@@ -9,12 +9,27 @@ import {
   BookOpen,
   Settings,
   ScrollText,
+  Crown,
+  Trophy,
+  Users,
+  Gavel,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { GoldChip, GemChip } from './ui';
+import { GoldChip, GemChip, LevelBadge } from './ui';
 
 export type MetaScreen =
-  'menu' | 'play' | 'collection' | 'decks' | 'store' | 'profile' | 'settings' | 'changelog';
+  | 'menu'
+  | 'play'
+  | 'collection'
+  | 'decks'
+  | 'store'
+  | 'battlepass'
+  | 'achievements'
+  | 'social'
+  | 'market'
+  | 'profile'
+  | 'settings'
+  | 'changelog';
 
 export function MainMenu({
   onNavigate,
@@ -67,6 +82,38 @@ export function MainMenu({
       disabled: guest,
     },
     {
+      key: 'battlepass',
+      label: 'BATTLE PASS',
+      desc: guest ? 'Requires an account' : 'Season 1 — 25 free rewards',
+      icon: <Crown className="w-8 h-8" />,
+      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
+      disabled: guest,
+    },
+    {
+      key: 'achievements',
+      label: 'MISSIONS',
+      desc: guest ? 'Requires an account' : 'Missions & achievements',
+      icon: <Trophy className="w-8 h-8" />,
+      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+      disabled: guest,
+    },
+    {
+      key: 'market',
+      label: 'MARKETPLACE',
+      desc: guest ? 'Requires an account' : 'Buy, sell & auction cards',
+      icon: <Gavel className="w-8 h-8" />,
+      color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+      disabled: guest,
+    },
+    {
+      key: 'social',
+      label: 'FRIENDS',
+      desc: guest ? 'Requires an account' : 'Friends & card trading',
+      icon: <Users className="w-8 h-8" />,
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+      disabled: guest,
+    },
+    {
       key: 'profile',
       label: 'PROFILE',
       desc: guest ? 'Requires an account' : 'Stats & customization',
@@ -108,7 +155,8 @@ export function MainMenu({
               {guest ? 'GUEST OPERATIVE' : profile?.username || '…'}
             </div>
             {profile && (
-              <div className="flex gap-2 mt-1.5">
+              <div className="flex gap-2 mt-1.5 items-center flex-wrap">
+                <LevelBadge level={profile.level} xp={profile.xp} />
                 <GoldChip amount={profile.gold} />
                 <GemChip amount={profile.gems} />
                 <span className="text-[10px] font-bold text-[var(--c-steel)] self-center">

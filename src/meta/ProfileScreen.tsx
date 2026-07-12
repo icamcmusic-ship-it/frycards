@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pencil, Check } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { equipCosmetic, setUsername, ShopItem } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, ProgressBar, xpForLevel } from './ui';
 import { cn } from '../lib/utils';
 import { SafeImage } from './SafeImage';
 
@@ -13,8 +13,10 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState('');
 
   const ownedIds = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
-  // Free items (cost 0) are always equippable.
-  const usable = (s: ShopItem) => ownedIds.has(s.id) || s.cost_gold === 0 || s.cost_gems === 0;
+  // Free items (cost 0) are always equippable — but battle pass exclusives
+  // must actually be owned, whatever their price columns say.
+  const usable = (s: ShopItem) =>
+    ownedIds.has(s.id) || (!s.is_season_pass_exclusive && (s.cost_gold === 0 || s.cost_gems === 0));
 
   if (!profile) return null;
 
@@ -110,9 +112,29 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
                 </button>
               )}
               <div className="text-[11px] font-bold text-[var(--c-yellow)]">
-                BLUE CORAL OPERATIVE
+                BLUE CORAL OPERATIVE · LEVEL {profile.level}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Level progress */}
+        <div className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-2 mt-4">
+          <div className="flex justify-between text-[10px] font-black mb-1">
+            <span>LEVEL {profile.level}</span>
+            <span className="font-mono">
+              {profile.xp - xpForLevel(profile.level)}/
+              {xpForLevel(profile.level + 1) - xpForLevel(profile.level)} XP TO LEVEL{' '}
+              {profile.level + 1}
+            </span>
+          </div>
+          <ProgressBar
+            value={profile.xp - xpForLevel(profile.level)}
+            max={xpForLevel(profile.level + 1) - xpForLevel(profile.level)}
+          />
+          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+            Earn XP from every match (+60 win / +25 loss). Each level pays 100 gold; every 5th
+            level adds 10 gems.
           </div>
         </div>
 

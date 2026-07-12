@@ -80,6 +80,63 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
   );
 }
 
+/** Generic progress bar used by battle pass, achievements, missions, level. */
+export function ProgressBar({
+  value,
+  max,
+  className,
+  barClassName,
+}: {
+  value: number;
+  max: number;
+  className?: string;
+  barClassName?: string;
+}) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div className={cn('h-2.5 ink-border-sm bg-[var(--c-ink)]/10 overflow-hidden', className)}>
+      <div
+        className={cn('h-full bg-[var(--c-yellow)] transition-all', barClassName)}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+/** Cumulative XP required to reach a level — mirror of xp_for_level in SQL. */
+export function xpForLevel(level: number): number {
+  return 50 * (level - 1) * level;
+}
+
+/** Level badge + XP-to-next-level bar, driven by the profile row. */
+export function LevelBadge({
+  level,
+  xp,
+  compact = false,
+}: {
+  level: number;
+  xp: number;
+  compact?: boolean;
+}) {
+  const cur = xpForLevel(level);
+  const next = xpForLevel(level + 1);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-xs px-2 py-0.5 ink-border-sm">
+        LV {level}
+      </span>
+      {!compact && (
+        <div className="flex flex-col gap-0.5 w-28">
+          <ProgressBar value={xp - cur} max={next - cur} className="h-1.5" />
+          <span className="text-[8px] font-bold text-[var(--c-steel)] leading-none">
+            {xp - cur}/{next - cur} XP TO LV {level + 1}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Small toast-style error/success line. */
 export function Notice({ text, kind = 'error' }: { text: string; kind?: 'error' | 'success' }) {
   if (!text) return null;
