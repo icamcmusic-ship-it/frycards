@@ -883,6 +883,7 @@ export function activateViaRally(
   targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
+  if (g.stage !== 'PLACEMENT') return false;
   if (p.rallyUsedThisTurn) return false;
   const c = p.board.find((x) => x.iid === rallyIid);
   const src = [...p.board, p.leader, p.location].find((x): x is Inst => !!x && x.iid === sourceIid);
