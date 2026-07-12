@@ -307,6 +307,12 @@ function LeaderPanel({
 type Stage = 'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
 
 const ROLL_ANIM_MS = 650;
+// v4.3: much slower, narrated CPU turns — a "thinking" beat before it acts,
+// then every log line the AI produced streams in one at a time instead of
+// the whole turn resolving silently in one snapshot. SKIP ▸▸ still escapes
+// both stages instantly for an impatient player.
+const CPU_THINK_MS = 900;
+const CPU_LINE_MS = 950;
 
 interface Pending {
   kind: 'cast' | 'ability' | 'ultimate' | 'echo';
@@ -387,6 +393,14 @@ export function GameV4({
   const cpuTimeoutRef = useRef<number | null>(null);
   const bannerTimeoutRef = useRef<number | null>(null);
   const rollTimeoutRef = useRef<number | null>(null);
+  // v4.3: CPU turn narration — the AI's whole turn is computed up front (the
+  // engine has no resumable/step mode), but its log lines are revealed one
+  // at a time on a delay so the player can actually follow what happened,
+  // instead of the board snapping straight to the post-turn result.
+  const cpuLogRef = useRef<string[]>([]);
+  const cpuLogIdxRef = useRef(0);
+  const cpuTurnPlayedRef = useRef(false);
+  const [cpuNarration, setCpuNarration] = useState<string | null>(null);
   // Which die indices are mid-animation (spinning through random faces)
   // right now — driven by a rolling stage or a reroll, cleared once the
   // settle timeout fires.
@@ -439,28 +453,68 @@ export function GameV4({
     }, ROLL_ANIM_MS);
   };
 
+  // Reveal the next queued CPU log line (or wrap up once they're exhausted).
+  const tickCpuNarration = () => {
+    cpuTimeoutRef.current = null;
+    const lines = cpuLogRef.current;
+    const i = cpuLogIdxRef.current;
+    if (i >= lines.length) {
+      setCpuNarration(null);
+      bump();
+      if (g.winner) {
+        setStage('over');
+        return;
+      }
+      beginHumanTurn();
+      return;
+    }
+    setCpuNarration(lines[i]);
+    cpuLogIdxRef.current = i + 1;
+    cpuTimeoutRef.current = window.setTimeout(tickCpuNarration, CPU_LINE_MS);
+  };
+
+  // Plays the CPU's entire turn (the AI has no resumable/step mode), then
+  // narrates what it did one log line at a time instead of snapping the
+  // board straight to the result.
   const resolveCpuTurn = () => {
     cpuTimeoutRef.current = null;
+    const before = g.log.length;
     playTurn(g);
+    cpuTurnPlayedRef.current = true;
+    const newLines = g.log.slice(before);
+    cpuLogRef.current = newLines.length > 0 ? newLines : [`${cpuLabel} passes.`];
+    cpuLogIdxRef.current = 0;
+    tickCpuNarration();
+  };
+
+  const runCpuTurn = () => {
+    setStage('cpu');
+    setCpuNarration(null);
+    cpuTurnPlayedRef.current = false;
+    cpuLogRef.current = [];
+    cpuLogIdxRef.current = 0;
+    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_THINK_MS);
+  };
+
+  // Lets an impatient player skip straight to the end of the CPU's turn,
+  // whether it's still "thinking" or partway through narrating its log.
+  const skipCpuDelay = () => {
+    if (cpuTimeoutRef.current !== null) {
+      window.clearTimeout(cpuTimeoutRef.current);
+      cpuTimeoutRef.current = null;
+    }
+    if (!cpuTurnPlayedRef.current) {
+      playTurn(g);
+      cpuTurnPlayedRef.current = true;
+    }
+    cpuLogIdxRef.current = cpuLogRef.current.length;
+    setCpuNarration(null);
     bump();
     if (g.winner) {
       setStage('over');
       return;
     }
     beginHumanTurn();
-  };
-
-  const runCpuTurn = () => {
-    setStage('cpu');
-    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, 1000);
-  };
-
-  // Lets an impatient player skip the fixed thinking-delay and resolve the
-  // CPU's turn immediately instead of waiting out the pacing timer.
-  const skipCpuDelay = () => {
-    if (cpuTimeoutRef.current === null) return;
-    window.clearTimeout(cpuTimeoutRef.current);
-    resolveCpuTurn();
   };
 
   // Conceding is a resignation, not a free way to dodge a loss on the
@@ -1050,6 +1104,11 @@ export function GameV4({
           {banner}
         </div>
       )}
+      {stage === 'cpu' && cpuNarration && (
+        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[80vw] text-center">
+          {cpuLabel}: {cpuNarration}
+        </div>
+      )}
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           PICK A TARGET — {describeEffect(pending.effect)}
@@ -1254,8 +1313,8 @@ export function GameV4({
           )}
           {stage === 'cpu' && (
             <>
-              <span className="text-[10px] font-bold text-[var(--c-paper)]/60 animate-pulse ml-1">
-                CPU is thinking…
+              <span className="text-[10px] font-bold text-[var(--c-yellow)] animate-pulse ml-1 max-w-[260px] leading-tight">
+                {cpuNarration ? `${cpuLabel}: ${cpuNarration}` : `${cpuLabel} is thinking…`}
               </span>
               <button
                 onClick={skipCpuDelay}
