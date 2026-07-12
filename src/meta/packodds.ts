@@ -46,7 +46,15 @@ export interface SlotOdds {
   pity: string | null;
 }
 
-const RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
+const RARITY_ORDER = [
+  'Common',
+  'Uncommon',
+  'Rare',
+  'Super-Rare',
+  'Ultra-Rare',
+  'Full-Art',
+  'Mythic',
+];
 
 export function sortedWeights(weights: Record<string, number>): [string, number][] {
   return Object.entries(weights).sort(
@@ -85,7 +93,9 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
     weights,
     foilChance,
     dupeProtected: slot.dupe_protected ?? false,
-    pity: slot.pity_key ? `Hard pity${slot.pity_cap ? ` within ${slot.pity_cap} packs` : ''}` : null,
+    pity: slot.pity_key
+      ? `Hard pity${slot.pity_cap ? ` within ${slot.pity_cap} packs` : ''}`
+      : null,
   };
 }
 

@@ -107,7 +107,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     const sellerName = l.seller === userId ? 'You' : sellers.get(l.seller)?.username || '…';
     const highBidder = l.current_bidder === userId;
     return (
-      <div key={l.id} className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3">
+      <div
+        key={l.id}
+        className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3"
+      >
         <div className="shrink-0">
           <CardFace def={def} size="sm" foil={l.foil} />
         </div>
@@ -117,7 +120,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             <span className={cn('text-[8px] font-black px-1', RARITY_CHIP[def.rarity || 'Common'])}>
               {(def.rarity || 'Common').toUpperCase()}
             </span>
-            {l.foil && <span className="text-[8px] font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">FOIL ✦</span>}
+            {l.foil && (
+              <span className="text-[8px] font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
+                FOIL ✦
+              </span>
+            )}
             {l.quantity > 1 && <span className="text-[9px] font-black">×{l.quantity}</span>}
           </div>
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5">
@@ -131,7 +138,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <>
                 <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
                   <Gavel className="w-3 h-3" />
-                  {l.current_bid != null ? `${l.current_bid.toLocaleString()}g` : `Start ${l.price.toLocaleString()}g`}
+                  {l.current_bid != null
+                    ? `${l.current_bid.toLocaleString()}g`
+                    : `Start ${l.price.toLocaleString()}g`}
                 </span>
                 <span className="text-[9px] font-bold text-[var(--c-steel)]">
                   {l.bid_count} bid{l.bid_count === 1 ? '' : 's'}
@@ -154,7 +163,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <PopButton
                 color="steel"
                 disabled={busy || l.bid_count > 0}
-                onClick={() => run(() => cancelListing(l.id), 'Listing cancelled — cards returned.')}
+                onClick={() =>
+                  run(() => cancelListing(l.id), 'Listing cancelled — cards returned.')
+                }
                 title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
               >
                 CANCEL LISTING
@@ -180,10 +191,13 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 {(l.listing_type === 'fixed' || l.buyout != null) && (
                   <PopButton
                     color="yellow"
-                    disabled={busy || !profile || profile.gold < (isAuction ? (l.buyout ?? 0) : l.price)}
+                    disabled={
+                      busy || !profile || profile.gold < (isAuction ? (l.buyout ?? 0) : l.price)
+                    }
                     onClick={() => run(() => buyListing(l.id), 'Purchase complete!')}
                   >
-                    BUY {isAuction ? `${l.buyout!.toLocaleString()}g` : `${l.price.toLocaleString()}g`}
+                    BUY{' '}
+                    {isAuction ? `${l.buyout!.toLocaleString()}g` : `${l.price.toLocaleString()}g`}
                   </PopButton>
                 )}
               </>
@@ -191,7 +205,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <span
                 className={cn(
                   'text-[9px] font-black px-1.5 py-1 ink-border-sm self-start',
-                  l.status === 'sold' ? 'bg-[#22C55E] text-[#052E12]' : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                  l.status === 'sold'
+                    ? 'bg-[#22C55E] text-[#052E12]'
+                    : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
                 )}
               >
                 {l.status.toUpperCase()}
@@ -251,10 +267,16 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <select className={select} value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)}>
-                {['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'].map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
+              <select
+                className={select}
+                value={rarityFilter}
+                onChange={(e) => setRarityFilter(e.target.value)}
+              >
+                {['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'].map(
+                  (r) => (
+                    <option key={r}>{r}</option>
+                  ),
+                )}
               </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -292,9 +314,17 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
 
       {/* Bid modal */}
       {bidFor && (
-        <div className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4" onClick={() => setBidFor(null)}>
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80" onClick={(e) => e.stopPropagation()}>
-            <div className="heading-font text-sm mb-2">BID ON {defFor(bidFor.card_id).name.toUpperCase()}</div>
+        <div
+          className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setBidFor(null)}
+        >
+          <div
+            className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="heading-font text-sm mb-2">
+              BID ON {defFor(bidFor.card_id).name.toUpperCase()}
+            </div>
             <div className="text-[10px] font-bold text-[var(--c-steel)] mb-2">
               {bidFor.current_bid != null
                 ? `Current bid ${bidFor.current_bid.toLocaleString()}g — minimum raise 5%.`
@@ -390,13 +420,20 @@ function SellForm({
     ? Math.max(
         0,
         (foil ? selected.foil_quantity : selected.quantity) -
-          Math.max(0, (locked.get(cardId) || 0) - (foil ? selected.quantity : selected.foil_quantity)),
+          Math.max(
+            0,
+            (locked.get(cardId) || 0) - (foil ? selected.quantity : selected.foil_quantity),
+          ),
       )
     : 0;
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
   const valid =
-    selected && quantity >= 1 && quantity <= maxQty && price >= 1 && (buyout === '' || buyout > price);
+    selected &&
+    quantity >= 1 &&
+    quantity <= maxQty &&
+    price >= 1 &&
+    (buyout === '' || buyout > price);
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
@@ -460,7 +497,9 @@ function SellForm({
                   min={1}
                   max={maxQty}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))}
+                  onChange={(e) =>
+                    setQuantity(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))
+                  }
                   className="w-16 px-2 py-1 ink-border-sm"
                 />
                 <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
@@ -473,10 +512,16 @@ function SellForm({
 
           <div className="heading-font text-xs mb-1">2 · CHOOSE HOW TO SELL</div>
           <div className="flex gap-2 mb-3">
-            <PopButton color={type === 'fixed' ? 'black' : 'yellow'} onClick={() => setType('fixed')}>
+            <PopButton
+              color={type === 'fixed' ? 'black' : 'yellow'}
+              onClick={() => setType('fixed')}
+            >
               FIXED PRICE
             </PopButton>
-            <PopButton color={type === 'auction' ? 'black' : 'yellow'} onClick={() => setType('auction')}>
+            <PopButton
+              color={type === 'auction' ? 'black' : 'yellow'}
+              onClick={() => setType('auction')}
+            >
               AUCTION
             </PopButton>
           </div>
@@ -501,14 +546,22 @@ function SellForm({
                     type="number"
                     min={0}
                     value={buyout}
-                    onChange={(e) => setBuyout(e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0))}
+                    onChange={(e) =>
+                      setBuyout(
+                        e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0),
+                      )
+                    }
                     className="w-24 px-2 py-1 ink-border-sm"
                   />
                   g
                 </label>
                 <label className="flex items-center gap-2 text-xs font-bold">
                   Duration
-                  <select className={select} value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+                  <select
+                    className={select}
+                    value={hours}
+                    onChange={(e) => setHours(Number(e.target.value))}
+                  >
                     <option value={6}>6 hours</option>
                     <option value={12}>12 hours</option>
                     <option value={24}>24 hours</option>
@@ -538,8 +591,8 @@ function SellForm({
             {busy ? 'LISTING…' : type === 'fixed' ? 'LIST FOR SALE ▸' : 'START AUCTION ▸'}
           </PopButton>
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-2">
-            Listed cards leave your collection until sold, cancelled, or expired. Fixed listings
-            run for 14 days.
+            Listed cards leave your collection until sold, cancelled, or expired. Fixed listings run
+            for 14 days.
           </div>
         </>
       )}

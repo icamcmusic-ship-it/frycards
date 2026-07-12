@@ -133,8 +133,8 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
             max={xpForLevel(profile.level + 1) - xpForLevel(profile.level)}
           />
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
-            Earn XP from every match (+60 win / +25 loss). Each level pays 100 gold; every 5th
-            level adds 10 gems.
+            Earn XP from every match (+60 win / +25 loss). Each level pays 100 gold; every 5th level
+            adds 10 gems.
           </div>
         </div>
 

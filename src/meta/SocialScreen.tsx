@@ -46,7 +46,15 @@ function CardChip({ item }: { key?: React.Key; item: TradeCardItem }) {
   );
 }
 
-function TradeSide({ label, cards, gold }: { label: string; cards: TradeCardItem[]; gold: number }) {
+function TradeSide({
+  label,
+  cards,
+  gold,
+}: {
+  label: string;
+  cards: TradeCardItem[];
+  gold: number;
+}) {
   return (
     <div className="flex-1 min-w-[180px]">
       <div className="text-[9px] font-black text-[var(--c-steel)] mb-1">{label}</div>
@@ -146,7 +154,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="FRIENDS & TRADING" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <div className="flex gap-2 mb-4">
-          <PopButton color={tab === 'friends' ? 'black' : 'yellow'} onClick={() => setTab('friends')}>
+          <PopButton
+            color={tab === 'friends' ? 'black' : 'yellow'}
+            onClick={() => setTab('friends')}
+          >
             <span className="flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> FRIENDS ({friendProfiles.length})
             </span>
@@ -192,7 +203,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
               {results && (
                 <div className="mt-3 flex flex-col gap-2">
                   {results.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5">
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
+                    >
                       <div className="text-xs font-bold">
                         {r.username}
                         <span className="text-[9px] text-[var(--c-steel)] ml-2">
@@ -203,7 +217,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         color="red"
                         disabled={busy}
                         onClick={() =>
-                          run(() => sendFriendRequest(r.username), `Friend request sent to ${r.username}!`)
+                          run(
+                            () => sendFriendRequest(r.username),
+                            `Friend request sent to ${r.username}!`,
+                          )
                         }
                       >
                         ADD ▸
@@ -211,7 +228,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   ))}
                   {results.length === 0 && (
-                    <div className="text-[10px] font-bold text-[var(--c-steel)]">No players found.</div>
+                    <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                      No players found.
+                    </div>
                   )}
                 </div>
               )}
@@ -225,13 +244,26 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                 </h2>
                 <div className="flex flex-col gap-2">
                   {incoming.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]">
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
+                    >
                       <span className="text-xs font-bold">{nameOf(f.requester)}</span>
                       <div className="flex gap-2">
-                        <PopButton color="red" disabled={busy} onClick={() => run(() => respondFriendRequest(f.id, true), 'Friend added!')}>
+                        <PopButton
+                          color="red"
+                          disabled={busy}
+                          onClick={() =>
+                            run(() => respondFriendRequest(f.id, true), 'Friend added!')
+                          }
+                        >
                           ACCEPT
                         </PopButton>
-                        <PopButton color="steel" disabled={busy} onClick={() => run(() => respondFriendRequest(f.id, false))}>
+                        <PopButton
+                          color="steel"
+                          disabled={busy}
+                          onClick={() => run(() => respondFriendRequest(f.id, false))}
+                        >
                           DECLINE
                         </PopButton>
                       </div>
@@ -247,7 +279,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
             </h2>
             <div className="flex flex-col gap-2 mb-6">
               {friendProfiles.map(({ friendship, other, otherId }) => (
-                <div key={friendship.id} className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]">
+                <div
+                  key={friendship.id}
+                  className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
+                >
                   <div className="text-xs font-bold">
                     {other?.username || 'Unknown player'}
                     {other && (
@@ -270,7 +305,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       color="steel"
                       disabled={busy}
                       onClick={() => {
-                        if (confirm(`Remove ${other?.username || 'this player'} from your friends?`))
+                        if (
+                          confirm(`Remove ${other?.username || 'this player'} from your friends?`)
+                        )
                           run(() => removeFriend(friendship.id));
                       }}
                     >
@@ -294,9 +331,16 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                 </h2>
                 <div className="flex flex-col gap-2">
                   {outgoing.map((f) => (
-                    <div key={f.id} className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]">
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
+                    >
                       <span className="text-xs font-bold">{nameOf(f.addressee)} · pending…</span>
-                      <PopButton color="steel" disabled={busy} onClick={() => run(() => removeFriend(f.id))}>
+                      <PopButton
+                        color="steel"
+                        disabled={busy}
+                        onClick={() => run(() => removeFriend(f.id))}
+                      >
                         CANCEL
                       </PopButton>
                     </div>
@@ -315,7 +359,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
               {pendingTrades.map((t) => {
                 const isIncoming = t.recipient === userId;
                 return (
-                  <div key={t.id} className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]">
+                  <div
+                    key={t.id}
+                    className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]"
+                  >
                     <div className="heading-font text-[11px] mb-2">
                       {isIncoming
                         ? `${nameOf(t.proposer)} OFFERS YOU A TRADE`
@@ -352,12 +399,20 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           >
                             ACCEPT TRADE ▸
                           </PopButton>
-                          <PopButton color="steel" disabled={busy} onClick={() => run(() => respondTrade(t.id, false))}>
+                          <PopButton
+                            color="steel"
+                            disabled={busy}
+                            onClick={() => run(() => respondTrade(t.id, false))}
+                          >
                             DECLINE
                           </PopButton>
                         </>
                       ) : (
-                        <PopButton color="steel" disabled={busy} onClick={() => run(() => cancelTrade(t.id))}>
+                        <PopButton
+                          color="steel"
+                          disabled={busy}
+                          onClick={() => run(() => cancelTrade(t.id))}
+                        >
                           CANCEL OFFER
                         </PopButton>
                       )}
@@ -380,7 +435,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                 </h2>
                 <div className="flex flex-col gap-2">
                   {doneTrades.map((t) => (
-                    <div key={t.id} className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2">
+                    <div
+                      key={t.id}
+                      className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2"
+                    >
                       <span
                         className={cn(
                           'text-[8px] font-black px-1 ink-border-sm',
@@ -493,11 +551,13 @@ function TradeComposerModal({
                   className={cn(
                     'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
-                    pickedQty(list, c.card_id, false) > 0 && 'outline outline-2 outline-[var(--c-red)]',
+                    pickedQty(list, c.card_id, false) > 0 &&
+                      'outline outline-2 outline-[var(--c-red)]',
                   )}
                 >
                   {cardName(c.card_id)} ×{c.quantity}
-                  {pickedQty(list, c.card_id, false) > 0 && ` [${pickedQty(list, c.card_id, false)}]`}
+                  {pickedQty(list, c.card_id, false) > 0 &&
+                    ` [${pickedQty(list, c.card_id, false)}]`}
                 </button>
               )}
               {c.foil_quantity > 0 && (
@@ -506,7 +566,8 @@ function TradeComposerModal({
                   className={cn(
                     'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
-                    pickedQty(list, c.card_id, true) > 0 && 'outline outline-2 outline-[var(--c-red)]',
+                    pickedQty(list, c.card_id, true) > 0 &&
+                      'outline outline-2 outline-[var(--c-red)]',
                   )}
                 >
                   {cardName(c.card_id)} ✦×{c.foil_quantity}
@@ -523,7 +584,10 @@ function TradeComposerModal({
   );
 
   return (
-    <div className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div
         className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -557,7 +621,9 @@ function TradeComposerModal({
               min={0}
               max={profile?.gold ?? 0}
               value={offerGold}
-              onChange={(e) => setOfferGold(Math.max(0, Math.min(profile?.gold ?? 0, Number(e.target.value) || 0)))}
+              onChange={(e) =>
+                setOfferGold(Math.max(0, Math.min(profile?.gold ?? 0, Number(e.target.value) || 0)))
+              }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
             <span className="text-[9px] font-bold text-[var(--c-steel)]">

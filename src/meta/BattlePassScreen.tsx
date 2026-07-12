@@ -67,9 +67,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       return;
     }
     setNotice(`Tier ${tier.tier} claimed: ${tier.label}!`);
-    setProgress((p) =>
-      p ? { ...p, claimed_tiers: [...p.claimed_tiers, tier.tier] } : p,
-    );
+    setProgress((p) => (p ? { ...p, claimed_tiers: [...p.claimed_tiers, tier.tier] } : p));
     refreshProfile();
     if (tier.reward_type === 'pack') refreshInventory();
     if (tier.reward_type === 'cosmetic') refreshCosmetics();
@@ -143,7 +141,9 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
                     {season.name.toUpperCase()}
                   </div>
                   <div className="text-[10px] font-bold text-[var(--c-paper)]/70">
-                    {season.is_free ? 'FREE PASS — EVERY REWARD IS EARNABLE BY PLAYING' : 'PREMIUM PASS'}
+                    {season.is_free
+                      ? 'FREE PASS — EVERY REWARD IS EARNABLE BY PLAYING'
+                      : 'PREMIUM PASS'}
                     {season.ends_at
                       ? ` · ENDS ${new Date(season.ends_at).toLocaleDateString()}`
                       : ''}

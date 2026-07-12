@@ -60,9 +60,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       if ((o?.q || 0) + (o?.f || 0) > 0) e.owned += 1;
       totals.set(r, e);
     }
-    return RARITIES.map((r) => ({ rarity: r, ...(totals.get(r) || { total: 0, owned: 0 }) })).filter(
-      (e) => e.total > 0,
-    );
+    return RARITIES.map((r) => ({
+      rarity: r,
+      ...(totals.get(r) || { total: 0, owned: 0 }),
+    })).filter((e) => e.total > 0);
   }, [owned]);
   const [showProgress, setShowProgress] = useState(true);
 

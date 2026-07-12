@@ -130,7 +130,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="MISSIONS & ACHIEVEMENTS" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
         <div className="flex gap-2 mb-4">
-          <PopButton color={tab === 'missions' ? 'black' : 'yellow'} onClick={() => setTab('missions')}>
+          <PopButton
+            color={tab === 'missions' ? 'black' : 'yellow'}
+            onClick={() => setTab('missions')}
+          >
             <span className="flex items-center gap-1">
               <Target className="w-3.5 h-3.5" /> MISSIONS
             </span>
@@ -140,7 +143,8 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
             onClick={() => setTab('achievements')}
           >
             <span className="flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5" /> ACHIEVEMENTS ({completedCount}/{achievements.length})
+              <Trophy className="w-3.5 h-3.5" /> ACHIEVEMENTS ({completedCount}/
+              {achievements.length})
             </span>
           </PopButton>
         </div>
@@ -171,9 +175,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                     {cadence === 'daily' ? 'DAILY MISSIONS' : 'WEEKLY MISSIONS'}
                   </h2>
                   <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
-                    {cadence === 'daily'
-                      ? 'Reset every day at midnight.'
-                      : 'Reset every Monday.'}
+                    {cadence === 'daily' ? 'Reset every day at midnight.' : 'Reset every Monday.'}
                   </div>
                   <div className="flex flex-col gap-3">
                     {list.map((m) => {
