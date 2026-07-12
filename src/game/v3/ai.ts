@@ -33,7 +33,7 @@ import {
   autoTarget,
   defaultDiscardChoice,
 } from './engine';
-import { hasKw } from './cards';
+import { CardDef, hasKw } from './cards';
 
 /**
  * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
@@ -96,20 +96,47 @@ function castPriority(g: Game, p: Player, c: Inst): number {
   return v;
 }
 
-/** Pick the cheapest sufficient die index for a threshold, or -1. */
+/** Pick the cheapest sufficient die index for an "at least" threshold, or -1. */
 function bestDieFor(p: Player, threshold: number): number {
   const idxs = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value);
   for (const i of idxs) if (p.dice[i].value >= threshold) return i;
   return -1;
 }
 
+/**
+ * v4.3: pick a legal die selection for any of this card's cast-cost formats
+ * (comboGate is handled by callers directly since it also needs the
+ * once-per-turn gate check). Returns null if unaffordable right now.
+ */
+function bestSelectionFor(g: Game, p: Player, def: CardDef): number[] | null {
+  const thr = effThreshold(g, p.id, def);
+  if (def.castCostKind === 'exact') {
+    const idx = unplacedDice(p).find((i) => p.dice[i].value === thr);
+    return idx !== undefined ? [idx] : null;
+  }
+  if (def.castCostKind === 'sum') {
+    // Smallest dice first — spends low-value dice that few other cards want,
+    // preserving high dice for 'atLeast'/'exact' costs elsewhere in hand.
+    const idxs = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value);
+    const chosen: number[] = [];
+    let sum = 0;
+    for (const i of idxs) {
+      if (sum >= thr) break;
+      chosen.push(i);
+      sum += p.dice[i].value;
+    }
+    return sum >= thr ? chosen : null;
+  }
+  const idx = bestDieFor(p, thr);
+  return idx >= 0 ? [idx] : null;
+}
+
 /** v4.2 Snap: cast any Snap-marked Charm during the Reroll Phase, before the window closes. */
 function playSnaps(g: Game, p: Player) {
   for (const c of [...p.hand]) {
     if (!c.def.snap || c.def.type !== 'Charm') continue;
-    const thr = effThreshold(g, p.id, c.def);
-    const dieIdx = bestDieFor(p, thr);
-    if (dieIdx < 0) continue;
+    const sel = bestSelectionFor(g, p, c.def);
+    if (!sel) continue;
     // Same value-gating as ordinary casts: don't burn Snap on a pointless target.
     const opp = opponentOf(g, p.id);
     if (
@@ -125,7 +152,7 @@ function playSnaps(g: Game, p: Player) {
       !p.board.some((u) => u.damage > 0)
     )
       continue;
-    castFromHand(g, dieIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
+    castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
   }
 }
 
@@ -227,15 +254,19 @@ function playPlacement(g: Game, p: Player) {
     const free = unplacedDice(p);
     if (free.length === 0) break;
 
-    // 1. Combo-gated events whose gate is met.
+    // 1. Combo-gated cards whose gate is met (v4.3: any card type, not just
+    //    Events — Units/Charms may print a comboGate cost with no onCast at
+    //    all, so this no longer assumes onCast exists).
     for (const c of [...p.hand]) {
       if (!c.def.comboGate) continue;
+      if (p.comboGateCastThisTurn) break;
       if (!matchesPattern(rollValues(p), c.def.comboGate)) continue;
       // Don't nuke a thin board with an AoE payoff — hold for value.
       if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
       const dieIdx = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
       if (dieIdx === undefined) break;
-      if (castFromHand(g, dieIdx, c.iid, autoTarget(g, p.id, c.def.onCast!))) progress = true;
+      const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
+      if (castFromHand(g, dieIdx, c.iid, target)) progress = true;
     }
 
     // 2. Cast best numeric-threshold card that fits a die (Locations excluded —
@@ -282,19 +313,23 @@ function playPlacement(g: Game, p: Player) {
         }
         continue;
       }
-      const dieIdx = bestDieFor(p, thr);
-      if (dieIdx < 0) continue;
-      // Prefer hitting Overflow when cheaply available.
-      let useIdx = dieIdx;
-      if (c.def.overflow) {
+      // v4.3: Overflow only ever prints on 'atLeast'-cost cards (see
+      // cardpool.ts) — prefer a die that clears the Overflow amount when one's
+      // cheaply available. Every other numeric cost format (exact/sum) goes
+      // through the general bestSelectionFor picker below.
+      let sel: number[] | null = null;
+      if (c.def.overflow && (c.def.castCostKind ?? 'atLeast') === 'atLeast') {
+        const dieIdx = bestDieFor(p, thr);
+        if (dieIdx < 0) continue;
         const oIdx = unplacedDice(p)
           .filter((i) => p.dice[i].value - thr >= c.def.overflow!.amount)
           .sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
-        if (oIdx !== undefined) useIdx = oIdx;
+        sel = [oIdx !== undefined ? oIdx : dieIdx];
+      } else {
+        sel = bestSelectionFor(g, p, c.def);
       }
-      if (
-        castFromHand(g, useIdx, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)
-      ) {
+      if (!sel) continue;
+      if (castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)) {
         progress = true;
         break; // re-evaluate priorities with new state
       }
@@ -307,10 +342,10 @@ function playPlacement(g: Game, p: Player) {
         (c) => hasKw(c.def, 'Echo') && !c.echoSpent && c.def.type === 'Unit',
       );
       for (const c of echoes) {
-        const dieIdx = bestDieFor(p, effThreshold(g, p.id, c.def));
-        if (dieIdx < 0) continue;
+        const sel = bestSelectionFor(g, p, c.def);
+        if (!sel) continue;
         const fodder = defaultDiscardChoice(p.hand);
-        if (echoRecast(g, dieIdx, c.iid, fodder.iid)) {
+        if (echoRecast(g, sel, c.iid, fodder.iid)) {
           progress = true;
           break;
         }

@@ -33,6 +33,66 @@ const RARITY_TIER: Record<string, number> = {
   Mythic: 5,
 };
 
+// ---------------------------------------------------------------------------
+// v4.3 Cast Slot cost vocabulary — every Unit/Charm/Event prices in one of:
+//   - Single Die, exact number ('exact')
+//   - Combine the value of any number of dice ('sum')
+//   - a dice-pattern gate: Pairs, Three/Four/Five of a Kind, Full House,
+//     Small/Large Straight, Three Odds, Three Evens (all reuse `comboGate` —
+//     already engine-supported on any card type: once-per-turn cap, AI
+//     reroll-toward-it, UI badge — so this is pure assignment, no new engine
+//     mechanic needed for the pattern formats).
+// Harder gates and bigger sum targets skew toward higher rarity, mirroring
+// the old plain-threshold scaling this replaces.
+// ---------------------------------------------------------------------------
+export type CostPick =
+  | { kind: 'exact'; value: number }
+  | { kind: 'sum'; value: number }
+  | { kind: 'gate'; pattern: ComboPattern };
+
+const EASY_GATES: ComboPattern[] = ['AnyPair', 'ThreeOdds', 'ThreeEvens'];
+const MID_GATES: ComboPattern[] = ['ThreeKind', 'TwoPair', 'SmallStraight'];
+const HARD_GATES: ComboPattern[] = ['FullHouse', 'FourKind', 'LargeStraight'];
+// Yahtzee is deliberately excluded from the general picker — per v4.1
+// guidance it's flavor-only rarity, reserved for the single Mythic trophy
+// card (see TROPHY_ID in mapSpell), never assigned generally.
+
+export function pickCostFormat(id: string, tier: number): CostPick {
+  const roll = hash(`${id}:cost`) % 10;
+  if (tier <= 1) {
+    if (roll < 4) return { kind: 'exact', value: 1 + (hash(`${id}:ev`) % 4) }; // 1-4
+    if (roll < 7) return { kind: 'sum', value: 4 + (hash(`${id}:sv`) % 3) }; // 4-6
+    return { kind: 'gate', pattern: pick(id, 41, EASY_GATES) };
+  }
+  if (tier === 2) {
+    if (roll < 3) return { kind: 'exact', value: 2 + (hash(`${id}:ev`) % 5) }; // 2-6
+    if (roll < 6) return { kind: 'sum', value: 7 + (hash(`${id}:sv`) % 4) }; // 7-10
+    if (roll < 8) return { kind: 'gate', pattern: pick(id, 41, MID_GATES) };
+    return { kind: 'gate', pattern: pick(id, 41, EASY_GATES) };
+  }
+  if (tier === 3) {
+    if (roll < 3) return { kind: 'sum', value: 9 + (hash(`${id}:sv`) % 5) }; // 9-13
+    if (roll < 7) return { kind: 'gate', pattern: pick(id, 41, MID_GATES) };
+    return { kind: 'gate', pattern: pick(id, 41, HARD_GATES) };
+  }
+  // tier 4-5 (Ultra-Rare, Mythic): the hardest, highest-payoff formats.
+  if (roll < 3) return { kind: 'sum', value: 13 + (hash(`${id}:sv`) % 6) }; // 13-18
+  return { kind: 'gate', pattern: pick(id, 41, HARD_GATES) };
+}
+
+/** Apply a cost pick to a CardDef, clearing whichever numeric/gate field it doesn't use. */
+export function applyCostFormat(def: CardDef, cost: CostPick) {
+  if (cost.kind === 'gate') {
+    def.comboGate = cost.pattern;
+    def.threshold = undefined;
+    def.castCostKind = undefined;
+  } else {
+    def.threshold = cost.value;
+    def.castCostKind = cost.kind;
+    def.comboGate = undefined;
+  }
+}
+
 // The primary keyword wheel each Unit draws from (weights via repetition).
 const UNIT_KEYWORDS = ['Ward', 'Guard', 'Guard', 'Frenzy', 'Swift', 'Echo', 'Twin', 'Anchor'];
 
@@ -94,6 +154,15 @@ function mapUnit(c: CardTemplate): CardDef {
     flavor: c.flavor,
   };
 
+  // v4.3: assign this Unit's real Cast Slot cost format — every non-Twin
+  // Unit prices in exact/sum/a dice-pattern gate instead of the old plain
+  // "die >= threshold". Twin cards keep the legacy at-least cost (below):
+  // their two Cast Slots already require matching an exact rolled face,
+  // which is a distinct mechanic from the new 'exact' cost format.
+  if (!keywords.includes('Twin')) {
+    applyCostFormat(def, pickCostFormat(c.id, tier));
+  }
+
   // Twin units carry a printed Twin bonus (required by §7).
   if (keywords.includes('Twin')) {
     def.twinBonus = pick(c.id, 1, [
@@ -132,8 +201,11 @@ function mapUnit(c: CardTemplate): CardDef {
     };
   }
 
-  // Overflow reward on a slice, off the effective threshold.
-  if (hash(c.id) % 6 === 0) {
+  // Overflow reward on a slice, off the effective threshold — only makes
+  // sense for the two numeric cost formats (exceed the sum target, or land
+  // an exact-match Ability Slot die that also clears an Overflow amount);
+  // dice-pattern-gated cards have no numeric threshold to exceed.
+  if (def.threshold !== undefined && hash(c.id) % 6 === 0) {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 
@@ -188,12 +260,14 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // wipes (Sap X to all enemy Units), the removal density reactive shells need.
   if (!asCharm && tier >= 3 && hash(c.id) % 2 === 0) {
     base.onCast = { action: 'sap', value: 2 + tier, target: 'allEnemyUnits' };
-    base.threshold = 6;
+    // v4.3: a board wipe earns its old "threshold 6" steepness via a hard
+    // numeric/gate cost format instead of a flat die minimum.
+    applyCostFormat(base, pickCostFormat(c.id, Math.max(4, tier)));
     return base;
   }
   if (!asCharm && tier >= 4) {
-    // Would-be trophy bomb -> high numeric threshold + Combo bonus rider.
-    base.threshold = 6;
+    // Would-be trophy bomb -> steep cost format + Combo bonus rider.
+    applyCostFormat(base, pickCostFormat(`${c.id}:bomb`, 5));
     base.onCast = { action: 'sap', value: 6, target: 'anyTarget' };
     base.combo = {
       pattern: hash(c.id) % 2 ? 'FourKind' : 'LargeStraight',
@@ -225,11 +299,12 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     return base;
   }
 
-  // Numeric-threshold one-shots. Charms are cheaper/weaker; Events pricier/stronger.
-  const threshold = asCharm
-    ? Math.min(4, 1 + Math.min(2, tier))
-    : Math.min(6, 3 + Math.min(3, tier));
-  base.threshold = threshold;
+  // Power/cost tier — Charms are cheaper/weaker; Events pricier/stronger.
+  // `wasCheap`/`wasSteep` feed the v4.3 cost-format pick below, replacing
+  // what used to be direct threshold bumps (bind/destroy costing more).
+  const baseTier = asCharm ? Math.min(2, tier) : Math.min(5, 1 + tier);
+  let costTier = baseTier;
+  let wasCheap = asCharm && tier === 0;
 
   const kind = hash(c.id) % 5;
   const power = (asCharm ? 2 : 3) + tier;
@@ -237,11 +312,11 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.onCast = { action: 'mend', value: power, target: 'friendlyAny' };
   } else if (kind === 1) {
     base.onCast = { action: 'bind', target: 'enemyUnit' };
-    if (asCharm) base.threshold = Math.min(4, threshold + 1);
+    if (asCharm) costTier = Math.min(5, baseTier + 1);
   } else if (kind === 2 && !asCharm) {
     if (hash(c.id) % 2 === 0) {
       base.onCast = { action: 'destroy', target: 'enemyUnit' };
-      base.threshold = 6;
+      costTier = 5;
     } else {
       base.onCast = { action: 'draw', value: 1 + Math.floor(tier / 2), target: 'none' };
     }
@@ -249,8 +324,11 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.onCast = { action: 'sap', value: power, target: pick(c.id, 5, SAP_TARGETS) };
   }
 
-  // Overflow riders on some spells.
-  if (hash(c.id) % 4 === 0) {
+  // v4.3: assign the real Cast Slot cost format.
+  applyCostFormat(base, pickCostFormat(c.id, costTier));
+
+  // Overflow riders on some spells — numeric cost formats only (see mapUnit).
+  if (base.threshold !== undefined && hash(c.id) % 4 === 0) {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
   // Echo on a slice of utility so recursion exists outside bombs.
@@ -258,7 +336,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.keywords = ['Echo'];
   }
   // Scrap on a slice of cheap charms (dice smoothing).
-  if (asCharm && base.threshold <= 2 && hash(c.id) % 3 === 0) {
+  if (asCharm && wasCheap && hash(c.id) % 3 === 0) {
     base.keywords = [...(base.keywords || []), 'Scrap'];
   }
   // v4.2 Crescendo X (Event only): the preferred pattern for "big roll payoff"

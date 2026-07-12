@@ -12,7 +12,11 @@ export type ComboPattern =
   | 'FullHouse'
   | 'LargeStraight'
   | 'FourKind'
-  | 'Yahtzee';
+  | 'Yahtzee'
+  /** v4.3: at least 3 of your 5 dice show an odd value. */
+  | 'ThreeOdds'
+  /** v4.3: at least 3 of your 5 dice show an even value. */
+  | 'ThreeEvens';
 
 export type EffectAction = 'sap' | 'mend' | 'draw' | 'bind' | 'destroy' | 'buff';
 export type EffectTarget =
@@ -46,9 +50,24 @@ export interface CardDef {
   set?: string;
   image?: string;
   flavor?: string;
-  /** Cast Slot threshold 1-6. Undefined only for Combo-gated Events and Leaders. */
+  /**
+   * Cast Slot cost target. Undefined only for Combo-gated cards and Leaders.
+   * Paired with `castCostKind` (v4.3) to pick how the die(s) placed here must
+   * relate to this number — see `castCostKind`.
+   */
   threshold?: number;
-  /** Combo-gated Event cost. */
+  /**
+   * v4.3: how a numeric `threshold` is paid. Every Unit/Charm/Event prints
+   * one of the five cost formats: this field (with `threshold`) covers two
+   * of them; `comboGate` (below) covers the other three (Pairs and every
+   * kind/straight/house pattern, plus Three Odds/Evens via the matching
+   * `ComboPattern`).
+   * - 'atLeast' (default/legacy): one die of value >= threshold.
+   * - 'exact': one die showing exactly threshold.
+   * - 'sum': any number of unplaced dice whose total >= threshold.
+   */
+  castCostKind?: 'atLeast' | 'exact' | 'sum';
+  /** Combo-gated cost: the roll must contain this pattern. Usable on any card type (v4.3), not just Events. */
   comboGate?: ComboPattern;
   atk?: number;
   hp?: number;
