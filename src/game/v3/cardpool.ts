@@ -304,7 +304,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // what used to be direct threshold bumps (bind/destroy costing more).
   const baseTier = asCharm ? Math.min(2, tier) : Math.min(5, 1 + tier);
   let costTier = baseTier;
-  let wasCheap = asCharm && tier === 0;
+  const wasCheap = asCharm && tier === 0;
 
   const kind = hash(c.id) % 5;
   const power = (asCharm ? 2 : 3) + tier;

@@ -336,7 +336,16 @@ h4,
   }
 }
 .mythic-bg {
-  background: linear-gradient(120deg, #1a0505, #3a0a12, #7a1420, #e11d2e, #ffb300, #7a1420, #1a0505);
+  background: linear-gradient(
+    120deg,
+    #1a0505,
+    #3a0a12,
+    #7a1420,
+    #e11d2e,
+    #ffb300,
+    #7a1420,
+    #1a0505
+  );
   background-size: 300% 300%;
   animation: mythic-bg-kf 6s ease-in-out infinite;
 }

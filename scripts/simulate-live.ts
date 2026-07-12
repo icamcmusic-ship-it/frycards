@@ -20,9 +20,7 @@ import { CardTemplate } from '../src/types';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataPath = path.join(__dirname, 'live-cards.json');
 if (!fs.existsSync(dataPath)) {
-  console.error(
-    `Missing ${dataPath} — export it first (see the header comment in this file).`,
-  );
+  console.error(`Missing ${dataPath} — export it first (see the header comment in this file).`);
   process.exit(1);
 }
 const templates: CardTemplate[] = JSON.parse(fs.readFileSync(dataPath, 'utf8'));

@@ -235,283 +235,283 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
         )}
         {tab !== 'leaderboard' &&
           (tab === 'friends' ? (
-          <>
-            {/* Find players */}
-            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-6">
-              <div className="heading-font text-xs mb-2 flex items-center gap-1.5">
-                <UserPlus className="w-4 h-4" /> FIND PLAYERS
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="Search by username…"
-                  className="flex-1 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
-                />
-                <PopButton color="black" onClick={handleSearch}>
-                  <Search className="w-4 h-4" />
-                </PopButton>
-              </div>
-              {results && (
-                <div className="mt-3 flex flex-col gap-2">
-                  {results.map((r) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
-                    >
-                      <div className="text-xs font-bold">
-                        {r.username}
-                        <span className="text-[9px] text-[var(--c-steel)] ml-2">
-                          LV {r.level} · {r.wins}W {r.losses}L
-                        </span>
-                      </div>
-                      <PopButton
-                        color="red"
-                        disabled={busy}
-                        onClick={() =>
-                          run(
-                            () => sendFriendRequest(r.username),
-                            `Friend request sent to ${r.username}!`,
-                          )
-                        }
-                      >
-                        ADD ▸
-                      </PopButton>
-                    </div>
-                  ))}
-                  {results.length === 0 && (
-                    <div className="text-[10px] font-bold text-[var(--c-steel)]">
-                      No players found.
-                    </div>
-                  )}
+            <>
+              {/* Find players */}
+              <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-6">
+                <div className="heading-font text-xs mb-2 flex items-center gap-1.5">
+                  <UserPlus className="w-4 h-4" /> FIND PLAYERS
                 </div>
-              )}
-            </div>
-
-            {/* Incoming requests */}
-            {incoming.length > 0 && (
-              <div className="mb-6">
-                <h2 className="heading-font text-base mb-2 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                  FRIEND REQUESTS
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {incoming.map((f) => (
-                    <div
-                      key={f.id}
-                      className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
-                    >
-                      <span className="text-xs font-bold">{nameOf(f.requester)}</span>
-                      <div className="flex gap-2">
+                <div className="flex gap-2">
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="Search by username…"
+                    className="flex-1 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
+                  />
+                  <PopButton color="black" onClick={handleSearch}>
+                    <Search className="w-4 h-4" />
+                  </PopButton>
+                </div>
+                {results && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {results.map((r) => (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
+                      >
+                        <div className="text-xs font-bold">
+                          {r.username}
+                          <span className="text-[9px] text-[var(--c-steel)] ml-2">
+                            LV {r.level} · {r.wins}W {r.losses}L
+                          </span>
+                        </div>
                         <PopButton
                           color="red"
                           disabled={busy}
                           onClick={() =>
-                            run(() => respondFriendRequest(f.id, true), 'Friend added!')
+                            run(
+                              () => sendFriendRequest(r.username),
+                              `Friend request sent to ${r.username}!`,
+                            )
                           }
                         >
-                          ACCEPT
-                        </PopButton>
-                        <PopButton
-                          color="steel"
-                          disabled={busy}
-                          onClick={() => run(() => respondFriendRequest(f.id, false))}
-                        >
-                          DECLINE
+                          ADD ▸
                         </PopButton>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Friends list */}
-            <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-              YOUR FRIENDS
-            </h2>
-            <div className="flex flex-col gap-2 mb-6">
-              {friendProfiles.map(({ friendship, other, otherId }) => (
-                <div
-                  key={friendship.id}
-                  className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
-                >
-                  <div className="text-xs font-bold">
-                    {other?.username || 'Unknown player'}
-                    {other && (
-                      <span className="text-[9px] text-[var(--c-steel)] ml-2">
-                        LV {other.level} · {other.wins}W {other.losses}L
-                      </span>
+                    ))}
+                    {results.length === 0 && (
+                      <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                        No players found.
+                      </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <PopButton
-                      color="yellow"
-                      disabled={busy || !other}
-                      onClick={() => other && setTradePartner(other)}
-                    >
-                      <span className="flex items-center gap-1">
-                        <ArrowLeftRight className="w-3 h-3" /> TRADE
-                      </span>
-                    </PopButton>
-                    <PopButton
-                      color="steel"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          confirm(`Remove ${other?.username || 'this player'} from your friends?`)
-                        )
-                          run(() => removeFriend(friendship.id));
-                      }}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </PopButton>
-                  </div>
-                </div>
-              ))}
-              {friendProfiles.length === 0 && (
-                <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                  No friends yet — search for players above and send a request.
-                </div>
-              )}
-            </div>
-
-            {/* Outgoing requests */}
-            {outgoing.length > 0 && (
-              <div className="mb-6">
-                <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                  SENT REQUESTS
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {outgoing.map((f) => (
-                    <div
-                      key={f.id}
-                      className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
-                    >
-                      <span className="text-xs font-bold">{nameOf(f.addressee)} · pending…</span>
-                      <PopButton
-                        color="steel"
-                        disabled={busy}
-                        onClick={() => run(() => removeFriend(f.id))}
-                      >
-                        CANCEL
-                      </PopButton>
-                    </div>
-                  ))}
-                </div>
+                )}
               </div>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Pending trades */}
-            <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-              OPEN TRADES
-            </h2>
-            <div className="flex flex-col gap-3 mb-7">
-              {pendingTrades.map((t) => {
-                const isIncoming = t.recipient === userId;
-                return (
-                  <div
-                    key={t.id}
-                    className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]"
-                  >
-                    <div className="heading-font text-[11px] mb-2">
-                      {isIncoming
-                        ? `${nameOf(t.proposer)} OFFERS YOU A TRADE`
-                        : `YOUR OFFER TO ${nameOf(t.recipient).toUpperCase()}`}
-                    </div>
-                    <div className="flex flex-wrap gap-4 mb-3">
-                      <TradeSide
-                        label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
-                        cards={t.proposer_cards}
-                        gold={t.proposer_gold}
-                      />
-                      <TradeSide
-                        label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
-                        cards={t.recipient_cards}
-                        gold={t.recipient_gold}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      {isIncoming ? (
-                        <>
+
+              {/* Incoming requests */}
+              {incoming.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="heading-font text-base mb-2 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+                    FRIEND REQUESTS
+                  </h2>
+                  <div className="flex flex-col gap-2">
+                    {incoming.map((f) => (
+                      <div
+                        key={f.id}
+                        className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
+                      >
+                        <span className="text-xs font-bold">{nameOf(f.requester)}</span>
+                        <div className="flex gap-2">
                           <PopButton
                             color="red"
                             disabled={busy}
                             onClick={() =>
-                              run(async () => {
-                                const err = await respondTrade(t.id, true);
-                                if (!err) {
-                                  refreshCollection();
-                                  refreshProfile();
-                                }
-                                return err;
-                              }, 'Trade complete!')
+                              run(() => respondFriendRequest(f.id, true), 'Friend added!')
                             }
                           >
-                            ACCEPT TRADE ▸
+                            ACCEPT
                           </PopButton>
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() => run(() => respondTrade(t.id, false))}
+                            onClick={() => run(() => respondFriendRequest(f.id, false))}
                           >
                             DECLINE
                           </PopButton>
-                        </>
-                      ) : (
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Friends list */}
+              <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+                YOUR FRIENDS
+              </h2>
+              <div className="flex flex-col gap-2 mb-6">
+                {friendProfiles.map(({ friendship, other, otherId }) => (
+                  <div
+                    key={friendship.id}
+                    className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
+                  >
+                    <div className="text-xs font-bold">
+                      {other?.username || 'Unknown player'}
+                      {other && (
+                        <span className="text-[9px] text-[var(--c-steel)] ml-2">
+                          LV {other.level} · {other.wins}W {other.losses}L
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <PopButton
+                        color="yellow"
+                        disabled={busy || !other}
+                        onClick={() => other && setTradePartner(other)}
+                      >
+                        <span className="flex items-center gap-1">
+                          <ArrowLeftRight className="w-3 h-3" /> TRADE
+                        </span>
+                      </PopButton>
+                      <PopButton
+                        color="steel"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            confirm(`Remove ${other?.username || 'this player'} from your friends?`)
+                          )
+                            run(() => removeFriend(friendship.id));
+                        }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </PopButton>
+                    </div>
+                  </div>
+                ))}
+                {friendProfiles.length === 0 && (
+                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
+                    No friends yet — search for players above and send a request.
+                  </div>
+                )}
+              </div>
+
+              {/* Outgoing requests */}
+              {outgoing.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+                    SENT REQUESTS
+                  </h2>
+                  <div className="flex flex-col gap-2">
+                    {outgoing.map((f) => (
+                      <div
+                        key={f.id}
+                        className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
+                      >
+                        <span className="text-xs font-bold">{nameOf(f.addressee)} · pending…</span>
                         <PopButton
                           color="steel"
                           disabled={busy}
-                          onClick={() => run(() => cancelTrade(t.id))}
+                          onClick={() => run(() => removeFriend(f.id))}
                         >
-                          CANCEL OFFER
+                          CANCEL
                         </PopButton>
-                      )}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-              {pendingTrades.length === 0 && (
-                <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                  No open trades. Start one from the TRADE button next to a friend.
                 </div>
               )}
-            </div>
-
-            {/* History */}
-            {doneTrades.length > 0 && (
-              <>
-                <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                  RECENT HISTORY
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {doneTrades.map((t) => (
+            </>
+          ) : (
+            <>
+              {/* Pending trades */}
+              <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+                OPEN TRADES
+              </h2>
+              <div className="flex flex-col gap-3 mb-7">
+                {pendingTrades.map((t) => {
+                  const isIncoming = t.recipient === userId;
+                  return (
                     <div
                       key={t.id}
-                      className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2"
+                      className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]"
                     >
-                      <span
-                        className={cn(
-                          'text-[8px] font-black px-1 ink-border-sm',
-                          t.status === 'accepted'
-                            ? 'bg-[#22C55E] text-[#052E12]'
-                            : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                      <div className="heading-font text-[11px] mb-2">
+                        {isIncoming
+                          ? `${nameOf(t.proposer)} OFFERS YOU A TRADE`
+                          : `YOUR OFFER TO ${nameOf(t.recipient).toUpperCase()}`}
+                      </div>
+                      <div className="flex flex-wrap gap-4 mb-3">
+                        <TradeSide
+                          label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
+                          cards={t.proposer_cards}
+                          gold={t.proposer_gold}
+                        />
+                        <TradeSide
+                          label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
+                          cards={t.recipient_cards}
+                          gold={t.recipient_gold}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        {isIncoming ? (
+                          <>
+                            <PopButton
+                              color="red"
+                              disabled={busy}
+                              onClick={() =>
+                                run(async () => {
+                                  const err = await respondTrade(t.id, true);
+                                  if (!err) {
+                                    refreshCollection();
+                                    refreshProfile();
+                                  }
+                                  return err;
+                                }, 'Trade complete!')
+                              }
+                            >
+                              ACCEPT TRADE ▸
+                            </PopButton>
+                            <PopButton
+                              color="steel"
+                              disabled={busy}
+                              onClick={() => run(() => respondTrade(t.id, false))}
+                            >
+                              DECLINE
+                            </PopButton>
+                          </>
+                        ) : (
+                          <PopButton
+                            color="steel"
+                            disabled={busy}
+                            onClick={() => run(() => cancelTrade(t.id))}
+                          >
+                            CANCEL OFFER
+                          </PopButton>
                         )}
-                      >
-                        {t.status.toUpperCase()}
-                      </span>
-                      <span className="text-[10px] font-bold">
-                        {nameOf(t.proposer === userId ? t.recipient : t.proposer)} ·{' '}
-                        {new Date(t.created_at).toLocaleDateString()}
-                      </span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
+                  );
+                })}
+                {pendingTrades.length === 0 && (
+                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
+                    No open trades. Start one from the TRADE button next to a friend.
+                  </div>
+                )}
+              </div>
+
+              {/* History */}
+              {doneTrades.length > 0 && (
+                <>
+                  <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+                    RECENT HISTORY
+                  </h2>
+                  <div className="flex flex-col gap-2">
+                    {doneTrades.map((t) => (
+                      <div
+                        key={t.id}
+                        className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2"
+                      >
+                        <span
+                          className={cn(
+                            'text-[8px] font-black px-1 ink-border-sm',
+                            t.status === 'accepted'
+                              ? 'bg-[#22C55E] text-[#052E12]'
+                              : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                          )}
+                        >
+                          {t.status.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] font-bold">
+                          {nameOf(t.proposer === userId ? t.recipient : t.proposer)} ·{' '}
+                          {new Date(t.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           ))}
       </div>
 
