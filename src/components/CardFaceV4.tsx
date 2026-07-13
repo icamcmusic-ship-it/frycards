@@ -165,6 +165,15 @@ export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
 }
 
+/** Scales a font size down as text grows past a soft length target, so long
+ * names/flavor text shrink to fit instead of getting clipped or truncated.
+ * Never shrinks below `min`. */
+function fitFontSize(text: string, base: number, min: number, softLimit: number): number {
+  if (!text || text.length <= softLimit) return base;
+  const scaled = base * (softLimit / text.length);
+  return Math.max(min, Math.round(scaled * 10) / 10);
+}
+
 /** A small tinted, icon-led stat pill (ATK/HP) — replaces plain emoji text
  * with a proper badge so the stat line reads as UI, not a caption. */
 function StatChip({
@@ -345,6 +354,13 @@ export function CardFace({
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
+  // Long names/flavor text shrink to fit rather than getting truncated or
+  // clipped — the card itself can also grow (min-height, not fixed height)
+  // as a last resort so nothing is ever cut off.
+  const nameFontPx = isLg
+    ? fitFontSize(def.name, 13, 8.5, 15)
+    : fitFontSize(def.name, 9, 6.5, 11);
+  const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 85);
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
   // animated sheen; Mythic additionally gets a pulsing frame and a distinct
   // gold-on-red name banner instead of the shared tinted-paper header.
@@ -371,9 +387,9 @@ export function CardFace({
           onClick();
         }
       }}
-      style={{ width: w, height: h, backgroundImage: bg }}
+      style={{ width: w, minHeight: h, backgroundImage: bg }}
       className={cn(
-        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-hidden rounded-[4px]',
+        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-visible rounded-[4px]',
         rarityBorder(def.rarity),
         onClick && 'btn-pop cursor-pointer',
         dimmed && 'opacity-45 saturate-50',
@@ -414,9 +430,7 @@ export function CardFace({
           className={cn(
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
             mythic && 'text-[var(--c-yellow)]',
-            isLg ? 'text-[13px]' : 'text-[9px]',
           )}
-          title={def.name}
         >
           <TypeIcon
             className={cn(
@@ -425,7 +439,7 @@ export function CardFace({
               mythic && 'opacity-90',
             )}
           />
-          <span className="truncate">{def.name}</span>
+          <span style={{ fontSize: nameFontPx }}>{def.name}</span>
         </span>
         {def.comboGate ? (
           <span
@@ -600,7 +614,7 @@ export function CardFace({
 
         {isLg && def.flavor && (
           <div className="mt-1 pt-1 border-t border-[var(--c-ink)]/15">
-            <p className={cn('text-[9px] leading-snug line-clamp-2', set.className)}>
+            <p className={cn('leading-snug', set.className)} style={{ fontSize: flavorFontPx }}>
               {def.flavor}
             </p>
           </div>

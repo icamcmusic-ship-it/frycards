@@ -41,6 +41,7 @@ export interface Profile {
   equipped_avatar: string | null;
   starter_claimed: boolean;
   last_free_pack_at: string | null;
+  showcase_cards: string[];
 }
 
 export interface ShopItem {
@@ -253,6 +254,12 @@ export async function equipCosmetic(itemId: string): Promise<string | null> {
 
 export async function setUsername(name: string): Promise<string | null> {
   const { error } = await supabase.rpc('set_username', { p_name: name });
+  return rpcError(error);
+}
+
+/** Pin up to 6 owned cards to show off on the profile (own or when viewed by others). */
+export async function setShowcaseCards(cardIds: string[]): Promise<string | null> {
+  const { error } = await supabase.rpc('set_showcase_cards', { p_card_ids: cardIds });
   return rpcError(error);
 }
 
@@ -517,6 +524,27 @@ export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[
   if (ids.length === 0) return [];
   const { data } = await supabase.rpc('get_public_profiles', { p_ids: ids });
   return (data as PublicProfile[]) || [];
+}
+
+/** Full read-only profile card for the "view another player's profile" modal. */
+export interface PlayerProfileCard {
+  id: string;
+  username: string;
+  level: number;
+  wins: number;
+  losses: number;
+  games_played: number;
+  equipped_avatar: string | null;
+  equipped_banner: string | null;
+  equipped_card_back: string | null;
+  showcase_cards: string[];
+  created_at: string;
+}
+
+export async function fetchPlayerProfileCard(id: string): Promise<PlayerProfileCard | null> {
+  const { data, error } = await supabase.rpc('get_player_profile_card', { p_id: id });
+  if (error || !data || data.length === 0) return null;
+  return (data as PlayerProfileCard[])[0];
 }
 
 export interface CardsLeaderboardEntry {

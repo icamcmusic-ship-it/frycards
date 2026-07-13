@@ -25,6 +25,7 @@ import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { RARITY_CHIP } from './rarity';
+import { PlayerLink } from './PlayerProfileModal';
 
 type Tab = 'friends' | 'trades' | 'leaderboard';
 
@@ -218,7 +219,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                   >
                     <span className="heading-font text-xs w-7 text-right shrink-0">#{i + 1}</span>
                     <span className="flex-1 min-w-0 text-[11px] font-bold truncate">
-                      {row.username}
+                      <PlayerLink id={row.id} name={row.username} />
                       {row.id === userId ? ' (you)' : ''}
                     </span>
                     <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">
@@ -261,7 +262,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
                       >
                         <div className="text-xs font-bold">
-                          {r.username}
+                          <PlayerLink id={r.id} name={r.username} />
                           <span className="text-[9px] text-[var(--c-steel)] ml-2">
                             LV {r.level} · {r.wins}W {r.losses}L
                           </span>
@@ -301,7 +302,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         key={f.id}
                         className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                       >
-                        <span className="text-xs font-bold">{nameOf(f.requester)}</span>
+                        <span className="text-xs font-bold">
+                          <PlayerLink id={f.requester} name={nameOf(f.requester)} />
+                        </span>
                         <div className="flex gap-2">
                           <PopButton
                             color="red"
@@ -337,7 +340,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                   >
                     <div className="text-xs font-bold">
-                      {other?.username || 'Unknown player'}
+                      {other ? (
+                        <PlayerLink id={otherId} name={other.username} />
+                      ) : (
+                        'Unknown player'
+                      )}
                       {other && (
                         <span className="text-[9px] text-[var(--c-steel)] ml-2">
                           LV {other.level} · {other.wins}W {other.losses}L
@@ -388,7 +395,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         key={f.id}
                         className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
                       >
-                        <span className="text-xs font-bold">{nameOf(f.addressee)} · pending…</span>
+                        <span className="text-xs font-bold">
+                          <PlayerLink id={f.addressee} name={nameOf(f.addressee)} /> · pending…
+                        </span>
                         <PopButton
                           color="steel"
                           disabled={busy}
@@ -417,9 +426,20 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]"
                     >
                       <div className="heading-font text-[11px] mb-2">
-                        {isIncoming
-                          ? `${nameOf(t.proposer)} OFFERS YOU A TRADE`
-                          : `YOUR OFFER TO ${nameOf(t.recipient).toUpperCase()}`}
+                        {isIncoming ? (
+                          <>
+                            <PlayerLink id={t.proposer} name={nameOf(t.proposer)} /> OFFERS YOU A
+                            TRADE
+                          </>
+                        ) : (
+                          <>
+                            YOUR OFFER TO{' '}
+                            <PlayerLink
+                              id={t.recipient}
+                              name={nameOf(t.recipient).toUpperCase()}
+                            />
+                          </>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-4 mb-3">
                         <TradeSide
@@ -503,8 +523,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           {t.status.toUpperCase()}
                         </span>
                         <span className="text-[10px] font-bold">
-                          {nameOf(t.proposer === userId ? t.recipient : t.proposer)} ·{' '}
-                          {new Date(t.created_at).toLocaleDateString()}
+                          <PlayerLink
+                            id={t.proposer === userId ? t.recipient : t.proposer}
+                            name={nameOf(t.proposer === userId ? t.recipient : t.proposer)}
+                          />{' '}
+                          · {new Date(t.created_at).toLocaleDateString()}
                         </span>
                       </div>
                     ))}
