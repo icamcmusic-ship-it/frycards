@@ -69,7 +69,13 @@ function prettySlotName(raw: string): string {
     .toUpperCase();
 }
 
-export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
+/**
+ * `foilPity` mirrors grant_pack_contents' escalating soft pity: each pack
+ * opened with no foil raises the next pack's foil chance by 25% of that
+ * streak (reset to 0 the moment a foil is pulled). Omitting it (or passing
+ * 0) shows the base chance a player at zero pity would see.
+ */
+export function slotOdds(pack: PackType, slot: PackSlot, foilPity = 0): SlotOdds {
   const rawType = slot.type ?? slot.slot_type ?? 'foundation';
   const isLegacy = slot.type != null;
   const guaranteedFoil = rawType.startsWith('foil_') || rawType === 'prismatic';
@@ -84,8 +90,10 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
   let foilChance: number;
   if (guaranteedFoil) foilChance = 1;
   else if (slot.foil_eligible === false) foilChance = 0;
-  else if (slot.foil_chance_override != null) foilChance = slot.foil_chance_override;
-  else foilChance = Number(pack.foil_chance) || 0;
+  else {
+    const base = slot.foil_chance_override ?? (Number(pack.foil_chance) || 0);
+    foilChance = slot.foil_chance_override === 1 ? 1 : Math.min(1, base * (1 + 0.25 * foilPity));
+  }
 
   return {
     label: prettySlotName(rawType),
@@ -101,10 +109,10 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
 
 /** Collapse identical adjacent legacy slots so the modal reads "×4 FOUNDATION"
  * instead of four separate rows. */
-export function packOdds(pack: PackType): SlotOdds[] {
+export function packOdds(pack: PackType, foilPity = 0): SlotOdds[] {
   const rows: SlotOdds[] = [];
   for (const slot of pack.slot_config || []) {
-    const odds = slotOdds(pack, slot);
+    const odds = slotOdds(pack, slot, foilPity);
     const prev = rows[rows.length - 1];
     if (
       prev &&

@@ -15,6 +15,11 @@ import { cn } from '../lib/utils';
 export const DECK_SIZE = 30;
 export const MAX_COPIES = 3;
 
+// decodeDeckCode wants a Map (its `.get`/`.has` lookups) — POOL_BY_ID is a
+// plain Record, so build the Map once rather than casting the Record and
+// crashing at runtime the moment decodeDeckCode calls db.get(...).
+const POOL_MAP = new Map(Object.entries(POOL_BY_ID));
+
 export interface DeckIssue {
   text: string;
 }
@@ -81,7 +86,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const handleImport = () => {
     const code = window.prompt('Paste a deck code (FRY1:…):');
     if (!code) return;
-    const res = decodeDeckCode(code, POOL_BY_ID as unknown as Map<string, { type: string }>);
+    const res = decodeDeckCode(code, POOL_MAP);
     if ('error' in res) {
       setImportError(res.error);
       return;
@@ -251,9 +256,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
   const handleExport = async () => {
     if (!leaderId) return;
-    await navigator.clipboard.writeText(encodeDeckCode(leaderId, cardIds));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(encodeDeckCode(leaderId, cardIds));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      window.alert('Could not copy to clipboard — clipboard access is blocked in this browser.');
+    }
   };
 
   const ownedLeaders = POOL_LEADERS.filter((c) => (ownedQty.get(c.id) || 0) > 0);

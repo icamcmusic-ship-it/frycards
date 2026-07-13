@@ -42,6 +42,14 @@ export interface Profile {
   starter_claimed: boolean;
   last_free_pack_at: string | null;
   showcase_cards: string[];
+  /** Consecutive packs opened with no foil pull — the server escalates foil
+   * odds by 25% of this per pack (grant_pack_contents), reset to 0 on a hit. */
+  foil_pity: number;
+  /** Packs opened since the last Full-Art+ pull; a Full-Art+ is guaranteed
+   * within 10 (grant_pack_contents' global pity). */
+  packs_since_fullart: number;
+  /** Same guarantee, but a Mythic within 60 packs. */
+  packs_since_mythic: number;
 }
 
 export interface ShopItem {
@@ -122,12 +130,20 @@ export interface PackPull {
   image_url: string | null;
   foil: boolean;
   slot: string;
+  /** True when this pull was past the player's per-rarity copy cap — no
+   * card was actually granted, it was auto-converted to `shards` instead. */
+  converted_to_shards: boolean;
+  /** Shards gained from this specific pull; only nonzero when converted. */
+  shards: number;
 }
 
 export interface OpenPackResult {
   cards: PackPull[];
   gold: number;
   gems: number;
+  /** Not present on claim_starter_pack's result (it doesn't grant shards). */
+  shards?: number;
+  shards_gained?: number;
 }
 
 // ---------------------------------------------------------------------------
