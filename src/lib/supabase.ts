@@ -323,6 +323,41 @@ export interface QuicksellResult {
   total: number;
 }
 
+export interface CraftResult {
+  ok: boolean;
+  shards: number;
+  cost: number;
+}
+
+export interface DisenchantResult {
+  ok: boolean;
+  shards: number;
+  gained: number;
+}
+
+/** Spend shards to craft a specific card (see shard_craft_cost for pricing). */
+export async function craftCard(
+  cardId: string,
+  foil = false,
+): Promise<{ data: CraftResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('craft_card', { p_card_id: cardId, p_foil: foil });
+  return { data: (data as CraftResult) || null, error: rpcError(error) };
+}
+
+/** Break down spare copies of a card into shards (see shard_disenchant_value for pricing). */
+export async function disenchantCard(
+  cardId: string,
+  quantity: number,
+  foil = false,
+): Promise<{ data: DisenchantResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('disenchant_card', {
+    p_card_id: cardId,
+    p_quantity: quantity,
+    p_foil: foil,
+  });
+  return { data: (data as DisenchantResult) || null, error: rpcError(error) };
+}
+
 // ---------------------------------------------------------------------------
 // Levels, battle pass, achievements, missions, inventory
 // ---------------------------------------------------------------------------

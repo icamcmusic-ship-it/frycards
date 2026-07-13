@@ -89,7 +89,6 @@ export interface Player {
   /** v4.3: number of Reroll Phase rerolls spent this turn (cap: rules.rerollsAllowed). */
   rerollsUsed: number;
   locationCastThisTurn: boolean;
-  rallyUsedThisTurn: boolean;
   turnsTaken: number;
   /** v4.2: at most one Combo-gated card (cast or Echo-recast) per Placement Phase. */
   comboGateCastThisTurn: boolean;
@@ -200,6 +199,32 @@ export function effMaxHp(g: Game, u: Inst): number {
 }
 export function remainingHp(g: Game, u: Inst): number {
   return effMaxHp(g, u) - u.damage;
+}
+
+/** True if an unused Ward would fully prevent the next hostile damage/Removal instance. */
+export function hasUnspentWard(target: Inst): boolean {
+  return target.def.type === 'Unit' && hasKw(target.def, 'Ward') && !target.wardUsed;
+}
+
+/**
+ * Would `rawAtk` combat damage actually destroy `target` this attack?
+ * Accounts for an unused Ward (full prevention) and Bulwark X (flat combat
+ * damage reduction) — naive `remainingHp(g, t) <= atk` ignores both and
+ * mistakes a warded/bulwarked unit for a safe kill.
+ */
+export function willKillInCombat(g: Game, target: Inst, rawAtk: number): boolean {
+  if (target.def.type !== 'Unit') return false;
+  if (hasUnspentWard(target)) return false;
+  const dmg = Math.max(0, rawAtk - (target.def.bulwark?.x || 0));
+  return dmg >= remainingHp(g, target);
+}
+
+/** Would `rawValue` non-combat (Sap) damage kill? Bulwark doesn't apply outside
+ * combat (§10 — Toll is the direct/Sap damage answer), only Ward does. */
+export function wouldSapKill(g: Game, target: Inst, rawValue: number): boolean {
+  if (target.def.type !== 'Unit') return false;
+  if (hasUnspentWard(target)) return false;
+  return rawValue >= remainingHp(g, target);
 }
 
 /** Anchor: effective Cast threshold = printed - (# other in-play Anchor cards), min 1. */
@@ -328,7 +353,6 @@ export function newGame(
       dice: [],
       rerollsUsed: 0,
       locationCastThisTurn: false,
-      rallyUsedThisTurn: false,
       turnsTaken: 0,
       comboGateCastThisTurn: false,
     };
@@ -518,8 +542,10 @@ export function applyEffect(
       drawCards(g, p, v);
       break;
     case 'bind': {
+      // Ward only stops damage/Removal (§10) — Bind is neither, so it isn't
+      // checked or consumed by Ward.
       const t = find(targetIid);
-      if (t && t.def.type === 'Unit' && !wardCheck(g, t, t.owner !== ownerId)) {
+      if (t && t.def.type === 'Unit') {
         t.boundNextTurn = true;
         g.log.push(`${t.def.name} was Bound.`);
       }
@@ -556,7 +582,6 @@ export function startTurn(g: Game) {
   p.turnsTaken++;
   p.rerollsUsed = 0;
   p.locationCastThisTurn = false;
-  p.rallyUsedThisTurn = false;
   p.comboGateCastThisTurn = false;
   g.stage = 'PRE_REROLL';
   for (const u of [...p.board, p.leader]) {
@@ -733,14 +758,14 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       // chipping the biggest body — otherwise removal wastes value chipping
       // a tough unit while a nearly-dead one survives untouched.
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      const killable = opp.board.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
       if (killable) return killable.iid;
       const t = [...opp.board].sort(byAtk)[0];
       return t?.iid;
     }
     case 'anyTarget': {
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => remainingHp(g, u) <= v).sort(byAtk)[0];
+      const killable = opp.board.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
       if (killable) return killable.iid;
       const big = [...opp.board].sort(byAtk)[0];
       // Prefer face damage if no good unit target.
@@ -943,9 +968,11 @@ export function activateViaRally(
 ): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
-  if (p.rallyUsedThisTurn) return false;
   const c = p.board.find((x) => x.iid === rallyIid);
   const src = [...p.board, p.leader, p.location].find((x): x is Inst => !!x && x.iid === sourceIid);
+  // "Once per turn" (§10) is per Rally card, not a whole-player budget —
+  // that's already enforced below by c.abilityUsed, same as any other
+  // Ability Slot exhaustion.
   if (!c || !src || !hasKw(c.def, 'Rally') || !c.def.ability || c.abilityUsed) return false;
   if (c.hasAttacked || c.boundThisTurn) return false;
   if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
@@ -954,7 +981,6 @@ export function activateViaRally(
   c.abilityUsed = true;
   c.abilityDie = src.abilityDie;
   src.abilityDie = undefined; // die moves; source stays exhausted
-  p.rallyUsedThisTurn = true;
   g.stats.rallies++;
   applyEffect(
     g,
@@ -1021,27 +1047,38 @@ export function echoRecast(
 ): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
-  const dice = pickDice(p, dieIndex);
   const idx = p.discard.findIndex((c) => c.iid === cardIid);
   const dIdx = p.hand.findIndex((c) => c.iid === discardIid);
-  if (!dice || idx < 0 || dIdx < 0) return false;
+  if (idx < 0 || dIdx < 0) return false;
   const c = p.discard[idx];
   if (!hasKw(c.def, 'Echo') || c.echoSpent) return false;
-  if (c.def.comboGate) {
-    // v4.2: the one-Combo-gated-card-per-turn cap also covers Echo recasts.
-    if (p.comboGateCastThisTurn) return false;
-    if (dice.length !== 1) return false;
-    if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
-  } else if (!payableNumeric(g, p.id, c.def, dice)) {
-    return false;
-  }
   if (c.def.type === 'Location') {
     if (p.locationCastThisTurn) return false;
     if (p.location?.def.id === c.def.id) return false;
   }
+  // v4.1: Locations are die-free / Cast-Slot-free, even Echo-recast — only
+  // non-Location cards spend a die meeting their normal Cast Slot threshold.
+  let dice: Die[] = [];
+  if (c.def.type !== 'Location') {
+    const picked = pickDice(p, dieIndex);
+    if (!picked) return false;
+    dice = picked;
+    if (c.def.comboGate) {
+      // v4.2: the one-Combo-gated-card-per-turn cap also covers Echo recasts.
+      if (p.comboGateCastThisTurn) return false;
+      if (dice.length !== 1) return false;
+      if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
+    } else if (!payableNumeric(g, p.id, c.def, dice)) {
+      return false;
+    }
+  }
   for (const die of dice) die.placed = true;
   const primaryValue =
-    c.def.castCostKind === 'sum' ? dice.reduce((s, d) => s + d.value, 0) : dice[0].value;
+    dice.length === 0
+      ? 0
+      : c.def.castCostKind === 'sum'
+        ? dice.reduce((s, d) => s + d.value, 0)
+        : dice[0].value;
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
   p.discard.splice(idx, 1);
   const extra = p.hand.splice(dIdx, 1)[0];

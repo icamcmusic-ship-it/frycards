@@ -340,11 +340,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                   >
                     <div className="text-xs font-bold">
-                      {other ? (
-                        <PlayerLink id={otherId} name={other.username} />
-                      ) : (
-                        'Unknown player'
-                      )}
+                      {other ? <PlayerLink id={otherId} name={other.username} /> : 'Unknown player'}
                       {other && (
                         <span className="text-[9px] text-[var(--c-steel)] ml-2">
                           LV {other.level} · {other.wins}W {other.losses}L
@@ -434,10 +430,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         ) : (
                           <>
                             YOUR OFFER TO{' '}
-                            <PlayerLink
-                              id={t.recipient}
-                              name={nameOf(t.recipient).toUpperCase()}
-                            />
+                            <PlayerLink id={t.recipient} name={nameOf(t.recipient).toUpperCase()} />
                           </>
                         )}
                       </div>

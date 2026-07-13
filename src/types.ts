@@ -6,7 +6,8 @@
  */
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
-export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Mythic';
+export type Rarity =
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Mythic';
 
 export const RARITIES: Rarity[] = [
   'Common',
@@ -14,6 +15,7 @@ export const RARITIES: Rarity[] = [
   'Rare',
   'Super-Rare',
   'Ultra-Rare',
+  'Full-Art',
   'Mythic',
 ];
 

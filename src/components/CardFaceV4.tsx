@@ -184,20 +184,27 @@ function StatChip({
   icon: Icon,
   value,
   maxValue,
-  isLg,
+  tier,
   tint,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value?: number;
   maxValue?: number;
-  isLg: boolean;
+  tier: 'compact' | 'standard' | 'full';
   tint: string;
 }) {
+  const textClass =
+    tier === 'full'
+      ? 'text-[12px] px-1.5 py-0.5'
+      : tier === 'standard'
+        ? 'text-[10px] px-1.5 py-0.5'
+        : 'text-[8px] px-1';
+  const iconClass = tier === 'full' ? 'w-3 h-3' : tier === 'standard' ? 'w-2.5 h-2.5' : 'w-2 h-2';
   return (
     <span
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full font-mono font-black border',
-        isLg ? 'text-[12px] px-1.5 py-0.5' : 'text-[8px] px-1',
+        textClass,
       )}
       style={{
         color: tint,
@@ -205,7 +212,7 @@ function StatChip({
         backgroundColor: `color-mix(in srgb, ${tint} 12%, transparent)`,
       }}
     >
-      <Icon className={isLg ? 'w-3 h-3' : 'w-2 h-2'} />
+      <Icon className={iconClass} />
       {value}
       {maxValue !== undefined && <span className="opacity-60 font-bold">/{maxValue}</span>}
     </span>
@@ -254,22 +261,11 @@ const AUTO_INTRO_VISIBLE_MS = 6000;
  * of firing them all on top of each other in one unreadable stack. */
 let nextAutoIntroSlot = 0;
 
-export function KeywordChip({
-  kw,
-  small,
-  autoIntroduce,
-}: {
-  key?: React.Key;
-  kw: string;
-  small?: boolean;
-  /** Auto-opens this chip's popover once per device the first time this
-   * keyword is ever seen (tracked in localStorage), so new players discover
-   * the glossary exists instead of needing to guess a pill is clickable.
-   * Only pass this from live-match contexts (hand/board) — passing it from
-   * a screen that renders many cards at once (Collection, Deck Builder)
-   * would fire a stack of popovers simultaneously. */
-  autoIntroduce?: boolean;
-}) {
+/** Shared popover behavior for any clickable keyword mention — the pill chip
+ * (kwList) and any inline keyword mention found inside a rules sentence both
+ * drive the same click-to-open/auto-introduce popover through this hook, so
+ * a keyword is equally clickable whichever form it's rendered in. */
+function useKeywordPopover(kw: string, autoIntroduce?: boolean) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   // Pending auto-close timer for the auto-introduced popover — cleared the
@@ -332,6 +328,63 @@ export function KeywordChip({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  return { pos, btnRef, text, open, close };
+}
+
+/** Renders the popover itself (via portal) — shared by the pill chip and the
+ * inline keyword link so both look/behave identically once opened. */
+function KeywordPopover({
+  kw,
+  text,
+  pos,
+  close,
+}: {
+  kw: string;
+  text: string;
+  pos: { top: number; left: number };
+  close: () => void;
+}) {
+  return createPortal(
+    <>
+      <div
+        className="fixed inset-0 z-[9998]"
+        onClick={(e) => {
+          e.stopPropagation();
+          close();
+        }}
+        onWheel={close}
+      />
+      <div
+        style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
+        className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+        {text}
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+export function KeywordChip({
+  kw,
+  small,
+  autoIntroduce,
+}: {
+  key?: React.Key;
+  kw: string;
+  small?: boolean;
+  /** Auto-opens this chip's popover once per device the first time this
+   * keyword is ever seen (tracked in localStorage), so new players discover
+   * the glossary exists instead of needing to guess a pill is clickable.
+   * Only pass this from live-match contexts (hand/board) — passing it from
+   * a screen that renders many cards at once (Collection, Deck Builder)
+   * would fire a stack of popovers simultaneously. */
+  autoIntroduce?: boolean;
+}) {
+  const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
+
   return (
     <span className="relative inline-block">
       <button
@@ -345,30 +398,68 @@ export function KeywordChip({
       >
         {kw}
       </button>
-      {pos &&
-        text &&
-        createPortal(
-          <>
-            <div
-              className="fixed inset-0 z-[9998]"
-              onClick={(e) => {
-                e.stopPropagation();
-                close();
-              }}
-              onWheel={close}
-            />
-            <div
-              style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
-              className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
-              {text}
-            </div>
-          </>,
-          document.body,
-        )}
+      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
     </span>
+  );
+}
+
+/** v4.3.1: an inline, in-sentence keyword mention (e.g. "Twin bonus:" inside
+ * a rules line, or a keyword named inside a Combo/Overflow/Aftershock
+ * description) — opens the exact same glossary popover as the pill chip
+ * above. Previously, only a card's top-of-box keyword pills were clickable;
+ * any mention of a keyword *inside* the generated rules sentences (or a
+ * pill hidden by the small-card slice cap) had no way to open its
+ * definition. This makes every recognized keyword word clickable wherever
+ * it appears, not just in the pill row. */
+function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boolean }) {
+  const { pos, btnRef, text, open, close } = useKeywordPopover(kw);
+  if (!text) return <>{kw}</>;
+  return (
+    <span className="relative inline">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={open}
+        className={cn(
+          'font-bold underline decoration-dotted underline-offset-2 cursor-help',
+          small ? 'text-[6.5px]' : undefined,
+        )}
+      >
+        {kw}
+      </button>
+      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
+    </span>
+  );
+}
+
+/** Sorted longest-first so a multi-word keyword (if ever added) is matched
+ * before any single-word keyword it might contain. */
+const KEYWORD_NAMES = Object.keys(KEYWORD_GLOSSARY).sort((a, b) => b.length - a.length);
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** \b word-boundary on both sides — matches a keyword regardless of
+ * surrounding punctuation ("Anchor.", "Anchor,", "(Anchor)") or position in
+ * the sentence, matches every repeated occurrence (global flag), and never
+ * matches a keyword as a partial word inside a longer word (e.g. "Rush"
+ * inside "Rushmore") since \b requires an actual word/non-word transition. */
+const KEYWORD_TEXT_RE = new RegExp(`\\b(${KEYWORD_NAMES.map(escapeRegExp).join('|')})\\b`, 'g');
+
+/** Splits `text` on every recognized keyword mention and renders each one as
+ * a clickable `KeywordText`, so any card sentence — combo text, "while
+ * staged" passives, Overflow/Aftershock/Ultimate lines, etc — gets working
+ * click-to-define keywords wherever they're mentioned, not just when a
+ * keyword is its own top-level pill. */
+export function renderKeywordText(text: string, small?: boolean): React.ReactNode {
+  if (!text) return text;
+  const parts = text.split(KEYWORD_TEXT_RE);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    // Odd indices are the captured keyword matches (String.split keeps
+    // capture groups in the output array); even indices are plain text.
+    i % 2 === 1 ? (
+      <KeywordText key={i} kw={part} small={small} />
+    ) : (
+      part && <React.Fragment key={i}>{part}</React.Fragment>
+    ),
   );
 }
 
@@ -424,17 +515,141 @@ function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
   );
 }
 
-const SIZES = {
-  sm: { w: 110, h: 154 },
-  md: { w: 140, h: 196 },
-  lg: { w: 240, h: 336 },
+/** The three fixed pixel sizes for `CardFace`'s `size` prop — exported so any
+ * wrapper that needs to reserve exact space for a card (e.g. a flip-reveal
+ * container) can read the real dimensions instead of hardcoding a magic
+ * number that could silently drift out of sync with this table. */
+export const CARD_SIZES = {
+  compact: { w: 110, h: 154 },
+  standard: { w: 140, h: 196 },
+  full: { w: 240, h: 336 },
 } as const;
+const SIZES = CARD_SIZES;
+
+export type CardSize = keyof typeof SIZES;
+
+/** Hand-tuned per-tier presentation values. `compact` and `standard` are NOT
+ * just a linear shrink of `full` — each tier gets its own font sizes, border
+ * weights, keyword caps and content toggles so small cards stay legible
+ * instead of reusing full-size styling squeezed into a smaller box. Only
+ * three fixed tiers exist anywhere in the app; nothing renders at an
+ * arbitrary pixel size. */
+const TIER: Record<
+  CardSize,
+  {
+    outerBorder: string;
+    rounded: string;
+    shadow: string;
+    showGlow: boolean;
+    showCornerGem: boolean;
+    headerPy: string;
+    typeIconSize: string;
+    nameFont: { base: number; min: number; soft: number };
+    comboBadge: string;
+    showDiceIcon: boolean;
+    costBadge: string;
+    freeBadge: string;
+    artBorder: string;
+    artRing: boolean;
+    rarityChip: string;
+    artBadge: string;
+    foilBadge: string;
+    typeLine: string;
+    showSetSuffix: boolean;
+    textBoxPad: string;
+    keywordMax: number;
+    keywordSmall: boolean;
+    rules: string;
+    rulesMultiline: boolean;
+    showFlavor: boolean;
+  }
+> = {
+  compact: {
+    outerBorder: 'border-2',
+    rounded: 'rounded-[3px]',
+    shadow: 'shadow-hard-black-xs',
+    showGlow: false,
+    showCornerGem: false,
+    headerPy: 'py-0.5',
+    typeIconSize: 'w-2.5 h-2.5',
+    nameFont: { base: 9.5, min: 7, soft: 11 },
+    comboBadge: 'text-[6.5px] px-1 py-0.5',
+    showDiceIcon: false,
+    costBadge: 'text-[8px] px-1 h-4 min-w-4',
+    freeBadge: 'text-[6.5px] px-1 py-0.5',
+    artBorder: 'border',
+    artRing: false,
+    rarityChip: 'text-[6px] px-1',
+    artBadge: 'text-[6.5px]',
+    foilBadge: 'text-[6px] px-1',
+    typeLine: 'mt-0.5 text-[7px]',
+    showSetSuffix: false,
+    textBoxPad: 'p-1',
+    keywordMax: 2,
+    keywordSmall: true,
+    rules: 'mt-0.5 text-[6.5px] line-clamp-1',
+    rulesMultiline: false,
+    showFlavor: false,
+  },
+  standard: {
+    outerBorder: 'border-[3px]',
+    rounded: 'rounded-[4px]',
+    shadow: 'shadow-hard-black-xs',
+    showGlow: false,
+    showCornerGem: false,
+    headerPy: 'py-0.5',
+    typeIconSize: 'w-3 h-3',
+    nameFont: { base: 11, min: 8, soft: 13 },
+    comboBadge: 'text-[7.5px] px-1 py-0.5',
+    showDiceIcon: false,
+    costBadge: 'text-[9px] px-1 h-5 min-w-5',
+    freeBadge: 'text-[7.5px] px-1 py-0.5',
+    artBorder: 'border-2',
+    artRing: false,
+    rarityChip: 'text-[7px] px-1',
+    artBadge: 'text-[7.5px]',
+    foilBadge: 'text-[7px] px-1',
+    typeLine: 'mt-0.5 text-[8px]',
+    showSetSuffix: false,
+    textBoxPad: 'p-1',
+    keywordMax: 4,
+    keywordSmall: false,
+    rules: 'mt-0.5 text-[7.5px] line-clamp-2',
+    rulesMultiline: false,
+    showFlavor: false,
+  },
+  full: {
+    outerBorder: 'border-4',
+    rounded: 'rounded-[4px]',
+    shadow: 'shadow-hard-black',
+    showGlow: true,
+    showCornerGem: true,
+    headerPy: 'py-1',
+    typeIconSize: 'w-3.5 h-3.5',
+    nameFont: { base: 13, min: 8.5, soft: 15 },
+    comboBadge: 'text-[9px] px-1.5 py-0.5',
+    showDiceIcon: true,
+    costBadge: 'text-[11px] px-1.5 h-7 min-w-7',
+    freeBadge: 'text-[9px] px-1.5 py-0.5',
+    artBorder: 'border-[3px]',
+    artRing: true,
+    rarityChip: 'text-[9px] px-1.5 py-0.5',
+    artBadge: 'text-[9px]',
+    foilBadge: 'text-[9px] px-1.5 py-0.5',
+    typeLine: 'mt-1 text-[10px]',
+    showSetSuffix: true,
+    textBoxPad: 'p-1.5',
+    keywordMax: 8,
+    keywordSmall: false,
+    rules: 'mt-1 text-[9.5px] space-y-0.5',
+    rulesMultiline: true,
+    showFlavor: true,
+  },
+};
 
 export function CardFace({
   def,
-  size = 'md',
-  small,
-  large,
+  size = 'standard',
   dimmed,
   highlight,
   foil,
@@ -449,12 +664,12 @@ export function CardFace({
 }: {
   key?: React.Key;
   def: CardDef;
-  /** Card size — real 2.5:3.5 proportions at every tier. */
-  size?: 'sm' | 'md' | 'lg';
-  /** @deprecated use size="sm" */
-  small?: boolean;
-  /** @deprecated use size="lg" */
-  large?: boolean;
+  /** Card size — one of three fixed, hand-tuned tiers (real 2.5:3.5
+   * proportions at every tier): `compact` for dense rows (hand, discard,
+   * showcases), `standard` for a browsable grid (deck builder pool), `full`
+   * for the primary "read the whole card" view (collection grid, inspector,
+   * pack reveal). */
+  size?: CardSize;
   dimmed?: boolean;
   highlight?: boolean;
   /** Renders the built-in foil treatment: shimmering sheen + pulsing glow ring. */
@@ -476,9 +691,8 @@ export function CardFace({
    * they can click a keyword pill. */
   introduceKeywords?: boolean;
 }) {
-  const resolvedSize = large ? 'lg' : small ? 'sm' : size;
-  const { w, h } = SIZES[resolvedSize];
-  const isLg = resolvedSize === 'lg';
+  const { w, h } = SIZES[size];
+  const cfg = TIER[size];
   const rules = cardRuleLines(def);
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
@@ -487,9 +701,7 @@ export function CardFace({
   // Long names/flavor text shrink to fit rather than getting truncated or
   // clipped — the card itself can also grow (min-height, not fixed height)
   // as a last resort so nothing is ever cut off.
-  const nameFontPx = isLg
-    ? fitFontSize(def.name, 13, 8.5, 15)
-    : fitFontSize(def.name, 9, 6.5, 11);
+  const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
   const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 85);
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
   // animated sheen; Mythic additionally gets a pulsing frame and a distinct
@@ -519,13 +731,15 @@ export function CardFace({
       }}
       style={{ width: w, minHeight: h, backgroundImage: bg }}
       className={cn(
-        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-hidden rounded-[4px]',
+        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] text-left shrink-0 transition-transform overflow-hidden',
+        cfg.outerBorder,
+        cfg.rounded,
         rarityBorder(def.rarity),
         onClick && 'btn-pop cursor-pointer',
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
-        isLg ? 'shadow-hard-black' : 'shadow-hard-black-xs',
-        !dimmed && (mythic ? 'mythic-frame' : isLg && rarityGlow(def.rarity)),
+        cfg.shadow,
+        !dimmed && (mythic ? 'mythic-frame' : cfg.showGlow && rarityGlow(def.rarity)),
         foil && !dimmed && 'foil-glow',
       )}
     >
@@ -534,7 +748,7 @@ export function CardFace({
           Positioned at the corner (not negative-offset) since the card
           wrapper clips overflow — the rotated square's tips peek past the
           edge for a "corner tag" look instead of being invisible. */}
-      {isLg && def.rarity && def.rarity !== 'Common' && def.rarity !== 'Uncommon' && (
+      {cfg.showCornerGem && def.rarity && def.rarity !== 'Common' && def.rarity !== 'Uncommon' && (
         <span
           aria-hidden
           className="absolute top-0 left-0 w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-[var(--c-ink)] z-10"
@@ -547,7 +761,7 @@ export function CardFace({
       <div
         className={cn(
           'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2',
-          isLg ? 'py-1' : 'py-0.5',
+          cfg.headerPy,
           mythic ? 'mythic-bg border-[#7A1420]' : 'border-[var(--c-ink)]/15',
         )}
         style={
@@ -564,11 +778,7 @@ export function CardFace({
           title={def.name}
         >
           <TypeIcon
-            className={cn(
-              'shrink-0 opacity-70',
-              isLg ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5',
-              mythic && 'opacity-90',
-            )}
+            className={cn('shrink-0 opacity-70', cfg.typeIconSize, mythic && 'opacity-90')}
           />
           <span className="break-words" style={{ fontSize: nameFontPx }}>
             {def.name}
@@ -578,11 +788,11 @@ export function CardFace({
           <span
             className={cn(
               'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
-              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
+              cfg.comboBadge,
             )}
             title={costSummary(def) || undefined}
           >
-            {isLg && <Dices className="w-3 h-3" />}
+            {cfg.showDiceIcon && <Dices className="w-3 h-3" />}
             {GATE_LABEL[def.comboGate] || def.comboGate}
           </span>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
@@ -603,7 +813,7 @@ export function CardFace({
                   : def.castCostKind === 'sum'
                     ? 'bg-[#B45309] text-white'
                     : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-                isLg ? 'text-[11px] px-1.5 h-7 min-w-7' : 'text-[8px] px-1 h-4 min-w-4',
+                cfg.costBadge,
               )}
               title={
                 effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
@@ -623,7 +833,7 @@ export function CardFace({
           <span
             className={cn(
               'heading-font shrink-0 rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-steel)] text-white',
-              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1 py-0.5',
+              cfg.freeBadge,
             )}
           >
             FREE
@@ -639,10 +849,10 @@ export function CardFace({
       <div
         className={cn(
           'relative w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 overflow-hidden rounded-[2px]',
-          isLg ? 'border-[3px]' : 'border-2',
+          cfg.artBorder,
           'border-[var(--c-ink)]',
         )}
-        style={isLg ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
+        style={cfg.artRing ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
       >
         <CardArt def={def} />
         <div
@@ -653,7 +863,7 @@ export function CardFace({
           <span
             className={cn(
               'absolute top-1 right-1 font-black rounded-full leading-tight',
-              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1',
+              cfg.rarityChip,
               rarityChip(def.rarity),
             )}
           >
@@ -664,7 +874,7 @@ export function CardFace({
           <span
             className={cn(
               'absolute top-1 left-1 bg-[var(--c-red)] text-white font-black px-1 rounded-full',
-              isLg ? 'text-[9px]' : 'text-[7px]',
+              cfg.artBadge,
             )}
           >
             {badge}
@@ -674,7 +884,7 @@ export function CardFace({
           <span
             className={cn(
               'absolute top-1 left-1 bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
-              isLg ? 'text-[9px] px-1.5 py-0.5' : 'text-[6px] px-1',
+              cfg.foilBadge,
             )}
           >
             ✦ FOIL
@@ -693,20 +903,15 @@ export function CardFace({
       </div>
 
       {/* Type / rarity / stat line */}
-      <div
-        className={cn(
-          'flex items-center justify-between px-1.5 shrink-0',
-          isLg ? 'mt-1 text-[10px]' : 'mt-0.5 text-[7px]',
-        )}
-      >
+      <div className={cn('flex items-center justify-between px-1.5 shrink-0', cfg.typeLine)}>
         <span className="font-bold uppercase text-[var(--c-steel)] truncate">
           {def.type}
-          {isLg && def.set ? ` · ${def.set}` : ''}
+          {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
         </span>
         {def.type === 'Unit' && (
           <span className="flex items-center gap-1 shrink-0">
-            <StatChip icon={Swords} value={def.atk} isLg={isLg} tint="var(--c-red)" />
-            <StatChip icon={Heart} value={def.hp} isLg={isLg} tint="#22C55E" />
+            <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
+            <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
           </span>
         )}
         {def.type === 'Leader' && (
@@ -715,7 +920,7 @@ export function CardFace({
               icon={Heart}
               value={def.hp}
               maxValue={maxHp}
-              isLg={isLg}
+              tier={size}
               tint={
                 maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
                   ? 'var(--c-red)'
@@ -733,7 +938,7 @@ export function CardFace({
       <div
         className={cn(
           'flex-1 min-h-0 flex flex-col mx-1.5 mt-1 mb-1 rounded-[3px] border',
-          isLg ? 'p-1.5' : 'p-1',
+          cfg.textBoxPad,
           mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
         )}
         style={{
@@ -743,28 +948,33 @@ export function CardFace({
         }}
       >
         {kwList(def).length > 0 && (
-          <div className={cn('flex flex-wrap gap-0.5 shrink-0', !isLg && 'min-h-[9px]')}>
+          <div className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}>
             {kwList(def)
-              .slice(0, isLg ? 8 : 3)
+              .slice(0, cfg.keywordMax)
               .map((kw) => (
-                <KeywordChip key={kw} kw={kw} small={!isLg} autoIntroduce={introduceKeywords} />
+                <KeywordChip
+                  key={kw}
+                  kw={kw}
+                  small={cfg.keywordSmall}
+                  autoIntroduce={introduceKeywords}
+                />
               ))}
           </div>
         )}
 
         {rules.length > 0 && (
           <div
-            className={cn(
-              'shrink-0 leading-snug',
-              isLg ? 'mt-1 text-[9.5px] space-y-0.5' : 'mt-0.5 text-[6.5px] line-clamp-2',
-              kwList(def).length === 0 && 'mt-0',
-            )}
+            className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
           >
-            {isLg ? rules.map((r, i) => <div key={i}>{r}</div>) : <div>{rules.join(' · ')}</div>}
+            {cfg.rulesMultiline ? (
+              rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
+            ) : (
+              <div>{renderKeywordText(rules.join(' · '), true)}</div>
+            )}
           </div>
         )}
 
-        {isLg && def.flavor && (
+        {cfg.showFlavor && def.flavor && (
           <div className="mt-1 pt-1 border-t border-[var(--c-ink)]/15">
             <p
               className={cn('leading-snug break-words', set.className)}
@@ -822,7 +1032,7 @@ export function CardInspectorModal({
         role="dialog"
         aria-modal="true"
       >
-        <CardFace def={def} size="lg" foil={foil} />
+        <CardFace def={def} size="full" foil={foil} />
         {actions}
         <button
           onClick={onClose}

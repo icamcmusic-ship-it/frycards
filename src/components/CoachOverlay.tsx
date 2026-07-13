@@ -31,7 +31,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'awaitRoll',
     title: '1. ROLL',
-    body: "Dice are your only resource — no mana. Click ROLL DICE to roll five for this turn.",
+    body: 'Dice are your only resource — no mana. Click ROLL DICE to roll five for this turn.',
   },
   {
     stage: 'preRoll',
