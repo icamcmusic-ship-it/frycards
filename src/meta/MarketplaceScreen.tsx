@@ -20,6 +20,7 @@ import { CardDef } from '../game/v3/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP } from './rarity';
 import { quicksellPrice } from './economy';
+import { PlayerLink } from './PlayerProfileModal';
 
 type Tab = 'browse' | 'mine' | 'sell';
 
@@ -128,7 +129,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             {l.quantity > 1 && <span className="text-[9px] font-black">×{l.quantity}</span>}
           </div>
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5">
-            {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller: {sellerName}
+            {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller:{' '}
+            {l.seller === userId ? (
+              sellerName
+            ) : (
+              <PlayerLink id={l.seller} name={sellerName} className="font-bold" />
+            )}
           </div>
           <div className="flex items-center gap-2 mt-1 text-[10px] font-bold">
             <Clock className="w-3 h-3" /> {timeLeft(l.ends_at)}

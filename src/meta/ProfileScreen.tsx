@@ -5,8 +5,16 @@ import { equipCosmetic, setUsername, ShopItem } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, ProgressBar, xpForLevel } from './ui';
 import { cn } from '../lib/utils';
 import { SafeImage } from './SafeImage';
+import { CardFace } from '../components/CardFaceV4';
+import { POOL_BY_ID } from '../game/v3/cardpool';
 
-export function ProfileScreen({ onBack }: { onBack: () => void }) {
+export function ProfileScreen({
+  onBack,
+  onManageShowcase,
+}: {
+  onBack: () => void;
+  onManageShowcase?: () => void;
+}) {
   const { profile, shopItems, cosmetics, refreshProfile } = useMeta();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -161,6 +169,33 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
             <Notice text={error} />
           </div>
         )}
+
+        {/* Showcase cards */}
+        <div className="mt-7">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h2 className="heading-font text-base bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+              SHOWCASE
+            </h2>
+            {onManageShowcase && (
+              <PopButton color="yellow" onClick={onManageShowcase}>
+                MANAGE IN COLLECTION ▸
+              </PopButton>
+            )}
+          </div>
+          {(profile.showcase_cards || []).length === 0 ? (
+            <p className="text-[11px] font-bold text-[var(--c-steel)] py-2">
+              Pin up to 6 cards from your Collection to show off here.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {(profile.showcase_cards || []).map((id) => {
+                const def = POOL_BY_ID[id];
+                if (!def) return null;
+                return <CardFace key={id} def={def} size="md" />;
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Cosmetic lockers */}
         {sections.map((sec) => {

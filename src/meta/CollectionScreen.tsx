@@ -3,17 +3,18 @@ import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
-import { POOL_V4 } from '../game/v3/cardpool';
+import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
-import { quicksellCards } from '../lib/supabase';
+import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { quicksellPrice } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
+const MAX_SHOWCASE = 6;
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { collection, refreshCollection, refreshProfile, decks } = useMeta();
+  const { profile, collection, refreshCollection, refreshProfile, decks } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
@@ -21,6 +22,26 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [sellError, setSellError] = useState('');
   const [selling, setSelling] = useState(false);
+  const [showcaseBusy, setShowcaseBusy] = useState(false);
+  const [showcaseError, setShowcaseError] = useState('');
+
+  const showcase = profile?.showcase_cards || [];
+
+  const toggleShowcase = async (cardId: string) => {
+    if (showcaseBusy) return;
+    const inShowcase = showcase.includes(cardId);
+    if (!inShowcase && showcase.length >= MAX_SHOWCASE) {
+      setShowcaseError(`You can only showcase up to ${MAX_SHOWCASE} cards.`);
+      return;
+    }
+    const next = inShowcase ? showcase.filter((id) => id !== cardId) : [...showcase, cardId];
+    setShowcaseBusy(true);
+    setShowcaseError('');
+    const err = await setShowcaseCards(next);
+    setShowcaseBusy(false);
+    if (err) setShowcaseError(err);
+    else refreshProfile();
+  };
 
   const owned = useMemo(() => {
     const m = new Map<string, { q: number; f: number }>();
@@ -83,6 +104,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
   const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
+  const inspectShowcased = inspect ? showcase.includes(inspect.id) : false;
 
   const handleSell = async (foil: boolean, quantity: number) => {
     if (!inspect || selling || quantity < 1) return;
@@ -129,6 +151,44 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   <ProgressBar value={e.owned} max={e.total} className="h-1.5" />
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Showcase strip */}
+        <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="heading-font text-sm">
+              MY SHOWCASE ({showcase.length}/{MAX_SHOWCASE})
+            </span>
+            <span className="text-[9px] font-bold text-[var(--c-steel)]">
+              Tap ★ on an owned card below to pin/unpin it
+            </span>
+          </div>
+          {showcaseError && (
+            <div className="mb-2">
+              <Notice text={showcaseError} />
+            </div>
+          )}
+          {showcase.length === 0 ? (
+            <p className="text-[11px] font-bold text-[var(--c-steel)] py-2">
+              No showcase cards yet — pin your favorites so friends can see them on your profile.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {showcase.map((id) => {
+                const def = POOL_BY_ID[id];
+                if (!def) return null;
+                return (
+                  <CardFace
+                    key={id}
+                    def={def}
+                    size="sm"
+                    onClick={() => toggleShowcase(id)}
+                    badge="★ UNPIN"
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -202,6 +262,21 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setInspect(null)}
           actions={
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+              {showcaseError && <Notice text={showcaseError} />}
+              <PopButton
+                color={inspectShowcased ? 'red' : 'yellow'}
+                className="w-full"
+                disabled={
+                  showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
+                }
+                onClick={() => toggleShowcase(inspect.id)}
+              >
+                {inspectShowcased
+                  ? '★ REMOVE FROM SHOWCASE'
+                  : showcase.length >= MAX_SHOWCASE
+                    ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
+                    : '☆ ADD TO SHOWCASE'}
+              </PopButton>
               <div className="heading-font text-xs text-center">QUICKSELL</div>
               {inspect.type === 'Leader' && (
                 <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">

@@ -288,7 +288,12 @@ function AppInner() {
     case 'decks':
       return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
     case 'profile':
-      return <ProfileScreen onBack={() => setScreen('menu')} />;
+      return (
+        <ProfileScreen
+          onBack={() => setScreen('menu')}
+          onManageShowcase={() => setScreen('collection')}
+        />
+      );
     case 'settings':
       return (
         <SettingsScreen
