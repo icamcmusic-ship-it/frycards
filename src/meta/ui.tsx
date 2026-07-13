@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/utils';
-import { Coins, Gem } from 'lucide-react';
+import { Coins, Gem, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 
 /** Comic-pop button used across all meta screens. */
@@ -59,6 +59,16 @@ export function GemChip({ amount }: { amount: number }) {
   );
 }
 
+/** Crafting currency, gained from duplicate-protected pack pulls, disenchanting
+ * spare cards, and battle pass rewards — spend it in the Collection screen. */
+export function ShardChip({ amount }: { amount: number }) {
+  return (
+    <span className="flex items-center gap-1 bg-[#2DD4BF] text-[#042F2C] px-2 py-0.5 ink-border-sm heading-font text-xs">
+      <Sparkles className="w-3.5 h-3.5" /> {amount.toLocaleString()}
+    </span>
+  );
+}
+
 /** Top bar with title, wallet and navigation back to the menu. */
 export function MetaHeader({ title, onBack }: { title: string; onBack: () => void }) {
   const { profile } = useMeta();
@@ -74,6 +84,7 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
         <div className="flex items-center gap-2">
           <GoldChip amount={profile.gold} />
           <GemChip amount={profile.gems} />
+          <ShardChip amount={profile.shards} />
         </div>
       )}
     </div>

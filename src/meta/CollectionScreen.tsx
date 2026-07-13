@@ -6,8 +6,8 @@ import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
-import { quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { quicksellPrice } from './economy';
+import { craftCard, disenchantCard, quicksellCards, setShowcaseCards } from '../lib/supabase';
+import { quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
@@ -22,6 +22,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [sellError, setSellError] = useState('');
   const [selling, setSelling] = useState(false);
+  const [craftError, setCraftError] = useState('');
+  const [crafting, setCrafting] = useState(false);
   const [showcaseBusy, setShowcaseBusy] = useState(false);
   const [showcaseError, setShowcaseError] = useState('');
 
@@ -120,6 +122,34 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     refreshProfile();
   };
 
+  const handleDisenchant = async (foil: boolean, quantity: number) => {
+    if (!inspect || crafting || quantity < 1) return;
+    setCrafting(true);
+    setCraftError('');
+    const { error } = await disenchantCard(inspect.id, quantity, foil);
+    setCrafting(false);
+    if (error) {
+      setCraftError(error);
+      return;
+    }
+    refreshCollection();
+    refreshProfile();
+  };
+
+  const handleCraft = async (foil: boolean) => {
+    if (!inspect || crafting) return;
+    setCrafting(true);
+    setCraftError('');
+    const { error } = await craftCard(inspect.id, foil);
+    setCrafting(false);
+    if (error) {
+      setCraftError(error);
+      return;
+    }
+    refreshCollection();
+    refreshProfile();
+  };
+
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="COLLECTION" onBack={onBack} />
@@ -183,7 +213,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   <CardFace
                     key={id}
                     def={def}
-                    size="sm"
+                    size="compact"
                     onClick={() => toggleShowcase(id)}
                     badge="★ UNPIN"
                   />
@@ -221,7 +251,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
-          Tap an owned card to inspect it and quicksell spare copies for gold.
+          Tap any card to inspect it — quicksell spare copies for gold, disenchant them for ✦
+          shards, or craft cards you're missing.
         </p>
 
         <div className="flex flex-wrap gap-3">
@@ -232,19 +263,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               <CardFace
                 key={c.id}
                 def={c}
-                size="lg"
+                size="full"
                 count={o?.q || 0}
                 foilCount={o?.f || 0}
                 foil={(o?.f || 0) > 0 && (o?.q || 0) === 0}
                 dimmed={total === 0}
-                onClick={
-                  total > 0
-                    ? () => {
-                        setInspect(c);
-                        setSellError('');
-                      }
-                    : undefined
-                }
+                onClick={() => {
+                  setInspect(c);
+                  setSellError('');
+                  setCraftError('');
+                }}
               />
             );
           })}
@@ -262,72 +290,142 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setInspect(null)}
           actions={
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
-              {showcaseError && <Notice text={showcaseError} />}
-              <PopButton
-                color={inspectShowcased ? 'red' : 'yellow'}
-                className="w-full"
-                disabled={
-                  showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
-                }
-                onClick={() => toggleShowcase(inspect.id)}
-              >
-                {inspectShowcased
-                  ? '★ REMOVE FROM SHOWCASE'
-                  : showcase.length >= MAX_SHOWCASE
-                    ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
-                    : '☆ ADD TO SHOWCASE'}
-              </PopButton>
-              <div className="heading-font text-xs text-center">QUICKSELL</div>
-              {inspect.type === 'Leader' && (
-                <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
-                  Leaders can be sold like any other card — one copy stays reserved while a saved
-                  deck still uses it.
-                </div>
+              {inspectTotal > 0 && (
+                <>
+                  {showcaseError && <Notice text={showcaseError} />}
+                  <PopButton
+                    color={inspectShowcased ? 'red' : 'yellow'}
+                    className="w-full"
+                    disabled={
+                      showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
+                    }
+                    onClick={() => toggleShowcase(inspect.id)}
+                  >
+                    {inspectShowcased
+                      ? '★ REMOVE FROM SHOWCASE'
+                      : showcase.length >= MAX_SHOWCASE
+                        ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
+                        : '☆ ADD TO SHOWCASE'}
+                  </PopButton>
+                </>
               )}
-              {inspectLocked > 0 && (
-                <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
-                  {inspect.type === 'Leader'
-                    ? 'In use by a saved deck — 1 copy reserved'
-                    : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
-                </div>
-              )}
-              {sellError && <Notice text={sellError} />}
+
+              <div className="heading-font text-xs text-center mt-1">
+                CRAFT WITH ✦ {(profile?.shards || 0).toLocaleString()}
+              </div>
+              {craftError && <Notice text={craftError} />}
               <div className="flex items-center justify-between text-[10px] font-bold">
-                <span>Normal ×{inspectOwned?.q || 0}</span>
-                <span>{quicksellPrice(inspect.rarity, false)}g each</span>
+                <span>Normal</span>
+                <span>✦ {shardCraftCost(inspect.rarity, false)}</span>
               </div>
               <PopButton
                 color="yellow"
                 className="w-full"
-                disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
-                onClick={() => handleSell(false, 1)}
+                disabled={
+                  crafting || (profile?.shards || 0) < shardCraftCost(inspect.rarity, false)
+                }
+                onClick={() => handleCraft(false)}
               >
-                SELL 1 NORMAL
+                CRAFT NORMAL
               </PopButton>
-              {(inspectOwned?.q || 0) > 1 && (
-                <PopButton
-                  color="black"
-                  className="w-full"
-                  disabled={selling || inspectSellable <= 0}
-                  onClick={() => handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))}
-                >
-                  SELL ALL NORMAL
-                </PopButton>
-              )}
-              {(inspectOwned?.f || 0) > 0 && (
+              <div className="flex items-center justify-between text-[10px] font-bold">
+                <span>Foil ✦</span>
+                <span>✦ {shardCraftCost(inspect.rarity, true)}</span>
+              </div>
+              <PopButton
+                color="black"
+                className="w-full"
+                disabled={crafting || (profile?.shards || 0) < shardCraftCost(inspect.rarity, true)}
+                onClick={() => handleCraft(true)}
+              >
+                CRAFT FOIL
+              </PopButton>
+
+              {inspectTotal > 0 && (
                 <>
-                  <div className="flex items-center justify-between text-[10px] font-bold mt-1">
-                    <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                    <span>{quicksellPrice(inspect.rarity, true)}g each</span>
+                  <div className="heading-font text-xs text-center mt-1">
+                    QUICKSELL / DISENCHANT
                   </div>
-                  <PopButton
-                    color="red"
-                    className="w-full"
-                    disabled={selling || inspectSellable <= 0}
-                    onClick={() => handleSell(true, 1)}
-                  >
-                    SELL 1 FOIL
-                  </PopButton>
+                  {inspect.type === 'Leader' && (
+                    <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
+                      Leaders can be sold like any other card — one copy stays reserved while a
+                      saved deck still uses it.
+                    </div>
+                  )}
+                  {inspectLocked > 0 && (
+                    <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                      {inspect.type === 'Leader'
+                        ? 'In use by a saved deck — 1 copy reserved'
+                        : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
+                    </div>
+                  )}
+                  {sellError && <Notice text={sellError} />}
+                  <div className="flex items-center justify-between text-[10px] font-bold">
+                    <span>Normal ×{inspectOwned?.q || 0}</span>
+                    <span>
+                      {quicksellPrice(inspect.rarity, false)}g / ✦{' '}
+                      {shardDisenchantValue(inspect.rarity, false)}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <PopButton
+                      color="yellow"
+                      className="w-full"
+                      disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                      onClick={() => handleSell(false, 1)}
+                    >
+                      SELL 1
+                    </PopButton>
+                    <PopButton
+                      color="steel"
+                      className="w-full"
+                      disabled={crafting || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                      onClick={() => handleDisenchant(false, 1)}
+                    >
+                      DISENCHANT 1
+                    </PopButton>
+                  </div>
+                  {(inspectOwned?.q || 0) > 1 && (
+                    <PopButton
+                      color="black"
+                      className="w-full"
+                      disabled={selling || inspectSellable <= 0}
+                      onClick={() =>
+                        handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))
+                      }
+                    >
+                      SELL ALL NORMAL
+                    </PopButton>
+                  )}
+                  {(inspectOwned?.f || 0) > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-[10px] font-bold mt-1">
+                        <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
+                        <span>
+                          {quicksellPrice(inspect.rarity, true)}g / ✦{' '}
+                          {shardDisenchantValue(inspect.rarity, true)}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <PopButton
+                          color="red"
+                          className="w-full"
+                          disabled={selling || inspectSellable <= 0}
+                          onClick={() => handleSell(true, 1)}
+                        >
+                          SELL 1
+                        </PopButton>
+                        <PopButton
+                          color="steel"
+                          className="w-full"
+                          disabled={crafting || inspectSellable <= 0}
+                          onClick={() => handleDisenchant(true, 1)}
+                        >
+                          DISENCHANT 1
+                        </PopButton>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>

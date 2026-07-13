@@ -16,7 +16,7 @@ import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_LEADERS, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
-import { CardFace } from '../components/CardFaceV4';
+import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { RARITY_CHIP, rarityGlow } from './rarity';
 import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
@@ -695,7 +695,7 @@ function CardBack({ className }: { className?: string }) {
   );
 }
 
-const BIG_RARITIES = new Set(['Mythic', 'Ultra-Rare', 'Super-Rare']);
+const BIG_RARITIES = new Set(['Mythic', 'Full-Art', 'Ultra-Rare', 'Super-Rare']);
 
 /** Cinematic one-at-a-time pack reveal: spotlight flip, rarity flourishes, thumbnail
  * strip for context, and a final haul summary. "REVEAL ALL" skips straight there. */
@@ -761,7 +761,7 @@ function PackRevealModal({
               >
                 <CardFace
                   def={def}
-                  size="sm"
+                  size="compact"
                   foil={pull.foil}
                   dimmed={pull.converted_to_shards}
                 />
@@ -824,10 +824,14 @@ function PackRevealModal({
       <div
         onClick={handleFlip}
         className={cn(
-          'relative w-[240px] h-[336px] transition-transform duration-300',
+          'relative transition-transform duration-300',
           !currentShown && 'cursor-pointer hover:-translate-y-2',
         )}
-        style={{ perspective: '800px' }}
+        style={{
+          width: CARD_SIZES.full.w,
+          height: CARD_SIZES.full.h,
+          perspective: '800px',
+        }}
       >
         {!currentShown ? (
           <CardBack />
@@ -840,7 +844,7 @@ function PackRevealModal({
           >
             <CardFace
               def={currentCard!}
-              size="lg"
+              size="full"
               foil={current.foil}
               dimmed={current.converted_to_shards}
             />

@@ -107,7 +107,7 @@ Draw 1 card. (Skipped by the first player on their first turn only.)
 Roll five d6 from your own supply.
 
 ### 3.3 Reroll Phase
-Reroll any subset of your five dice **exactly once**.
+Reroll any subset of your five dice, up to **two times** *(v4.3 — raised from one reroll; the §6 hit-rate table below still reflects the old one-reroll baseline and understates actual hit rates under the current rule)*.
 
 ### 3.4 Placement Phase
 Place your five dice **one at a time**, in any order. Each die may go to exactly one of these four legal destinations:
@@ -396,7 +396,7 @@ You lose immediately if either is true:
 | Max copies per card | 3 |
 | Starting hand | 5 (one mulligan allowed, first player decides first, both execute together) |
 | Hand size cap | 6 |
-| Dice per turn | 5d6 from your own supply (10+ recommended total), one reroll of any subset |
+| Dice per turn | 5d6 from your own supply (10+ recommended total), up to two rerolls of any subset *(v4.3, was one)* |
 | Locations in play | 1 max, 1 cast per turn max, no same-name replacement; *(v4.1)* cast **free** — no die, no Cast Slot |
 | Anchor | *(v4.1)* −1 per other Anchor card in play, **max total −2**, min threshold 1 |
 | Combo gates | *(v4.1)* practical ceiling Full House / Large Straight; Yahtzee/4-Kind = trophy-only |

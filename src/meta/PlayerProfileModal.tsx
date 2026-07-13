@@ -40,13 +40,7 @@ export function PlayerLink({
 /** Read-only profile card for viewing any other player — banner/avatar
  * identity, stats strip, and their pinned showcase cards. Used by clicking
  * any username in the app. */
-export function PlayerProfileModal({
-  userId,
-  onClose,
-}: {
-  userId: string;
-  onClose: () => void;
-}) {
+export function PlayerProfileModal({ userId, onClose }: { userId: string; onClose: () => void }) {
   const { session, shopItems } = useMeta();
   const [card, setCard] = useState<PlayerProfileCard | null | undefined>(undefined);
   const isSelf = session?.user?.id === userId;
@@ -158,7 +152,7 @@ export function PlayerProfileModal({
                   {(card.showcase_cards || []).map((id) => {
                     const def = POOL_BY_ID[id];
                     if (!def) return null;
-                    return <CardFace key={id} def={def} size="sm" />;
+                    return <CardFace key={id} def={def} size="compact" />;
                   })}
                 </div>
               )}

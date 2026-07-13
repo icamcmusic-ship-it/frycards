@@ -55,6 +55,7 @@ import {
   costBadge,
   describeEffect,
   kwList,
+  renderKeywordText,
 } from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
 import { CoachOverlay } from './CoachOverlay';
@@ -253,7 +254,7 @@ function LeaderPanel({
     <div className={cn('shrink-0', highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]')}>
       <CardFace
         def={liveDef}
-        size="md"
+        size="standard"
         maxHp={maxHp}
         introduceKeywords
         onClick={onClickTarget ?? onInspect}
@@ -804,10 +805,6 @@ export function GameV4({
   const tryRally = (u: Inst) => {
     if (stage !== 'placement') {
       say('Rally resolves during Placement.');
-      return;
-    }
-    if (me.rallyUsedThisTurn) {
-      say('Rally already used this turn.');
       return;
     }
     if (!u.def.ability || u.abilityUsed) return;
@@ -1376,7 +1373,7 @@ export function GameV4({
           )}
           {stage === 'preRoll' && (
             <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[130px] leading-tight">
-              Pick dice to reroll (once). Snap Charms castable now.
+              Pick dice to reroll ({g.rules.rerollsAllowed}x). Snap Charms castable now.
             </span>
           )}
         </div>
@@ -1462,7 +1459,7 @@ export function GameV4({
                 📍 {me.location.def.name}
               </div>
               <div className="text-[7px] text-[var(--c-paper)]/70 leading-tight">
-                {cardRules(me.location.def)}
+                {renderKeywordText(cardRules(me.location.def), true)}
               </div>
               {me.location.def.ability && (
                 <button
@@ -1567,7 +1564,7 @@ export function GameV4({
                 !u.hasAttacked &&
                 !u.boundThisTurn &&
                 !(u.enteredThisTurn && !hasKw(u.def, 'Swift'));
-              const rallyReady = abilityReady && hasKw(u.def, 'Rally') && !me.rallyUsedThisTurn;
+              const rallyReady = abilityReady && hasKw(u.def, 'Rally');
               return (
                 <div key={u.iid} className="flex flex-col items-center gap-0.5">
                   <BoardUnit
@@ -1629,14 +1626,12 @@ export function GameV4({
                   <div key={c.iid} className="flex flex-col gap-0.5 shrink-0">
                     <CardFace
                       def={c.def}
-                      small
+                      size="compact"
                       dimmed={!potentiallyCastable && !echoPick && !canScrap}
                       highlight={!!echoPick}
                       introduceKeywords
                       effectiveThreshold={
-                        c.def.threshold !== undefined
-                          ? effThreshold(g, HUMAN, c.def)
-                          : undefined
+                        c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
                       }
                       onClick={
                         echoPick
@@ -1714,7 +1709,7 @@ export function GameV4({
                 <div key={c.iid} className="flex flex-col gap-0.5">
                   <CardFace
                     def={c.def}
-                    small
+                    size="compact"
                     dimmed={!eligible}
                     introduceKeywords
                     effectiveThreshold={
@@ -1797,7 +1792,7 @@ export function GameV4({
                   <div key={c.iid} className="flex flex-col gap-0.5">
                     <CardFace
                       def={c.def}
-                      small
+                      size="compact"
                       highlight={picked}
                       dimmed={!picked && forcedDiscard.picks.length >= forcedDiscard.needed}
                       introduceKeywords
@@ -1837,7 +1832,12 @@ export function GameV4({
             <div className="flex gap-1.5 justify-center flex-wrap mb-4">
               {me.hand.map((c) => (
                 <React.Fragment key={c.iid}>
-                  <CardFace def={c.def} small introduceKeywords onClick={() => setInspect(c.def)} />
+                  <CardFace
+                    def={c.def}
+                    size="compact"
+                    introduceKeywords
+                    onClick={() => setInspect(c.def)}
+                  />
                 </React.Fragment>
               ))}
             </div>

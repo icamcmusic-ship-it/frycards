@@ -191,7 +191,7 @@ export function ProfileScreen({
               {(profile.showcase_cards || []).map((id) => {
                 const def = POOL_BY_ID[id];
                 if (!def) return null;
-                return <CardFace key={id} def={def} size="md" />;
+                return <CardFace key={id} def={def} size="standard" />;
               })}
             </div>
           )}

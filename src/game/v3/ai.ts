@@ -25,6 +25,7 @@ import {
   legalTargets,
   effAtk,
   remainingHp,
+  willKillInCombat,
   effThreshold,
   effAbilityThreshold,
   rollValues,
@@ -88,12 +89,21 @@ function unplacedDice(p: Player): number[] {
   return p.dice.map((d, i) => (d.placed ? -1 : i)).filter((i) => i >= 0);
 }
 
-/** value of a card for cast-priority: bigger threshold first, units before spells. */
+/** value of a card for cast-priority: bigger threshold first, units before spells.
+ * Includes a small seeded jitter so priority ties (and near-ties) don't always
+ * resolve the same way — without it, the AI's line of play is 100%
+ * reproducible from board state alone and gets predictable/exploitable. */
 function castPriority(g: Game, p: Player, c: Inst): number {
   let v = (c.def.threshold ?? 3) * 10;
   if (c.def.type === 'Unit') v += 5;
   if (c.def.comboGate) v += 40; // free value when the gate is met
-  return v;
+  return v + tieBreak(g);
+}
+
+/** Small seeded-random nudge (±1.5) used to break near-ties in AI heuristics
+ * without overriding genuine priority differences. */
+function tieBreak(g: Game): number {
+  return (g.rng() - 0.5) * 3;
 }
 
 /** Pick the cheapest sufficient die index for an "at least" threshold, or -1. */
@@ -418,8 +428,9 @@ function playPlacement(g: Game, p: Player) {
     }
     if (progress) continue;
 
-    // 5. Rally: free re-activation using a resting die.
-    if (!p.rallyUsedThisTurn) {
+    // 5. Rally: free re-activation using a resting die. Not player-capped —
+    // each Rally card is its own "once per turn" (enforced by abilityUsed).
+    {
       const rallyUnit = p.board.find(
         (u) =>
           hasKw(u.def, 'Rally') &&
@@ -455,7 +466,7 @@ function playCombat(g: Game, p: Player) {
     // Lethal check: if total available ATK >= leader hp and no guards, go face.
     const targets = legalTargets(g, p.id);
     const guardsUp = targets.every((t) => t.def.type !== 'Leader');
-    const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
+    const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a) + tieBreak(g))[0];
     const atk = effAtk(g, att);
     if (atk === 0) {
       att.hasAttacked = true;
@@ -467,8 +478,8 @@ function playCombat(g: Game, p: Player) {
     if (guardsUp) {
       // Must hit a guard: pick the one we kill, else the biggest threat.
       target =
-        targets.find((t) => remainingHp(g, t) <= atk) ??
-        [...targets].sort((a, b) => effAtk(g, b) - effAtk(g, a))[0];
+        targets.find((t) => willKillInCombat(g, t, atk)) ??
+        [...targets].sort((a, b) => effAtk(g, b) - effAtk(g, a) + tieBreak(g))[0];
     } else {
       const totalAtk = attackers.reduce((s, u) => s + effAtk(g, u), 0);
       const lethal = totalAtk >= remainingHp(g, opp.leader);
@@ -476,7 +487,7 @@ function playCombat(g: Game, p: Player) {
         target = opp.leader;
       } else {
         // Favorable trade: kill an enemy unit without dying, or kill something bigger.
-        const kills = opp.board.filter((t) => remainingHp(g, t) <= atk);
+        const kills = opp.board.filter((t) => willKillInCombat(g, t, atk));
         const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
         const valueKill = kills.find((t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0));
         // Threat check: clear big attackers even with a trade.

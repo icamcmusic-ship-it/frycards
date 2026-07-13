@@ -113,7 +113,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
         className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3"
       >
         <div className="shrink-0">
-          <CardFace def={def} size="sm" foil={l.foil} />
+          <CardFace def={def} size="compact" foil={l.foil} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -481,7 +481,7 @@ function SellForm({
       {selected && (
         <>
           <div className="flex gap-4 mb-4 items-start flex-wrap">
-            <CardFace def={selected.def} size="sm" foil={foil} />
+            <CardFace def={selected.def} size="compact" foil={foil} />
             <div className="flex flex-col gap-2">
               {selected.foil_quantity > 0 && (
                 <label className="flex items-center gap-2 text-xs font-bold">
