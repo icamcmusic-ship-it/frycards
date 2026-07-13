@@ -4,7 +4,8 @@
  * and reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dices, Swords, Heart, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
@@ -208,22 +209,45 @@ function StatChip({
   );
 }
 
+const POPOVER_WIDTH = 180;
+
 /**
  * v4.3: a keyword pill that opens a small popover with its rules text on
  * click — used anywhere a keyword chip is shown (card template, board
- * Units) so players never have to guess what a keyword does.
+ * Units) so players never have to guess what a keyword does. The popover
+ * renders through a portal at a viewport-fixed position computed from the
+ * button's own bounding rect (clamped to stay on-screen) rather than as an
+ * absolutely-positioned child — every place this chip is used sits inside
+ * at least one `overflow-hidden`/`overflow-auto` ancestor (the card face
+ * itself, the battlefield shell, scrollable hand/collection rows), which
+ * would otherwise clip an absolutely-positioned popover into invisibility.
  */
 export function KeywordChip({ kw, small }: { key?: React.Key; kw: string; small?: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const text = KEYWORD_GLOSSARY[kw];
+
+  const open = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pos) {
+      setPos(null);
+      return;
+    }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.min(
+      Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
+      window.innerWidth - POPOVER_WIDTH - 8,
+    );
+    setPos({ top: rect.bottom + 4, left });
+  };
+
   return (
     <span className="relative inline-block">
       <button
+        ref={btnRef}
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((o) => !o);
-        }}
+        onClick={open}
         className={cn(
           'font-bold bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full cursor-help',
           small ? 'text-[6.5px] px-1' : 'text-[9px] px-1.5',
@@ -231,24 +255,29 @@ export function KeywordChip({ kw, small }: { key?: React.Key; kw: string; small?
       >
         {kw}
       </button>
-      {open && text && (
-        <>
-          <div
-            className="fixed inset-0 z-[60]"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-[61] w-[180px] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
-            {text}
-          </div>
-        </>
-      )}
+      {pos &&
+        text &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPos(null);
+              }}
+              onWheel={() => setPos(null)}
+            />
+            <div
+              style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
+              className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+              {text}
+            </div>
+          </>,
+          document.body,
+        )}
     </span>
   );
 }
