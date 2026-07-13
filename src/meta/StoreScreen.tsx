@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Gift, Package, Percent, Backpack, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -64,8 +64,14 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   );
 
   const dailyPack = packTypes.find((p) => p.acquisition === 'daily_free' && p.is_active);
-  // Snapshot of "now" from mount — good enough for the daily-pack countdown.
-  const [nowTs] = useState(() => Date.now());
+  // Ticks once a minute so the daily-pack countdown/READY state flips on its
+  // own instead of staying frozen at whatever "now" was when the screen
+  // first mounted (previously only updated by leaving and re-entering Store).
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
   const dailyReadyAt = profile?.last_free_pack_at
     ? new Date(profile.last_free_pack_at).getTime() + DAILY_PACK_COOLDOWN_MS
     : 0;
@@ -95,7 +101,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
-    setBusyId('inv:' + pack.id);
+    setBusyId('inv:' + pack.id + ':' + currency);
     const err = await buyPackToInventory(pack.id, currency, 1);
     setBusyId(null);
     if (err) {
@@ -147,6 +153,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   const handleClaimStarter = async (leaderId: string, leaderName: string) => {
     if (!profile || busyId) return;
     setError('');
+    setNotice('');
     setBusyId('starter:' + leaderId);
     const { data, error } = await claimStarterPack(leaderId);
     setBusyId(null);
@@ -165,11 +172,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   const handleBuyItem = async (item: ShopItem, currency: 'gold' | 'gems') => {
     if (!profile || busyId) return;
     setError('');
+    setNotice('');
     setBusyId(item.id);
     const err = await buyShopItem(item.id, currency);
     setBusyId(null);
     if (err) setError(err);
     else {
+      setNotice(`${item.name} added to your collection.`);
       refreshProfile();
       refreshCosmetics();
       refreshCollection();
@@ -326,7 +335,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     <span
                       className={cn(
                         'absolute bottom-1 right-1 heading-font text-[9px] px-1.5 ink-border-sm',
-                        RARITY_CHIP[pack.guaranteed_rarity],
+                        RARITY_CHIP[pack.guaranteed_rarity] || RARITY_CHIP.Common,
                       )}
                     >
                       {pack.guaranteed_rarity}+ GUARANTEED
@@ -364,22 +373,28 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     </PopButton>
                   )}
                 </div>
-                <button
-                  disabled={
-                    !profile ||
-                    !!busyId ||
-                    (pack.price_gold != null
-                      ? profile.gold < pack.price_gold
-                      : profile.gems < (pack.price_gems ?? Infinity))
-                  }
-                  onClick={() =>
-                    handleBuyToInventory(pack, pack.price_gold != null ? 'gold' : 'gems')
-                  }
-                  className="mx-3 mb-3 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Backpack className="w-3 h-3" />
-                  {busyId === 'inv:' + pack.id ? 'BUYING…' : 'BUY & SAVE FOR LATER'}
-                </button>
+                <div className="mx-3 mb-3 flex gap-1.5">
+                  {pack.price_gold != null && (
+                    <button
+                      disabled={!profile || !!busyId || profile.gold < pack.price_gold}
+                      onClick={() => handleBuyToInventory(pack, 'gold')}
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Backpack className="w-3 h-3" />
+                      {busyId === 'inv:' + pack.id + ':gold' ? 'BUYING…' : 'SAVE FOR LATER (GOLD)'}
+                    </button>
+                  )}
+                  {pack.price_gems != null && (
+                    <button
+                      disabled={!profile || !!busyId || profile.gems < pack.price_gems}
+                      onClick={() => handleBuyToInventory(pack, 'gems')}
+                      className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Backpack className="w-3 h-3" />
+                      {busyId === 'inv:' + pack.id + ':gems' ? 'BUYING…' : 'SAVE FOR LATER (GEMS)'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -552,7 +567,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
 /** Full per-slot drop table for a pack, mirrored from the server's rolls. */
 function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
-  const rows = packOdds(pack);
+  const { profile } = useMeta();
+  const foilPity = profile?.foil_pity ?? 0;
+  const rows = packOdds(pack, foilPity);
   const expected = expectedRarities(pack);
   return (
     <div
@@ -579,6 +596,8 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
             Every pack is rolled slot by slot. These are the exact server-side odds for each slot —
             no hidden weighting.
+            {foilPity > 0 &&
+              ` Foil odds below already include your current pity streak (${foilPity} pack${foilPity === 1 ? '' : 's'} since your last foil) — they'll reset to normal the moment you pull one.`}
           </div>
 
           {rows.map((row, i) => (
@@ -716,6 +735,7 @@ function PackRevealModal({
   if (done) {
     const rarityCounts = new Map<string, number>();
     for (const p of pulls) rarityCounts.set(p.rarity, (rarityCounts.get(p.rarity) || 0) + 1);
+    const shardsGained = pulls.reduce((s, p) => s + (p.converted_to_shards ? p.shards : 0), 0);
     return (
       <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
         <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
@@ -734,18 +754,30 @@ function PackRevealModal({
                 key={i}
                 className={cn(
                   'relative animate-[flipIn_.3s_ease-out]',
-                  BIG_RARITIES.has(pull.rarity) && 'scale-105',
-                  rarityGlow(pull.rarity),
+                  BIG_RARITIES.has(pull.rarity) && !pull.converted_to_shards && 'scale-105',
+                  !pull.converted_to_shards && rarityGlow(pull.rarity),
                 )}
                 style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
               >
-                <CardFace def={def} size="sm" foil={pull.foil} />
+                <CardFace
+                  def={def}
+                  size="sm"
+                  foil={pull.foil}
+                  dimmed={pull.converted_to_shards}
+                />
+                {pull.converted_to_shards && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="heading-font text-[10px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm shadow-hard-black-xs">
+                      ✦ +{pull.shards}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
 
-        <div className="flex flex-wrap justify-center gap-2 mb-8 relative">
+        <div className="flex flex-wrap justify-center gap-2 mb-3 relative">
           {[...rarityCounts.entries()].map(([r, n]) => (
             <span
               key={r}
@@ -758,6 +790,16 @@ function PackRevealModal({
             </span>
           ))}
         </div>
+        {shardsGained > 0 &&
+          (() => {
+            const n = pulls.filter((p) => p.converted_to_shards).length;
+            return (
+              <p className="text-[10px] font-bold text-[#67E8F9] mb-5 relative">
+                {n} pull{n === 1 ? '' : 's'} {n === 1 ? 'was' : 'were'} past your copy cap and
+                converted to ✦ {shardsGained} shards instead of a duplicate.
+              </p>
+            );
+          })()}
 
         <PopButton color="red" onClick={onClose}>
           ADD TO COLLECTION ✓
@@ -793,11 +835,23 @@ function PackRevealModal({
           <div
             className={cn(
               'relative animate-[flipIn_.4s_ease-out] rounded-sm',
-              rarityGlow(current.rarity),
+              !current.converted_to_shards && rarityGlow(current.rarity),
             )}
           >
-            <CardFace def={currentCard!} size="lg" foil={current.foil} />
-            {BIG_RARITIES.has(current.rarity) && (
+            <CardFace
+              def={currentCard!}
+              size="lg"
+              foil={current.foil}
+              dimmed={current.converted_to_shards}
+            />
+            {current.converted_to_shards && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="heading-font text-lg bg-[var(--c-ink)] text-[#67E8F9] px-3 py-1.5 ink-border-md shadow-hard-black-xs">
+                  ✦ +{current.shards} SHARDS
+                </span>
+              </div>
+            )}
+            {BIG_RARITIES.has(current.rarity) && !current.converted_to_shards && (
               <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-70 -z-10" />
             )}
           </div>
@@ -808,11 +862,14 @@ function PackRevealModal({
         <div
           className={cn(
             'mt-4 heading-font text-sm px-3 py-1 ink-border-sm relative',
-            RARITY_CHIP[current.rarity] || RARITY_CHIP.Common,
+            current.converted_to_shards
+              ? 'bg-[var(--c-ink)] text-[#67E8F9]'
+              : RARITY_CHIP[current.rarity] || RARITY_CHIP.Common,
           )}
         >
-          {current.rarity.toUpperCase()}
-          {current.foil ? ' · FOIL' : ''}
+          {current.converted_to_shards
+            ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} CONVERTED TO SHARDS`
+            : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL' : ''}`}
         </div>
       )}
 

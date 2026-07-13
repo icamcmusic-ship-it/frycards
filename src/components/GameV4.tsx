@@ -57,6 +57,7 @@ import {
   kwList,
 } from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
+import { CoachOverlay } from './CoachOverlay';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -175,7 +176,7 @@ function BoardUnit({
           {kwList(u.def)
             .slice(0, 3)
             .map((kw) => (
-              <KeywordChip key={kw} kw={kw} small />
+              <KeywordChip key={kw} kw={kw} small autoIntroduce />
             ))}
         </div>
       </div>
@@ -254,6 +255,7 @@ function LeaderPanel({
         def={liveDef}
         size="md"
         maxHp={maxHp}
+        introduceKeywords
         onClick={onClickTarget ?? onInspect}
         badge={
           resolveOn ? `RESOLVE ${l.def.resolve!.x} ON` : toll > 0 ? `TOLL -${toll}` : undefined
@@ -276,7 +278,8 @@ function LeaderPanel({
                     l.abilityUsed && 'line-through',
                   )}
                 >
-                  {abThr}+ {describeEffect(ab.effect)}
+                  {abThr}+{abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}{' '}
+                  {describeEffect(ab.effect)}
                 </button>
               )}
               {ult && (
@@ -612,6 +615,41 @@ export function GameV4({
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
       return { ok: false, why: 'No legal target' };
     return { ok: true };
+  };
+
+  /** Whether SOME currently-unplaced die could pay this card's cost, without
+   * requiring one to already be selected — `canCastNow` alone reports every
+   * threshold/exact-cost card as illegal ("Select a die") until a specific
+   * die is picked first, so hand cards looked uncastable by default even
+   * when the roll could clearly pay for them. Used only to decide whether a
+   * card should look dimmed before the player has committed to a die. */
+  const canCastWithAnyDie = (c: Inst): boolean => {
+    if (c.def.type === 'Location') return canCastNow(c).ok;
+    if (stage === 'preRoll' && !c.def.snap) return false;
+    // Mirrors canCastNow's branch order exactly (minus the "a die must
+    // already be selected" checks) — comboGate cards intentionally skip the
+    // needsTarget check there too, so this must skip it here as well.
+    // Also requires an unplaced die to actually exist — canCastNow's own
+    // `dieVal === null` check implicitly forbids this once every die is
+    // placed, since selecting an already-placed die still yields dieVal
+    // null; this needs the same guard since it never reads dieVal at all.
+    if (c.def.comboGate)
+      return (
+        unplaced.length > 0 &&
+        !me.comboGateCastThisTurn &&
+        matchesPattern(rollValues(me), c.def.comboGate)
+      );
+    const thr = effThreshold(g, HUMAN, c.def);
+    if (c.def.castCostKind === 'sum') {
+      if (unplaced.reduce((s, d) => s + d.value, 0) < thr) return false;
+      return !needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0;
+    }
+    const anyDieWorks =
+      c.def.castCostKind === 'exact'
+        ? unplaced.some((d) => d.value === thr)
+        : unplaced.some((d) => d.value >= thr);
+    if (!anyDieWorks) return false;
+    return !needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0;
   };
 
   const tryCast = (c: Inst) => {
@@ -1103,6 +1141,8 @@ export function GameV4({
         </div>
       </div>
 
+      <CoachOverlay stage={stage} />
+
       {banner && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
           {banner}
@@ -1446,7 +1486,10 @@ export function GameV4({
                     me.location.abilityUsed && 'line-through',
                   )}
                 >
-                  {effAbilityThreshold(g, me.location)}+{' '}
+                  {effAbilityThreshold(g, me.location)}+
+                  {effAbilityThreshold(g, me.location) !== me.location.def.ability.threshold
+                    ? ` (was ${me.location.def.ability.threshold}+)`
+                    : ''}{' '}
                   {describeEffect(me.location.def.ability.effect)}
                 </button>
               )}
@@ -1578,13 +1621,23 @@ export function GameV4({
               {me.hand.map((c) => {
                 const chk = canCastNow(c);
                 const canScrap = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
+                // Before a die is selected, judge dimming on "could any of my
+                // dice pay for this" rather than the stricter per-die check,
+                // which always fails pre-selection with "Select a die".
+                const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
                 return (
                   <div key={c.iid} className="flex flex-col gap-0.5 shrink-0">
                     <CardFace
                       def={c.def}
                       small
-                      dimmed={!chk.ok && !echoPick && !canScrap}
+                      dimmed={!potentiallyCastable && !echoPick && !canScrap}
                       highlight={!!echoPick}
+                      introduceKeywords
+                      effectiveThreshold={
+                        c.def.threshold !== undefined
+                          ? effThreshold(g, HUMAN, c.def)
+                          : undefined
+                      }
                       onClick={
                         echoPick
                           ? () => tryEchoFodder(c)
@@ -1601,9 +1654,25 @@ export function GameV4({
                         SCRAP → reroll die
                       </button>
                     )}
-                    {!chk.ok && chk.why && stage !== 'cpu' && !echoPick && (
-                      <span className="text-[6.5px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[104px]">
-                        {chk.why}
+                    {!chk.ok &&
+                      chk.why &&
+                      chk.why !== 'Select a die' &&
+                      stage !== 'cpu' &&
+                      !echoPick && (
+                        <span className="text-[6.5px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[104px]">
+                          {chk.why}
+                        </span>
+                      )}
+                    {!chk.ok && chk.why === 'Select a die' && !echoPick && (
+                      <span
+                        className={cn(
+                          'text-[6.5px] font-bold text-center leading-tight max-w-[104px]',
+                          potentiallyCastable
+                            ? 'text-[var(--c-yellow)]/70'
+                            : 'text-[var(--c-paper)]/40',
+                        )}
+                      >
+                        {potentiallyCastable ? 'Ready — pick a die' : 'No die pays this cost'}
                       </span>
                     )}
                   </div>
@@ -1647,6 +1716,10 @@ export function GameV4({
                     def={c.def}
                     small
                     dimmed={!eligible}
+                    introduceKeywords
+                    effectiveThreshold={
+                      c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
+                    }
                     onClick={() => setInspect(c.def)}
                   />
                   {eligible && stage === 'placement' && (
@@ -1727,6 +1800,7 @@ export function GameV4({
                       small
                       highlight={picked}
                       dimmed={!picked && forcedDiscard.picks.length >= forcedDiscard.needed}
+                      introduceKeywords
                       onClick={() => toggleForcedDiscardPick(c.iid)}
                     />
                     {picked && (
@@ -1763,7 +1837,7 @@ export function GameV4({
             <div className="flex gap-1.5 justify-center flex-wrap mb-4">
               {me.hand.map((c) => (
                 <React.Fragment key={c.iid}>
-                  <CardFace def={c.def} small onClick={() => setInspect(c.def)} />
+                  <CardFace def={c.def} small introduceKeywords onClick={() => setInspect(c.def)} />
                 </React.Fragment>
               ))}
             </div>

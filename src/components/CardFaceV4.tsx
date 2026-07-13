@@ -4,7 +4,8 @@
  * and reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dices, Swords, Heart, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect } from '../game/v3/cards';
 import { cn } from '../lib/utils';
@@ -82,13 +83,16 @@ export const GATE_LABEL: Record<string, string> = {
   ThreeEvens: '3 EVENS',
 };
 
-/** v4.3: short badge text for this card's Cast Slot cost, any format. */
-export function costBadge(def: CardDef): string | null {
+/** v4.3: short badge text for this card's Cast Slot cost, any format.
+ * `threshold` overrides `def.threshold` — pass the live effective value
+ * (post-Anchor-discount) during a match so the badge reflects what it
+ * actually costs right now, not just what's printed. */
+export function costBadge(def: CardDef, threshold = def.threshold): string | null {
   if (def.comboGate) return GATE_LABEL[def.comboGate] || def.comboGate;
-  if (def.threshold === undefined) return null;
-  if (def.castCostKind === 'exact') return `=${def.threshold}`;
-  if (def.castCostKind === 'sum') return `Σ${def.threshold}`;
-  return `${def.threshold}+`;
+  if (threshold === undefined) return null;
+  if (def.castCostKind === 'exact') return `=${threshold}`;
+  if (def.castCostKind === 'sum') return `Σ${threshold}`;
+  return `${threshold}+`;
 }
 
 /** v4.3: one-line plain-English summary of this card's Cast Slot cost. */
@@ -208,22 +212,132 @@ function StatChip({
   );
 }
 
+const POPOVER_WIDTH = 180;
+
 /**
  * v4.3: a keyword pill that opens a small popover with its rules text on
  * click — used anywhere a keyword chip is shown (card template, board
- * Units) so players never have to guess what a keyword does.
+ * Units) so players never have to guess what a keyword does. The popover
+ * renders through a portal at a viewport-fixed position computed from the
+ * button's own bounding rect (clamped to stay on-screen) rather than as an
+ * absolutely-positioned child — every place this chip is used sits inside
+ * at least one `overflow-hidden`/`overflow-auto` ancestor (the card face
+ * itself, the battlefield shell, scrollable hand/collection rows), which
+ * would otherwise clip an absolutely-positioned popover into invisibility.
  */
-export function KeywordChip({ kw, small }: { key?: React.Key; kw: string; small?: boolean }) {
-  const [open, setOpen] = useState(false);
+const SEEN_KEYWORDS_KEY = 'frycards_seen_keywords';
+
+function hasSeenKeyword(kw: string): boolean {
+  try {
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEYWORDS_KEY) || '[]');
+    return Array.isArray(seen) && seen.includes(kw);
+  } catch {
+    return false;
+  }
+}
+
+function markKeywordSeen(kw: string): void {
+  try {
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEYWORDS_KEY) || '[]');
+    const next = Array.isArray(seen) ? seen : [];
+    if (!next.includes(kw)) localStorage.setItem(SEEN_KEYWORDS_KEY, JSON.stringify([...next, kw]));
+  } catch {
+    // localStorage unavailable — auto-introduce simply won't dedupe this session.
+  }
+}
+
+const AUTO_INTRO_GAP_MS = 3500;
+const AUTO_INTRO_VISIBLE_MS = 6000;
+/** Module-level, shared by every KeywordChip on the page: when several
+ * never-seen keywords mount at once (e.g. a fresh opening hand full of
+ * distinct keywords), this staggers their auto-introduce popovers instead
+ * of firing them all on top of each other in one unreadable stack. */
+let nextAutoIntroSlot = 0;
+
+export function KeywordChip({
+  kw,
+  small,
+  autoIntroduce,
+}: {
+  key?: React.Key;
+  kw: string;
+  small?: boolean;
+  /** Auto-opens this chip's popover once per device the first time this
+   * keyword is ever seen (tracked in localStorage), so new players discover
+   * the glossary exists instead of needing to guess a pill is clickable.
+   * Only pass this from live-match contexts (hand/board) — passing it from
+   * a screen that renders many cards at once (Collection, Deck Builder)
+   * would fire a stack of popovers simultaneously. */
+  autoIntroduce?: boolean;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // Pending auto-close timer for the auto-introduced popover — cleared the
+  // moment the player interacts with it manually, so a manual re-open isn't
+  // cut short by a timeout scheduled for the earlier auto-open.
+  const autoCloseRef = useRef<number | null>(null);
   const text = KEYWORD_GLOSSARY[kw];
+
+  const clearAutoClose = () => {
+    if (autoCloseRef.current !== null) {
+      window.clearTimeout(autoCloseRef.current);
+      autoCloseRef.current = null;
+    }
+  };
+
+  const computePos = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const left = Math.min(
+      Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
+      window.innerWidth - POPOVER_WIDTH - 8,
+    );
+    return { top: rect.bottom + 4, left };
+  };
+
+  const open = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    clearAutoClose();
+    if (pos) {
+      setPos(null);
+      return;
+    }
+    setPos(computePos());
+  };
+
+  const close = () => {
+    clearAutoClose();
+    setPos(null);
+  };
+
+  useEffect(() => {
+    if (!autoIntroduce || !text || hasSeenKeyword(kw)) return;
+    markKeywordSeen(kw);
+    const now = Date.now();
+    const showAt = Math.max(now, nextAutoIntroSlot);
+    nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
+    const openTimeout = window.setTimeout(() => {
+      const next = computePos();
+      if (!next) return;
+      setPos(next);
+      autoCloseRef.current = window.setTimeout(() => {
+        autoCloseRef.current = null;
+        setPos(null);
+      }, AUTO_INTRO_VISIBLE_MS);
+    }, showAt - now);
+    return () => {
+      window.clearTimeout(openTimeout);
+      clearAutoClose();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <span className="relative inline-block">
       <button
+        ref={btnRef}
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((o) => !o);
-        }}
+        onClick={open}
         className={cn(
           'font-bold bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full cursor-help',
           small ? 'text-[6.5px] px-1' : 'text-[9px] px-1.5',
@@ -231,24 +345,29 @@ export function KeywordChip({ kw, small }: { key?: React.Key; kw: string; small?
       >
         {kw}
       </button>
-      {open && text && (
-        <>
-          <div
-            className="fixed inset-0 z-[60]"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-[61] w-[180px] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
-            {text}
-          </div>
-        </>
-      )}
+      {pos &&
+        text &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={(e) => {
+                e.stopPropagation();
+                close();
+              }}
+              onWheel={close}
+            />
+            <div
+              style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
+              className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+              {text}
+            </div>
+          </>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -325,6 +444,8 @@ export function CardFace({
   count,
   foilCount,
   maxHp,
+  effectiveThreshold,
+  introduceKeywords,
 }: {
   key?: React.Key;
   def: CardDef;
@@ -345,6 +466,15 @@ export function CardFace({
   foilCount?: number;
   /** Leader template only: shows `${def.hp}/${maxHp}` instead of just current HP. */
   maxHp?: number;
+  /** Live-match only: this card's Cast threshold after Anchor discounts, so
+   * the cost badge can show the real number alongside the printed one
+   * instead of leaving the discount invisible. Omit outside a match. */
+  effectiveThreshold?: number;
+  /** Live-match only: auto-opens each of this card's keyword glossary
+   * popovers once per device, the first time that keyword is ever seen, so
+   * new players discover the glossary exists instead of needing to guess
+   * they can click a keyword pill. */
+  introduceKeywords?: boolean;
 }) {
   const resolvedSize = large ? 'lg' : small ? 'sm' : size;
   const { w, h } = SIZES[resolvedSize];
@@ -458,17 +588,36 @@ export function CardFace({
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
           <span
             className={cn(
-              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
-              def.castCostKind === 'exact'
-                ? 'bg-[#0E7490] text-white'
-                : def.castCostKind === 'sum'
-                  ? 'bg-[#B45309] text-white'
-                  : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-              isLg ? 'text-[11px] px-1.5 h-7 min-w-7' : 'text-[8px] px-1 h-4 min-w-4',
+              'flex flex-col items-end shrink-0',
+              // Centering a two-line stack (badge + "was X") shifts the
+              // badge itself higher than the single-line case — nudge the
+              // whole stack down so the badge still lines up with the name.
+              effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && 'mt-1.5',
             )}
-            title={costSummary(def) || undefined}
           >
-            {costBadge(def)}
+            <span
+              className={cn(
+                'heading-font font-mono flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
+                def.castCostKind === 'exact'
+                  ? 'bg-[#0E7490] text-white'
+                  : def.castCostKind === 'sum'
+                    ? 'bg-[#B45309] text-white'
+                    : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+                isLg ? 'text-[11px] px-1.5 h-7 min-w-7' : 'text-[8px] px-1 h-4 min-w-4',
+              )}
+              title={
+                effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
+                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn`
+                  : costSummary(def) || undefined
+              }
+            >
+              {costBadge(def, effectiveThreshold ?? def.threshold)}
+            </span>
+            {effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && (
+              <span className="text-[6px] font-bold text-[var(--c-steel)] line-through leading-none mt-0.5">
+                was {costBadge(def)}
+              </span>
+            )}
           </span>
         ) : def.type === 'Location' ? (
           <span
@@ -598,7 +747,7 @@ export function CardFace({
             {kwList(def)
               .slice(0, isLg ? 8 : 3)
               .map((kw) => (
-                <KeywordChip key={kw} kw={kw} small={!isLg} />
+                <KeywordChip key={kw} kw={kw} small={!isLg} autoIntroduce={introduceKeywords} />
               ))}
           </div>
         )}
