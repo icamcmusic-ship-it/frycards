@@ -24,6 +24,13 @@ export interface MetaState {
   /** true when playing without an account: no persistence, prebuilt decks only. */
   guest: boolean;
   loading: boolean;
+  /** Set when the initial store/session bootstrap failed (e.g. offline) — the
+   * splash screen shows this with a retry instead of hanging forever. */
+  bootError: string | null;
+  retryBoot: () => void;
+  /** True while the signed-in player's profile/collection/decks/etc. are still
+   * loading — check this before rendering "you have none of X" empty states. */
+  dataLoading: boolean;
   profile: Profile | null;
   shopItems: ShopItem[];
   packTypes: PackType[];
@@ -53,6 +60,13 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [guest, setGuest] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [assetsLoading, setAssetsLoading] = useState(true);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
+  /** True while the signed-in player's own data (profile/collection/decks/…)
+   * is still loading — distinct from `loading`, which only covers session +
+   * static store data. Lets a screen show "loading" instead of a misleading
+   * empty state on first mount. */
+  const [dataLoading, setDataLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [packTypes, setPackTypes] = useState<PackType[]>([]);
@@ -61,15 +75,37 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [decks, setDecks] = useState<DeckRow[]>([]);
   const [inventory, setInventory] = useState<InventoryEntry[]>([]);
 
-  // Session bootstrap + subscription.
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setSessionLoading(false);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
+  /** Bump to re-run both bootstrap effects below after a failed load. */
+  const retryBoot = useCallback(() => {
+    setBootError(null);
+    setSessionLoading(true);
+    setAssetsLoading(true);
+    setBootAttempt((n) => n + 1);
   }, []);
+
+  // Session bootstrap + subscription. Network failures here (offline, DNS,
+  // Supabase outage) must not leave `loading` stuck true forever — that
+  // would hang every player on the splash screen with no way out.
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSession(data.session);
+        setSessionLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBootError("Couldn't reach the server. Check your connection and try again.");
+        setSessionLoading(false);
+      });
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [bootAttempt]);
 
   // Static store data (public, no auth needed) — preload every pack/cosmetic
   // image up front so the Store never shows art popping in mid-browse.
@@ -84,11 +120,16 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       })
       .then(() => {
         if (!cancelled) setAssetsLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBootError("Couldn't reach the server. Check your connection and try again.");
+        setAssetsLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bootAttempt]);
 
   const userId = session?.user?.id;
 
@@ -121,13 +162,17 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       setCosmetics([]);
       setDecks([]);
       setInventory([]);
+      setDataLoading(false);
       return;
     }
-    refreshProfile();
-    refreshCollection();
-    refreshCosmetics();
-    refreshDecks();
-    refreshInventory();
+    setDataLoading(true);
+    Promise.all([
+      refreshProfile(),
+      refreshCollection(),
+      refreshCosmetics(),
+      refreshDecks(),
+      refreshInventory(),
+    ]).finally(() => setDataLoading(false));
   }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, refreshInventory]);
 
   const signOut = useCallback(async () => {
@@ -141,6 +186,9 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         session,
         guest,
         loading: sessionLoading || assetsLoading,
+        bootError,
+        retryBoot,
+        dataLoading,
         profile,
         shopItems,
         packTypes,

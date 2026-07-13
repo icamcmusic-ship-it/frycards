@@ -14,7 +14,7 @@ const RARITY_FILTERS = ['All', ...RARITIES];
 const MAX_SHOWCASE = 6;
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { profile, collection, refreshCollection, refreshProfile, decks } = useMeta();
+  const { profile, collection, refreshCollection, refreshProfile, decks, dataLoading } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
@@ -276,7 +276,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               />
             );
           })}
-          {filtered.length === 0 && (
+          {dataLoading && (
+            <div className="w-full text-center font-bold text-[var(--c-steel)] py-14 animate-pulse">
+              Loading your collection…
+            </div>
+          )}
+          {!dataLoading && filtered.length === 0 && (
             <div className="w-full text-center font-bold text-[var(--c-steel)] py-14">
               No cards match these filters. Crack some packs in the Store!
             </div>
@@ -374,13 +379,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
                       onClick={() => handleSell(false, 1)}
                     >
-                      SELL 1
+                      QUICKSELL 1
                     </PopButton>
                     <PopButton
                       color="steel"
                       className="w-full"
                       disabled={crafting || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
-                      onClick={() => handleDisenchant(false, 1)}
+                      onClick={() => {
+                        if (confirm(`Disenchant 1 copy of ${inspect.name} for shards?`))
+                          handleDisenchant(false, 1);
+                      }}
                     >
                       DISENCHANT 1
                     </PopButton>
@@ -390,11 +398,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       color="black"
                       className="w-full"
                       disabled={selling || inspectSellable <= 0}
-                      onClick={() =>
-                        handleSell(false, Math.min(inspectOwned?.q || 0, inspectSellable))
-                      }
+                      onClick={() => {
+                        const n = Math.min(inspectOwned?.q || 0, inspectSellable);
+                        if (confirm(`Quicksell all ${n} spare copies of ${inspect.name}?`))
+                          handleSell(false, n);
+                      }}
                     >
-                      SELL ALL NORMAL
+                      QUICKSELL ALL NORMAL
                     </PopButton>
                   )}
                   {(inspectOwned?.f || 0) > 0 && (
@@ -413,13 +423,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                           disabled={selling || inspectSellable <= 0}
                           onClick={() => handleSell(true, 1)}
                         >
-                          SELL 1
+                          QUICKSELL 1
                         </PopButton>
                         <PopButton
                           color="steel"
                           className="w-full"
                           disabled={crafting || inspectSellable <= 0}
-                          onClick={() => handleDisenchant(true, 1)}
+                          onClick={() => {
+                            if (confirm(`Disenchant 1 foil copy of ${inspect.name} for shards?`))
+                              handleDisenchant(true, 1);
+                          }}
                         >
                           DISENCHANT 1
                         </PopButton>

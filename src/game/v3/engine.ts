@@ -1253,15 +1253,16 @@ export function defaultDiscardChoice(hand: Inst[]): Inst {
 export function resolveEndPhasePreDiscard(g: Game) {
   const p = g.players[g.active];
   // v4.0 Pitch: any die still unplaced may be pitched for Mend 1 to your Leader.
-  // A dead 1 or 2 always has this baseline floor; only a die pitched with the
-  // Leader already at full HP is truly "wasted".
+  // Pitch itself is always available (§3.4) regardless of Leader HP — a die
+  // pitched at full HP still counts as Pitched for Tribute (§10), it just has
+  // nothing to heal, which is what makes it "wasted".
   let pitchedThisTurn = 0;
   for (const d of p.dice) {
     if (d.placed) continue;
+    pitchedThisTurn++;
+    g.stats.dicePitched++;
     if (p.leader.damage > 0) {
       p.leader.damage = Math.max(0, p.leader.damage - 1);
-      g.stats.dicePitched++;
-      pitchedThisTurn++;
     } else {
       g.stats.diceWasted++;
     }

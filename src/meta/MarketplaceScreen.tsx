@@ -200,7 +200,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     disabled={
                       busy || !profile || profile.gold < (isAuction ? (l.buyout ?? 0) : l.price)
                     }
-                    onClick={() => run(() => buyListing(l.id), 'Purchase complete!')}
+                    onClick={() => {
+                      const price = isAuction ? (l.buyout ?? 0) : l.price;
+                      if (!confirm(`Buy this listing for ${price.toLocaleString()}g?`)) return;
+                      run(() => buyListing(l.id), 'Purchase complete!');
+                    }}
                   >
                     BUY{' '}
                     {isAuction ? `${l.buyout!.toLocaleString()}g` : `${l.price.toLocaleString()}g`}
