@@ -235,7 +235,17 @@ function AppInner() {
   const [screen, setScreen] = useState<MetaScreen>('menu');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [gameKey, setGameKey] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
+  // First-ever visit auto-opens the rules panel — previously How to Play was
+  // 100% opt-in (only reachable via the Main Menu button), so a new player
+  // could start a real match having never seen the turn structure or any
+  // keyword explained.
+  const [showHelp, setShowHelp] = useState(
+    () => localStorage.getItem('frycards_seen_howtoplay') !== '1',
+  );
+  const dismissHelp = () => {
+    localStorage.setItem('frycards_seen_howtoplay', '1');
+    setShowHelp(false);
+  };
 
   // Keep the equipped card back applied to in-game face-down cards.
   useEffect(() => {
@@ -308,7 +318,7 @@ function AppInner() {
       return (
         <>
           <MainMenu onNavigate={setScreen} onHelp={() => setShowHelp(true)} />
-          {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
+          {showHelp && <HowToPlay onClose={dismissHelp} />}
         </>
       );
   }
