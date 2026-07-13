@@ -66,6 +66,7 @@ export interface ShopItem {
   is_season_pass_exclusive: boolean;
   aspect_ratio: string;
   author: string | null;
+  is_limited: boolean;
 }
 
 /** slot_config entries come in two shapes: legacy `{type}` slots whose odds
@@ -99,6 +100,10 @@ export interface PackType {
   slot_config: PackSlot[];
   is_active: boolean;
   acquisition: string;
+  time_limited: boolean;
+  /** Backend-authored pity/guarantee blurb shown in the odds modal, e.g.
+   * "Hard pity: a Mythic from the pity slot at least once every 20 Vaults." */
+  pity_note: string | null;
 }
 
 export interface PlayerCard {
