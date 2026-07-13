@@ -1,15 +1,19 @@
 import { test, expect } from 'vitest';
-import { validateDeckList, DECK_SIZE, MAX_COPIES } from './DeckBuilderScreen';
+import { validateDeckList, DECK_SIZE } from './DeckBuilderScreen';
+import { rarityCopyCap } from './economy';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 
 const db = new Map(POOL_V4.map((c) => [c.id, c]));
 const leader = POOL_BY_ID['avatar_of_the_abyss'];
 const units = POOL_V4.filter((c) => c.type !== 'Leader');
 
-function fillDeck(n: number, maxPerCard = MAX_COPIES): string[] {
+// Fills up to each card's real rarity-scaled copy cap (1-3), not a flat number,
+// so this stays a legal deck under the same rule save_deck enforces.
+function fillDeck(n: number): string[] {
   const ids: string[] = [];
   for (const c of units) {
-    for (let i = 0; i < maxPerCard && ids.length < n; i++) ids.push(c.id);
+    const cap = rarityCopyCap(c.rarity);
+    for (let i = 0; i < cap && ids.length < n; i++) ids.push(c.id);
     if (ids.length >= n) break;
   }
   return ids.slice(0, n);
@@ -25,17 +29,29 @@ test('flags a deck that is not exactly 30 cards', () => {
   expect(issues.some((i) => i.text.includes('exactly 30'))).toBe(true);
 });
 
-test('accepts an exactly-30-card, max-3-copies-per-card deck', () => {
+test("accepts an exactly-30-card deck at each card's rarity-scaled copy cap", () => {
   const ids = fillDeck(DECK_SIZE);
   const issues = validateDeckList(leader, ids, db);
   expect(issues).toEqual([]);
 });
 
-test('rejects more than 3 copies of one card (v4.2 cap, up from legacy 2)', () => {
+test('rejects more copies of a card than its rarity allows (rarity_copy_cap)', () => {
   const card = units[0];
+  const cap = rarityCopyCap(card.rarity);
   const ids = [
-    ...Array(4).fill(card.id),
-    ...fillDeck(DECK_SIZE - 4).filter((id) => id !== card.id),
+    ...Array(cap + 1).fill(card.id),
+    ...fillDeck(DECK_SIZE - (cap + 1)).filter((id) => id !== card.id),
+  ];
+  const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
+  expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);
+});
+
+test('a flat 3 copies of a Mythic/Full-Art card is rejected (max 1 at that rarity)', () => {
+  const mythic = units.find((c) => c.rarity === 'Mythic' || c.rarity === 'Full-Art');
+  if (!mythic) return; // pool may not have one in a given snapshot
+  const ids = [
+    ...Array(3).fill(mythic.id),
+    ...fillDeck(DECK_SIZE - 3).filter((id) => id !== mythic.id),
   ];
   const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
   expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);

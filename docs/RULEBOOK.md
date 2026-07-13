@@ -69,8 +69,8 @@ Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
 ## 2. Game Materials & Setup
 
 ### Deck construction
-- Each player builds exactly **one 30-card deck** *(v4.0: was 40)* from Locations, Units, Charms, and Events, plus **exactly one Leader** kept separate (not part of the 30). A tighter 30-card deck at the same 3-copy cap raises synergy density, making include/cut decisions sharper.
-- **Maximum 3 copies** of any single named card.
+- Each player builds exactly **one 30-card deck** *(v4.0: was 40)* from Locations, Units, Charms, and Events, plus **exactly one Leader** kept separate (not part of the 30). A tighter 30-card deck raises synergy density, making include/cut decisions sharper.
+- **Maximum copies of any single named card, scaled by rarity** *(v4.3, was a flat 3)*: **3** at Common/Uncommon/Rare, **2** at Super-Rare/Ultra-Rare, **1** at Full-Art/Mythic. Enforced server-side by `save_deck`/`rarity_copy_cap`; a rarer card being harder to triple up is also what makes the pack-opening copy-cap-to-shards conversion (see the Store's pack-odds panel) mean something.
 - **Recommended physical components:** each player should have **at least 10 six-sided dice** of their own. You roll 5 at a time, but dice can rest in your Staging Zone (Twin) across turns, so 5 alone isn't enough to guarantee you can always roll a full turn. Each player's dice are entirely their own — there is no communal dice pool shared between opponents.
 
 ### Starting setup
@@ -393,7 +393,7 @@ You lose immediately if either is true:
 | Players | 2 |
 | Leader starting/max HP | **64** *(v4.1; was 28 in v4.0, 20 in v3.0)*, no ATK, cannot change zones |
 | Deck size | **30** *(v4.0, was 40)* (Leader separate) |
-| Max copies per card | 3 |
+| Max copies per card | *(v4.3, was a flat 3)* by rarity: 3 (Common/Uncommon/Rare), 2 (Super-Rare/Ultra-Rare), 1 (Full-Art/Mythic) |
 | Starting hand | 5 (one mulligan allowed, first player decides first, both execute together) |
 | Hand size cap | 6 |
 | Dice per turn | 5d6 from your own supply (10+ recommended total), up to two rerolls of any subset *(v4.3, was one)* |

@@ -7,9 +7,11 @@
  * field, so this works for both the legacy CardTemplate pool and the v4.2
  * CardDef pool.
  */
-import { MAX_COPIES } from '../game/v3/decks';
+import { rarityCopyCap } from './economy';
 
 const PREFIX = 'FRY1';
+/** Hard ceiling regardless of rarity — real per-card cap comes from rarityCopyCap. */
+const ABSOLUTE_MAX_COPIES = 3;
 
 export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
   const counts = new Map<string, number>();
@@ -23,7 +25,7 @@ export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
 
 export function decodeDeckCode(
   code: string,
-  db: Map<string, { type: string }>,
+  db: Map<string, { type: string; rarity?: string }>,
 ): { leaderId: string; cardIds: string[] } | { error: string } {
   const trimmed = code.trim();
   const parts = trimmed.split(':');
@@ -38,14 +40,22 @@ export function decodeDeckCode(
   for (const entry of body.split(',').filter(Boolean)) {
     const [id, nStr] = entry.split('*');
     const n = nStr ? parseInt(nStr, 10) : 1;
-    if (!db.has(id)) return { error: `Unknown card id: ${id}` };
-    if (!Number.isFinite(n) || n < 1 || n > MAX_COPIES)
-      return { error: `Bad count for ${id} (max ${MAX_COPIES} copies).` };
+    const card = db.get(id);
+    if (!card) return { error: `Unknown card id: ${id}` };
+    // Per-card cap is scaled by rarity (mirrors the `rarity_copy_cap` SQL
+    // function / save_deck's real check) — a flat 3 would accept a code
+    // that later fails to save for any Super-Rare-or-above card.
+    const cap = Math.min(ABSOLUTE_MAX_COPIES, rarityCopyCap(card.rarity));
+    if (!Number.isFinite(n) || n < 1 || n > cap)
+      return { error: `Bad count for ${id} (max ${cap} at ${card.rarity || 'Common'} rarity).` };
     // A code can spell the same id across more than one entry (e.g. a
     // hand-edited or concatenated code) — cap the aggregate, not just
     // each individual entry's own count.
     const total = (totals.get(id) || 0) + n;
-    if (total > MAX_COPIES) return { error: `Too many total copies of ${id} (max ${MAX_COPIES}).` };
+    if (total > cap)
+      return {
+        error: `Too many total copies of ${id} (max ${cap} at ${card.rarity || 'Common'} rarity).`,
+      };
     totals.set(id, total);
     for (let i = 0; i < n; i++) cardIds.push(id);
   }

@@ -201,11 +201,17 @@ function mapUnit(c: CardTemplate): CardDef {
     };
   }
 
-  // Overflow reward on a slice, off the effective threshold — only makes
-  // sense for the two numeric cost formats (exceed the sum target, or land
-  // an exact-match Ability Slot die that also clears an Overflow amount);
-  // dice-pattern-gated cards have no numeric threshold to exceed.
-  if (def.threshold !== undefined && hash(c.id) % 6 === 0) {
+  // Overflow reward for exceeding the effective threshold: valid for
+  // 'atLeast' (die beats the threshold) and 'sum' (total beats the sum
+  // target) cost kinds. 'exact' cards can never exceed their threshold — the
+  // cast itself requires the die to equal it exactly (payableNumeric) — so
+  // Overflow would be permanently dead text; dice-pattern-gated cards have
+  // no numeric threshold to exceed either.
+  if (
+    def.threshold !== undefined &&
+    (def.castCostKind ?? 'atLeast') !== 'exact' &&
+    hash(c.id) % 6 === 0
+  ) {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 

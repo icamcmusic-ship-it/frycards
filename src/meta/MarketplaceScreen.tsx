@@ -12,6 +12,8 @@ import {
   MarketListing,
   PublicProfile,
   MARKET_FEE,
+  MARKET_MAX_LISTING_QUANTITY,
+  MARKET_MAX_ACTIVE_LISTINGS,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
@@ -75,6 +77,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     reload();
+    // Auctions move without this player acting (outbid, anti-snipe extension,
+    // settlement) — poll so a losing bidder or a stale countdown doesn't sit
+    // wrong until the next manual action/navigation.
+    const id = window.setInterval(reload, 20_000);
+    return () => window.clearInterval(id);
   }, [reload]);
 
   const run = async (fn: () => Promise<string | null>, success?: string) => {
@@ -312,6 +319,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             collection={collection}
             decksLocked={decks}
             busy={busy}
+            activeListingCount={
+              myActivity.filter((l) => l.seller === userId && l.status === 'active').length
+            }
             onSubmit={(opts) =>
               run(
                 () => createListing(opts),
@@ -381,11 +391,13 @@ function SellForm({
   collection,
   decksLocked,
   busy,
+  activeListingCount,
   onSubmit,
 }: {
   collection: { card_id: string; quantity: number; foil_quantity: number }[];
   decksLocked: { card_ids: string[] }[];
   busy: boolean;
+  activeListingCount: number;
   onSubmit: (opts: {
     cardId: string;
     foil: boolean;
@@ -427,19 +439,24 @@ function SellForm({
 
   const selected = sellable.find((c) => c.card_id === cardId);
   const maxQty = selected
-    ? Math.max(
-        0,
-        (foil ? selected.foil_quantity : selected.quantity) -
-          Math.max(
-            0,
-            (locked.get(cardId) || 0) - (foil ? selected.quantity : selected.foil_quantity),
-          ),
+    ? Math.min(
+        MARKET_MAX_LISTING_QUANTITY,
+        Math.max(
+          0,
+          (foil ? selected.foil_quantity : selected.quantity) -
+            Math.max(
+              0,
+              (locked.get(cardId) || 0) - (foil ? selected.quantity : selected.foil_quantity),
+            ),
+        ),
       )
     : 0;
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
+  const atListingLimit = activeListingCount >= MARKET_MAX_ACTIVE_LISTINGS;
 
   const valid =
     selected &&
+    !atListingLimit &&
     quantity >= 1 &&
     quantity <= maxQty &&
     price >= 1 &&
@@ -449,6 +466,15 @@ function SellForm({
 
   return (
     <div className="max-w-2xl">
+      <div
+        className={cn(
+          'text-[9px] font-bold mb-2',
+          atListingLimit ? 'text-[var(--c-red)]' : 'text-[var(--c-steel)]',
+        )}
+      >
+        {activeListingCount}/{MARKET_MAX_ACTIVE_LISTINGS} active listings
+        {atListingLimit ? ' — cancel or sell one before listing another.' : ''}
+      </div>
       <div className="heading-font text-xs mb-1">1 · PICK A CARD</div>
       <input
         className={cn(select, 'w-56 mb-2 placeholder:text-[var(--c-steel)]/50')}

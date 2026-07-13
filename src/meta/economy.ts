@@ -46,3 +46,24 @@ export function shardCraftCost(rarity: string | undefined, foil: boolean): numbe
 export function shardDisenchantValue(rarity: string | undefined, foil: boolean): number {
   return Math.ceil(shardCraftCost(rarity, foil) / 4);
 }
+
+/**
+ * Client-side mirror of `rarity_copy_cap` — the max copies of a single card
+ * a deck may run, scaled by rarity (not a flat 3). `save_deck` is the source
+ * of truth and rejects anything over this; without this mirror the deck
+ * builder would let a player "validly" build 3 copies of a Mythic and only
+ * discover the real cap as a confusing server error on save.
+ */
+export const RARITY_COPY_CAP: Record<Rarity, number> = {
+  Common: 3,
+  Uncommon: 3,
+  Rare: 3,
+  'Super-Rare': 2,
+  'Ultra-Rare': 2,
+  'Full-Art': 1,
+  Mythic: 1,
+};
+
+export function rarityCopyCap(rarity: string | undefined): number {
+  return RARITY_COPY_CAP[(rarity as Rarity) || 'Common'] ?? RARITY_COPY_CAP.Common;
+}

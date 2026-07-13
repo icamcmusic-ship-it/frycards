@@ -721,6 +721,12 @@ export interface MarketListing {
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
 export const MARKET_FEE = 0.05;
 
+/** Per-listing quantity ceiling — mirror of create_listing's `p_quantity > 20` check. */
+export const MARKET_MAX_LISTING_QUANTITY = 20;
+
+/** Max simultaneous active listings per seller — mirror of create_listing's count check. */
+export const MARKET_MAX_ACTIVE_LISTINGS = 10;
+
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // settle anything past its end time first so browsers see fresh state
   await supabase.rpc('settle_expired_listings');
