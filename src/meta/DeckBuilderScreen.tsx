@@ -79,7 +79,7 @@ export function validateDeckList(
 }
 
 export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
-  const { decks, refreshDecks } = useMeta();
+  const { decks, refreshDecks, dataLoading } = useMeta();
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(null);
   const [importError, setImportError] = useState('');
 
@@ -184,7 +184,12 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
               </div>
             );
           })}
-          {decks.length === 0 && (
+          {dataLoading && (
+            <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14 animate-pulse">
+              Loading your decks…
+            </div>
+          )}
+          {!dataLoading && decks.length === 0 && (
             <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14">
               No decks yet. Forge your first deck — you already own a full starter collection.
             </div>
@@ -568,7 +573,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                           e.stopPropagation();
                           setInspect(c);
                         }}
-                        className="text-[6.5px] font-bold text-[var(--c-steel)]/70 underline mt-0.5"
+                        className="text-[9px] font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-0.5"
                       >
                         details
                       </button>

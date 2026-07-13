@@ -92,6 +92,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const [results, setResults] = useState<PublicProfile[] | null>(null);
   const [tradePartner, setTradePartner] = useState<PublicProfile | null>(null);
   const [leaderboard, setLeaderboard] = useState<CardsLeaderboardEntry[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (tab !== 'leaderboard' || leaderboard !== null) return;
@@ -117,7 +119,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   }, [userId]);
 
   useEffect(() => {
-    reload();
+    reload().finally(() => setLoading(false));
   }, [reload]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';
@@ -154,8 +156,13 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   };
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
-    setResults(await searchPlayers(query));
+    if (!query.trim() || searching) return;
+    setSearching(true);
+    try {
+      setResults(await searchPlayers(query));
+    } finally {
+      setSearching(false);
+    }
   };
 
   return (
@@ -250,11 +257,16 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     placeholder="Search by username…"
                     className="flex-1 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
                   />
-                  <PopButton color="black" onClick={handleSearch}>
+                  <PopButton color="black" onClick={handleSearch} disabled={searching}>
                     <Search className="w-4 h-4" />
                   </PopButton>
                 </div>
-                {results && (
+                {searching && (
+                  <div className="mt-3 text-[10px] font-bold text-[var(--c-steel)] animate-pulse">
+                    Searching…
+                  </div>
+                )}
+                {!searching && results && (
                   <div className="mt-3 flex flex-col gap-2">
                     {results.map((r) => (
                       <div
@@ -318,7 +330,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() => run(() => respondFriendRequest(f.id, false))}
+                            onClick={() =>
+                              run(() => respondFriendRequest(f.id, false), 'Request declined.')
+                            }
                           >
                             DECLINE
                           </PopButton>
@@ -372,7 +386,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   </div>
                 ))}
-                {friendProfiles.length === 0 && (
+                {loading && (
+                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
+                    Loading…
+                  </div>
+                )}
+                {!loading && friendProfiles.length === 0 && (
                   <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
                     No friends yet — search for players above and send a request.
                   </div>
@@ -452,7 +471,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             <PopButton
                               color="red"
                               disabled={busy}
-                              onClick={() =>
+                              onClick={() => {
+                                if (!confirm('Accept this trade? Cards and gold move immediately.'))
+                                  return;
                                 run(async () => {
                                   const err = await respondTrade(t.id, true);
                                   if (!err) {
@@ -460,15 +481,17 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                                     refreshProfile();
                                   }
                                   return err;
-                                }, 'Trade complete!')
-                              }
+                                }, 'Trade complete!');
+                              }}
                             >
                               ACCEPT TRADE ▸
                             </PopButton>
                             <PopButton
                               color="steel"
                               disabled={busy}
-                              onClick={() => run(() => respondTrade(t.id, false))}
+                              onClick={() =>
+                                run(() => respondTrade(t.id, false), 'Trade declined.')
+                              }
                             >
                               DECLINE
                             </PopButton>
@@ -486,7 +509,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   );
                 })}
-                {pendingTrades.length === 0 && (
+                {loading && (
+                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
+                    Loading…
+                  </div>
+                )}
+                {!loading && pendingTrades.length === 0 && (
                   <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
                     No open trades. Start one from the TRADE button next to a friend.
                   </div>

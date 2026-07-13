@@ -230,7 +230,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
 // App shell
 // ---------------------------------------------------------------------------
 function AppInner() {
-  const { session, guest, loading, profile, shopItems } = useMeta();
+  const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   const [screen, setScreen] = useState<MetaScreen>('menu');
   const [match, setMatch] = useState<MatchSetup | null>(null);
@@ -260,6 +260,23 @@ function AppInner() {
     const back = shopItems.find((s) => s.id === profile?.equipped_card_back);
     setCardBackImage(back?.image_url || null);
   }, [profile?.equipped_card_back, shopItems]);
+
+  if (bootError) {
+    return (
+      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
+          FRYCARDS
+        </div>
+        <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{bootError}</p>
+        <button
+          onClick={retryBoot}
+          className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+        >
+          RETRY
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !themeLoaded) {
     return (
@@ -335,12 +352,17 @@ function AppInner() {
 export default function App() {
   const [poolReady, setPoolReady] = useState(false);
   const [progress, setProgress] = useState({ loaded: 0, total: 0 });
+  const [poolError, setPoolError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   // Load the universal card catalog from the Supabase backend once at
   // startup, build the v4.2 card pool from it (mechanics are assigned
   // deterministically client-side), then preload every card image so
   // nothing pops in mid-browse once the app is up. Falls back to the
-  // bundled catalog if the fetch fails.
+  // bundled catalog if the fetch fails. preloadImages() never rejects, but
+  // applyCardPool()/fetchCardTemplates() theoretically could throw on
+  // malformed data — without a catch, that would strand players on this
+  // screen forever with no way out, so any failure here surfaces a retry.
   useEffect(() => {
     let cancelled = false;
     fetchCardTemplates()
@@ -354,11 +376,35 @@ export default function App() {
       })
       .then(() => {
         if (!cancelled) setPoolReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPoolError("Couldn't load the card database. Check your connection.");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
+
+  if (poolError) {
+    return (
+      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
+          FRYCARDS
+        </div>
+        <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{poolError}</p>
+        <button
+          onClick={() => {
+            setPoolError(null);
+            setProgress({ loaded: 0, total: 0 });
+            setAttempt((n) => n + 1);
+          }}
+          className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+        >
+          RETRY
+        </button>
+      </div>
+    );
+  }
 
   if (!poolReady) {
     const pct = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
