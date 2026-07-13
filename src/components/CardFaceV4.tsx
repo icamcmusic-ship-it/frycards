@@ -389,7 +389,7 @@ export function CardFace({
       }}
       style={{ width: w, minHeight: h, backgroundImage: bg }}
       className={cn(
-        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-visible rounded-[4px]',
+        'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] border-4 text-left shrink-0 transition-transform overflow-hidden rounded-[4px]',
         rarityBorder(def.rarity),
         onClick && 'btn-pop cursor-pointer',
         dimmed && 'opacity-45 saturate-50',
@@ -431,6 +431,7 @@ export function CardFace({
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
             mythic && 'text-[var(--c-yellow)]',
           )}
+          title={def.name}
         >
           <TypeIcon
             className={cn(
@@ -439,7 +440,9 @@ export function CardFace({
               mythic && 'opacity-90',
             )}
           />
-          <span style={{ fontSize: nameFontPx }}>{def.name}</span>
+          <span className="break-words" style={{ fontSize: nameFontPx }}>
+            {def.name}
+          </span>
         </span>
         {def.comboGate ? (
           <span
@@ -614,7 +617,10 @@ export function CardFace({
 
         {isLg && def.flavor && (
           <div className="mt-1 pt-1 border-t border-[var(--c-ink)]/15">
-            <p className={cn('leading-snug', set.className)} style={{ fontSize: flavorFontPx }}>
+            <p
+              className={cn('leading-snug break-words', set.className)}
+              style={{ fontSize: flavorFontPx }}
+            >
               {def.flavor}
             </p>
           </div>

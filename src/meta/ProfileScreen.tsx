@@ -182,13 +182,13 @@ export function ProfileScreen({
               </PopButton>
             )}
           </div>
-          {profile.showcase_cards.length === 0 ? (
+          {(profile.showcase_cards || []).length === 0 ? (
             <p className="text-[11px] font-bold text-[var(--c-steel)] py-2">
               Pin up to 6 cards from your Collection to show off here.
             </p>
           ) : (
             <div className="flex flex-wrap gap-3">
-              {profile.showcase_cards.map((id) => {
+              {(profile.showcase_cards || []).map((id) => {
                 const def = POOL_BY_ID[id];
                 if (!def) return null;
                 return <CardFace key={id} def={def} size="md" />;

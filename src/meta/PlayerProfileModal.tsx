@@ -147,7 +147,7 @@ export function PlayerProfileModal({
               <h2 className="heading-font text-sm mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
                 SHOWCASE
               </h2>
-              {card.showcase_cards.length === 0 ? (
+              {(card.showcase_cards || []).length === 0 ? (
                 <p className="text-[11px] font-bold text-[var(--c-steel)] py-3">
                   {isSelf
                     ? "You haven't pinned any showcase cards yet — do it from the Collection screen."
@@ -155,7 +155,7 @@ export function PlayerProfileModal({
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {card.showcase_cards.map((id) => {
+                  {(card.showcase_cards || []).map((id) => {
                     const def = POOL_BY_ID[id];
                     if (!def) return null;
                     return <CardFace key={id} def={def} size="sm" />;

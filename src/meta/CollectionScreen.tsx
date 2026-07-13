@@ -104,6 +104,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
   const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
+  const inspectShowcased = inspect ? showcase.includes(inspect.id) : false;
 
   const handleSell = async (foil: boolean, quantity: number) => {
     if (!inspect || selling || quantity < 1) return;
@@ -263,15 +264,14 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
               {showcaseError && <Notice text={showcaseError} />}
               <PopButton
-                color={showcase.includes(inspect.id) ? 'red' : 'yellow'}
+                color={inspectShowcased ? 'red' : 'yellow'}
                 className="w-full"
                 disabled={
-                  showcaseBusy ||
-                  (!showcase.includes(inspect.id) && showcase.length >= MAX_SHOWCASE)
+                  showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
                 }
                 onClick={() => toggleShowcase(inspect.id)}
               >
-                {showcase.includes(inspect.id)
+                {inspectShowcased
                   ? '★ REMOVE FROM SHOWCASE'
                   : showcase.length >= MAX_SHOWCASE
                     ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
