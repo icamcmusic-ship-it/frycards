@@ -9,6 +9,22 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const DONE_KEY = 'frycards_coach_done';
 
+function isCoachDone(): boolean {
+  try {
+    return localStorage.getItem(DONE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markCoachDone(): void {
+  try {
+    localStorage.setItem(DONE_KEY, '1');
+  } catch {
+    // localStorage unavailable — the coach will just show again next visit.
+  }
+}
+
 type CoachStage = 'awaitRoll' | 'preRoll' | 'placement' | 'combat' | 'cpu';
 
 const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
@@ -40,7 +56,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
 ];
 
 export function CoachOverlay({ stage }: { stage: string }) {
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem(DONE_KEY) === '1');
+  const [dismissed, setDismissed] = useState(isCoachDone);
   const [step, setStep] = useState<(typeof SCRIPT)[number] | null>(null);
   const shown = useRef<Set<CoachStage>>(new Set());
 
@@ -50,11 +66,17 @@ export function CoachOverlay({ stage }: { stage: string }) {
     if (next) {
       shown.current.add(next.stage);
       setStep(next);
+    } else {
+      // The game has moved on to a stage this step doesn't cover — hide it
+      // rather than leaving it stuck on screen indefinitely (e.g. a player
+      // who watches the CPU's turn play out without clicking "GOT IT" would
+      // otherwise still see that callout sitting over their own next turn).
+      setStep((cur) => (cur && cur.stage !== stage ? null : cur));
     }
   }, [stage, dismissed]);
 
   const finish = () => {
-    localStorage.setItem(DONE_KEY, '1');
+    markCoachDone();
     setDismissed(true);
     setStep(null);
   };

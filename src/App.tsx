@@ -239,11 +239,19 @@ function AppInner() {
   // 100% opt-in (only reachable via the Main Menu button), so a new player
   // could start a real match having never seen the turn structure or any
   // keyword explained.
-  const [showHelp, setShowHelp] = useState(
-    () => localStorage.getItem('frycards_seen_howtoplay') !== '1',
-  );
+  const [showHelp, setShowHelp] = useState(() => {
+    try {
+      return localStorage.getItem('frycards_seen_howtoplay') !== '1';
+    } catch {
+      return false;
+    }
+  });
   const dismissHelp = () => {
-    localStorage.setItem('frycards_seen_howtoplay', '1');
+    try {
+      localStorage.setItem('frycards_seen_howtoplay', '1');
+    } catch {
+      // localStorage unavailable — the panel will just auto-open again next visit.
+    }
     setShowHelp(false);
   };
 

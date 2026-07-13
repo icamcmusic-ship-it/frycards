@@ -629,8 +629,16 @@ export function GameV4({
     // Mirrors canCastNow's branch order exactly (minus the "a die must
     // already be selected" checks) — comboGate cards intentionally skip the
     // needsTarget check there too, so this must skip it here as well.
+    // Also requires an unplaced die to actually exist — canCastNow's own
+    // `dieVal === null` check implicitly forbids this once every die is
+    // placed, since selecting an already-placed die still yields dieVal
+    // null; this needs the same guard since it never reads dieVal at all.
     if (c.def.comboGate)
-      return !me.comboGateCastThisTurn && matchesPattern(rollValues(me), c.def.comboGate);
+      return (
+        unplaced.length > 0 &&
+        !me.comboGateCastThisTurn &&
+        matchesPattern(rollValues(me), c.def.comboGate)
+      );
     const thr = effThreshold(g, HUMAN, c.def);
     if (c.def.castCostKind === 'sum') {
       if (unplaced.reduce((s, d) => s + d.value, 0) < thr) return false;
@@ -1655,9 +1663,16 @@ export function GameV4({
                           {chk.why}
                         </span>
                       )}
-                    {!chk.ok && chk.why === 'Select a die' && potentiallyCastable && !echoPick && (
-                      <span className="text-[6.5px] font-bold text-[var(--c-yellow)]/70 text-center leading-tight max-w-[104px]">
-                        Ready — pick a die
+                    {!chk.ok && chk.why === 'Select a die' && !echoPick && (
+                      <span
+                        className={cn(
+                          'text-[6.5px] font-bold text-center leading-tight max-w-[104px]',
+                          potentiallyCastable
+                            ? 'text-[var(--c-yellow)]/70'
+                            : 'text-[var(--c-paper)]/40',
+                        )}
+                      >
+                        {potentiallyCastable ? 'Ready — pick a die' : 'No die pays this cost'}
                       </span>
                     )}
                   </div>

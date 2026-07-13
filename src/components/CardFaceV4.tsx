@@ -246,6 +246,14 @@ function markKeywordSeen(kw: string): void {
   }
 }
 
+const AUTO_INTRO_GAP_MS = 3500;
+const AUTO_INTRO_VISIBLE_MS = 6000;
+/** Module-level, shared by every KeywordChip on the page: when several
+ * never-seen keywords mount at once (e.g. a fresh opening hand full of
+ * distinct keywords), this staggers their auto-introduce popovers instead
+ * of firing them all on top of each other in one unreadable stack. */
+let nextAutoIntroSlot = 0;
+
 export function KeywordChip({
   kw,
   small,
@@ -264,7 +272,18 @@ export function KeywordChip({
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  // Pending auto-close timer for the auto-introduced popover — cleared the
+  // moment the player interacts with it manually, so a manual re-open isn't
+  // cut short by a timeout scheduled for the earlier auto-open.
+  const autoCloseRef = useRef<number | null>(null);
   const text = KEYWORD_GLOSSARY[kw];
+
+  const clearAutoClose = () => {
+    if (autoCloseRef.current !== null) {
+      window.clearTimeout(autoCloseRef.current);
+      autoCloseRef.current = null;
+    }
+  };
 
   const computePos = () => {
     const rect = btnRef.current?.getBoundingClientRect();
@@ -278,6 +297,7 @@ export function KeywordChip({
 
   const open = (e: React.MouseEvent) => {
     e.stopPropagation();
+    clearAutoClose();
     if (pos) {
       setPos(null);
       return;
@@ -285,14 +305,30 @@ export function KeywordChip({
     setPos(computePos());
   };
 
+  const close = () => {
+    clearAutoClose();
+    setPos(null);
+  };
+
   useEffect(() => {
     if (!autoIntroduce || !text || hasSeenKeyword(kw)) return;
     markKeywordSeen(kw);
-    const next = computePos();
-    if (!next) return;
-    setPos(next);
-    const timeout = window.setTimeout(() => setPos(null), 6000);
-    return () => window.clearTimeout(timeout);
+    const now = Date.now();
+    const showAt = Math.max(now, nextAutoIntroSlot);
+    nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
+    const openTimeout = window.setTimeout(() => {
+      const next = computePos();
+      if (!next) return;
+      setPos(next);
+      autoCloseRef.current = window.setTimeout(() => {
+        autoCloseRef.current = null;
+        setPos(null);
+      }, AUTO_INTRO_VISIBLE_MS);
+    }, showAt - now);
+    return () => {
+      window.clearTimeout(openTimeout);
+      clearAutoClose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -317,9 +353,9 @@ export function KeywordChip({
               className="fixed inset-0 z-[9998]"
               onClick={(e) => {
                 e.stopPropagation();
-                setPos(null);
+                close();
               }}
-              onWheel={() => setPos(null)}
+              onWheel={close}
             />
             <div
               style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
@@ -550,7 +586,15 @@ export function CardFace({
             {GATE_LABEL[def.comboGate] || def.comboGate}
           </span>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
-          <span className="flex flex-col items-end shrink-0">
+          <span
+            className={cn(
+              'flex flex-col items-end shrink-0',
+              // Centering a two-line stack (badge + "was X") shifts the
+              // badge itself higher than the single-line case — nudge the
+              // whole stack down so the badge still lines up with the name.
+              effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && 'mt-1.5',
+            )}
+          >
             <span
               className={cn(
                 'heading-font font-mono flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
