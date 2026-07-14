@@ -21,7 +21,7 @@ import {
   PlayerCard,
   CardsLeaderboardEntry,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { RARITY_CHIP } from './rarity';
@@ -776,8 +776,8 @@ function TradeComposerModal({
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
-            <span className="text-[9px] font-bold text-[var(--c-steel)]">
-              credits, in dollars (you have {fmtCredits(profile?.credits)})
+            <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+              credits (you have <Credits amount={profile?.credits} />)
             </span>
           </div>
 
@@ -801,8 +801,8 @@ function TradeComposerModal({
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
-            <span className="text-[9px] font-bold text-[var(--c-steel)]">
-              credits requested ({fmtCredits(requestCredits)})
+            <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+              credits requested (<Credits amount={requestCredits} />)
             </span>
           </div>
 

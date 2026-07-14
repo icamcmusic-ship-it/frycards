@@ -1,11 +1,12 @@
 /**
- * Currency display. Credits are the base currency and mimic the US dollar
- * system: stored server-side as integer cents, displayed as dollars.
+ * Currency display. Credits are the base currency, stored server-side as
+ * integer cents. No "$" prefix — the credits Coins icon (see CreditChip /
+ * fmtCreditsIcon) is the only currency symbol used anywhere in the UI.
  * Vouchers are the secondary/premium currency (plain integer).
  */
 export function fmtCredits(cents: number | null | undefined): string {
   const n = Math.max(0, Math.round(cents ?? 0));
-  return `$${(n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function fmtVouchers(n: number | null | undefined): string {
@@ -59,4 +60,25 @@ export function shardCraftCost(rarity: string | undefined, foil: boolean): numbe
 
 export function shardDisenchantValue(rarity: string | undefined, foil: boolean): number {
   return Math.ceil(shardCraftCost(rarity, foil) / 4);
+}
+
+/**
+ * Client-side mirrors of the Player Shops constants — kept in sync with the
+ * shop_* SQL functions (shop_setup_fee, shop_base_slots, shop_slot_cost,
+ * shop_maintenance_fee_per_slot, shop_min_pool_size). Used only to render
+ * costs before the player confirms; the server always recomputes.
+ */
+export const SHOP_UNLOCK_LEVEL = 50;
+export const SHOP_SETUP_FEE = 5000;
+export const SHOP_BASE_SLOTS = 4;
+export const SHOP_MAX_SLOTS = 30;
+export const SHOP_MAINTENANCE_FEE_PER_SLOT = 15;
+
+/** Collateral cost of the n'th purchased slot (1-indexed, beyond the base allotment). */
+export function shopSlotCost(n: number): number {
+  return 1500 + (Math.max(1, n) - 1) * 750;
+}
+
+export function shopMinPoolSize(packSize: number): number {
+  return Math.max(packSize * 10, 30);
 }

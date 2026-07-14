@@ -847,3 +847,378 @@ export async function adminGrantCard(
   });
   return rpcError(error);
 }
+
+// ---------------------------------------------------------------------------
+// Player Shops — player-run storefronts (individual/bundle/mystery-pack
+// listings), unlocked at level 50. See open_shop / create_shop_listing /
+// submit_mystery_pool etc (SECURITY DEFINER RPCs) for the server logic.
+// ---------------------------------------------------------------------------
+export const SHOP_UNLOCK_LEVEL = 50;
+
+export interface CardMarketValue {
+  sales: number;
+  avg_price: number | null;
+}
+
+/** Blended (quicksell + player-market-average) reference price shown as the
+ * "market value" popup on the expanded card viewer — null avg_price until
+ * the card has at least 5 completed player-market sales. */
+export async function fetchCardMarketValue(cardId: string, foil = false): Promise<CardMarketValue> {
+  const { data, error } = await supabase.rpc('get_card_market_value', { p_card_id: cardId, p_foil: foil });
+  if (error || !data) return { sales: 0, avg_price: null };
+  return data as CardMarketValue;
+}
+
+/** Blended reference price used for shop soft-cap bands (quicksell + market avg). */
+export async function fetchCardBlendedReference(cardId: string, foil = false): Promise<number> {
+  const { data, error } = await supabase.rpc('card_blended_reference', { p_card_id: cardId, p_foil: foil });
+  if (error || data == null) return 0;
+  return data as number;
+}
+
+export interface PlayerShop {
+  owner: string;
+  name: string;
+  banner_url: string | null;
+  status: 'active' | 'dormant';
+  slots_purchased: number;
+  last_maintenance_at: string;
+  created_at: string;
+  closed_at: string | null;
+}
+
+export interface ShopSlot {
+  id: string;
+  owner: string;
+  slot_index: number;
+  collateral: number;
+  status: 'empty' | 'occupied' | 'burned';
+  created_at: string;
+}
+
+export type MysteryMode = 'simple' | 'advanced';
+export type MysterySlotMode = 'exact' | 'minimum' | 'open';
+
+export interface MysterySlotSpec {
+  mode: MysterySlotMode;
+  card_id?: string;
+  foil?: boolean;
+  rarity?: string;
+}
+
+export interface MysteryTemplateConfig {
+  rarity_weights?: Record<string, number>;
+  slots?: MysterySlotSpec[];
+}
+
+export interface MysteryTemplate {
+  id: string;
+  owner: string;
+  name: string;
+  pack_size: number;
+  mode: MysteryMode;
+  config: MysteryTemplateConfig;
+  historical_floor_ev: number | null;
+  created_at: string;
+}
+
+export interface ShopListingCardItem {
+  card_id: string;
+  foil: boolean;
+  quantity: number;
+}
+
+export type ShopListingType = 'individual' | 'bundle' | 'mystery';
+export type ShopListingStatus = 'active' | 'sold' | 'sold_out' | 'cancelled';
+
+export interface ShopListing {
+  id: string;
+  owner: string;
+  slot_id: string;
+  listing_type: ShopListingType;
+  status: ShopListingStatus;
+  cards: ShopListingCardItem[];
+  price: number;
+  reference_price: number;
+  template_id: string | null;
+  pack_size: number | null;
+  total_packs: number | null;
+  remaining_packs: number | null;
+  ev_frozen: number | null;
+  created_at: string;
+}
+
+export interface ShopPurchase {
+  id: string;
+  owner: string;
+  buyer: string;
+  listing_id: string;
+  listing_type: ShopListingType;
+  price: number;
+  reference_price: number;
+  cards: ShopListingCardItem[];
+  created_at: string;
+}
+
+export interface ShopPublic {
+  owner: string;
+  name: string;
+  banner_url: string | null;
+  status: 'active' | 'dormant';
+  created_at: string;
+  sales_count: number;
+  unique_buyers: number;
+  rating_unlocked: boolean;
+  composite_score: number | null;
+}
+
+export interface BrowseShopEntry {
+  owner: string;
+  name: string;
+  banner_url: string | null;
+  status: 'active' | 'dormant';
+  created_at: string;
+  sales_count: number;
+  trending_score: number;
+  composite_score: number;
+  rating_unlocked: boolean;
+}
+
+export interface MysteryPoolValidation {
+  ok: boolean;
+  errors: string[];
+  pool_size: number;
+  num_packs?: number;
+  ev_per_pack?: number;
+  suggested_min?: number;
+  suggested_max?: number;
+}
+
+export interface MysteryLiveStats {
+  remaining_packs: number;
+  live_ev_per_pack: number | null;
+}
+
+export interface ShopReport {
+  id: string;
+  listing_id: string;
+  reporter: string;
+  reason: 'mismatch' | 'not_as_described' | 'other';
+  note: string | null;
+  status: 'open' | 'auto_resolved' | 'escalated' | 'resolved' | 'dismissed';
+  created_at: string;
+}
+
+// -- reads --------------------------------------------------------------
+export async function fetchMyShop(ownerId: string): Promise<PlayerShop | null> {
+  const { data } = await supabase.from('player_shops').select('*').eq('owner', ownerId).maybeSingle();
+  return (data as PlayerShop) || null;
+}
+
+export async function fetchShopSlots(ownerId: string): Promise<ShopSlot[]> {
+  const { data } = await supabase
+    .from('shop_slots')
+    .select('*')
+    .eq('owner', ownerId)
+    .order('slot_index');
+  return (data as ShopSlot[]) || [];
+}
+
+export async function fetchShopListings(ownerId: string): Promise<ShopListing[]> {
+  const { data } = await supabase
+    .from('shop_listings')
+    .select('*')
+    .eq('owner', ownerId)
+    .order('created_at', { ascending: false });
+  return (data as ShopListing[]) || [];
+}
+
+export async function fetchMysteryTemplates(ownerId: string): Promise<MysteryTemplate[]> {
+  const { data } = await supabase
+    .from('mystery_pack_templates')
+    .select('*')
+    .eq('owner', ownerId)
+    .order('created_at', { ascending: false });
+  return (data as MysteryTemplate[]) || [];
+}
+
+export async function fetchShopPublic(ownerId: string): Promise<ShopPublic | null> {
+  const { data, error } = await supabase.rpc('get_shop_public', { p_owner: ownerId });
+  if (error || !data) return null;
+  return data as ShopPublic;
+}
+
+export async function browseShops(
+  sort: 'featured' | 'trending' | 'new' | 'top_rated' = 'featured',
+  limit = 30,
+): Promise<BrowseShopEntry[]> {
+  const { data, error } = await supabase.rpc('browse_shops', { p_sort: sort, p_limit: limit });
+  if (error || !data) return [];
+  return data as BrowseShopEntry[];
+}
+
+export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryLiveStats> {
+  const { data, error } = await supabase.rpc('get_mystery_live_stats', { p_listing_id: listingId });
+  if (error || !data) return { remaining_packs: 0, live_ev_per_pack: null };
+  return data as MysteryLiveStats;
+}
+
+/** Purchases where the caller is either the buyer or the selling shop's owner. */
+export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase[]> {
+  const { data } = await supabase
+    .from('shop_purchases')
+    .select('*')
+    .or(`buyer.eq.${userId},owner.eq.${userId}`)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  return (data as ShopPurchase[]) || [];
+}
+
+// -- shop lifecycle -------------------------------------------------------
+export async function openShop(name: string, bannerUrl?: string | null): Promise<string | null> {
+  const { error } = await supabase.rpc('open_shop', { p_name: name, p_banner_url: bannerUrl ?? null });
+  return rpcError(error);
+}
+
+export async function reopenShop(): Promise<string | null> {
+  const { error } = await supabase.rpc('reopen_shop');
+  return rpcError(error);
+}
+
+export async function closeShop(): Promise<{ data: { refunded: number } | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('close_shop');
+  return { data: (data as { refunded: number }) || null, error: rpcError(error) };
+}
+
+export async function buyShopSlot(): Promise<{
+  data: { cost: number; slot_index: number } | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('buy_shop_slot');
+  return { data: (data as { cost: number; slot_index: number }) || null, error: rpcError(error) };
+}
+
+// -- individual / bundle listings -----------------------------------------
+export async function createShopListing(
+  slotId: string,
+  type: 'individual' | 'bundle',
+  cards: ShopListingCardItem[],
+  price: number,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('create_shop_listing', {
+    p_slot_id: slotId,
+    p_type: type,
+    p_cards: cards,
+    p_price: price,
+  });
+  return rpcError(error);
+}
+
+export async function cancelShopListing(listingId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('cancel_shop_listing', { p_listing_id: listingId });
+  return rpcError(error);
+}
+
+export async function buyShopListing(listingId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('buy_shop_listing', { p_listing_id: listingId });
+  return rpcError(error);
+}
+
+// -- mystery packs ----------------------------------------------------------
+export async function createMysteryTemplate(
+  name: string,
+  packSize: number,
+  mode: MysteryMode,
+  config: MysteryTemplateConfig,
+): Promise<{ data: { template_id: string } | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('create_mystery_template', {
+    p_name: name,
+    p_pack_size: packSize,
+    p_mode: mode,
+    p_config: config,
+  });
+  return { data: (data as { template_id: string }) || null, error: rpcError(error) };
+}
+
+export async function previewMysteryPool(
+  templateId: string,
+  pool: ShopListingCardItem[],
+): Promise<{ data: MysteryPoolValidation | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('preview_mystery_pool', {
+    p_template_id: templateId,
+    p_pool: pool,
+  });
+  return { data: (data as MysteryPoolValidation) || null, error: rpcError(error) };
+}
+
+export async function submitMysteryPool(
+  templateId: string,
+  slotId: string,
+  pool: ShopListingCardItem[],
+  price: number,
+): Promise<{ data: { listing_id: string; ev_per_pack: number } | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('submit_mystery_pool', {
+    p_template_id: templateId,
+    p_slot_id: slotId,
+    p_pool: pool,
+    p_price: price,
+  });
+  return { data: (data as { listing_id: string; ev_per_pack: number }) || null, error: rpcError(error) };
+}
+
+export interface MysteryDrawResult {
+  cards: { card_id: string; foil: boolean; rarity: string }[];
+  remaining_packs: number;
+}
+
+export async function buyMysteryPack(
+  listingId: string,
+): Promise<{ data: MysteryDrawResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('buy_mystery_pack', { p_listing_id: listingId });
+  return { data: (data as MysteryDrawResult) || null, error: rpcError(error) };
+}
+
+export interface ShopBuyerRating {
+  purchase_id: string;
+  buyer: string;
+  owner: string;
+  rating: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Ratings the caller has already left, keyed for quick per-purchase lookup. */
+export async function fetchMyBuyerRatings(userId: string): Promise<ShopBuyerRating[]> {
+  const { data } = await supabase.from('shop_buyer_ratings').select('*').eq('buyer', userId);
+  return (data as ShopBuyerRating[]) || [];
+}
+
+// -- rating & moderation ------------------------------------------------
+export async function rateShopPurchase(purchaseId: string, rating: number): Promise<string | null> {
+  const { error } = await supabase.rpc('rate_shop_purchase', { p_purchase_id: purchaseId, p_rating: rating });
+  return rpcError(error);
+}
+
+export async function reportListing(
+  listingId: string,
+  reason: 'mismatch' | 'not_as_described' | 'other',
+  note?: string,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('report_listing', {
+    p_listing_id: listingId,
+    p_reason: reason,
+    p_note: note ?? null,
+  });
+  return rpcError(error);
+}
+
+export async function adminResolveShopReport(
+  reportId: string,
+  action: 'strike' | 'dismiss',
+): Promise<string | null> {
+  const { error } = await supabase.rpc('admin_resolve_shop_report', {
+    p_report_id: reportId,
+    p_action: action,
+  });
+  return rpcError(error);
+}

@@ -12,11 +12,11 @@ import {
   ShopItem,
   PackPull,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
-import { fmtCredits, fmtVouchers } from './economy';
+import { fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
 import { packOdds, expectedRarities, sortedWeights } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
@@ -317,15 +317,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         disabled={!profile || profile.credits < pack.price_credits || !!busyId}
                         onClick={() => handleOpenPack(pack, 'credits')}
                       >
-                        {busyId === pack.id
-                          ? 'OPENING…'
-                          : pack.price_credits === 0
-                            ? 'FREE'
-                            : fmtCredits(pack.price_credits)}
+                        {busyId === pack.id ? (
+                          'OPENING…'
+                        ) : pack.price_credits === 0 ? (
+                          'FREE'
+                        ) : (
+                          <Credits amount={pack.price_credits} className="justify-center" />
+                        )}
                       </PopButton>
                       {profile && profile.credits < pack.price_credits && (
-                        <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
-                          {fmtCredits(pack.price_credits - profile.credits)} SHORT
+                        <div className="mt-1 flex items-center justify-center gap-0.5 text-[9px] font-black text-[var(--c-red)]">
+                          <Credits amount={pack.price_credits - profile.credits} /> SHORT
                         </div>
                       )}
                     </div>
@@ -358,11 +360,15 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Backpack className="w-3 h-3" />
-                      {busyId === 'inv:' + pack.id + ':credits'
-                        ? 'BUYING…'
-                        : pack.price_credits === 0
-                          ? 'SAVE FOR LATER (FREE)'
-                          : `SAVE FOR LATER (${fmtCredits(pack.price_credits)})`}
+                      {busyId === 'inv:' + pack.id + ':credits' ? (
+                        'BUYING…'
+                      ) : pack.price_credits === 0 ? (
+                        'SAVE FOR LATER (FREE)'
+                      ) : (
+                        <>
+                          SAVE FOR LATER (<Credits amount={pack.price_credits} />)
+                        </>
+                      )}
                     </button>
                   )}
                   {pack.price_vouchers != null && (
@@ -510,11 +516,15 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                               }
                               onClick={() => handleBuyItem(item, 'credits')}
                             >
-                              {item.cost_credits === 0 ? 'FREE' : fmtCredits(item.cost_credits)}
+                              {item.cost_credits === 0 ? (
+                                'FREE'
+                              ) : (
+                                <Credits amount={item.cost_credits} className="justify-center" />
+                              )}
                             </PopButton>
                             {profile && profile.credits < item.cost_credits && (
-                              <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
-                                {fmtCredits(item.cost_credits - profile.credits)} SHORT
+                              <div className="mt-1 flex items-center justify-center gap-0.5 text-[9px] font-black text-[var(--c-red)]">
+                                <Credits amount={item.cost_credits - profile.credits} /> SHORT
                               </div>
                             )}
                           </div>

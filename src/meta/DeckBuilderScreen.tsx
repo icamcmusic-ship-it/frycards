@@ -4,7 +4,7 @@ import { encodeDeckCode, decodeDeckCode } from './deckcode';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
-import { MetaHeader, PopButton } from './ui';
+import { MetaHeader, PopButton, CardMarketValuePanel } from './ui';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
@@ -679,7 +679,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       </div>
 
       {/* Card inspector — the same universal card face used everywhere else. */}
-      {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
+      {inspect && (
+        <CardInspectorModal
+          def={inspect}
+          onClose={() => setInspect(null)}
+          actions={<CardMarketValuePanel cardId={inspect.id} />}
+        />
+      )}
     </div>
   );
 }
