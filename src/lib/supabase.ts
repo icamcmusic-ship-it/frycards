@@ -198,7 +198,8 @@ export async function fetchPackTypes(): Promise<PackType[]> {
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
     (a, b) =>
-      (a.price_credits ?? (a.price_vouchers ?? 0) * 100) - (b.price_credits ?? (b.price_vouchers ?? 0) * 100),
+      (a.price_credits ?? (a.price_vouchers ?? 0) * 100) -
+      (b.price_credits ?? (b.price_vouchers ?? 0) * 100),
   );
 }
 

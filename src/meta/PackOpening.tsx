@@ -194,7 +194,12 @@ export function PackOpening({
         />
       )}
       {stage === 'summary' && (
-        <SummaryStage packName={packName} pulls={pulls} reducedMotion={reducedMotion} onDone={onDone} />
+        <SummaryStage
+          packName={packName}
+          pulls={pulls}
+          reducedMotion={reducedMotion}
+          onDone={onDone}
+        />
       )}
     </div>
   );
@@ -238,7 +243,10 @@ function TearStage({
     const width = stripRef.current?.offsetWidth || 300;
     const p = Math.min(
       1,
-      Math.max(dragging.current.startProgress, dragging.current.startProgress + (e.clientX - dragging.current.startX) / (width * 0.85)),
+      Math.max(
+        dragging.current.startProgress,
+        dragging.current.startProgress + (e.clientX - dragging.current.startX) / (width * 0.85),
+      ),
     );
     setProgress(p);
     if (p >= 1) finishTear();
@@ -284,8 +292,13 @@ function TearStage({
           style={{
             background:
               'repeating-linear-gradient(115deg, #C9CED6 0px, #F3F4F6 10px, #AEB6C2 20px, #E5E7EB 30px)',
-            transform: torn ? undefined : `translateX(${progress * 14}px) rotate(${progress * 2}deg)`,
-            animation: torn && !reducedMotion ? 'po-strip-fly 0.8s cubic-bezier(.4,-0.1,.7,.4) forwards' : undefined,
+            transform: torn
+              ? undefined
+              : `translateX(${progress * 14}px) rotate(${progress * 2}deg)`,
+            animation:
+              torn && !reducedMotion
+                ? 'po-strip-fly 0.8s cubic-bezier(.4,-0.1,.7,.4) forwards'
+                : undefined,
             opacity: torn && reducedMotion ? 0 : undefined,
             // serrated bottom edge
             clipPath:
@@ -310,7 +323,8 @@ function TearStage({
           style={{
             aspectRatio: '77 / 96',
             marginTop: -2,
-            animation: torn && !reducedMotion ? 'po-pack-drop 0.9s ease-in 0.35s forwards' : undefined,
+            animation:
+              torn && !reducedMotion ? 'po-pack-drop 0.9s ease-in 0.35s forwards' : undefined,
           }}
         >
           <SafeImage
@@ -400,7 +414,10 @@ function RevealStage({
       {/* 3D flip container */}
       <div
         onClick={flip}
-        className={cn('relative po-anim', !currentShown && 'cursor-pointer hover:-translate-y-2 transition-transform')}
+        className={cn(
+          'relative po-anim',
+          !currentShown && 'cursor-pointer hover:-translate-y-2 transition-transform',
+        )}
         style={{
           width: CARD_W,
           height: CARD_H,
@@ -410,16 +427,19 @@ function RevealStage({
         key={index}
       >
         {/* rarity glow burst on flip (Rare+) */}
-        {currentShown && isRarePlus(current.rarity) && !current.converted_to_shards && !reducedMotion && (
-          <div
-            key={burstKey}
-            className="absolute inset-0 pointer-events-none z-0 po-anim"
-            style={{
-              background: `radial-gradient(circle, ${glowColor}CC 0%, ${glowColor}44 40%, transparent 70%)`,
-              animation: 'po-glow-burst 0.7s ease-out forwards',
-            }}
-          />
-        )}
+        {currentShown &&
+          isRarePlus(current.rarity) &&
+          !current.converted_to_shards &&
+          !reducedMotion && (
+            <div
+              key={burstKey}
+              className="absolute inset-0 pointer-events-none z-0 po-anim"
+              style={{
+                background: `radial-gradient(circle, ${glowColor}CC 0%, ${glowColor}44 40%, transparent 70%)`,
+                animation: 'po-glow-burst 0.7s ease-out forwards',
+              }}
+            />
+          )}
         <div
           className="relative w-full h-full"
           style={{
@@ -434,7 +454,10 @@ function RevealStage({
           </div>
           {/* front face */}
           <div
-            className={cn('absolute inset-0', currentShown && !current.converted_to_shards && rarityGlow(current.rarity))}
+            className={cn(
+              'absolute inset-0',
+              currentShown && !current.converted_to_shards && rarityGlow(current.rarity),
+            )}
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
             <div
@@ -476,9 +499,11 @@ function RevealStage({
             </div>
           </div>
         </div>
-        {currentShown && rarityRank(current.rarity) >= rarityRank('Super-Rare') && !current.converted_to_shards && (
-          <div className="absolute -inset-12 pointer-events-none starburst-ray opacity-70 -z-10" />
-        )}
+        {currentShown &&
+          rarityRank(current.rarity) >= rarityRank('Super-Rare') &&
+          !current.converted_to_shards && (
+            <div className="absolute -inset-12 pointer-events-none starburst-ray opacity-70 -z-10" />
+          )}
       </div>
 
       {/* rarity readout */}
@@ -577,7 +602,10 @@ function SummaryStage({
         {rarityCounts.map(([r, n]) => (
           <span
             key={r}
-            className={cn('text-[10px] font-black px-2 py-1 ink-border-sm', RARITY_CHIP[r] || RARITY_CHIP.Common)}
+            className={cn(
+              'text-[10px] font-black px-2 py-1 ink-border-sm',
+              RARITY_CHIP[r] || RARITY_CHIP.Common,
+            )}
           >
             {r.toUpperCase()} ×{n}
           </span>
@@ -611,7 +639,12 @@ function SummaryStage({
                 </>
               )}
               <div className={cn(!pull.converted_to_shards && rarityGlow(pull.rarity))}>
-                <CardFace def={def} size="full" foil={pull.foil} dimmed={pull.converted_to_shards} />
+                <CardFace
+                  def={def}
+                  size="full"
+                  foil={pull.foil}
+                  dimmed={pull.converted_to_shards}
+                />
               </div>
               {pull.converted_to_shards && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -627,8 +660,9 @@ function SummaryStage({
 
       {convertedCount > 0 && (
         <p className="text-[10px] font-bold text-[#67E8F9] mb-4 text-center max-w-md">
-          {convertedCount} pull{convertedCount === 1 ? '' : 's'} {convertedCount === 1 ? 'was' : 'were'} past
-          your copy cap and converted to ✦ {shardsGained} shards instead of a duplicate.
+          {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
+          {convertedCount === 1 ? 'was' : 'were'} past your copy cap and converted to ✦{' '}
+          {shardsGained} shards instead of a duplicate.
         </p>
       )}
 

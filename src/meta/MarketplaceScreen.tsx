@@ -552,7 +552,9 @@ function SellForm({
                 min={0.01}
                 step="0.01"
                 value={price / 100}
-                onChange={(e) => setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))}
+                onChange={(e) =>
+                  setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))
+                }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
               <span className="text-[9px] text-[var(--c-steel)]">= {fmtCredits(price)}</span>

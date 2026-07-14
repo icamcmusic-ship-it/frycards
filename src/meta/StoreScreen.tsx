@@ -288,9 +288,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       <PopButton
                         color="yellow"
                         className="w-full"
-                        disabled={
-                          !profile || profile.credits < pack.price_credits || !!busyId
-                        }
+                        disabled={!profile || profile.credits < pack.price_credits || !!busyId}
                         onClick={() => handleOpenPack(pack, 'credits')}
                       >
                         {busyId === pack.id ? 'OPENING…' : fmtCredits(pack.price_credits)}
@@ -307,9 +305,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       <PopButton
                         color="steel"
                         className="w-full"
-                        disabled={
-                          !profile || profile.vouchers < pack.price_vouchers || !!busyId
-                        }
+                        disabled={!profile || profile.vouchers < pack.price_vouchers || !!busyId}
                         onClick={() => handleOpenPack(pack, 'vouchers')}
                       >
                         {busyId === pack.id
@@ -646,4 +642,3 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
     </div>
   );
 }
-

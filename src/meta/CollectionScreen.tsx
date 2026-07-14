@@ -77,8 +77,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     return true;
   }).sort((a, b) => {
     if (sort === 'Rarity') {
-      const d =
-        RARITIES.indexOf(b.rarity || 'Common') - RARITIES.indexOf(a.rarity || 'Common');
+      const d = RARITIES.indexOf(b.rarity || 'Common') - RARITIES.indexOf(a.rarity || 'Common');
       if (d !== 0) return d;
     } else if (sort === 'Type') {
       const d = a.type.localeCompare(b.type);
@@ -325,9 +324,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             { label: 'Type', value: inspect.type },
             { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
-            ...(inspectLocked > 0
-              ? [{ label: 'Locked in decks', value: `${inspectLocked}` }]
-              : []),
+            ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
           ]}
           onClose={() => setInspect(null)}
           actions={

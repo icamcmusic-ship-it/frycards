@@ -753,7 +753,10 @@ function TradeComposerModal({
                 setOfferCredits(
                   Math.max(
                     0,
-                    Math.min(profile?.credits ?? 0, Math.round((Number(e.target.value) || 0) * 100)),
+                    Math.min(
+                      profile?.credits ?? 0,
+                      Math.round((Number(e.target.value) || 0) * 100),
+                    ),
                   ),
                 )
               }

@@ -431,7 +431,9 @@ function CreatorTools() {
                   type="number"
                   min={0}
                   value={vouchers}
-                  onChange={(e) => setVouchers(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                  onChange={(e) =>
+                    setVouchers(Math.max(0, Math.round(Number(e.target.value) || 0)))
+                  }
                   className={`${input} w-24`}
                 />
               </label>
@@ -533,10 +535,7 @@ function CreatorTools() {
                 disabled={busy}
                 onClick={() => {
                   if (!confirm(`Set ${target.username}'s role to "${role}"?`)) return;
-                  run(
-                    () => adminSetRole(target.id, role),
-                    `${target.username} is now a ${role}.`,
-                  );
+                  run(() => adminSetRole(target.id, role), `${target.username} is now a ${role}.`);
                 }}
               >
                 APPLY ROLE ▸

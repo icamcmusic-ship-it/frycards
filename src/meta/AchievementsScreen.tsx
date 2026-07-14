@@ -101,7 +101,12 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     return p && p.progress >= a.target;
   }).length;
 
-  const rewardChips = (credits: number, vouchers: number, packId?: string | null, bpXp?: number) => (
+  const rewardChips = (
+    credits: number,
+    vouchers: number,
+    packId?: string | null,
+    bpXp?: number,
+  ) => (
     <div className="flex flex-wrap items-center gap-1.5">
       {credits > 0 && (
         <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-yellow)] px-1 ink-border-sm">

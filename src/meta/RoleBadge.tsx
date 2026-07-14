@@ -7,7 +7,10 @@ import { PlayerRole } from '../lib/supabase';
  *  - Founder: one of the first 25 signups after the Creator.
  * Regular players get no badge.
  */
-const ROLE_STYLES: Record<Exclude<PlayerRole, 'player'>, { label: string; bg: string; fg: string; title: string }> = {
+const ROLE_STYLES: Record<
+  Exclude<PlayerRole, 'player'>,
+  { label: string; bg: string; fg: string; title: string }
+> = {
   creator: {
     label: 'CREATOR',
     bg: 'linear-gradient(135deg, #ff5722, #ffc107)',

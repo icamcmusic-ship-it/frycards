@@ -434,8 +434,20 @@ test('one Combo-gated card per turn, shared between casts and Echo recasts (v4.2
     d.value = 5;
     d.placed = false;
   }); // Yahtzee of 5s => AnyPair met
-  const gated1: CardDef = { id: 'cg1', name: 'cg1', type: 'Event', comboGate: 'AnyPair', onCast: { action: 'draw', value: 1, target: 'none' } };
-  const gated2: CardDef = { id: 'cg2', name: 'cg2', type: 'Event', comboGate: 'AnyPair', onCast: { action: 'draw', value: 1, target: 'none' } };
+  const gated1: CardDef = {
+    id: 'cg1',
+    name: 'cg1',
+    type: 'Event',
+    comboGate: 'AnyPair',
+    onCast: { action: 'draw', value: 1, target: 'none' },
+  };
+  const gated2: CardDef = {
+    id: 'cg2',
+    name: 'cg2',
+    type: 'Event',
+    comboGate: 'AnyPair',
+    onCast: { action: 'draw', value: 1, target: 'none' },
+  };
   const a = makeInst(gated1, 'A');
   const b = makeInst(gated2, 'A');
   p.hand.push(a, b);
@@ -443,7 +455,14 @@ test('one Combo-gated card per turn, shared between casts and Echo recasts (v4.2
   expect(castFromHand(g, 1, b.iid)).toBe(false); // cap hit
   // Echo recast of a gated card is also under the cap
   const gatedEcho = makeInst(
-    { id: 'cg3', name: 'cg3', type: 'Event', comboGate: 'AnyPair', keywords: ['Echo'], onCast: { action: 'draw', value: 1, target: 'none' } },
+    {
+      id: 'cg3',
+      name: 'cg3',
+      type: 'Event',
+      comboGate: 'AnyPair',
+      keywords: ['Echo'],
+      onCast: { action: 'draw', value: 1, target: 'none' },
+    },
     'A',
   );
   p.discard.push(gatedEcho);
@@ -474,7 +493,11 @@ test('Ultimate: locked before turn N, threshold enforced, strictly once per game
   const p = g.players.A;
   p.leader.def = {
     ...p.leader.def,
-    ultimate: { unlockTurn: 3, threshold: 5, effect: { action: 'sap', value: 8, target: 'enemyLeader' } },
+    ultimate: {
+      unlockTurn: 3,
+      threshold: 5,
+      effect: { action: 'sap', value: 8, target: 'enemyLeader' },
+    },
   };
   startTurn(g);
   reroll(g, []);
