@@ -176,8 +176,8 @@ export function AuthScreen() {
           </button>
 
           <div className="text-center text-[10px] font-bold text-[var(--c-steel)] mt-1">
-            New accounts start with 1000 gold and 50 gems — pick a free Starter Deck in the Store
-            to get your first cards.
+            New accounts start with a stash of credits and vouchers — open packs in the Store to get
+            your first cards.
           </div>
         </form>
 

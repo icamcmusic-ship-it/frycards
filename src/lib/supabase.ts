@@ -25,11 +25,16 @@ export interface CardRow {
   template: CardTemplate | null;
 }
 
+/** Player role/badge. 'creator' = first account (full frontend+backend access);
+ * 'founder' = one of the first 25 signups after the Creator (+3,000-credit bonus). */
+export type PlayerRole = 'creator' | 'founder' | 'player';
+
 export interface Profile {
   id: string;
   username: string;
-  gold: number;
-  gems: number;
+  role: PlayerRole;
+  credits: number;
+  vouchers: number;
   shards: number;
   xp: number;
   level: number;
@@ -39,7 +44,6 @@ export interface Profile {
   equipped_card_back: string | null;
   equipped_banner: string | null;
   equipped_avatar: string | null;
-  starter_claimed: boolean;
   last_free_pack_at: string | null;
   showcase_cards: string[];
   /** Consecutive packs opened with no foil pull — the server escalates foil
@@ -56,10 +60,10 @@ export interface ShopItem {
   id: string;
   name: string;
   description: string | null;
-  item_type: 'card_back' | 'profile_banner' | 'profile_avatar' | 'starter_deck';
+  item_type: 'card_back' | 'profile_banner' | 'profile_avatar';
   image_url: string | null;
-  cost_gold: number | null;
-  cost_gems: number | null;
+  cost_credits: number | null;
+  cost_vouchers: number | null;
   rarity: string;
   has_foil_variant: boolean;
   foil_cost_multiplier: number;
@@ -94,8 +98,8 @@ export interface PackType {
   image_url: string | null;
   foil_chance: number;
   has_foil_slot: boolean;
-  price_gold: number | null;
-  price_gems: number | null;
+  price_credits: number | null;
+  price_vouchers: number | null;
   pack_tier: string;
   slot_config: PackSlot[];
   is_active: boolean;
@@ -144,9 +148,8 @@ export interface PackPull {
 
 export interface OpenPackResult {
   cards: PackPull[];
-  gold: number;
-  gems: number;
-  /** Not present on claim_starter_pack's result (it doesn't grant shards). */
+  credits: number;
+  vouchers: number;
   shards?: number;
   shards_gained?: number;
 }
@@ -185,7 +188,7 @@ export async function fetchShopItems(): Promise<ShopItem[]> {
     .from('shop_items')
     .select('*')
     .order('item_type')
-    .order('cost_gold');
+    .order('cost_credits');
   return (data as ShopItem[]) || [];
 }
 
@@ -195,7 +198,8 @@ export async function fetchPackTypes(): Promise<PackType[]> {
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
     (a, b) =>
-      (a.price_gold ?? (a.price_gems ?? 0) * 10) - (b.price_gold ?? (b.price_gems ?? 0) * 10),
+      (a.price_credits ?? (a.price_vouchers ?? 0) * 100) -
+      (b.price_credits ?? (b.price_vouchers ?? 0) * 100),
   );
 }
 
@@ -235,7 +239,7 @@ function rpcError(error: { message: string } | null): string | null {
 
 export async function openPack(
   packId: string,
-  currency: 'gold' | 'gems',
+  currency: 'credits' | 'vouchers',
 ): Promise<{ data: OpenPackResult | null; error: string | null }> {
   const { data, error } = await supabase.rpc('open_pack', {
     p_pack_id: packId,
@@ -244,20 +248,9 @@ export async function openPack(
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
 }
 
-/**
- * One-time Starter Pack: grants the chosen Leader plus the exact 30 cards of
- * that Leader's prebuilt deck, and saves it as a ready-to-play deck.
- */
-export async function claimStarterPack(
-  leaderId: string,
-): Promise<{ data: OpenPackResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('claim_starter_pack', { p_leader_id: leaderId });
-  return { data: (data as OpenPackResult) || null, error: rpcError(error) };
-}
-
 export async function buyShopItem(
   itemId: string,
-  currency: 'gold' | 'gems',
+  currency: 'credits' | 'vouchers',
   foil = false,
 ): Promise<string | null> {
   const { error } = await supabase.rpc('buy_shop_item', {
@@ -320,7 +313,7 @@ export async function deleteDeck(deckId: string): Promise<string | null> {
 
 export interface QuicksellResult {
   ok: boolean;
-  gold: number;
+  credits: number;
   card_id: string;
   sold: number;
   foil: boolean;
@@ -368,15 +361,15 @@ export async function disenchantCard(
 // ---------------------------------------------------------------------------
 export interface MatchResult {
   reward: number;
-  gold: number;
+  credits: number;
   wins: number;
   losses: number;
   xp_gained: number;
   xp: number;
   level: number;
   leveled_up: boolean;
-  level_gold_bonus: number;
-  level_gems_bonus: number;
+  level_credits_bonus: number;
+  level_vouchers_bonus: number;
   bp_xp_gained: number;
 }
 
@@ -394,7 +387,7 @@ export interface BattlePassTier {
   id: string;
   season_id: string;
   tier: number;
-  reward_type: 'gold' | 'gems' | 'shards' | 'pack' | 'cosmetic';
+  reward_type: 'credits' | 'vouchers' | 'shards' | 'pack' | 'cosmetic';
   amount: number;
   pack_type_id: string | null;
   shop_item_id: string | null;
@@ -453,8 +446,8 @@ export interface Achievement {
   category: string;
   stat_key: string;
   target: number;
-  reward_gold: number;
-  reward_gems: number;
+  reward_credits: number;
+  reward_vouchers: number;
   reward_pack_id: string | null;
   sort: number;
 }
@@ -490,8 +483,8 @@ export interface Mission {
   stat_key: string;
   target: number;
   cadence: 'daily' | 'weekly';
-  reward_gold: number;
-  reward_gems: number;
+  reward_credits: number;
+  reward_vouchers: number;
   reward_bp_xp: number;
   progress: number;
   claimed: boolean;
@@ -524,7 +517,7 @@ export async function fetchInventory(userId: string): Promise<InventoryEntry[]> 
 
 export async function buyPackToInventory(
   packId: string,
-  currency: 'gold' | 'gems',
+  currency: 'credits' | 'vouchers',
   quantity = 1,
 ): Promise<string | null> {
   const { error } = await supabase.rpc('buy_pack_to_inventory', {
@@ -556,6 +549,7 @@ export async function claimDailyPack(): Promise<{
 export interface PublicProfile {
   id: string;
   username: string;
+  role: PlayerRole;
   level: number;
   wins: number;
   losses: number;
@@ -586,6 +580,7 @@ export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[
 export interface PlayerProfileCard {
   id: string;
   username: string;
+  role: PlayerRole;
   level: number;
   wins: number;
   losses: number;
@@ -606,6 +601,7 @@ export async function fetchPlayerProfileCard(id: string): Promise<PlayerProfileC
 export interface CardsLeaderboardEntry {
   id: string;
   username: string;
+  role: PlayerRole;
   level: number;
   total_cards: number;
   equipped_avatar: string | null;
@@ -651,8 +647,8 @@ export interface Trade {
   recipient: string;
   proposer_cards: TradeCardItem[];
   recipient_cards: TradeCardItem[];
-  proposer_gold: number;
-  recipient_gold: number;
+  proposer_credits: number;
+  recipient_credits: number;
   status: 'pending' | 'accepted' | 'declined' | 'cancelled';
   created_at: string;
 }
@@ -680,15 +676,15 @@ export async function createTrade(
   recipient: string,
   offerCards: TradeCardItem[],
   requestCards: TradeCardItem[],
-  offerGold: number,
-  requestGold: number,
+  offerCredits: number,
+  requestCredits: number,
 ): Promise<string | null> {
   const { error } = await supabase.rpc('create_trade', {
     p_recipient: recipient,
     p_offer_cards: offerCards,
     p_request_cards: requestCards,
-    p_offer_gold: offerGold,
-    p_request_gold: requestGold,
+    p_offer_credits: offerCredits,
+    p_request_credits: requestCredits,
   });
   return rpcError(error);
 }
@@ -784,7 +780,7 @@ export async function placeBid(listingId: string, amount: number): Promise<strin
   return rpcError(error);
 }
 
-/** Sell owned copies of a card for a fixed rarity-based gold price (foils pay 2.5x). */
+/** Sell owned copies of a card for a fixed rarity-based credits price (foils pay 2.5x). */
 export async function quicksellCards(
   cardId: string,
   quantity: number,
@@ -796,4 +792,42 @@ export async function quicksellCards(
     p_foil: foil,
   });
   return { data: (data as QuicksellResult) || null, error: rpcError(error) };
+}
+
+// ---------------------------------------------------------------------------
+// Creator (admin) tools — every RPC is guarded server-side by assert_creator().
+// ---------------------------------------------------------------------------
+export async function adminGrantCurrency(
+  userId: string,
+  credits = 0,
+  vouchers = 0,
+  shards = 0,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('admin_grant_currency', {
+    p_user: userId,
+    p_credits: credits,
+    p_vouchers: vouchers,
+    p_shards: shards,
+  });
+  return rpcError(error);
+}
+
+export async function adminSetRole(userId: string, role: PlayerRole): Promise<string | null> {
+  const { error } = await supabase.rpc('admin_set_role', { p_user: userId, p_role: role });
+  return rpcError(error);
+}
+
+export async function adminGrantCard(
+  userId: string,
+  cardId: string,
+  quantity = 1,
+  foil = false,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('admin_grant_card', {
+    p_user: userId,
+    p_card_id: cardId,
+    p_quantity: quantity,
+    p_foil: foil,
+  });
+  return rpcError(error);
 }

@@ -1,8 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Check } from 'lucide-react';
+import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { equipCosmetic, setUsername, ShopItem } from '../lib/supabase';
+import {
+  equipCosmetic,
+  setUsername,
+  searchPlayers,
+  adminGrantCurrency,
+  adminSetRole,
+  adminGrantCard,
+  PublicProfile,
+  PlayerRole,
+  ShopItem,
+} from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, ProgressBar, xpForLevel } from './ui';
+import { RoleBadge } from './RoleBadge';
+import { fmtCredits } from './economy';
+import { POOL_V4 } from '../game/v3/cardpool';
 import { cn } from '../lib/utils';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
@@ -24,7 +37,8 @@ export function ProfileScreen({
   // Free items (cost 0) are always equippable — but battle pass exclusives
   // must actually be owned, whatever their price columns say.
   const usable = (s: ShopItem) =>
-    ownedIds.has(s.id) || (!s.is_season_pass_exclusive && (s.cost_gold === 0 || s.cost_gems === 0));
+    ownedIds.has(s.id) ||
+    (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
 
   if (!profile) return null;
 
@@ -116,7 +130,9 @@ export function ProfileScreen({
                   }}
                   className="heading-font text-2xl text-[var(--c-paper)] flex items-center gap-2 hover:text-[var(--c-yellow)]"
                 >
-                  {profile.username} <Pencil className="w-4 h-4" />
+                  {profile.username}
+                  <RoleBadge role={profile.role} size="md" />
+                  <Pencil className="w-4 h-4" />
                 </button>
               )}
               <div className="text-[11px] font-bold text-[var(--c-yellow)]">
@@ -141,8 +157,8 @@ export function ProfileScreen({
             max={xpForLevel(profile.level + 1) - xpForLevel(profile.level)}
           />
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
-            Earn XP from every match (+60 win / +25 loss). Each level pays 100 gold; every 5th level
-            adds 10 gems.
+            Earn XP from every match (+60 win / +25 loss). Each level pays a credits bonus; every
+            5th level adds vouchers on top.
           </div>
         </div>
 
@@ -253,6 +269,280 @@ export function ProfileScreen({
             </div>
           );
         })}
+
+        {/* Creator (admin) tools — server-guarded RPCs; only rendered for the creator. */}
+        {profile.role === 'creator' && <CreatorTools />}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Creator Tools: search a player, then grant currency/cards or set their role.
+// Every action calls a SECURITY DEFINER RPC that re-checks the creator role
+// server-side — this panel is a convenience, not the security boundary.
+// ---------------------------------------------------------------------------
+function CreatorTools() {
+  const { refreshProfile, refreshCollection } = useMeta();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PublicProfile[] | null>(null);
+  const [target, setTarget] = useState<PublicProfile | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  // Grant inputs. Credits entered in dollars, stored as integer cents.
+  const [credits, setCredits] = useState(0);
+  const [vouchers, setVouchers] = useState(0);
+  const [shards, setShards] = useState(0);
+  const [cardId, setCardId] = useState('');
+  const [cardQty, setCardQty] = useState(1);
+  const [cardFoil, setCardFoil] = useState(false);
+  const [role, setRole] = useState<PlayerRole>('player');
+
+  const cardKnown = POOL_V4.some((c) => c.id === cardId);
+
+  const handleSearch = async () => {
+    if (!query.trim() || searching) return;
+    setSearching(true);
+    setError('');
+    try {
+      setResults(await searchPlayers(query));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const run = async (fn: () => Promise<string | null>, success: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    const err = await fn();
+    setBusy(false);
+    if (err) setError(err);
+    else {
+      setNotice(success);
+      // Grants to yourself should show up immediately in the wallet/collection.
+      refreshProfile();
+      refreshCollection();
+    }
+  };
+
+  const input = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
+
+  return (
+    <div className="mt-7 mb-8">
+      <h2 className="heading-font text-base mb-2 bg-[var(--c-red)] text-[var(--c-paper)] inline-flex items-center gap-1.5 px-2 py-0.5">
+        <ShieldAlert className="w-4 h-4" /> CREATOR TOOLS
+      </h2>
+      <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3">
+        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          Admin-only. Grants and role changes apply instantly and are verified server-side.
+        </p>
+
+        {/* Step 1: pick a player */}
+        <div className="heading-font text-xs mb-1">1 · FIND A PLAYER</div>
+        <div className="flex gap-2 mb-2">
+          <input
+            className={`${input} flex-1 placeholder:text-[var(--c-steel)]/50`}
+            placeholder="Search by username…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <PopButton color="black" onClick={handleSearch} disabled={searching}>
+            <Search className="w-4 h-4" />
+          </PopButton>
+        </div>
+        {searching && (
+          <div className="text-[10px] font-bold text-[var(--c-steel)] animate-pulse mb-2">
+            Searching…
+          </div>
+        )}
+        {!searching && results && !target && (
+          <div className="flex flex-col gap-1.5 mb-2">
+            {results.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => {
+                  setTarget(r);
+                  setRole(r.role);
+                }}
+                className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5 text-left hover:bg-[var(--c-yellow)]/40"
+              >
+                <span className="text-xs font-bold">
+                  {r.username}
+                  <RoleBadge role={r.role} />
+                  <span className="text-[9px] text-[var(--c-steel)] ml-2">LV {r.level}</span>
+                </span>
+                <span className="heading-font text-[9px]">SELECT ▸</span>
+              </button>
+            ))}
+            {results.length === 0 && (
+              <div className="text-[10px] font-bold text-[var(--c-steel)]">No players found.</div>
+            )}
+          </div>
+        )}
+
+        {target && (
+          <>
+            <div className="flex items-center justify-between gap-2 ink-border-sm bg-[var(--c-yellow)]/40 px-2 py-1.5 mb-3">
+              <span className="text-xs font-black">
+                TARGET: {target.username}
+                <RoleBadge role={target.role} />
+              </span>
+              <PopButton color="steel" onClick={() => setTarget(null)}>
+                CHANGE
+              </PopButton>
+            </div>
+
+            {error && (
+              <div className="mb-2">
+                <Notice text={error} />
+              </div>
+            )}
+            {notice && (
+              <div className="mb-2">
+                <Notice text={notice} kind="success" />
+              </div>
+            )}
+
+            {/* Grant currency */}
+            <div className="heading-font text-xs mb-1">2 · GRANT CURRENCY</div>
+            <div className="flex flex-wrap items-end gap-3 mb-3">
+              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+                CREDITS ($)
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={credits / 100}
+                  onChange={(e) =>
+                    setCredits(Math.max(0, Math.round((Number(e.target.value) || 0) * 100)))
+                  }
+                  className={`${input} w-24`}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+                VOUCHERS
+                <input
+                  type="number"
+                  min={0}
+                  value={vouchers}
+                  onChange={(e) =>
+                    setVouchers(Math.max(0, Math.round(Number(e.target.value) || 0)))
+                  }
+                  className={`${input} w-24`}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+                SHARDS
+                <input
+                  type="number"
+                  min={0}
+                  value={shards}
+                  onChange={(e) => setShards(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                  className={`${input} w-24`}
+                />
+              </label>
+              <PopButton
+                color="red"
+                disabled={busy || (credits === 0 && vouchers === 0 && shards === 0)}
+                onClick={() =>
+                  run(
+                    () => adminGrantCurrency(target.id, credits, vouchers, shards),
+                    `Granted ${fmtCredits(credits)} / ${vouchers} vouchers / ${shards} shards to ${target.username}.`,
+                  )
+                }
+              >
+                GRANT ▸
+              </PopButton>
+            </div>
+
+            {/* Grant a card */}
+            <div className="heading-font text-xs mb-1">3 · GRANT A CARD</div>
+            <div className="flex flex-wrap items-end gap-3 mb-3">
+              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+                CARD ID
+                <input
+                  list="creator-card-ids"
+                  value={cardId}
+                  onChange={(e) => setCardId(e.target.value)}
+                  placeholder="card id…"
+                  className={`${input} w-48 placeholder:text-[var(--c-steel)]/50`}
+                />
+                <datalist id="creator-card-ids">
+                  {POOL_V4.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
+                QTY
+                <input
+                  type="number"
+                  min={1}
+                  value={cardQty}
+                  onChange={(e) => setCardQty(Math.max(1, Math.round(Number(e.target.value) || 1)))}
+                  className={`${input} w-16`}
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-[10px] font-black pb-1.5">
+                <input
+                  type="checkbox"
+                  checked={cardFoil}
+                  onChange={(e) => setCardFoil(e.target.checked)}
+                />
+                FOIL ✦
+              </label>
+              <PopButton
+                color="red"
+                disabled={busy || !cardId.trim()}
+                onClick={() =>
+                  run(
+                    () => adminGrantCard(target.id, cardId.trim(), cardQty, cardFoil),
+                    `Granted ${cardQty}× ${cardId}${cardFoil ? ' (foil)' : ''} to ${target.username}.`,
+                  )
+                }
+              >
+                GRANT ▸
+              </PopButton>
+            </div>
+            {cardId.trim() !== '' && !cardKnown && (
+              <div className="text-[9px] font-bold text-[var(--c-red)] -mt-2 mb-3">
+                Unknown card id in the local pool — the server has the final say.
+              </div>
+            )}
+
+            {/* Set role */}
+            <div className="heading-font text-xs mb-1">4 · SET ROLE</div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                className={input}
+                value={role}
+                onChange={(e) => setRole(e.target.value as PlayerRole)}
+              >
+                <option value="player">player</option>
+                <option value="founder">founder</option>
+                <option value="creator">creator</option>
+              </select>
+              <PopButton
+                color="red"
+                disabled={busy}
+                onClick={() => {
+                  if (!confirm(`Set ${target.username}'s role to "${role}"?`)) return;
+                  run(() => adminSetRole(target.id, role), `${target.username} is now a ${role}.`);
+                }}
+              >
+                APPLY ROLE ▸
+              </PopButton>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

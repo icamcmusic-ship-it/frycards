@@ -26,6 +26,8 @@ import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';
+import { RoleBadge } from './RoleBadge';
+import { fmtCredits } from './economy';
 
 type Tab = 'friends' | 'trades' | 'leaderboard';
 
@@ -52,11 +54,11 @@ function CardChip({ item }: { key?: React.Key; item: TradeCardItem }) {
 function TradeSide({
   label,
   cards,
-  gold,
+  credits,
 }: {
   label: string;
   cards: TradeCardItem[];
-  gold: number;
+  credits: number;
 }) {
   return (
     <div className="flex-1 min-w-[180px]">
@@ -65,12 +67,12 @@ function TradeSide({
         {cards.map((c, i) => (
           <CardChip key={i} item={c} />
         ))}
-        {gold > 0 && (
+        {credits > 0 && (
           <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-yellow)] ink-border-sm">
-            <Coins className="w-2.5 h-2.5" /> {gold.toLocaleString()}
+            <Coins className="w-2.5 h-2.5" /> {fmtCredits(credits)}
           </span>
         )}
-        {cards.length === 0 && gold === 0 && (
+        {cards.length === 0 && credits === 0 && (
           <span className="text-[9px] font-bold text-[var(--c-steel)]">nothing</span>
         )}
       </div>
@@ -226,7 +228,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                   >
                     <span className="heading-font text-xs w-7 text-right shrink-0">#{i + 1}</span>
                     <span className="flex-1 min-w-0 text-[11px] font-bold truncate">
-                      <PlayerLink id={row.id} name={row.username} />
+                      <PlayerLink id={row.id} name={row.username} role={row.role} />
                       {row.id === userId ? ' (you)' : ''}
                     </span>
                     <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">
@@ -274,7 +276,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
                       >
                         <div className="text-xs font-bold">
-                          <PlayerLink id={r.id} name={r.username} />
+                          <PlayerLink id={r.id} name={r.username} role={r.role} />
                           <span className="text-[9px] text-[var(--c-steel)] ml-2">
                             LV {r.level} · {r.wins}W {r.losses}L
                           </span>
@@ -315,7 +317,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                       >
                         <span className="text-xs font-bold">
-                          <PlayerLink id={f.requester} name={nameOf(f.requester)} />
+                          <PlayerLink
+                            id={f.requester}
+                            name={nameOf(f.requester)}
+                            role={profiles.get(f.requester)?.role}
+                          />
                         </span>
                         <div className="flex gap-2">
                           <PopButton
@@ -354,7 +360,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                   >
                     <div className="text-xs font-bold">
-                      {other ? <PlayerLink id={otherId} name={other.username} /> : 'Unknown player'}
+                      {other ? (
+                        <PlayerLink id={otherId} name={other.username} role={other.role} />
+                      ) : (
+                        'Unknown player'
+                      )}
                       {other && (
                         <span className="text-[9px] text-[var(--c-steel)] ml-2">
                           LV {other.level} · {other.wins}W {other.losses}L
@@ -411,7 +421,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
                       >
                         <span className="text-xs font-bold">
-                          <PlayerLink id={f.addressee} name={nameOf(f.addressee)} /> · pending…
+                          <PlayerLink
+                            id={f.addressee}
+                            name={nameOf(f.addressee)}
+                            role={profiles.get(f.addressee)?.role}
+                          />{' '}
+                          · pending…
                         </span>
                         <PopButton
                           color="steel"
@@ -443,13 +458,21 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       <div className="heading-font text-[11px] mb-2">
                         {isIncoming ? (
                           <>
-                            <PlayerLink id={t.proposer} name={nameOf(t.proposer)} /> OFFERS YOU A
-                            TRADE
+                            <PlayerLink
+                              id={t.proposer}
+                              name={nameOf(t.proposer)}
+                              role={profiles.get(t.proposer)?.role}
+                            />{' '}
+                            OFFERS YOU A TRADE
                           </>
                         ) : (
                           <>
                             YOUR OFFER TO{' '}
-                            <PlayerLink id={t.recipient} name={nameOf(t.recipient).toUpperCase()} />
+                            <PlayerLink
+                              id={t.recipient}
+                              name={nameOf(t.recipient).toUpperCase()}
+                              role={profiles.get(t.recipient)?.role}
+                            />
                           </>
                         )}
                       </div>
@@ -457,12 +480,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         <TradeSide
                           label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
                           cards={t.proposer_cards}
-                          gold={t.proposer_gold}
+                          credits={t.proposer_credits}
                         />
                         <TradeSide
                           label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
                           cards={t.recipient_cards}
-                          gold={t.recipient_gold}
+                          credits={t.recipient_credits}
                         />
                       </div>
                       <div className="flex gap-2">
@@ -472,7 +495,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                               color="red"
                               disabled={busy}
                               onClick={() => {
-                                if (!confirm('Accept this trade? Cards and gold move immediately.'))
+                                if (
+                                  !confirm('Accept this trade? Cards and credits move immediately.')
+                                )
                                   return;
                                 run(async () => {
                                   const err = await respondTrade(t.id, true);
@@ -547,6 +572,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PlayerLink
                             id={t.proposer === userId ? t.recipient : t.proposer}
                             name={nameOf(t.proposer === userId ? t.recipient : t.proposer)}
+                            role={
+                              profiles.get(t.proposer === userId ? t.recipient : t.proposer)?.role
+                            }
                           />{' '}
                           · {new Date(t.created_at).toLocaleDateString()}
                         </span>
@@ -576,7 +604,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Trade composer: pick cards + gold on both sides, then send the offer.
+// Trade composer: pick cards + credits on both sides, then send the offer.
 // ---------------------------------------------------------------------------
 function TradeComposerModal({
   partner,
@@ -591,8 +619,9 @@ function TradeComposerModal({
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
-  const [offerGold, setOfferGold] = useState(0);
-  const [requestGold, setRequestGold] = useState(0);
+  // Credits are integer cents — inputs below are dollar-denominated for humans.
+  const [offerCredits, setOfferCredits] = useState(0);
+  const [requestCredits, setRequestCredits] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -624,7 +653,7 @@ function TradeComposerModal({
     if (busy) return;
     setBusy(true);
     setError('');
-    const err = await createTrade(partner.id, offer, request, offerGold, requestGold);
+    const err = await createTrade(partner.id, offer, request, offerCredits, requestCredits);
     setBusy(false);
     if (err) setError(err);
     else onCreated();
@@ -692,6 +721,7 @@ function TradeComposerModal({
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0 z-10">
           <div className="heading-font text-sm text-[var(--c-yellow)]">
             TRADE WITH {partner.username.toUpperCase()}
+            <RoleBadge role={partner.role} />
           </div>
           <PopButton color="yellow" onClick={onClose}>
             ✕
@@ -716,15 +746,24 @@ function TradeComposerModal({
             <input
               type="number"
               min={0}
-              max={profile?.gold ?? 0}
-              value={offerGold}
+              max={(profile?.credits ?? 0) / 100}
+              step="0.01"
+              value={offerCredits / 100}
               onChange={(e) =>
-                setOfferGold(Math.max(0, Math.min(profile?.gold ?? 0, Number(e.target.value) || 0)))
+                setOfferCredits(
+                  Math.max(
+                    0,
+                    Math.min(
+                      profile?.credits ?? 0,
+                      Math.round((Number(e.target.value) || 0) * 100),
+                    ),
+                  ),
+                )
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
             <span className="text-[9px] font-bold text-[var(--c-steel)]">
-              gold (you have {profile?.gold.toLocaleString()})
+              credits, in dollars (you have {fmtCredits(profile?.credits)})
             </span>
           </div>
 
@@ -741,11 +780,16 @@ function TradeComposerModal({
             <input
               type="number"
               min={0}
-              value={requestGold}
-              onChange={(e) => setRequestGold(Math.max(0, Number(e.target.value) || 0))}
+              step="0.01"
+              value={requestCredits / 100}
+              onChange={(e) =>
+                setRequestCredits(Math.max(0, Math.round((Number(e.target.value) || 0) * 100)))
+              }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
-            <span className="text-[9px] font-bold text-[var(--c-steel)]">gold requested</span>
+            <span className="text-[9px] font-bold text-[var(--c-steel)]">
+              credits requested ({fmtCredits(requestCredits)})
+            </span>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -756,7 +800,10 @@ function TradeComposerModal({
               color="red"
               disabled={
                 busy ||
-                (offer.length === 0 && request.length === 0 && offerGold === 0 && requestGold === 0)
+                (offer.length === 0 &&
+                  request.length === 0 &&
+                  offerCredits === 0 &&
+                  requestCredits === 0)
               }
               onClick={handleSend}
             >

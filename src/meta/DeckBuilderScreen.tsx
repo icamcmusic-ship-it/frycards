@@ -194,7 +194,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
           )}
           {!dataLoading && decks.length === 0 && (
             <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14">
-              No decks yet. Claim your free Starter Deck in the Store, then forge your first deck
+              No decks yet. Open packs in the Store to collect cards, then forge your first deck
               here.
             </div>
           )}

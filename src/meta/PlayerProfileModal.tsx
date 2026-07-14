@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useMeta } from './MetaContext';
-import { fetchPlayerProfileCard, PlayerProfileCard } from '../lib/supabase';
+import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
+import { RoleBadge } from './RoleBadge';
 import { PopButton } from './ui';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
@@ -13,10 +14,13 @@ import { cn } from '../lib/utils';
 export function PlayerLink({
   id,
   name,
+  role,
   className,
 }: {
   id: string;
   name: string;
+  /** When known, renders the player's role badge right after the name. */
+  role?: PlayerRole | null;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -31,6 +35,7 @@ export function PlayerLink({
         className={cn('hover:text-[var(--c-red)] hover:underline transition-colors', className)}
       >
         {name}
+        <RoleBadge role={role} />
       </button>
       {open && <PlayerProfileModal userId={id} onClose={() => setOpen(false)} />}
     </>
@@ -104,6 +109,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 <div className="pb-1">
                   <div className="heading-font text-xl text-[var(--c-paper)]">
                     {card.username}
+                    <RoleBadge role={card.role} />
                     {isSelf && (
                       <span className="text-[9px] font-bold text-[var(--c-yellow)] ml-2">
                         (YOU)

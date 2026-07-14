@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Gift, Package, Percent, Backpack, Sparkles } from 'lucide-react';
+import { Package, Percent, Backpack, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   openPack,
   buyShopItem,
-  claimStarterPack,
   claimDailyPack,
   buyPackToInventory,
   openInventoryPack,
@@ -14,12 +13,10 @@ import {
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
-import { POOL_LEADERS, POOL_BY_ID } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
-import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
-import { RARITY_CHIP, rarityGlow } from './rarity';
-import { getCardBackImage } from './cardback';
+import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
+import { fmtCredits, fmtVouchers } from './economy';
+import { PackOpening } from './PackOpening';
 import { packOdds, expectedRarities, sortedWeights } from './packodds';
 
 type Tab = 'packs' | 'my_packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
@@ -36,16 +33,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshProfile,
     refreshCollection,
     refreshCosmetics,
-    refreshDecks,
     refreshInventory,
   } = useMeta();
   const [tab, setTab] = useState<Tab>('packs');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pulls, setPulls] = useState<PackPull[] | null>(null);
-  const [openedPackName, setOpenedPackName] = useState('');
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [opening, setOpening] = useState<{
+    packName: string;
+    packImageUrl: string | null;
+    pulls: PackPull[];
+  } | null>(null);
   const [oddsPack, setOddsPack] = useState<PackType | null>(null);
 
   const ownedCosmetics = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
@@ -58,7 +56,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         (p) =>
           p.is_active &&
           p.acquisition === 'purchase' &&
-          (p.price_gold != null || p.price_gems != null),
+          (p.price_credits != null || p.price_vouchers != null),
       ),
     [packTypes],
   );
@@ -79,7 +77,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   const packById = useMemo(() => new Map(packTypes.map((p) => [p.id, p])), [packTypes]);
 
-  const handleOpenPack = async (pack: PackType, currency: 'gold' | 'gems') => {
+  const handleOpenPack = async (pack: PackType, currency: 'credits' | 'vouchers') => {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
@@ -90,14 +88,12 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       setError(error || 'Pack opening failed.');
       return;
     }
-    setOpenedPackName(pack.name);
-    setPulls(data.cards);
-    setRevealed(new Set());
+    setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
     refreshProfile();
     refreshCollection();
   };
 
-  const handleBuyToInventory = async (pack: PackType, currency: 'gold' | 'gems') => {
+  const handleBuyToInventory = async (pack: PackType, currency: 'credits' | 'vouchers') => {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
@@ -124,9 +120,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       setError(error || 'Pack opening failed.');
       return;
     }
-    setOpenedPackName(pack.name);
-    setPulls(data.cards);
-    setRevealed(new Set());
+    setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
     refreshProfile();
     refreshCollection();
     refreshInventory();
@@ -143,33 +137,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       setError(error || 'Daily pack claim failed.');
       return;
     }
-    setOpenedPackName(dailyPack.name);
-    setPulls(data.cards);
-    setRevealed(new Set());
+    setOpening({
+      packName: dailyPack.name,
+      packImageUrl: dailyPack.image_url,
+      pulls: data.cards,
+    });
     refreshProfile();
     refreshCollection();
   };
 
-  const handleClaimStarter = async (leaderId: string, leaderName: string) => {
-    if (!profile || busyId) return;
-    setError('');
-    setNotice('');
-    setBusyId('starter:' + leaderId);
-    const { data, error } = await claimStarterPack(leaderId);
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Starter Pack claim failed.');
-      return;
-    }
-    setOpenedPackName(`Starter Deck — ${leaderName}`);
-    setPulls(data.cards);
-    setRevealed(new Set());
-    refreshProfile();
-    refreshCollection();
-    refreshDecks();
-  };
-
-  const handleBuyItem = async (item: ShopItem, currency: 'gold' | 'gems') => {
+  const handleBuyItem = async (item: ShopItem, currency: 'credits' | 'vouchers') => {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
@@ -223,52 +200,6 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         {notice && (
           <div className="mb-4">
             <Notice text={notice} kind="success" />
-          </div>
-        )}
-
-        {tab === 'packs' && profile && !profile.starter_claimed && (
-          <div className="mb-6 bg-[var(--c-ink)] ink-border-md shadow-hard-yellow p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Gift className="w-5 h-5 text-[var(--c-yellow)]" />
-              <span className="heading-font text-base text-[var(--c-yellow)]">
-                FREE STARTER DECK — ONE TIME ONLY
-              </span>
-            </div>
-            <p className="text-[11px] font-bold text-[var(--c-paper)]/80 mb-3">
-              Pick a Leader and instantly receive that Leader plus a complete, ready-to-play 30-card
-              deck.
-            </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {POOL_LEADERS.map((l) => (
-                <button
-                  key={l.id}
-                  disabled={!!busyId}
-                  onClick={() => handleClaimStarter(l.id, l.name)}
-                  className="btn-pop bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs text-left overflow-hidden hover:-translate-y-0.5 transition-transform"
-                >
-                  <div className="w-full aspect-[16/9]">
-                    <SafeImage src={l.image} alt={l.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="p-2">
-                    <div className="heading-font text-[11px] leading-tight truncate">{l.name}</div>
-                    <div className="text-[9px] font-bold text-[var(--c-steel)] uppercase">
-                      {l.hp} HP{l.ability ? ` · Ability ${l.ability.threshold}+` : ''}
-                    </div>
-                    <div
-                      className={cn(
-                        'inline-block mt-1 text-[8px] font-black px-1',
-                        RARITY_CHIP[l.rarity || 'Common'] || RARITY_CHIP.Common,
-                      )}
-                    >
-                      {(l.rarity || 'Common').toUpperCase()}
-                    </div>
-                    <div className="heading-font text-[10px] mt-1 text-[var(--c-red)]">
-                      {busyId === 'starter:' + l.id ? 'CLAIMING…' : 'CLAIM FREE ▸'}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
@@ -352,46 +283,66 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   <Percent className="w-3 h-3" /> VIEW DROP ODDS
                 </button>
                 <div className="flex gap-2 p-3 pb-1.5">
-                  {pack.price_gold != null && (
-                    <PopButton
-                      color="yellow"
-                      className="flex-1"
-                      disabled={!profile || profile.gold < pack.price_gold || !!busyId}
-                      onClick={() => handleOpenPack(pack, 'gold')}
-                    >
-                      {busyId === pack.id ? 'OPENING…' : `${pack.price_gold.toLocaleString()} GOLD`}
-                    </PopButton>
+                  {pack.price_credits != null && (
+                    <div className="flex-1 min-w-0">
+                      <PopButton
+                        color="yellow"
+                        className="w-full"
+                        disabled={!profile || profile.credits < pack.price_credits || !!busyId}
+                        onClick={() => handleOpenPack(pack, 'credits')}
+                      >
+                        {busyId === pack.id ? 'OPENING…' : fmtCredits(pack.price_credits)}
+                      </PopButton>
+                      {profile && profile.credits < pack.price_credits && (
+                        <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+                          {fmtCredits(pack.price_credits - profile.credits)} SHORT
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {pack.price_gems != null && (
-                    <PopButton
-                      color="steel"
-                      className="flex-1"
-                      disabled={!profile || profile.gems < pack.price_gems || !!busyId}
-                      onClick={() => handleOpenPack(pack, 'gems')}
-                    >
-                      {busyId === pack.id ? 'OPENING…' : `${pack.price_gems.toLocaleString()} GEMS`}
-                    </PopButton>
+                  {pack.price_vouchers != null && (
+                    <div className="flex-1 min-w-0">
+                      <PopButton
+                        color="steel"
+                        className="w-full"
+                        disabled={!profile || profile.vouchers < pack.price_vouchers || !!busyId}
+                        onClick={() => handleOpenPack(pack, 'vouchers')}
+                      >
+                        {busyId === pack.id
+                          ? 'OPENING…'
+                          : `${fmtVouchers(pack.price_vouchers)} VOUCHERS`}
+                      </PopButton>
+                      {profile && profile.vouchers < pack.price_vouchers && (
+                        <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+                          {fmtVouchers(pack.price_vouchers - profile.vouchers)} SHORT
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="mx-3 mb-3 flex gap-1.5">
-                  {pack.price_gold != null && (
+                  {pack.price_credits != null && (
                     <button
-                      disabled={!profile || !!busyId || profile.gold < pack.price_gold}
-                      onClick={() => handleBuyToInventory(pack, 'gold')}
+                      disabled={!profile || !!busyId || profile.credits < pack.price_credits}
+                      onClick={() => handleBuyToInventory(pack, 'credits')}
                       className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Backpack className="w-3 h-3" />
-                      {busyId === 'inv:' + pack.id + ':gold' ? 'BUYING…' : 'SAVE FOR LATER (GOLD)'}
+                      {busyId === 'inv:' + pack.id + ':credits'
+                        ? 'BUYING…'
+                        : `SAVE FOR LATER (${fmtCredits(pack.price_credits)})`}
                     </button>
                   )}
-                  {pack.price_gems != null && (
+                  {pack.price_vouchers != null && (
                     <button
-                      disabled={!profile || !!busyId || profile.gems < pack.price_gems}
-                      onClick={() => handleBuyToInventory(pack, 'gems')}
+                      disabled={!profile || !!busyId || profile.vouchers < pack.price_vouchers}
+                      onClick={() => handleBuyToInventory(pack, 'vouchers')}
                       className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Backpack className="w-3 h-3" />
-                      {busyId === 'inv:' + pack.id + ':gems' ? 'BUYING…' : 'SAVE FOR LATER (GEMS)'}
+                      {busyId === 'inv:' + pack.id + ':vouchers'
+                        ? 'BUYING…'
+                        : 'SAVE FOR LATER (VOUCHERS)'}
                     </button>
                   )}
                 </div>
@@ -456,7 +407,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
             {cosmeticItems.map((item) => {
-              const owned = ownedCosmetics.has(item.id) || item.item_type === 'starter_deck';
+              const owned = ownedCosmetics.has(item.id);
               return (
                 <div
                   key={item.id}
@@ -509,32 +460,50 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       </div>
                     ) : (
                       <>
-                        {item.cost_gold != null && (
-                          <PopButton
-                            color="yellow"
-                            className="flex-1"
-                            disabled={
-                              !profile || profile.gold < item.cost_gold || busyId === item.id
-                            }
-                            onClick={() => handleBuyItem(item, 'gold')}
-                          >
-                            {item.cost_gold === 0 ? 'FREE' : `${item.cost_gold.toLocaleString()} G`}
-                          </PopButton>
+                        {item.cost_credits != null && (
+                          <div className="flex-1 min-w-0">
+                            <PopButton
+                              color="yellow"
+                              className="w-full"
+                              disabled={
+                                !profile ||
+                                profile.credits < item.cost_credits ||
+                                busyId === item.id
+                              }
+                              onClick={() => handleBuyItem(item, 'credits')}
+                            >
+                              {item.cost_credits === 0 ? 'FREE' : fmtCredits(item.cost_credits)}
+                            </PopButton>
+                            {profile && profile.credits < item.cost_credits && (
+                              <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+                                {fmtCredits(item.cost_credits - profile.credits)} SHORT
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {item.cost_gems != null && item.cost_gems > 0 && (
-                          <PopButton
-                            color="steel"
-                            className="flex-1"
-                            disabled={
-                              !profile || profile.gems < item.cost_gems || busyId === item.id
-                            }
-                            onClick={() => handleBuyItem(item, 'gems')}
-                          >
-                            {item.cost_gems.toLocaleString()} GEMS
-                          </PopButton>
+                        {item.cost_vouchers != null && item.cost_vouchers > 0 && (
+                          <div className="flex-1 min-w-0">
+                            <PopButton
+                              color="steel"
+                              className="w-full"
+                              disabled={
+                                !profile ||
+                                profile.vouchers < item.cost_vouchers ||
+                                busyId === item.id
+                              }
+                              onClick={() => handleBuyItem(item, 'vouchers')}
+                            >
+                              {fmtVouchers(item.cost_vouchers)} VOUCHERS
+                            </PopButton>
+                            {profile && profile.vouchers < item.cost_vouchers && (
+                              <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+                                {fmtVouchers(item.cost_vouchers - profile.vouchers)} SHORT
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {item.cost_gold == null &&
-                          (item.cost_gems == null || item.cost_gems === 0) && (
+                        {item.cost_credits == null &&
+                          (item.cost_vouchers == null || item.cost_vouchers === 0) && (
                             <div className="flex-1 text-center heading-font text-[10px] py-2 bg-[var(--c-ink)] text-[var(--c-paper)]/60 ink-border-sm">
                               SEASON EXCLUSIVE
                             </div>
@@ -557,15 +526,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       {/* Transparent pack odds */}
       {oddsPack && <PackOddsModal pack={oddsPack} onClose={() => setOddsPack(null)} />}
 
-      {/* Pack opening reveal */}
-      {pulls && (
-        <PackRevealModal
-          packName={openedPackName}
-          pulls={pulls}
-          revealed={revealed}
-          onReveal={(i) => setRevealed((r) => new Set(r).add(i))}
-          onRevealAll={() => setRevealed(new Set(pulls.map((_, i) => i)))}
-          onClose={() => setPulls(null)}
+      {/* Pack opening — full-screen rip / reveal / summary experience */}
+      {opening && (
+        <PackOpening
+          packName={opening.packName}
+          packImageUrl={opening.packImageUrl}
+          pulls={opening.pulls}
+          onDone={() => setOpening(null)}
         />
       )}
     </div>
@@ -671,253 +638,6 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Resolve a pack pull to its v4.2 card definition (with a minimal fallback). */
-function pullToDef(pull: PackPull): CardDef {
-  return (
-    POOL_BY_ID[pull.card_id] || {
-      id: pull.card_id,
-      name: pull.name,
-      type: pull.card_type as CardDef['type'],
-      rarity: pull.rarity as CardDef['rarity'],
-      image: pull.image_url || undefined,
-    }
-  );
-}
-
-/** Face-down card showing the player's equipped card back. */
-function CardBack({ className }: { className?: string }) {
-  const back = getCardBackImage();
-  return (
-    <div
-      className={cn(
-        'w-full h-full bg-[var(--c-ink)] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center',
-        className,
-      )}
-    >
-      {back ? (
-        <img src={back} className="w-full h-full object-cover" draggable={false} />
-      ) : (
-        <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRYCARDS</div>
-      )}
-    </div>
-  );
-}
-
-const BIG_RARITIES = new Set(['Mythic', 'Full-Art', 'Ultra-Rare', 'Super-Rare']);
-
-/** Cinematic one-at-a-time pack reveal: spotlight flip, rarity flourishes, thumbnail
- * strip for context, and a final haul summary. "REVEAL ALL" skips straight there. */
-function PackRevealModal({
-  packName,
-  pulls,
-  revealed,
-  onReveal,
-  onRevealAll,
-  onClose,
-}: {
-  packName: string;
-  pulls: PackPull[];
-  revealed: Set<number>;
-  onReveal: (i: number) => void;
-  onRevealAll: () => void;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(0);
-  const done = index >= pulls.length;
-  const allRevealed = revealed.size >= pulls.length;
-
-  const current = pulls[index];
-  const currentShown = !done && revealed.has(index);
-  const currentCard = current ? pullToDef(current) : null;
-
-  const handleFlip = () => {
-    if (done || currentShown) return;
-    onReveal(index);
-  };
-  const handleNext = () => setIndex((i) => Math.min(i + 1, pulls.length));
-  const handleSkipToSummary = () => {
-    onRevealAll();
-    setIndex(pulls.length);
-  };
-
-  if (done) {
-    const rarityCounts = new Map<string, number>();
-    for (const p of pulls) rarityCounts.set(p.rarity, (rarityCounts.get(p.rarity) || 0) + 1);
-    const shardsGained = pulls.reduce((s, p) => s + (p.converted_to_shards ? p.shards : 0), 0);
-    return (
-      <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
-        <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
-        <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 relative">
-          {packName.toUpperCase()}
-        </h2>
-        <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-6 relative">
-          Your haul — {pulls.length} card{pulls.length === 1 ? '' : 's'}
-        </p>
-
-        <div className="flex flex-wrap justify-center gap-4 max-w-5xl relative mb-6">
-          {pulls.map((pull, i) => {
-            const def = pullToDef(pull);
-            return (
-              <div
-                key={i}
-                className={cn(
-                  'relative animate-[flipIn_.3s_ease-out]',
-                  BIG_RARITIES.has(pull.rarity) && !pull.converted_to_shards && 'scale-105',
-                  !pull.converted_to_shards && rarityGlow(pull.rarity),
-                )}
-                style={{ animationDelay: `${i * 60}ms`, animationFillMode: 'backwards' }}
-              >
-                <CardFace
-                  def={def}
-                  size="compact"
-                  foil={pull.foil}
-                  dimmed={pull.converted_to_shards}
-                />
-                {pull.converted_to_shards && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="heading-font text-[10px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm shadow-hard-black-xs">
-                      ✦ +{pull.shards}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2 mb-3 relative">
-          {[...rarityCounts.entries()].map(([r, n]) => (
-            <span
-              key={r}
-              className={cn(
-                'text-[10px] font-black px-2 py-1 ink-border-sm',
-                RARITY_CHIP[r] || RARITY_CHIP.Common,
-              )}
-            >
-              {r} ×{n}
-            </span>
-          ))}
-        </div>
-        {shardsGained > 0 &&
-          (() => {
-            const n = pulls.filter((p) => p.converted_to_shards).length;
-            return (
-              <p className="text-[10px] font-bold text-[#67E8F9] mb-5 relative">
-                {n} pull{n === 1 ? '' : 's'} {n === 1 ? 'was' : 'were'} past your copy cap and
-                converted to ✦ {shardsGained} shards instead of a duplicate.
-              </p>
-            );
-          })()}
-
-        <PopButton color="red" onClick={onClose}>
-          ADD TO COLLECTION ✓
-        </PopButton>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
-      <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
-      <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 relative">
-        {packName.toUpperCase()}
-      </h2>
-      <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-1 relative">
-        {currentShown ? 'Nice! Tap NEXT to continue.' : 'Tap the card to reveal it.'}
-      </p>
-      <div className="text-[10px] font-mono font-bold text-[var(--c-paper)]/50 mb-6 relative">
-        CARD {index + 1} / {pulls.length}
-      </div>
-
-      <div
-        onClick={handleFlip}
-        className={cn(
-          'relative transition-transform duration-300',
-          !currentShown && 'cursor-pointer hover:-translate-y-2',
-        )}
-        style={{
-          width: CARD_SIZES.full.w,
-          height: CARD_SIZES.full.h,
-          perspective: '800px',
-        }}
-      >
-        {!currentShown ? (
-          <CardBack />
-        ) : (
-          <div
-            className={cn(
-              'relative animate-[flipIn_.4s_ease-out] rounded-sm',
-              !current.converted_to_shards && rarityGlow(current.rarity),
-            )}
-          >
-            <CardFace
-              def={currentCard!}
-              size="full"
-              foil={current.foil}
-              dimmed={current.converted_to_shards}
-            />
-            {current.converted_to_shards && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="heading-font text-lg bg-[var(--c-ink)] text-[#67E8F9] px-3 py-1.5 ink-border-md shadow-hard-black-xs">
-                  ✦ +{current.shards} SHARDS
-                </span>
-              </div>
-            )}
-            {BIG_RARITIES.has(current.rarity) && !current.converted_to_shards && (
-              <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-70 -z-10" />
-            )}
-          </div>
-        )}
-      </div>
-
-      {currentShown && (
-        <div
-          className={cn(
-            'mt-4 heading-font text-sm px-3 py-1 ink-border-sm relative',
-            current.converted_to_shards
-              ? 'bg-[var(--c-ink)] text-[#67E8F9]'
-              : RARITY_CHIP[current.rarity] || RARITY_CHIP.Common,
-          )}
-        >
-          {current.converted_to_shards
-            ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} CONVERTED TO SHARDS`
-            : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL' : ''}`}
-        </div>
-      )}
-
-      {/* Thumbnail strip for context */}
-      <div className="flex gap-1.5 mt-6 relative max-w-full overflow-x-auto px-4 py-1">
-        {pulls.map((p, i) => {
-          const shown = revealed.has(i);
-          return (
-            <div
-              key={i}
-              onClick={() => setIndex(i)}
-              className={cn(
-                'w-8 h-11 shrink-0 ink-border-sm cursor-pointer overflow-hidden bg-[var(--c-ink)]',
-                i === index ? 'ring-2 ring-[var(--c-yellow)]' : 'opacity-60 hover:opacity-90',
-              )}
-            >
-              {shown && <SafeImage src={p.image_url} className="w-full h-full object-cover" />}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex gap-3 mt-6 relative">
-        {!allRevealed && (
-          <PopButton color="yellow" onClick={handleSkipToSummary}>
-            REVEAL ALL
-          </PopButton>
-        )}
-        <PopButton color="black" onClick={handleNext} disabled={!currentShown}>
-          {index < pulls.length - 1 ? 'NEXT ▸' : 'SEE SUMMARY ▸'}
-        </PopButton>
       </div>
     </div>
   );

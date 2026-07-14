@@ -2,15 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
-import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
+import { CardFace } from '../components/CardFaceV4';
+import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { craftCard, disenchantCard, quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
+import { fmtCredits, quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
+const SORTS = ['Name', 'Rarity', 'Type'] as const;
+type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
@@ -19,6 +22,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortKey>('Name');
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [sellError, setSellError] = useState('');
   const [selling, setSelling] = useState(false);
@@ -71,6 +75,15 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
+  }).sort((a, b) => {
+    if (sort === 'Rarity') {
+      const d = RARITIES.indexOf(b.rarity || 'Common') - RARITIES.indexOf(a.rarity || 'Common');
+      if (d !== 0) return d;
+    } else if (sort === 'Type') {
+      const d = a.type.localeCompare(b.type);
+      if (d !== 0) return d;
+    }
+    return a.name.localeCompare(b.name);
   });
 
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
@@ -240,6 +253,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               <option key={r}>{r}</option>
             ))}
           </select>
+          <select
+            className={select}
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+          >
+            {SORTS.map((s) => (
+              <option key={s} value={s}>
+                Sort: {s}
+              </option>
+            ))}
+          </select>
           <PopButton
             color={ownedOnly ? 'black' : 'yellow'}
             onClick={() => setOwnedOnly(!ownedOnly)}
@@ -251,7 +275,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
-          Tap any card to inspect it — quicksell spare copies for gold, disenchant them for ✦
+          Tap any card to inspect it — quicksell spare copies for credits, disenchant them for ✦
           shards, or craft cards you're missing.
         </p>
 
@@ -290,8 +314,18 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       {inspect && (
-        <CardInspectorModal
+        <Card3DInspector
           def={inspect}
+          foil={(inspectOwned?.f || 0) > 0 && (inspectOwned?.q || 0) === 0}
+          canToggleFoil={(inspectOwned?.f || 0) > 0}
+          meta={[
+            { label: 'Rarity', value: inspect.rarity || 'Common' },
+            { label: 'Set', value: inspect.set || '—' },
+            { label: 'Type', value: inspect.type },
+            { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
+            { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
+            ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
+          ]}
           onClose={() => setInspect(null)}
           actions={
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
@@ -368,7 +402,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Normal ×{inspectOwned?.q || 0}</span>
                     <span>
-                      {quicksellPrice(inspect.rarity, false)}g / ✦{' '}
+                      {fmtCredits(quicksellPrice(inspect.rarity, false))} / ✦{' '}
                       {shardDisenchantValue(inspect.rarity, false)}
                     </span>
                   </div>
@@ -412,7 +446,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       <div className="flex items-center justify-between text-[10px] font-bold mt-1">
                         <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
                         <span>
-                          {quicksellPrice(inspect.rarity, true)}g / ✦{' '}
+                          {fmtCredits(quicksellPrice(inspect.rarity, true))} / ✦{' '}
                           {shardDisenchantValue(inspect.rarity, true)}
                         </span>
                       </div>

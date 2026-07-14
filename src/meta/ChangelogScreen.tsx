@@ -12,17 +12,26 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Economy Update',
+    items: [
+      'New currencies: Gold is now Credits (displayed dollar-style, e.g. $4.99) and Gems are now Vouchers. All balances, prices and rewards were converted automatically.',
+      'Starter Decks retired — new accounts get a credits & vouchers stipend instead and build their collection from packs.',
+      'Role badges: the Creator and the first 25 Founders now show a badge next to their name everywhere — profiles, friends, search, trades, leaderboards and the marketplace.',
+      'Creator Tools: an admin panel on the Profile screen (Creator only) for granting currency and cards and managing roles.',
+    ],
+  },
+  {
     version: 'Season 1 Update',
     items: [
-      'Battle Pass — Season 1 "Blue Coral": a free 25-tier pass. Earn season XP from matches and missions; rewards include gold, gems, shards, free packs, The Voyager card back (tier 20) and the Nebula Soul banner (tier 25). Both are now pass exclusives and left the shop.',
-      'Level system: every match grants XP; each level pays 100 gold and every 5th level 10 gems.',
-      'Missions & Achievements: daily and weekly missions plus 22 permanent achievements with gold, gem and free-pack rewards.',
+      'Battle Pass — Season 1 "Blue Coral": a free 25-tier pass. Earn season XP from matches and missions; rewards include credits, vouchers, shards, free packs, The Voyager card back (tier 20) and the Nebula Soul banner (tier 25). Both are now pass exclusives and left the shop.',
+      'Level system: every match grants XP; each level pays a credits bonus and every 5th level adds vouchers.',
+      'Missions & Achievements: daily and weekly missions plus 22 permanent achievements with credits, voucher and free-pack rewards.',
       'Card Marketplace: list your spare cards at a fixed price or run timed auctions with bids and buyouts. Sellers pay a 5% fee.',
-      'Friends & Trading: search players, send friend requests and trade cards and gold directly with friends.',
+      'Friends & Trading: search players, send friend requests and trade cards and credits directly with friends.',
       'Pack inventory: buy packs without opening them ("BUY & SAVE FOR LATER") and store reward packs — open everything from the new MY PACKS tab in the Store.',
       'Transparent pack odds: every pack now has a VIEW DROP ODDS panel showing the exact per-slot rarity percentages, foil chances and pity rules.',
       'Daily Free Pack is now claimable from the Store (every 20 hours).',
-      'Fixed: several packs showed in the store but could never be bought; the shelf now only shows purchasable packs, and Starter Pack, Premium Elite Box and Ultra Pack returned to sale.',
+      'Fixed: several packs showed in the store but could never be bought; the shelf now only shows purchasable packs, and Premium Elite Box and Ultra Pack returned to sale.',
       'Collection screen now shows overall and per-rarity completion progress.',
     ],
   },
@@ -30,7 +39,7 @@ const ENTRIES: ChangelogEntry[] = [
     version: 'Unreleased',
     items: [
       'New universal card template with a dice-medallion cost badge, rounded rarity/keyword pill styling and a rarity-tinted header — used everywhere a card is shown: match, Collection, Deck Builder, pack opening and the new expanded card viewer.',
-      'Quicksell: sell spare cards straight from the Collection for a fixed gold price by rarity (Common 10g, Uncommon 25g, Rare 60g, Super-Rare 150g, Ultra-Rare 400g, Mythic 1000g). Foil copies always sell for 2.5x. Pack gold prices raised roughly 10% to balance the new gold faucet.',
+      'Quicksell: sell spare cards straight from the Collection for a fixed credits price by rarity. Foil copies always sell for 2.5x. Pack prices raised roughly 10% to balance the new credits faucet.',
       'Foil cards now render with a real built-in glowing/shimmering foil effect (previously only a flat overlay in pack reveals); every pack pull still has its existing per-pack chance to come out foil.',
       'Deck Builder now consumes cards: the same physical copy of a card can no longer be committed to two decks at once. Deleting a deck automatically frees its cards back up for your other decks.',
       'Card inspection ("details" in Deck Builder, tapping a card in Collection) now opens a shared expanded card viewer using the same universal template, instead of a stripped-down info box.',
