@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
-import { Coins, Ticket, Sparkles } from 'lucide-react';
+import { Coins, Ticket, Sparkles, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
+import { fetchCardMarketValue } from '../lib/supabase';
 
 /** Comic-pop button used across all meta screens. */
 export function PopButton({
@@ -44,11 +45,22 @@ export function PopButton({
   );
 }
 
-/** Credits — the base currency. Stored as integer cents, shown dollar-style. */
+/** Credits — the base currency. Stored as integer cents, shown as a bare
+ * number next to the Coins glyph — no "$" is used anywhere in this app. */
 export function CreditChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm heading-font text-xs">
       <Coins className="w-3.5 h-3.5" /> {fmtCredits(amount)}
+    </span>
+  );
+}
+
+/** Inline "coin glyph + amount" — the standalone equivalent of CreditChip's
+ * number for use inline in running text/buttons instead of a "$" prefix. */
+export function Credits({ amount, className }: { amount: number | null | undefined; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-0.5', className)}>
+      <Coins className="w-3 h-3 shrink-0" /> {fmtCredits(amount)}
     </span>
   );
 }
@@ -69,6 +81,48 @@ export function ShardChip({ amount }: { amount: number }) {
     <span className="flex items-center gap-1 bg-[#2DD4BF] text-[#042F2C] px-2 py-0.5 ink-border-sm heading-font text-xs">
       <Sparkles className="w-3.5 h-3.5" /> {amount.toLocaleString()}
     </span>
+  );
+}
+
+/**
+ * Player-market value popup for the expanded card viewer (outside actual
+ * gameplay only — never render this in GameV4). Hidden until a card has at
+ * least 5 completed player-market sales, per the blended quicksell + auction
+ * average computed server-side by get_card_market_value.
+ */
+export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: boolean }) {
+  const [value, setValue] = useState<{ sales: number; avg_price: number | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setValue(null);
+    fetchCardMarketValue(cardId, !!foil).then((v) => {
+      if (!cancelled) setValue(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardId, foil]);
+
+  if (!value) return null;
+  return (
+    <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px]">
+      <div className="heading-font text-xs mb-1 flex items-center gap-1">
+        <TrendingUp className="w-3.5 h-3.5" /> MARKET VALUE
+      </div>
+      {value.avg_price != null ? (
+        <div className="text-[13px] font-bold flex items-center gap-1">
+          <Coins className="w-3.5 h-3.5" /> {fmtCredits(value.avg_price)}
+          <span className="text-[9px] font-bold text-[var(--c-steel)] ml-1">
+            avg · {value.sales} sale{value.sales === 1 ? '' : 's'}
+          </span>
+        </div>
+      ) : (
+        <div className="text-[10px] font-bold text-[var(--c-steel)]">
+          Not enough player-market sales yet ({value.sales}/5)
+        </div>
+      )}
+    </div>
   );
 }
 

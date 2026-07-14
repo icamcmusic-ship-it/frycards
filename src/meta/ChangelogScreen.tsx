@@ -14,7 +14,7 @@ const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Economy Update',
     items: [
-      'New currencies: Gold is now Credits (displayed dollar-style, e.g. $4.99) and Gems are now Vouchers. All balances, prices and rewards were converted automatically.',
+      'New currencies: Gold is now Credits (shown next to a coin glyph, no currency symbol) and Gems are now Vouchers. All balances, prices and rewards were converted automatically.',
       'Starter Decks retired — new accounts get a credits & vouchers stipend instead and build their collection from packs.',
       'Role badges: the Creator and the first 25 Founders now show a badge next to their name everywhere — profiles, friends, search, trades, leaderboards and the marketplace.',
       'Creator Tools: an admin panel on the Profile screen (Creator only) for granting currency and cards and managing roles.',
@@ -38,6 +38,9 @@ const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Unreleased',
     items: [
+      'Player Shops (unlock at level 50): open your own storefront with a one-time setup fee and purchasable, collateral-backed listing slots. Sell individual cards and fixed bundles, or run Mystery Packs — Simple (overall rarity ratio) or Advanced (per-slot Exact/Minimum/Open) — drawn without replacement from a real submitted pool with a pass/fail preview before listing. Closing a shop refunds half of remaining collateral and goes dormant rather than deleting your setup. Sellers build a persistent, account-wide weighted rating (buyer reviews, value-vs-market, repeat buyers, sales volume, with fraud strikes applied as a multiplier) that unlocks publicly after 10 unique buyers. Browse shops by Featured, Trending, New or Top Rated, and report listings for moderation.',
+      'Card market value: the expanded card viewer (Collection, Deck Builder) now shows a player-market value popup once a card has at least 5 completed marketplace sales.',
+      'Removed the "$" from every credits display — amounts now show next to the credits coin glyph everywhere in the app.',
       'New universal card template with a dice-medallion cost badge, rounded rarity/keyword pill styling and a rarity-tinted header — used everywhere a card is shown: match, Collection, Deck Builder, pack opening and the new expanded card viewer.',
       'Quicksell: sell spare cards straight from the Collection for a fixed credits price by rarity. Foil copies always sell for 2.5x. Pack prices raised roughly 10% to balance the new credits faucet.',
       'Foil cards now render with a real built-in glowing/shimmering foil effect (previously only a flat overlay in pack reveals); every pack pull still has its existing per-pack chance to come out foil.',

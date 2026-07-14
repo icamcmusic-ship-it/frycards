@@ -13,6 +13,7 @@ import {
   Trophy,
   Users,
   Gavel,
+  Building2,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CreditChip, VoucherChip, LevelBadge } from './ui';
@@ -28,6 +29,7 @@ export type MetaScreen =
   | 'achievements'
   | 'social'
   | 'market'
+  | 'shops'
   | 'profile'
   | 'settings'
   | 'changelog';
@@ -104,6 +106,14 @@ export function MainMenu({
       desc: guest ? 'Requires an account' : 'Buy, sell & auction cards',
       icon: <Gavel className="w-8 h-8" />,
       color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+      disabled: guest,
+    },
+    {
+      key: 'shops',
+      label: 'PLAYER SHOPS',
+      desc: guest ? 'Requires an account' : 'Player-run storefronts',
+      icon: <Building2 className="w-8 h-8" />,
+      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
       disabled: guest,
     },
     {

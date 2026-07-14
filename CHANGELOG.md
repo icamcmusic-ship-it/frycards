@@ -7,6 +7,50 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Added (player shops)
+
+- **Player Shops** (`PlayerShopsScreen`, unlocks at level 50): a one-time
+  non-refundable setup fee opens a shop with a base slot allotment; extra
+  slots are purchased and each acts as that slot's at-risk collateral, plus a
+  small lazily-accrued per-slot daily maintenance fee (individual/bundle
+  slots only — mystery packs are exempt).
+  - **Individual & bundle listings**: fixed-price single cards or 2+ card
+    bundles with full contents visible pre-purchase, priced against a
+    blended-reference soft-cap band shown to the seller.
+  - **Mystery packs**: Simple (overall rarity ratio) or Advanced (per-slot
+    Exact / Minimum-guarantee / Open) templates. Pools are validated against
+    the template with a pass/fail preview before submission (min 10 packs'
+    worth or 30 cards, whichever is stricter, in an exact multiple of pack
+    size) and rejected entirely on any shortfall. Draws are without
+    replacement from the real submitted pool; the storefront shows live
+    remaining-pack count and live remaining-pool EV separately from the
+    price, which freezes at listing time. Sold-out mystery listings stay
+    visible, grayed out, as sales/reputation history.
+  - **Collateral**: a confirmed fraud strike forfeits that slot's collateral
+    and burns the slot (must be re-bought). Closing a shop refunds half of
+    remaining collateral and marks the shop dormant (not deleted) — slots and
+    any remaining collateral stay in place, and reopening is free.
+  - **Discovery & rating**: a marketplace hub (Featured / Trending / New /
+    Top Rated, self-purchases never counted). Sellers earn a 5-star weighted
+    composite rating — explicit buyer rating (35%, editable for 3 days post-
+    purchase), value-vs-market (25%), repeat-buyer rate (20%), log-scaled
+    sales volume (10%), with confirmed fraud applied as a multiplier — that
+    persists to the account (not the shop) and unlocks publicly after 10
+    unique buyers, recomputed every ~2 days.
+  - **Moderation**: report/flag any listing. Since listings only ever escrow
+    real, server-verified inventory, "contents don't match" reports
+    auto-resolve with no human needed; subjective reports escalate to
+    Creator review only once a report-count threshold is met.
+  - Shop-to-shop sales are tax-exempt, fully liquid immediately (no
+    relisting cooldown), and excluded from the blended quicksell/auction
+    reference price shop listings are themselves priced against.
+- **Card market value popup**: the expanded card viewer (Collection, Deck
+  Builder — not shown during an actual match) now surfaces a card's
+  blended player-market value once it has at least 5 completed marketplace
+  sales.
+- **Credits display**: dropped the "$" from every credits amount in the
+  app — the credits coin glyph is now the only currency symbol used.
+
 ### Added (progression, battle pass, marketplace, social)
 
 - **Level system**: every match grants XP (+60 win / +25 loss). Levels follow a

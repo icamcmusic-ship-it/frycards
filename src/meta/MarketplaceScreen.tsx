@@ -13,7 +13,7 @@ import {
   PublicProfile,
   MARKET_FEE,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice } from './ui';
+import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
@@ -175,8 +175,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </span>
             )}
             {isAuction && l.buyout != null && (
-              <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                Buyout {fmtCredits(l.buyout)}
+              <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                Buyout <Credits amount={l.buyout} />
               </span>
             )}
           </div>
@@ -222,7 +222,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                       run(() => buyListing(l.id), 'Purchase complete!');
                     }}
                   >
-                    BUY {isAuction ? fmtCredits(l.buyout!) : fmtCredits(l.price)}
+                    BUY <Credits amount={isAuction ? l.buyout! : l.price} />
                   </PopButton>
                 )}
               </>
@@ -366,8 +366,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setBidAmount(Math.round((Number(e.target.value) || 0) * 100))}
                 className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
               />
-              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0">
-                = {fmtCredits(bidAmount)}
+              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
+                = <Credits amount={bidAmount} />
               </span>
             </div>
             <div className="flex gap-2 justify-end">
@@ -533,8 +533,8 @@ function SellForm({
                 />
                 <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
               </label>
-              <div className="text-[9px] font-bold text-[var(--c-steel)]">
-                Quicksell value: {fmtCredits(suggested)} each — price above that to profit.
+              <div className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                Quicksell value: <Credits amount={suggested} /> each — price above that to profit.
               </div>
             </div>
           </div>
@@ -568,7 +568,9 @@ function SellForm({
                 }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
-              <span className="text-[9px] text-[var(--c-steel)]">= {fmtCredits(price)}</span>
+              <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                = <Credits amount={price} />
+              </span>
             </label>
             {type === 'auction' && (
               <>
@@ -589,7 +591,9 @@ function SellForm({
                     className="w-24 px-2 py-1 ink-border-sm"
                   />
                   {buyout !== '' && (
-                    <span className="text-[9px] text-[var(--c-steel)]">= {fmtCredits(buyout)}</span>
+                    <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                      = <Credits amount={buyout} />
+                    </span>
                   )}
                 </label>
                 <label className="flex items-center gap-2 text-xs font-bold">

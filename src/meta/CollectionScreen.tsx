@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
+import { MetaHeader, PopButton, Notice, ProgressBar, CardMarketValuePanel, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
@@ -8,7 +8,7 @@ import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { craftCard, disenchantCard, quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { fmtCredits, quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
+import { quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
@@ -328,8 +328,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           ]}
           onClose={() => setInspect(null)}
           actions={
-            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
-              {inspectTotal > 0 && (
+            <div className="flex flex-col gap-3">
+              <CardMarketValuePanel
+                cardId={inspect.id}
+                foil={(inspectOwned?.f || 0) > 0 && (inspectOwned?.q || 0) === 0}
+              />
+              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+                {inspectTotal > 0 && (
                 <>
                   {showcaseError && <Notice text={showcaseError} />}
                   <PopButton
@@ -401,8 +406,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   {sellError && <Notice text={sellError} />}
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Normal ×{inspectOwned?.q || 0}</span>
-                    <span>
-                      {fmtCredits(quicksellPrice(inspect.rarity, false))} / ✦{' '}
+                    <span className="inline-flex items-center gap-0.5">
+                      <Credits amount={quicksellPrice(inspect.rarity, false)} /> / ✦{' '}
                       {shardDisenchantValue(inspect.rarity, false)}
                     </span>
                   </div>
@@ -445,8 +450,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     <>
                       <div className="flex items-center justify-between text-[10px] font-bold mt-1">
                         <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                        <span>
-                          {fmtCredits(quicksellPrice(inspect.rarity, true))} / ✦{' '}
+                        <span className="inline-flex items-center gap-0.5">
+                          <Credits amount={quicksellPrice(inspect.rarity, true)} /> / ✦{' '}
                           {shardDisenchantValue(inspect.rarity, true)}
                         </span>
                       </div>
@@ -475,6 +480,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   )}
                 </>
               )}
+              </div>
             </div>
           }
         />

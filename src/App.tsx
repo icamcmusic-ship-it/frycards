@@ -22,6 +22,7 @@ import { BattlePassScreen } from './meta/BattlePassScreen';
 import { AchievementsScreen } from './meta/AchievementsScreen';
 import { SocialScreen } from './meta/SocialScreen';
 import { MarketplaceScreen } from './meta/MarketplaceScreen';
+import { PlayerShopsScreen } from './meta/PlayerShopsScreen';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
@@ -306,6 +307,8 @@ function AppInner() {
       return <SocialScreen onBack={() => setScreen('menu')} />;
     case 'market':
       return <MarketplaceScreen onBack={() => setScreen('menu')} />;
+    case 'shops':
+      return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
     case 'collection':
       return <CollectionScreen onBack={() => setScreen('menu')} />;
     case 'decks':
