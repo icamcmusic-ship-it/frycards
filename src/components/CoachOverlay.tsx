@@ -36,7 +36,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'preRoll',
     title: '2. REROLL',
-    body: 'Reroll any dice you don’t like — once — or keep them all. Snap Charms can be cast right now too.',
+    body: 'Reroll any dice you don’t like — up to twice — or keep them all. Snap Charms can be cast right now too.',
   },
   {
     stage: 'placement',

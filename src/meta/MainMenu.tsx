@@ -15,7 +15,8 @@ import {
   Gavel,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { GoldChip, GemChip, LevelBadge } from './ui';
+import { CreditChip, VoucherChip, LevelBadge } from './ui';
+import { RoleBadge } from './RoleBadge';
 
 export type MetaScreen =
   | 'menu'
@@ -153,12 +154,13 @@ export function MainMenu({
           <div>
             <div className="heading-font text-lg leading-none">
               {guest ? 'GUEST OPERATIVE' : profile?.username || '…'}
+              {!guest && <RoleBadge role={profile?.role} />}
             </div>
             {profile && (
               <div className="flex gap-2 mt-1.5 items-center flex-wrap">
                 <LevelBadge level={profile.level} xp={profile.xp} />
-                <GoldChip amount={profile.gold} />
-                <GemChip amount={profile.gems} />
+                <CreditChip amount={profile.credits} />
+                <VoucherChip amount={profile.vouchers} />
                 <span className="text-[10px] font-bold text-[var(--c-steel)] self-center">
                   {profile.wins}W · {profile.losses}L
                 </span>
@@ -212,18 +214,6 @@ export function MainMenu({
           </span>
         </h1>
       </div>
-
-      {/* One-time starter deck call-out */}
-      {profile && !profile.starter_claimed && (
-        <div className="relative z-10 flex justify-center px-6 mb-6">
-          <button
-            onClick={() => onNavigate('store')}
-            className="btn-pop bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-sm px-5 py-3 ink-border-md shadow-hard-black hover:-translate-y-0.5 transition-transform"
-          >
-            🎁 CLAIM YOUR FREE STARTER DECK IN THE STORE ▸
-          </button>
-        </div>
-      )}
 
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">

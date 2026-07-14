@@ -692,11 +692,18 @@ export function mulliganRedraw(g: Game, pid: string) {
  */
 export function reroll(g: Game, indices: number[]) {
   const p = g.players[g.active];
+  // §3.3/§3.4: the Reroll window is closed for good once the Placement Phase
+  // opens — including when the player voluntarily ended it early with an
+  // empty selection while rerolls were still unspent.
+  if (g.stage !== 'PRE_REROLL') return;
   if (p.rerollsUsed >= g.rules.rerollsAllowed) {
     g.stage = 'PLACEMENT';
     return;
   }
-  for (const i of indices) if (!p.dice[i].placed) p.dice[i].value = d6(g.rng);
+  for (const i of indices) {
+    const d = p.dice[i];
+    if (d && !d.placed) d.value = d6(g.rng);
+  }
   p.rerollsUsed++;
   if (indices.length === 0 || p.rerollsUsed >= g.rules.rerollsAllowed) {
     g.stage = 'PLACEMENT';

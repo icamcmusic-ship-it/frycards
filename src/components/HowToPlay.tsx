@@ -34,7 +34,7 @@ const SECTIONS = [
       ['Roll', 'Roll your five dice.'],
       [
         'Reroll',
-        'Reroll any subset of your dice exactly once. Charms with Snap may be cast during this window, before you lock your reroll.',
+        'Reroll any subset of your dice, up to two times. Charms with Snap may be cast during this window, before you lock your reroll.',
       ],
       [
         'Placement',

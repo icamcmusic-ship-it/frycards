@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Coins, Gem, Gift, Lock, Check, Package, Sparkles } from 'lucide-react';
+import { Coins, Ticket, Gift, Lock, Check, Package, Sparkles } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchActiveSeason,
@@ -13,6 +13,7 @@ import {
 import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
 import { SafeImage } from './SafeImage';
+import { fmtCredits, fmtVouchers } from './economy';
 
 export function BattlePassScreen({ onBack }: { onBack: () => void }) {
   const { session, packTypes, shopItems, refreshProfile, refreshInventory, refreshCosmetics } =
@@ -103,17 +104,23 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       );
     }
     const icon =
-      tier.reward_type === 'gold' ? (
+      tier.reward_type === 'credits' ? (
         <Coins className="w-8 h-8 text-[var(--c-yellow)]" />
-      ) : tier.reward_type === 'gems' ? (
-        <Gem className="w-8 h-8 text-[var(--c-steel)]" />
+      ) : tier.reward_type === 'vouchers' ? (
+        <Ticket className="w-8 h-8 text-[var(--c-steel)]" />
       ) : (
         <Sparkles className="w-8 h-8 text-[#A855F7]" />
       );
+    const amountLabel =
+      tier.reward_type === 'credits'
+        ? fmtCredits(tier.amount)
+        : tier.reward_type === 'vouchers'
+          ? fmtVouchers(tier.amount)
+          : tier.amount;
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--c-ink)]">
         {icon}
-        <span className="heading-font text-sm text-[var(--c-paper)]">{tier.amount}</span>
+        <span className="heading-font text-sm text-[var(--c-paper)]">{amountLabel}</span>
       </div>
     );
   };

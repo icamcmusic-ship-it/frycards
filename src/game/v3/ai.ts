@@ -192,6 +192,7 @@ function chooseReroll(g: Game, p: Player): number[] {
     // Keep distinct values; reroll duplicates and isolated extremes.
     const seen = new Set<number>();
     p.dice.forEach((d, i) => {
+      if (d.placed) return; // Snap casts may have placed dice pre-reroll
       if (stagedNeeds.has(d.value)) return;
       if (seen.has(d.value)) {
         out.push(i);
@@ -208,6 +209,7 @@ function chooseReroll(g: Game, p: Player): number[] {
   );
   const modeCount = counts[modeValue];
   p.dice.forEach((d, i) => {
+    if (d.placed) return; // Snap casts may have placed dice pre-reroll
     if (stagedNeeds.has(d.value)) return;
     const partOfPair = d.value === modeValue && modeCount >= 2;
     if (!partOfPair && d.value <= 3) out.push(i);
@@ -466,7 +468,12 @@ function playCombat(g: Game, p: Player) {
     // Lethal check: if total available ATK >= leader hp and no guards, go face.
     const targets = legalTargets(g, p.id);
     const guardsUp = targets.every((t) => t.def.type !== 'Leader');
-    const att = attackers.sort((a, b) => effAtk(g, b) - effAtk(g, a) + tieBreak(g))[0];
+    // Score once per attacker (a seeded jitter INSIDE a sort comparator makes
+    // the comparator inconsistent) — jittered so near-tied attacker choices
+    // vary game to game while staying reproducible under a fixed seed.
+    const att = attackers
+      .map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) }))
+      .sort((a, b) => b.s - a.s)[0].u;
     const atk = effAtk(g, att);
     if (atk === 0) {
       att.hasAttacked = true;
@@ -479,7 +486,7 @@ function playCombat(g: Game, p: Player) {
       // Must hit a guard: pick the one we kill, else the biggest threat.
       target =
         targets.find((t) => willKillInCombat(g, t, atk)) ??
-        [...targets].sort((a, b) => effAtk(g, b) - effAtk(g, a) + tieBreak(g))[0];
+        targets.map((t) => ({ t, s: effAtk(g, t) + tieBreak(g) })).sort((a, b) => b.s - a.s)[0].t;
     } else {
       const totalAtk = attackers.reduce((s, u) => s + effAtk(g, u), 0);
       const lethal = totalAtk >= remainingHp(g, opp.leader);

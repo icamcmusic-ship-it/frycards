@@ -30,6 +30,7 @@ import { ChangelogScreen } from './meta/ChangelogScreen';
 import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
+import { fmtCredits, fmtVouchers } from './meta/economy';
 import { useTheme } from './meta/useTheme';
 
 // ---------------------------------------------------------------------------
@@ -208,20 +209,8 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         playerName={profile?.username || 'Player 1'}
         onExit={onExit}
         onResult={onResult}
+        reward={reward}
       />
-      {reward !== null && (
-        <div className="absolute bottom-2 right-2 z-[60] flex flex-col items-end gap-1">
-          <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
-            +{reward.reward} GOLD · +{reward.xp_gained} XP · +{reward.bp_xp_gained} PASS XP
-          </div>
-          {reward.leveled_up && (
-            <div className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs animate-pulse">
-              LEVEL UP! NOW LV {reward.level} · +{reward.level_gold_bonus} GOLD
-              {reward.level_gems_bonus > 0 ? ` · +${reward.level_gems_bonus} GEMS` : ''}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

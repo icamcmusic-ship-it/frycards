@@ -19,7 +19,7 @@ import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP } from './rarity';
-import { quicksellPrice } from './economy';
+import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 
 type Tab = 'browse' | 'mine' | 'sell';
@@ -133,7 +133,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             {l.seller === userId ? (
               sellerName
             ) : (
-              <PlayerLink id={l.seller} name={sellerName} className="font-bold" />
+              <PlayerLink
+                id={l.seller}
+                name={sellerName}
+                role={sellers.get(l.seller)?.role}
+                className="font-bold"
+              />
             )}
           </div>
           <div className="flex items-center gap-2 mt-1 text-[10px] font-bold">
@@ -145,8 +150,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
                   <Gavel className="w-3 h-3" />
                   {l.current_bid != null
-                    ? `${l.current_bid.toLocaleString()}g`
-                    : `Start ${l.price.toLocaleString()}g`}
+                    ? fmtCredits(l.current_bid)
+                    : `Start ${fmtCredits(l.price)}`}
                 </span>
                 <span className="text-[9px] font-bold text-[var(--c-steel)]">
                   {l.bid_count} bid{l.bid_count === 1 ? '' : 's'}
@@ -155,12 +160,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </>
             ) : (
               <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
-                <Coins className="w-3 h-3" /> {l.price.toLocaleString()}g
+                <Coins className="w-3 h-3" /> {fmtCredits(l.price)}
               </span>
             )}
             {isAuction && l.buyout != null && (
               <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                Buyout {l.buyout.toLocaleString()}g
+                Buyout {fmtCredits(l.buyout)}
               </span>
             )}
           </div>
@@ -198,16 +203,15 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   <PopButton
                     color="yellow"
                     disabled={
-                      busy || !profile || profile.gold < (isAuction ? (l.buyout ?? 0) : l.price)
+                      busy || !profile || profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
                     }
                     onClick={() => {
                       const price = isAuction ? (l.buyout ?? 0) : l.price;
-                      if (!confirm(`Buy this listing for ${price.toLocaleString()}g?`)) return;
+                      if (!confirm(`Buy this listing for ${fmtCredits(price)}?`)) return;
                       run(() => buyListing(l.id), 'Purchase complete!');
                     }}
                   >
-                    BUY{' '}
-                    {isAuction ? `${l.buyout!.toLocaleString()}g` : `${l.price.toLocaleString()}g`}
+                    BUY {isAuction ? fmtCredits(l.buyout!) : fmtCredits(l.price)}
                   </PopButton>
                 )}
               </>
@@ -260,7 +264,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
         <p className="text-[10px] font-bold text-[var(--c-steel)] mb-4">
-          Player-to-player market. Sellers pay a {Math.round(MARKET_FEE * 100)}% gold fee on
+          Player-to-player market. Sellers pay a {Math.round(MARKET_FEE * 100)}% credits fee on
           completed sales. Bids in the final 5 minutes extend an auction.
         </p>
 
@@ -337,19 +341,23 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             </div>
             <div className="text-[10px] font-bold text-[var(--c-steel)] mb-2">
               {bidFor.current_bid != null
-                ? `Current bid ${bidFor.current_bid.toLocaleString()}g — minimum raise 5%.`
-                : `Starting bid ${bidFor.price.toLocaleString()}g.`}{' '}
-              Gold is held while you're the top bidder and refunded if outbid.
+                ? `Current bid ${fmtCredits(bidFor.current_bid)} — minimum raise 5%.`
+                : `Starting bid ${fmtCredits(bidFor.price)}.`}{' '}
+              Credits are held while you're the top bidder and refunded if outbid.
             </div>
             <div className="flex items-center gap-2 mb-3">
               <Coins className="w-4 h-4" />
               <input
                 type="number"
-                value={bidAmount}
+                value={bidAmount / 100}
                 min={0}
-                onChange={(e) => setBidAmount(Number(e.target.value) || 0)}
+                step="0.01"
+                onChange={(e) => setBidAmount(Math.round((Number(e.target.value) || 0) * 100))}
                 className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
               />
+              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0">
+                = {fmtCredits(bidAmount)}
+              </span>
             </div>
             <div className="flex gap-2 justify-end">
               <PopButton color="steel" onClick={() => setBidFor(null)}>
@@ -357,7 +365,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </PopButton>
               <PopButton
                 color="red"
-                disabled={busy || !profile || profile.gold < bidAmount}
+                disabled={busy || !profile || profile.credits < bidAmount}
                 onClick={() => {
                   const l = bidFor;
                   setBidFor(null);
@@ -515,7 +523,7 @@ function SellForm({
                 <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
               </label>
               <div className="text-[9px] font-bold text-[var(--c-steel)]">
-                Quicksell value: {suggested}g each — price above that to profit.
+                Quicksell value: {fmtCredits(suggested)} each — price above that to profit.
               </div>
             </div>
           </div>
@@ -541,12 +549,13 @@ function SellForm({
               {type === 'fixed' ? 'Price' : 'Starting bid'}
               <input
                 type="number"
-                min={1}
-                value={price}
-                onChange={(e) => setPrice(Math.max(1, Number(e.target.value) || 1))}
+                min={0.01}
+                step="0.01"
+                value={price / 100}
+                onChange={(e) => setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))}
                 className="w-24 px-2 py-1 ink-border-sm"
               />
-              g
+              <span className="text-[9px] text-[var(--c-steel)]">= {fmtCredits(price)}</span>
             </label>
             {type === 'auction' && (
               <>
@@ -555,15 +564,20 @@ function SellForm({
                   <input
                     type="number"
                     min={0}
-                    value={buyout}
+                    step="0.01"
+                    value={buyout === '' ? '' : buyout / 100}
                     onChange={(e) =>
                       setBuyout(
-                        e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0),
+                        e.target.value === ''
+                          ? ''
+                          : Math.max(0, Math.round((Number(e.target.value) || 0) * 100)),
                       )
                     }
                     className="w-24 px-2 py-1 ink-border-sm"
                   />
-                  g
+                  {buyout !== '' && (
+                    <span className="text-[9px] text-[var(--c-steel)]">= {fmtCredits(buyout)}</span>
+                  )}
                 </label>
                 <label className="flex items-center gap-2 text-xs font-bold">
                   Duration

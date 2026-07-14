@@ -59,6 +59,8 @@ import {
 } from './CardFaceV4';
 import { SafeImage } from '../meta/SafeImage';
 import { CoachOverlay } from './CoachOverlay';
+import { MatchResult } from '../lib/supabase';
+import { fmtCredits, fmtVouchers } from '../meta/economy';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -346,6 +348,7 @@ export function GameV4({
   playerName,
   onExit,
   onResult,
+  reward,
 }: {
   /** A prebuilt archetype's DeckDef, or a player's own saved deck resolved against the pool. */
   humanDeck: DeckDef;
@@ -355,6 +358,10 @@ export function GameV4({
   playerName: string;
   onExit: () => void;
   onResult?: (won: boolean) => void;
+  /** Post-match rewards from recordMatchResult(), shown on the game-over
+   * screen once the parent has recorded the result (null/undefined until
+   * then, or forever for guests). */
+  reward?: MatchResult | null;
 }) {
   // The engine Game object is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
@@ -446,6 +453,14 @@ export function GameV4({
     setRerollSel(new Set());
     setSelDie(null);
     setPending(null);
+    // Clear every selection overlay that could have been left armed when the
+    // previous turn ended (sum-cast, Rally donor pick, Echo fodder pick,
+    // attacker) — otherwise e.g. an unconfirmed sum-cast bar from last turn
+    // sticks around and keeps the dice tray in sum-select mode.
+    setSumCast(null);
+    setRallyPick(null);
+    setEchoPick(null);
+    setAttacker(null);
     setStage('awaitRoll');
   };
 
@@ -955,6 +970,13 @@ export function GameV4({
     }
     setSelDie(null);
     setPending(null);
+    // Placement-only selection modes must not leak into Combat: a live
+    // sum-cast keeps the dice in sum-select mode, an armed Rally pick keeps
+    // donors highlighted, and a pending Echo fodder pick would hijack hand
+    // clicks (tryEchoFodder) during Combat.
+    setSumCast(null);
+    setRallyPick(null);
+    setEchoPick(null);
     setStage('combat');
   };
 
@@ -1373,7 +1395,7 @@ export function GameV4({
           )}
           {stage === 'preRoll' && (
             <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[130px] leading-tight">
-              Pick dice to reroll ({g.rules.rerollsAllowed}x). Snap Charms castable now.
+              Pick dice to reroll ({rerollsRemaining(g, HUMAN)} left). Snap Charms castable now.
             </span>
           )}
         </div>
@@ -1871,6 +1893,23 @@ export function GameV4({
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
               {g.log.slice(-2).join(' · ')}
             </div>
+            {reward != null && (
+              <div className="flex flex-col items-center gap-1 mb-4">
+                <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
+                  +{fmtCredits(reward.reward)} CREDITS · +{reward.xp_gained} XP · +
+                  {reward.bp_xp_gained} PASS XP
+                </div>
+                {reward.leveled_up && (
+                  <div className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs animate-pulse">
+                    LEVEL UP! NOW LV {reward.level} · +{fmtCredits(reward.level_credits_bonus)}{' '}
+                    CREDITS
+                    {reward.level_vouchers_bonus > 0
+                      ? ` · +${fmtVouchers(reward.level_vouchers_bonus)} VOUCHERS`
+                      : ''}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               onClick={onExit}
               className="btn-pop heading-font text-sm bg-[var(--c-yellow)] px-6 py-2 ink-border-sm shadow-hard-black-xs"

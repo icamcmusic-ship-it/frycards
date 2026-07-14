@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy, Target, Coins, Gem, Package, Zap, Check } from 'lucide-react';
+import { Trophy, Target, Coins, Ticket, Package, Zap, Check } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchAchievements,
@@ -12,6 +12,7 @@ import {
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
+import { fmtCredits, fmtVouchers } from './economy';
 
 type Tab = 'missions' | 'achievements';
 
@@ -100,16 +101,16 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     return p && p.progress >= a.target;
   }).length;
 
-  const rewardChips = (gold: number, gems: number, packId?: string | null, bpXp?: number) => (
+  const rewardChips = (credits: number, vouchers: number, packId?: string | null, bpXp?: number) => (
     <div className="flex flex-wrap items-center gap-1.5">
-      {gold > 0 && (
+      {credits > 0 && (
         <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-yellow)] px-1 ink-border-sm">
-          <Coins className="w-2.5 h-2.5" /> {gold}
+          <Coins className="w-2.5 h-2.5" /> {fmtCredits(credits)}
         </span>
       )}
-      {gems > 0 && (
+      {vouchers > 0 && (
         <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-steel)] text-[var(--c-paper)] px-1 ink-border-sm">
-          <Gem className="w-2.5 h-2.5" /> {gems}
+          <Ticket className="w-2.5 h-2.5" /> {fmtVouchers(vouchers)}
         </span>
       )}
       {packId && (
@@ -201,7 +202,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                               </span>
                             </div>
                           </div>
-                          {rewardChips(m.reward_gold, m.reward_gems, null, m.reward_bp_xp)}
+                          {rewardChips(m.reward_credits, m.reward_vouchers, null, m.reward_bp_xp)}
                           {m.claimed ? (
                             <div className="flex items-center gap-1 heading-font text-[10px] px-3 py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                               <Check className="w-3 h-3" /> CLAIMED
@@ -281,7 +282,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                           </span>
                         </div>
                         <div className="mt-2">
-                          {rewardChips(a.reward_gold, a.reward_gems, a.reward_pack_id)}
+                          {rewardChips(a.reward_credits, a.reward_vouchers, a.reward_pack_id)}
                         </div>
                       </div>
                     );
