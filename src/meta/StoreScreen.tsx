@@ -7,6 +7,7 @@ import {
   claimDailyPack,
   buyPackToInventory,
   openInventoryPack,
+  claimStarterBox,
   PackType,
   ShopItem,
   PackPull,
@@ -18,6 +19,7 @@ import { SafeImage } from './SafeImage';
 import { fmtCredits, fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
 import { packOdds, expectedRarities, sortedWeights } from './packodds';
+import { LeaderPicker } from './LeaderPicker';
 
 type Tab = 'packs' | 'my_packs' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
@@ -34,6 +36,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshCollection,
     refreshCosmetics,
     refreshInventory,
+    refreshDecks,
   } = useMeta();
   const [tab, setTab] = useState<Tab>('packs');
   const [error, setError] = useState('');
@@ -45,6 +48,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     pulls: PackPull[];
   } | null>(null);
   const [oddsPack, setOddsPack] = useState<PackType | null>(null);
+  // Starter Box flow: pick a Leader first, then the RPC opens the box.
+  const [pickingLeaderFor, setPickingLeaderFor] = useState<PackType | null>(null);
+  const [claimingStarter, setClaimingStarter] = useState(false);
 
   const ownedCosmetics = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
 
@@ -124,6 +130,26 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshProfile();
     refreshCollection();
     refreshInventory();
+  };
+
+  const handlePickStarterLeader = async (leaderId: string) => {
+    if (claimingStarter || !pickingLeaderFor) return;
+    const pack = pickingLeaderFor;
+    setClaimingStarter(true);
+    setError('');
+    setNotice('');
+    const { data, error } = await claimStarterBox(leaderId);
+    setClaimingStarter(false);
+    if (error || !data) {
+      setError(error || 'Starter Box claim failed.');
+      return;
+    }
+    setPickingLeaderFor(null);
+    setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
+    refreshProfile();
+    refreshCollection();
+    refreshInventory();
+    refreshDecks();
   };
 
   const handleClaimDaily = async () => {
@@ -291,7 +317,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         disabled={!profile || profile.credits < pack.price_credits || !!busyId}
                         onClick={() => handleOpenPack(pack, 'credits')}
                       >
-                        {busyId === pack.id ? 'OPENING…' : fmtCredits(pack.price_credits)}
+                        {busyId === pack.id
+                          ? 'OPENING…'
+                          : pack.price_credits === 0
+                            ? 'FREE'
+                            : fmtCredits(pack.price_credits)}
                       </PopButton>
                       {profile && profile.credits < pack.price_credits && (
                         <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
@@ -330,7 +360,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       <Backpack className="w-3 h-3" />
                       {busyId === 'inv:' + pack.id + ':credits'
                         ? 'BUYING…'
-                        : `SAVE FOR LATER (${fmtCredits(pack.price_credits)})`}
+                        : pack.price_credits === 0
+                          ? 'SAVE FOR LATER (FREE)'
+                          : `SAVE FOR LATER (${fmtCredits(pack.price_credits)})`}
                     </button>
                   )}
                   {pack.price_vouchers != null && (
@@ -383,17 +415,23 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       color="red"
                       className="flex-1"
                       disabled={!!busyId}
-                      onClick={() => handleOpenFromInventory(pack)}
+                      onClick={() =>
+                        pack.acquisition === 'starter_grant'
+                          ? setPickingLeaderFor(pack)
+                          : handleOpenFromInventory(pack)
+                      }
                     >
                       {busyId === 'open:' + pack.id ? 'OPENING…' : 'OPEN PACK ▸'}
                     </PopButton>
-                    <button
-                      onClick={() => setOddsPack(pack)}
-                      className="px-2 ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
-                      title="View drop odds"
-                    >
-                      <Percent className="w-3.5 h-3.5" />
-                    </button>
+                    {pack.acquisition !== 'starter_grant' && (
+                      <button
+                        onClick={() => setOddsPack(pack)}
+                        className="px-2 ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
+                        title="View drop odds"
+                      >
+                        <Percent className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -525,6 +563,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
       {/* Transparent pack odds */}
       {oddsPack && <PackOddsModal pack={oddsPack} onClose={() => setOddsPack(null)} />}
+
+      {/* Starter Box — pick a Leader before the box actually opens */}
+      {pickingLeaderFor && (
+        <LeaderPicker
+          busy={claimingStarter}
+          onPick={handlePickStarterLeader}
+          onClose={() => {
+            if (!claimingStarter) setPickingLeaderFor(null);
+          }}
+        />
+      )}
 
       {/* Pack opening — full-screen rip / reveal / summary experience */}
       {opening && (

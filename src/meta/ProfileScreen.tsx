@@ -40,8 +40,6 @@ export function ProfileScreen({
     ownedIds.has(s.id) ||
     (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
 
-  if (!profile) return null;
-
   const banner = shopItems.find((s) => s.id === profile.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile.equipped_avatar);
   const winRate =
@@ -63,6 +61,17 @@ export function ProfileScreen({
       refreshProfile();
     }
   };
+
+  if (!profile) {
+    return (
+      <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+        <MetaHeader title="OPERATIVE PROFILE" onBack={onBack} />
+        <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
+          LOADING PROFILE…
+        </div>
+      </div>
+    );
+  }
 
   const sections: { type: ShopItem['item_type']; label: string; equipped: string | null }[] = [
     { type: 'card_back', label: 'CARD BACKS', equipped: profile.equipped_card_back },

@@ -181,6 +181,19 @@ function invariants(g: Game, sizeA: number, sizeB: number, errors: string[]) {
       p.board.length +
       (p.location ? 1 : 0);
     if (total !== sizes[p.id]) errors.push(`card drift ${total}!=${sizes[p.id]}`);
+    // Ward-usage sanity: only a Ward-keyword card can ever have wardUsed set.
+    for (const u of [...p.board, p.leader, ...(p.location ? [p.location] : [])]) {
+      if (u.wardUsed && !(u.def.type === 'Unit' && u.def.keywords?.includes('Ward'))) {
+        errors.push(`wardUsed set on non-Ward card: ${u.def.name}`);
+      }
+      // abilityDie should only ever be resting on a card whose Ability Slot is
+      // marked used — this is what Rally reads to steal a die, and it's also
+      // what would have caught activateUltimate() ever setting abilityDie on
+      // the Leader (letting Rally illegally pull a die off an Ultimate use).
+      if (u.abilityDie !== undefined && !u.abilityUsed) {
+        errors.push(`abilityDie set without abilityUsed: ${u.def.name}`);
+      }
+    }
   }
 }
 

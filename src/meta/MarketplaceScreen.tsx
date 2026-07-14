@@ -74,8 +74,19 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   }, [userId]);
 
   useEffect(() => {
-    reload();
+    (async () => {
+      await reload();
+    })();
   }, [reload]);
+
+  useEffect(() => {
+    if (!bidFor) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBidFor(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bidFor]);
 
   const run = async (fn: () => Promise<string | null>, success?: string) => {
     if (busy) return;
