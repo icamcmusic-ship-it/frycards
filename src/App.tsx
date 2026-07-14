@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { fetchCardTemplates, recordMatchResult } from './lib/supabase';
+import { fetchCardTemplates, recordMatchResult, MatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
 import { HowToPlay } from './components/HowToPlay';
 import { Archetype, buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
@@ -40,7 +40,7 @@ function PlayScreen({
   onStart: (setup: MatchSetup) => void;
   onBack: () => void;
 }) {
-  const { decks, guest } = useMeta();
+  const { decks, guest, dataLoading } = useMeta();
   const legalDecks = decks.filter((d) => d.is_valid);
 
   return (
@@ -60,7 +60,11 @@ function PlayScreen({
             <h2 className="heading-font text-base mb-3 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
               YOUR DECKS
             </h2>
-            {legalDecks.length === 0 ? (
+            {dataLoading ? (
+              <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8 animate-pulse">
+                Loading your decks…
+              </p>
+            ) : legalDecks.length === 0 ? (
               <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8">
                 No legal decks yet — build one in the Deck Builder (30 cards, max 3 copies each).
               </p>
@@ -151,16 +155,27 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   // fixed archetype presets — keeps every match legal even when the human's
   // own custom deck is still a work in progress.
   const [cpuArch] = useState(() => randomArchetype());
-  const [reward, setReward] = useState<Awaited<ReturnType<typeof recordMatchResult>>>(null);
+  const [reward, setReward] = useState<MatchResult | null>(null);
+  const [rewardError, setRewardError] = useState<string | null>(null);
 
-  const onResult = (won: boolean) => {
+  // recordMatchResult used to return bare `null` on both "no reward data"
+  // and an outright RPC failure, so a transient network/server error meant
+  // the player's win/loss, credits and XP were silently dropped with zero
+  // feedback and no retry. Retry a couple of times before giving up and
+  // telling the player their reward didn't sync, instead of staying silent.
+  const onResult = async (won: boolean) => {
     if (!session) return;
-    recordMatchResult(won).then((res) => {
-      if (res) {
-        setReward(res);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+      const { data, error } = await recordMatchResult(won);
+      if (data) {
+        setReward(data);
         refreshProfile();
+        return;
       }
-    });
+      if (!error) return; // legitimately no reward to report (e.g. cooldown)
+    }
+    setRewardError("Couldn't record this match's result — check your connection and try again from the menu.");
   };
 
   return (
@@ -174,6 +189,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         onExit={onExit}
         onResult={onResult}
         reward={reward}
+        rewardError={rewardError}
       />
     </div>
   );

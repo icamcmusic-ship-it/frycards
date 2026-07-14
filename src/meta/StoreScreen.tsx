@@ -694,9 +694,8 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
               </div>
             ))}
             <div className="text-[9px] font-bold text-[var(--c-steel)] mt-2">
-              Safety nets: a Full-Art or better is guaranteed within 10 packs, and a Mythic within
-              60 packs, across all pack types. Foil odds rise 25% for every consecutive pack without
-              a foil.
+              Safety net: a Super-Rare or better is guaranteed at least once every 10 packs, across
+              all pack types.
             </div>
           </div>
         </div>

@@ -273,10 +273,11 @@ export async function setShowcaseCards(cardIds: string[]): Promise<string | null
   return rpcError(error);
 }
 
-export async function recordMatchResult(won: boolean): Promise<MatchResult | null> {
+export async function recordMatchResult(
+  won: boolean,
+): Promise<{ data: MatchResult | null; error: string | null }> {
   const { data, error } = await supabase.rpc('record_match_result', { p_won: won });
-  if (error) return null;
-  return data as MatchResult;
+  return { data: (data as MatchResult) || null, error: rpcError(error) };
 }
 
 /**

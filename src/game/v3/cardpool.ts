@@ -208,10 +208,19 @@ function mapUnit(c: CardTemplate): CardDef {
   }
 
   // Overflow reward on a slice, off the effective threshold — only makes
-  // sense for the two numeric cost formats (exceed the sum target, or land
-  // an exact-match Ability Slot die that also clears an Overflow amount);
-  // dice-pattern-gated cards have no numeric threshold to exceed.
-  if (def.threshold !== undefined && hash(c.id) % 6 === 0) {
+  // sense against a numeric cost that a die can actually exceed: 'sum'
+  // (beat the dice-total target by `amount`) or the Twin/undefined "at
+  // least" format engine.ts's payableNumeric() falls back to. An 'exact'
+  // cost mandates dieValue === threshold with no slack — overflowHit
+  // (engine.ts) computes `dieValue - eff`, which is always exactly 0 for an
+  // exact-cost card, so Overflow could never trigger there; excluding it
+  // here keeps every card carrying the Overflow badge one that can actually
+  // fire it. Dice-pattern-gated cards have no numeric threshold to exceed.
+  if (
+    def.threshold !== undefined &&
+    def.castCostKind !== 'exact' &&
+    hash(c.id) % 6 === 0
+  ) {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 
@@ -333,8 +342,10 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // v4.3: assign the real Cast Slot cost format.
   applyCostFormat(base, pickCostFormat(c.id, costTier));
 
-  // Overflow riders on some spells — numeric cost formats only (see mapUnit).
-  if (base.threshold !== undefined && hash(c.id) % 4 === 0) {
+  // Overflow riders on some spells — numeric cost formats only, excluding
+  // 'exact' (see mapUnit: an exact-cost die can never exceed its own
+  // threshold, so overflowHit could never fire).
+  if (base.threshold !== undefined && base.castCostKind !== 'exact' && hash(c.id) % 4 === 0) {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
   // Echo on a slice of utility so recursion exists outside bombs.

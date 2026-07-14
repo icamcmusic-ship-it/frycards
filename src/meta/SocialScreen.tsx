@@ -99,35 +99,52 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (tab !== 'leaderboard' || leaderboard !== null) return;
-    fetchCardsLeaderboard(50).then(setLeaderboard);
+    let cancelled = false;
+    fetchCardsLeaderboard(50).then((lb) => {
+      if (!cancelled) setLeaderboard(lb);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [tab, leaderboard]);
 
-  const reload = useCallback(async () => {
-    const [fs, ts] = await Promise.all([fetchFriendships(), fetchTrades()]);
-    setFriendships(fs);
-    setTrades(ts);
-    const ids = new Set<string>();
-    for (const f of fs) {
-      ids.add(f.requester);
-      ids.add(f.addressee);
-    }
-    for (const t of ts) {
-      ids.add(t.proposer);
-      ids.add(t.recipient);
-    }
-    if (userId) ids.delete(userId);
-    const pp = await fetchPublicProfiles([...ids]);
-    setProfiles(new Map(pp.map((p) => [p.id, p])));
-  }, [userId]);
+  const reload = useCallback(
+    async (isCancelled?: () => boolean) => {
+      const [fs, ts] = await Promise.all([fetchFriendships(), fetchTrades()]);
+      if (isCancelled?.()) return;
+      setFriendships(fs);
+      setTrades(ts);
+      const ids = new Set<string>();
+      for (const f of fs) {
+        ids.add(f.requester);
+        ids.add(f.addressee);
+      }
+      for (const t of ts) {
+        ids.add(t.proposer);
+        ids.add(t.recipient);
+      }
+      if (userId) ids.delete(userId);
+      const pp = await fetchPublicProfiles([...ids]);
+      if (isCancelled?.()) return;
+      setProfiles(new Map(pp.map((p) => [p.id, p])));
+    },
+    [userId],
+  );
 
   useEffect(() => {
+    // Guards a stale in-flight reload() (e.g. from a fast sign-out/sign-in)
+    // from clobbering friendships/trades/profiles state after userId changes.
+    let cancelled = false;
     (async () => {
       try {
-        await reload();
+        await reload(() => cancelled);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [reload]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';

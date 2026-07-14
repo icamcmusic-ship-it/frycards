@@ -39,9 +39,16 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   const userId = session?.user?.id;
   const packById = useMemo(() => new Map(packTypes.map((p) => [p.id, p])), [packTypes]);
 
-  const reload = async () => {
-    if (!userId) return;
+  const reload = async (isCancelled?: () => boolean) => {
+    // A guest (no userId) previously returned here without ever clearing
+    // `loading`, leaving the screen stuck on "LOADING…" forever if this tab
+    // were ever reachable without a session.
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     const [{ all, mine }, ms] = await Promise.all([fetchAchievements(userId), fetchMissions()]);
+    if (isCancelled?.()) return;
     setAchievements(all);
     setMine(new Map(mine.map((m) => [m.achievement_id, m])));
     setMissions(ms);
@@ -49,9 +56,14 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   };
 
   useEffect(() => {
-    (async () => {
-      await reload();
-    })();
+    // Without this guard, a fast userId change (sign-out/sign-in) could let
+    // an in-flight reload() for the OLD user resolve after the new one and
+    // clobber achievements/missions state with stale data.
+    let cancelled = false;
+    reload(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
