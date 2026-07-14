@@ -46,14 +46,10 @@ export interface Profile {
   equipped_avatar: string | null;
   last_free_pack_at: string | null;
   showcase_cards: string[];
-  /** Consecutive packs opened with no foil pull — the server escalates foil
-   * odds by 25% of this per pack (grant_pack_contents), reset to 0 on a hit. */
-  foil_pity: number;
-  /** Packs opened since the last Full-Art+ pull; a Full-Art+ is guaranteed
-   * within 10 (grant_pack_contents' global pity). */
-  packs_since_fullart: number;
-  /** Same guarantee, but a Mythic within 60 packs. */
-  packs_since_mythic: number;
+  /** Packs opened since the last Super-Rare+ pull — a Super-Rare (or better)
+   * is guaranteed within 10 (grant_pack_contents' one and only pity rule).
+   * Reset to 0 whenever a pack's best pull is Super-Rare or above. */
+  packs_since_super_rare: number;
 }
 
 export interface ShopItem {

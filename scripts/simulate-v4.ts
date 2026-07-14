@@ -17,8 +17,140 @@
  */
 import { newGame, mulberry32, Game, DeckDef, remainingHp, TwinMode } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
-import { ARCHETYPES, buildDeck } from '../src/game/v3/decks';
+import { Archetype, buildDeck } from '../src/game/v3/decks';
 import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
+
+// A varied roster of archetypes across all six real Leaders — sim-only (the
+// player-facing "prebuilt archetype" deck picker was removed from the app;
+// this fixed, hand-tuned roster is kept here purely so balance simulations
+// stay comparable run-over-run).
+const ARCHETYPES: Archetype[] = [
+  {
+    label: 'Abyss Echo-Recursion',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Echo', 'Twin'],
+    effects: ['draw', 'sap'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'match',
+  },
+  {
+    label: 'Abyss Sap Burn',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Frenzy', 'Pierce'],
+    effects: ['sap', 'destroy'],
+    units: 15,
+    spells: 12,
+    locations: 3,
+    comboFamily: 'none',
+  },
+
+  {
+    label: 'Sea Witch Bind-Control',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Ward', 'Anchor'],
+    effects: ['bind', 'destroy', 'draw'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'straight',
+  },
+  {
+    label: 'Sea Witch Anchor-Ramp',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Anchor', 'Ward'],
+    effects: ['draw', 'bind'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
+
+  {
+    label: 'Mer King Guard-Wall',
+    leaderId: 'mer_king',
+    keywords: ['Guard', 'Ward'],
+    effects: ['mend', 'destroy'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Mer King Heal-Midrange',
+    leaderId: 'mer_king',
+    keywords: ['Guard', 'Twin'],
+    effects: ['mend', 'buff'],
+    units: 16,
+    spells: 10,
+    locations: 4,
+    comboFamily: 'match',
+  },
+
+  {
+    label: 'Diver Straight-Combo',
+    leaderId: 'legendary_diver',
+    keywords: ['Swift', 'Frenzy'],
+    effects: ['sap', 'draw'],
+    units: 15,
+    spells: 12,
+    locations: 3,
+    comboFamily: 'straight',
+  },
+  {
+    label: 'Diver Aggro-Swift',
+    leaderId: 'legendary_diver',
+    keywords: ['Frenzy', 'Swift', 'Pierce'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+
+  {
+    label: 'Crimson Frenzy-Aggro',
+    leaderId: 'crimson_vector_commander',
+    keywords: ['Frenzy', 'Pierce', 'Guard'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Crimson Match-Combo',
+    leaderId: 'crimson_vector_commander',
+    keywords: ['Guard', 'Frenzy'],
+    effects: ['sap', 'buff'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'match',
+  },
+
+  {
+    label: 'Shinobi Tempo-Anchor',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Anchor', 'Echo', 'Swift'],
+    effects: ['buff', 'sap'],
+    units: 17,
+    spells: 10,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Shinobi Echo-Straight',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Echo', 'Anchor'],
+    effects: ['draw', 'sap'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'straight',
+  },
+];
 
 const PER_PAIR = parseInt(process.argv[2] || '20', 10);
 const MAX_TURNS = 160;

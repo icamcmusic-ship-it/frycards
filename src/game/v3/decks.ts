@@ -5,7 +5,7 @@
  */
 import { CardDef } from './cards';
 import { DeckDef } from './engine';
-import { POOL_BY_ID, POOL_V4, poolByType } from './cardpool';
+import { POOL_BY_ID, POOL_LEADERS, POOL_V4, poolByType } from './cardpool';
 
 const DECK_SIZE = 30; // v4.0
 export const MAX_COPIES = 3;
@@ -103,141 +103,6 @@ export function buildDeck(arch: Archetype): DeckDef {
   return { leaderId: arch.leaderId, cards, resolve: (id) => POOL_BY_ID[id], label: arch.label };
 }
 
-// ---------------------------------------------------------------------------
-// A varied roster of archetypes across all six real Leaders.
-// ---------------------------------------------------------------------------
-export const ARCHETYPES: Archetype[] = [
-  {
-    label: 'Abyss Echo-Recursion',
-    leaderId: 'avatar_of_the_abyss',
-    keywords: ['Echo', 'Twin'],
-    effects: ['draw', 'sap'],
-    units: 17,
-    spells: 9,
-    locations: 4,
-    comboFamily: 'match',
-  },
-  {
-    label: 'Abyss Sap Burn',
-    leaderId: 'avatar_of_the_abyss',
-    keywords: ['Frenzy', 'Pierce'],
-    effects: ['sap', 'destroy'],
-    units: 15,
-    spells: 12,
-    locations: 3,
-    comboFamily: 'none',
-  },
-
-  {
-    label: 'Sea Witch Bind-Control',
-    leaderId: 'ethereal_sea_witch',
-    keywords: ['Ward', 'Anchor'],
-    effects: ['bind', 'destroy', 'draw'],
-    units: 16,
-    spells: 11,
-    locations: 3,
-    comboFamily: 'straight',
-  },
-  {
-    label: 'Sea Witch Anchor-Ramp',
-    leaderId: 'ethereal_sea_witch',
-    keywords: ['Anchor', 'Ward'],
-    effects: ['draw', 'bind'],
-    units: 18,
-    spells: 8,
-    locations: 4,
-    comboFamily: 'none',
-  },
-
-  {
-    label: 'Mer King Guard-Wall',
-    leaderId: 'mer_king',
-    keywords: ['Guard', 'Ward'],
-    effects: ['mend', 'destroy'],
-    units: 18,
-    spells: 8,
-    locations: 4,
-    comboFamily: 'none',
-  },
-  {
-    label: 'Mer King Heal-Midrange',
-    leaderId: 'mer_king',
-    keywords: ['Guard', 'Twin'],
-    effects: ['mend', 'buff'],
-    units: 16,
-    spells: 10,
-    locations: 4,
-    comboFamily: 'match',
-  },
-
-  {
-    label: 'Diver Straight-Combo',
-    leaderId: 'legendary_diver',
-    keywords: ['Swift', 'Frenzy'],
-    effects: ['sap', 'draw'],
-    units: 15,
-    spells: 12,
-    locations: 3,
-    comboFamily: 'straight',
-  },
-  {
-    label: 'Diver Aggro-Swift',
-    leaderId: 'legendary_diver',
-    keywords: ['Frenzy', 'Swift', 'Pierce'],
-    effects: ['sap'],
-    units: 19,
-    spells: 8,
-    locations: 3,
-    comboFamily: 'none',
-  },
-
-  {
-    label: 'Crimson Frenzy-Aggro',
-    leaderId: 'crimson_vector_commander',
-    keywords: ['Frenzy', 'Pierce', 'Guard'],
-    effects: ['sap'],
-    units: 19,
-    spells: 8,
-    locations: 3,
-    comboFamily: 'none',
-  },
-  {
-    label: 'Crimson Match-Combo',
-    leaderId: 'crimson_vector_commander',
-    keywords: ['Guard', 'Frenzy'],
-    effects: ['sap', 'buff'],
-    units: 16,
-    spells: 11,
-    locations: 3,
-    comboFamily: 'match',
-  },
-
-  {
-    label: 'Shinobi Tempo-Anchor',
-    leaderId: 'apex_nanite_shinobi',
-    keywords: ['Anchor', 'Echo', 'Swift'],
-    effects: ['buff', 'sap'],
-    units: 17,
-    spells: 10,
-    locations: 3,
-    comboFamily: 'none',
-  },
-  {
-    label: 'Shinobi Echo-Straight',
-    leaderId: 'apex_nanite_shinobi',
-    keywords: ['Echo', 'Anchor'],
-    effects: ['draw', 'sap'],
-    units: 16,
-    spells: 11,
-    locations: 3,
-    comboFamily: 'straight',
-  },
-];
-
-export function allDecks(): DeckDef[] {
-  return ARCHETYPES.map(buildDeck);
-}
-
 /**
  * Build a DeckDef from a saved custom deck (Supabase `decks` row: a Leader id
  * plus a flat list of card ids, one entry per copy). Used to play a
@@ -250,8 +115,9 @@ export function deckDefFromCustom(leaderId: string, cardIds: string[], label: st
 }
 
 // ---------------------------------------------------------------------------
-// Random deck generation — used for the CPU opponent so every match plays a
-// freshly rolled build instead of one of the twelve fixed archetypes above.
+// Random deck generation — every match (CPU opponent, and human players with
+// no saved custom deck) plays a freshly rolled build instead of a fixed
+// preset list.
 // ---------------------------------------------------------------------------
 const ALL_KEYWORDS = [
   'Guard',
@@ -280,8 +146,7 @@ function shuffle<T>(arr: T[], rng: () => number): T[] {
  * leanings and a random unit/spell/location split. `buildDeck()` still does the
  * actual card scoring, so the result is a legal, sensibly-curved 30-card deck. */
 export function randomArchetype(rng: () => number = Math.random): Archetype {
-  const leaderIds = [...new Set(ARCHETYPES.map((a) => a.leaderId))];
-  const leaderId = leaderIds[Math.floor(rng() * leaderIds.length)];
+  const leaderId = POOL_LEADERS[Math.floor(rng() * POOL_LEADERS.length)]?.id || 'avatar_of_the_abyss';
   const leader = POOL_BY_ID[leaderId];
 
   const keywords = shuffle(ALL_KEYWORDS, rng).slice(0, 2 + Math.floor(rng() * 2));

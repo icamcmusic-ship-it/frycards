@@ -150,7 +150,11 @@ export function Card3DInspector({
                   className="relative"
                 >
                   <div className="relative overflow-hidden rounded-[4px]" style={{ width: w }}>
-                    <CardFace def={def} size="full" foil={showFoil} />
+                    {/* foilEffect=false: this view supplies its own pointer-driven
+                        holographic sheen below, so CardFace's built-in animated
+                        shimmer is suppressed — stacking both caused visible
+                        flicker/banding where the two competing overlays met. */}
+                    <CardFace def={def} size="full" foil={showFoil} foilEffect={false} />
                     {/* Dynamic glare / light sweep following the tilt */}
                     {!reducedMotion && (
                       <div
@@ -163,13 +167,16 @@ export function Card3DInspector({
                         }}
                       />
                     )}
-                    {/* Holographic rainbow sheen for foils, angle follows tilt */}
-                    {!reducedMotion && showFoil && (
+                    {/* Holographic rainbow sheen for foils, angle follows tilt.
+                        Always mounted (never conditionally added/removed) so
+                        toggling "VIEW FOIL" crossfades via opacity instead of
+                        popping the gradient in/out with no transition. */}
+                    {!reducedMotion && (
                       <div
                         aria-hidden
                         className="absolute inset-0 pointer-events-none mix-blend-color-dodge"
                         style={{
-                          opacity: 0.2 + tiltAmount * 0.45,
+                          opacity: showFoil ? 0.2 + tiltAmount * 0.45 : 0,
                           background: `linear-gradient(${115 + ry * 5 + rx * 3}deg,
                             rgba(255,0,132,0.55) ${px * 30}%,
                             rgba(255,229,0,0.5) ${20 + px * 30}%,

@@ -12,11 +12,34 @@ import {
   abandonTwin,
 } from './engine';
 import { CardDef } from './cards';
-import { ARCHETYPES, buildDeck } from './decks';
+import { Archetype, buildDeck } from './decks';
+
+// Fixed deck-building specs for test fixtures — deterministic, not affected
+// by the (now-removed) prebuilt archetype list.
+const TEST_ARCHETYPE_A: Archetype = {
+  label: 'Test Deck A',
+  leaderId: 'avatar_of_the_abyss',
+  keywords: ['Echo', 'Twin'],
+  effects: ['draw', 'sap'],
+  units: 17,
+  spells: 9,
+  locations: 4,
+  comboFamily: 'match',
+};
+const TEST_ARCHETYPE_B: Archetype = {
+  label: 'Test Deck B',
+  leaderId: 'ethereal_sea_witch',
+  keywords: ['Ward', 'Anchor'],
+  effects: ['bind', 'destroy', 'draw'],
+  units: 16,
+  spells: 11,
+  locations: 3,
+  comboFamily: 'straight',
+};
 
 function freshGame() {
   const rng = mulberry32(1);
-  return newGame(buildDeck(ARCHETYPES[0]), buildDeck(ARCHETYPES[1]), rng);
+  return newGame(buildDeck(TEST_ARCHETYPE_A), buildDeck(TEST_ARCHETYPE_B), rng);
 }
 
 const echoUnit: CardDef = {
@@ -408,7 +431,7 @@ test('Twin one-die-per-turn: staged-this-turn card cannot complete until a later
 
 test("Twin 'sameTurn' mode auto-completes when a matching die is available", () => {
   const rng = mulberry32(2);
-  const g = newGame(buildDeck(ARCHETYPES[0]), buildDeck(ARCHETYPES[1]), rng, {
+  const g = newGame(buildDeck(TEST_ARCHETYPE_A), buildDeck(TEST_ARCHETYPE_B), rng, {
     twinMode: 'sameTurn',
   });
   g.active = 'A';

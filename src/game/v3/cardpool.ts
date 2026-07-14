@@ -30,7 +30,13 @@ const RARITY_TIER: Record<string, number> = {
   Rare: 2,
   'Super-Rare': 3,
   'Ultra-Rare': 4,
-  Mythic: 5,
+  // Full-Art sits above Ultra-Rare (see economy.ts pricing/rarity.ts glow
+  // tiers) — previously missing here entirely, which silently fell back to
+  // Common-tier (`?? 0`) stat/threshold budgets for any Full-Art card. No
+  // Full-Art cards are active in the catalog right now, but this stays
+  // correct for whenever they're reintroduced.
+  'Full-Art': 5,
+  Mythic: 6,
 };
 
 // ---------------------------------------------------------------------------

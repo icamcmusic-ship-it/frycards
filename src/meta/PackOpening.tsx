@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, Zap } from 'lucide-react';
-import { PackPull } from '../lib/supabase';
+import { Coins, Sparkles, Zap } from 'lucide-react';
+import { PackPull, quicksellCards } from '../lib/supabase';
 import { CardDef } from '../game/v3/cards';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
-import { PopButton } from './ui';
+import { PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, RARITY_HEX, rarityGlow } from './rarity';
 import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
+import { useMeta } from './MetaContext';
+import { fmtCredits } from './economy';
 
 /**
  * Full-screen pack-opening experience:
@@ -366,8 +368,11 @@ function TearStage({
 // Stage 2 — one-at-a-time 3D flip reveal
 // ---------------------------------------------------------------------------
 const CARD_SCALE = 1.06; // full tier is 240x336; scale to ~356px tall so it reads premium
+// Round only the width, then derive height from the exact 2.5:3.5 ratio —
+// rounding both independently can drift the rendered card off-ratio by a
+// pixel or two.
 const CARD_W = Math.round(CARD_SIZES.full.w * CARD_SCALE);
-const CARD_H = Math.round(CARD_SIZES.full.h * CARD_SCALE);
+const CARD_H = Math.round((CARD_W * CARD_SIZES.full.h) / CARD_SIZES.full.w);
 
 function RevealStage({
   packName,
@@ -397,6 +402,9 @@ function RevealStage({
     if (index >= pulls.length - 1) onDone();
     else setIndex((i) => i + 1);
   };
+  // Click the card itself to flip it face-up, then click again to advance —
+  // no need to reach for the separate NEXT button once it's revealed.
+  const onCardClick = () => (currentShown ? next() : flip());
 
   if (!current) return null;
 
@@ -408,16 +416,22 @@ function RevealStage({
         {packName.toUpperCase()}
       </h2>
       <div className="text-[10px] font-mono font-bold text-[var(--c-paper)]/50 mb-5">
-        CARD {index + 1} / {pulls.length} — {currentShown ? 'NICE!' : 'CLICK TO FLIP'}
+        CARD {index + 1} / {pulls.length} —{' '}
+        {currentShown ? 'CLICK TO CONTINUE ▸' : 'CLICK TO FLIP'}
       </div>
 
       {/* 3D flip container */}
       <div
-        onClick={flip}
-        className={cn(
-          'relative po-anim',
-          !currentShown && 'cursor-pointer hover:-translate-y-2 transition-transform',
-        )}
+        onClick={onCardClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onCardClick();
+          }
+        }}
+        className="relative po-anim cursor-pointer hover:-translate-y-2 transition-transform"
         style={{
           width: CARD_W,
           height: CARD_H,
@@ -589,6 +603,62 @@ function SummaryStage({
     return best;
   }, [pulls]);
 
+  // Quicksell straight from the haul — mostly for the common/uncommon
+  // clutter a big box tends to dump, without a separate trip to Collection.
+  const { refreshCollection, refreshProfile } = useMeta();
+  const [sold, setSold] = useState<Set<number>>(new Set());
+  const [sellBusy, setSellBusy] = useState(false);
+  const [sellError, setSellError] = useState('');
+  const [sellNotice, setSellNotice] = useState('');
+
+  const clutterIndices = pulls
+    .map((_, i) => i)
+    .filter(
+      (i) =>
+        !sold.has(i) &&
+        !pulls[i].converted_to_shards &&
+        (pulls[i].rarity === 'Common' || pulls[i].rarity === 'Uncommon'),
+    );
+
+  const quicksellClutter = async () => {
+    if (sellBusy || clutterIndices.length === 0) return;
+    setSellBusy(true);
+    setSellError('');
+    setSellNotice('');
+    // group by (card_id, foil) so identical pulls sell in one RPC call each
+    const groups = new Map<string, { cardId: string; foil: boolean; qty: number; indices: number[] }>();
+    for (const i of clutterIndices) {
+      const p = pulls[i];
+      const key = `${p.card_id}:${p.foil}`;
+      const g = groups.get(key) || { cardId: p.card_id, foil: p.foil, qty: 0, indices: [] };
+      g.qty += 1;
+      g.indices.push(i);
+      groups.set(key, g);
+    }
+    let totalCredits = 0;
+    let totalCards = 0;
+    const newlySold = new Set<number>();
+    for (const g of groups.values()) {
+      const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
+      if (error) {
+        setSellError(error);
+        break;
+      }
+      if (data) {
+        totalCredits += data.total;
+        totalCards += data.sold;
+        g.indices.forEach((i) => newlySold.add(i));
+      }
+    }
+    setSellBusy(false);
+    if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
+    if (totalCards > 0) {
+      setSellNotice(`Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`);
+      refreshCollection();
+      refreshProfile();
+    }
+  };
+
   return (
     <div className="relative flex flex-col items-center max-h-full w-full">
       <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center">
@@ -622,37 +692,51 @@ function SummaryStage({
           const def = pullToDef(pull);
           const isBest = i === bestIndex && pulls.length > 1;
           return (
-            <div
-              key={i}
-              className={cn('relative po-anim', isBest && 'scale-110 z-10 mx-3')}
-              style={{
-                animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out backwards',
-                animationDelay: reducedMotion ? undefined : `${i * 70}ms`,
-              }}
-            >
-              {isBest && (
-                <>
-                  <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-                    <Sparkles className="w-3 h-3" /> BEST PULL
-                  </div>
-                </>
-              )}
-              <div className={cn(!pull.converted_to_shards && rarityGlow(pull.rarity))}>
-                <CardFace
-                  def={def}
-                  size="full"
-                  foil={pull.foil}
-                  dimmed={pull.converted_to_shards}
-                />
-              </div>
-              {pull.converted_to_shards && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                    ✦ +{pull.shards} SHARDS
-                  </span>
+            // Split static positioning (outer, e.g. the best-pull scale-up)
+            // from the entrance animation (inner): both set `transform`, and
+            // stacking them on one element meant the animation — which has
+            // no `forwards` fill — reverted to the outer's static transform
+            // the instant it finished, producing a visible snap/jump.
+            // Nested elements compose their transforms instead of fighting.
+            <div key={i} className={cn('relative', isBest && 'scale-110 z-10 mx-3')}>
+              <div
+                className="relative po-anim"
+                style={{
+                  animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out backwards',
+                  animationDelay: reducedMotion ? undefined : `${i * 70}ms`,
+                }}
+              >
+                {isBest && (
+                  <>
+                    <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+                      <Sparkles className="w-3 h-3" /> BEST PULL
+                    </div>
+                  </>
+                )}
+                <div className={cn(!pull.converted_to_shards && !sold.has(i) && rarityGlow(pull.rarity))}>
+                  <CardFace
+                    def={def}
+                    size="full"
+                    foil={pull.foil}
+                    dimmed={pull.converted_to_shards || sold.has(i)}
+                  />
                 </div>
-              )}
+                {sold.has(i) && !pull.converted_to_shards && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="heading-font text-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs">
+                      SOLD
+                    </span>
+                  </div>
+                )}
+                {pull.converted_to_shards && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
+                      ✦ +{pull.shards} SHARDS
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
@@ -666,9 +750,30 @@ function SummaryStage({
         </p>
       )}
 
-      <PopButton color="red" onClick={onDone}>
-        ADD TO COLLECTION ✓
-      </PopButton>
+      {sellError && (
+        <div className="mb-3">
+          <Notice text={sellError} />
+        </div>
+      )}
+      {sellNotice && (
+        <div className="mb-3">
+          <Notice text={sellNotice} kind="success" />
+        </div>
+      )}
+
+      <div className="flex flex-wrap justify-center gap-3">
+        {clutterIndices.length > 0 && (
+          <PopButton color="steel" disabled={sellBusy} onClick={quicksellClutter}>
+            <span className="flex items-center gap-1">
+              <Coins className="w-3.5 h-3.5" />
+              {sellBusy ? 'SELLING…' : `QUICKSELL COMMONS & UNCOMMONS (${clutterIndices.length})`}
+            </span>
+          </PopButton>
+        )}
+        <PopButton color="red" onClick={onDone}>
+          ADD TO COLLECTION ✓
+        </PopButton>
+      </div>
       <div className="h-4 shrink-0" />
     </div>
   );
