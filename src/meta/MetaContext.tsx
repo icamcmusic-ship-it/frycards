@@ -44,6 +44,10 @@ export interface MetaState {
   refreshCosmetics: () => Promise<void>;
   refreshDecks: () => Promise<void>;
   refreshInventory: () => Promise<void>;
+  /** Re-fetch the static store catalogs — useful after a Creator Tools admin
+   * edit to a pack/shop item so the change shows up without a full reload. */
+  refreshShopItems: () => Promise<void>;
+  refreshPackTypes: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -153,26 +157,35 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return;
     setInventory(await fetchInventory(userId));
   }, [userId]);
+  const refreshShopItems = useCallback(async () => {
+    setShopItems(await fetchShopItems());
+  }, []);
+  const refreshPackTypes = useCallback(async () => {
+    setPackTypes(await fetchPackTypes());
+  }, []);
 
   // Load per-user data when a session appears.
   useEffect(() => {
-    if (!userId) {
-      setProfile(null);
-      setCollection([]);
-      setCosmetics([]);
-      setDecks([]);
-      setInventory([]);
-      setDataLoading(false);
-      return;
-    }
-    setDataLoading(true);
-    Promise.all([
-      refreshProfile(),
-      refreshCollection(),
-      refreshCosmetics(),
-      refreshDecks(),
-      refreshInventory(),
-    ]).finally(() => setDataLoading(false));
+    (async () => {
+      if (!userId) {
+        await Promise.resolve();
+        setProfile(null);
+        setCollection([]);
+        setCosmetics([]);
+        setDecks([]);
+        setInventory([]);
+        setDataLoading(false);
+        return;
+      }
+      setDataLoading(true);
+      await Promise.all([
+        refreshProfile(),
+        refreshCollection(),
+        refreshCosmetics(),
+        refreshDecks(),
+        refreshInventory(),
+      ]).finally(() => setDataLoading(false));
+    })();
   }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, refreshInventory]);
 
   const signOut = useCallback(async () => {
@@ -202,6 +215,8 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         refreshCosmetics,
         refreshDecks,
         refreshInventory,
+        refreshShopItems,
+        refreshPackTypes,
         signOut,
       }}
     >

@@ -543,6 +543,22 @@ export async function claimDailyPack(): Promise<{
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
 }
 
+/**
+ * Opens the free "Starter Box" every new signup receives: grants the chosen
+ * Leader + a legal, auto-saved 30-card deck + 8 bonus commons/uncommons. See
+ * `claim_starter_box` (SECURITY DEFINER) for the server-side logic.
+ */
+export async function claimStarterBox(leaderId: string): Promise<{
+  data: (OpenPackResult & { leader_id: string; deck_saved: boolean }) | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('claim_starter_box', { p_leader_id: leaderId });
+  return {
+    data: (data as OpenPackResult & { leader_id: string; deck_saved: boolean }) || null,
+    error: rpcError(error),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Friends & trading
 // ---------------------------------------------------------------------------

@@ -121,7 +121,13 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   }, [userId]);
 
   useEffect(() => {
-    reload().finally(() => setLoading(false));
+    (async () => {
+      try {
+        await reload();
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [reload]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';
@@ -628,6 +634,14 @@ function TradeComposerModal({
   useEffect(() => {
     fetchFriendCollection(partner.id).then(setTheirCollection);
   }, [partner.id]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const toggle = (
     list: TradeCardItem[],

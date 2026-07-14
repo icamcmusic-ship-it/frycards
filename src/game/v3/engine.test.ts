@@ -187,6 +187,7 @@ import {
   canAttack,
   castFromHand,
   activateUltimate,
+  activateViaRally,
   effAbilityThreshold,
   effThreshold,
   matchesPattern,
@@ -600,3 +601,183 @@ function autoTargetSafe(g: Game): boolean {
   const afterFace: number = g.players.B.leader.damage;
   return afterFace === 3;
 }
+
+// ---------------------------------------------------------------------------
+// Second audit pass: Ward refresh timing, Bulwark+Pierce+Toll stacking,
+// Avenge simultaneous-death timing, Rally-vs-Ultimate dice, Echo-recast on a
+// Location, and sum-cost + Anchor interaction.
+// ---------------------------------------------------------------------------
+
+test("VERIFIED CORRECT: Ward refreshes after the very next End Phase (either player's), not two later", () => {
+  const g = combatGame();
+  const warded = makeInst(mkU('wardA', { atk: 0, hp: 5, keywords: ['Ward'] }), 'A');
+  g.players.A.board.push(warded);
+
+  // Consume A's Ward via a hostile Sap from B.
+  applyEffect(g, 'B', { action: 'sap', value: 3, target: 'enemyUnit' }, warded.iid);
+  expect(warded.wardUsed).toBe(true);
+  expect(warded.damage).toBe(0); // fully prevented
+
+  // Still A's ward-used state should persist through the rest of A's own turn.
+  expect(warded.wardUsed).toBe(true);
+
+  // End A's turn (one End Phase) -> Ward must refresh immediately, before B even acts.
+  endTurn(g);
+  expect(warded.wardUsed).toBe(false);
+
+  // A second hostile Sap immediately (still B's turn) should be preventable again.
+  applyEffect(g, 'B', { action: 'sap', value: 2, target: 'enemyUnit' }, warded.iid);
+  expect(warded.wardUsed).toBe(true);
+  expect(warded.damage).toBe(0);
+});
+
+test('BUG-CHECK: Bulwark + Pierce overflow + Toll stack correctly in one attack (Ward->Bulwark->Pierce->Toll)', () => {
+  const g = combatGame();
+  // B has 1 stack of Toll (reduces all incoming Leader damage by 1, capped at 3).
+  g.players.B.board.push(makeInst(mkU('toll1', { atk: 0, hp: 9, toll: { x: 1 } }), 'B'));
+  // B's blocker: Bulwark 2, HP 3.
+  const blocker = makeInst(mkU('blk', { atk: 0, hp: 3, bulwark: { x: 2 } }), 'B');
+  g.players.B.board.push(blocker);
+  // A's attacker: Pierce, ATK 6.
+  const att = makeInst(mkU('pierceAtk', { atk: 6, hp: 10, keywords: ['Pierce'] }), 'A');
+  g.players.A.board.push(att);
+
+  expect(attack(g, att.iid, blocker.iid)).toBe(true);
+  // Bulwark: 6 - 2 = 4 dealt to the 3-HP blocker -> it dies.
+  expect(blocker.damage).toBe(4);
+  // Pierce overflow = post-Bulwark damage (4) minus blocker's pre-attack HP (3) = 1.
+  // Toll then reduces that Leader-bound overflow by 1 (its cap), leaving 0.
+  expect(g.players.B.leader.damage).toBe(0);
+  expect(g.stats.bulwarkReduced).toBeGreaterThanOrEqual(2);
+  expect(g.stats.tollReduced).toBeGreaterThanOrEqual(1);
+});
+
+test('VERIFIED CORRECT: Avenge cannot save its own would-be-dead recipient in the same simultaneous wave', () => {
+  const g = freshGame();
+  const p = g.players.A;
+  const av = makeInst(mkU('av3', { hp: 9, avenge: true }), 'A');
+  // A unit sitting at exactly 1 remaining HP: if Avenge's +1/+1 HP applied
+  // mid-wave it would survive a 1-damage hit landing in the same cleanup pass
+  // as another friendly death. Per the rulebook, Avenge is a state-based
+  // trigger with "no priority window" — remainingHp is fixed for the whole
+  // wave before any Avenge buffs apply, so this unit must still die.
+  const borderline = makeInst(mkU('border', { hp: 1 }), 'A');
+  const other = makeInst(mkU('other', { hp: 1 }), 'A');
+  p.board.push(av, borderline, other);
+  borderline.damage = 1; // exactly lethal
+  other.damage = 1; // also dies this same wave
+  cleanupDeaths(g);
+  expect(p.board.some((u) => u.iid === borderline.iid)).toBe(false); // still dead
+  expect(p.board.some((u) => u.iid === other.iid)).toBe(false);
+  expect(av.permAtk).toBe(2); // credited for both simultaneous deaths
+  expect(av.permHp).toBe(2);
+});
+
+test('VERIFIED CORRECT: activateUltimate never occupies abilityDie, so Rally cannot pull a die from a just-used Ultimate', () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  p.leader.def = {
+    ...p.leader.def,
+    ultimate: {
+      unlockTurn: 1,
+      threshold: 3,
+      effect: { action: 'sap', value: 1, target: 'enemyLeader' },
+    },
+  };
+  startTurn(g);
+  reroll(g, []);
+  p.turnsTaken = 1;
+  p.dice.forEach((d) => (d.value = 6));
+
+  const rallyUnit = makeInst(
+    mkU('rallier', {
+      keywords: ['Rally'],
+      ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } },
+    }),
+    'A',
+  );
+  rallyUnit.enteredThisTurn = false;
+  p.board.push(rallyUnit);
+
+  expect(activateUltimate(g, 0)).toBe(true);
+  expect(p.leader.abilityDie).toBeUndefined(); // Ultimate never sets abilityDie
+  expect(p.leader.abilityUsed).toBe(false); // Ultimate is independent of the normal Ability Slot
+
+  // Rally requires the source to already have abilityUsed && abilityDie !== undefined —
+  // the Leader's Ultimate use satisfies neither, so Rally off it must be rejected.
+  expect(activateViaRally(g, rallyUnit.iid, p.leader.iid)).toBe(false);
+  expect(rallyUnit.abilityUsed).toBe(false);
+});
+
+const locDef: CardDef = {
+  id: 'test_echo_location',
+  name: 'Test Echo Location',
+  type: 'Location',
+  keywords: ['Echo'],
+  excavate: { x: 1 },
+  ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } },
+};
+
+test('BUG-CHECK: Echo-recasting a Location starts a fresh life (excavateStacks reset), and cannot be re-Echoed', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+
+  const inst = makeInst(locDef, 'A');
+  inst.excavateStacks = 5; // stale accumulation from a previous life
+  p.discard.push(inst);
+
+  const ok = echoRecast(g, [], inst.iid, p.hand[0].iid);
+  expect(ok).toBe(true);
+  expect(p.location?.iid).toBe(inst.iid);
+  expect(inst.excavateStacks).toBe(0); // fresh Location life
+  expect(inst.echoSpent).toBe(true);
+
+  // Replace it with another Location on a later turn (only one Location cast
+  // per turn) -> the Echoed one, being echoSpent, must be banished rather
+  // than returned to Discard.
+  endTurn(g);
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const replacement = makeInst(mkU('other_loc', { type: 'Location' }), 'A');
+  p.hand.push(replacement);
+  expect(castLocationFree(g, replacement.iid)).toBe(true);
+  expect(p.banished.some((c) => c.iid === inst.iid)).toBe(true);
+  expect(p.discard.some((c) => c.iid === inst.iid)).toBe(false);
+
+  // Even if it somehow ended up back in Discard, it can never be Echo-recast again.
+  p.discard.push(inst);
+  expect(echoRecast(g, [], inst.iid, p.hand[0]?.iid ?? replacement.iid)).toBe(false);
+});
+
+test('VERIFIED CORRECT: Anchor reduces the effective threshold a sum-cost card actually needs to hit', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  for (let i = 0; i < 2; i++) p.board.push(makeInst(mkU(`anc${i}`, { keywords: ['Anchor'] }), 'A'));
+
+  const sumCard: CardDef = {
+    id: 'sumcard',
+    name: 'sumcard',
+    type: 'Charm',
+    threshold: 8,
+    castCostKind: 'sum',
+    keywords: ['Anchor'],
+    onCast: { action: 'draw', value: 1, target: 'none' },
+  };
+  expect(effThreshold(g, 'A', sumCard)).toBe(6); // 8 - 2 Anchors in play
+  p.hand.push(makeInst(sumCard, 'A'));
+  const card = p.hand[p.hand.length - 1];
+  const idxs = p.dice.map((_, i) => i).filter((i) => !p.dice[i].placed);
+  // Sum of two dice = 6 (meets the reduced threshold, would fail the printed 8).
+  p.dice[idxs[0]].value = 2;
+  p.dice[idxs[1]].value = 4;
+  expect(castFromHand(g, [idxs[0], idxs[1]], card.iid)).toBe(true);
+  expect(p.discard.some((c) => c.iid === card.iid)).toBe(true);
+});
