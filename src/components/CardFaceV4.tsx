@@ -653,6 +653,7 @@ export function CardFace({
   dimmed,
   highlight,
   foil,
+  foilEffect = true,
   onClick,
   footer,
   badge,
@@ -674,6 +675,11 @@ export function CardFace({
   highlight?: boolean;
   /** Renders the built-in foil treatment: shimmering sheen + pulsing glow ring. */
   foil?: boolean;
+  /** Set false to suppress the animated shimmer overlay while still showing
+   * the foil badge/glow — for callers (Card3DInspector) that layer their
+   * own pointer-driven holographic sheen and would otherwise double up two
+   * competing animated overlays on the same card. */
+  foilEffect?: boolean;
   onClick?: () => void;
   footer?: React.ReactNode;
   badge?: string;
@@ -698,9 +704,10 @@ export function CardFace({
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
-  // Long names/flavor text shrink to fit rather than getting truncated or
-  // clipped — the card itself can also grow (min-height, not fixed height)
-  // as a last resort so nothing is ever cut off.
+  // Long names/flavor text shrink to fit via fitFontSize below. The card's
+  // own footprint is a hard 2.5:3.5 (w:h) rectangle at every tier — it never
+  // grows to accommodate overflow; any residual overflow clips at the
+  // (already overflow-hidden) outer edge instead of distorting the ratio.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
   const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 85);
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
@@ -729,7 +736,7 @@ export function CardFace({
           onClick();
         }
       }}
-      style={{ width: w, minHeight: h, backgroundImage: bg }}
+      style={{ width: w, height: h, backgroundImage: bg }}
       className={cn(
         'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] text-left shrink-0 transition-transform overflow-hidden',
         cfg.outerBorder,
@@ -740,7 +747,11 @@ export function CardFace({
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         cfg.shadow,
         !dimmed && (mythic ? 'mythic-frame' : cfg.showGlow && rarityGlow(def.rarity)),
-        foil && !dimmed && 'foil-glow',
+        // Mythic already animates its own box-shadow pulse (mythic-frame) —
+        // stacking foil-glow's competing box-shadow keyframes on the same
+        // element causes the two animations to visibly stutter against each
+        // other, so a mythic foil gets only the (already more intense) frame.
+        foil && !dimmed && !mythic && 'foil-glow',
       )}
     >
       {/* Corner gem — a small decorative flourish marking Rare+ prints,
@@ -992,7 +1003,9 @@ export function CardFace({
       {def.set && <div className={cn('h-[3px] w-full shrink-0', set.bar)} title={def.set} />}
       {footer}
 
-      {foil && <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />}
+      {foil && foilEffect && (
+        <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
+      )}
       {!foil && animatedFx && !dimmed && (
         <div
           className={cn(

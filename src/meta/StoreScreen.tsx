@@ -601,8 +601,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 /** Full per-slot drop table for a pack, mirrored from the server's rolls. */
 function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
   const { profile } = useMeta();
-  const foilPity = profile?.foil_pity ?? 0;
-  const rows = packOdds(pack, foilPity);
+  const packsSinceSuperRare = profile?.packs_since_super_rare ?? 0;
+  const rows = packOdds(pack);
   const expected = expectedRarities(pack);
   return (
     <div
@@ -629,8 +629,11 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
             Every pack is rolled slot by slot. These are the exact server-side odds for each slot —
             no hidden weighting.
-            {foilPity > 0 &&
-              ` Foil odds below already include your current pity streak (${foilPity} pack${foilPity === 1 ? '' : 's'} since your last foil) — they'll reset to normal the moment you pull one.`}
+          </div>
+
+          <div className="text-[10px] font-bold text-[var(--c-red)] mb-3 ink-border-sm p-2 bg-[var(--c-red)]/10">
+            Guaranteed Super-Rare (or better) at least once every 10 packs, account-wide across
+            every pack you open — you're {packsSinceSuperRare}/10 packs into the current streak.
           </div>
 
           {pack.pity_note && (

@@ -8,7 +8,7 @@ import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { craftCard, disenchantCard, quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
+import { fmtCredits, quicksellPrice, shardCraftCost, shardDisenchantValue } from './economy';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
@@ -66,6 +66,71 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   // references one leader_id, so a Leader in use by any deck needs exactly
   // 1 copy reserved, not a count of appearances. Mirrors the RPC.
   const leadersInUse = useMemo(() => new Set(decks.map((d) => d.leader_id)), [decks]);
+
+  // Spare (unlocked) copy count per rarity, across the whole collection —
+  // Leaders excluded (they're never bulk-fodder). Backs the "QUICKSELL ALL
+  // <rarity>" bulk actions below.
+  const spareByRarity = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of POOL_V4) {
+      if (c.type === 'Leader') continue;
+      const o = owned.get(c.id);
+      if (!o) continue;
+      const spare = Math.max(0, o.q + o.f - (lockedByDecks.get(c.id) || 0));
+      if (spare <= 0) continue;
+      const r = c.rarity || 'Common';
+      m.set(r, (m.get(r) || 0) + spare);
+    }
+    return m;
+  }, [owned, lockedByDecks]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState('');
+  const [bulkError, setBulkError] = useState('');
+
+  const bulkQuicksell = async (targetRarity: string) => {
+    if (bulkBusy) return;
+    setBulkBusy(true);
+    setBulkError('');
+    setBulkNotice('');
+    let totalCredits = 0;
+    let totalCards = 0;
+    for (const c of POOL_V4) {
+      if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
+      const o = owned.get(c.id);
+      if (!o) continue;
+      const locked = lockedByDecks.get(c.id) || 0;
+      const spareTotal = Math.max(0, o.q + o.f - locked);
+      if (spareTotal <= 0) continue;
+      const spareFoil = Math.max(0, o.f - Math.max(0, locked - o.q));
+      const spareNormal = spareTotal - spareFoil;
+      for (const [foil, qty] of [
+        [false, spareNormal],
+        [true, spareFoil],
+      ] as const) {
+        if (qty <= 0) continue;
+        const { data, error } = await quicksellCards(c.id, qty, foil);
+        if (error) {
+          setBulkError(error);
+          setBulkBusy(false);
+          refreshCollection();
+          refreshProfile();
+          return;
+        }
+        if (data) {
+          totalCredits += data.total;
+          totalCards += data.sold;
+        }
+      }
+    }
+    setBulkBusy(false);
+    setBulkNotice(
+      totalCards === 0
+        ? `No spare ${targetRarity} cards to sell.`
+        : `Quicksold ${totalCards} ${targetRarity} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
+    );
+    refreshCollection();
+    refreshProfile();
+  };
 
   const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
@@ -279,6 +344,32 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           shards, or craft cards you're missing.
         </p>
 
+        {/* Bulk quicksell — clear out common/uncommon clutter in one click
+            instead of opening each card individually. */}
+        {(spareByRarity.get('Common') || 0) + (spareByRarity.get('Uncommon') || 0) > 0 && (
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-4 flex flex-wrap items-center gap-2">
+            <span className="heading-font text-xs mr-1">BULK QUICKSELL</span>
+            {bulkError && <Notice text={bulkError} />}
+            {bulkNotice && <Notice text={bulkNotice} kind="success" />}
+            {(['Common', 'Uncommon'] as const).map(
+              (r) =>
+                (spareByRarity.get(r) || 0) > 0 && (
+                  <PopButton
+                    key={r}
+                    color="yellow"
+                    disabled={bulkBusy}
+                    onClick={() => {
+                      const n = spareByRarity.get(r) || 0;
+                      if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
+                    }}
+                  >
+                    {bulkBusy ? 'SELLING…' : `QUICKSELL ALL ${r.toUpperCase()} (${spareByRarity.get(r)})`}
+                  </PopButton>
+                ),
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-3">
           {filtered.map((c) => {
             const o = owned.get(c.id);
@@ -476,6 +567,20 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                           DISENCHANT 1
                         </PopButton>
                       </div>
+                      {(inspectOwned?.f || 0) > 1 && (
+                        <PopButton
+                          color="black"
+                          className="w-full"
+                          disabled={selling || inspectSellable <= 0}
+                          onClick={() => {
+                            const n = Math.min(inspectOwned?.f || 0, inspectSellable);
+                            if (confirm(`Quicksell all ${n} spare foil copies of ${inspect.name}?`))
+                              handleSell(true, n);
+                          }}
+                        >
+                          QUICKSELL ALL FOIL
+                        </PopButton>
+                      )}
                     </>
                   )}
                 </>

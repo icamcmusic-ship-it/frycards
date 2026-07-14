@@ -51,6 +51,56 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 - **Credits display**: dropped the "$" from every credits amount in the
   app — the credits coin glyph is now the only currency symbol used.
 
+### Fixed (card rendering, pack opening, economy)
+
+- **Foil animation glitches**: fixed three real bugs — the 3D card inspector
+  was layering its own pointer-driven holographic sheen directly on top of
+  the card's own animated CSS shimmer (two competing rainbow overlays on the
+  same pixels); a Mythic foil card ran two different `box-shadow` pulse
+  animations on the same element at once (they can't blend, only stutter
+  between each other); and toggling "VIEW FOIL" hard-restarted the shimmer
+  sweep from frame 0 instead of crossfading. All three are now single,
+  non-conflicting, crossfading effects.
+- **Hard 2.5:3.5 card ratio**: every card face is now a fixed-height
+  rectangle at its exact printed aspect ratio — long name/flavor text still
+  shrinks to fit first, but the card itself no longer grows taller to
+  avoid clipping (any residual overflow now clips at the card edge instead
+  of distorting the ratio).
+- **Pack-opening summary snap**: the "BEST PULL" card's scale-up and its
+  entrance animation were fighting over the same `transform` on one
+  element — the entrance animation (no `forwards` fill) reverted to the
+  static scale the instant it finished, producing a visible jump. Split
+  across two nested elements so they compose instead of colliding.
+- **Pack opening**: clicking a revealed card now advances to the next one
+  (previously only the separate NEXT button did); added a "QUICKSELL
+  COMMONS & UNCOMMONS" action right on the haul summary screen.
+- **Quicksell**: added a "QUICKSELL ALL FOIL" bulk button to the Collection
+  inspector (previously only normal copies had a bulk-sell option), plus a
+  new "BULK QUICKSELL" toolbar on the Collection screen to clear out every
+  spare Common/Uncommon in one click without opening each card.
+
+### Changed (decks, pity, leaders, card catalog)
+
+- **Removed prebuilt archetype decks**: the 12 fixed "PREBUILT ARCHETYPES"
+  the Play screen offered are gone. Playing without a saved custom deck (or
+  as a guest) now rolls a single fresh, legal, randomly-built deck instead —
+  the same generator the CPU opponent has always used.
+- **Pity reworked**: removed the escalating foil-streak pity and the
+  separate Full-Art/Mythic 10/60-pack guarantees. The only pity left is one
+  rule — a Super-Rare or better is guaranteed at least once every 10 packs,
+  account-wide. The Store's drop-odds panel shows your current progress
+  toward it.
+- **Starter Box Leader choice capped at Rare**: four Leaders were rebalanced
+  down to Rare (from Super-Rare/Ultra-Rare/Mythic) based on their current
+  power — the two with no Ultimate at all, plus the two next-weakest — and
+  the Starter Box Leader picker now only offers Rare-or-below Leaders,
+  enforced server-side as well as in the picker UI.
+- **Full-Art retired from the active card list** (for now): the 8 cards
+  previously tagged Full-Art were reassigned to Mythic, Ultra-Rare or
+  Super-Rare by power. Also fixed a bug where Full-Art cards were silently
+  getting Common-tier stats/thresholds due to a gap in the rarity-to-power
+  mapping — fixed for whenever Full-Art returns to the catalog.
+
 ### Added (progression, battle pass, marketplace, social)
 
 - **Level system**: every match grants XP (+60 win / +25 loss). Levels follow a
