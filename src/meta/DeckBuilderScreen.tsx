@@ -81,17 +81,28 @@ export function validateDeckList(
 export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const { decks, refreshDecks, dataLoading } = useMeta();
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(null);
-  const [importError, setImportError] = useState('');
+  const [listError, setListError] = useState('');
+
+  const handleDelete = async (d: DeckRow) => {
+    if (!window.confirm(`Delete the deck "${d.name}"? This cannot be undone.`)) return;
+    const err = await deleteDeck(d.id);
+    if (err) {
+      setListError(err);
+      return;
+    }
+    setListError('');
+    refreshDecks();
+  };
 
   const handleImport = () => {
     const code = window.prompt('Paste a deck code (FRY1:…):');
     if (!code) return;
     const res = decodeDeckCode(code, POOL_MAP);
     if ('error' in res) {
-      setImportError(res.error);
+      setListError(res.error);
       return;
     }
-    setImportError('');
+    setListError('');
     // Unsaved draft: no id yet, saving creates a new deck row.
     setEditing({
       name: 'Imported Deck',
@@ -127,8 +138,8 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
               <Import className="w-4 h-4" /> IMPORT CODE
             </span>
           </PopButton>
-          {importError && (
-            <span className="text-[11px] font-bold text-[var(--c-red)]">⚠ {importError}</span>
+          {listError && (
+            <span className="text-[11px] font-bold text-[var(--c-red)]">⚠ {listError}</span>
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -169,15 +180,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                   <PopButton color="yellow" className="flex-1" onClick={() => setEditing(d)}>
                     EDIT
                   </PopButton>
-                  <PopButton
-                    color="black"
-                    onClick={async () => {
-                      if (!window.confirm(`Delete the deck "${d.name}"? This cannot be undone.`))
-                        return;
-                      await deleteDeck(d.id);
-                      refreshDecks();
-                    }}
-                  >
+                  <PopButton color="black" onClick={() => handleDelete(d)}>
                     <Trash2 className="w-4 h-4" />
                   </PopButton>
                 </div>
@@ -191,7 +194,8 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
           )}
           {!dataLoading && decks.length === 0 && (
             <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-14">
-              No decks yet. Forge your first deck — you already own a full starter collection.
+              No decks yet. Claim your free Starter Deck in the Store, then forge your first deck
+              here.
             </div>
           )}
         </div>

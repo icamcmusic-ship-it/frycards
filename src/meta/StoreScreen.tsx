@@ -482,13 +482,20 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   <div className="px-3 flex-1">
                     <div className="flex items-center justify-between gap-1">
                       <div className="heading-font text-xs truncate">{item.name}</div>
-                      <span
-                        className={cn(
-                          'text-[8px] font-black px-1 shrink-0',
-                          RARITY_CHIP[item.rarity] || RARITY_CHIP.Common,
+                      <span className="flex items-center gap-1 shrink-0">
+                        {item.is_limited && (
+                          <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-[var(--c-paper)]">
+                            LIMITED
+                          </span>
                         )}
-                      >
-                        {item.rarity.toUpperCase()}
+                        <span
+                          className={cn(
+                            'text-[8px] font-black px-1',
+                            RARITY_CHIP[item.rarity] || RARITY_CHIP.Common,
+                          )}
+                        >
+                          {item.rarity.toUpperCase()}
+                        </span>
                       </span>
                     </div>
                     <p className="text-[10px] font-bold text-[var(--c-steel)] mt-1 line-clamp-2">
@@ -599,6 +606,12 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             {foilPity > 0 &&
               ` Foil odds below already include your current pity streak (${foilPity} pack${foilPity === 1 ? '' : 's'} since your last foil) — they'll reset to normal the moment you pull one.`}
           </div>
+
+          {pack.pity_note && (
+            <div className="text-[10px] font-bold text-[var(--c-red)] mb-3 ink-border-sm p-2 bg-[var(--c-red)]/10">
+              {pack.pity_note}
+            </div>
+          )}
 
           {rows.map((row, i) => (
             <div key={i} className="mb-3 ink-border-sm p-2.5 bg-[var(--c-paper)]">

@@ -178,6 +178,8 @@ Each Combo-referencing card names one **exact pattern**. It's satisfied if your 
 | Large Straight (5 sequential) | big swing |
 | Four of a Kind | bomb |
 | Yahtzee (5 of a Kind) | game-ending bomb |
+| Three Odds (3+ odd-value dice) | usually available — an easy gate, alongside Any Pair |
+| Three Evens (3+ even-value dice) | usually available — an easy gate, alongside Any Pair |
 
 Because this is subset-based rather than tier-based, some rolls legitimately satisfy several different requirements at once — a Yahtzee, for instance, contains a genuine Pair, Three of a Kind, and Four of a Kind within it (any 2, 3, or 4 of the five identical dice), so it can trigger all of those cards' Combo bonuses simultaneously along with its own. It does **not** satisfy Two Pair, since that specifically requires two pairs of *different* values, and five identical dice only offer one value. This is intentional — a great roll paying off multiple cards at once is the reward for hitting one.
 
@@ -208,7 +210,11 @@ The v4.2 fix to the specific offending Large-Straight-gated Event (see Changelog
 
 ## 7. Casting & Activating
 
-Every non-Leader card prints a **Cast Slot** (threshold 1–6). A die of that value or higher, placed there, brings the card into play or resolves it immediately.
+Every non-Leader card prints a **Cast Slot** (threshold 1–6). By default this is an **"at least"** cost: a die of that value or higher, placed there, brings the card into play or resolves it immediately. *(v4.3)* Some cards instead print one of two other Cast Slot formats:
+- **Exact** — the placed die must show **exactly** the printed number, no higher and no lower.
+- **Sum** — combine the value of **any number** of your still-unplaced dice until they total the printed number or more; all of them are spent on this one card.
+
+Anchor and Overflow (below) both key off a card's **effective** threshold regardless of which cost format it uses; Overflow specifically only ever appears on 'at least'-cost cards.
 
 Cards in play may print one or more **Ability Slots** — repeatable thresholds. **Exhaustion is tracked per Ability Slot**, not per card: a card with two different Ability Slots can have both activated in the same turn, each once. However, **activating any Ability Slot and attacking are mutually exclusive on the same Unit in the same turn** — a Unit that has used an Ability Slot this turn cannot also attack this turn, and vice versa.
 
@@ -307,7 +313,7 @@ You lose immediately if either is true:
 
 **Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
 
-**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop.
+**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
 
 **Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own.
 

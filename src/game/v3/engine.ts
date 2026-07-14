@@ -6,7 +6,7 @@
  * (hand Cast Slot, in-play Ability Slot, Staging second Twin slot, Echo
  * recast from Discard). Sequential targeted combat with Guard walls.
  */
-import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, hasKw } from './cards';
+import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, EffectTarget, hasKw } from './cards';
 
 /**
  * v4.2 Twin A/B test modes (errata B): the two isolated fixes for Twin's
@@ -111,6 +111,12 @@ export interface Game {
   stage: TurnStage;
   /** v4.2 Aftershock: queued effects that fire at the start of their owner's next turn, before Draw Phase. */
   pendingAftershocks: { ownerId: string; effect: Effect }[];
+  /** True once startTurn() has run for the current `active` player. `stage`
+   * alone can't distinguish "new turn, startTurn not called yet" (stale
+   * PLACEMENT left over from the *previous* player's turn) from "this
+   * player's own Placement Phase" (also PLACEMENT) — this flag is what lets
+   * abandonTwin tell those apart. See abandonTwin for why that matters. */
+  turnStarted: boolean;
 }
 
 export interface GameStats {
@@ -385,6 +391,7 @@ export function newGame(
     rules: { ...DEFAULT_RULES, ...rules },
     stage: 'PRE_REROLL',
     pendingAftershocks: [],
+    turnStarted: false,
   };
   for (const p of Object.values(g.players)) {
     shuffle(p.deck, rng);
@@ -494,6 +501,30 @@ export function applyEffect(
   const v = eff.value || 0;
   const find = (iid?: string): Inst | undefined =>
     [...p.board, ...opp.board, p.leader, opp.leader].find((c) => c.iid === iid);
+  // Defense-in-depth: enforce the EffectTarget contract against whatever
+  // targetIid was actually supplied, rather than trusting every caller to
+  // only ever pass a legal id. autoTarget/the UI's target pickers already
+  // only ever offer legal choices, so this doesn't change any current
+  // behavior — it just stops a self-targeted Bind/Sap/destroy on an
+  // 'enemyUnit'/'anyTarget' effect from silently doing something to a
+  // friendly Unit instead of the "does nothing" the rulebook documents.
+  const findFor = (target: EffectTarget, iid?: string): Inst | undefined => {
+    const t = find(iid);
+    if (!t) return undefined;
+    const isEnemy = t.owner !== ownerId;
+    switch (target) {
+      case 'enemyUnit':
+        return isEnemy && t.def.type === 'Unit' ? t : undefined;
+      case 'friendlyUnit':
+        return !isEnemy && t.def.type === 'Unit' ? t : undefined;
+      case 'anyTarget':
+        return isEnemy ? t : undefined;
+      case 'friendlyAny':
+        return !isEnemy ? t : undefined;
+      default:
+        return t;
+    }
+  };
 
   const dmg = (t: Inst, amount: number, hostile: boolean) => {
     if (wardCheck(g, t, hostile)) return;
@@ -518,7 +549,7 @@ export function applyEffect(
       let t: Inst | undefined;
       if (eff.target === 'enemyLeader') t = opp.leader;
       else if (eff.target === 'self') t = self;
-      else t = find(targetIid);
+      else t = findFor(eff.target, targetIid);
       if (t) dmg(t, v, t.owner !== ownerId);
       break;
     }
@@ -528,7 +559,7 @@ export function applyEffect(
           if (!wardCheck(g, u, true)) u.damage += 999;
         }
       } else {
-        const t = find(targetIid);
+        const t = findFor(eff.target, targetIid);
         if (t && t.def.type === 'Unit' && !wardCheck(g, t, t.owner !== ownerId)) t.damage += 999;
       }
       break;
@@ -544,7 +575,7 @@ export function applyEffect(
     case 'bind': {
       // Ward only stops damage/Removal (§10) — Bind is neither, so it isn't
       // checked or consumed by Ward.
-      const t = find(targetIid);
+      const t = findFor(eff.target, targetIid);
       if (t && t.def.type === 'Unit') {
         t.boundNextTurn = true;
         g.log.push(`${t.def.name} was Bound.`);
@@ -584,6 +615,7 @@ export function startTurn(g: Game) {
   p.locationCastThisTurn = false;
   p.comboGateCastThisTurn = false;
   g.stage = 'PRE_REROLL';
+  g.turnStarted = true;
   for (const u of [...p.board, p.leader]) {
     u.hasAttacked = false;
     u.attacksMade = 0;
@@ -697,6 +729,11 @@ function enterPlay(
   const eff = effThreshold(g, p.id, c.def);
   const overflowHit =
     !!c.def.overflow && c.def.threshold !== undefined && dieValue - eff >= c.def.overflow.amount;
+  // Must be set before any discardCard() call below — an Echo-recast Charm/
+  // Event resolves-then-discards immediately, and that discard IS the "next
+  // time this Echoed card would be discarded again" that Rulebook §10 sends
+  // to the Banished Zone instead of back to Discard.
+  if (viaEcho) c.echoSpent = true;
 
   if (c.def.type === 'Unit') {
     // A Unit (re)entering play — whether a fresh cast, a completed Twin, or
@@ -740,7 +777,6 @@ function enterPlay(
     g.log.push(`${c.def.name} Overflow triggered.`);
     applyEffect(g, p.id, c.def.overflow.effect, autoTarget(g, p.id, c.def.overflow.effect), c);
   }
-  if (viaEcho) c.echoSpent = true;
   cleanupDeaths(g);
 }
 
@@ -1107,8 +1143,12 @@ export function scrap(g: Game, handIid: string, dieIndex: number): boolean {
   return true;
 }
 
-/** Voluntary Twin abandonment (start of turn, before Draw — call before startTurn draws). */
+/** Voluntary Twin abandonment (start of turn, before Draw — call before startTurn draws, or
+ * during that same turn's Reroll Phase, mirroring Snap Charms' PRE_REROLL window). Blocked once
+ * the active player has entered their own Placement Phase — full board/roll information is
+ * known by then and other cards may already have been cast this turn. */
 export function abandonTwin(g: Game, cardIid: string): boolean {
+  if (g.turnStarted && g.stage !== 'PRE_REROLL') return false;
   const p = g.players[g.active];
   const idx = p.staging.findIndex((c) => c.iid === cardIid);
   if (idx < 0) return false;
@@ -1297,6 +1337,7 @@ export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst)
   }
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
+  g.turnStarted = false;
 }
 
 export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {

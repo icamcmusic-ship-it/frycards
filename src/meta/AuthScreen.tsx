@@ -176,7 +176,8 @@ export function AuthScreen() {
           </button>
 
           <div className="text-center text-[10px] font-bold text-[var(--c-steel)] mt-1">
-            New accounts start with 750 gold, 50 gems and the Blue Coral starter collection.
+            New accounts start with 1000 gold and 50 gems — pick a free Starter Deck in the Store
+            to get your first cards.
           </div>
         </form>
 

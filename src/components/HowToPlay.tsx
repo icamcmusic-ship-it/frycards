@@ -59,7 +59,7 @@ const SECTIONS = [
     body: [
       [
         'Cast Slot',
-        'Every non-Location card prints a threshold 1–6. Place a die of that value OR HIGHER to cast it.',
+        'Every non-Location card prints a threshold 1–6. Most want a die of that value OR HIGHER, but some instead want EXACTLY that value, or the SUM of several dice.',
       ],
       [
         'Combo-gated',
@@ -121,7 +121,7 @@ const SECTIONS = [
       ['Bulwark X', 'Takes X less damage from every attack (after Ward, before Frenzy).'],
       [
         'Toll X',
-        'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives.',
+        'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives (total reduction from every Toll source caps at 3).',
       ],
       ['Avenge', 'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic.'],
       [
@@ -171,6 +171,10 @@ const SECTIONS = [
     title: '7 · Combo Patterns',
     body: [
       ['Any Pair', 'Two dice with the same value. Hits ~99% of turns if you chase it.'],
+      [
+        'Three Odds / Three Evens',
+        'Three or more dice that are all odd (or all even). About as easy to hit as Any Pair.',
+      ],
       ['Two Pair / Three Kind', 'Reliable mid-tier payoffs (~54–56% when chased).'],
       ['Small Straight', 'Four sequential values (~33% chased).'],
       ['Full House', 'Three of one value + two of another (~18% chased).'],
