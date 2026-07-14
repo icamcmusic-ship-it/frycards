@@ -283,9 +283,16 @@ function playPlacement(g: Game, p: Player) {
 
     // 2. Cast best numeric-threshold card that fits a die (Locations excluded —
     //    they cast free above and never use a die in v4.1).
-    const castable = [...p.hand]
+    // Score each card's priority once, then sort the scores — a sort
+    // comparator that re-rolls castPriority's seeded jitter on every
+    // comparison (Array.prototype.sort calls it more than once per element)
+    // isn't a consistent total order, so the same card could rank
+    // differently against different opponents in the same pass.
+    const castable = p.hand
       .filter((c) => !c.def.comboGate && c.def.type !== 'Location')
-      .sort((a, b) => castPriority(g, p, b) - castPriority(g, p, a));
+      .map((c) => ({ c, s: castPriority(g, p, c) }))
+      .sort((a, b) => b.s - a.s)
+      .map(({ c }) => c);
     for (const c of castable) {
       if (g.winner) break;
       const thr = effThreshold(g, p.id, c.def);

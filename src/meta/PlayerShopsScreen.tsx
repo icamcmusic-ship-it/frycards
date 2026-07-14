@@ -65,7 +65,7 @@ import {
   reportListing,
 } from '../lib/supabase';
 
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
+const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'];
 
 function defFor(cardId: string): CardDef {
   return (
@@ -719,8 +719,14 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
 // My Shop — setup, slots, listings, mystery builder, purchases/ratings
 // ---------------------------------------------------------------------------
 function MyShopTab() {
-  const { session, profile, collection, decks, refreshProfile, refreshCollection } = useMeta();
-  const userId = session!.user!.id;
+  const { session, profile, dataLoading, collection, decks, refreshProfile, refreshCollection } =
+    useMeta();
+  // A guest (no session) can still reach this tab's parent nav — fall back
+  // to a neutral empty id rather than crashing on session!.user!.id; the
+  // fetch* calls below just return empty results for it and the level-gate
+  // panel (guarded on `dataLoading` too, so it doesn't flash for a still-
+  // loading real profile) renders in its place.
+  const userId = session?.user?.id ?? '';
   const [shop, setShop] = useState<PlayerShop | null>(null);
   const [slots, setSlots] = useState<ShopSlot[]>([]);
   const [listings, setListings] = useState<ShopListing[]>([]);
@@ -773,7 +779,7 @@ function MyShopTab() {
     }
   };
 
-  if (loading) {
+  if (loading || dataLoading) {
     return <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">LOADING…</div>;
   }
 
@@ -1183,6 +1189,7 @@ function MysteryBuilderPanel({
   const [price, setPrice] = useState(200);
   const [validation, setValidation] = useState<MysteryPoolValidation | null>(null);
   const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
 
   useEffect(() => {
     setSlotSpecs((prev) => {
@@ -1197,8 +1204,10 @@ function MysteryBuilderPanel({
   const checkPool = async () => {
     if (!templateId) return;
     setChecking(true);
-    const { data } = await previewMysteryPool(templateId, pool);
+    setCheckError('');
+    const { data, error } = await previewMysteryPool(templateId, pool);
     setValidation(data);
+    if (!data && error) setCheckError(error);
     setChecking(false);
   };
 
@@ -1384,6 +1393,11 @@ function MysteryBuilderPanel({
               {checking ? 'CHECKING…' : 'PREVIEW POOL'}
             </PopButton>
           </div>
+          {checkError && (
+            <div className="ink-border-sm p-2 mb-2 text-[10px] font-bold text-[var(--c-red)]">
+              ✕ {checkError}
+            </div>
+          )}
           {validation && (
             <div className="ink-border-sm p-2 mb-2 text-[10px] font-bold">
               {validation.ok ? (

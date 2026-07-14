@@ -40,11 +40,6 @@ export function ProfileScreen({
     ownedIds.has(s.id) ||
     (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
 
-  const banner = shopItems.find((s) => s.id === profile.equipped_banner);
-  const avatar = shopItems.find((s) => s.id === profile.equipped_avatar);
-  const winRate =
-    profile.games_played > 0 ? Math.round((profile.wins / profile.games_played) * 100) : 0;
-
   const handleEquip = async (item: ShopItem) => {
     setError('');
     const err = await equipCosmetic(item.id);
@@ -72,6 +67,17 @@ export function ProfileScreen({
       </div>
     );
   }
+
+  // Read profile-dependent fields only after the null-check above — these
+  // used to sit before it and dereference `profile` unconditionally on
+  // every render (tsconfig has no `strict`/`strictNullChecks`, so this typed
+  // clean but crashed at runtime with "Cannot read properties of null"
+  // whenever this screen rendered before MetaContext's profile fetch
+  // resolved, e.g. right after sign-in).
+  const banner = shopItems.find((s) => s.id === profile.equipped_banner);
+  const avatar = shopItems.find((s) => s.id === profile.equipped_avatar);
+  const winRate =
+    profile.games_played > 0 ? Math.round((profile.wins / profile.games_played) * 100) : 0;
 
   const sections: { type: ShopItem['item_type']; label: string; equipped: string | null }[] = [
     { type: 'card_back', label: 'CARD BACKS', equipped: profile.equipped_card_back },

@@ -638,7 +638,14 @@ export function startTurn(g: Game) {
   for (const s of p.staging) {
     s.stagedTurns++;
     s.stagedThisTurn = false;
-    if (s.def.stagedPassive) {
+    // Rulebook §7's "keep the cap, but give staged cards a passive" describes
+    // 'stagedPassive' as a variant of the capped ('oneDiePerTurn') behavior,
+    // isolated from the uncapped 'sameTurn' arm — firing this unconditionally
+    // regardless of twinMode collapsed that isolation (every A/B/C sim arm,
+    // including 'sameTurn', got the passive) and let it leak into live play
+    // under any mode. DEFAULT_RULES.twinMode is 'oneDiePerTurn', not
+    // 'sameTurn', so this only changes the 'sameTurn' sim arm's behavior.
+    if (s.def.stagedPassive && g.rules.twinMode !== 'sameTurn') {
       applyEffect(g, p.id, s.def.stagedPassive, autoTarget(g, p.id, s.def.stagedPassive), s);
       decide(g, p.id, 'twinStagedPassive');
     }
@@ -775,6 +782,7 @@ function enterPlay(
       applyEffect(g, p.id, eff, targetIid ?? autoTarget(g, p.id, eff), c);
       queueAftershock(g, p, c);
     }
+    resolveCastComboBonus(g, p, c);
     discardCard(g, p, c);
   }
   if (c.def.type === 'Unit' && c.def.onCast) {
@@ -939,6 +947,7 @@ export function castFromHand(
       ) {
         applyEffect(g, p.id, c.def.overflow.effect, autoTarget(g, p.id, c.def.overflow.effect), c);
       }
+      resolveCastComboBonus(g, p, c);
       discardCard(g, p, c);
       cleanupDeaths(g);
       return true;
@@ -1065,9 +1074,13 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   if (!die || idx < 0) return false;
   const c = p.staging[idx];
   if (die.value !== c.stagedDie) return false;
-  // v4.2 Twin A/B test (errata B): the one-die-per-turn cap only applies in
-  // 'oneDiePerTurn' mode. 'sameTurn' reverts to same-Placement-Phase completion.
-  if (g.rules.twinMode === 'oneDiePerTurn' && c.stagedThisTurn) return false;
+  // v4.2 Twin A/B test (errata B): the one-die-per-turn cap applies in every
+  // mode except 'sameTurn', which reverts to same-Placement-Phase completion
+  // by design. A literal `=== 'oneDiePerTurn'` check left 'stagedPassive'
+  // (whose rulebook description is explicitly "keep the cap, but give staged
+  // cards a passive") with no cap at all — same-turn completion was legal in
+  // that mode too, contradicting its own name.
+  if (g.rules.twinMode !== 'sameTurn' && c.stagedThisTurn) return false;
   die.placed = true;
   p.staging.splice(idx, 1);
   c.stagedDie = undefined;
@@ -1132,6 +1145,29 @@ export function echoRecast(
   // "commons drag the average down" story can be told apart from "overpriced
   // across the board".
   decide(g, p.id, `echoRecast_${rarityTier(c.def.rarity)}`);
+
+  if (hasKw(c.def, 'Twin')) {
+    // Echo must fill Twin's first Cast Slot the same way a fresh cast does —
+    // straight to Staging, still needing a second exact-matching die on a
+    // later turn — not a one-die completion via enterPlay(). Must be marked
+    // spent before it lands in Staging: if it's later abandoned back to
+    // Discard, §10 sends an already-Echoed card to Banished instead.
+    c.echoSpent = true;
+    c.stagedDie = primaryValue;
+    c.stagedTurns = 0;
+    c.stagedThisTurn = true;
+    p.staging.push(c);
+    g.log.push(`${c.def.name} Echoed back into Staging (die ${primaryValue}).`);
+    if (g.rules.twinMode === 'sameTurn') {
+      const placedIdx = Array.isArray(dieIndex) ? dieIndex[0] : dieIndex;
+      const matchIdx = p.dice.findIndex(
+        (d, i) => i !== placedIdx && !d.placed && d.value === primaryValue,
+      );
+      if (matchIdx >= 0) completeTwin(g, matchIdx, c.iid);
+    }
+    return true;
+  }
+
   enterPlay(g, p, c, primaryValue, true, targetIid);
   return true;
 }
@@ -1180,6 +1216,22 @@ export function comboCheck(g: Game) {
       g.stats.comboTriggers[c.def.id] = (g.stats.comboTriggers[c.def.id] || 0) + 1;
       applyEffect(g, p.id, c.def.combo!.effect, autoTarget(g, p.id, c.def.combo!.effect), c);
     }
+  }
+}
+
+/**
+ * A Charm/Event's own `.combo` bonus (cardpool.ts's "Combo bonus, not a
+ * requirement" rider on steep-cost Events) can never be picked up by
+ * `comboCheck()` above — that function only scans permanents still sitting
+ * in `p.board`/`p.location` at the Combat Phase transition, but Charms/
+ * Events resolve immediately and go straight to Discard. Check it inline,
+ * right when the card resolves, against the roll that paid for it.
+ */
+function resolveCastComboBonus(g: Game, p: Player, c: Inst) {
+  if (!c.def.combo) return;
+  if (matchesPattern(rollValues(p), c.def.combo.pattern)) {
+    g.stats.comboTriggers[c.def.id] = (g.stats.comboTriggers[c.def.id] || 0) + 1;
+    applyEffect(g, p.id, c.def.combo.effect, autoTarget(g, p.id, c.def.combo.effect), c);
   }
 }
 

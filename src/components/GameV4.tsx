@@ -334,10 +334,13 @@ interface Pending {
   dieIndices?: number[];
 }
 
-/** v4.3: in-progress "build a dice sum" cast for a 'sum'-cost hand card. */
+/** v4.3: in-progress "build a dice sum" cast for a 'sum'-cost hand card.
+ * `mode: 'echo'` reuses the same dice-picker for a 'sum'-cost Echo recast
+ * (cardIid then refers to a discard-pile card, not a hand card). */
 interface SumCast {
   cardIid: string;
   sel: Set<number>;
+  mode?: 'echo';
 }
 
 export function GameV4({
@@ -349,6 +352,7 @@ export function GameV4({
   onExit,
   onResult,
   reward,
+  rewardError,
 }: {
   /** A prebuilt archetype's DeckDef, or a player's own saved deck resolved against the pool. */
   humanDeck: DeckDef;
@@ -362,6 +366,10 @@ export function GameV4({
    * screen once the parent has recorded the result (null/undefined until
    * then, or forever for guests). */
   reward?: MatchResult | null;
+  /** Set once the parent gives up retrying a failed recordMatchResult() —
+   * shown in place of the reward banner so a network/server error doesn't
+   * just look like the reward never showed up. */
+  rewardError?: string | null;
 }) {
   // The engine Game object is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
@@ -396,7 +404,13 @@ export function GameV4({
   const [rallyPick, setRallyPick] = useState<string | null>(null);
   const [attacker, setAttacker] = useState<string | null>(null);
   // Echo card awaiting fodder — targetIid is set first if the recast effect needs one.
-  const [echoPick, setEchoPick] = useState<{ cardIid: string; targetIid?: string } | null>(null);
+  const [echoPick, setEchoPick] = useState<{
+    cardIid: string;
+    targetIid?: string;
+    /** v4.3: the dice picked to pay a 'sum'-cost card's Echo recast, carried
+     * from confirmSumEcho through the fodder-discard step below. */
+    dieIndices?: number[];
+  } | null>(null);
   const [showDiscard, setShowDiscard] = useState(false);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -597,8 +611,10 @@ export function GameV4({
   const canCastNow = (c: Inst): { ok: boolean; why?: string } => {
     if (c.def.type === 'Location') {
       // Free Location casts are a Placement Phase bonus action (§7) — not
-      // available before the reroll window closes, same as every other cast.
-      if (stage === 'preRoll')
+      // available before or during the roll, same as every other cast (a
+      // `stage === 'preRoll'`-only check let a Location render as clickable
+      // during 'awaitRoll'/'rolling' too, since neither was excluded).
+      if (stage !== 'placement')
         return { ok: false, why: 'Free Location cast happens during Placement' };
       if (me.locationCastThisTurn) return { ok: false, why: 'Location already cast this turn' };
       if (me.location?.def.id === c.def.id) return { ok: false, why: 'Same-name Location in play' };
@@ -670,10 +686,15 @@ export function GameV4({
 
   const tryCast = (c: Inst) => {
     if (c.def.type === 'Location') {
+      const chk = canCastNow(c);
+      if (!chk.ok) {
+        say(chk.why || 'Illegal');
+        return;
+      }
       if (castLocationFree(g, c.iid)) {
         bump();
         say(`${c.def.name} enters play (free).`);
-      }
+      } else say('Illegal placement.');
       return;
     }
     const chk = canCastNow(c);
@@ -744,14 +765,41 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
+  // ---- 'sum'-cost Echo recast: same dice-picker as confirmSumCast, but the
+  // card lives in discard and resolution still needs a fodder discard from
+  // hand — hands off to echoPick/tryEchoFodder instead of casting directly.
+  const confirmSumEcho = () => {
+    if (!sumCast || sumCast.sel.size === 0) return;
+    const c = me.discard.find((h) => h.iid === sumCast.cardIid);
+    if (!c) {
+      setSumCast(null);
+      return;
+    }
+    const dieIndices = [...sumCast.sel];
+    if (needsTarget(c.def.onCast)) {
+      if (targetsFor(g, HUMAN, c.def.onCast!).length === 0) {
+        say('No legal target.');
+        setSumCast(null);
+        return;
+      }
+      setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
+      return;
+    }
+    setEchoPick({ cardIid: c.iid, dieIndices });
+    setSumCast(null);
+    say('Now pick a hand card to discard.');
+  };
+
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
     if (pending.kind === 'echo') {
       // Echo still needs a fodder discard from hand — stash the chosen
-      // target and hand off to the fodder-picking step instead of resolving
+      // target (and, for a 'sum'-cost Echo, the dice already picked to pay
+      // it) and hand off to the fodder-picking step instead of resolving
       // immediately.
-      setEchoPick({ cardIid: pending.cardIid, targetIid });
+      setEchoPick({ cardIid: pending.cardIid, targetIid, dieIndices: pending.dieIndices });
       setPending(null);
+      setSumCast(null);
       say('Now pick a hand card to discard.');
       return;
     }
@@ -939,7 +987,10 @@ export function GameV4({
 
   const tryEchoFodder = (fodder: Inst) => {
     if (!echoPick) return;
-    if (selDie === null) {
+    // A 'sum'-cost Echo already collected its dice in confirmSumEcho; every
+    // other Echo still needs a single die selected right here.
+    const dice = echoPick.dieIndices ?? (selDie !== null ? selDie : null);
+    if (dice === null) {
       say('Select a die.');
       return;
     }
@@ -948,7 +999,7 @@ export function GameV4({
       setEchoPick(null);
       return;
     }
-    if (echoRecast(g, selDie, echoPick.cardIid, fodder.iid, echoPick.targetIid)) {
+    if (echoRecast(g, dice, echoPick.cardIid, fodder.iid, echoPick.targetIid)) {
       setEchoPick(null);
       setSelDie(null);
       setShowDiscard(false);
@@ -1198,26 +1249,27 @@ export function GameV4({
       )}
       {sumCast &&
         (() => {
-          const c = me.hand.find((h) => h.iid === sumCast.cardIid);
+          const isEcho = sumCast.mode === 'echo';
+          const c = (isEcho ? me.discard : me.hand).find((h) => h.iid === sumCast.cardIid);
           const target = c ? effThreshold(g, HUMAN, c.def) : 0;
           const total = [...sumCast.sel].reduce((s, i) => s + (me.dice[i]?.value ?? 0), 0);
           const met = total >= target;
           return (
             <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#B45309] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-              SUM CAST — {c?.def.name}: Σ {total}/{target}
+              {isEcho ? 'SUM ECHO' : 'SUM CAST'} — {c?.def.name}: Σ {total}/{target}
               <button
-                onClick={confirmSumCast}
+                onClick={isEcho ? confirmSumEcho : confirmSumCast}
                 disabled={!met}
                 className={cn(
                   'px-1.5 py-0.5',
                   met ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-ink)]/40',
                 )}
               >
-                CAST
+                {isEcho ? 'ECHO' : 'CAST'}
               </button>
               <button
                 onClick={cancelSumCast}
-                aria-label="Cancel sum cast"
+                aria-label={isEcho ? 'Cancel sum echo' : 'Cancel sum cast'}
                 className="bg-[var(--c-ink)] px-1"
               >
                 ✕
@@ -1742,6 +1794,17 @@ export function GameV4({
                   {eligible && stage === 'placement' && (
                     <button
                       onClick={() => {
+                        // 'sum'-cost Echo cards can't be paid with a single
+                        // die (their threshold is a dice-total, not a face
+                        // value) — arm the same multi-die builder the hand
+                        // cast flow uses, instead of the single-die checks
+                        // below (which would always fail for these).
+                        if (c.def.castCostKind === 'sum' && !c.def.comboGate) {
+                          setSumCast({ cardIid: c.iid, sel: new Set(), mode: 'echo' });
+                          setSelDie(null);
+                          say('Click dice to build the sum, then ECHO.');
+                          return;
+                        }
                         if (selDie === null) {
                           say('Select a die first.');
                           return;
@@ -1908,6 +1971,11 @@ export function GameV4({
                       : ''}
                   </div>
                 )}
+              </div>
+            )}
+            {reward == null && rewardError && (
+              <div className="bg-[var(--c-red)] text-white heading-font text-[10px] px-3 py-1.5 ink-border-sm mb-4 max-w-[280px]">
+                {rewardError}
               </div>
             )}
             <button

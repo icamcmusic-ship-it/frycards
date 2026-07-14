@@ -104,7 +104,17 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         setBootError("Couldn't reach the server. Check your connection and try again.");
         setSessionLoading(false);
       });
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
+      setSession(s);
+      // `guest` only ever gets reset inside signOut() below — a real session
+      // arriving through this listener (a stale/duplicate auth event, an
+      // OAuth redirect completing, multi-tab session sync) while `guest` was
+      // still true from an earlier "play as guest" choice left every screen
+      // that gates on `guest` (MainMenu's Collection/Deck Builder/Store/etc.)
+      // locked into the guest-restricted UI for an authenticated player, with
+      // no way out short of an explicit sign-out.
+      if (s) setGuest(false);
+    });
     return () => {
       cancelled = true;
       sub.subscription.unsubscribe();
