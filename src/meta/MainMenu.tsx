@@ -126,7 +126,6 @@ function DailyLoginPanel() {
         {claimed ? (
           <div className="text-[10px] font-black text-[var(--c-steel)]">
             CLAIMED: {fmtCredits(claimed.credits_awarded)} credits
-            {claimed.shards_awarded > 0 && ` · ${claimed.shards_awarded}✦`}
             {claimed.vouchers_awarded > 0 && ` · ${claimed.vouchers_awarded} vouchers`}
             {claimed.pack_awarded && ` · 1× ${claimed.pack_awarded}`}
           </div>

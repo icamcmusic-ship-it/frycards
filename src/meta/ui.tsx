@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
-import { Coins, Ticket, Sparkles, TrendingUp } from 'lucide-react';
+import { Coins, Ticket, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
 import { fetchCardMarketValue } from '../lib/supabase';
@@ -74,16 +74,6 @@ export function VoucherChip({ amount }: { amount: number }) {
   );
 }
 
-/** Crafting currency, gained from duplicate-protected pack pulls, disenchanting
- * spare cards, and battle pass rewards — spend it in the Collection screen. */
-export function ShardChip({ amount }: { amount: number }) {
-  return (
-    <span className="flex items-center gap-1 bg-[#2DD4BF] text-[#042F2C] px-2 py-0.5 ink-border-sm heading-font text-xs">
-      <Sparkles className="w-3.5 h-3.5" /> {amount.toLocaleString()}
-    </span>
-  );
-}
-
 /**
  * Player-market value popup for the expanded card viewer (outside actual
  * gameplay only — never render this in GameV4). Hidden until a card has at
@@ -141,7 +131,6 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
         <div className="flex items-center gap-2">
           <CreditChip amount={profile.credits} />
           <VoucherChip amount={profile.vouchers} />
-          <ShardChip amount={profile.shards} />
         </div>
       )}
     </div>
