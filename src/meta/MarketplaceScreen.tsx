@@ -24,8 +24,10 @@ import { PlayerLink } from './PlayerProfileModal';
 
 type Tab = 'browse' | 'mine' | 'sell';
 
-function timeLeft(endsAt: string): string {
+function timeLeft(endsAt: string | null | undefined): string {
+  if (!endsAt) return 'ended';
   const ms = new Date(endsAt).getTime() - Date.now();
+  if (Number.isNaN(ms)) return 'ended';
   if (ms <= 0) return 'ended';
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
@@ -62,15 +64,20 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   const [search, setSearch] = useState('');
 
   const reload = useCallback(async () => {
-    const [ls, mine] = await Promise.all([
-      fetchMarketListings(),
-      userId ? fetchMyMarketActivity(userId) : Promise.resolve([]),
-    ]);
-    setListings(ls);
-    setMyActivity(mine);
-    const ids = [...new Set([...ls, ...mine].map((l) => l.seller))];
-    setSellers(new Map((await fetchPublicProfiles(ids)).map((p) => [p.id, p])));
-    setLoading(false);
+    try {
+      const [ls, mine] = await Promise.all([
+        fetchMarketListings(),
+        userId ? fetchMyMarketActivity(userId) : Promise.resolve([]),
+      ]);
+      setListings(ls);
+      setMyActivity(mine);
+      const ids = [...new Set([...ls, ...mine].map((l) => l.seller))];
+      setSellers(new Map((await fetchPublicProfiles(ids)).map((p) => [p.id, p])));
+    } catch {
+      setError('Could not load the marketplace. Check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   }, [userId]);
 
   useEffect(() => {
@@ -129,7 +136,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="heading-font text-xs truncate">{def.name}</span>
-            <span className={cn('text-[8px] font-black px-1', RARITY_CHIP[def.rarity || 'Common'])}>
+            <span
+              className={cn(
+                'text-[8px] font-black px-1',
+                RARITY_CHIP[def.rarity || 'Common'] || RARITY_CHIP.Common,
+              )}
+            >
               {(def.rarity || 'Common').toUpperCase()}
             </span>
             {l.foil && (
@@ -165,7 +177,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     : `Start ${fmtCredits(l.price)}`}
                 </span>
                 <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                  {l.bid_count} bid{l.bid_count === 1 ? '' : 's'}
+                  {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                   {highBidder ? ' · YOU LEAD' : ''}
                 </span>
               </>
@@ -235,7 +247,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
                 )}
               >
-                {l.status.toUpperCase()}
+                {(l.status || 'UNKNOWN').toUpperCase()}
               </span>
             )}
           </div>
@@ -426,7 +438,7 @@ function SellForm({
 
   const locked = useMemo(() => {
     const m = new Map<string, number>();
-    for (const d of decksLocked) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    for (const d of decksLocked) for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decksLocked]);
 

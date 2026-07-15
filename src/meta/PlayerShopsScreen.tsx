@@ -80,12 +80,15 @@ function defFor(cardId: string): CardDef {
 
 const RATING_WINDOW_MS = 3 * 86_400_000;
 
-function withinRatingWindow(createdAt: string): boolean {
+function withinRatingWindow(createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
   return Date.now() - new Date(createdAt).getTime() < RATING_WINDOW_MS;
 }
 
-function shopAge(createdAt: string): string {
-  const days = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
+function shopAge(createdAt: string | null | undefined): string {
+  const ts = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (Number.isNaN(ts)) return 'opened recently';
+  const days = Math.max(0, Math.floor((Date.now() - ts) / 86_400_000));
   if (days < 1) return 'opened today';
   if (days === 1) return '1 day old';
   if (days < 60) return `${days} days old`;
@@ -132,7 +135,7 @@ function CardStackPicker({
 
   const locked = useMemo(() => {
     const m = new Map<string, number>();
-    for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    for (const d of decks) for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decks]);
 
@@ -367,7 +370,7 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <RatingBadge shop={s} />
                   <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                    {s.sales_count} sale{s.sales_count === 1 ? '' : 's'} · {shopAge(s.created_at)}
+                    {s.sales_count ?? 0} sale{(s.sales_count ?? 0) === 1 ? '' : 's'} · {shopAge(s.created_at)}
                   </span>
                 </div>
               </div>
@@ -506,7 +509,7 @@ function MysteryListingCard({
           </span>
           {soldOut && (
             <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
-              {listing.status.toUpperCase()}
+              {(listing.status || 'SOLD OUT').toUpperCase()}
             </span>
           )}
         </div>
@@ -595,19 +598,20 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         />
       );
     }
+    const cards = l.cards ?? [];
     return (
       <div key={l.id} className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3">
         <div className="shrink-0 flex flex-col gap-1">
-          <CardFace def={defFor(l.cards[0]?.card_id || '')} size="compact" foil={l.cards[0]?.foil} />
-          {l.cards.length > 1 && <span className="text-[9px] font-black text-center">+{l.cards.length - 1} more</span>}
+          <CardFace def={defFor(cards[0]?.card_id || '')} size="compact" foil={cards[0]?.foil} />
+          {cards.length > 1 && <span className="text-[9px] font-black text-center">+{cards.length - 1} more</span>}
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="heading-font text-xs">
-            {l.listing_type === 'bundle' ? 'BUNDLE' : defFor(l.cards[0]?.card_id || '').name}
+            {l.listing_type === 'bundle' ? 'BUNDLE' : defFor(cards[0]?.card_id || '').name}
           </div>
           {l.listing_type === 'bundle' && (
             <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1 flex flex-col gap-0.5">
-              {l.cards.map((c, i) => (
+              {cards.map((c, i) => (
                 <span key={i}>
                   {defFor(c.card_id).name}
                   {c.foil ? ' ✦' : ''} ×{c.quantity}
@@ -621,7 +625,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
             </span>
             {l.status !== 'active' && (
               <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
-                {l.status.toUpperCase()}
+                {(l.status || 'UNAVAILABLE').toUpperCase()}
               </span>
             )}
           </div>
@@ -669,7 +673,8 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                   ) : (
                     '…'
                   )}{' '}
-                  · {shopAge(shop.created_at)} · {shop.sales_count} sale{shop.sales_count === 1 ? '' : 's'}
+                  · {shopAge(shop.created_at)} · {shop.sales_count ?? 0} sale
+                  {(shop.sales_count ?? 0) === 1 ? '' : 's'}
                 </div>
               </div>
               <RatingBadge shop={shop} />
@@ -878,7 +883,7 @@ function MyShopTab() {
             )}
           >
             <span>#{s.slot_index}</span>
-            <span>{s.status.toUpperCase()}</span>
+            <span>{(s.status || 'EMPTY').toUpperCase()}</span>
             {s.collateral > 0 && <Credits amount={s.collateral} />}
           </div>
         ))}
@@ -964,12 +969,12 @@ function MyShopTab() {
             className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
           >
             <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
-              <span className="heading-font text-xs mr-1">{l.listing_type.toUpperCase()}</span>
+              <span className="heading-font text-xs mr-1">{(l.listing_type || 'LISTING').toUpperCase()}</span>
               {l.listing_type === 'mystery'
-                ? `${l.remaining_packs}/${l.total_packs} packs left`
-                : l.cards.map((c) => defFor(c.card_id).name).join(', ')}
+                ? `${l.remaining_packs ?? 0}/${l.total_packs ?? 0} packs left`
+                : (l.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
               {' · '}
-              <Credits amount={l.price} /> · {l.status.toUpperCase()}
+              <Credits amount={l.price} /> · {(l.status || 'UNKNOWN').toUpperCase()}
             </div>
             {l.status === 'active' && (l.listing_type === 'individual' || l.listing_type === 'bundle') && (
               <PopButton color="steel" disabled={busy} onClick={() => run(() => cancelShopListing(l.id))}>
@@ -994,7 +999,7 @@ function MyShopTab() {
               className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
             >
               <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
-                {p.listing_type === 'mystery' ? 'Mystery pack' : p.cards.map((c) => defFor(c.card_id).name).join(', ')}
+                {p.listing_type === 'mystery' ? 'Mystery pack' : (p.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
                 {' · '}
                 <Credits amount={p.price} />
               </div>
@@ -1418,7 +1423,7 @@ function MysteryBuilderPanel({
                 </span>
               ) : (
                 <div className="text-[var(--c-red)]">
-                  {validation.errors.map((e, i) => (
+                  {(validation.errors ?? ['Pool rejected by the server.']).map((e, i) => (
                     <div key={i}>✕ {e}</div>
                   ))}
                 </div>

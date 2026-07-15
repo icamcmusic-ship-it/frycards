@@ -86,6 +86,51 @@ export function maybeMulligan(g: Game, rng: () => number): Record<string, boolea
   return mulliganed;
 }
 
+/**
+ * Per-game CPU persona: a small set of dials rolled once per game (from the
+ * game's own seeded rng, so sims stay reproducible) that skew the heuristics
+ * below. Without this the CPU's line of play collapses to one archetype —
+ * every game it trades the same way, casts in the same order, and feels
+ * identical to play against. Personas keep every choice legal and sensible
+ * (lethal is always taken, big threats are always answered) but vary the
+ * flavor: how face-hungry combat is, how much cast order favors Units vs
+ * removal, and how loose the tie-breaking jitter is.
+ */
+interface Persona {
+  name: string;
+  /** 0..1 — chance combat pushes face damage over an optional value trade. */
+  aggression: number;
+  /** Magnitude of the seeded tie-break jitter (± this / 2). */
+  jitter: number;
+  /** Cast-priority skew: >0 favors Units/tempo, <0 favors removal/answers. */
+  curveBias: number;
+}
+
+const PERSONAS: Persona[] = [
+  { name: 'aggro', aggression: 0.75, jitter: 2.5, curveBias: 4 },
+  { name: 'tempo', aggression: 0.5, jitter: 3.5, curveBias: 2 },
+  { name: 'balanced', aggression: 0.35, jitter: 3, curveBias: 0 },
+  { name: 'control', aggression: 0.15, jitter: 2, curveBias: -4 },
+];
+
+// WeakMap keyed on the Game object (ai.ts owns no field on Game itself) —
+// one persona per player per game, rolled lazily from g.rng on first use.
+const gamePersonas = new WeakMap<Game, Record<string, Persona>>();
+
+function personaFor(g: Game, pid: string): Persona {
+  let m = gamePersonas.get(g);
+  if (!m) {
+    m = {};
+    gamePersonas.set(g, m);
+  }
+  let p = m[pid];
+  if (!p) {
+    p = PERSONAS[Math.floor(g.rng() * PERSONAS.length)] ?? PERSONAS[0];
+    m[pid] = p;
+  }
+  return p;
+}
+
 function unplacedDice(p: Player): number[] {
   return p.dice.map((d, i) => (d.placed ? -1 : i)).filter((i) => i >= 0);
 }
@@ -95,16 +140,21 @@ function unplacedDice(p: Player): number[] {
  * resolve the same way — without it, the AI's line of play is 100%
  * reproducible from board state alone and gets predictable/exploitable. */
 function castPriority(g: Game, p: Player, c: Inst): number {
+  const persona = personaFor(g, p.id);
   let v = (c.def.threshold ?? 3) * 10;
-  if (c.def.type === 'Unit') v += 5;
+  if (c.def.type === 'Unit') v += 5 + persona.curveBias;
+  // Removal/disruption gets the mirror-image skew, so control personas answer
+  // the board first while aggro personas develop theirs.
+  const act = c.def.onCast?.action;
+  if (act === 'destroy' || act === 'sap' || act === 'bind') v -= persona.curveBias;
   if (c.def.comboGate) v += 40; // free value when the gate is met
   return v + tieBreak(g);
 }
 
-/** Small seeded-random nudge (±1.5) used to break near-ties in AI heuristics
- * without overriding genuine priority differences. */
+/** Small seeded-random nudge (persona-sized, ±1 to ±1.75) used to break
+ * near-ties in AI heuristics without overriding genuine priority differences. */
 function tieBreak(g: Game): number {
-  return (g.rng() - 0.5) * 3;
+  return (g.rng() - 0.5) * personaFor(g, g.active).jitter;
 }
 
 /** Pick the cheapest sufficient die index for an "at least" threshold, or -1. */
@@ -517,9 +567,21 @@ function playCombat(g: Game, p: Player) {
         const kills = opp.board.filter((t) => willKillInCombat(g, t, atk));
         const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
         const valueKill = kills.find((t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0));
-        // Threat check: clear big attackers even with a trade.
+        // Threat check: clear big attackers even with a trade — every persona
+        // answers a 5+ ATK unit before doing anything cute.
         const bigThreat = kills.find((t) => effAtk(g, t) >= 5);
-        target = safeKill ?? bigThreat ?? valueKill ?? opp.leader;
+        // Persona flavor (seeded): aggro personas sometimes push face damage
+        // instead of taking an optional trade; control personas will even
+        // trade down to clear a real attacker (3+ ATK) when nothing free is
+        // on offer. Lethal and bigThreat above are never skipped.
+        const persona = personaFor(g, p.id);
+        const wantsFace = g.rng() < persona.aggression;
+        const clearKill =
+          g.rng() > persona.aggression ? kills.find((t) => effAtk(g, t) >= 3) : undefined;
+        // Free kills (no death-back) are always taken; only the optional
+        // trade-with-losses is subject to the face-vs-trade roll.
+        target =
+          bigThreat ?? safeKill ?? (wantsFace ? undefined : valueKill ?? clearKill) ?? opp.leader;
       }
     }
     if (!attack(g, att.iid, target.iid)) {

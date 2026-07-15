@@ -251,14 +251,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                   >
                     <span className="heading-font text-xs w-7 text-right shrink-0">#{i + 1}</span>
                     <span className="flex-1 min-w-0 text-[11px] font-bold truncate">
-                      <PlayerLink id={row.id} name={row.username} role={row.role} />
+                      <PlayerLink id={row.id} name={row.username || 'Unknown player'} role={row.role} />
                       {row.id === userId ? ' (you)' : ''}
                     </span>
                     <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">
-                      Lv {row.level}
+                      Lv {row.level ?? 1}
                     </span>
                     <span className="font-mono font-black text-sm shrink-0">
-                      {row.total_cards.toLocaleString()}
+                      {(row.total_cards ?? 0).toLocaleString()}
                     </span>
                   </div>
                 ))}
@@ -502,13 +502,13 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       <div className="flex flex-wrap gap-4 mb-3">
                         <TradeSide
                           label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
-                          cards={t.proposer_cards}
-                          credits={t.proposer_credits}
+                          cards={t.proposer_cards ?? []}
+                          credits={t.proposer_credits ?? 0}
                         />
                         <TradeSide
                           label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
-                          cards={t.recipient_cards}
-                          credits={t.recipient_credits}
+                          cards={t.recipient_cards ?? []}
+                          credits={t.recipient_credits ?? 0}
                         />
                       </div>
                       <div className="flex gap-2">
@@ -589,7 +589,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                               : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
                           )}
                         >
-                          {t.status.toUpperCase()}
+                          {(t.status || 'UNKNOWN').toUpperCase()}
                         </span>
                         <span className="text-[10px] font-bold">
                           <PlayerLink
@@ -599,7 +599,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                               profiles.get(t.proposer === userId ? t.recipient : t.proposer)?.role
                             }
                           />{' '}
-                          · {new Date(t.created_at).toLocaleDateString()}
+                          {t.created_at ? ` · ${new Date(t.created_at).toLocaleDateString()}` : ''}
                         </span>
                       </div>
                     ))}
@@ -643,7 +643,7 @@ function TradeComposerModal({
   // assert_cards_available's deck-lock check the create_trade RPC enforces.
   const locked = useMemo(() => {
     const m = new Map<string, number>();
-    for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    for (const d of decks) for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decks]);
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
@@ -764,7 +764,7 @@ function TradeComposerModal({
       >
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0 z-10">
           <div className="heading-font text-sm text-[var(--c-yellow)]">
-            TRADE WITH {partner.username.toUpperCase()}
+            TRADE WITH {(partner.username || 'PLAYER').toUpperCase()}
             <RoleBadge role={partner.role} />
           </div>
           <PopButton color="yellow" onClick={onClose}>

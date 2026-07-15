@@ -176,7 +176,9 @@ export function PackOpening({
   // Big hauls (bulk opens, boxes) skip the one-at-a-time reveal — clicking
   // through 30+ flips is a chore, and the grouped summary is the payoff.
   const bigHaul = pulls.length > 12;
-  const [stage, setStage] = useState<Stage>('pack');
+  // An empty pull list (bad server response) would strand the player on a
+  // reveal stage that renders nothing — go straight to the summary instead.
+  const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
 
   return (
     <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
@@ -540,8 +542,8 @@ function RevealStage({
             )}
           >
             {current.converted_to_credits
-              ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} → CREDITS`
-              : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
+              ? `DUPLICATE PROTECTED — ${(current.rarity || 'COMMON').toUpperCase()} → CREDITS`
+              : `${(current.rarity || 'COMMON').toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
                   current.serialized ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}` : ''
                 }`}
           </div>
@@ -618,7 +620,7 @@ function SummaryStage({
       (a, b) =>
         rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
         Number(b.pull.foil) - Number(a.pull.foil) ||
-        a.pull.name.localeCompare(b.pull.name),
+        (a.pull.name || '').localeCompare(b.pull.name || ''),
     );
   }, [pulls]);
 
@@ -713,7 +715,7 @@ function SummaryStage({
               RARITY_CHIP[r] || RARITY_CHIP.Common,
             )}
           >
-            {r.toUpperCase()} ×{n}
+            {(r || 'Common').toUpperCase()} ×{n}
           </span>
         ))}
         {creditsGained > 0 && (

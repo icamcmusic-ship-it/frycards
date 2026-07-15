@@ -879,3 +879,339 @@ test('VERIFIED CORRECT: Anchor reduces the effective threshold a sum-cost card a
   expect(castFromHand(g, [idxs[0], idxs[1]], card.iid)).toBe(true);
   expect(p.discard.some((c) => c.iid === card.iid)).toBe(true);
 });
+
+// ---------------------------------------------------------------------------
+// Third audit pass (v4.3): stage-gate holes, Bind window, Snap timing,
+// Crescendo/Aftershock/Excavate/Contested/Tribute/staged-passive coverage,
+// Resolve-vs-Ultimate ruling, exact-cost + Anchor, Frenzy+Bulwark ordering.
+// ---------------------------------------------------------------------------
+import { effAtk } from './engine';
+
+test('BUG FIXED: castFromHand is rejected once the Combat Phase has opened', () => {
+  const g = combatGame(); // stage === 'COMBAT'
+  const p = g.players.A;
+  const c = makeInst(mkU('lateCast'), 'A');
+  p.hand.push(c);
+  const die = p.dice.findIndex((d) => !d.placed);
+  p.dice[die].value = 6;
+  expect(castFromHand(g, die, c.iid)).toBe(false);
+  expect(p.board.some((u) => u.iid === c.iid)).toBe(false);
+  expect(p.hand.some((u) => u.iid === c.iid)).toBe(true);
+});
+
+test('BUG FIXED: die-free placements (free Location cast, Echo Location recast) are rejected between turns', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  endTurn(g); // active is now B, turnStarted=false, stage left at PLACEMENT
+  expect(g.turnStarted).toBe(false);
+  const p = g.players.B;
+  const loc = makeInst({ id: 'btl', name: 'btl', type: 'Location' }, 'B');
+  p.hand.push(loc);
+  expect(castLocationFree(g, loc.iid)).toBe(false);
+  const echoLoc = makeInst(locDef, 'B');
+  p.discard.push(echoLoc);
+  expect(echoRecast(g, [], echoLoc.iid, p.hand[0].iid)).toBe(false);
+  // once the turn properly starts, both are legal again
+  startTurn(g);
+  reroll(g, []);
+  expect(castLocationFree(g, loc.iid)).toBe(true);
+});
+
+test("RULING: Bind blocks attack/ability on its controller's turn AND retaliation on the binder's following turn, then expires", () => {
+  const g = freshGame();
+  g.players.A.turnsTaken = 3;
+  g.players.B.turnsTaken = 3;
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const bound = makeInst(
+    mkU('bnd', {
+      atk: 3,
+      hp: 9,
+      ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } },
+    }),
+    'B',
+  );
+  g.players.B.board.push(bound);
+  applyEffect(g, 'A', { action: 'bind', target: 'enemyUnit' }, bound.iid);
+  expect(bound.boundNextTurn).toBe(true);
+  // A's own Combat Phase this same turn: retaliation is still live.
+  comboCheck(g);
+  const a1 = makeInst(mkU('a1', { atk: 0, hp: 9 }), 'A');
+  g.players.A.board.push(a1);
+  expect(attack(g, a1.iid, bound.iid)).toBe(true);
+  expect(a1.damage).toBe(3); // Bind aims at upcoming turns, not the cast turn
+  endTurn(g);
+
+  // B's turn: bound — no attack, no Ability Slot.
+  startTurn(g);
+  expect(bound.boundThisTurn).toBe(true);
+  reroll(g, []);
+  expect(canAttack(g, bound)).toBe(false);
+  const dieIdx = g.players.B.dice.findIndex((d) => !d.placed);
+  expect(activateAbility(g, dieIdx, bound.iid)).toBe(false);
+  endTurn(g);
+
+  // A's following turn: the "safe target" window — no retaliation.
+  startTurn(g);
+  reroll(g, []);
+  comboCheck(g);
+  const a2 = makeInst(mkU('a2', { atk: 1, hp: 9 }), 'A');
+  g.players.A.board.push(a2);
+  expect(attack(g, a2.iid, bound.iid)).toBe(true);
+  expect(a2.damage).toBe(0);
+  endTurn(g);
+
+  // B's next turn: Bind has expired.
+  startTurn(g);
+  expect(bound.boundThisTurn).toBe(false);
+  expect(canAttack(g, bound)).toBe(true);
+});
+
+test("RULING: Resolve discounts only the Leader's normal Ability Slot, never its Ultimate", () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  p.leader.def = {
+    ...p.leader.def,
+    resolve: { x: 2 },
+    ability: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
+    ultimate: { unlockTurn: 1, threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
+  };
+  startTurn(g);
+  reroll(g, []);
+  p.leader.damage = Math.ceil((p.leader.def.hp || 0) / 2); // at half HP
+  expect(effAbilityThreshold(g, p.leader)).toBe(3); // normal slot: 5 - 2
+  p.dice[0].value = 4; // would meet the discounted normal slot, not the Ultimate's printed 5
+  expect(activateUltimate(g, 0)).toBe(false);
+  p.dice[0].value = 5;
+  expect(activateUltimate(g, 0)).toBe(true);
+});
+
+test('Snap casts during the Reroll Phase, plain Charms cannot, and the Snap die is locked from rerolls', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  const p = g.players.A;
+  const snapC = makeInst(
+    { id: 'snapc', name: 'snapc', type: 'Charm', threshold: 1, snap: true, onCast: { action: 'draw', value: 1, target: 'none' } },
+    'A',
+  );
+  const plainC = makeInst(
+    { id: 'plainc', name: 'plainc', type: 'Charm', threshold: 1, onCast: { action: 'draw', value: 1, target: 'none' } },
+    'A',
+  );
+  p.hand.push(snapC, plainC);
+  expect(g.stage).toBe('PRE_REROLL');
+  p.dice[0].value = 6;
+  p.dice[1].value = 6;
+  expect(castFromHand(g, 1, plainC.iid)).toBe(false); // must wait for Placement
+  expect(castFromHand(g, 0, snapC.iid)).toBe(true);
+  expect(g.stage).toBe('PRE_REROLL'); // reroll window still open after the Snap
+  reroll(g, [0]);
+  expect(p.dice[0].value).toBe(6); // placed die can't be rerolled
+  expect(p.dice[0].placed).toBe(true);
+});
+
+test('Crescendo counts every placed 6 this turn including its own casting die, never unplaced or non-6 dice', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.dice.forEach((d) => {
+    d.placed = false;
+    d.value = 3;
+  });
+  p.dice[0].value = 6; // will cast the Event
+  p.dice[1].value = 6;
+  p.dice[1].placed = true; // a 6 already spent earlier this turn
+  p.dice[2].placed = true; // placed non-6: must not count
+  p.dice[3].value = 6; // UNplaced 6: must not count
+  const ev = makeInst(
+    { id: 'cre', name: 'cre', type: 'Event', threshold: 1, crescendo: { x: 1 }, onCast: { action: 'sap', value: 2, target: 'enemyLeader' } },
+    'A',
+  );
+  p.hand.push(ev);
+  expect(castFromHand(g, 0, ev.iid)).toBe(true);
+  expect(g.players.B.leader.damage).toBe(2 + 2); // base 2, +1 per placed 6 (own die + the earlier one)
+});
+
+test("Aftershock fires exactly once, at the start of the owner's next turn — not the opponent's", () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  const ev = makeInst(
+    {
+      id: 'aft', name: 'aft', type: 'Event', threshold: 1,
+      onCast: { action: 'sap', value: 4, target: 'enemyLeader' },
+      aftershock: { action: 'sap', value: 2, target: 'enemyLeader' },
+    },
+    'A',
+  );
+  p.hand.push(ev);
+  p.dice[0].value = 6;
+  expect(castFromHand(g, 0, ev.iid)).toBe(true);
+  expect(g.players.B.leader.damage).toBe(4);
+  endTurn(g);
+  startTurn(g); // B's turn: A's Aftershock must not fire here
+  reroll(g, []);
+  expect(g.players.B.leader.damage).toBe(4);
+  g.players.B.dice.forEach((d) => (d.placed = true)); // stop Pitch from healing B
+  endTurn(g);
+  startTurn(g); // A's next turn: fires now, before Draw
+  expect(g.players.B.leader.damage).toBe(6);
+  expect(g.pendingAftershocks.length).toBe(0);
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g);
+  reroll(g, []);
+  g.players.B.dice.forEach((d) => (d.placed = true));
+  endTurn(g);
+  startTurn(g); // A again: never a second firing
+  expect(g.players.B.leader.damage).toBe(6);
+});
+
+test('Excavate: no discount the turn cast, -X per full controller turn (opponent turns never accrue), floor 1', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  const loc = makeInst(
+    { id: 'exl', name: 'exl', type: 'Location', excavate: { x: 2 }, ability: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } } },
+    'A',
+  );
+  p.hand.push(loc);
+  expect(castLocationFree(g, loc.iid)).toBe(true);
+  expect(effAbilityThreshold(g, loc)).toBe(5); // no unearned discount on the cast turn
+  endTurn(g);
+  startTurn(g); // B's turn
+  reroll(g, []);
+  expect(effAbilityThreshold(g, loc)).toBe(5); // opponent turns don't accrue
+  endTurn(g);
+  startTurn(g); // A turn 2: one stack
+  expect(effAbilityThreshold(g, loc)).toBe(3);
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g);
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g); // A turn 3: two stacks -> 1
+  expect(effAbilityThreshold(g, loc)).toBe(1);
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g);
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g); // A turn 4: floored at 1
+  expect(effAbilityThreshold(g, loc)).toBe(1);
+});
+
+test('Contested doubles the Location passive only while the opponent controls no Location', () => {
+  const g = freshGame();
+  const p = g.players.A;
+  p.location = makeInst({ id: 'cl', name: 'cl', type: 'Location', contested: true, locPassive: 'ATK_ALL' }, 'A');
+  const u = makeInst(mkU('cu', { atk: 2 }), 'A');
+  p.board.push(u);
+  expect(effAtk(g, u)).toBe(4); // 2 + 1x2 while uncontested
+  g.players.B.location = makeInst({ id: 'ol', name: 'ol', type: 'Location' }, 'B');
+  expect(effAtk(g, u)).toBe(3); // 2 + 1 once the opponent has a Location
+});
+
+test('Pitch mends 1 per unplaced die at End Phase; Tribute needs 2+ pitched dice, not 1', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.leader.damage = 10;
+  p.location = makeInst(
+    { id: 'tl', name: 'tl', type: 'Location', tribute: { action: 'mend', value: 3, target: 'friendlyLeader' } },
+    'A',
+  );
+  p.dice.forEach((d, i) => (d.placed = i !== 0)); // exactly 1 unplaced
+  endTurn(g);
+  expect(p.leader.damage).toBe(9); // 1 pitch heal, no Tribute
+  startTurn(g); // B
+  reroll(g, []);
+  endTurn(g);
+  startTurn(g); // A again
+  reroll(g, []);
+  p.dice.forEach((d, i) => (d.placed = i > 1)); // 2 unplaced
+  endTurn(g);
+  expect(p.leader.damage).toBe(9 - 2 - 3); // 2 pitches + Tribute Mend 3
+});
+
+test('Twin staged passive ticks at the start of each controller turn AFTER staging, never the staging turn', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  const tw = makeInst(
+    {
+      id: 'twp', name: 'twp', type: 'Unit', threshold: 1, atk: 1, hp: 1,
+      keywords: ['Twin'],
+      stagedPassive: { action: 'sap', value: 1, target: 'enemyLeader' },
+    },
+    'A',
+  );
+  p.hand.push(tw);
+  p.dice[0].placed = false;
+  p.dice[0].value = 6;
+  expect(castFromHand(g, 0, tw.iid)).toBe(true);
+  expect(p.staging.some((c) => c.iid === tw.iid)).toBe(true);
+  expect(g.players.B.leader.damage).toBe(0); // no tick on the staging turn
+  endTurn(g);
+  startTurn(g); // B's turn: not B's card, no tick
+  reroll(g, []);
+  expect(g.players.B.leader.damage).toBe(0);
+  endTurn(g);
+  startTurn(g); // A's next turn: one tick
+  expect(g.players.B.leader.damage).toBe(1);
+});
+
+test('destroy and Bind can never touch a Leader (§5: Leaders only ever take damage/healing)', () => {
+  const g = freshGame();
+  applyEffect(g, 'A', { action: 'destroy', target: 'enemyUnit' }, g.players.B.leader.iid);
+  applyEffect(g, 'A', { action: 'bind', target: 'enemyUnit' }, g.players.B.leader.iid);
+  expect(g.players.B.leader.damage).toBe(0);
+  expect(g.players.B.leader.boundNextTurn).toBe(false);
+  expect(g.winner).toBe(null);
+});
+
+test('RULING: Bulwark reduces retaliation BEFORE Frenzy doubles it on the bonus swing (Ward->Bulwark->Frenzy)', () => {
+  const g = combatGame();
+  const fz = makeInst(mkU('fzb', { atk: 1, hp: 20, keywords: ['Frenzy'], bulwark: { x: 1 } }), 'A');
+  g.players.A.board.push(fz);
+  const wall = makeInst(mkU('wallb', { atk: 3, hp: 30 }), 'B');
+  g.players.B.board.push(wall);
+  expect(attack(g, fz.iid, wall.iid)).toBe(true);
+  expect(fz.damage).toBe(2); // first swing: 3 - 1 Bulwark
+  expect(attack(g, fz.iid, wall.iid)).toBe(true);
+  expect(fz.damage).toBe(2 + 4); // second swing: (3 - 1) x 2, not 3x2 - 1
+});
+
+test('VERIFIED CORRECT: exact-cost cards key off the EFFECTIVE threshold — Anchor shifts the exact number required', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.board.push(makeInst(mkU('ax', { keywords: ['Anchor'] }), 'A'));
+  const c = makeInst(
+    { id: 'exc', name: 'exc', type: 'Charm', threshold: 4, castCostKind: 'exact', keywords: ['Anchor'], onCast: { action: 'draw', value: 1, target: 'none' } },
+    'A',
+  );
+  p.hand.push(c);
+  p.dice[0].placed = false;
+  p.dice[0].value = 4; // the PRINTED number no longer pays it
+  expect(castFromHand(g, 0, c.iid)).toBe(false);
+  p.dice[0].value = 3; // effective = 4 - 1 Anchor
+  expect(castFromHand(g, 0, c.iid)).toBe(true);
+});

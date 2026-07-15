@@ -930,6 +930,12 @@ export function castFromHand(
   // v4.1: Locations never use a die — they cast free via castLocationFree().
   if (c.def.type === 'Location') return false;
 
+  // §3.4/§3.6: casting is a Placement Phase action (or Reroll Phase, for
+  // Snap). Once comboCheck() has opened the Combat window, the cast window
+  // is closed for the rest of the turn — every other placement action
+  // already rejects non-PLACEMENT stages, but this function only checked
+  // the PRE_REROLL side, silently allowing casts mid-Combat.
+  if (g.stage === 'COMBAT') return false;
   // v4.2 Snap: everything else must wait for the Placement Phase to open.
   if (g.stage === 'PRE_REROLL' && !c.def.snap) return false;
 
@@ -941,6 +947,10 @@ export function castFromHand(
     if (dice.length !== 1) return false;
     if (!matchesPattern(rollValues(p), c.def.comboGate)) return false;
     // any die value works
+    // RULING (Snap + comboGate): a Snap card cast during the Reroll Phase
+    // checks the pattern against the *live roll at cast time*. The card is
+    // fully resolved immediately (§2: no stack) — later rerolls this same
+    // turn breaking the pattern never un-resolve it.
   } else {
     if (!payableNumeric(g, p.id, c.def, dice)) return false;
   }
@@ -1003,7 +1013,13 @@ export function castFromHand(
  */
 export function castLocationFree(g: Game, cardIid: string): boolean {
   const p = g.players[g.active];
-  if (g.stage !== 'PLACEMENT') return false;
+  // `!g.turnStarted` closes the between-turns gap: finishEndPhase leaves
+  // stage at PLACEMENT (deliberately, to keep the Combat window shut) with
+  // `active` already flipped. Die-costed actions are safe there because
+  // p.dice is empty, but this action is die-free — without this check the
+  // incoming player could slip in a free Location cast before their own
+  // startTurn() ran (against a stale locationCastThisTurn flag, no less).
+  if (g.stage !== 'PLACEMENT' || !g.turnStarted) return false;
   const idx = p.hand.findIndex((c) => c.iid === cardIid);
   if (idx < 0) return false;
   const c = p.hand[idx];
@@ -1097,6 +1113,10 @@ export function activateUltimate(g: Game, dieIndex: number, targetIid?: string):
   if (!ult || leader.ultimateUsed) return false;
   if (p.turnsTaken < ult.unlockTurn) return false;
   const die = pickDie(p, dieIndex);
+  // RULING: Resolve X discounts only the Leader's *normal* Ability Slot
+  // (effAbilityThreshold). Ultimate(N) is "entirely independent of its
+  // normal one" (§10) — its printed threshold is never reduced by Resolve,
+  // Anchor (Cast Slots only) or anything else.
   if (!die || die.value < ult.threshold) return false;
   die.placed = true;
   leader.ultimateUsed = true;
@@ -1142,7 +1162,10 @@ export function echoRecast(
   targetIid?: string,
 ): boolean {
   const p = g.players[g.active];
-  if (g.stage !== 'PLACEMENT') return false;
+  // `!g.turnStarted`: same between-turns hole as castLocationFree — an
+  // Echo-recast of a *Location* spends no die, so the empty-dice guard that
+  // protects every other placement action between turns doesn't apply here.
+  if (g.stage !== 'PLACEMENT' || !g.turnStarted) return false;
   const idx = p.discard.findIndex((c) => c.iid === cardIid);
   const dIdx = p.hand.findIndex((c) => c.iid === discardIid);
   if (idx < 0 || dIdx < 0) return false;
@@ -1354,6 +1377,14 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     dmgToTarget -= reduced;
   }
   // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
+  // RULING on Bind's retaliation window (§10): boundThisTurn is set at the
+  // start of the bound Unit's controller's turn and only cleared at the
+  // start of that controller's *following* turn (startTurn touches only the
+  // active player's cards). Retaliation only ever happens on the opponent's
+  // turn, so the no-retaliation window is the binder's turn AFTER the bound
+  // turn — which is exactly what makes the rulebook's "a completely safe
+  // target for one turn" real. On the turn Bind is cast, the target still
+  // retaliates normally (Bind is disruption aimed at upcoming turns).
   let retaliation = tgt.boundThisTurn ? 0 : effAtk(g, tgt);
   // v4.2 Bulwark X: also reduces retaliation damage the attacker itself takes,
   // before Frenzy's multiplier — same Ward -> Bulwark -> Frenzy sequence.
