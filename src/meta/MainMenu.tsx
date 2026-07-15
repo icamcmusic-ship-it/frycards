@@ -14,6 +14,7 @@ import {
   Users,
   Gavel,
   Building2,
+  Newspaper,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CreditChip, VoucherChip, LevelBadge } from './ui';
@@ -32,15 +33,11 @@ export type MetaScreen =
   | 'shops'
   | 'profile'
   | 'settings'
-  | 'changelog';
+  | 'changelog'
+  | 'news'
+  | 'howtoplay';
 
-export function MainMenu({
-  onNavigate,
-  onHelp,
-}: {
-  onNavigate: (s: MetaScreen) => void;
-  onHelp: () => void;
-}) {
+export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }) {
   const { profile, guest, signOut, shopItems } = useMeta();
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
@@ -185,10 +182,16 @@ export function MainMenu({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={onHelp}
+            onClick={() => onNavigate('howtoplay')}
             className="btn-pop heading-font text-[11px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
           >
-            <BookOpen className="w-3.5 h-3.5" /> RULES
+            <BookOpen className="w-3.5 h-3.5" /> HOW TO PLAY
+          </button>
+          <button
+            onClick={() => onNavigate('news')}
+            className="btn-pop heading-font text-[11px] bg-[var(--c-red)] text-white px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
+          >
+            <Newspaper className="w-3.5 h-3.5" /> NEWS
           </button>
           <button
             onClick={() => onNavigate('changelog')}

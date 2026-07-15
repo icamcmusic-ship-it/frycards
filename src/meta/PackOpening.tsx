@@ -26,8 +26,8 @@ const RARITY_ORDER = [
   'Uncommon',
   'Rare',
   'Super-Rare',
-  'Ultra-Rare',
   'Full-Art',
+  'Ultra-Rare',
   'Mythic',
 ];
 const rarityRank = (r: string) => Math.max(0, RARITY_ORDER.indexOf(r));
@@ -488,6 +488,11 @@ function RevealStage({
                 size="full"
                 foil={current.foil}
                 dimmed={current.converted_to_shards}
+                serial={
+                  current.serialized
+                    ? { number: current.serial_number!, cap: current.serial_cap! }
+                    : undefined
+                }
               />
               {/* foil sheen sweep */}
               {currentShown && current.foil && !reducedMotion && (
@@ -533,7 +538,9 @@ function RevealStage({
           >
             {current.converted_to_shards
               ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} → SHARDS`
-              : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}`}
+              : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
+                  current.serialized ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}` : ''
+                }`}
           </div>
         )}
       </div>
@@ -596,7 +603,10 @@ function SummaryStage({
   const bestIndex = useMemo(() => {
     let best = 0;
     const score = (p: PackPull) =>
-      rarityRank(p.rarity) * 100 + (p.converted_to_shards ? 0 : 10) + (p.foil ? 1 : 0);
+      rarityRank(p.rarity) * 100 +
+      (p.converted_to_shards ? 0 : 10) +
+      (p.foil ? 1 : 0) +
+      (p.serialized ? 1000 : 0);
     pulls.forEach((p, i) => {
       if (score(p) > score(pulls[best])) best = i;
     });
@@ -710,7 +720,7 @@ function SummaryStage({
                   <>
                     <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-                      <Sparkles className="w-3 h-3" /> BEST PULL
+                      <Sparkles className="w-3 h-3" /> {pull.serialized ? 'SERIALIZED!' : 'BEST PULL'}
                     </div>
                   </>
                 )}
@@ -720,6 +730,11 @@ function SummaryStage({
                     size="full"
                     foil={pull.foil}
                     dimmed={pull.converted_to_shards || sold.has(i)}
+                    serial={
+                      pull.serialized
+                        ? { number: pull.serial_number!, cap: pull.serial_cap! }
+                        : undefined
+                    }
                   />
                 </div>
                 {sold.has(i) && !pull.converted_to_shards && (
@@ -771,7 +786,7 @@ function SummaryStage({
           </PopButton>
         )}
         <PopButton color="red" onClick={onDone}>
-          ADD TO COLLECTION ✓
+          DONE ✓
         </PopButton>
       </div>
       <div className="h-4 shrink-0" />

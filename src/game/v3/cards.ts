@@ -40,7 +40,7 @@ export interface Effect {
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
 export type Rarity =
-  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Mythic';
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Full-Art' | 'Ultra-Rare' | 'Mythic';
 
 export interface CardDef {
   id: string;

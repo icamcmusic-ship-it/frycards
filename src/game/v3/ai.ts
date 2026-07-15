@@ -224,7 +224,7 @@ function locScore(
   let s = 0;
   if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
   if (c.def.ability) s += 2;
-  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'];
+  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'];
   s += tierOrder.indexOf(c.def.rarity || 'Common') * 0.3;
   return s;
 }
@@ -357,16 +357,16 @@ function playPlacement(g: Game, p: Player) {
     }
     if (progress) continue;
 
-    // 3. Echo recasts (only for units, only with spare hand fodder).
+    // 3. Echo recasts — any Echo card type (Units, Charms, Events all print
+    // it; see cardpool.ts), only with spare hand fodder.
     if (p.hand.length >= 2) {
-      const echoes = p.discard.filter(
-        (c) => hasKw(c.def, 'Echo') && !c.echoSpent && c.def.type === 'Unit',
-      );
+      const echoes = p.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
       for (const c of echoes) {
         const sel = bestSelectionFor(g, p, c.def);
         if (!sel) continue;
         const fodder = defaultDiscardChoice(p.hand);
-        if (echoRecast(g, sel, c.iid, fodder.iid)) {
+        const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
+        if (echoRecast(g, sel, c.iid, fodder.iid, target)) {
           progress = true;
           break;
         }
@@ -407,7 +407,9 @@ function playPlacement(g: Game, p: Player) {
       const eff = u.def.ability.effect;
       if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0))
         continue;
-      if (eff.action === 'buff' && p.board.length < 2) continue;
+      // Only skip a board-wide buff on a near-empty board — a self/single-
+      // target buff is still worth using even with just one Unit in play.
+      if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2) continue;
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) {
         progress = true;

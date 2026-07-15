@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { MetaHeader } from '../meta/ui';
+import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
 
-interface HowToPlayProps {
-  onClose: () => void;
-}
-
-// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.2).
+// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.2), plus a
+// standalone rarity-system explainer and an app feature guide — this used to
+// be a popup shown only on first launch; it's now its own page reachable
+// any time from the Main Menu's HOW TO PLAY button.
 const SECTIONS = [
   {
     title: '1 · Objective & Setup',
@@ -15,7 +16,7 @@ const SECTIONS = [
       ],
       [
         'Deck',
-        '30 cards (Units, Locations, Charms, Events) plus one Leader kept separate. Max 3 copies of any card.',
+        '30 cards (Units, Locations, Charms, Events) plus one Leader kept separate. Max 3 copies of any card (Full-Art, Ultra-Rare and Mythic cards are capped lower — see the Rarity System section).',
       ],
       [
         'Setup',
@@ -190,60 +191,128 @@ const SECTIONS = [
       ],
     ],
   },
+  {
+    title: '8 · Rarity System',
+    body: [
+      [
+        'The ladder',
+        'Common < Uncommon < Rare < Super-Rare < Full-Art < Ultra-Rare < Mythic, low to high. Full-Art sits just below Ultra-Rare — a step up from Super-Rare, not quite as scarce as Ultra-Rare or Mythic.',
+      ],
+      [
+        'Copy caps',
+        'Common/Uncommon/Rare: up to 3 copies in a deck. Super-Rare/Full-Art/Ultra-Rare: up to 2. Mythic: exactly 1.',
+      ],
+      [
+        'Full-Art',
+        "A visually distinct print tier with its own animated frame — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, shard crafting, pack odds).",
+      ],
+      [
+        'Foil',
+        'A separate, independent shine some pulls get regardless of rarity (per-pack foil chance). Foil sells for 2.5x the normal quicksell price.',
+      ],
+      [
+        'Serialized',
+        "The rarest possible pull: a numbered 1-of-however-many-are-left print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed, server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. Numbering starts at #1 for each tier and counts up until that tier's supply runs out for good. About a 1-in-100 chance on every pack you open. Serialized copies can never be foil and can never be quick sold — they're yours to keep or show off. Every Serialized pull posts to the News Center (with an opt-out for your username in Settings).",
+      ],
+      [
+        'Pity',
+        'A Super-Rare (or better) is guaranteed at least once every 10 packs — tracked per-account and shown as a progress readout in the Store.',
+      ],
+    ],
+  },
+  {
+    title: '9 · Using FryCards — Every Feature',
+    body: [
+      [
+        'Collection',
+        'Browse every card you own, filter by rarity/type/set, inspect full card art, and quicksell spares for credits or craft/disenchant with shards.',
+      ],
+      [
+        'Deck Builder',
+        'Assemble a legal 30-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your cast-slot curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
+      ],
+      [
+        'Store',
+        'Buy booster packs and cosmetics with credits or vouchers, claim your free Daily Pack every 20 hours, and check VIEW DROP ODDS on any pack before buying.',
+      ],
+      [
+        'Battle Pass',
+        'A free, seasonal 25-tier reward track. Earn XP from matches and missions; claim tiers as you cross their XP threshold.',
+      ],
+      [
+        'Missions & Achievements',
+        'Daily/weekly missions and permanent achievements pay out credits, vouchers and free packs for playing normally.',
+      ],
+      [
+        'Marketplace',
+        'List spare cards for a fixed price or run a timed auction with bids and a buyout. Sellers pay a 5% fee on completed sales.',
+      ],
+      [
+        'Player Shops',
+        'Unlocks at level 50 — open your own storefront, sell individual cards, bundles or blind Mystery Packs, and build a public seller rating over time.',
+      ],
+      [
+        'Friends & Trading',
+        'Search players, send friend requests, and propose direct card-and-credits trades.',
+      ],
+      [
+        'News Center',
+        "One place for the newest changelog headline, dev blog posts, and a live feed of every Serialized card pulled server-wide.",
+      ],
+      [
+        'Profile & Settings',
+        'Track your stats, equip cosmetics, pick a color theme, and (Settings) opt out of username recognition in the Serialized feed.',
+      ],
+    ],
+  },
 ];
 
-export function HowToPlay({ onClose }: HowToPlayProps) {
+export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
   const [open, setOpen] = useState(0);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <div className="absolute inset-0 bg-[var(--c-ink)]/95 flex items-center justify-center z-50 p-4">
-      <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full flex flex-col max-h-[92vh]">
-        <div className="flex justify-between items-center px-6 py-3 border-b-4 border-[var(--c-ink)] bg-[var(--c-yellow)]">
-          <h2 className="text-2xl heading-font">How to Play</h2>
-          <button
-            onClick={onClose}
-            className="btn-pop bg-[var(--c-red)] text-[var(--c-paper)] px-4 py-1.5 font-black ink-border-sm shadow-hard-black-xs heading-font text-sm"
-          >
-            Close [X]
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-          {SECTIONS.map((sec, i) => (
-            <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
-              <button
-                onClick={() => setOpen(open === i ? -1 : i)}
-                className="w-full text-left px-4 py-2 heading-font text-sm flex justify-between items-center bg-[var(--c-steel)] text-[var(--c-paper)] hover:bg-[var(--c-ink)]"
-              >
-                <span>{sec.title}</span>
-                <span className="text-[var(--c-yellow)]">{open === i ? '▾' : '▸'}</span>
-              </button>
-              {open === i && (
-                <dl className="px-4 py-3 grid gap-2 text-sm">
-                  {sec.body.map(([term, desc]) => (
-                    <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
-                      <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start">
-                        {term}
-                      </dt>
-                      <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
-                        {desc}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </div>
-          ))}
-          <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2">
-            DEFINITIVE RULEBOOK V4.2 · docs/RULEBOOK.md
+    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+      <MetaHeader title="HOW TO PLAY" onBack={onBack} />
+      <div className="p-6 max-w-3xl mx-auto flex flex-col gap-2">
+        {SECTIONS.map((sec, i) => (
+          <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
+            <button
+              onClick={() => setOpen(open === i ? -1 : i)}
+              className="w-full text-left px-4 py-2 heading-font text-sm flex justify-between items-center bg-[var(--c-steel)] text-[var(--c-paper)] hover:bg-[var(--c-ink)]"
+            >
+              <span>{sec.title}</span>
+              <span className="text-[var(--c-yellow)]">{open === i ? '▾' : '▸'}</span>
+            </button>
+            {open === i && (
+              <dl className="px-4 py-3 grid gap-2 text-sm">
+                {sec.body.map(([term, desc]) => (
+                  <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
+                    <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start">
+                      {term}
+                    </dt>
+                    <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
+                      {desc}
+                    </dd>
+                  </div>
+                ))}
+                {sec.title === '8 · Rarity System' && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {RARITY_ORDER.map((r) => (
+                      <span
+                        key={r}
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[r] || ''}`}
+                      >
+                        {r}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </dl>
+            )}
           </div>
+        ))}
+        <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
+          DEFINITIVE RULEBOOK V4.2 · docs/RULEBOOK.md
         </div>
       </div>
     </div>

@@ -662,6 +662,7 @@ export function CardFace({
   maxHp,
   effectiveThreshold,
   introduceKeywords,
+  serial,
 }: {
   key?: React.Key;
   def: CardDef;
@@ -696,13 +697,20 @@ export function CardFace({
    * new players discover the glossary exists instead of needing to guess
    * they can click a keyword pill. */
   introduceKeywords?: boolean;
+  /** A numbered Serialized print (see grant_pack_contents' 1%-per-pack roll
+   * and player_serialized_cards) — the rarest possible pull, always foil-free
+   * and never quick-sellable. Renders a rotating prismatic frame + an
+   * engraved number plate instead of the normal rarity treatment. */
+  serial?: { number: number; cap: number };
 }) {
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
   const rules = cardRuleLines(def);
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
-  const label = `${def.name}, ${def.type}${atkHp}${foil ? ', foil' : ''}`;
+  // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
+  const isFoil = foil && !serial;
+  const label = `${def.name}, ${def.type}${atkHp}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
   // Long names/flavor text shrink to fit via fitFontSize below. The card's
   // own footprint is a hard 2.5:3.5 (w:h) rectangle at every tier — it never
@@ -713,8 +721,8 @@ export function CardFace({
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
   // animated sheen; Mythic additionally gets a pulsing frame and a distinct
   // gold-on-red name banner instead of the shared tinted-paper header.
-  const mythic = isMythic(def.rarity);
-  const animatedFx = rarityAnimated(def.rarity) || mythic;
+  const mythic = isMythic(def.rarity) && !serial;
+  const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
   const bg = rarityBg(def.rarity);
   const TypeIcon = TYPE_ICON[def.type];
 
@@ -746,12 +754,13 @@ export function CardFace({
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         cfg.shadow,
-        !dimmed && (mythic ? 'mythic-frame' : cfg.showGlow && rarityGlow(def.rarity)),
+        !dimmed &&
+          (serial ? 'serialized-frame' : mythic ? 'mythic-frame' : cfg.showGlow && rarityGlow(def.rarity)),
         // Mythic already animates its own box-shadow pulse (mythic-frame) —
         // stacking foil-glow's competing box-shadow keyframes on the same
         // element causes the two animations to visibly stutter against each
         // other, so a mythic foil gets only the (already more intense) frame.
-        foil && !dimmed && !mythic && 'foil-glow',
+        isFoil && !dimmed && !mythic && 'foil-glow',
       )}
     >
       {/* Corner gem — a small decorative flourish marking Rare+ prints,
@@ -891,7 +900,7 @@ export function CardFace({
             {badge}
           </span>
         )}
-        {foil && (
+        {isFoil && (
           <span
             className={cn(
               'absolute top-1 left-1 bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
@@ -899,6 +908,17 @@ export function CardFace({
             )}
           >
             ✦ FOIL
+          </span>
+        )}
+        {serial && (
+          <span
+            className={cn(
+              'serial-plate absolute top-1 left-1 font-black rounded-full tracking-wide',
+              cfg.foilBadge,
+            )}
+            title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+          >
+            #{serial.number}/{serial.cap}
           </span>
         )}
         {(foilCount || 0) > 0 && (
@@ -1003,10 +1023,11 @@ export function CardFace({
       {def.set && <div className={cn('h-[3px] w-full shrink-0', set.bar)} title={def.set} />}
       {footer}
 
-      {foil && foilEffect && (
+      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
+      {isFoil && foilEffect && (
         <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
       )}
-      {!foil && animatedFx && !dimmed && (
+      {!isFoil && !serial && animatedFx && !dimmed && (
         <div
           className={cn(
             'rarity-sheen absolute inset-0 pointer-events-none',

@@ -17,7 +17,8 @@ type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { profile, collection, refreshCollection, refreshProfile, decks, dataLoading } = useMeta();
+  const { profile, collection, refreshCollection, refreshProfile, decks, dataLoading, serializedCards } =
+    useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
@@ -185,6 +186,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
   const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
   const inspectShowcased = inspect ? showcase.includes(inspect.id) : false;
+  // Serialized prints are never foil and can never be quick sold/disenchanted
+  // (see quicksell_cards' serialized-reserved check) — reserve that many
+  // normal copies from the sell/disenchant UI so it never offers a sale the
+  // server will reject.
+  const inspectSerializedReserved = inspect
+    ? serializedCards.filter((s) => s.card_id === inspect.id).length
+    : 0;
+  const normalSellable = Math.max(
+    0,
+    Math.min(inspectSellable, (inspectOwned?.q || 0) - inspectSerializedReserved),
+  );
 
   const handleSell = async (foil: boolean, quantity: number) => {
     if (!inspect || selling || quantity < 1) return;
@@ -494,6 +506,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                         : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
                     </div>
                   )}
+                  {inspectSerializedReserved > 0 && (
+                    <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                      {inspectSerializedReserved} Serialized cop
+                      {inspectSerializedReserved === 1 ? 'y' : 'ies'} — never quick-sellable
+                    </div>
+                  )}
                   {sellError && <Notice text={sellError} />}
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Normal ×{inspectOwned?.q || 0}</span>
@@ -506,7 +524,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     <PopButton
                       color="yellow"
                       className="w-full"
-                      disabled={selling || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                      disabled={selling || normalSellable <= 0}
                       onClick={() => handleSell(false, 1)}
                     >
                       QUICKSELL 1
@@ -514,7 +532,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     <PopButton
                       color="steel"
                       className="w-full"
-                      disabled={crafting || (inspectOwned?.q || 0) <= 0 || inspectSellable <= 0}
+                      disabled={crafting || normalSellable <= 0}
                       onClick={() => {
                         if (confirm(`Disenchant 1 copy of ${inspect.name} for shards?`))
                           handleDisenchant(false, 1);
@@ -527,9 +545,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     <PopButton
                       color="black"
                       className="w-full"
-                      disabled={selling || inspectSellable <= 0}
+                      disabled={selling || normalSellable <= 0}
                       onClick={() => {
-                        const n = Math.min(inspectOwned?.q || 0, inspectSellable);
+                        const n = normalSellable;
                         if (confirm(`Quicksell all ${n} spare copies of ${inspect.name}?`))
                           handleSell(false, n);
                       }}
