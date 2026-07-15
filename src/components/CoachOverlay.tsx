@@ -41,7 +41,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'placement',
     title: '3. PLACE YOUR DICE',
-    body: 'Spend each die: pay a card’s Cast cost, activate an Ability Slot, or Pitch a leftover die to heal your Leader 1. Tap a card in your hand to see what it needs.',
+    body: 'Spend each die: pay a card’s Cast cost, activate an Ability Slot, or Pitch a leftover die to heal your Leader 1. Hover or tap a card in your hand to preview it and CAST from the preview.',
   },
   {
     stage: 'combat',
@@ -85,7 +85,9 @@ export function CoachOverlay({ stage }: { stage: string }) {
   const isLast = step.stage === SCRIPT[SCRIPT.length - 1].stage;
 
   return (
-    <div className="absolute left-1/2 bottom-20 -translate-x-1/2 z-[70] w-[min(90vw,360px)] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md shadow-hard-yellow p-3">
+    // bottom-44 keeps the callout clear of the docked hand row + its preview
+    // affordances along the very bottom of the match screen.
+    <div className="absolute left-1/2 bottom-44 -translate-x-1/2 z-[70] w-[min(90vw,360px)] bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md shadow-hard-yellow p-3">
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="heading-font text-[11px] text-[var(--c-yellow)]">{step.title}</span>
         <button

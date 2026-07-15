@@ -42,6 +42,7 @@ import {
   mulliganRedraw,
   defaultDiscardChoice,
   rerollsRemaining,
+  HAND_LIMIT,
 } from '../game/v3/engine';
 import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
@@ -50,14 +51,10 @@ import { cn } from '../lib/utils';
 import {
   CardFace,
   CardInspectorModal,
-  KeywordChip,
-  cardRules,
-  costBadge,
+  GATE_LABEL,
   describeEffect,
-  kwList,
   renderKeywordText,
 } from './CardFaceV4';
-import { SafeImage } from '../meta/SafeImage';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
@@ -66,6 +63,55 @@ import { fmtCredits, fmtVouchers } from '../meta/economy';
 // Small helpers
 // ---------------------------------------------------------------------------
 const DIE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+/** Component-scoped keyframes for the match-only combat feedback (damage
+ * floats, phase banners, attack flashes) — an inline <style> block rather
+ * than src/index.css, which another surface owns. */
+const GAME_CSS = `
+@keyframes gv4-dmg-float {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); }
+  30% { transform: translate(-50%, -4px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -38px) scale(1); }
+}
+.gv4-dmg-float {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 45;
+  pointer-events: none;
+  animation: gv4-dmg-float 1.15s ease-out forwards;
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+  background: var(--c-red);
+  border: 2px solid var(--c-ink);
+  border-radius: 9999px;
+  padding: 0 7px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+}
+@keyframes gv4-phase-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  18% { opacity: 1; transform: scale(1.06); }
+  32% { transform: scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+.gv4-phase-banner { animation: gv4-phase-pop 1.15s ease-out forwards; }
+@keyframes gv4-attack-flash {
+  0%, 100% { filter: none; }
+  30% { filter: brightness(1.7) saturate(1.5); }
+  60% { filter: brightness(0.75); }
+}
+.gv4-attack-flash { animation: gv4-attack-flash 0.65s ease-in-out; }
+`;
+
+/** One floating "-N" damage number, keyed so simultaneous hits stack cleanly. */
+interface DmgFloat {
+  id: number;
+  iid: string;
+  amount: number;
+}
 
 /** Which in-play cards may a hand-cast / ability effect legally target? */
 function targetsFor(g: Game, pid: string, eff: Effect): Inst[] {
@@ -104,37 +150,39 @@ function rallySourcesFor(g: Game, pid: string, unit: Inst): Inst[] {
 }
 
 // ---------------------------------------------------------------------------
-// A unit (or leader) on the battlefield
+// Labeled ability pill — the ONE clickable affordance for every Ability
+// Slot / Ultimate on the battlefield (leaders, Locations, board Units), so
+// activations are named buttons ("ABILITY 4+: Sap 2 …") instead of mystery
+// click targets. Disabled pills carry a `title` tooltip explaining why.
 // ---------------------------------------------------------------------------
-function BoardUnit({
-  g,
-  u,
+function AbilityPill({
+  label,
+  desc,
+  usable,
+  used,
+  usedLabel = 'USED',
+  why,
   onClick,
-  highlight,
-  dimmed,
-  isAttacker,
+  accent,
 }: {
-  g: Game;
-  u: Inst;
+  label: string;
+  desc: string;
+  usable?: boolean;
+  used?: boolean;
+  usedLabel?: string;
+  /** Reason this pill is currently disabled — shown as a hover tooltip. */
+  why?: string;
   onClick?: () => void;
-  highlight?: boolean;
-  dimmed?: boolean;
-  isAttacker?: boolean;
+  accent?: 'red';
 }) {
-  const hp = remainingHp(g, u);
-  const maxHp = effMaxHp(g, u);
-  const atk = effAtk(g, u);
-  const exhausted = u.hasAttacked || u.abilityUsed;
-  const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
-  const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
   return (
-    // A div, not a <button>: keyword pills below render their own <button>
-    // for the click-to-open glossary popover, and nested buttons are invalid
-    // HTML / break keyboard navigation (same reasoning as CardFace).
+    // A div, not a <button>: `desc` runs through renderKeywordText, whose
+    // inline keyword mentions are themselves <button>s — nested buttons are
+    // invalid HTML (same reasoning as CardFace / BoardUnit).
     <div
       role="button"
       tabIndex={onClick ? 0 : -1}
-      aria-disabled={!onClick}
+      aria-disabled={!usable}
       onClick={onClick}
       onKeyDown={(e) => {
         if (!onClick) return;
@@ -143,80 +191,125 @@ function BoardUnit({
           onClick();
         }
       }}
-      aria-label={`${u.def.name}, ${atk} attack, ${hp} of ${maxHp} health${exhausted ? ', exhausted' : ''}${sick ? ', summoning sick' : ''}`}
+      title={why}
       className={cn(
-        'relative w-[92px] sm:w-[120px] bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm text-left shrink-0',
-        onClick && 'btn-pop cursor-pointer',
-        highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1',
-        isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
-        dimmed && 'opacity-45',
+        'w-full text-[8.5px] font-bold px-1.5 py-1 ink-border-sm text-left leading-tight',
+        usable
+          ? cn(
+              'btn-pop cursor-pointer',
+              accent === 'red'
+                ? 'bg-[var(--c-red)] text-white'
+                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+            )
+          : 'bg-[var(--c-steel)]/70 text-[var(--c-paper)]/70',
+        used && 'line-through opacity-70',
+      )}
+    >
+      <span className="heading-font mr-1">{label}</span>
+      {renderKeywordText(desc, true)}
+      {used ? ` — ${usedLabel}` : ''}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A unit on the battlefield — the same shared CardFace template used
+// everywhere else (standard size), with live effective stats rendered in
+// the normal stat-chip slots and status/damage overlays on a wrapper.
+// ---------------------------------------------------------------------------
+function BoardUnit({
+  g,
+  u,
+  onClick,
+  highlight,
+  dimmed,
+  isAttacker,
+  flash,
+  floats,
+}: {
+  g: Game;
+  u: Inst;
+  onClick?: () => void;
+  highlight?: boolean;
+  dimmed?: boolean;
+  isAttacker?: boolean;
+  /** Attack feedback: briefly true on the attacker/target of a resolved attack. */
+  flash?: boolean;
+  /** Floating "-N" damage numbers currently animating over this card. */
+  floats?: DmgFloat[];
+}) {
+  const hp = remainingHp(g, u);
+  const maxHp = effMaxHp(g, u);
+  const atk = effAtk(g, u);
+  const exhausted = u.hasAttacked || u.abilityUsed;
+  const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
+  const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
+  return (
+    <div
+      className={cn(
+        'relative shrink-0',
+        flash && 'gv4-attack-flash',
+        highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1 rounded-[4px]',
+        isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1 rounded-[4px]',
         (exhausted || sick) && 'saturate-50',
       )}
     >
-      <div className="h-[44px] sm:h-[62px] overflow-hidden ink-border-sm m-0.5">
-        <SafeImage src={u.def.image} className="w-full h-full object-cover" />
-      </div>
-      <div className="px-0.5 pb-0.5">
-        <div className="heading-font text-[8px] sm:text-[10px] leading-tight truncate">
-          {u.def.name}
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] sm:text-[13px] font-mono font-bold">
-            {atk}
-            <span className="text-[var(--c-red)]">⚔</span>
-          </span>
-          <span
-            className={cn(
-              'text-[10px] sm:text-[13px] font-mono font-bold',
-              hp < maxHp && 'text-[var(--c-red)]',
-            )}
-          >
-            {hp}/{maxHp}
-            <span className="text-[#43A047]">♥</span>
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-0.5 min-h-[9px] sm:min-h-[13px]">
-          {kwList(u.def)
-            .slice(0, 3)
-            .map((kw) => (
-              <KeywordChip key={kw} kw={kw} small autoIntroduce />
-            ))}
-        </div>
-      </div>
-      <div className="absolute -top-1.5 -right-1.5 flex gap-0.5">
+      <CardFace
+        def={u.def}
+        size="standard"
+        live={{ atk, hp, maxHp }}
+        dimmed={dimmed}
+        introduceKeywords
+        onClick={onClick}
+      />
+      <div className="absolute -top-1.5 -right-1.5 z-20 flex gap-0.5">
         {wardUp && (
-          <span title="Ward available" className="text-[9px] bg-[#29B6F6] ink-border-sm px-0.5">
+          <span
+            title="Ward available — the first damage/Removal against this Unit is prevented"
+            className="text-[10px] bg-[#29B6F6] ink-border-sm px-0.5"
+          >
             🛡
           </span>
         )}
         {u.boundThisTurn && (
-          <span title="Bound" className="text-[9px] bg-[#8E44AD] text-white ink-border-sm px-0.5">
+          <span
+            title="Bound — cannot attack, use abilities, or retaliate this turn"
+            className="text-[10px] bg-[#8E44AD] text-white ink-border-sm px-0.5"
+          >
             ⛓
           </span>
         )}
         {sick && (
           <span
-            title="Just played"
-            className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
+            title="Just played — can't act until your next turn (no Swift)"
+            className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             z
           </span>
         )}
         {exhausted && !sick && (
           <span
-            title="Exhausted"
-            className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
+            title="Exhausted — already attacked or used an ability this turn"
+            className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             ✓
           </span>
         )}
       </div>
+      {floats?.map((f) => (
+        <span key={f.id} className="gv4-dmg-float">
+          −{f.amount}
+        </span>
+      ))}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Leader panel
+// Leader panel — full CardFace plus clearly labeled, non-overlapping ability
+// pills BELOW the card (never squeezed inside its text box): HP lives in the
+// card's stat chip, Resolve/Toll status in the art badge, and the Ability /
+// Ultimate slots are separate named buttons with disabled-reason tooltips.
 // ---------------------------------------------------------------------------
 function LeaderPanel({
   g,
@@ -224,22 +317,27 @@ function LeaderPanel({
   isHuman,
   onAbility,
   onUltimate,
-  abilityUsable,
-  ultimateUsable,
+  abilityWhy,
+  ultimateWhy,
   highlight,
+  flash,
   onClickTarget,
   onInspect,
+  floats,
 }: {
   g: Game;
   p: Player;
   isHuman: boolean;
   onAbility?: () => void;
   onUltimate?: () => void;
-  abilityUsable?: boolean;
-  ultimateUsable?: boolean;
+  /** Reason the ability pill is disabled right now (undefined = usable). */
+  abilityWhy?: string;
+  ultimateWhy?: string;
   highlight?: boolean;
+  flash?: boolean;
   onClickTarget?: () => void;
   onInspect?: () => void;
+  floats?: DmgFloat[];
 }) {
   const l = p.leader;
   const hp = Math.max(0, remainingHp(g, l));
@@ -249,11 +347,18 @@ function LeaderPanel({
   const abThr = effAbilityThreshold(g, l);
   const toll = tollReduction(g, p.id);
   const resolveOn = !!l.def.resolve && hp * 2 <= maxHp;
-  // Interactive controls (human only) replace the ability/ultimate text the
-  // shared rules section would otherwise print, so it isn't duplicated.
-  const liveDef = { ...l.def, hp, ...(isHuman ? { ability: undefined, ultimate: undefined } : {}) };
+  // Ability/Ultimate render as the labeled pills below (for BOTH players), so
+  // strip them from the def the shared rules section would otherwise print —
+  // no duplicated or overlapping text inside the card's text box.
+  const liveDef = { ...l.def, hp, ability: undefined, ultimate: undefined };
   return (
-    <div className={cn('shrink-0', highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]')}>
+    <div
+      className={cn(
+        'shrink-0 relative w-[140px] flex flex-col gap-0.5',
+        flash && 'gv4-attack-flash',
+        highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]',
+      )}
+    >
       <CardFace
         def={liveDef}
         size="standard"
@@ -261,50 +366,93 @@ function LeaderPanel({
         introduceKeywords
         onClick={onClickTarget ?? onInspect}
         badge={
-          resolveOn ? `RESOLVE ${l.def.resolve!.x} ON` : toll > 0 ? `TOLL -${toll}` : undefined
-        }
-        footer={
-          isHuman && (ab || ult) ? (
-            <div
-              className="px-1.5 pb-1.5 flex flex-col gap-0.5"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {ab && (
-                <button
-                  onClick={onAbility}
-                  disabled={!abilityUsable}
-                  className={cn(
-                    'w-full text-[9px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-                    abilityUsable
-                      ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
-                    l.abilityUsed && 'line-through',
-                  )}
-                >
-                  {abThr}+{abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}{' '}
-                  {describeEffect(ab.effect)}
-                </button>
-              )}
-              {ult && (
-                <button
-                  onClick={onUltimate}
-                  disabled={!ultimateUsable}
-                  className={cn(
-                    'w-full text-[9px] font-bold px-1 py-0.5 ink-border-sm text-left leading-tight',
-                    ultimateUsable
-                      ? 'btn-pop bg-[var(--c-red)] text-white'
-                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/50',
-                    l.ultimateUsed && 'line-through',
-                  )}
-                >
-                  ULT (turn {ult.unlockTurn}+, {ult.threshold}+): {describeEffect(ult.effect)}
-                  {l.ultimateUsed ? ' — SPENT' : ''}
-                </button>
-              )}
-            </div>
-          ) : undefined
+          resolveOn ? `RESOLVE −${l.def.resolve!.x}` : toll > 0 ? `TOLL −${toll}` : undefined
         }
       />
+      {ab && (
+        <AbilityPill
+          label={`ABILITY ${abThr}+${abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
+          desc={describeEffect(ab.effect)}
+          usable={isHuman && !abilityWhy}
+          used={l.abilityUsed}
+          why={isHuman ? abilityWhy : 'Opponent ability — shown for information'}
+          onClick={isHuman ? onAbility : undefined}
+        />
+      )}
+      {ult && (
+        <AbilityPill
+          label={`ULTIMATE t${ult.unlockTurn}+, die ${ult.threshold}+:`}
+          desc={describeEffect(ult.effect)}
+          usable={isHuman && !ultimateWhy}
+          used={l.ultimateUsed}
+          usedLabel="SPENT"
+          why={isHuman ? ultimateWhy : 'Opponent ultimate — shown for information'}
+          onClick={isHuman ? onUltimate : undefined}
+          accent="red"
+        />
+      )}
+      {floats?.map((f) => (
+        <span key={f.id} className="gv4-dmg-float">
+          −{f.amount}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The player's Location — a full CardFace (standard size) with its Ability
+// Slot as a labeled pill below, matching the leader/unit presentation.
+// ---------------------------------------------------------------------------
+function LocationPanel({
+  g,
+  loc,
+  onAbility,
+  abilityWhy,
+  isRallySource,
+  onRallyClick,
+  onInspect,
+  floats,
+}: {
+  g: Game;
+  loc: Inst;
+  onAbility?: () => void;
+  abilityWhy?: string;
+  isRallySource?: boolean;
+  onRallyClick?: () => void;
+  onInspect?: () => void;
+  floats?: DmgFloat[];
+}) {
+  const ab = loc.def.ability;
+  const thr = ab ? effAbilityThreshold(g, loc) : null;
+  return (
+    <div
+      className={cn(
+        'relative shrink-0 w-[140px] flex flex-col gap-0.5',
+        isRallySource && 'ring-4 ring-[#8E44AD] rounded-[4px] cursor-pointer',
+      )}
+    >
+      <CardFace
+        def={loc.def}
+        size="standard"
+        introduceKeywords
+        onClick={isRallySource ? onRallyClick : onInspect}
+      />
+      {ab && (
+        <AbilityPill
+          label={`ABILITY ${thr}+${thr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
+          desc={describeEffect(ab.effect)}
+          usable={!abilityWhy}
+          used={loc.abilityUsed}
+          why={abilityWhy}
+          onClick={onAbility}
+        />
+      )}
+      {floats?.map((f) => (
+        <span key={f.id} className="gv4-dmg-float">
+          −{f.amount}
+        </span>
+      ))}
     </div>
   );
 }
@@ -332,6 +480,10 @@ interface Pending {
   rallySourceIid?: string;
   /** v4.3: multi-die selection for a 'sum'-cost card, in place of selDie. */
   dieIndices?: number[];
+  /** v4.3: the single die committed when this cast was armed (e.g. auto-
+   * picked by the hand preview's CAST button) — takes precedence over
+   * whatever selDie happens to be by the time the target is clicked. */
+  dieIndex?: number;
 }
 
 /** v4.3: in-progress "build a dice sum" cast for a 'sum'-cost hand card.
@@ -389,7 +541,10 @@ export function GameV4({
   const foe = g.players[CPU];
 
   const [, setVersion] = useState(0);
-  const bump = () => setVersion((v) => v + 1);
+  const bump = () => {
+    recordDamageFloats();
+    setVersion((v) => v + 1);
+  };
 
   const [stage, setStage] = useState<Stage>('mulligan');
   const [mulliganUsed, setMulliganUsed] = useState(false);
@@ -414,6 +569,19 @@ export function GameV4({
   const [showDiscard, setShowDiscard] = useState(false);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  // v4.3 hand preview: the hand card currently enlarged above the bottom
+  // dock (hover opens it, click pins it so it survives the mouse leaving).
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewPinned, setPreviewPinned] = useState(false);
+  // v4.3 combat feedback: floating damage numbers (diffed per bump), a big
+  // phase banner on stage changes, and a brief flash on attacker/target.
+  const [floats, setFloats] = useState<DmgFloat[]>([]);
+  const [phaseFx, setPhaseFx] = useState<string | null>(null);
+  const [attackFx, setAttackFx] = useState<{ attacker: string; target: string } | null>(null);
+  const damageMemoRef = useRef<Map<string, number>>(new Map());
+  const floatIdRef = useRef(0);
+  const phaseTimeoutRef = useRef<number | null>(null);
+  const attackFxTimeoutRef = useRef<number | null>(null);
   const [forcedDiscard, setForcedDiscard] = useState<{ needed: number; picks: string[] } | null>(
     null,
   );
@@ -448,9 +616,52 @@ export function GameV4({
       if (cpuTimeoutRef.current !== null) window.clearTimeout(cpuTimeoutRef.current);
       if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
       if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
+      if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
+      if (attackFxTimeoutRef.current !== null) window.clearTimeout(attackFxTimeoutRef.current);
     },
     [],
   );
+
+  /** Diff every in-play card's accumulated damage against the last bump and
+   * spawn a floating "-N" over anything that just took a hit. Hoisted
+   * function declaration so bump() (defined above) can call it safely. */
+  function recordDamageFloats() {
+    const seen = new Map<string, number>();
+    const fresh: DmgFloat[] = [];
+    for (const pid of g.order) {
+      const pl = g.players[pid];
+      const all: Inst[] = [...pl.board, pl.leader, ...(pl.location ? [pl.location] : [])];
+      for (const u of all) {
+        seen.set(u.iid, u.damage);
+        const prev = damageMemoRef.current.get(u.iid);
+        if (prev !== undefined && u.damage > prev) {
+          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - prev });
+        }
+      }
+    }
+    damageMemoRef.current = seen;
+    if (fresh.length > 0) {
+      setFloats((f) => [...f, ...fresh]);
+      const ids = new Set(fresh.map((f) => f.id));
+      window.setTimeout(() => setFloats((f) => f.filter((x) => !ids.has(x.id))), 1250);
+    }
+  }
+  const floatsFor = (iid: string) => floats.filter((f) => f.iid === iid);
+
+  /** Big center-screen phase banner (ROLL / PLACEMENT / COMBAT / END). */
+  const flashPhase = (label: string) => {
+    setPhaseFx(label);
+    if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
+    phaseTimeoutRef.current = window.setTimeout(() => {
+      setPhaseFx(null);
+      phaseTimeoutRef.current = null;
+    }, 1150);
+  };
+
+  const closePreview = () => {
+    setPreview(null);
+    setPreviewPinned(false);
+  };
 
   // ---- turn driving -------------------------------------------------------
   // Values are rolled by the engine immediately (startTurn), but they stay
@@ -475,10 +686,12 @@ export function GameV4({
     setRallyPick(null);
     setEchoPick(null);
     setAttacker(null);
+    closePreview();
     setStage('awaitRoll');
   };
 
   const doRollDice = () => {
+    flashPhase('ROLL');
     setStage('rolling');
     setRollingDice(new Set([0, 1, 2, 3, 4]));
     if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
@@ -583,7 +796,10 @@ export function GameV4({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (inspect) setInspect(null);
-      else if (pending) setPending(null);
+      else if (preview) {
+        setPreview(null);
+        setPreviewPinned(false);
+      } else if (pending) setPending(null);
       else if (sumCast) setSumCast(null);
       else if (rallyPick) setRallyPick(null);
       else if (showDiscard) {
@@ -594,7 +810,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker]);
+  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker, preview]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -608,7 +824,9 @@ export function GameV4({
   const dieVal =
     selDie !== null && me.dice[selDie] && !me.dice[selDie].placed ? me.dice[selDie].value : null;
 
-  const canCastNow = (c: Inst): { ok: boolean; why?: string } => {
+  /** v4.3: `dieIdx` defaults to the tray selection but can be overridden by
+   * the hand preview's CAST button (which may auto-pick a paying die). */
+  const canCastNow = (c: Inst, dieIdx: number | null = selDie): { ok: boolean; why?: string } => {
     if (c.def.type === 'Location') {
       // Free Location casts are a Placement Phase bonus action (§7) — not
       // available before or during the roll, same as every other cast (a
@@ -620,13 +838,19 @@ export function GameV4({
       if (me.location?.def.id === c.def.id) return { ok: false, why: 'Same-name Location in play' };
       return { ok: true };
     }
+    if (stage !== 'placement' && stage !== 'preRoll')
+      return { ok: false, why: 'Casting happens during Placement' };
     if (stage === 'preRoll' && !c.def.snap)
       return { ok: false, why: 'Only Snap Charms before the reroll' };
+    const dv =
+      dieIdx !== null && me.dice[dieIdx] && !me.dice[dieIdx].placed
+        ? me.dice[dieIdx].value
+        : null;
     if (c.def.comboGate) {
       if (me.comboGateCastThisTurn) return { ok: false, why: 'One Combo-gated card per turn' };
       if (!matchesPattern(rollValues(me), c.def.comboGate))
-        return { ok: false, why: `Roll lacks ${c.def.comboGate}` };
-      if (dieVal === null) return { ok: false, why: 'Select a die' };
+        return { ok: false, why: `Roll lacks ${GATE_LABEL[c.def.comboGate] || c.def.comboGate}` };
+      if (dv === null) return { ok: false, why: 'Select a die' };
       if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
         return { ok: false, why: 'No legal target' };
       return { ok: true };
@@ -640,10 +864,10 @@ export function GameV4({
         return { ok: false, why: 'No legal target' };
       return { ok: true };
     }
-    if (dieVal === null) return { ok: false, why: 'Select a die' };
+    if (dv === null) return { ok: false, why: 'Select a die' };
     if (c.def.castCostKind === 'exact') {
-      if (dieVal !== thr) return { ok: false, why: `Needs exactly ${thr}` };
-    } else if (dieVal < thr) {
+      if (dv !== thr) return { ok: false, why: `Needs exactly ${thr}` };
+    } else if (dv < thr) {
       return { ok: false, why: `Needs ${thr}+` };
     }
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
@@ -659,6 +883,8 @@ export function GameV4({
    * card should look dimmed before the player has committed to a die. */
   const canCastWithAnyDie = (c: Inst): boolean => {
     if (c.def.type === 'Location') return canCastNow(c).ok;
+    // Mirror canCastNow's stage gating (casting is a Placement/Snap action).
+    if (stage !== 'placement' && stage !== 'preRoll') return false;
     if (stage === 'preRoll' && !c.def.snap) return false;
     // Mirrors canCastNow's branch order exactly (minus the "a die must
     // already be selected" checks). Also requires an unplaced die to
@@ -686,7 +912,7 @@ export function GameV4({
     return !needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0;
   };
 
-  const tryCast = (c: Inst) => {
+  const tryCast = (c: Inst, dieIdx: number | null = selDie) => {
     if (c.def.type === 'Location') {
       const chk = canCastNow(c);
       if (!chk.ok) {
@@ -699,7 +925,7 @@ export function GameV4({
       } else say('Illegal placement.');
       return;
     }
-    const chk = canCastNow(c);
+    const chk = canCastNow(c, dieIdx);
     if (!chk.ok) {
       say(chk.why || 'Illegal');
       return;
@@ -714,10 +940,15 @@ export function GameV4({
       return;
     }
     if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
-      setPending({ kind: 'cast', cardIid: c.iid, effect: c.def.onCast! });
+      setPending({
+        kind: 'cast',
+        cardIid: c.iid,
+        effect: c.def.onCast!,
+        dieIndex: dieIdx ?? undefined,
+      });
       return;
     }
-    if (castFromHand(g, selDie!, c.iid)) {
+    if (castFromHand(g, dieIdx!, c.iid)) {
       setSelDie(null);
       bump();
       say(
@@ -731,6 +962,37 @@ export function GameV4({
     // or the game-over screen never appears (the UI would just sit in
     // Placement with the win already decided internally).
     if (g.winner) setStage('over');
+  };
+
+  /** v4.3: cheapest still-unplaced die that pays this card's single-die cost
+   * — lets the preview's CAST button work without a manual die pick first. */
+  const pickAutoDie = (c: Inst): number | null => {
+    if (c.def.type === 'Location') return null;
+    if (c.def.castCostKind === 'sum' && !c.def.comboGate) return null;
+    const thr = effThreshold(g, HUMAN, c.def);
+    const cands = unplaced
+      .filter((d) => {
+        if (c.def.comboGate) return true; // any die value pays a pattern gate
+        return c.def.castCostKind === 'exact' ? d.value === thr : d.value >= thr;
+      })
+      .sort((a, b) => a.value - b.value);
+    return cands.length > 0 ? cands[0].i : null;
+  };
+
+  /** CAST from the enlarged hand preview: reuse the selected die if it pays,
+   * otherwise auto-pick the cheapest one that does, then run the normal
+   * cast flow (sum-builder / target picker / immediate resolve). */
+  const castFromPreview = (c: Inst) => {
+    let dieIdx = selDie;
+    if (c.def.type !== 'Location' && !canCastNow(c, dieIdx).ok) {
+      const auto = pickAutoDie(c);
+      if (auto !== null) {
+        dieIdx = auto;
+        setSelDie(auto);
+      }
+    }
+    closePreview();
+    tryCast(c, dieIdx);
   };
 
   // ---- 'sum'-cost casting: build a multi-die selection, then confirm ------
@@ -807,7 +1069,7 @@ export function GameV4({
     }
     let ok = false;
     if (pending.kind === 'cast')
-      ok = castFromHand(g, pending.dieIndices ?? selDie!, pending.cardIid, targetIid);
+      ok = castFromHand(g, pending.dieIndices ?? pending.dieIndex ?? selDie!, pending.cardIid, targetIid);
     else if (pending.kind === 'ability')
       ok = pending.rallySourceIid
         ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
@@ -1030,6 +1292,8 @@ export function GameV4({
     setSumCast(null);
     setRallyPick(null);
     setEchoPick(null);
+    closePreview();
+    flashPhase('COMBAT');
     setStage('combat');
   };
 
@@ -1059,13 +1323,14 @@ export function GameV4({
   // the limit even when it wasn't before — the picker needs the post-draw
   // hand size, not the pre-draw one.
   const attemptFinishTurn = () => {
+    flashPhase('END');
     resolveEndPhasePreDiscard(g);
     bump();
     if (g.winner) {
       setStage('over');
       return;
     }
-    const needed = me.hand.length - 6;
+    const needed = me.hand.length - HAND_LIMIT;
     if (needed > 0) {
       setForcedDiscard({ needed, picks: [] });
       return;
@@ -1105,6 +1370,7 @@ export function GameV4({
       }, ROLL_ANIM_MS);
     }
     bump();
+    if (g.stage === 'PLACEMENT') flashPhase('PLACEMENT');
     setStage(g.stage === 'PLACEMENT' ? 'placement' : 'preRoll');
   };
 
@@ -1114,6 +1380,13 @@ export function GameV4({
   const tryAttackTarget = (iid: string) => {
     if (!attacker) return;
     if (attack(g, attacker, iid)) {
+      // Attack feedback: flash both combatants for the animation's duration.
+      setAttackFx({ attacker, target: iid });
+      if (attackFxTimeoutRef.current !== null) window.clearTimeout(attackFxTimeoutRef.current);
+      attackFxTimeoutRef.current = window.setTimeout(() => {
+        setAttackFx(null);
+        attackFxTimeoutRef.current = null;
+      }, 680);
       const stillCan = me.board.find((u) => u.iid === attacker && canAttack(g, u));
       setAttacker(stillCan ? attacker : null);
       bump();
@@ -1133,6 +1406,94 @@ export function GameV4({
 
   const echoables = me.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
 
+  // ---- labeled ability-slot state (why is this pill disabled?) -------------
+  const leaderAbilityWhy = (() => {
+    const l = me.leader;
+    if (!l.def.ability) return undefined;
+    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
+    if (l.abilityUsed) return 'Already used this turn';
+    const thr = effAbilityThreshold(g, l);
+    if (dieVal === null) return `Select a die of ${thr}+ first`;
+    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
+    return undefined;
+  })();
+  const leaderUltimateWhy = (() => {
+    const l = me.leader;
+    const ult = l.def.ultimate;
+    if (!ult) return undefined;
+    if (l.ultimateUsed) return 'Already spent — once per game';
+    if (stage !== 'placement') return 'Ultimates resolve during your Placement Phase';
+    if (me.turnsTaken < ult.unlockTurn)
+      return `Unlocks on your turn ${ult.unlockTurn} (this is your turn ${me.turnsTaken})`;
+    if (dieVal === null) return `Select a die of ${ult.threshold}+ first`;
+    if (dieVal < ult.threshold) return `Needs a die of ${ult.threshold}+ (selected: ${dieVal})`;
+    return undefined;
+  })();
+  const locationAbilityWhy = (() => {
+    const loc = me.location;
+    if (!loc?.def.ability) return undefined;
+    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
+    if (loc.abilityUsed) return 'Already used this turn';
+    const thr = effAbilityThreshold(g, loc);
+    if (dieVal === null) return `Select a die of ${thr}+ first`;
+    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
+    return undefined;
+  })();
+  const unitAbilityWhy = (u: Inst): string | undefined => {
+    if (!u.def.ability) return undefined;
+    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
+    if (u.abilityUsed) return 'Already used this turn';
+    if (u.hasAttacked) return 'Attacked this turn — abilities locked';
+    if (u.boundThisTurn) return "Bound — can't act this turn";
+    if (u.enteredThisTurn && !hasKw(u.def, 'Swift')) return "Just played — can't act yet";
+    const thr = effAbilityThreshold(g, u);
+    if (dieVal === null) return `Select a die of ${thr}+ first`;
+    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
+    return undefined;
+  };
+
+  // ---- contextual hint bar (item: keywords/actions unintuitive) ------------
+  const hint = (() => {
+    if (pending) return 'Pick a highlighted target for the effect (✕ or Esc to cancel).';
+    if (rallyPick) return 'Pick a highlighted donor — an exhausted permanent with a resting die.';
+    if (sumCast) return 'Click dice in the tray to build the sum, then confirm in the orange bar.';
+    if (echoPick) return 'Pick a card in your hand to discard — that pays the Echo cost.';
+    switch (stage) {
+      case 'awaitRoll':
+        return 'Dice are your only resource — no mana. Click ROLL DICE to roll five.';
+      case 'rolling':
+        return 'Rolling…';
+      case 'preRoll':
+        return `Click dice to mark them, then REROLL (${rerollsRemaining(g, HUMAN)} left) — or KEEP ALL. Snap Charms can be cast right now.`;
+      case 'placement':
+        return selDie !== null
+          ? `Die ${dieVal ?? '?'} selected — hover a hand card and press CAST, or press an ABILITY pill · dice left: ${unplaced.length}`
+          : `Hover a card in hand to preview & cast it · Locations cast free · dice left: ${unplaced.length} (leftovers Pitch = heal your Leader 1 each)`;
+      case 'combat':
+        return attacker
+          ? 'Now click a highlighted enemy to attack it (Guards must fall first).'
+          : 'Click one of your ready Units, then an enemy target. END TURN when done.';
+      case 'cpu':
+        return `${cpuLabel} is playing its turn — each action is narrated (SKIP ▸▸ to fast-forward).`;
+      default:
+        return null;
+    }
+  })();
+
+  const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
+  const previewInfo = previewCard
+    ? {
+        chk: canCastNow(previewCard),
+        auto: pickAutoDie(previewCard),
+        isSum: previewCard.def.castCostKind === 'sum' && !previewCard.def.comboGate,
+        canScrapNow:
+          hasKw(previewCard.def, 'Scrap') && stage === 'placement' && selDie !== null,
+      }
+    : null;
+  const previewCastable =
+    !!previewInfo &&
+    (previewInfo.chk.ok || (previewInfo.auto !== null && previewInfo.chk.why === 'Select a die'));
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -1143,6 +1504,7 @@ export function GameV4({
         background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
       }}
     >
+      <style>{GAME_CSS}</style>
       {/* Top bar */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
         <button
@@ -1213,7 +1575,23 @@ export function GameV4({
         </div>
       </div>
 
+      {/* Contextual hint bar — plain-words summary of what's possible right now */}
+      {hint && stage !== 'over' && stage !== 'mulligan' && (
+        <div className="px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
+          💡 {hint}
+        </div>
+      )}
+
       <CoachOverlay stage={stage} />
+
+      {/* Phase banner — big center-screen callout on ROLL/PLACEMENT/COMBAT/END */}
+      {phaseFx && (
+        <div className="absolute inset-0 z-[60] pointer-events-none flex items-center justify-center">
+          <div className="gv4-phase-banner heading-font text-4xl sm:text-5xl text-[var(--c-yellow)] bg-[var(--c-ink)]/85 px-8 py-3 ink-border-md shadow-hard-black-xs">
+            {phaseFx}
+          </div>
+        </div>
+      )}
 
       {banner && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
@@ -1222,7 +1600,7 @@ export function GameV4({
       )}
       {stage === 'cpu' && cpuNarration && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[80vw] text-center">
-          {cpuLabel}: {cpuNarration}
+          {cpuLabel}: {renderKeywordText(cpuNarration)}
         </div>
       )}
       {pending && (
@@ -1259,6 +1637,9 @@ export function GameV4({
           return (
             <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#B45309] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
               {isEcho ? 'SUM ECHO' : 'SUM CAST'} — {c?.def.name}: Σ {total}/{target}
+              <span className="text-[9px] font-bold opacity-90">
+                {met ? '✓ enough — confirm!' : `need ${target - total} more`}
+              </span>
               <button
                 onClick={isEcho ? confirmSumEcho : confirmSumCast}
                 disabled={!met}
@@ -1294,7 +1675,7 @@ export function GameV4({
 
       {/* Enemy row */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25">
+      <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25 min-h-0 overflow-y-auto">
         <LeaderPanel
           g={g}
           p={foe}
@@ -1303,6 +1684,8 @@ export function GameV4({
             (!!pending && isPendingTarget(foe.leader.iid)) ||
             (!!attacker && combatTargets.some((t) => t.iid === foe.leader.iid))
           }
+          flash={attackFx?.target === foe.leader.iid}
+          floats={floatsFor(foe.leader.iid)}
           onClickTarget={
             pending && isPendingTarget(foe.leader.iid)
               ? () => resolvePendingOn(foe.leader.iid)
@@ -1321,15 +1704,16 @@ export function GameV4({
               <span
                 className="bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer"
                 onClick={() => setInspect(foe.location!.def)}
+                title="Click to inspect the enemy Location"
               >
                 📍 {foe.location.def.name}
               </span>
             )}
             {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
           </div>
-          <div className="flex gap-1 flex-wrap min-h-[92px] sm:min-h-[130px]">
+          <div className="flex gap-1.5 items-start overflow-x-auto pb-1 min-h-[120px]">
             {foe.board.length === 0 && (
-              <div className="w-full h-[80px] sm:h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1345,6 +1729,8 @@ export function GameV4({
                     g={g}
                     u={u}
                     highlight={targetable}
+                    flash={attackFx?.target === u.iid}
+                    floats={floatsFor(u.iid)}
                     onClick={
                       pending && isPendingTarget(u.iid)
                         ? () => resolvePendingOn(u.iid)
@@ -1458,7 +1844,7 @@ export function GameV4({
             Battle Log
           </div>
           {g.log.slice(-40).map((l, i) => (
-            <div key={i}>· {l}</div>
+            <div key={i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">
@@ -1477,153 +1863,97 @@ export function GameV4({
 
       {/* My row */}
       <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-1.5 items-start flex-1 min-h-0 bg-[var(--c-ink)]/25">
-        <div className="flex flex-col gap-1 shrink-0">
-          <LeaderPanel
+      <div className="flex gap-2 px-2 pt-1.5 pb-1 items-start flex-1 min-h-0 overflow-y-auto bg-[var(--c-ink)]/25">
+        <LeaderPanel
+          g={g}
+          p={me}
+          isHuman
+          abilityWhy={leaderAbilityWhy}
+          ultimateWhy={leaderUltimateWhy}
+          onAbility={() => tryAbility(me.leader)}
+          onUltimate={tryUltimate}
+          highlight={
+            (!!pending && isPendingTarget(me.leader.iid)) ||
+            (!!rallyPick && isRallySource(me.leader.iid))
+          }
+          floats={floatsFor(me.leader.iid)}
+          onClickTarget={
+            pending && isPendingTarget(me.leader.iid)
+              ? () => resolvePendingOn(me.leader.iid)
+              : rallyPick && isRallySource(me.leader.iid)
+                ? () => resolveRallySource(me.leader.iid)
+                : undefined
+          }
+        />
+        {me.location ? (
+          <LocationPanel
             g={g}
-            p={me}
-            isHuman
-            abilityUsable={
-              stage === 'placement' &&
-              !me.leader.abilityUsed &&
-              dieVal !== null &&
-              dieVal >= effAbilityThreshold(g, me.leader)
-            }
-            ultimateUsable={
-              stage === 'placement' &&
-              !!me.leader.def.ultimate &&
-              !me.leader.ultimateUsed &&
-              me.turnsTaken >= (me.leader.def.ultimate?.unlockTurn ?? 99) &&
-              dieVal !== null &&
-              dieVal >= (me.leader.def.ultimate?.threshold ?? 7)
-            }
-            onAbility={() => tryAbility(me.leader)}
-            onUltimate={tryUltimate}
-            highlight={
-              (!!pending && isPendingTarget(me.leader.iid)) ||
-              (!!rallyPick && isRallySource(me.leader.iid))
-            }
-            onClickTarget={
-              pending && isPendingTarget(me.leader.iid)
-                ? () => resolvePendingOn(me.leader.iid)
-                : rallyPick && isRallySource(me.leader.iid)
-                  ? () => resolveRallySource(me.leader.iid)
-                  : undefined
-            }
+            loc={me.location}
+            onAbility={() => tryAbility(me.location!)}
+            abilityWhy={locationAbilityWhy}
+            isRallySource={!!rallyPick && isRallySource(me.location.iid)}
+            onRallyClick={() => resolveRallySource(me.location!.iid)}
+            onInspect={() => setInspect(me.location!.def)}
+            floats={floatsFor(me.location.iid)}
           />
-          {me.location ? (
-            <div
-              className={cn(
-                'w-[168px] bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm p-1',
-                rallyPick &&
-                  isRallySource(me.location.iid) &&
-                  'ring-4 ring-[var(--c-red)] cursor-pointer',
-              )}
-              onClick={
-                rallyPick && isRallySource(me.location.iid)
-                  ? () => resolveRallySource(me.location!.iid)
-                  : undefined
-              }
-            >
+        ) : (
+          <div className="w-[100px] shrink-0 h-[196px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 flex items-center justify-center text-center">
+            no Location
+            <br />
+            (cast one free each turn)
+          </div>
+        )}
+        {me.staging.length > 0 && (
+          <div className="w-[150px] shrink-0">
+            <div className="text-[8px] font-bold text-[var(--c-paper)]/60">STAGING (Twin)</div>
+            {me.staging.map((s) => (
               <div
-                className="text-[8px] font-bold cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setInspect(me.location!.def);
-                }}
+                key={s.iid}
+                className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5"
               >
-                📍 {me.location.def.name}
-              </div>
-              <div className="text-[7px] text-[var(--c-paper)]/70 leading-tight">
-                {renderKeywordText(cardRules(me.location.def), true)}
-              </div>
-              {me.location.def.ability && (
-                <button
-                  onClick={() => tryAbility(me.location!)}
-                  disabled={
-                    !(
-                      stage === 'placement' &&
-                      !me.location.abilityUsed &&
-                      dieVal !== null &&
-                      dieVal >= effAbilityThreshold(g, me.location)
-                    )
-                  }
-                  className={cn(
-                    'w-full mt-0.5 text-[8px] font-bold px-1 ink-border-sm text-left',
-                    stage === 'placement' &&
-                      !me.location.abilityUsed &&
-                      dieVal !== null &&
-                      dieVal >= effAbilityThreshold(g, me.location)
-                      ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                      : 'bg-[var(--c-ink)]/50 text-[var(--c-paper)]/40',
-                    me.location.abilityUsed && 'line-through',
-                  )}
-                >
-                  {effAbilityThreshold(g, me.location)}+
-                  {effAbilityThreshold(g, me.location) !== me.location.def.ability.threshold
-                    ? ` (was ${me.location.def.ability.threshold}+)`
-                    : ''}{' '}
-                  {describeEffect(me.location.def.ability.effect)}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="w-[168px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 text-center">
-              no Location
-            </div>
-          )}
-          {me.staging.length > 0 && (
-            <div className="w-[168px]">
-              <div className="text-[8px] font-bold text-[var(--c-paper)]/60">STAGING (Twin)</div>
-              {me.staging.map((s) => (
-                <div
-                  key={s.iid}
-                  className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5"
-                >
-                  <span className="text-lg leading-none text-[var(--c-paper)]">
-                    {DIE_FACES[(s.stagedDie ?? 1) - 1]}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className="text-[8px] font-bold text-[var(--c-paper)] truncate cursor-pointer"
-                      onClick={() => setInspect(s.def)}
-                    >
-                      {s.def.name}
-                    </div>
-                    <div className="text-[7px] text-[var(--c-paper)]/60">
-                      match a {s.stagedDie} to complete
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => tryCompleteTwin(s)}
-                    className="btn-pop text-[8px] font-bold bg-[var(--c-yellow)] px-1 ink-border-sm"
+                <span className="text-lg leading-none text-[var(--c-paper)]">
+                  {DIE_FACES[(s.stagedDie ?? 1) - 1]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className="text-[8px] font-bold text-[var(--c-paper)] truncate cursor-pointer"
+                    onClick={() => setInspect(s.def)}
                   >
-                    SET
-                  </button>
-                  {stage === 'preRoll' && (
-                    <button
-                      onClick={() => {
-                        if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`)) return;
-                        abandonTwin(g, s.iid);
-                        bump();
-                      }}
-                      title="Abandon (return to hand)"
-                      aria-label={`Abandon ${s.def.name} and return it to hand`}
-                      className="btn-pop text-[8px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
-                    >
-                      ✕
-                    </button>
-                  )}
+                    {s.def.name}
+                  </div>
+                  <div className="text-[7px] text-[var(--c-paper)]/60">
+                    match a {s.stagedDie} to complete
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <button
+                  onClick={() => tryCompleteTwin(s)}
+                  className="btn-pop text-[8px] font-bold bg-[var(--c-yellow)] px-1 ink-border-sm"
+                >
+                  SET
+                </button>
+                {stage === 'preRoll' && (
+                  <button
+                    onClick={() => {
+                      if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`)) return;
+                      abandonTwin(g, s.iid);
+                      bump();
+                    }}
+                    title="Abandon (return to hand)"
+                    aria-label={`Abandon ${s.def.name} and return it to hand`}
+                    className="btn-pop text-[8px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
-        <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <div className="flex gap-1 flex-wrap min-h-[92px] sm:min-h-[130px]">
+        <div className="flex-1 min-w-0">
+          <div className="flex gap-1.5 items-start overflow-x-auto pb-1 min-h-[120px]">
             {me.board.length === 0 && (
-              <div className="w-full h-[80px] sm:h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1633,21 +1963,23 @@ export function GameV4({
               const canAtt = stage === 'combat' && canAttack(g, u);
               const targetable = !!pending && isPendingTarget(u.iid);
               const isSource = !!rallyPick && isRallySource(u.iid);
-              const abilityReady =
+              const rallyReady =
                 stage === 'placement' &&
                 u.def.ability &&
                 !u.abilityUsed &&
                 !u.hasAttacked &&
                 !u.boundThisTurn &&
-                !(u.enteredThisTurn && !hasKw(u.def, 'Swift'));
-              const rallyReady = abilityReady && hasKw(u.def, 'Rally');
+                !(u.enteredThisTurn && !hasKw(u.def, 'Swift')) &&
+                hasKw(u.def, 'Rally');
               return (
-                <div key={u.iid} className="flex flex-col items-center gap-0.5">
+                <div key={u.iid} className="flex flex-col items-center gap-0.5 shrink-0 w-[140px]">
                   <BoardUnit
                     g={g}
                     u={u}
                     isAttacker={attacker === u.iid}
                     highlight={targetable || isSource || (canAtt && attacker !== u.iid)}
+                    flash={attackFx?.attacker === u.iid || attackFx?.target === u.iid}
+                    floats={floatsFor(u.iid)}
                     onClick={
                       targetable
                         ? () => resolvePendingOn(u.iid)
@@ -1658,18 +1990,19 @@ export function GameV4({
                             : () => setInspect(u.def)
                     }
                   />
-                  {abilityReady && (
-                    <button
+                  {u.def.ability && (
+                    <AbilityPill
+                      label={`ABILITY ${effAbilityThreshold(g, u)}+${
+                        effAbilityThreshold(g, u) !== u.def.ability.threshold
+                          ? ` (was ${u.def.ability.threshold}+)`
+                          : ''
+                      }:`}
+                      desc={describeEffect(u.def.ability.effect)}
+                      usable={!unitAbilityWhy(u)}
+                      used={u.abilityUsed}
+                      why={unitAbilityWhy(u)}
                       onClick={() => tryAbility(u)}
-                      className={cn(
-                        'text-[7px] font-bold px-1 ink-border-sm',
-                        dieVal !== null && dieVal >= effAbilityThreshold(g, u)
-                          ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                          : 'bg-[var(--c-steel)] text-[var(--c-paper)]/50',
-                      )}
-                    >
-                      {effAbilityThreshold(g, u)}+ ability
-                    </button>
+                    />
                   )}
                   {rallyReady && (
                     <button
@@ -1684,78 +2017,153 @@ export function GameV4({
               );
             })}
           </div>
+        </div>
+      </div>
 
-          {/* Hand */}
-          <div className="mt-auto pb-1.5">
-            <div className="text-[8px] font-bold text-[var(--c-paper)]/60 mb-0.5">
-              HAND {me.hand.length}/6 {echoPick ? '— pick a card to DISCARD for Echo' : ''}
-            </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {me.hand.map((c) => {
-                const chk = canCastNow(c);
-                const canScrap = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
-                // Before a die is selected, judge dimming on "could any of my
-                // dice pay for this" rather than the stricter per-die check,
-                // which always fails pre-selection with "Select a die".
-                const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
-                return (
-                  <div key={c.iid} className="flex flex-col gap-0.5 shrink-0">
-                    <CardFace
-                      def={c.def}
-                      size="compact"
-                      dimmed={!potentiallyCastable && !echoPick && !canScrap}
-                      highlight={!!echoPick}
-                      introduceKeywords
-                      effectiveThreshold={
-                        c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
-                      }
-                      onClick={
-                        echoPick
-                          ? () => tryEchoFodder(c)
-                          : chk.ok
-                            ? () => tryCast(c)
-                            : () => setInspect(c.def)
-                      }
-                    />
-                    {canScrap && (
-                      <button
-                        onClick={() => tryScrap(c)}
-                        className="btn-pop text-[7px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
-                      >
-                        SCRAP → reroll die
-                      </button>
-                    )}
-                    {!chk.ok &&
-                      chk.why &&
-                      chk.why !== 'Select a die' &&
-                      stage !== 'cpu' &&
-                      !echoPick && (
-                        <span className="text-[6.5px] font-bold text-[var(--c-paper)]/40 text-center leading-tight max-w-[104px]">
-                          {chk.why}
-                        </span>
-                      )}
-                    {!chk.ok && chk.why === 'Select a die' && !echoPick && (
-                      <span
-                        className={cn(
-                          'text-[6.5px] font-bold text-center leading-tight max-w-[104px]',
-                          potentiallyCastable
-                            ? 'text-[var(--c-yellow)]/70'
-                            : 'text-[var(--c-paper)]/40',
-                        )}
-                      >
-                        {potentiallyCastable ? 'Ready — pick a die' : 'No die pays this cost'}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              {me.hand.length === 0 && (
-                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">
-                  — empty hand —
+      {/* Hand dock — compact cards along the very bottom; hover/click a card
+          to open the enlarged preview above it and CAST from the preview. */}
+      <div
+        className="relative shrink-0 z-30 bg-[var(--c-ink)]/85 border-t-2 border-[var(--c-yellow)]/50"
+        onMouseLeave={() => {
+          if (!previewPinned) setPreview(null);
+        }}
+      >
+        {previewCard && previewInfo && (
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-stretch gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs">
+            <CardFace
+              def={previewCard.def}
+              size="full"
+              introduceKeywords
+              effectiveThreshold={
+                previewCard.def.threshold !== undefined
+                  ? effThreshold(g, HUMAN, previewCard.def)
+                  : undefined
+              }
+            />
+            <div className="flex flex-col gap-1.5 w-[160px]">
+              <button
+                onClick={closePreview}
+                aria-label="Close preview"
+                className="btn-pop self-end text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              >
+                ✕ CLOSE
+              </button>
+              <button
+                onClick={() => castFromPreview(previewCard)}
+                disabled={!previewCastable}
+                className={cn(
+                  'heading-font text-sm px-3 py-2 ink-border-md shadow-hard-black-xs',
+                  previewCastable
+                    ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                    : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/40 cursor-not-allowed',
+                )}
+              >
+                {previewCard.def.type === 'Location'
+                  ? 'CAST — FREE'
+                  : previewInfo.isSum
+                    ? 'CAST — PICK DICE'
+                    : 'CAST'}
+              </button>
+              {!previewInfo.chk.ok && previewInfo.chk.why !== 'Select a die' && (
+                <span className="text-[9px] font-bold text-[var(--c-red)] leading-tight">
+                  {previewInfo.chk.why}
+                </span>
+              )}
+              {!previewInfo.chk.ok &&
+                previewInfo.chk.why === 'Select a die' &&
+                previewInfo.auto === null && (
+                  <span className="text-[9px] font-bold text-[var(--c-red)] leading-tight">
+                    No unplaced die pays this cost.
+                  </span>
+                )}
+              {!previewInfo.chk.ok &&
+                previewInfo.chk.why === 'Select a die' &&
+                previewInfo.auto !== null && (
+                  <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
+                    Will spend a die showing {me.dice[previewInfo.auto].value}.
+                  </span>
+                )}
+              {previewInfo.chk.ok &&
+                selDie !== null &&
+                !previewInfo.isSum &&
+                previewCard.def.type !== 'Location' && (
+                  <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
+                    Will spend the selected die ({dieVal}).
+                  </span>
+                )}
+              {previewInfo.isSum && (
+                <span className="text-[9px] font-bold text-[var(--c-paper)]/70 leading-tight">
+                  Sum cost: after CAST, click dice in the tray until they total{' '}
+                  {effThreshold(g, HUMAN, previewCard.def)}+, then confirm.
+                </span>
+              )}
+              {previewInfo.canScrapNow && (
+                <button
+                  onClick={() => {
+                    tryScrap(previewCard);
+                    closePreview();
+                  }}
+                  className="btn-pop text-[9px] font-bold bg-[var(--c-red)] text-white px-2 py-1 ink-border-sm"
+                >
+                  SCRAP → reroll die {dieVal}
+                </button>
+              )}
+              {hasKw(previewCard.def, 'Scrap') && !previewInfo.canScrapNow && (
+                <span className="text-[8px] font-bold text-[var(--c-paper)]/50 leading-tight">
+                  Scrap: select a die during Placement, then reopen this card.
                 </span>
               )}
             </div>
           </div>
+        )}
+        <div className="flex items-center gap-2 px-2 pt-1">
+          <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
+            HAND {me.hand.length}/{HAND_LIMIT}
+            {echoPick ? ' — pick a card to DISCARD for Echo' : ' · hover a card to preview'}
+          </span>
+        </div>
+        <div className="flex gap-1.5 px-2 pb-1.5 pt-0.5 overflow-x-auto">
+          {me.hand.map((c) => {
+            const chk = canCastNow(c);
+            const canScrapNow = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
+            // Before a die is selected, judge dimming on "could any of my
+            // dice pay for this" rather than the stricter per-die check,
+            // which always fails pre-selection with "Select a die".
+            const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
+            return (
+              <div
+                key={c.iid}
+                className="shrink-0"
+                onMouseEnter={() => {
+                  if (!echoPick) setPreview(c.iid);
+                }}
+              >
+                <CardFace
+                  def={c.def}
+                  size="compact"
+                  dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
+                  highlight={!!echoPick || preview === c.iid}
+                  introduceKeywords
+                  effectiveThreshold={
+                    c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
+                  }
+                  onClick={
+                    echoPick
+                      ? () => tryEchoFodder(c)
+                      : () => {
+                          setPreview(c.iid);
+                          setPreviewPinned(true);
+                        }
+                  }
+                />
+              </div>
+            );
+          })}
+          {me.hand.length === 0 && (
+            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold py-2">
+              — empty hand —
+            </span>
+          )}
         </div>
       </div>
 
@@ -1817,7 +2225,7 @@ export function GameV4({
                             return;
                           }
                           if (!matchesPattern(rollValues(me), c.def.comboGate)) {
-                            say(`Roll lacks ${c.def.comboGate}.`);
+                            say(`Roll lacks ${GATE_LABEL[c.def.comboGate] || c.def.comboGate}.`);
                             return;
                           }
                         } else {
@@ -1863,11 +2271,11 @@ export function GameV4({
           identically no matter where it's inspected from. */}
       {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
 
-      {/* Forced discard (hand size &gt; 6 at End Phase) — player picks which cards */}
+      {/* Forced discard (hand size &gt; 8 at End Phase) — player picks which cards */}
       {forcedDiscard && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4">
           <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl">
-            <div className="heading-font text-xl mb-1">Discard Down to 6</div>
+            <div className="heading-font text-xl mb-1">Discard Down to {HAND_LIMIT}</div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
               Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
               {forcedDiscard.picks.length}/{forcedDiscard.needed} selected).
@@ -1908,39 +2316,48 @@ export function GameV4({
         </div>
       )}
 
-      {/* Mulligan overlay */}
+      {/* Mulligan overlay — large readable cards, a clear question, two
+          prominent buttons, and a plain-words explainer of what a mulligan
+          actually does. */}
       {stage === 'mulligan' && (
-        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl">
-            <div className="heading-font text-xl mb-1">Opening Hand — {playerName}</div>
-            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
-              Keep this hand, or mulligan once to shuffle and redraw 5.
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto">
+            <div className="heading-font text-3xl mb-1">
+              {mulliganUsed ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
             </div>
-            <div className="flex gap-1.5 justify-center flex-wrap mb-4">
+            <div className="text-[12px] font-bold text-[var(--c-steel)] mb-1">
+              Opening hand — {playerName}
+            </div>
+            <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-4 leading-snug">
+              {mulliganUsed
+                ? 'That was your one mulligan — this hand is yours now. Click any card to zoom in, then KEEP to start.'
+                : 'A mulligan shuffles all 7 of these cards back into your deck and draws 7 fresh ones. You get exactly one per game. Click any card to zoom in.'}
+            </div>
+            <div className="flex gap-2 justify-center flex-wrap mb-5">
               {me.hand.map((c) => (
                 <React.Fragment key={c.iid}>
                   <CardFace
                     def={c.def}
-                    size="compact"
+                    size="standard"
                     introduceKeywords
                     onClick={() => setInspect(c.def)}
                   />
                 </React.Fragment>
               ))}
             </div>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-4 justify-center flex-wrap">
               <button
                 onClick={afterMulligan}
-                className="btn-pop heading-font text-xs bg-[var(--c-yellow)] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font text-base bg-[var(--c-yellow)] px-8 py-3 ink-border-md shadow-hard-black-xs"
               >
-                KEEP HAND
+                ✓ KEEP THIS HAND
               </button>
               {!mulliganUsed && (
                 <button
                   onClick={doMulligan}
-                  className="btn-pop heading-font text-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-5 py-2 ink-border-sm shadow-hard-black-xs"
+                  className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"
                 >
-                  MULLIGAN
+                  ↻ MULLIGAN — redraw 7
                 </button>
               )}
             </div>

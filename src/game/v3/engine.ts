@@ -54,6 +54,15 @@ export interface Inst {
   abilityUsed: boolean;
   /** die value resting on the ability slot this turn (for Rally). */
   abilityDie?: number;
+  /** index into the owner's `p.dice` of the physical die recorded in
+   * `abilityDie` — lets `releaseAbilityDie` return that exact die to the
+   * supply (§4) if this card leaves play before the dice are cleared for
+   * the turn (e.g. a Location replaced mid-Placement, or a Unit destroyed
+   * with a die still resting on the Ability Slot it used this turn). Only
+   * ever meaningful within the same Placement Phase — `p.dice` is emptied
+   * at End Phase, so a stale index from an earlier turn safely resolves to
+   * nothing (see enterPlay's Location-replacement branch / cleanupDeaths). */
+  abilityDieIndex?: number;
   enteredThisTurn: boolean;
   wardUsed: boolean;
   boundThisTurn: boolean;
@@ -94,9 +103,12 @@ export interface Player {
   comboGateCastThisTurn: boolean;
 }
 
-export type Phase = 'PLACEMENT' | 'COMBAT' | 'DONE';
-/** v4.2 Snap: the Reroll Phase window closes (and the Placement window opens) when reroll() is called. */
-export type TurnStage = 'PRE_REROLL' | 'PLACEMENT';
+/** v4.2 Snap: the Reroll Phase window closes (and the Placement window opens)
+ * when reroll() is called. The Combat Phase window opens when comboCheck()
+ * runs (§3.5 -> §3.6, "Placement -> Combo Check -> Combat") and closes again
+ * the moment the turn ends (finishEndPhase resets it, and the next player's
+ * startTurn() always sets PRE_REROLL regardless). */
+export type TurnStage = 'PRE_REROLL' | 'PLACEMENT' | 'COMBAT';
 
 export interface Game {
   players: Record<string, Player>;
@@ -395,7 +407,10 @@ export function newGame(
   };
   for (const p of Object.values(g.players)) {
     shuffle(p.deck, rng);
-    for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+    // v4.3: starting hand of 7 (was 5) — with the End Phase cap raised to 8,
+    // a fuller opening hand gives both players real turn-1 options without
+    // forcing an immediate discard.
+    for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
   }
   return g;
 }
@@ -432,6 +447,7 @@ export function cleanupDeaths(g: Game) {
     p.board = survivors;
     for (const u of dead) {
       g.log.push(`${u.def.name} was destroyed.`);
+      releaseAbilityDie(p, u);
       discardCard(g, p, u);
     }
   }
@@ -621,6 +637,7 @@ export function startTurn(g: Game) {
     u.attacksMade = 0;
     u.abilityUsed = false;
     u.abilityDie = undefined;
+    u.abilityDieIndex = undefined;
     u.enteredThisTurn = false;
     u.boundThisTurn = u.boundNextTurn;
     u.boundNextTurn = false;
@@ -628,6 +645,7 @@ export function startTurn(g: Game) {
   if (p.location) {
     p.location.abilityUsed = false;
     p.location.abilityDie = undefined;
+    p.location.abilityDieIndex = undefined;
     // v4.2 Excavate X: Ability Slot threshold drops by X per controller turn in play.
     if (p.location.def.excavate) p.location.excavateStacks = (p.location.excavateStacks || 0) + 1;
   }
@@ -677,7 +695,7 @@ export function startTurn(g: Game) {
 
 /**
  * Mulligan (§2 setup): shuffle the player's hand back into their deck and
- * redraw 5. Once per player, enforced by the caller/UI.
+ * redraw 7 (v4.3, was 5). Once per player, enforced by the caller/UI.
  */
 export function mulliganRedraw(g: Game, pid: string) {
   const p = g.players[pid];
@@ -687,7 +705,7 @@ export function mulliganRedraw(g: Game, pid: string) {
     const j = Math.floor(g.rng() * (i + 1));
     [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
   }
-  for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+  for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
 }
 
 /**
@@ -731,6 +749,25 @@ function pickDie(p: Player, dieIndex: number): Die | null {
   return die && !die.placed ? die : null;
 }
 
+/**
+ * §4: if a card leaves play while a die is resting on one of its slots, that
+ * die is immediately returned to the supply. Only Ability Slot dice need
+ * this (Cast Slot dice are already "spent" the instant the card resolves —
+ * there's no persistent slot left behind to vacate); see `abilityDieIndex`.
+ * Note: don't cross-check `die.value` against `c.abilityDie` here — Rally
+ * (activateViaRally) clears the *source* card's `abilityDie` the moment its
+ * die's value is copied onto the Rally card, while deliberately leaving the
+ * source's `abilityDieIndex` pointing at the real physical die (still
+ * correctly exhausted). If the source later leaves play, that index is the
+ * only reliable link back to it.
+ */
+function releaseAbilityDie(p: Player, c: Inst) {
+  if (c.abilityDieIndex === undefined) return;
+  const die = p.dice[c.abilityDieIndex];
+  if (die && die.placed) die.placed = false;
+  c.abilityDieIndex = undefined;
+}
+
 function enterPlay(
   g: Game,
   p: Player,
@@ -762,6 +799,7 @@ function enterPlay(
     c.attacksMade = 0;
     c.abilityUsed = false;
     c.abilityDie = undefined;
+    c.abilityDieIndex = undefined;
     c.wardUsed = false;
     c.boundThisTurn = false;
     c.boundNextTurn = false;
@@ -769,6 +807,7 @@ function enterPlay(
   } else if (c.def.type === 'Location') {
     if (p.location) {
       g.log.push(`${p.location.def.name} was replaced.`);
+      releaseAbilityDie(p, p.location);
       discardCard(g, p, p.location);
     }
     c.excavateStacks = 0; // fresh Location life: no unearned Excavate discount
@@ -997,6 +1036,7 @@ export function activateAbility(
   die.placed = true;
   c.abilityUsed = true;
   c.abilityDie = die.value;
+  c.abilityDieIndex = dieIndex;
   if (c.def.type === 'Leader') {
     g.stats.leaderAbilityUses[c.def.id] = (g.stats.leaderAbilityUses[c.def.id] || 0) + 1;
     decide(g, p.id, 'leaderAbility');
@@ -1206,6 +1246,11 @@ export function abandonTwin(g: Game, cardIid: string): boolean {
 // Combo Check (§3.5)
 // ---------------------------------------------------------------------------
 export function comboCheck(g: Game) {
+  // Idempotence guard: comboCheck is the one-shot Placement->Combat turnstile
+  // (see the stage flip below). Without this, a second call in the same
+  // turn would double-apply every qualifying Combo bonus (permanent
+  // permAtk/permHp buffs, Sap damage, etc.) instead of being a harmless no-op.
+  if (g.stage !== 'PLACEMENT') return;
   const p = g.players[g.active];
   const values = rollValues(p);
   const holders = [...p.board, p.location].filter((c): c is Inst => !!c && !!c.def.combo);
@@ -1217,6 +1262,11 @@ export function comboCheck(g: Game) {
       applyEffect(g, p.id, c.def.combo!.effect, autoTarget(g, p.id, c.def.combo!.effect), c);
     }
   }
+  // §3.5 -> §3.6: Combo Check is the one-way turnstile into the Combat Phase
+  // — this is the only place `attack()` will ever run. Set unconditionally
+  // (even if a Combo effect just ended the game) since nothing further reads
+  // stage once g.winner is set.
+  g.stage = 'COMBAT';
 }
 
 /**
@@ -1257,6 +1307,11 @@ export function legalTargets(g: Game, attackerOwner: string): Inst[] {
 }
 
 export function attack(g: Game, attackerIid: string, targetIid: string): boolean {
+  // §3.5/§3.6: attacks only ever happen in the Combat Phase, which comboCheck()
+  // is the sole gateway into — this rejects an attack declared before Combo
+  // Check has run (or after the turn's already ended) instead of silently
+  // allowing combat to interleave with Placement.
+  if (g.stage !== 'COMBAT') return false;
   const p = g.players[g.active];
   const att = p.board.find((u) => u.iid === attackerIid);
   if (!att || !canAttack(g, att)) return false;
@@ -1379,11 +1434,15 @@ export function resolveEndPhasePreDiscard(g: Game) {
   }
 }
 
-/** Second half of End Phase: discard down to 6, then reset/pass the turn. */
+/** v4.3 End Phase hand cap (was 6) — raised alongside the 7-card starting
+ * hand so a keep-everything opening doesn't force a discard on turn 1. */
+export const HAND_LIMIT = 8;
+
+/** Second half of End Phase: discard down to HAND_LIMIT, then reset/pass the turn. */
 export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   const p = g.players[g.active];
-  // Discard down to 6.
-  while (p.hand.length > 6) {
+  // Discard down to the hand cap (v4.3: 8, was 6).
+  while (p.hand.length > HAND_LIMIT) {
     const pick = discardChooser ? discardChooser(p.hand) : defaultDiscardChoice(p.hand);
     const idx = p.hand.indexOf(pick);
     const c = p.hand.splice(idx >= 0 ? idx : p.hand.length - 1, 1)[0];
@@ -1397,6 +1456,11 @@ export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst)
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
   g.turnStarted = false;
+  // Leave the Combat window closed between turns — the next player's
+  // startTurn() always resets to PRE_REROLL anyway, but this closes the
+  // brief gap (active already flipped, startTurn not yet called) during
+  // which a stale COMBAT stage would otherwise still let attack() through.
+  g.stage = 'PLACEMENT';
 }
 
 export function endTurn(g: Game, discardChooser?: (hand: Inst[]) => Inst) {

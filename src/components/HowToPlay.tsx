@@ -20,7 +20,7 @@ const SECTIONS = [
       ],
       [
         'Setup',
-        'Both players draw 5. One mulligan each (shuffle back, redraw 5). The first player skips their first Draw Phase, and nobody may attack on their own first turn.',
+        'Both players draw 7. One mulligan each (shuffle back, redraw 7). The first player skips their first Draw Phase, and nobody may attack on their own first turn.',
       ],
       [
         'Dice',
@@ -51,7 +51,7 @@ const SECTIONS = [
       ],
       [
         'End',
-        'Discard down to 6. Unplaced dice are Pitched: each heals your Leader 1 (no effect at full HP). Ward refreshes for both players.',
+        'Discard down to 8. Unplaced dice are Pitched: each heals your Leader 1 (no effect at full HP). Ward refreshes for both players.',
       ],
     ],
   },
@@ -192,7 +192,90 @@ const SECTIONS = [
     ],
   },
   {
-    title: '8 · Rarity System',
+    title: '8 · A Worked Turn',
+    body: [
+      [
+        'The roll',
+        'Say you roll 2, 3, 3, 5, 6. Your hand holds a Unit costing "one die 4+", a Charm costing "dice totalling 7+", and an Event gated on Any Pair.',
+      ],
+      [
+        'Reading it',
+        'The pair of 3s satisfies Any Pair — the Event can be cast with ANY one die (the 2 is perfect, it pays nothing else). The 5 or 6 pays the Unit. The remaining 6+3 (or 5+3) covers the Charm\'s Σ7 sum cost.',
+      ],
+      [
+        'Order matters',
+        'Cast the Event first with the 2 (Combo-gated cards check your CURRENT roll — spending the 3s first would break the pair). Then the Unit with the 5, then the Charm with 6+3. One die (a 3) is left.',
+      ],
+      [
+        'The leftover',
+        'Place the spare 3 on an Ability Slot if any card in play wants 3 or less — otherwise it Pitches at End Phase for Mend 1. A die is never wasted unless your Leader is already at full HP.',
+      ],
+      [
+        'Combo Check',
+        'Before Combat, your five FINAL die values are checked against Combo patterns printed on cards you control in play — dice you placed still count; this is about values, not who spent what.',
+      ],
+    ],
+  },
+  {
+    title: '9 · Dice Math Cheat Sheet',
+    body: [
+      [
+        'One die 4+',
+        'A single fresh die shows 4+ half the time. Across five dice you almost always have one — the cost is really about WHICH die you can spare.',
+      ],
+      [
+        'Exact costs',
+        'Needing exactly one value (=3) hits ~67% across five fresh dice — but rerolls chase it hard: keep everything else, spin the rest.',
+      ],
+      [
+        'Sum costs',
+        'Five dice average ~17.5 total. A Σ13+ cost usually eats three dice — check what the rest of your hand needs BEFORE paying a big sum.',
+      ],
+      [
+        'Pairs & straights',
+        'Any Pair appears in ~99% of turns if chased with rerolls. Three of a Kind ~56%, Small Straight ~33%, Full House ~18%, Large Straight ~13%, Yahtzee ~1%.',
+      ],
+      [
+        'Reroll strategy',
+        'You get up to TWO rerolls of any subset. Decide your plan first (straight vs matching), keep dice that serve it, spin the rest — never reroll dice that already pay a cost you intend to use.',
+      ],
+    ],
+  },
+  {
+    title: '10 · Strategy Primer',
+    body: [
+      [
+        'Tempo',
+        'Every die is one action. A turn that places all five dice nearly always beats a turn that pitches two. Cheap cards exist to convert bad dice into board.',
+      ],
+      [
+        'Guard walls',
+        'Aggro loses to a well-timed Guard Unit — enemies MUST attack it first. Guards with high HP buy your bombs time to come online.',
+      ],
+      [
+        'When to Pitch',
+        'Pitching at full HP heals nothing — that die is wasted. If your Leader is damaged, pitching two dice also arms any Tribute Location you control.',
+      ],
+      [
+        'Fighting from behind',
+        'Behind on board? Look for board wipes and mass Sap on high-rarity Events, your Leader\'s Ultimate (unlocks on a fixed turn — plan around it), and Resolve Leaders whose abilities get CHEAPER below half HP. The comeback tools are real — losing the early board is not losing the game.',
+      ],
+      [
+        'Ability vs attack',
+        'A Unit cannot attack AND use its Ability Slot in the same turn. Utility Units (Mend/Surge/Bind abilities) are usually worth more exhausted on their slot than swinging for 2.',
+      ],
+      [
+        'Echo value',
+        'Echo cards are two cards in one — but the recast costs a die AND a discard. Never Echo when your hand is already thin; Echo when a dead card in hand can be the fodder.',
+      ],
+      [
+        'Hand discipline',
+        'The End Phase cap is 8 — banking cards is fine, flooding is not. If you\'re at 9+ going into End Phase, cast something cheap rather than discarding it for free.',
+      ],
+    ],
+  },
+  {
+    title: '11 · Rarity System',
     body: [
       [
         'The ladder',
@@ -216,12 +299,78 @@ const SECTIONS = [
       ],
       [
         'Pity',
-        'A Super-Rare (or better) is guaranteed at least once every 10 packs — tracked per-account and shown as a progress readout in the Store.',
+        'There is exactly ONE pity rule in the game: a Super-Rare (or better) is guaranteed at least once every 10 packs — tracked per-account across all pack types and shown as a progress readout in the Store. Nothing else is ever guaranteed.',
+      ],
+      [
+        'No guaranteed top end',
+        'No product guarantees a Full-Art, Ultra-Rare or Mythic. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
       ],
     ],
   },
   {
-    title: '9 · Using FryCards — Every Feature',
+    title: '12 · Packs, Boxes & Opening',
+    body: [
+      [
+        'Pack anatomy',
+        'Every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The smallest pack is 5 cards.',
+      ],
+      [
+        'Boxes',
+        'Boxes are big multi-booster rips at a bulk discount — the Standard Box is six boosters\' worth (36 cards) in one opening, ending in a guaranteed-foil box topper (Rare floor).',
+      ],
+      [
+        'Leader Pack',
+        'The one single-card product: it always pulls a Leader (mostly Rare Leaders, a small chance of a Mythic one). Never foil.',
+      ],
+      [
+        'Mass opening',
+        'Buy-and-open 5 or 10 copies of any pack in one click, or OPEN ALL from MY PACKS. Big hauls show a grouped summary — duplicates stack with a ×N badge, best pull spotlighted on top.',
+      ],
+      [
+        'Dupe protection',
+        'Marked slots avoid cards you already own at cap. Any pull past your per-rarity copy cap auto-converts to shards instead of a dead duplicate.',
+      ],
+      [
+        'Pack XP',
+        'Every pack you open grants 20 account XP — leveling up pays credits, and every 5th level pays vouchers.',
+      ],
+      [
+        'Daily freebies',
+        'Two separate daily faucets: the free Daily Pack in the Store (every 20 hours), and the Daily Login Reward on the main menu (once per calendar day, escalating over a 7-day streak — day 7 is the jackpot; miss a day and the streak resets).',
+      ],
+    ],
+  },
+  {
+    title: '13 · Economy & Currencies',
+    body: [
+      [
+        'Credits',
+        'The base currency. Earned from matches, level-ups, missions, achievements, daily logins and quickselling. Spent on packs, boxes, cosmetics and the Marketplace.',
+      ],
+      [
+        'Vouchers',
+        'The premium currency — from achievements, missions, level milestones (every 5th level) and day-7 login streaks. Some packs can be bought with either.',
+      ],
+      [
+        'Shards ✦',
+        'The crafting currency. Disenchant spare cards into shards, or receive shards automatically when a pull is past your copy cap. Spend them to craft any specific card you\'re missing (foil crafts cost double).',
+      ],
+      [
+        'Quicksell',
+        'Instant credits for spare cards at a fixed price by rarity; foils always sell for 2.5×. Cards locked in decks and Serialized copies can never be quicksold.',
+      ],
+      [
+        'Player-to-player',
+        'The Marketplace (fixed listings and auctions, 5% seller fee), direct friend Trades, and level-50 Player Shops all move cards between real players — prices there are whatever the market bears.',
+      ],
+      [
+        'XP sources',
+        'Matches, opening packs (20 XP each), and missions (Battle Pass XP is tracked separately for the seasonal pass).',
+      ],
+    ],
+  },
+  {
+    title: '14 · Using FryCards — Every Feature',
     body: [
       [
         'Collection',
@@ -233,7 +382,11 @@ const SECTIONS = [
       ],
       [
         'Store',
-        'Buy booster packs and cosmetics with credits or vouchers, claim your free Daily Pack every 20 hours, and check VIEW DROP ODDS on any pack before buying.',
+        'Buy packs and boxes with credits or vouchers, claim your free Daily Pack every 20 hours, open in bulk, and check VIEW DROP ODDS on any pack before buying.',
+      ],
+      [
+        'Daily Login',
+        'On the main menu: claim once per calendar day. Rewards escalate across a 7-day streak cycle (credits → shards → a free pack → vouchers), plus a growing bonus for your total streak.',
       ],
       [
         'Battle Pass',
@@ -241,7 +394,7 @@ const SECTIONS = [
       ],
       [
         'Missions & Achievements',
-        'Daily/weekly missions and permanent achievements pay out credits, vouchers and free packs for playing normally.',
+        'Daily/weekly missions and permanent achievements pay out credits, vouchers and free packs for playing normally — opening packs, logging in, trading and selling all count.',
       ],
       [
         'Marketplace',
@@ -295,7 +448,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                     </dd>
                   </div>
                 ))}
-                {sec.title === '8 · Rarity System' && (
+                {sec.title === '11 · Rarity System' && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {RARITY_ORDER.map((r) => (
                       <span

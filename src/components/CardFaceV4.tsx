@@ -184,12 +184,18 @@ function StatChip({
   icon: Icon,
   value,
   maxValue,
+  printed,
   tier,
   tint,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value?: number;
   maxValue?: number;
+  /** v4.3 live-match stats: the printed value this live value has drifted
+   * from (buff/nerf). Rendered struck through inside the chip itself, so
+   * modified stats live in the normal stat position rather than as an extra
+   * badge. Omitted (or equal to `value`) renders a plain chip. */
+  printed?: number;
   tier: 'compact' | 'standard' | 'full';
   tint: string;
 }) {
@@ -213,6 +219,9 @@ function StatChip({
       }}
     >
       <Icon className={iconClass} />
+      {printed !== undefined && printed !== value && (
+        <s className="opacity-50 font-bold">{printed}</s>
+      )}
       {value}
       {maxValue !== undefined && <span className="opacity-60 font-bold">/{maxValue}</span>}
     </span>
@@ -429,6 +438,54 @@ function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boole
       </button>
       {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
     </span>
+  );
+}
+
+/** v4.3: click-to-open popover explaining a card's Cast Slot cost — the same
+ * portal popover the keyword chips use (see useKeywordPopover's rationale for
+ * why it must portal), so the cost badge is no longer a hover-only `title`
+ * affordance. Wraps whatever badge content is passed as children in a real
+ * <button>; the `title` attr is kept as a desktop hover fallback. */
+function CostInfoButton({
+  text,
+  className,
+  title,
+  children,
+}: {
+  text: string;
+  className?: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pos) {
+      setPos(null);
+      return;
+    }
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.min(
+      Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
+      window.innerWidth - POPOVER_WIDTH - 8,
+    );
+    setPos({ top: rect.bottom + 4, left });
+  };
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        title={title}
+        className={cn('cursor-help', className)}
+      >
+        {children}
+      </button>
+      {pos && <KeywordPopover kw="CAST COST" text={text} pos={pos} close={() => setPos(null)} />}
+    </>
   );
 }
 
@@ -660,6 +717,7 @@ export function CardFace({
   count,
   foilCount,
   maxHp,
+  live,
   effectiveThreshold,
   introduceKeywords,
   serial,
@@ -688,6 +746,11 @@ export function CardFace({
   foilCount?: number;
   /** Leader template only: shows `${def.hp}/${maxHp}` instead of just current HP. */
   maxHp?: number;
+  /** Live-match only (Units on the battlefield): effective ATK / current HP /
+   * effective max HP. Rendered in the normal StatChip position — green when
+   * above the printed value, red when below/damaged, with the printed value
+   * struck through inside the chip — never as a separate extra badge. */
+  live?: { atk: number; hp: number; maxHp: number };
   /** Live-match only: this card's Cast threshold after Anchor discounts, so
    * the cost badge can show the real number alongside the printed one
    * instead of leaving the discount invisible. Omit outside a match. */
@@ -805,7 +868,8 @@ export function CardFace({
           </span>
         </span>
         {def.comboGate ? (
-          <span
+          <CostInfoButton
+            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.`}
             className={cn(
               'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
               cfg.comboBadge,
@@ -814,7 +878,7 @@ export function CardFace({
           >
             {cfg.showDiceIcon && <Dices className="w-3 h-3" />}
             {GATE_LABEL[def.comboGate] || def.comboGate}
-          </span>
+          </CostInfoButton>
         ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
           <span
             className={cn(
@@ -825,7 +889,12 @@ export function CardFace({
               effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && 'mt-1.5',
             )}
           >
-            <span
+            <CostInfoButton
+              text={
+                effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
+                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn (Anchor).`
+                  : `${costSummary(def)}.`
+              }
               className={cn(
                 'heading-font font-mono flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
                 def.castCostKind === 'exact'
@@ -842,7 +911,7 @@ export function CardFace({
               }
             >
               {costBadge(def, effectiveThreshold ?? def.threshold)}
-            </span>
+            </CostInfoButton>
             {effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && (
               <span className="text-[6px] font-bold text-[var(--c-steel)] line-through leading-none mt-0.5">
                 was {costBadge(def)}
@@ -850,14 +919,16 @@ export function CardFace({
             )}
           </span>
         ) : def.type === 'Location' ? (
-          <span
+          <CostInfoButton
+            text="Locations cast free: once per turn, as a bonus action alongside your five die placements — no die, no Cast Slot. Max one Location in play."
             className={cn(
               'heading-font shrink-0 rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-steel)] text-white',
               cfg.freeBadge,
             )}
+            title="Cast: free — once per turn as a bonus action"
           >
             FREE
-          </span>
+          </CostInfoButton>
         ) : null}
       </div>
 
@@ -939,12 +1010,43 @@ export function CardFace({
           {def.type}
           {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
         </span>
-        {def.type === 'Unit' && (
-          <span className="flex items-center gap-1 shrink-0">
-            <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
-            <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
-          </span>
-        )}
+        {def.type === 'Unit' &&
+          (live ? (
+            // Live battlefield stats in the same StatChip slots the printed
+            // values use: green = buffed above printed, red = below printed /
+            // damaged, printed value struck through inside the chip.
+            <span
+              className="flex items-center gap-1 shrink-0"
+              title={`Printed ${def.atk}/${def.hp}`}
+            >
+              <StatChip
+                icon={Swords}
+                value={live.atk}
+                printed={def.atk}
+                tier={size}
+                tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
+              />
+              <StatChip
+                icon={Heart}
+                value={live.hp}
+                maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
+                printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                tier={size}
+                tint={
+                  live.hp < live.maxHp
+                    ? 'var(--c-red)'
+                    : live.maxHp > (def.hp ?? 0)
+                      ? '#16A34A'
+                      : '#22C55E'
+                }
+              />
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 shrink-0">
+              <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
+              <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
+            </span>
+          ))}
         {def.type === 'Leader' && (
           <span className="shrink-0">
             <StatChip

@@ -278,13 +278,24 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     return base;
   }
   if (!asCharm && tier >= 4) {
-    // Would-be trophy bomb -> steep cost format + Combo bonus rider.
+    // v4.3 comeback pass: the top of the Event pool is where a player behind
+    // on board finds real outs. Most tier 4+ Events are now full board wipes
+    // or heavy AoE sap (3+ to every enemy Unit) behind a steep cost format;
+    // only a hash-picked slice keeps the old single-target trophy bomb.
     applyCostFormat(base, pickCostFormat(`${c.id}:bomb`, 5));
-    base.onCast = { action: 'sap', value: 6, target: 'anyTarget' };
-    base.combo = {
-      pattern: hash(c.id) % 2 ? 'FourKind' : 'LargeStraight',
-      effect: { action: 'sap', value: 6, target: 'enemyLeader' },
-    };
+    const swing = hash(`${c.id}:swing`) % 3;
+    if (swing === 0) {
+      base.onCast = { action: 'destroy', target: 'allEnemyUnits' };
+    } else if (swing === 1) {
+      base.onCast = { action: 'sap', value: 3 + Math.min(2, tier - 4), target: 'allEnemyUnits' };
+    } else {
+      // Would-be trophy bomb -> steep cost format + Combo bonus rider.
+      base.onCast = { action: 'sap', value: 6, target: 'anyTarget' };
+      base.combo = {
+        pattern: hash(c.id) % 2 ? 'FourKind' : 'LargeStraight',
+        effect: { action: 'sap', value: 6, target: 'enemyLeader' },
+      };
+    }
     base.keywords = ['Echo'];
     return base;
   }
@@ -449,45 +460,53 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
 // v4.2 Resolve X: while at/below half HP, Ability Slot threshold -X. Given to
 // the leaders whose plan is reactive/defensive — a direct answer to the
 // measured +19pt early-face-attack dominance, without touching combat math.
+// v4.3 comeback pass: assignment rate raised — nearly every leader now
+// carries at least Resolve 1, so falling behind always cheapens your answer.
 const LEADER_RESOLVE: Record<string, number> = {
   mer_king: 2,
   apex_nanite_shinobi: 2,
   ethereal_sea_witch: 1,
+  legendary_diver: 1,
+  crimson_vector_commander: 1,
 };
 
 // v4.2 Ultimate(N): a second, once-per-game Ability Slot from the controller's
 // Nth own turn on — the answer to "reactive leaders lack inevitability".
 // Every Leader gets one; the unlock turn and power are tuned per archetype.
+// v4.3 comeback pass: Ultimates strengthened into genuine swing turns — the
+// reactive leaders' Ultimates are now board wipes / mass sap, and the rest
+// got a straight power bump, so a player behind on board always has a
+// once-per-game out sitting on their Leader.
 const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   avatar_of_the_abyss: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'sap', value: 8, target: 'anyTarget' },
+    effect: { action: 'sap', value: 4, target: 'allEnemyUnits' },
   },
   ethereal_sea_witch: {
     unlockTurn: 6,
     threshold: 6,
-    effect: { action: 'bind', target: 'enemyUnit' },
+    effect: { action: 'destroy', target: 'allEnemyUnits' },
   },
   mer_king: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'mend', value: 8, target: 'friendlyAny' },
+    effect: { action: 'mend', value: 12, target: 'friendlyAny' },
   },
   legendary_diver: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'draw', value: 2, target: 'none' },
+    effect: { action: 'draw', value: 3, target: 'none' },
   },
   crimson_vector_commander: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'sap', value: 6, target: 'enemyLeader' },
+    effect: { action: 'sap', value: 8, target: 'enemyLeader' },
   },
   apex_nanite_shinobi: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' },
+    effect: { action: 'buff', value: 4, target: 'allFriendlyUnits' },
   },
 };
 

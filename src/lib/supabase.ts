@@ -53,6 +53,10 @@ export interface Profile {
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
+  /** Consecutive daily-login-reward days (resets after a missed UTC day). */
+  login_streak: number;
+  /** When the daily login reward was last claimed (one claim per UTC day). */
+  last_login_claim_at: string | null;
 }
 
 export interface ShopItem {
@@ -84,8 +88,8 @@ export interface PackSlot {
   foil_chance_override?: number;
   foil_eligible?: boolean;
   dupe_protected?: boolean;
-  pity_key?: string;
-  pity_cap?: number;
+  /** Restrict this slot to a card type — 'Leader' powers the Leader Pack. */
+  card_type?: string;
 }
 
 export interface PackType {
@@ -104,8 +108,8 @@ export interface PackType {
   is_active: boolean;
   acquisition: string;
   time_limited: boolean;
-  /** Backend-authored pity/guarantee blurb shown in the odds modal, e.g.
-   * "Hard pity: a Mythic from the pity slot at least once every 20 Vaults." */
+  /** Legacy column — per-pack pity was removed (the only pity left is the
+   * global Super-Rare-within-10-packs counter on profiles). Always null. */
   pity_note: string | null;
 }
 
@@ -548,6 +552,63 @@ export async function claimDailyPack(): Promise<{
 }> {
   const { data, error } = await supabase.rpc('claim_daily_pack');
   return { data: (data as OpenPackResult) || null, error: rpcError(error) };
+}
+
+/** Buy-and-open up to 24 copies of one pack in a single call. */
+export async function buyAndOpenPacks(
+  packId: string,
+  count: number,
+  currency: 'credits' | 'vouchers',
+): Promise<{ data: (OpenPackResult & { packs_opened: number }) | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('buy_and_open_packs', {
+    p_pack_id: packId,
+    p_count: count,
+    p_currency: currency,
+  });
+  return {
+    data: (data as OpenPackResult & { packs_opened: number }) || null,
+    error: rpcError(error),
+  };
+}
+
+/** Open up to 24 copies of one pack from inventory in a single call. */
+export async function openInventoryPacks(
+  packId: string,
+  count: number,
+): Promise<{ data: (OpenPackResult & { packs_opened: number }) | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('open_inventory_packs', {
+    p_pack_id: packId,
+    p_count: count,
+  });
+  return {
+    data: (data as OpenPackResult & { packs_opened: number }) || null,
+    error: rpcError(error),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Daily login reward (streak-based; separate from the Daily Free Pack)
+// ---------------------------------------------------------------------------
+export interface DailyLoginResult {
+  streak: number;
+  /** 1..7 position in the repeating reward cycle (day 7 is the jackpot). */
+  cycle_day: number;
+  credits_awarded: number;
+  shards_awarded: number;
+  vouchers_awarded: number;
+  /** Name of the free pack granted to inventory (cycle day 5 only). */
+  pack_awarded: string | null;
+  credits: number;
+  vouchers: number;
+  shards: number;
+}
+
+export async function claimDailyLogin(): Promise<{
+  data: DailyLoginResult | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('claim_daily_login');
+  return { data: (data as DailyLoginResult) || null, error: rpcError(error) };
 }
 
 /**

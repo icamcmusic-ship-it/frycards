@@ -43,7 +43,8 @@ export interface SlotOdds {
   weights: Record<string, number>;
   foilChance: number; // 0..1, 1 = guaranteed foil
   dupeProtected: boolean;
-  pity: string | null;
+  /** 'Leader' for the Leader Pack's Leader-only slot. */
+  cardType: string | null;
 }
 
 const RARITY_ORDER = [
@@ -92,9 +93,7 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
     weights,
     foilChance,
     dupeProtected: slot.dupe_protected ?? false,
-    pity: slot.pity_key
-      ? `Hard pity${slot.pity_cap ? ` within ${slot.pity_cap} packs` : ''}`
-      : null,
+    cardType: slot.card_type ?? null,
   };
 }
 

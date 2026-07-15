@@ -1,12 +1,21 @@
-# FryCards — Definitive Rulebook v4.2
+# FryCards — Definitive Rulebook v4.3
 
-Supersedes v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.3 errata:** the Reroll Phase now allows **two rerolls** (was one); every
+Unit/Charm/Event prints one of five Cast Slot cost formats (at-least, exact,
+sum, or a dice-pattern gate — see §7); the **starting hand is 7** (was 5) and
+the End Phase **hand cap is 8** (was 6), so a kept opening hand never forces a
+turn-1 discard; and a comeback pass made high-tier Events meaningfully more
+likely to be board wipes or heavy AoE sap, strengthened every Leader Ultimate
+(wipe / mass-sap options on the reactive leaders), and widened Resolve
+assignment across the Leader roster. Changes are marked *(v4.3)* inline.
 
 **v4.2 errata (applied from an ~8,832-game v4.1 decision-correlation pass):**
 Combo-gated cards are capped at **one cast per turn**, closing the general
@@ -75,7 +84,7 @@ Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
 
 ### Starting setup
 1. Both players choose and reveal their Leader.
-2. Shuffle decks. Each player draws a **starting hand of 5**.
+2. Shuffle decks. Each player draws a **starting hand of 7** *(v4.3: was 5)*.
 3. Roll 1d6 each; highest goes first (reroll ties).
 4. **Mulligan (once each):** the first player announces their decision, then the second player does. Both decisions are locked in before either player physically shuffles or redraws; then both execute simultaneously.
 5. **First-turn balancing rule:** the first player skips the Draw Phase on their very first turn only.
@@ -84,7 +93,7 @@ Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
 | Zone | Visibility | Notes |
 |---|---|---|
 | Deck | Private, face-down | Drawn from during Draw Phase |
-| Hand | Private | Cap of 6 at End Phase |
+| Hand | Private | Cap of 8 at End Phase *(v4.3: was 6)* |
 | Discard | Public, face-up | Source zone for Echo recasting |
 | Staging Zone | Public, face-up | Holds Twin cards with one slot filled, waiting on the second |
 | Banished Zone | Public | Permanently removed from the game — nothing can retrieve a card from here |
@@ -138,7 +147,7 @@ Check your final five die values against the Combo requirements of cards you con
 See §8. Only the active player's Units may attack. **Neither player may attack during their own first turn of the game.**
 
 ### 3.7 End Phase
-1. Discard down to 6 cards in hand if needed (your choice which). This is an ordinary discard and can trigger Echo eligibility on a qualifying card — but see §10 for why you can't actually pay to recast it until a future turn.
+1. Discard down to **8** cards in hand *(v4.3: was 6)* if needed (your choice which). This is an ordinary discard and can trigger Echo eligibility on a qualifying card — but see §10 for why you can't actually pay to recast it until a future turn.
 2. All exhaustion clears (both the "attacked" flag and every Ability Slot's used-flag). Any dice still resting on Ability Slots return to your supply.
 3. **Ward refresh *(v4.0)*:** all Ward effects, on *both* players' cards, refresh at the end of *every* End Phase — yours and your opponent's. Ward is never off for a full round; it's a per-turn-taken resource, not a per-player-turn resource. (Under the old reading Ward would only ever be "on" every other turn for whichever player wasn't currently active, which broke defenders.)
 3. Pass the turn.
@@ -400,8 +409,8 @@ You lose immediately if either is true:
 | Leader starting/max HP | **64** *(v4.1; was 28 in v4.0, 20 in v3.0)*, no ATK, cannot change zones |
 | Deck size | **30** *(v4.0, was 40)* (Leader separate) |
 | Max copies per card | 3 |
-| Starting hand | 5 (one mulligan allowed, first player decides first, both execute together) |
-| Hand size cap | 6 |
+| Starting hand | **7** *(v4.3, was 5)* (one mulligan allowed, first player decides first, both execute together) |
+| Hand size cap | **8** *(v4.3, was 6)* |
 | Dice per turn | 5d6 from your own supply (10+ recommended total), up to two rerolls of any subset *(v4.3, was one)* |
 | Locations in play | 1 max, 1 cast per turn max, no same-name replacement; *(v4.1)* cast **free** — no die, no Cast Slot |
 | Anchor | *(v4.1)* −1 per other Anchor card in play, **max total −2**, min threshold 1 |
@@ -418,4 +427,4 @@ You lose immediately if either is true:
 | Combo-gated casts | *(v4.2)* max **1 per turn**, cast or Echo-recast, regardless of how many qualify |
 | New v4.2 keywords | Leader: Resolve X, Ultimate(N) · Unit: Bulwark X, Toll X, Avenge · Event: Crescendo X, Aftershock · Charm: Snap · Location: Tribute, Excavate X, Contested |
 
-**Turn order:** Draw (+ any pending Aftershock) → Roll → Reroll (Snap Charms may cast here) → Placement (4 legal die destinations + free Location cast, Scrap + Pitch on unplaced dice, max 1 Combo-gated card) → Combo Check → Combat (sequential) → End (discard to 6, clear exhaustion, refresh Ward both sides, check Tribute, pass turn).
+**Turn order:** Draw (+ any pending Aftershock) → Roll → Reroll (Snap Charms may cast here) → Placement (4 legal die destinations + free Location cast, Scrap + Pitch on unplaced dice, max 1 Combo-gated card) → Combo Check → Combat (sequential) → End (discard to 8, clear exhaustion, refresh Ward both sides, check Tribute, pass turn).
