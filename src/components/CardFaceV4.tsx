@@ -196,7 +196,7 @@ function StatChip({
    * modified stats live in the normal stat position rather than as an extra
    * badge. Omitted (or equal to `value`) renders a plain chip. */
   printed?: number;
-  tier: 'compact' | 'standard' | 'full';
+  tier: CardSize;
   tint: string;
 }) {
   const textClass =
@@ -204,8 +204,17 @@ function StatChip({
       ? 'text-[12px] px-1.5 py-0.5'
       : tier === 'standard'
         ? 'text-[10px] px-1.5 py-0.5'
-        : 'text-[8px] px-1';
-  const iconClass = tier === 'full' ? 'w-3 h-3' : tier === 'standard' ? 'w-2.5 h-2.5' : 'w-2 h-2';
+        : tier === 'compact'
+          ? 'text-[8px] px-1'
+          : 'text-[5.5px] px-0.5';
+  const iconClass =
+    tier === 'full'
+      ? 'w-3 h-3'
+      : tier === 'standard'
+        ? 'w-2.5 h-2.5'
+        : tier === 'compact'
+          ? 'w-2 h-2'
+          : 'w-1.5 h-1.5';
   return (
     <span
       className={cn(
@@ -548,7 +557,19 @@ function setStyle(set?: string): { label: string; className: string; bar: string
  * object-contain (not cover) so the full 4:3 art is always visible — never
  * cropped — inside its fixed-aspect box; art narrower than 4:3 letterboxes
  * instead of losing its edges. */
-function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
+function CardArt({
+  def,
+  onLoaded,
+  cover,
+}: {
+  def: CardDef;
+  onLoaded?: () => void;
+  /** Full-Art template: the image fills its box edge-to-edge (object-cover)
+   * instead of ever letterboxing — the whole card is the art, so a
+   * letterboxed bar would read as a rendering bug rather than the intended
+   * treatment. */
+  cover?: boolean;
+}) {
   const [broken, setBroken] = useState(false);
   if (!def.image || broken) {
     return (
@@ -563,7 +584,7 @@ function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
   return (
     <img
       src={def.image}
-      className="w-full h-full object-contain bg-[var(--c-ink)]"
+      className={cn('w-full h-full bg-[var(--c-ink)]', cover ? 'object-cover' : 'object-contain')}
       draggable={false}
       loading="lazy"
       onError={() => setBroken(true)}
@@ -577,6 +598,7 @@ function CardArt({ def, onLoaded }: { def: CardDef; onLoaded?: () => void }) {
  * container) can read the real dimensions instead of hardcoding a magic
  * number that could silently drift out of sync with this table. */
 export const CARD_SIZES = {
+  micro: { w: 78, h: 109 },
   compact: { w: 110, h: 154 },
   standard: { w: 140, h: 196 },
   full: { w: 240, h: 336 },
@@ -621,6 +643,33 @@ const TIER: Record<
     showFlavor: boolean;
   }
 > = {
+  micro: {
+    outerBorder: 'border',
+    rounded: 'rounded-[2px]',
+    shadow: 'shadow-hard-black-xs',
+    showGlow: false,
+    showCornerGem: false,
+    headerPy: 'py-[1px]',
+    typeIconSize: 'w-2 h-2',
+    nameFont: { base: 7, min: 5.5, soft: 9 },
+    comboBadge: 'text-[5.5px] px-0.5 py-[1px]',
+    showDiceIcon: false,
+    costBadge: 'text-[6.5px] px-0.5 h-3 min-w-3',
+    freeBadge: 'text-[5.5px] px-0.5 py-[1px]',
+    artBorder: 'border',
+    artRing: false,
+    rarityChip: 'text-[5px] px-0.5',
+    artBadge: 'text-[5.5px]',
+    foilBadge: 'text-[5px] px-0.5',
+    typeLine: 'mt-0 text-[5.5px]',
+    showSetSuffix: false,
+    textBoxPad: 'p-0.5',
+    keywordMax: 0,
+    keywordSmall: true,
+    rules: 'hidden',
+    rulesMultiline: false,
+    showFlavor: false,
+  },
   compact: {
     outerBorder: 'border-2',
     rounded: 'rounded-[3px]',
@@ -788,6 +837,17 @@ export function CardFace({
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
   const bg = rarityBg(def.rarity);
   const TypeIcon = TYPE_ICON[def.type];
+  // Full-Art: the uploaded image fills the entire card footprint edge to
+  // edge instead of sitting in a boxed 4:3 art window; every normal piece of
+  // card text (header, stat line, text box) instead floats on top of it in
+  // semi-transparent panels so the art itself is the whole card, not just a
+  // fraction of it.
+  const fullArt = def.rarity === 'Full-Art' && !serial;
+  // Ultra-Rare: a visibly stronger treatment than the shared Rare+ template
+  // (heavier glow, a gold hairline border ring around the art, and a
+  // brighter/faster sheen sweep) so it doesn't just look like Super-Rare
+  // with a different tint.
+  const ultra = def.rarity === 'Ultra-Rare' && !serial;
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -818,7 +878,13 @@ export function CardFace({
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
         cfg.shadow,
         !dimmed &&
-          (serial ? 'serialized-frame' : mythic ? 'mythic-frame' : cfg.showGlow && rarityGlow(def.rarity)),
+          (serial
+            ? 'serialized-frame'
+            : mythic
+              ? 'mythic-frame'
+              : ultra
+                ? 'ultra-frame'
+                : cfg.showGlow && rarityGlow(def.rarity)),
         // Mythic already animates its own box-shadow pulse (mythic-frame) —
         // stacking foil-glow's competing box-shadow keyframes on the same
         // element causes the two animations to visibly stutter against each
@@ -840,23 +906,29 @@ export function CardFace({
       )}
 
       {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
-          gold-on-red name banner instead of the shared tinted-paper header. */}
+          gold-on-red name banner instead of the shared tinted-paper header.
+          Full-Art floats this as a semi-transparent bar over the full-bleed
+          art (the art sits behind it as an absolutely-positioned layer)
+          instead of pushing the art down like every other rarity. */}
       <div
         className={cn(
-          'flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2',
+          'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 z-10',
           cfg.headerPy,
-          mythic ? 'mythic-bg border-[#7A1420]' : 'border-[var(--c-ink)]/15',
+          mythic ? 'mythic-bg border-[#7A1420]' : fullArt ? 'border-white/10' : 'border-[var(--c-ink)]/15',
+          fullArt && 'backdrop-blur-[2px]',
         )}
         style={
           mythic
             ? undefined
-            : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
+            : fullArt
+              ? { backgroundColor: 'rgba(10,10,14,0.55)' }
+              : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
         }
       >
         <span
           className={cn(
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
-            mythic && 'text-[var(--c-yellow)]',
+            mythic ? 'text-[var(--c-yellow)]' : fullArt && 'text-white',
           )}
           title={def.name}
         >
@@ -932,23 +1004,31 @@ export function CardFace({
         ) : null}
       </div>
 
-      {/* Art — fixed 4:3 box so the full uploaded image always shows, never
-          cropped; any leftover card height is absorbed by the flex-1 spacer
-          further down instead of stretching the art. A rarity-tinted double
-          bezel + inner vignette gives the art a "framed" feel instead of a
-          flat crop. */}
+      {/* Art — Full-Art fills the entire card footprint edge-to-edge behind
+          every other layer (absolutely positioned, out of flow, so the
+          header/stat-line/text box that follow simply overlay it in normal
+          flow). Every other rarity keeps the classic fixed 4:3 boxed art so
+          the full uploaded image always shows, never cropped. */}
       <div
         className={cn(
-          'relative w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 overflow-hidden rounded-[2px]',
-          cfg.artBorder,
-          'border-[var(--c-ink)]',
+          'relative overflow-hidden',
+          fullArt
+            ? 'absolute inset-0 z-0 rounded-none border-0'
+            : cn('w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 rounded-[2px]', cfg.artBorder, 'border-[var(--c-ink)]'),
         )}
-        style={cfg.artRing ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
+        style={!fullArt && cfg.artRing ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
       >
-        <CardArt def={def} />
+        <CardArt def={def} cover={fullArt} />
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }}
+          style={
+            fullArt
+              ? {
+                  background:
+                    'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.65) 100%)',
+                }
+              : { boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }
+          }
         />
         {def.rarity && (
           <span
@@ -1004,9 +1084,17 @@ export function CardFace({
         )}
       </div>
 
-      {/* Type / rarity / stat line */}
-      <div className={cn('flex items-center justify-between px-1.5 shrink-0', cfg.typeLine)}>
-        <span className="font-bold uppercase text-[var(--c-steel)] truncate">
+      {/* Type / rarity / stat line — Full-Art gives it its own semi-transparent
+          pill so it stays legible sitting directly on the art behind it. */}
+      <div
+        className={cn(
+          'relative z-10 flex items-center justify-between shrink-0',
+          cfg.typeLine,
+          fullArt ? 'mx-1.5 px-1.5 py-0.5 rounded-sm backdrop-blur-[2px]' : 'px-1.5',
+        )}
+        style={fullArt ? { backgroundColor: 'rgba(10,10,14,0.5)' } : undefined}
+      >
+        <span className={cn('font-bold uppercase truncate', fullArt ? 'text-white/85' : 'text-[var(--c-steel)]')}>
           {def.type}
           {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
         </span>
@@ -1067,20 +1155,28 @@ export function CardFace({
       {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
           panel (a real "text box" like a printed card) instead of floating
           directly on the paper background. flex-1 so it fills the remaining
-          height and pushes the footer to the bottom. */}
+          height and pushes the footer to the bottom. Full-Art swaps this for
+          a dark, semi-transparent glass panel so it reads over the art
+          behind it instead of the paper-tinted version. */}
       <div
         className={cn(
-          'flex-1 min-h-0 flex flex-col mx-1.5 mt-1 mb-1 rounded-[3px] border',
+          'relative z-10 flex-1 min-h-0 flex flex-col mx-1.5 mt-1 mb-1 rounded-[3px] border',
           cfg.textBoxPad,
-          mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
+          fullArt
+            ? 'border-white/15 backdrop-blur-[2px] text-white'
+            : mythic
+              ? 'border-[#7A1420]/40'
+              : 'border-[var(--c-ink)]/15',
         )}
         style={{
-          backgroundColor: mythic
-            ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-            : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
+          backgroundColor: fullArt
+            ? 'rgba(10,10,14,0.55)'
+            : mythic
+              ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
+              : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
         }}
       >
-        {kwList(def).length > 0 && (
+        {kwList(def).length > 0 && cfg.keywordMax > 0 && (
           <div className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}>
             {kwList(def)
               .slice(0, cfg.keywordMax)
@@ -1122,7 +1218,9 @@ export function CardFace({
       </div>
 
       {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}
-      {def.set && <div className={cn('h-[3px] w-full shrink-0', set.bar)} title={def.set} />}
+      {def.set && (
+        <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
+      )}
       {footer}
 
       {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
@@ -1133,7 +1231,7 @@ export function CardFace({
         <div
           className={cn(
             'rarity-sheen absolute inset-0 pointer-events-none',
-            mythic ? 'opacity-80' : 'opacity-50',
+            mythic ? 'opacity-80' : ultra ? 'opacity-70' : 'opacity-50',
           )}
         />
       )}
