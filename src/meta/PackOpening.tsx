@@ -421,8 +421,7 @@ function RevealStage({
         {packName.toUpperCase()}
       </h2>
       <div className="text-[10px] font-mono font-bold text-[var(--c-paper)]/50 mb-5">
-        CARD {index + 1} / {pulls.length} —{' '}
-        {currentShown ? 'CLICK TO CONTINUE ▸' : 'CLICK TO FLIP'}
+        CARD {index + 1} / {pulls.length} — {currentShown ? 'CLICK TO CONTINUE ▸' : 'CLICK TO FLIP'}
       </div>
 
       {/* 3D flip container */}
@@ -544,7 +543,9 @@ function RevealStage({
             {current.converted_to_credits
               ? `DUPLICATE PROTECTED — ${(current.rarity || 'COMMON').toUpperCase()} → CREDITS`
               : `${(current.rarity || 'COMMON').toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
-                  current.serialized ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}` : ''
+                  current.serialized
+                    ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}`
+                    : ''
                 }`}
           </div>
         )}
@@ -605,10 +606,7 @@ function SummaryStage({
   // card with a ×N count instead of a wall of 30+ full-size cards.
   const grouped = pulls.length > 12;
   const groups = useMemo(() => {
-    const m = new Map<
-      string,
-      { pull: PackPull; count: number; indices: number[] }
-    >();
+    const m = new Map<string, { pull: PackPull; count: number; indices: number[] }>();
     pulls.forEach((p, i) => {
       const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
       const g = m.get(key) || { pull: p, count: 0, indices: [] };
@@ -624,7 +622,10 @@ function SummaryStage({
     );
   }, [pulls]);
 
-  const creditsGained = pulls.reduce((s, p) => s + (p.converted_to_credits ? p.credit_value : 0), 0);
+  const creditsGained = pulls.reduce(
+    (s, p) => s + (p.converted_to_credits ? p.credit_value : 0),
+    0,
+  );
   const convertedCount = pulls.filter((p) => p.converted_to_credits).length;
 
   // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
@@ -664,7 +665,10 @@ function SummaryStage({
     setSellError('');
     setSellNotice('');
     // group by (card_id, foil) so identical pulls sell in one RPC call each
-    const groups = new Map<string, { cardId: string; foil: boolean; qty: number; indices: number[] }>();
+    const groups = new Map<
+      string,
+      { cardId: string; foil: boolean; qty: number; indices: number[] }
+    >();
     for (const i of clutterIndices) {
       const p = pulls[i];
       const key = `${p.card_id}:${p.foil}`;
@@ -691,7 +695,9 @@ function SummaryStage({
     setSellBusy(false);
     if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
     if (totalCards > 0) {
-      setSellNotice(`Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`);
+      setSellNotice(
+        `Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
+      );
       refreshCollection();
       refreshProfile();
     }
@@ -786,62 +792,67 @@ function SummaryStage({
       <div className="flex flex-wrap justify-center items-end gap-5 max-w-6xl mb-4 px-2">
         {!grouped &&
           pulls.map((pull, i) => {
-          const def = pullToDef(pull);
-          const isBest = i === bestIndex && pulls.length > 1;
-          return (
-            // Split static positioning (outer, e.g. the best-pull scale-up)
-            // from the entrance animation (inner): both set `transform`, and
-            // stacking them on one element meant the animation — which has
-            // no `forwards` fill — reverted to the outer's static transform
-            // the instant it finished, producing a visible snap/jump.
-            // Nested elements compose their transforms instead of fighting.
-            <div key={i} className={cn('relative', isBest && 'scale-110 z-10 mx-3')}>
-              <div
-                className="relative po-anim"
-                style={{
-                  animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out backwards',
-                  animationDelay: reducedMotion ? undefined : `${i * 70}ms`,
-                }}
-              >
-                {isBest && (
-                  <>
-                    <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-                      <Sparkles className="w-3 h-3" /> {pull.serialized ? 'SERIALIZED!' : 'BEST PULL'}
+            const def = pullToDef(pull);
+            const isBest = i === bestIndex && pulls.length > 1;
+            return (
+              // Split static positioning (outer, e.g. the best-pull scale-up)
+              // from the entrance animation (inner): both set `transform`, and
+              // stacking them on one element meant the animation — which has
+              // no `forwards` fill — reverted to the outer's static transform
+              // the instant it finished, producing a visible snap/jump.
+              // Nested elements compose their transforms instead of fighting.
+              <div key={i} className={cn('relative', isBest && 'scale-110 z-10 mx-3')}>
+                <div
+                  className="relative po-anim"
+                  style={{
+                    animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out backwards',
+                    animationDelay: reducedMotion ? undefined : `${i * 70}ms`,
+                  }}
+                >
+                  {isBest && (
+                    <>
+                      <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+                        <Sparkles className="w-3 h-3" />{' '}
+                        {pull.serialized ? 'SERIALIZED!' : 'BEST PULL'}
+                      </div>
+                    </>
+                  )}
+                  <div
+                    className={cn(
+                      !pull.converted_to_credits && !sold.has(i) && rarityGlow(pull.rarity),
+                    )}
+                  >
+                    <CardFace
+                      def={def}
+                      size="full"
+                      foil={pull.foil}
+                      dimmed={pull.converted_to_credits || sold.has(i)}
+                      serial={
+                        pull.serialized
+                          ? { number: pull.serial_number!, cap: pull.serial_cap! }
+                          : undefined
+                      }
+                    />
+                  </div>
+                  {sold.has(i) && !pull.converted_to_credits && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="heading-font text-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs">
+                        SOLD
+                      </span>
                     </div>
-                  </>
-                )}
-                <div className={cn(!pull.converted_to_credits && !sold.has(i) && rarityGlow(pull.rarity))}>
-                  <CardFace
-                    def={def}
-                    size="full"
-                    foil={pull.foil}
-                    dimmed={pull.converted_to_credits || sold.has(i)}
-                    serial={
-                      pull.serialized
-                        ? { number: pull.serial_number!, cap: pull.serial_cap! }
-                        : undefined
-                    }
-                  />
+                  )}
+                  {pull.converted_to_credits && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
+                        +{fmtCredits(pull.credit_value)} CREDITS
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {sold.has(i) && !pull.converted_to_credits && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="heading-font text-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                      SOLD
-                    </span>
-                  </div>
-                )}
-                {pull.converted_to_credits && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                      +{fmtCredits(pull.credit_value)} CREDITS
-                    </span>
-                  </div>
-                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       {convertedCount > 0 && (

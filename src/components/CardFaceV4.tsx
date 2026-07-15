@@ -945,7 +945,11 @@ export function CardFace({
         className={cn(
           'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 z-10',
           cfg.headerPy,
-          mythic ? 'mythic-bg border-[#7A1420]' : fullArt ? 'border-white/10' : 'border-[var(--c-ink)]/15',
+          mythic
+            ? 'mythic-bg border-[#7A1420]'
+            : fullArt
+              ? 'border-white/10'
+              : 'border-[var(--c-ink)]/15',
           fullArt && 'backdrop-blur-[2px]',
         )}
         style={
@@ -1045,7 +1049,11 @@ export function CardFace({
           'relative overflow-hidden',
           fullArt
             ? 'absolute inset-0 z-0 rounded-none border-0'
-            : cn('w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 rounded-[2px]', cfg.artBorder, 'border-[var(--c-ink)]'),
+            : cn(
+                'w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 rounded-[2px]',
+                cfg.artBorder,
+                'border-[var(--c-ink)]',
+              ),
         )}
         style={!fullArt && cfg.artRing ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
       >
@@ -1125,7 +1133,12 @@ export function CardFace({
         )}
         style={fullArt ? { backgroundColor: 'rgba(10,10,14,0.5)' } : undefined}
       >
-        <span className={cn('font-bold uppercase truncate', fullArt ? 'text-white/85' : 'text-[var(--c-steel)]')}>
+        <span
+          className={cn(
+            'font-bold uppercase truncate',
+            fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+          )}
+        >
           {def.type}
           {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
         </span>
@@ -1254,7 +1267,9 @@ export function CardFace({
       )}
       {footer}
 
-      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
+      {serial && !dimmed && (
+        <div className="serialized-sheen absolute inset-0 pointer-events-none" />
+      )}
       {isFoil && foilEffect && (
         <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
       )}

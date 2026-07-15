@@ -309,11 +309,18 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 value={rarityFilter}
                 onChange={(e) => setRarityFilter(e.target.value)}
               >
-                {['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'].map(
-                  (r) => (
-                    <option key={r}>{r}</option>
-                  ),
-                )}
+                {[
+                  'All',
+                  'Common',
+                  'Uncommon',
+                  'Rare',
+                  'Super-Rare',
+                  'Full-Art',
+                  'Ultra-Rare',
+                  'Mythic',
+                ].map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
               </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

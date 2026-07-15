@@ -138,7 +138,10 @@ export function NewsCenterScreen({
           )}
           <div className="flex flex-col gap-3">
             {posts.map((p) => (
-              <div key={p.id} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] p-4">
+              <div
+                key={p.id}
+                className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] p-4"
+              >
                 <div className="flex items-center justify-between">
                   <h3 className="heading-font text-sm">{p.title}</h3>
                   <span className="text-[10px] font-bold text-[var(--c-steel)]">

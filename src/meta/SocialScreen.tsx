@@ -251,7 +251,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                   >
                     <span className="heading-font text-xs w-7 text-right shrink-0">#{i + 1}</span>
                     <span className="flex-1 min-w-0 text-[11px] font-bold truncate">
-                      <PlayerLink id={row.id} name={row.username || 'Unknown player'} role={row.role} />
+                      <PlayerLink
+                        id={row.id}
+                        name={row.username || 'Unknown player'}
+                        role={row.role}
+                      />
                       {row.id === userId ? ' (you)' : ''}
                     </span>
                     <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">

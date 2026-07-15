@@ -891,14 +891,20 @@ export interface CardMarketValue {
  * "market value" popup on the expanded card viewer — null avg_price until
  * the card has at least 5 completed player-market sales. */
 export async function fetchCardMarketValue(cardId: string, foil = false): Promise<CardMarketValue> {
-  const { data, error } = await supabase.rpc('get_card_market_value', { p_card_id: cardId, p_foil: foil });
+  const { data, error } = await supabase.rpc('get_card_market_value', {
+    p_card_id: cardId,
+    p_foil: foil,
+  });
   if (error || !data) return { sales: 0, avg_price: null };
   return data as CardMarketValue;
 }
 
 /** Blended reference price used for shop soft-cap bands (quicksell + market avg). */
 export async function fetchCardBlendedReference(cardId: string, foil = false): Promise<number> {
-  const { data, error } = await supabase.rpc('card_blended_reference', { p_card_id: cardId, p_foil: foil });
+  const { data, error } = await supabase.rpc('card_blended_reference', {
+    p_card_id: cardId,
+    p_foil: foil,
+  });
   if (error || data == null) return 0;
   return data as number;
 }
@@ -1038,7 +1044,11 @@ export interface ShopReport {
 
 // -- reads --------------------------------------------------------------
 export async function fetchMyShop(ownerId: string): Promise<PlayerShop | null> {
-  const { data } = await supabase.from('player_shops').select('*').eq('owner', ownerId).maybeSingle();
+  const { data } = await supabase
+    .from('player_shops')
+    .select('*')
+    .eq('owner', ownerId)
+    .maybeSingle();
   return (data as PlayerShop) || null;
 }
 
@@ -1103,7 +1113,10 @@ export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase
 
 // -- shop lifecycle -------------------------------------------------------
 export async function openShop(name: string, bannerUrl?: string | null): Promise<string | null> {
-  const { error } = await supabase.rpc('open_shop', { p_name: name, p_banner_url: bannerUrl ?? null });
+  const { error } = await supabase.rpc('open_shop', {
+    p_name: name,
+    p_banner_url: bannerUrl ?? null,
+  });
   return rpcError(error);
 }
 
@@ -1112,7 +1125,10 @@ export async function reopenShop(): Promise<string | null> {
   return rpcError(error);
 }
 
-export async function closeShop(): Promise<{ data: { refunded: number } | null; error: string | null }> {
+export async function closeShop(): Promise<{
+  data: { refunded: number } | null;
+  error: string | null;
+}> {
   const { data, error } = await supabase.rpc('close_shop');
   return { data: (data as { refunded: number }) || null, error: rpcError(error) };
 }
@@ -1190,7 +1206,10 @@ export async function submitMysteryPool(
     p_pool: pool,
     p_price: price,
   });
-  return { data: (data as { listing_id: string; ev_per_pack: number }) || null, error: rpcError(error) };
+  return {
+    data: (data as { listing_id: string; ev_per_pack: number }) || null,
+    error: rpcError(error),
+  };
 }
 
 export interface MysteryDrawResult {
@@ -1222,7 +1241,10 @@ export async function fetchMyBuyerRatings(userId: string): Promise<ShopBuyerRati
 
 // -- rating & moderation ------------------------------------------------
 export async function rateShopPurchase(purchaseId: string, rating: number): Promise<string | null> {
-  const { error } = await supabase.rpc('rate_shop_purchase', { p_purchase_id: purchaseId, p_rating: rating });
+  const { error } = await supabase.rpc('rate_shop_purchase', {
+    p_purchase_id: purchaseId,
+    p_rating: rating,
+  });
   return rpcError(error);
 }
 

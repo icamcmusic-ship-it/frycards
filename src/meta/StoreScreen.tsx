@@ -417,9 +417,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     {[5, 10].map((n) => (
                       <button
                         key={n}
-                        disabled={
-                          !profile || !!busyId || profile.credits < pack.price_credits! * n
-                        }
+                        disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
                         onClick={() => handleOpenPacksBulk(pack, n, 'credits')}
                         className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
                       >

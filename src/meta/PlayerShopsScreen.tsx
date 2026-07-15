@@ -19,7 +19,13 @@ import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP } from './rarity';
-import { fmtCredits, SHOP_UNLOCK_LEVEL, SHOP_SETUP_FEE, shopSlotCost, shopMinPoolSize } from './economy';
+import {
+  fmtCredits,
+  SHOP_UNLOCK_LEVEL,
+  SHOP_SETUP_FEE,
+  shopSlotCost,
+  shopMinPoolSize,
+} from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import {
   PlayerShop,
@@ -159,7 +165,9 @@ function CardStackPicker({
   const spareTotal = selected
     ? Math.max(0, selected.quantity + selected.foil_quantity - (locked.get(cardId) || 0))
     : 0;
-  const maxQty = selected ? Math.min(foil ? selected.foil_quantity : selected.quantity, spareTotal) : 0;
+  const maxQty = selected
+    ? Math.min(foil ? selected.foil_quantity : selected.quantity, spareTotal)
+    : 0;
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const add = () => {
@@ -277,7 +285,10 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
   const matches = useMemo(() => {
     if (!search) return [];
     const q = search.toLowerCase();
-    return POOL_V4.filter((c) => c.type !== 'Leader' && c.name.toLowerCase().includes(q)).slice(0, 8);
+    return POOL_V4.filter((c) => c.type !== 'Leader' && c.name.toLowerCase().includes(q)).slice(
+      0,
+      8,
+    );
   }, [search]);
   const current = value ? POOL_BY_ID[value] : null;
   return (
@@ -297,7 +308,10 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
                 onChange(c.id);
                 setSearch('');
               }}
-              className={cn('text-[9px] font-black px-1.5 py-0.5 ink-border-sm', RARITY_CHIP[c.rarity || 'Common'])}
+              className={cn(
+                'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+                RARITY_CHIP[c.rarity || 'Common'],
+              )}
             >
               {c.name}
             </button>
@@ -341,7 +355,11 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
     <div>
       <div className="flex flex-wrap gap-2 mb-4">
         {tabs.map((t) => (
-          <PopButton key={t.key} color={sort === t.key ? 'black' : 'yellow'} onClick={() => setSort(t.key)}>
+          <PopButton
+            key={t.key}
+            color={sort === t.key ? 'black' : 'yellow'}
+            onClick={() => setSort(t.key)}
+          >
             <span className="flex items-center gap-1">
               {t.icon} {t.label}
             </span>
@@ -349,7 +367,9 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
         ))}
       </div>
       {loading ? (
-        <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">LOADING SHOPS…</div>
+        <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
+          LOADING SHOPS…
+        </div>
       ) : shops.length === 0 ? (
         <div className="text-center font-bold text-[var(--c-steel)] py-16">
           No shops yet — be the first to open one under MY SHOP.
@@ -370,7 +390,8 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <RatingBadge shop={s} />
                   <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                    {s.sales_count ?? 0} sale{(s.sales_count ?? 0) === 1 ? '' : 's'} · {shopAge(s.created_at)}
+                    {s.sales_count ?? 0} sale{(s.sales_count ?? 0) === 1 ? '' : 's'} ·{' '}
+                    {shopAge(s.created_at)}
                   </span>
                 </div>
               </div>
@@ -385,8 +406,18 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
 // ---------------------------------------------------------------------------
 // Report modal
 // ---------------------------------------------------------------------------
-function ReportModal({ listingId, onClose, onDone }: { listingId: string; onClose: () => void; onDone: () => void }) {
-  const [reason, setReason] = useState<'mismatch' | 'not_as_described' | 'other'>('not_as_described');
+function ReportModal({
+  listingId,
+  onClose,
+  onDone,
+}: {
+  listingId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState<'mismatch' | 'not_as_described' | 'other'>(
+    'not_as_described',
+  );
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -600,10 +631,15 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
     }
     const cards = l.cards ?? [];
     return (
-      <div key={l.id} className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3">
+      <div
+        key={l.id}
+        className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3"
+      >
         <div className="shrink-0 flex flex-col gap-1">
           <CardFace def={defFor(cards[0]?.card_id || '')} size="compact" foil={cards[0]?.foil} />
-          {cards.length > 1 && <span className="text-[9px] font-black text-center">+{cards.length - 1} more</span>}
+          {cards.length > 1 && (
+            <span className="text-[9px] font-black text-center">+{cards.length - 1} more</span>
+          )}
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="heading-font text-xs">
@@ -643,7 +679,10 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
               >
                 BUY ▸
               </PopButton>
-              <button onClick={() => setReportTarget(l.id)} className="text-[var(--c-steel)] hover:text-[var(--c-red)]">
+              <button
+                onClick={() => setReportTarget(l.id)}
+                className="text-[var(--c-steel)] hover:text-[var(--c-red)]"
+              >
                 <Flag className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -659,7 +698,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         &lt; BACK TO DIRECTORY
       </PopButton>
       {loading || !shop ? (
-        <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">LOADING SHOP…</div>
+        <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
+          LOADING SHOP…
+        </div>
       ) : (
         <>
           <div className="bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4 mb-4">
@@ -669,7 +710,12 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                 <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
                   Sold by{' '}
                   {seller ? (
-                    <PlayerLink id={owner} name={seller.username} role={seller.role} className="text-[var(--c-paper)]" />
+                    <PlayerLink
+                      id={owner}
+                      name={seller.username}
+                      role={seller.role}
+                      className="text-[var(--c-paper)]"
+                    />
                   ) : (
                     '…'
                   )}{' '}
@@ -699,7 +745,11 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
 
           <div className="flex gap-2 mb-4 flex-wrap">
             {(['all', 'individual', 'bundle', 'mystery'] as const).map((f) => (
-              <PopButton key={f} color={filter === f ? 'black' : 'yellow'} onClick={() => setFilter(f)}>
+              <PopButton
+                key={f}
+                color={filter === f ? 'black' : 'yellow'}
+                onClick={() => setFilter(f)}
+              >
                 {f.toUpperCase()}
               </PopButton>
             ))}
@@ -766,7 +816,10 @@ function MyShopTab() {
       setListings(li);
       setTemplates(tp);
     }
-    const [pur, rat] = await Promise.all([fetchMyShopPurchases(userId), fetchMyBuyerRatings(userId)]);
+    const [pur, rat] = await Promise.all([
+      fetchMyShopPurchases(userId),
+      fetchMyBuyerRatings(userId),
+    ]);
     setPurchases(pur.filter((p) => p.buyer === userId));
     setMyRatings(rat);
     setLoading(false);
@@ -794,7 +847,11 @@ function MyShopTab() {
   };
 
   if (loading || dataLoading) {
-    return <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">LOADING…</div>;
+    return (
+      <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
+        LOADING…
+      </div>
+    );
   }
 
   if (!shop) {
@@ -802,14 +859,22 @@ function MyShopTab() {
       return (
         <div className="text-center py-16">
           <Lock className="w-10 h-10 mx-auto mb-3 text-[var(--c-steel)]" />
-          <div className="heading-font text-lg">PLAYER SHOPS UNLOCK AT LEVEL {SHOP_UNLOCK_LEVEL}</div>
+          <div className="heading-font text-lg">
+            PLAYER SHOPS UNLOCK AT LEVEL {SHOP_UNLOCK_LEVEL}
+          </div>
           <div className="text-[11px] font-bold text-[var(--c-steel)] mt-2">
             You're level {profile?.level ?? 1}. Keep playing to unlock your own storefront.
           </div>
         </div>
       );
     }
-    return <OpenShopPanel busy={busy} error={error} onOpen={(name, banner) => run(() => openShop(name, banner))} />;
+    return (
+      <OpenShopPanel
+        busy={busy}
+        error={error}
+        onOpen={(name, banner) => run(() => openShop(name, banner))}
+      />
+    );
   }
 
   if (shop.status === 'dormant') {
@@ -823,9 +888,14 @@ function MyShopTab() {
         <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4">
           <div className="heading-font text-sm mb-2">{shop.name}</div>
           <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
-            Your shop is closed. Slots and any remaining collateral are still in place — reopening is free.
+            Your shop is closed. Slots and any remaining collateral are still in place — reopening
+            is free.
           </div>
-          <PopButton color="red" disabled={busy} onClick={() => run(() => reopenShop(), 'Shop reopened!')}>
+          <PopButton
+            color="red"
+            disabled={busy}
+            onClick={() => run(() => reopenShop(), 'Shop reopened!')}
+          >
             REOPEN SHOP
           </PopButton>
         </div>
@@ -854,15 +924,19 @@ function MyShopTab() {
         <div>
           <div className="heading-font text-xl">{shop.name}</div>
           <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-            {shopAge(shop.created_at)} · {slots.filter((s) => s.status === 'occupied').length}/{slots.length} slots
-            filled
+            {shopAge(shop.created_at)} · {slots.filter((s) => s.status === 'occupied').length}/
+            {slots.length} slots filled
           </div>
         </div>
         <PopButton
           color="steel"
           disabled={busy}
           onClick={() => {
-            if (confirm('Close your shop? Half of remaining slot collateral is refunded; the rest is a sink.'))
+            if (
+              confirm(
+                'Close your shop? Half of remaining slot collateral is refunded; the rest is a sink.',
+              )
+            )
               run(() => closeShop().then((r) => r.error), 'Shop closed.');
           }}
         >
@@ -954,10 +1028,16 @@ function MyShopTab() {
           emptySlots={emptySlots}
           busy={busy}
           onCreateTemplate={(name, size, mode, config) =>
-            run(() => createMysteryTemplate(name, size, mode, config).then((r) => r.error), 'Pack type created!')
+            run(
+              () => createMysteryTemplate(name, size, mode, config).then((r) => r.error),
+              'Pack type created!',
+            )
           }
           onSubmitPool={(templateId, slotId, pool, price) =>
-            run(() => submitMysteryPool(templateId, slotId, pool, price).then((r) => r.error), 'Pool submitted!')
+            run(
+              () => submitMysteryPool(templateId, slotId, pool, price).then((r) => r.error),
+              'Pool submitted!',
+            )
           }
         />
       )}
@@ -969,22 +1049,31 @@ function MyShopTab() {
             className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
           >
             <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
-              <span className="heading-font text-xs mr-1">{(l.listing_type || 'LISTING').toUpperCase()}</span>
+              <span className="heading-font text-xs mr-1">
+                {(l.listing_type || 'LISTING').toUpperCase()}
+              </span>
               {l.listing_type === 'mystery'
                 ? `${l.remaining_packs ?? 0}/${l.total_packs ?? 0} packs left`
                 : (l.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
               {' · '}
               <Credits amount={l.price} /> · {(l.status || 'UNKNOWN').toUpperCase()}
             </div>
-            {l.status === 'active' && (l.listing_type === 'individual' || l.listing_type === 'bundle') && (
-              <PopButton color="steel" disabled={busy} onClick={() => run(() => cancelShopListing(l.id))}>
-                CANCEL
-              </PopButton>
-            )}
+            {l.status === 'active' &&
+              (l.listing_type === 'individual' || l.listing_type === 'bundle') && (
+                <PopButton
+                  color="steel"
+                  disabled={busy}
+                  onClick={() => run(() => cancelShopListing(l.id))}
+                >
+                  CANCEL
+                </PopButton>
+              )}
           </div>
         ))}
         {listings.length === 0 && (
-          <div className="text-center font-bold text-[var(--c-steel)] py-6 text-xs">No listings yet.</div>
+          <div className="text-center font-bold text-[var(--c-steel)] py-6 text-xs">
+            No listings yet.
+          </div>
         )}
       </div>
 
@@ -999,7 +1088,9 @@ function MyShopTab() {
               className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
             >
               <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
-                {p.listing_type === 'mystery' ? 'Mystery pack' : (p.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
+                {p.listing_type === 'mystery'
+                  ? 'Mystery pack'
+                  : (p.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
                 {' · '}
                 <Credits amount={p.price} />
               </div>
@@ -1012,17 +1103,28 @@ function MyShopTab() {
                       onClick={() => run(() => rateShopPurchase(p.id, n))}
                       className={cn(
                         'w-4 h-4',
-                        existing && existing.rating >= n ? 'text-[var(--c-yellow)]' : 'text-[var(--c-steel)]',
+                        existing && existing.rating >= n
+                          ? 'text-[var(--c-yellow)]'
+                          : 'text-[var(--c-steel)]',
                       )}
                     >
-                      <Star className={cn('w-4 h-4', existing && existing.rating >= n && 'fill-current')} />
+                      <Star
+                        className={cn(
+                          'w-4 h-4',
+                          existing && existing.rating >= n && 'fill-current',
+                        )}
+                      />
                     </button>
                   ))}
                 </div>
               ) : existing ? (
-                <span className="text-[9px] font-bold text-[var(--c-steel)]">Rated {existing.rating}/5</span>
+                <span className="text-[9px] font-bold text-[var(--c-steel)]">
+                  Rated {existing.rating}/5
+                </span>
               ) : (
-                <span className="text-[9px] font-bold text-[var(--c-steel)]">Rating window closed</span>
+                <span className="text-[9px] font-bold text-[var(--c-steel)]">
+                  Rating window closed
+                </span>
               )}
             </div>
           );
@@ -1059,8 +1161,8 @@ function OpenShopPanel({
       <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4">
         <div className="heading-font text-sm mb-2">OPEN YOUR SHOP</div>
         <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3 inline-flex items-center flex-wrap gap-x-1">
-          One-time setup fee of <Credits amount={SHOP_SETUP_FEE} /> (non-refundable). You start with 4 free
-          listing slots — more can be purchased later, each backed by its own collateral.
+          One-time setup fee of <Credits amount={SHOP_SETUP_FEE} /> (non-refundable). You start with
+          4 free listing slots — more can be purchased later, each backed by its own collateral.
         </div>
         <label className="block text-xs font-bold mb-1">Shop name</label>
         <input
@@ -1075,7 +1177,11 @@ function OpenShopPanel({
           value={banner}
           onChange={(e) => setBanner(e.target.value)}
         />
-        <PopButton color="red" disabled={busy || !name.trim()} onClick={() => onOpen(name.trim(), banner.trim() || null)}>
+        <PopButton
+          color="red"
+          disabled={busy || !name.trim()}
+          onClick={() => onOpen(name.trim(), banner.trim() || null)}
+        >
           OPEN SHOP ▸
         </PopButton>
       </div>
@@ -1105,11 +1211,11 @@ function NewCardListingForm({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(items.map((i) => fetchCardBlendedReference(i.card_id, i.foil).then((v) => v * i.quantity))).then(
-      (vals) => {
-        if (!cancelled) setReference(vals.reduce((a, b) => a + b, 0));
-      },
-    );
+    Promise.all(
+      items.map((i) => fetchCardBlendedReference(i.card_id, i.foil).then((v) => v * i.quantity)),
+    ).then((vals) => {
+      if (!cancelled) setReference(vals.reduce((a, b) => a + b, 0));
+    });
     return () => {
       cancelled = true;
     };
@@ -1135,8 +1241,8 @@ function NewCardListingForm({
       {reference > 0 && (
         <div className="text-[9px] font-bold text-[var(--c-steel)] mb-2 inline-flex items-center flex-wrap gap-x-1">
           Blended reference: <Credits amount={reference} /> · typical band{' '}
-          <Credits amount={Math.round(reference * 1.1)} />–<Credits amount={Math.round(reference * 1.25)} /> (soft
-          cap, not enforced)
+          <Credits amount={Math.round(reference * 1.1)} />–
+          <Credits amount={Math.round(reference * 1.25)} /> (soft cap, not enforced)
         </div>
       )}
       <div className="flex flex-wrap gap-3 items-center">
@@ -1165,7 +1271,11 @@ function NewCardListingForm({
             className="w-24 px-2 py-1 ink-border-sm"
           />
         </label>
-        <PopButton color="red" disabled={!valid || busy} onClick={() => onSubmit(slotId, items, price)}>
+        <PopButton
+          color="red"
+          disabled={!valid || busy}
+          onClick={() => onSubmit(slotId, items, price)}
+        >
           LIST FOR SALE ▸
         </PopButton>
       </div>
@@ -1188,13 +1298,22 @@ function MysteryBuilderPanel({
   emptySlots: ShopSlot[];
   busy: boolean;
   onCreateTemplate: (name: string, size: number, mode: MysteryMode, config: any) => void;
-  onSubmitPool: (templateId: string, slotId: string, pool: ShopListingCardItem[], price: number) => void;
+  onSubmitPool: (
+    templateId: string,
+    slotId: string,
+    pool: ShopListingCardItem[],
+    price: number,
+  ) => void;
 }) {
   const [showNewTemplate, setShowNewTemplate] = useState(templates.length === 0);
   const [tName, setTName] = useState('');
   const [tSize, setTSize] = useState(3);
   const [tMode, setTMode] = useState<MysteryMode>('simple');
-  const [weights, setWeights] = useState<Record<string, number>>({ Common: 0.6, Uncommon: 0.3, Rare: 0.1 });
+  const [weights, setWeights] = useState<Record<string, number>>({
+    Common: 0.6,
+    Uncommon: 0.3,
+    Rare: 0.1,
+  });
   const [slotSpecs, setSlotSpecs] = useState<MysterySlotSpec[]>([]);
 
   const [templateId, setTemplateId] = useState(templates[0]?.id || '');
@@ -1254,10 +1373,16 @@ function MysteryBuilderPanel({
                 className="w-14 px-2 py-1 ink-border-sm"
               />
             </label>
-            <PopButton color={tMode === 'simple' ? 'black' : 'yellow'} onClick={() => setTMode('simple')}>
+            <PopButton
+              color={tMode === 'simple' ? 'black' : 'yellow'}
+              onClick={() => setTMode('simple')}
+            >
               SIMPLE
             </PopButton>
-            <PopButton color={tMode === 'advanced' ? 'black' : 'yellow'} onClick={() => setTMode('advanced')}>
+            <PopButton
+              color={tMode === 'advanced' ? 'black' : 'yellow'}
+              onClick={() => setTMode('advanced')}
+            >
               ADVANCED
             </PopButton>
           </div>
@@ -1386,8 +1511,8 @@ function MysteryBuilderPanel({
           </div>
           {template && (
             <div className="text-[9px] font-bold text-[var(--c-steel)] mb-2">
-              Pool must be at least {shopMinPoolSize(template.pack_size)} cards, an exact multiple of{' '}
-              {template.pack_size}.
+              Pool must be at least {shopMinPoolSize(template.pack_size)} cards, an exact multiple
+              of {template.pack_size}.
             </div>
           )}
           <CardStackPicker collection={collection} decks={decks} items={pool} onChange={setPool} />
@@ -1399,7 +1524,9 @@ function MysteryBuilderPanel({
                 min={0.01}
                 step="0.01"
                 value={price / 100}
-                onChange={(e) => setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))}
+                onChange={(e) =>
+                  setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))
+                }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
             </label>
@@ -1416,8 +1543,8 @@ function MysteryBuilderPanel({
             <div className="ink-border-sm p-2 mb-2 text-[10px] font-bold">
               {validation.ok ? (
                 <span className="inline-flex items-center flex-wrap gap-x-1">
-                  <span className="text-[#22C55E]">✓ Valid pool</span> — {validation.num_packs} packs, EV{' '}
-                  <Credits amount={validation.ev_per_pack || 0} />
+                  <span className="text-[#22C55E]">✓ Valid pool</span> — {validation.num_packs}{' '}
+                  packs, EV <Credits amount={validation.ev_per_pack || 0} />
                   /pack. Suggested price band: <Credits amount={validation.suggested_min || 0} />–
                   <Credits amount={validation.suggested_max || 0} />.
                 </span>
@@ -1457,12 +1584,18 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
         ) : (
           <>
             <div className="flex gap-2 flex-wrap mb-4">
-              <PopButton color={tab === 'directory' ? 'black' : 'yellow'} onClick={() => setTab('directory')}>
+              <PopButton
+                color={tab === 'directory' ? 'black' : 'yellow'}
+                onClick={() => setTab('directory')}
+              >
                 <span className="flex items-center gap-1">
                   <Store className="w-3.5 h-3.5" /> DIRECTORY
                 </span>
               </PopButton>
-              <PopButton color={tab === 'myshop' ? 'black' : 'yellow'} onClick={() => setTab('myshop')}>
+              <PopButton
+                color={tab === 'myshop' ? 'black' : 'yellow'}
+                onClick={() => setTab('myshop')}
+              >
                 MY SHOP
               </PopButton>
             </div>

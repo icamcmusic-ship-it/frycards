@@ -169,7 +169,10 @@ function mapUnit(c: CardTemplate): CardDef {
   // Twin units carry a printed Twin bonus (required by §7).
   if (keywords.includes('Twin')) {
     def.twinBonus = pick(c.id, 1, [
-      { action: 'sap', value: 2 + tier, target: 'enemyLeader' } as Effect,
+      // Balance: capped at Sap 5 (was 2+tier, up to 8) — top-tier Twin bodies
+      // already keep their full stat budget at a discounted threshold, so the
+      // face-sap rider can't also scale unbounded with rarity.
+      { action: 'sap', value: 2 + Math.min(3, tier), target: 'enemyLeader' } as Effect,
       { action: 'buff', value: 1 + Math.floor(tier / 2), target: 'allFriendlyUnits' } as Effect,
       { action: 'draw', value: 1, target: 'none' } as Effect,
     ]);
@@ -213,11 +216,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // exact-cost card, so Overflow could never trigger there; excluding it
   // here keeps every card carrying the Overflow badge one that can actually
   // fire it. Dice-pattern-gated cards have no numeric threshold to exceed.
-  if (
-    def.threshold !== undefined &&
-    def.castCostKind !== 'exact' &&
-    hash(c.id) % 6 === 0
-  ) {
+  if (def.threshold !== undefined && def.castCostKind !== 'exact' && hash(c.id) % 6 === 0) {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 
@@ -335,7 +334,10 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.onCast = { action: 'mend', value: power, target: 'friendlyAny' };
   } else if (kind === 1) {
     base.onCast = { action: 'bind', target: 'enemyUnit' };
-    if (asCharm) costTier = Math.min(5, baseTier + 1);
+    // Bind still prices one tier up, but a Charm's bump is capped at tier 2:
+    // tier 3 rolls hard gates (FourKind ~13% directed hit rate), which left
+    // Rare bind Charms near-dead in hand (0.61 casts/game, 31% win-in-deck).
+    if (asCharm) costTier = Math.min(2, baseTier + 1);
   } else if (kind === 2 && !asCharm) {
     if (hash(c.id) % 2 === 0) {
       base.onCast = { action: 'destroy', target: 'enemyUnit' };
@@ -374,7 +376,17 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   }
   // v4.2 Aftershock (Event only): a delayed half-value echo of the main
   // effect, resolving at the start of the caster's next turn before Draw.
-  if (!asCharm && tier >= 2 && hash(c.id) % 6 === 4 && base.onCast) {
+  // Only attaches to effects with a numeric value >= 1 — a valueless action
+  // (bind/destroy) has no "lower-value repeat" (§10): the delayed copy would
+  // be a second FULL destroy/Bind for free, not the intended half-strength
+  // echo (seabed_mandala shipped exactly that before this guard).
+  if (
+    !asCharm &&
+    tier >= 2 &&
+    hash(c.id) % 6 === 4 &&
+    base.onCast &&
+    (base.onCast.value ?? 0) >= 1
+  ) {
     const halfValue = Math.max(1, Math.floor((base.onCast.value || 2) / 2));
     base.aftershock = { action: base.onCast.action, value: halfValue, target: base.onCast.target };
     base.keywords = [...(base.keywords || []), 'Aftershock'];
@@ -438,7 +450,10 @@ function mapLocation(c: CardTemplate): CardDef {
 // Leader mapping (64 HP, one Ability Slot + one Ultimate, no ATK)
 // ---------------------------------------------------------------------------
 const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
-  avatar_of_the_abyss: { threshold: 6, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
+  // v4.4 balance: weakest leader after the Crimson/Mer-King pass (44.4%) — the
+  // only Leader still gated at a threshold-6 ability. Lowered to 5 so it fires
+  // at the same rate as the rest of the roster.
+  avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
   // v4.1 balance: Bind's retaliation-stop buff + 64 HP long games made an
   // every-turn threshold-4 leader Bind a permanent board lock (96.6% archetype
   // win rate) — raised to 6 so it's a high roll, not a routine.
@@ -447,9 +462,11 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
   mer_king: { threshold: 5, effect: { action: 'mend', value: 3, target: 'friendlyAny' } },
   legendary_diver: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
+  // v4.4 balance: weakest leader of the six at 44.0% (11k-game pass) — face
+  // sap 4 -> 5 keeps its identity (pure reach) with a small power nudge.
   crimson_vector_commander: {
     threshold: 4,
-    effect: { action: 'sap', value: 4, target: 'enemyLeader' },
+    effect: { action: 'sap', value: 5, target: 'enemyLeader' },
   },
   apex_nanite_shinobi: {
     threshold: 4,
@@ -463,6 +480,9 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
 // v4.3 comeback pass: assignment rate raised — nearly every leader now
 // carries at least Resolve 1, so falling behind always cheapens your answer.
 const LEADER_RESOLVE: Record<string, number> = {
+  // v4.4: Abyss was the one roster hole in the v4.3 "nearly every leader"
+  // Resolve widening, and measured weakest (44.4%) — Resolve 1 closes it.
+  avatar_of_the_abyss: 1,
   mer_king: 2,
   apex_nanite_shinobi: 2,
   ethereal_sea_witch: 2,
@@ -488,10 +508,12 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     threshold: 5,
     effect: { action: 'destroy', target: 'allEnemyUnits' },
   },
+  // v4.4 balance: strongest leader at 55.6% — Ultimate mend 8 -> 6 trims the
+  // top without touching his every-turn plan.
   mer_king: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'mend', value: 8, target: 'friendlyAny' },
+    effect: { action: 'mend', value: 6, target: 'friendlyAny' },
   },
   legendary_diver: {
     unlockTurn: 5,

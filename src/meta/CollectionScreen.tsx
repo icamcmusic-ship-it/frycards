@@ -17,8 +17,15 @@ type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
-  const { profile, collection, refreshCollection, refreshProfile, decks, dataLoading, serializedCards } =
-    useMeta();
+  const {
+    profile,
+    collection,
+    refreshCollection,
+    refreshProfile,
+    decks,
+    dataLoading,
+    serializedCards,
+  } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
@@ -344,7 +351,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
                     }}
                   >
-                    {bulkBusy ? 'SELLING…' : `QUICKSELL ALL ${r.toUpperCase()} (${spareByRarity.get(r)})`}
+                    {bulkBusy
+                      ? 'SELLING…'
+                      : `QUICKSELL ALL ${r.toUpperCase()} (${spareByRarity.get(r)})`}
                   </PopButton>
                 ),
             )}
@@ -406,106 +415,108 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               />
               <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
                 {inspectTotal > 0 && (
-                <>
-                  {showcaseError && <Notice text={showcaseError} />}
-                  <PopButton
-                    color={inspectShowcased ? 'red' : 'yellow'}
-                    className="w-full"
-                    disabled={
-                      showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
-                    }
-                    onClick={() => toggleShowcase(inspect.id)}
-                  >
-                    {inspectShowcased
-                      ? '★ REMOVE FROM SHOWCASE'
-                      : showcase.length >= MAX_SHOWCASE
-                        ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
-                        : '☆ ADD TO SHOWCASE'}
-                  </PopButton>
-                </>
-              )}
-
-              {inspectTotal > 0 && (
-                <>
-                  <div className="heading-font text-xs text-center mt-1">QUICKSELL</div>
-                  {inspect.type === 'Leader' && (
-                    <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
-                      Leaders can be sold like any other card — one copy stays reserved while a
-                      saved deck still uses it.
-                    </div>
-                  )}
-                  {inspectLocked > 0 && (
-                    <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
-                      {inspect.type === 'Leader'
-                        ? 'In use by a saved deck — 1 copy reserved'
-                        : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
-                    </div>
-                  )}
-                  {inspectSerializedReserved > 0 && (
-                    <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
-                      {inspectSerializedReserved} Serialized cop
-                      {inspectSerializedReserved === 1 ? 'y' : 'ies'} — never quick-sellable
-                    </div>
-                  )}
-                  {sellError && <Notice text={sellError} />}
-                  <div className="flex items-center justify-between text-[10px] font-bold">
-                    <span>Normal ×{inspectOwned?.q || 0}</span>
-                    <Credits amount={quicksellPrice(inspect.rarity, false)} />
-                  </div>
-                  <PopButton
-                    color="yellow"
-                    className="w-full"
-                    disabled={selling || normalSellable <= 0}
-                    onClick={() => handleSell(false, 1)}
-                  >
-                    QUICKSELL 1
-                  </PopButton>
-                  {(inspectOwned?.q || 0) > 1 && (
+                  <>
+                    {showcaseError && <Notice text={showcaseError} />}
                     <PopButton
-                      color="black"
+                      color={inspectShowcased ? 'red' : 'yellow'}
+                      className="w-full"
+                      disabled={
+                        showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
+                      }
+                      onClick={() => toggleShowcase(inspect.id)}
+                    >
+                      {inspectShowcased
+                        ? '★ REMOVE FROM SHOWCASE'
+                        : showcase.length >= MAX_SHOWCASE
+                          ? `SHOWCASE FULL (${MAX_SHOWCASE}/${MAX_SHOWCASE})`
+                          : '☆ ADD TO SHOWCASE'}
+                    </PopButton>
+                  </>
+                )}
+
+                {inspectTotal > 0 && (
+                  <>
+                    <div className="heading-font text-xs text-center mt-1">QUICKSELL</div>
+                    {inspect.type === 'Leader' && (
+                      <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
+                        Leaders can be sold like any other card — one copy stays reserved while a
+                        saved deck still uses it.
+                      </div>
+                    )}
+                    {inspectLocked > 0 && (
+                      <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                        {inspect.type === 'Leader'
+                          ? 'In use by a saved deck — 1 copy reserved'
+                          : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
+                      </div>
+                    )}
+                    {inspectSerializedReserved > 0 && (
+                      <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                        {inspectSerializedReserved} Serialized cop
+                        {inspectSerializedReserved === 1 ? 'y' : 'ies'} — never quick-sellable
+                      </div>
+                    )}
+                    {sellError && <Notice text={sellError} />}
+                    <div className="flex items-center justify-between text-[10px] font-bold">
+                      <span>Normal ×{inspectOwned?.q || 0}</span>
+                      <Credits amount={quicksellPrice(inspect.rarity, false)} />
+                    </div>
+                    <PopButton
+                      color="yellow"
                       className="w-full"
                       disabled={selling || normalSellable <= 0}
-                      onClick={() => {
-                        const n = normalSellable;
-                        if (confirm(`Quicksell all ${n} spare copies of ${inspect.name}?`))
-                          handleSell(false, n);
-                      }}
+                      onClick={() => handleSell(false, 1)}
                     >
-                      QUICKSELL ALL NORMAL
+                      QUICKSELL 1
                     </PopButton>
-                  )}
-                  {(inspectOwned?.f || 0) > 0 && (
-                    <>
-                      <div className="flex items-center justify-between text-[10px] font-bold mt-1">
-                        <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                        <Credits amount={quicksellPrice(inspect.rarity, true)} />
-                      </div>
+                    {(inspectOwned?.q || 0) > 1 && (
                       <PopButton
-                        color="red"
+                        color="black"
                         className="w-full"
-                        disabled={selling || inspectSellable <= 0}
-                        onClick={() => handleSell(true, 1)}
+                        disabled={selling || normalSellable <= 0}
+                        onClick={() => {
+                          const n = normalSellable;
+                          if (confirm(`Quicksell all ${n} spare copies of ${inspect.name}?`))
+                            handleSell(false, n);
+                        }}
                       >
-                        QUICKSELL 1
+                        QUICKSELL ALL NORMAL
                       </PopButton>
-                      {(inspectOwned?.f || 0) > 1 && (
+                    )}
+                    {(inspectOwned?.f || 0) > 0 && (
+                      <>
+                        <div className="flex items-center justify-between text-[10px] font-bold mt-1">
+                          <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
+                          <Credits amount={quicksellPrice(inspect.rarity, true)} />
+                        </div>
                         <PopButton
-                          color="black"
+                          color="red"
                           className="w-full"
                           disabled={selling || inspectSellable <= 0}
-                          onClick={() => {
-                            const n = Math.min(inspectOwned?.f || 0, inspectSellable);
-                            if (confirm(`Quicksell all ${n} spare foil copies of ${inspect.name}?`))
-                              handleSell(true, n);
-                          }}
+                          onClick={() => handleSell(true, 1)}
                         >
-                          QUICKSELL ALL FOIL
+                          QUICKSELL 1
                         </PopButton>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+                        {(inspectOwned?.f || 0) > 1 && (
+                          <PopButton
+                            color="black"
+                            className="w-full"
+                            disabled={selling || inspectSellable <= 0}
+                            onClick={() => {
+                              const n = Math.min(inspectOwned?.f || 0, inspectSellable);
+                              if (
+                                confirm(`Quicksell all ${n} spare foil copies of ${inspect.name}?`)
+                              )
+                                handleSell(true, n);
+                            }}
+                          >
+                            QUICKSELL ALL FOIL
+                          </PopButton>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           }

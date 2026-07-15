@@ -146,7 +146,8 @@ function shuffle<T>(arr: T[], rng: () => number): T[] {
  * leanings and a random unit/spell/location split. `buildDeck()` still does the
  * actual card scoring, so the result is a legal, sensibly-curved 30-card deck. */
 export function randomArchetype(rng: () => number = Math.random): Archetype {
-  const leaderId = POOL_LEADERS[Math.floor(rng() * POOL_LEADERS.length)]?.id || 'avatar_of_the_abyss';
+  const leaderId =
+    POOL_LEADERS[Math.floor(rng() * POOL_LEADERS.length)]?.id || 'avatar_of_the_abyss';
   const leader = POOL_BY_ID[leaderId];
 
   const keywords = shuffle(ALL_KEYWORDS, rng).slice(0, 2 + Math.floor(rng() * 2));

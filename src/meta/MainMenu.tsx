@@ -91,8 +91,8 @@ function DailyLoginPanel() {
           <div>
             <div className="heading-font text-sm leading-none">DAILY LOGIN REWARD</div>
             <div className="text-[10px] font-bold text-[var(--c-steel)] flex items-center gap-1 mt-0.5">
-              <Flame className="w-3 h-3 text-[var(--c-red)]" /> {streak}-day streak — day{' '}
-              {cycleDay} of 7. Bigger prizes the longer you keep it alive.
+              <Flame className="w-3 h-3 text-[var(--c-red)]" /> {streak}-day streak — day {cycleDay}{' '}
+              of 7. Bigger prizes the longer you keep it alive.
             </div>
           </div>
         </div>
@@ -130,7 +130,11 @@ function DailyLoginPanel() {
             {claimed.pack_awarded && ` · 1× ${claimed.pack_awarded}`}
           </div>
         ) : (
-          <PopButton color={claimable ? 'red' : 'steel'} disabled={!claimable || busy} onClick={claim}>
+          <PopButton
+            color={claimable ? 'red' : 'steel'}
+            disabled={!claimable || busy}
+            onClick={claim}
+          >
             {busy ? 'CLAIMING…' : claimable ? 'CLAIM ▸' : 'CLAIMED TODAY ✓'}
           </PopButton>
         )}
@@ -242,7 +246,9 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       <div className="absolute inset-0 halftone-pattern pointer-events-none opacity-30" />
 
       {/* Header / identity strip */}
-      <div className="relative z-10 flex items-center justify-between px-6 py-4">
+      {/* flex-wrap keeps the nav buttons on-screen on phones — without it,
+          SETTINGS / SIGN OUT ran off the right edge and were unreachable. */}
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-y-2 px-4 sm:px-6 py-4">
         <div className="flex items-center gap-3">
           <div
             className="w-14 h-14 ink-border-md shadow-hard-black-xs bg-[var(--c-steel)] overflow-hidden shrink-0"
@@ -282,7 +288,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => onNavigate('howtoplay')}
             className="btn-pop heading-font text-[11px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
