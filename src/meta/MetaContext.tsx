@@ -16,6 +16,8 @@ import {
   fetchCosmetics,
   fetchDecks,
   fetchInventory,
+  fetchMySerializedCards,
+  OwnedSerializedCard,
 } from '../lib/supabase';
 import { preloadImages } from '../lib/preload';
 
@@ -38,6 +40,9 @@ export interface MetaState {
   cosmetics: PlayerCosmetic[];
   decks: DeckRow[];
   inventory: InventoryEntry[];
+  /** This player's own numbered Serialized pulls — never foil, never
+   * quick-sellable (see quicksell_cards' serialized-reserved check). */
+  serializedCards: OwnedSerializedCard[];
   setGuest: (g: boolean) => void;
   refreshProfile: () => Promise<void>;
   refreshCollection: () => Promise<void>;
@@ -78,6 +83,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   const [cosmetics, setCosmetics] = useState<PlayerCosmetic[]>([]);
   const [decks, setDecks] = useState<DeckRow[]>([]);
   const [inventory, setInventory] = useState<InventoryEntry[]>([]);
+  const [serializedCards, setSerializedCards] = useState<OwnedSerializedCard[]>([]);
 
   /** Bump to re-run both bootstrap effects below after a failed load. */
   const retryBoot = useCallback(() => {
@@ -153,7 +159,12 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
   const refreshCollection = useCallback(async () => {
     if (!userId) return;
-    setCollection(await fetchCollection(userId));
+    const [coll, serial] = await Promise.all([
+      fetchCollection(userId),
+      fetchMySerializedCards(userId),
+    ]);
+    setCollection(coll);
+    setSerializedCards(serial);
   }, [userId]);
   const refreshCosmetics = useCallback(async () => {
     if (!userId) return;
@@ -184,6 +195,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         setCosmetics([]);
         setDecks([]);
         setInventory([]);
+        setSerializedCards([]);
         setDataLoading(false);
         return;
       }
@@ -219,6 +231,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         cosmetics,
         decks,
         inventory,
+        serializedCards,
         setGuest,
         refreshProfile,
         refreshCollection,

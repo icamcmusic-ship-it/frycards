@@ -14,8 +14,8 @@ export const RARITIES: Rarity[] = [
   'Uncommon',
   'Rare',
   'Super-Rare',
-  'Ultra-Rare',
   'Full-Art',
+  'Ultra-Rare',
   'Mythic',
 ];
 

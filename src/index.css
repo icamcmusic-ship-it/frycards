@@ -349,3 +349,88 @@ h4,
   background-size: 300% 300%;
   animation: mythic-bg-kf 6s ease-in-out infinite;
 }
+
+/* Serialized card treatment — the rarest possible pull (a numbered 1-of-N
+   print, never foil, see grant_pack_contents' serialized roll). Distinct from
+   foil/Mythic: a rotating prismatic conic-gradient frame plus an
+   engraved-metal number plate, so a Serialized card is unmistakable even
+   sitting next to a Mythic. See CardFaceV4.tsx's `serial` prop. */
+@keyframes serialized-frame-kf {
+  0% {
+    --serial-angle: 0deg;
+    box-shadow:
+      0 0 16px 3px rgba(255, 255, 255, 0.5),
+      0 0 34px 10px rgba(168, 85, 247, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 26px 7px rgba(255, 255, 255, 0.75),
+      0 0 50px 16px rgba(45, 212, 191, 0.5);
+  }
+  100% {
+    --serial-angle: 360deg;
+    box-shadow:
+      0 0 16px 3px rgba(255, 255, 255, 0.5),
+      0 0 34px 10px rgba(168, 85, 247, 0.4);
+  }
+}
+.serialized-frame {
+  position: relative;
+  animation: serialized-frame-kf 3s linear infinite;
+}
+.serialized-frame::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--serial-angle, 0deg),
+    #e11d2e,
+    #ffb300,
+    #22c55e,
+    #2dd4bf,
+    #3b82f6,
+    #a855f7,
+    #e11d2e
+  );
+  animation: serialized-spin-kf 2.4s linear infinite;
+}
+@keyframes serialized-spin-kf {
+  0% {
+    --serial-angle: 0deg;
+  }
+  100% {
+    --serial-angle: 360deg;
+  }
+}
+@keyframes serialized-sheen-kf {
+  0% {
+    background-position: -140% 0;
+  }
+  100% {
+    background-position: 240% 0;
+  }
+}
+.serialized-sheen {
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.85) 40%,
+    rgba(168, 85, 247, 0.6) 48%,
+    rgba(45, 212, 191, 0.6) 54%,
+    rgba(255, 255, 255, 0.85) 60%,
+    transparent 75%
+  );
+  background-size: 280% 100%;
+  animation: serialized-sheen-kf 2.8s ease-in-out infinite;
+  mix-blend-mode: color-dodge;
+  pointer-events: none;
+}
+.serial-plate {
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(160deg, #f4f4f5 0%, #a1a1aa 45%, #52525b 100%);
+  color: #18181b;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  border: 1px solid #27272a;
+}

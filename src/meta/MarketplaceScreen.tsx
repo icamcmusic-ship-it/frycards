@@ -297,7 +297,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 value={rarityFilter}
                 onChange={(e) => setRarityFilter(e.target.value)}
               >
-                {['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'].map(
+                {['All', 'Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'].map(
                   (r) => (
                     <option key={r}>{r}</option>
                   ),
@@ -573,45 +573,43 @@ function SellForm({
               </span>
             </label>
             {type === 'auction' && (
-              <>
-                <label className="flex items-center gap-2 text-xs font-bold">
-                  Buyout (optional)
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={buyout === '' ? '' : buyout / 100}
-                    onChange={(e) =>
-                      setBuyout(
-                        e.target.value === ''
-                          ? ''
-                          : Math.max(0, Math.round((Number(e.target.value) || 0) * 100)),
-                      )
-                    }
-                    className="w-24 px-2 py-1 ink-border-sm"
-                  />
-                  {buyout !== '' && (
-                    <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                      = <Credits amount={buyout} />
-                    </span>
-                  )}
-                </label>
-                <label className="flex items-center gap-2 text-xs font-bold">
-                  Duration
-                  <select
-                    className={select}
-                    value={hours}
-                    onChange={(e) => setHours(Number(e.target.value))}
-                  >
-                    <option value={6}>6 hours</option>
-                    <option value={12}>12 hours</option>
-                    <option value={24}>24 hours</option>
-                    <option value={48}>2 days</option>
-                    <option value={168}>7 days</option>
-                  </select>
-                </label>
-              </>
+              <label className="flex items-center gap-2 text-xs font-bold">
+                Buyout (optional)
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={buyout === '' ? '' : buyout / 100}
+                  onChange={(e) =>
+                    setBuyout(
+                      e.target.value === ''
+                        ? ''
+                        : Math.max(0, Math.round((Number(e.target.value) || 0) * 100)),
+                    )
+                  }
+                  className="w-24 px-2 py-1 ink-border-sm"
+                />
+                {buyout !== '' && (
+                  <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                    = <Credits amount={buyout} />
+                  </span>
+                )}
+              </label>
             )}
+            <label className="flex items-center gap-2 text-xs font-bold">
+              Duration
+              <select
+                className={select}
+                value={hours}
+                onChange={(e) => setHours(Number(e.target.value))}
+              >
+                <option value={6}>6 hours</option>
+                <option value={12}>12 hours</option>
+                <option value={24}>24 hours</option>
+                <option value={48}>2 days</option>
+                <option value={168}>7 days</option>
+              </select>
+            </label>
           </div>
 
           <PopButton
@@ -632,8 +630,7 @@ function SellForm({
             {busy ? 'LISTING…' : type === 'fixed' ? 'LIST FOR SALE ▸' : 'START AUCTION ▸'}
           </PopButton>
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-2">
-            Listed cards leave your collection until sold, cancelled, or expired. Fixed listings run
-            for 14 days.
+            Listed cards leave your collection until sold, cancelled, or expired.
           </div>
         </>
       )}

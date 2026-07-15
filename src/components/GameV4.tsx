@@ -627,6 +627,8 @@ export function GameV4({
       if (!matchesPattern(rollValues(me), c.def.comboGate))
         return { ok: false, why: `Roll lacks ${c.def.comboGate}` };
       if (dieVal === null) return { ok: false, why: 'Select a die' };
+      if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
+        return { ok: false, why: 'No legal target' };
       return { ok: true };
     }
     const thr = effThreshold(g, HUMAN, c.def);
@@ -659,17 +661,17 @@ export function GameV4({
     if (c.def.type === 'Location') return canCastNow(c).ok;
     if (stage === 'preRoll' && !c.def.snap) return false;
     // Mirrors canCastNow's branch order exactly (minus the "a die must
-    // already be selected" checks) — comboGate cards intentionally skip the
-    // needsTarget check there too, so this must skip it here as well.
-    // Also requires an unplaced die to actually exist — canCastNow's own
-    // `dieVal === null` check implicitly forbids this once every die is
-    // placed, since selecting an already-placed die still yields dieVal
-    // null; this needs the same guard since it never reads dieVal at all.
+    // already be selected" checks). Also requires an unplaced die to
+    // actually exist — canCastNow's own `dieVal === null` check implicitly
+    // forbids this once every die is placed, since selecting an
+    // already-placed die still yields dieVal null; this needs the same
+    // guard since it never reads dieVal at all.
     if (c.def.comboGate)
       return (
         unplaced.length > 0 &&
         !me.comboGateCastThisTurn &&
-        matchesPattern(rollValues(me), c.def.comboGate)
+        matchesPattern(rollValues(me), c.def.comboGate) &&
+        (!needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0)
       );
     const thr = effThreshold(g, HUMAN, c.def);
     if (c.def.castCostKind === 'sum') {

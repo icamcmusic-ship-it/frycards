@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchCardTemplates, recordMatchResult, MatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
-import { HowToPlay } from './components/HowToPlay';
+import { HowToPlayScreen } from './components/HowToPlay';
 import { Archetype, buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
@@ -22,6 +22,7 @@ import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { ChangelogScreen } from './meta/ChangelogScreen';
+import { NewsCenterScreen } from './meta/NewsCenterScreen';
 import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
@@ -201,27 +202,25 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
 function AppInner() {
   const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
-  const [screen, setScreen] = useState<MetaScreen>('menu');
-  const [match, setMatch] = useState<MatchSetup | null>(null);
-  const [gameKey, setGameKey] = useState(0);
-  // First-ever visit auto-opens the rules panel — previously How to Play was
+  // First-ever visit auto-opens the How to Play page — previously this was
   // 100% opt-in (only reachable via the Main Menu button), so a new player
   // could start a real match having never seen the turn structure or any
   // keyword explained.
-  const [showHelp, setShowHelp] = useState(() => {
+  const [screen, setScreen] = useState<MetaScreen>(() => {
     try {
-      return localStorage.getItem('frycards_seen_howtoplay') !== '1';
+      return localStorage.getItem('frycards_seen_howtoplay') === '1' ? 'menu' : 'howtoplay';
     } catch {
-      return false;
+      return 'menu';
     }
   });
-  const dismissHelp = () => {
+  const [match, setMatch] = useState<MatchSetup | null>(null);
+  const [gameKey, setGameKey] = useState(0);
+  const markHelpSeen = () => {
     try {
       localStorage.setItem('frycards_seen_howtoplay', '1');
     } catch {
-      // localStorage unavailable — the panel will just auto-open again next visit.
+      // localStorage unavailable — the page will just auto-open again next visit.
     }
-    setShowHelp(false);
   };
 
   // Keep the equipped card back applied to in-game face-down cards.
@@ -310,13 +309,24 @@ function AppInner() {
       );
     case 'changelog':
       return <ChangelogScreen onBack={() => setScreen('menu')} />;
-    default:
+    case 'news':
       return (
-        <>
-          <MainMenu onNavigate={setScreen} onHelp={() => setShowHelp(true)} />
-          {showHelp && <HowToPlay onClose={dismissHelp} />}
-        </>
+        <NewsCenterScreen
+          onBack={() => setScreen('menu')}
+          onOpenChangelog={() => setScreen('changelog')}
+        />
       );
+    case 'howtoplay':
+      return (
+        <HowToPlayScreen
+          onBack={() => {
+            markHelpSeen();
+            setScreen('menu');
+          }}
+        />
+      );
+    default:
+      return <MainMenu onNavigate={setScreen} />;
   }
 }
 

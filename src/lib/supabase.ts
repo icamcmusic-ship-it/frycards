@@ -50,6 +50,9 @@ export interface Profile {
    * is guaranteed within 10 (grant_pack_contents' one and only pity rule).
    * Reset to 0 whenever a pack's best pull is Super-Rare or above. */
   packs_since_super_rare: number;
+  /** Opt out of username recognition in the News Center's Serialized-pull
+   * feed — the pull itself always still posts, just as "A collector". */
+  hide_serialized_announcements: boolean;
 }
 
 export interface ShopItem {
@@ -140,6 +143,13 @@ export interface PackPull {
   converted_to_shards: boolean;
   /** Shards gained from this specific pull; only nonzero when converted. */
   shards: number;
+  /** True for the ~1%-per-pack Serialized pull (see grant_pack_contents) — a
+   * numbered 1-of-N print, never foil, never quick-sellable. */
+  serialized?: boolean;
+  /** This copy's number, e.g. 7 of 150 — only set when `serialized` is true. */
+  serial_number?: number;
+  /** Total supply for this pull's rarity tier (150/100/50 for Full-Art/Ultra-Rare/Mythic). */
+  serial_cap?: number;
 }
 
 export interface OpenPackResult {
@@ -1206,6 +1216,78 @@ export async function reportListing(
     p_reason: reason,
     p_note: note ?? null,
   });
+  return rpcError(error);
+}
+
+// ---------------------------------------------------------------------------
+// News Center — changelog link (see ChangelogScreen), Creator-authored blog
+// posts, and a live feed of Serialized-card pulls across the whole server.
+// ---------------------------------------------------------------------------
+export interface NewsPost {
+  id: string;
+  title: string;
+  body: string;
+  author: string;
+  published_at: string;
+  created_at: string;
+}
+
+export async function fetchNewsPosts(limit = 30): Promise<NewsPost[]> {
+  const { data } = await supabase
+    .from('news_posts')
+    .select('*')
+    .order('published_at', { ascending: false })
+    .limit(limit);
+  return (data as NewsPost[]) || [];
+}
+
+export async function createNewsPost(title: string, body: string): Promise<string | null> {
+  const { error } = await supabase.rpc('create_news_post', { p_title: title, p_body: body });
+  return rpcError(error);
+}
+
+export async function deleteNewsPost(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('delete_news_post', { p_id: id });
+  return rpcError(error);
+}
+
+export interface SerializedFeedEntry {
+  card_id: string;
+  card_name: string;
+  image_url: string | null;
+  rarity: string;
+  serial_number: number;
+  cap: number;
+  acquired_at: string;
+  username: string;
+}
+
+export async function fetchSerializedFeed(limit = 30): Promise<SerializedFeedEntry[]> {
+  const { data, error } = await supabase.rpc('get_serialized_feed', { p_limit: limit });
+  if (error || !data) return [];
+  return data as SerializedFeedEntry[];
+}
+
+/** This player's own Serialized pulls — used to badge owned copies in
+ * Collection/Deck Builder and to block quicksell in the UI before the RPC
+ * would reject it server-side. */
+export interface OwnedSerializedCard {
+  card_id: string;
+  rarity: string;
+  serial_number: number;
+  acquired_at: string;
+}
+
+export async function fetchMySerializedCards(userId: string): Promise<OwnedSerializedCard[]> {
+  const { data } = await supabase
+    .from('player_serialized_cards')
+    .select('card_id, rarity, serial_number, acquired_at')
+    .eq('user_id', userId);
+  return (data as OwnedSerializedCard[]) || [];
+}
+
+export async function setHideSerializedAnnouncements(hide: boolean): Promise<string | null> {
+  const { error } = await supabase.rpc('set_hide_serialized_announcements', { p_hide: hide });
   return rpcError(error);
 }
 

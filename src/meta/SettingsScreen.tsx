@@ -1,7 +1,9 @@
-import React from 'react';
-import { Palette } from 'lucide-react';
+import React, { useState } from 'react';
+import { Palette, Sparkles } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton } from './ui';
+import { useMeta } from './MetaContext';
+import { setHideSerializedAnnouncements } from '../lib/supabase';
 
 export function SettingsScreen({
   currentTheme,
@@ -13,6 +15,16 @@ export function SettingsScreen({
   onBack: () => void;
 }) {
   const themeList = Object.values(THEMES);
+  const { profile, refreshProfile, guest } = useMeta();
+  const [busy, setBusy] = useState(false);
+
+  const toggleHideSerialized = async () => {
+    if (!profile || busy) return;
+    setBusy(true);
+    const err = await setHideSerializedAnnouncements(!profile.hide_serialized_announcements);
+    setBusy(false);
+    if (!err) refreshProfile();
+  };
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -72,6 +84,32 @@ export function SettingsScreen({
             ))}
           </div>
         </div>
+
+        {/* Privacy Section */}
+        {!guest && profile && (
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <Sparkles className="w-6 h-6 text-[var(--c-ink)]" />
+              <h2 className="heading-font text-lg">NEWS CENTER PRIVACY</h2>
+            </div>
+            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="heading-font text-sm">HIDE MY USERNAME</div>
+                <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
+                  When you pull a Serialized card, the News Center always announces it — this only
+                  controls whether your username is attached or it shows as "A collector" instead.
+                </p>
+              </div>
+              <PopButton
+                color={profile.hide_serialized_announcements ? 'black' : 'yellow'}
+                disabled={busy}
+                onClick={toggleHideSerialized}
+              >
+                {profile.hide_serialized_announcements ? 'HIDDEN' : 'VISIBLE'}
+              </PopButton>
+            </div>
+          </div>
+        )}
 
         {/* Info Section */}
         <div className="bg-[var(--c-paper)] border-4 border-[var(--c-ink)] p-4">

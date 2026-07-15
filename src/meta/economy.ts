@@ -26,8 +26,8 @@ export const QUICKSELL_PRICES: Record<Rarity, number> = {
   Uncommon: 25, // $0.25
   Rare: 100, // $1.00
   'Super-Rare': 300, // $3.00
+  'Full-Art': 500, // $5.00
   'Ultra-Rare': 800, // $8.00
-  'Full-Art': 1500, // $15.00
   Mythic: 3000, // $30.00
 };
 
@@ -48,8 +48,8 @@ export const SHARD_CRAFT_COSTS: Record<Rarity, number> = {
   Uncommon: 100,
   Rare: 400,
   'Super-Rare': 800,
+  'Full-Art': 1200,
   'Ultra-Rare': 1600,
-  'Full-Art': 3200,
   Mythic: 6400,
 };
 

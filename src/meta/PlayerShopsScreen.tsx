@@ -65,7 +65,7 @@ import {
   reportListing,
 } from '../lib/supabase';
 
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Mythic'];
+const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'];
 
 function defFor(cardId: string): CardDef {
   return (
@@ -150,7 +150,13 @@ function CardStackPicker({
   );
 
   const selected = sellable.find((c) => c.card_id === cardId);
-  const maxQty = selected ? (foil ? selected.foil_quantity : selected.quantity) : 0;
+  // Spare (unlocked) copies across both variants, then capped by however many
+  // of the chosen variant (foil/normal) actually exist — mirrors the
+  // lock-aware max used by the Marketplace's sell form.
+  const spareTotal = selected
+    ? Math.max(0, selected.quantity + selected.foil_quantity - (locked.get(cardId) || 0))
+    : 0;
+  const maxQty = selected ? Math.min(foil ? selected.foil_quantity : selected.quantity, spareTotal) : 0;
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const add = () => {
@@ -466,8 +472,11 @@ function MysteryListingCard({
     };
   }, [listing.id, listing.status]);
 
-  const soldOut = listing.status !== 'active';
   const remaining = live?.remaining_packs ?? listing.remaining_packs ?? 0;
+  // Live stock (fetched separately) can hit zero moments before the listing
+  // row itself transitions to 'sold_out' — gate on both so the BUY button
+  // doesn't stay clickable for a pack that's actually empty.
+  const soldOut = listing.status !== 'active' || remaining <= 0;
 
   return (
     <div

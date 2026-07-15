@@ -638,7 +638,14 @@ function TradeComposerModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const { profile, collection } = useMeta();
+  const { profile, collection, decks } = useMeta();
+  // Cards locked into any of our own saved decks can't be traded — mirrors
+  // assert_cards_available's deck-lock check the create_trade RPC enforces.
+  const locked = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+    return m;
+  }, [decks]);
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
@@ -694,17 +701,23 @@ function TradeComposerModal({
     source: PlayerCard[],
     list: TradeCardItem[],
     setList: (l: TradeCardItem[]) => void,
+    lockedMap: Map<string, number> = new Map(),
   ) => (
     <div className="flex flex-wrap gap-1 max-h-52 overflow-y-auto ink-border-sm p-2 bg-[var(--c-paper)]">
       {source
         .filter((c) => c.quantity + c.foil_quantity > 0 && POOL_BY_ID[c.card_id]?.type !== 'Leader')
         .map((c) => {
           const def = POOL_BY_ID[c.card_id];
+          // Spare (unlocked) copies across both variants, then capped by
+          // however many of the chosen variant actually exist.
+          const spare = Math.max(0, c.quantity + c.foil_quantity - (lockedMap.get(c.card_id) || 0));
+          const normalMax = Math.min(c.quantity, spare);
+          const foilMax = Math.min(c.foil_quantity, spare);
           return (
             <React.Fragment key={c.card_id}>
-              {c.quantity > 0 && (
+              {normalMax > 0 && (
                 <button
-                  onClick={() => toggle(list, setList, c.card_id, false, c.quantity)}
+                  onClick={() => toggle(list, setList, c.card_id, false, normalMax)}
                   className={cn(
                     'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
@@ -712,14 +725,14 @@ function TradeComposerModal({
                       'outline outline-2 outline-[var(--c-red)]',
                   )}
                 >
-                  {cardName(c.card_id)} ×{c.quantity}
+                  {cardName(c.card_id)} ×{normalMax}
                   {pickedQty(list, c.card_id, false) > 0 &&
                     ` [${pickedQty(list, c.card_id, false)}]`}
                 </button>
               )}
-              {c.foil_quantity > 0 && (
+              {foilMax > 0 && (
                 <button
-                  onClick={() => toggle(list, setList, c.card_id, true, c.foil_quantity)}
+                  onClick={() => toggle(list, setList, c.card_id, true, foilMax)}
                   className={cn(
                     'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
@@ -727,7 +740,7 @@ function TradeComposerModal({
                       'outline outline-2 outline-[var(--c-red)]',
                   )}
                 >
-                  {cardName(c.card_id)} ✦×{c.foil_quantity}
+                  {cardName(c.card_id)} ✦×{foilMax}
                   {pickedQty(list, c.card_id, true) > 0 && ` [${pickedQty(list, c.card_id, true)}]`}
                 </button>
               )}
@@ -771,7 +784,7 @@ function TradeComposerModal({
           </p>
 
           <div className="heading-font text-xs mb-1">YOU GIVE</div>
-          {renderPicker(collection, offer, setOffer)}
+          {renderPicker(collection, offer, setOffer, locked)}
           <div className="flex items-center gap-2 mt-2 mb-4">
             <Coins className="w-4 h-4" />
             <input
