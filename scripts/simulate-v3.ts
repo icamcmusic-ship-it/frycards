@@ -4,7 +4,14 @@
  * length, card usage/impact, keyword activity and rule-level anomalies.
  * Usage: npx tsx scripts/simulate-v3.ts [gamesPerPairing]
  */
-import { newGame, mulberry32, Game, remainingHp, rollValues } from '../src/game/v3/engine';
+import {
+  newGame,
+  mulberry32,
+  Game,
+  remainingHp,
+  rollValues,
+  HAND_LIMIT,
+} from '../src/game/v3/engine';
 import { playTurn } from '../src/game/v3/ai';
 import { CARDS_V3, CARD_DB, LEADER_HP } from '../src/game/v3/cards';
 
@@ -46,7 +53,8 @@ function invariants(g: Game) {
     for (const u of p.board) {
       if (remainingHp(g, u) <= 0) errors.push(`dead unit on board: ${u.def.name}`);
     }
-    if (p.hand.length > 6 && g.active !== p.id) errors.push(`hand overflow: ${p.hand.length}`);
+    if (p.hand.length > HAND_LIMIT && g.active !== p.id)
+      errors.push(`hand overflow: ${p.hand.length}`);
     if (p.dice.length > 0 && g.active !== p.id) errors.push('inactive player holds dice');
     if (p.leader.damage < 0) errors.push('negative leader damage');
     const total =

@@ -15,7 +15,15 @@
  *
  * Usage: npx tsx scripts/simulate-v4.ts [gamesPerPairing]
  */
-import { newGame, mulberry32, Game, DeckDef, remainingHp, TwinMode } from '../src/game/v3/engine';
+import {
+  newGame,
+  mulberry32,
+  Game,
+  DeckDef,
+  remainingHp,
+  TwinMode,
+  HAND_LIMIT,
+} from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
 import { Archetype, buildDeck } from '../src/game/v3/decks';
 import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
@@ -302,7 +310,8 @@ function invariants(g: Game, sizeA: number, sizeB: number, errors: string[]) {
     if (g.winner) break;
     for (const u of p.board)
       if (remainingHp(g, u) <= 0) errors.push(`dead unit on board: ${u.def.name}`);
-    if (p.hand.length > 6 && g.active !== p.id) errors.push(`hand overflow ${p.hand.length}`);
+    if (p.hand.length > HAND_LIMIT && g.active !== p.id)
+      errors.push(`hand overflow ${p.hand.length}`);
     if (p.leader.damage < 0) errors.push('negative leader damage');
     const total =
       p.deck.length +
