@@ -12,6 +12,15 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Full-Art Update',
+    items: [
+      'Crafting and Disenchanting are gone, along with the Shards currency entirely. Any spare copy that would have converted to Shards past your per-rarity copy cap now converts straight to credits instead.',
+      'Fixed Add to Showcase not actually showing your pinned cards to other players — other profiles never loaded correctly due to a data access bug.',
+      'Full-Art cards can now be short looping video clips, not just still images, and the template renders the art edge-to-edge behind the card text instead of in a boxed frame.',
+      'The four original Full-Art cards (Crystalline Metropolis, Submerged Archives, Admiral Iron-Claw, Crown of the Reef) moved to Super-Rare. Two new Full-Art cards were added: "Where the Deep Meets the Sky" and "Faye\'s True Face" (video).',
+    ],
+  },
+  {
     version: 'Collector Update',
     items: [
       'New rarity order: Full-Art now sits between Super-Rare and Ultra-Rare (it was previously above Ultra-Rare). Four cards returned to the Full-Art tier; prices, shard costs and pack odds all follow the new ladder.',

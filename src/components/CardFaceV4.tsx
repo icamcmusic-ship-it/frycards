@@ -544,6 +544,12 @@ function setStyle(set?: string): { label: string; className: string; bar: string
         className: 'text-[#B91C1C] italic',
         bar: 'bg-[#B91C1C]',
       };
+    case 'Full Arts Collection 1':
+      return {
+        label: 'FULL ARTS COLLECTION 1',
+        className: 'text-[#2DD4BF] italic',
+        bar: 'bg-[#2DD4BF]',
+      };
     default:
       return {
         label: set || '',
@@ -557,6 +563,14 @@ function setStyle(set?: string): { label: string; className: string; bar: string
  * object-contain (not cover) so the full 4:3 art is always visible — never
  * cropped — inside its fixed-aspect box; art narrower than 4:3 letterboxes
  * instead of losing its edges. */
+/** True when `src` points at a video file rather than a still image — Full-Art
+ * cards may be a short looping clip instead of a static image. Sniffed from
+ * the file extension (ignoring any querystring) since that's all a plain
+ * URL string gives us; no separate "is this a video" field on CardDef. */
+function isVideoSrc(src: string): boolean {
+  return /\.(mp4|webm|mov)(\?|#|$)/i.test(src);
+}
+
 function CardArt({
   def,
   onLoaded,
@@ -581,10 +595,27 @@ function CardArt({
       </div>
     );
   }
+  const artClass = cn('w-full h-full bg-[var(--c-ink)]', cover ? 'object-cover' : 'object-contain');
+  if (isVideoSrc(def.image)) {
+    return (
+      <video
+        src={def.image}
+        className={artClass}
+        autoPlay
+        loop
+        muted
+        playsInline
+        disablePictureInPicture
+        controls={false}
+        onError={() => setBroken(true)}
+        onLoadedData={onLoaded}
+      />
+    );
+  }
   return (
     <img
       src={def.image}
-      className={cn('w-full h-full bg-[var(--c-ink)]', cover ? 'object-cover' : 'object-contain')}
+      className={artClass}
       draggable={false}
       loading="lazy"
       onError={() => setBroken(true)}

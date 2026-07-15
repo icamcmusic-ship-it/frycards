@@ -39,30 +39,6 @@ export function quicksellPrice(rarity: string | undefined, foil: boolean): numbe
 }
 
 /**
- * Client-side mirror of `shard_craft_cost` / `shard_disenchant_value` — used
- * only to render prices before the player confirms; the server always
- * recomputes and is the source of truth.
- */
-export const SHARD_CRAFT_COSTS: Record<Rarity, number> = {
-  Common: 40,
-  Uncommon: 100,
-  Rare: 400,
-  'Super-Rare': 800,
-  'Full-Art': 1200,
-  'Ultra-Rare': 1600,
-  Mythic: 6400,
-};
-
-export function shardCraftCost(rarity: string | undefined, foil: boolean): number {
-  const base = SHARD_CRAFT_COSTS[(rarity as Rarity) || 'Common'] ?? SHARD_CRAFT_COSTS.Common;
-  return foil ? base * 2 : base;
-}
-
-export function shardDisenchantValue(rarity: string | undefined, foil: boolean): number {
-  return Math.ceil(shardCraftCost(rarity, foil) / 4);
-}
-
-/**
  * Client-side mirrors of the Player Shops constants — kept in sync with the
  * shop_* SQL functions (shop_setup_fee, shop_base_slots, shop_slot_cost,
  * shop_maintenance_fee_per_slot, shop_min_pool_size). Used only to render

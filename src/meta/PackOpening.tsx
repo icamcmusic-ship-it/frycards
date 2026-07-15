@@ -17,7 +17,7 @@ import { fmtCredits } from './economy';
  *   Stage 1 "pack"    — the pack art, ripped open by dragging across the foil.
  *   Stage 2 "reveal"  — one large card at a time, click to 3D-flip, rarity
  *                       glow bursts, foil sheen. "REVEAL ALL" skips ahead.
- *   Stage 3 "summary" — full haul grid, rarity chips, shard conversions and a
+ *   Stage 3 "summary" — full haul grid, rarity chips, credit conversions and a
  *                       best-pull spotlight, then ADD TO COLLECTION.
  */
 
@@ -446,7 +446,7 @@ function RevealStage({
         {/* rarity glow burst on flip (Rare+) */}
         {currentShown &&
           isRarePlus(current.rarity) &&
-          !current.converted_to_shards &&
+          !current.converted_to_credits &&
           !reducedMotion && (
             <div
               key={burstKey}
@@ -473,7 +473,7 @@ function RevealStage({
           <div
             className={cn(
               'absolute inset-0',
-              currentShown && !current.converted_to_shards && rarityGlow(current.rarity),
+              currentShown && !current.converted_to_credits && rarityGlow(current.rarity),
             )}
             style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
           >
@@ -490,7 +490,7 @@ function RevealStage({
                 def={currentDef!}
                 size="full"
                 foil={current.foil}
-                dimmed={current.converted_to_shards}
+                dimmed={current.converted_to_credits}
                 serial={
                   current.serialized
                     ? { number: current.serial_number!, cap: current.serial_cap! }
@@ -511,10 +511,10 @@ function RevealStage({
                   />
                 </div>
               )}
-              {current.converted_to_shards && currentShown && (
+              {current.converted_to_credits && currentShown && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <span className="heading-font text-lg bg-[var(--c-ink)] text-[#67E8F9] px-3 py-1.5 ink-border-md shadow-hard-black-xs">
-                    ✦ +{current.shards} SHARDS
+                    +{fmtCredits(current.credit_value)} CREDITS
                   </span>
                 </div>
               )}
@@ -523,7 +523,7 @@ function RevealStage({
         </div>
         {currentShown &&
           rarityRank(current.rarity) >= rarityRank('Super-Rare') &&
-          !current.converted_to_shards && (
+          !current.converted_to_credits && (
             <div className="absolute -inset-12 pointer-events-none starburst-ray opacity-70 -z-10" />
           )}
       </div>
@@ -534,13 +534,13 @@ function RevealStage({
           <div
             className={cn(
               'heading-font text-sm px-3 py-1 ink-border-sm',
-              current.converted_to_shards
+              current.converted_to_credits
                 ? 'bg-[var(--c-ink)] text-[#67E8F9]'
                 : RARITY_CHIP[current.rarity] || RARITY_CHIP.Common,
             )}
           >
-            {current.converted_to_shards
-              ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} → SHARDS`
+            {current.converted_to_credits
+              ? `DUPLICATE PROTECTED — ${current.rarity.toUpperCase()} → CREDITS`
               : `${current.rarity.toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
                   current.serialized ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}` : ''
                 }`}
@@ -608,7 +608,7 @@ function SummaryStage({
       { pull: PackPull; count: number; indices: number[] }
     >();
     pulls.forEach((p, i) => {
-      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_shards}`;
+      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
       const g = m.get(key) || { pull: p, count: 0, indices: [] };
       g.count += 1;
       g.indices.push(i);
@@ -622,15 +622,15 @@ function SummaryStage({
     );
   }, [pulls]);
 
-  const shardsGained = pulls.reduce((s, p) => s + (p.converted_to_shards ? p.shards : 0), 0);
-  const convertedCount = pulls.filter((p) => p.converted_to_shards).length;
+  const creditsGained = pulls.reduce((s, p) => s + (p.converted_to_credits ? p.credit_value : 0), 0);
+  const convertedCount = pulls.filter((p) => p.converted_to_credits).length;
 
-  // Best pull: highest rarity (kept copies beat shard conversions, foils win ties).
+  // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
   const bestIndex = useMemo(() => {
     let best = 0;
     const score = (p: PackPull) =>
       rarityRank(p.rarity) * 100 +
-      (p.converted_to_shards ? 0 : 10) +
+      (p.converted_to_credits ? 0 : 10) +
       (p.foil ? 1 : 0) +
       (p.serialized ? 1000 : 0);
     pulls.forEach((p, i) => {
@@ -652,7 +652,7 @@ function SummaryStage({
     .filter(
       (i) =>
         !sold.has(i) &&
-        !pulls[i].converted_to_shards &&
+        !pulls[i].converted_to_credits &&
         (pulls[i].rarity === 'Common' || pulls[i].rarity === 'Uncommon'),
     );
 
@@ -716,9 +716,9 @@ function SummaryStage({
             {r.toUpperCase()} ×{n}
           </span>
         ))}
-        {shardsGained > 0 && (
+        {creditsGained > 0 && (
           <span className="text-[10px] font-black px-2 py-1 ink-border-sm bg-[var(--c-ink)] text-[#67E8F9]">
-            ✦ +{shardsGained} SHARDS
+            +{fmtCredits(creditsGained)} CREDITS
           </span>
         )}
       </div>
@@ -758,19 +758,19 @@ function SummaryStage({
                     size="compact"
                     foil={grp.pull.foil}
                     count={grp.count > 1 ? grp.count : undefined}
-                    dimmed={grp.pull.converted_to_shards || allSold}
+                    dimmed={grp.pull.converted_to_credits || allSold}
                     serial={
                       grp.pull.serialized
                         ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
                         : undefined
                     }
                   />
-                  {(grp.pull.converted_to_shards || allSold) && (
+                  {(grp.pull.converted_to_credits || allSold) && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
-                        {allSold && !grp.pull.converted_to_shards
+                        {allSold && !grp.pull.converted_to_credits
                           ? 'SOLD'
-                          : `✦ +${grp.pull.shards * grp.count}`}
+                          : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
                       </span>
                     </div>
                   )}
@@ -809,12 +809,12 @@ function SummaryStage({
                     </div>
                   </>
                 )}
-                <div className={cn(!pull.converted_to_shards && !sold.has(i) && rarityGlow(pull.rarity))}>
+                <div className={cn(!pull.converted_to_credits && !sold.has(i) && rarityGlow(pull.rarity))}>
                   <CardFace
                     def={def}
                     size="full"
                     foil={pull.foil}
-                    dimmed={pull.converted_to_shards || sold.has(i)}
+                    dimmed={pull.converted_to_credits || sold.has(i)}
                     serial={
                       pull.serialized
                         ? { number: pull.serial_number!, cap: pull.serial_cap! }
@@ -822,17 +822,17 @@ function SummaryStage({
                     }
                   />
                 </div>
-                {sold.has(i) && !pull.converted_to_shards && (
+                {sold.has(i) && !pull.converted_to_credits && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font text-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs">
                       SOLD
                     </span>
                   </div>
                 )}
-                {pull.converted_to_shards && (
+                {pull.converted_to_credits && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                      ✦ +{pull.shards} SHARDS
+                      +{fmtCredits(pull.credit_value)} CREDITS
                     </span>
                   </div>
                 )}
@@ -846,7 +846,7 @@ function SummaryStage({
         <p className="text-[10px] font-bold text-[#67E8F9] mb-4 text-center max-w-md">
           {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
           {convertedCount === 1 ? 'was' : 'were'} past your copy cap and converted to ✦{' '}
-          {shardsGained} shards instead of a duplicate.
+          {fmtCredits(creditsGained)} credits instead of a duplicate.
         </p>
       )}
 

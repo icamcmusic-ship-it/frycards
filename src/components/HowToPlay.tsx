@@ -287,7 +287,7 @@ const SECTIONS = [
       ],
       [
         'Full-Art',
-        "A visually distinct print tier with its own animated frame — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, shard crafting, pack odds).",
+        "A visually distinct print tier whose art fills the entire card edge-to-edge (some Full-Art cards are short looping video clips instead of a still image) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, pack odds).",
       ],
       [
         'Foil',
@@ -328,7 +328,7 @@ const SECTIONS = [
       ],
       [
         'Dupe protection',
-        'Marked slots avoid cards you already own at cap. Any pull past your per-rarity copy cap auto-converts to shards instead of a dead duplicate.',
+        'Marked slots avoid cards you already own at cap. Any pull past your per-rarity copy cap auto-converts to credits instead of a dead duplicate.',
       ],
       [
         'Pack XP',
@@ -352,10 +352,6 @@ const SECTIONS = [
         'The premium currency — from achievements, missions, level milestones (every 5th level) and day-7 login streaks. Some packs can be bought with either.',
       ],
       [
-        'Shards ✦',
-        'The crafting currency. Disenchant spare cards into shards, or receive shards automatically when a pull is past your copy cap. Spend them to craft any specific card you\'re missing (foil crafts cost double).',
-      ],
-      [
         'Quicksell',
         'Instant credits for spare cards at a fixed price by rarity; foils always sell for 2.5×. Cards locked in decks and Serialized copies can never be quicksold.',
       ],
@@ -374,7 +370,7 @@ const SECTIONS = [
     body: [
       [
         'Collection',
-        'Browse every card you own, filter by rarity/type/set, inspect full card art, and quicksell spares for credits or craft/disenchant with shards.',
+        'Browse every card you own, filter by rarity/type/set, inspect full card art, and quicksell spares for credits.',
       ],
       [
         'Deck Builder',
@@ -386,7 +382,7 @@ const SECTIONS = [
       ],
       [
         'Daily Login',
-        'On the main menu: claim once per calendar day. Rewards escalate across a 7-day streak cycle (credits → shards → a free pack → vouchers), plus a growing bonus for your total streak.',
+        'On the main menu: claim once per calendar day. Rewards escalate across a 7-day streak cycle (credits, a free pack on day 5, vouchers on day 7), plus a growing bonus for your total streak.',
       ],
       [
         'Battle Pass',

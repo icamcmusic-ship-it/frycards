@@ -310,7 +310,6 @@ function CreatorTools() {
   // Grant inputs. Credits entered in dollars, stored as integer cents.
   const [credits, setCredits] = useState(0);
   const [vouchers, setVouchers] = useState(0);
-  const [shards, setShards] = useState(0);
   const [cardId, setCardId] = useState('');
   const [cardQty, setCardQty] = useState(1);
   const [cardFoil, setCardFoil] = useState(false);
@@ -452,23 +451,13 @@ function CreatorTools() {
                   className={`${input} w-24`}
                 />
               </label>
-              <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
-                SHARDS
-                <input
-                  type="number"
-                  min={0}
-                  value={shards}
-                  onChange={(e) => setShards(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-                  className={`${input} w-24`}
-                />
-              </label>
               <PopButton
                 color="red"
-                disabled={busy || (credits === 0 && vouchers === 0 && shards === 0)}
+                disabled={busy || (credits === 0 && vouchers === 0)}
                 onClick={() =>
                   run(
-                    () => adminGrantCurrency(target.id, credits, vouchers, shards),
-                    `Granted ${fmtCredits(credits)} / ${vouchers} vouchers / ${shards} shards to ${target.username}.`,
+                    () => adminGrantCurrency(target.id, credits, vouchers),
+                    `Granted ${fmtCredits(credits)} / ${vouchers} vouchers to ${target.username}.`,
                   )
                 }
               >

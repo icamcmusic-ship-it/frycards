@@ -4,8 +4,8 @@
  * (perspective + rotateX/rotateY), with a dynamic glare highlight that
  * tracks the tilt and, for foil copies, a holographic rainbow sheen.
  * Supports flipping to the equipped card back, shows card metadata, and
- * hosts context-specific actions (quicksell/craft/disenchant) passed in
- * by the caller. Escape or clicking outside closes. Respects
+ * hosts context-specific actions (e.g. quicksell) passed in by the
+ * caller. Escape or clicking outside closes. Respects
  * prefers-reduced-motion by rendering a static enlarged card instead.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -45,7 +45,7 @@ export function Card3DInspector({
   canToggleFoil?: boolean;
   /** Metadata rows shown beside the card (rarity, set, owned counts, …). */
   meta?: { label: string; value: React.ReactNode }[];
-  /** Context-specific controls (quicksell/craft/disenchant panel etc). */
+  /** Context-specific controls (e.g. a quicksell panel). */
   actions?: React.ReactNode;
   onClose: () => void;
 }) {

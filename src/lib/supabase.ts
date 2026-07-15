@@ -35,7 +35,6 @@ export interface Profile {
   role: PlayerRole;
   credits: number;
   vouchers: number;
-  shards: number;
   xp: number;
   level: number;
   wins: number;
@@ -143,10 +142,10 @@ export interface PackPull {
   foil: boolean;
   slot: string;
   /** True when this pull was past the player's per-rarity copy cap — no
-   * card was actually granted, it was auto-converted to `shards` instead. */
-  converted_to_shards: boolean;
-  /** Shards gained from this specific pull; only nonzero when converted. */
-  shards: number;
+   * card was actually granted, it was auto-converted to credits instead. */
+  converted_to_credits: boolean;
+  /** Credits gained from this specific pull; only nonzero when converted. */
+  credit_value: number;
   /** True for the ~1%-per-pack Serialized pull (see grant_pack_contents) — a
    * numbered 1-of-N print, never foil, never quick-sellable. */
   serialized?: boolean;
@@ -160,8 +159,7 @@ export interface OpenPackResult {
   cards: PackPull[];
   credits: number;
   vouchers: number;
-  shards?: number;
-  shards_gained?: number;
+  credits_gained?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,41 +330,6 @@ export interface QuicksellResult {
   total: number;
 }
 
-export interface CraftResult {
-  ok: boolean;
-  shards: number;
-  cost: number;
-}
-
-export interface DisenchantResult {
-  ok: boolean;
-  shards: number;
-  gained: number;
-}
-
-/** Spend shards to craft a specific card (see shard_craft_cost for pricing). */
-export async function craftCard(
-  cardId: string,
-  foil = false,
-): Promise<{ data: CraftResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('craft_card', { p_card_id: cardId, p_foil: foil });
-  return { data: (data as CraftResult) || null, error: rpcError(error) };
-}
-
-/** Break down spare copies of a card into shards (see shard_disenchant_value for pricing). */
-export async function disenchantCard(
-  cardId: string,
-  quantity: number,
-  foil = false,
-): Promise<{ data: DisenchantResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('disenchant_card', {
-    p_card_id: cardId,
-    p_quantity: quantity,
-    p_foil: foil,
-  });
-  return { data: (data as DisenchantResult) || null, error: rpcError(error) };
-}
-
 // ---------------------------------------------------------------------------
 // Levels, battle pass, achievements, missions, inventory
 // ---------------------------------------------------------------------------
@@ -398,7 +361,7 @@ export interface BattlePassTier {
   id: string;
   season_id: string;
   tier: number;
-  reward_type: 'credits' | 'vouchers' | 'shards' | 'pack' | 'cosmetic';
+  reward_type: 'credits' | 'vouchers' | 'pack' | 'cosmetic';
   amount: number;
   pack_type_id: string | null;
   shop_item_id: string | null;
@@ -594,13 +557,11 @@ export interface DailyLoginResult {
   /** 1..7 position in the repeating reward cycle (day 7 is the jackpot). */
   cycle_day: number;
   credits_awarded: number;
-  shards_awarded: number;
   vouchers_awarded: number;
   /** Name of the free pack granted to inventory (cycle day 5 only). */
   pack_awarded: string | null;
   credits: number;
   vouchers: number;
-  shards: number;
 }
 
 export async function claimDailyLogin(): Promise<{
@@ -885,13 +846,11 @@ export async function adminGrantCurrency(
   userId: string,
   credits = 0,
   vouchers = 0,
-  shards = 0,
 ): Promise<string | null> {
   const { error } = await supabase.rpc('admin_grant_currency', {
     p_user: userId,
     p_credits: credits,
     p_vouchers: vouchers,
-    p_shards: shards,
   });
   return rpcError(error);
 }
