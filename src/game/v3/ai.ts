@@ -48,7 +48,8 @@ function handIsKeepable(p: Player): boolean {
   return cheapPlays >= 2 && units >= 1;
 }
 
-/** Mulligan a single player's hand (shuffle back, redraw 5, bottom the worst card). */
+/** Mulligan a single player's hand (shuffle back, redraw 7 — v4.3, was 5 —
+ * then bottom the worst card, London-style). */
 function mulliganOne(p: Player, rng: () => number) {
   p.deck.push(...p.hand);
   p.hand = [];
@@ -56,7 +57,7 @@ function mulliganOne(p: Player, rng: () => number) {
     const j = Math.floor(rng() * (i + 1));
     [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
   }
-  for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+  for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
   const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
   const idx = p.hand.indexOf(worst);
   if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
@@ -390,7 +391,7 @@ function playPlacement(g: Game, p: Player) {
         (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
         ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
           opp.board.length === 0) ||
-        (eff.action === 'draw' && p.hand.length >= 6);
+        (eff.action === 'draw' && p.hand.length >= 8);
       if (!pointless) {
         const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.leader));
         if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) {
@@ -399,7 +400,7 @@ function playPlacement(g: Game, p: Player) {
         }
       }
     }
-    if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 6) {
+    if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 8) {
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) {
         progress = true;
@@ -435,7 +436,10 @@ function playPlacement(g: Game, p: Player) {
           !p.board.some((u) => u.damage > 0)) ||
         ((ult.effect.action === 'bind' ||
           (ult.effect.action === 'sap' && ult.effect.target === 'enemyUnit')) &&
-          opp.board.length === 0);
+          opp.board.length === 0) ||
+        // v4.3 comeback-pass Ultimates: don't waste a once-per-game board
+        // wipe / mass sap on a thin board (same gating as AoE Event casts).
+        (ult.effect.target === 'allEnemyUnits' && opp.board.length < 2);
       if (!pointless) {
         const dieIdx = bestDieFor(p, ult.threshold);
         if (dieIdx >= 0 && activateUltimate(g, dieIdx)) {

@@ -10,6 +10,7 @@ import {
   castLocationFree,
   applyEffect,
   abandonTwin,
+  mulliganRedraw,
 } from './engine';
 import { CardDef } from './cards';
 import { Archetype, buildDeck } from './decks';
@@ -187,6 +188,29 @@ test('abandonTwin is a start-of-turn/Reroll-Phase action — rejected during Pla
   expect(g.stage).toBe('PLACEMENT');
   expect(abandonTwin(g, stagedInPlacement.iid)).toBe(false);
   expect(p.staging.some((c) => c.iid === stagedInPlacement.iid)).toBe(true);
+});
+
+test('v4.3 setup: both players draw an opening hand of 7, and mulligan redraws 7', () => {
+  const g = freshGame();
+  expect(g.players.A.hand.length).toBe(7);
+  expect(g.players.B.hand.length).toBe(7);
+  const deckBefore = g.players.A.deck.length;
+  mulliganRedraw(g, 'A');
+  expect(g.players.A.hand.length).toBe(7);
+  expect(g.players.A.deck.length).toBe(deckBefore); // full shuffle-back, full redraw
+});
+
+test('v4.3 End Phase: hand discards down to the raised cap of 8 (was 6)', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  // Inflate the hand well past the cap.
+  while (p.hand.length < 11 && p.deck.length > 0) p.hand.push(p.deck.pop()!);
+  expect(p.hand.length).toBe(11);
+  endTurn(g);
+  expect(p.hand.length).toBe(8);
 });
 
 test('applyEffect ignores an enemyUnit-target Bind supplied a friendly targetIid', () => {

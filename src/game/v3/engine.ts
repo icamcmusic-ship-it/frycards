@@ -407,7 +407,10 @@ export function newGame(
   };
   for (const p of Object.values(g.players)) {
     shuffle(p.deck, rng);
-    for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+    // v4.3: starting hand of 7 (was 5) — with the End Phase cap raised to 8,
+    // a fuller opening hand gives both players real turn-1 options without
+    // forcing an immediate discard.
+    for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
   }
   return g;
 }
@@ -692,7 +695,7 @@ export function startTurn(g: Game) {
 
 /**
  * Mulligan (§2 setup): shuffle the player's hand back into their deck and
- * redraw 5. Once per player, enforced by the caller/UI.
+ * redraw 7 (v4.3, was 5). Once per player, enforced by the caller/UI.
  */
 export function mulliganRedraw(g: Game, pid: string) {
   const p = g.players[pid];
@@ -702,7 +705,7 @@ export function mulliganRedraw(g: Game, pid: string) {
     const j = Math.floor(g.rng() * (i + 1));
     [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
   }
-  for (let i = 0; i < 5; i++) p.hand.push(p.deck.pop()!);
+  for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
 }
 
 /**
@@ -1431,11 +1434,15 @@ export function resolveEndPhasePreDiscard(g: Game) {
   }
 }
 
-/** Second half of End Phase: discard down to 6, then reset/pass the turn. */
+/** v4.3 End Phase hand cap (was 6) — raised alongside the 7-card starting
+ * hand so a keep-everything opening doesn't force a discard on turn 1. */
+export const HAND_LIMIT = 8;
+
+/** Second half of End Phase: discard down to HAND_LIMIT, then reset/pass the turn. */
 export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst) {
   const p = g.players[g.active];
-  // Discard down to 6.
-  while (p.hand.length > 6) {
+  // Discard down to the hand cap (v4.3: 8, was 6).
+  while (p.hand.length > HAND_LIMIT) {
     const pick = discardChooser ? discardChooser(p.hand) : defaultDiscardChoice(p.hand);
     const idx = p.hand.indexOf(pick);
     const c = p.hand.splice(idx >= 0 ? idx : p.hand.length - 1, 1)[0];
