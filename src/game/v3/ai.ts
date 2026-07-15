@@ -127,11 +127,18 @@ function bestSelectionFor(g: Game, p: Player, def: CardDef): number[] | null {
   if (def.castCostKind === 'sum') {
     // Smallest dice first — spends low-value dice that few other cards want,
     // preserving high dice for 'atLeast'/'exact' costs elsewhere in hand.
+    // v4.3 Overflow: cardpool.ts only ever prints Overflow on 'sum'-cost
+    // cards, but the bare-minimum sum this loop used to stop at almost
+    // never clears the Overflow amount on top of the threshold — keep
+    // adding the next-smallest die past the minimum until the Overflow
+    // bonus is actually earned (or dice run out), same as bestDieFor's
+    // sibling handling of 'atLeast'+Overflow cards elsewhere in this file.
     const idxs = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value);
+    const target = def.overflow ? thr + def.overflow.amount : thr;
     const chosen: number[] = [];
     let sum = 0;
     for (const i of idxs) {
-      if (sum >= thr) break;
+      if (sum >= target) break;
       chosen.push(i);
       sum += p.dice[i].value;
     }

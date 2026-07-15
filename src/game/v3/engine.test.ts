@@ -209,6 +209,7 @@ import {
   legalTargets,
   canAttack,
   castFromHand,
+  activateAbility,
   activateUltimate,
   activateViaRally,
   effAbilityThreshold,
@@ -216,6 +217,7 @@ import {
   matchesPattern,
   cleanupDeaths,
   endTurn,
+  comboCheck,
   Game,
 } from './engine';
 
@@ -229,7 +231,8 @@ const mkU = (id: string, over: Partial<CardDef> = {}): CardDef => ({
   ...over,
 });
 
-/** Put both players past turn 1 so combat is legal, with A active in Placement. */
+/** Put both players past turn 1 so combat is legal, with A active in the
+ * Combat Phase (attack() requires g.stage === 'COMBAT' — see engine.ts). */
 function combatGame(): Game {
   const g = freshGame();
   g.active = 'A';
@@ -240,6 +243,7 @@ function combatGame(): Game {
   // Clear prebuilt boards/hands noise
   g.players.A.board = [];
   g.players.B.board = [];
+  comboCheck(g); // Placement -> Combat, same turnstile a real turn goes through
   return g;
 }
 
@@ -775,6 +779,53 @@ test('BUG-CHECK: Echo-recasting a Location starts a fresh life (excavateStacks r
   // Even if it somehow ended up back in Discard, it can never be Echo-recast again.
   p.discard.push(inst);
   expect(echoRecast(g, [], inst.iid, p.hand[0]?.iid ?? replacement.iid)).toBe(false);
+});
+
+test('§4: a die resting on an Ability Slot returns to the supply the instant its card leaves play', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+
+  // Location case: activate its Ability Slot, then replace it with a new
+  // Location the same Placement Phase — the die spent on the old Location's
+  // ability must come back so it can be placed again this same turn.
+  const oldLoc = makeInst(locDef, 'A');
+  p.location = oldLoc;
+  const dieIdx = p.dice.findIndex((d) => !d.placed && d.value >= locDef.ability!.threshold);
+  expect(dieIdx).toBeGreaterThanOrEqual(0);
+  expect(activateAbility(g, dieIdx, oldLoc.iid)).toBe(true);
+  expect(p.dice[dieIdx].placed).toBe(true);
+
+  const newLoc = makeInst(mkU('new_loc', { type: 'Location' }), 'A');
+  p.hand.push(newLoc);
+  expect(castLocationFree(g, newLoc.iid)).toBe(true);
+  expect(p.location?.iid).toBe(newLoc.iid);
+  expect(p.discard.some((c) => c.iid === oldLoc.iid)).toBe(true);
+  expect(p.dice[dieIdx].placed).toBe(false); // returned to supply
+  expect(oldLoc.abilityDieIndex).toBeUndefined();
+
+  // The freed die can immediately be placed on something else this same turn.
+  const unit = makeInst(mkU('u1', { threshold: 1 }), 'A');
+  p.hand.push(unit);
+  expect(castFromHand(g, [dieIdx], unit.iid)).toBe(true);
+
+  // Unit case: activate an ability, then let the unit die mid-turn (Sap) —
+  // its Ability Slot die must also come back.
+  const healer = makeInst(
+    mkU('healer', { ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } } }),
+    'A',
+  );
+  p.board.push(healer);
+  const dieIdx2 = p.dice.findIndex((d) => !d.placed);
+  expect(dieIdx2).toBeGreaterThanOrEqual(0);
+  expect(activateAbility(g, dieIdx2, healer.iid)).toBe(true);
+  expect(p.dice[dieIdx2].placed).toBe(true);
+  healer.damage = 999; // lethal
+  cleanupDeaths(g);
+  expect(p.board.includes(healer)).toBe(false);
+  expect(p.dice[dieIdx2].placed).toBe(false); // returned to supply
 });
 
 test('VERIFIED CORRECT: Anchor reduces the effective threshold a sum-cost card actually needs to hit', () => {
