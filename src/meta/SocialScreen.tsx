@@ -183,8 +183,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const handleSearch = async () => {
     if (!query.trim() || searching) return;
     setSearching(true);
+    setError('');
     try {
-      setResults(await searchPlayers(query));
+      const { data, error } = await searchPlayers(query);
+      setResults(data);
+      if (error) setError(error);
     } finally {
       setSearching(false);
     }
@@ -649,7 +652,18 @@ function TradeComposerModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchFriendCollection(partner.id).then(setTheirCollection);
+    let cancelled = false;
+    fetchFriendCollection(partner.id).then(({ data, error }) => {
+      if (cancelled) return;
+      setTheirCollection(data);
+      // A failed fetch used to swallow the error and resolve to [], which
+      // rendered identically to the friend genuinely owning no cards — now
+      // it's surfaced instead of looking like an empty collection.
+      if (error) setError(error);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [partner.id]);
 
   useEffect(() => {

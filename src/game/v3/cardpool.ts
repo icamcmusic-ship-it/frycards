@@ -434,7 +434,13 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // v4.1 balance: Bind's retaliation-stop buff + 64 HP long games made an
   // every-turn threshold-4 leader Bind a permanent board lock (96.6% archetype
   // win rate) — raised to 6 so it's a high roll, not a routine.
-  ethereal_sea_witch: { threshold: 6, effect: { action: 'bind', target: 'enemyUnit' } },
+  // v4.3 balance: threshold 6 overcorrected — jumping straight from "every
+  // turn" (4) to "uniquely the hardest ability in the game, on a kit with no
+  // damage or healing" (6) with no middle ground gutted the archetype to a
+  // measured ~28% win rate (see sim), the mirror image of the original
+  // problem. 5 matches Avatar/Diver/Crimson's ability thresholds — still a
+  // real roll, not a routine, without being the single worst ability printed.
+  ethereal_sea_witch: { threshold: 5, effect: { action: 'bind', target: 'enemyUnit' } },
   // v4.0 balance: Mer King and Apex were the two weakest leaders (~24%); make
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
   mer_king: { threshold: 4, effect: { action: 'mend', value: 4, target: 'friendlyAny' } },
@@ -467,10 +473,17 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     threshold: 6,
     effect: { action: 'sap', value: 8, target: 'anyTarget' },
   },
+  // v4.3 balance bugfix: this printed as a verbatim copy of the base Ability
+  // (same effect, same threshold) — every other Leader's Ultimate is a
+  // meaningfully scaled-up version of its kit (single-target -> AoE/bigger
+  // number), so Sea Witch's once-per-game slot was providing zero
+  // additional value, undermining the "answer to reactive leaders lack
+  // inevitability" purpose Ultimates exist for (see LEADER_ULTIMATE
+  // comment). Scaled to match the AoE pattern other Leaders' Ultimates use.
   ethereal_sea_witch: {
     unlockTurn: 6,
     threshold: 6,
-    effect: { action: 'bind', target: 'enemyUnit' },
+    effect: { action: 'bind', target: 'allEnemyUnits' },
   },
   mer_king: {
     unlockTurn: 4,

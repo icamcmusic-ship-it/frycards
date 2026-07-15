@@ -455,6 +455,7 @@ function playPlacement(g: Game, p: Player) {
             !!x &&
             x.iid !== rallyUnit.iid &&
             x.abilityUsed &&
+            !x.viaRally && // no Rally chaining — see engine.ts activateViaRally
             (x.abilityDie ?? 0) >= effAbilityThreshold(g, rallyUnit),
         );
         if (src && activateViaRally(g, rallyUnit.iid, src.iid)) {

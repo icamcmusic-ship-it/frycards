@@ -127,6 +127,8 @@ export function describeEffect(eff: Effect): string {
         : eff.target === 'self'
           ? `This gains +${v}/+${v}`
           : `A friendly Unit +${v}/+${v}`;
+    case 'bounce':
+      return 'Bounce a Unit to hand';
   }
 }
 

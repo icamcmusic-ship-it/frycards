@@ -25,6 +25,7 @@ import {
   scrap,
   abandonTwin,
   comboCheck,
+  comboCheckCandidates,
   attack,
   resolveEndPhasePreDiscard,
   finishEndPhase,
@@ -98,6 +99,7 @@ function rallySourcesFor(g: Game, pid: string, unit: Inst): Inst[] {
       !!x &&
       x.iid !== unit.iid &&
       x.abilityUsed === true &&
+      !x.viaRally && // no Rally chaining — see engine.ts activateViaRally
       x.abilityDie !== undefined &&
       x.abilityDie >= thr,
   );
@@ -403,6 +405,9 @@ export function GameV4({
   // (an already-exhausted ability user with a high-enough resting die).
   const [rallyPick, setRallyPick] = useState<string | null>(null);
   const [attacker, setAttacker] = useState<string | null>(null);
+  // §3.5 player-chosen Combo Check resolution order — non-null while the
+  // picker overlay is open; the array accumulates iids in click order.
+  const [comboOrder, setComboOrder] = useState<string[] | null>(null);
   // Echo card awaiting fodder — targetIid is set first if the recast effect needs one.
   const [echoPick, setEchoPick] = useState<{
     cardIid: string;
@@ -586,6 +591,7 @@ export function GameV4({
       else if (pending) setPending(null);
       else if (sumCast) setSumCast(null);
       else if (rallyPick) setRallyPick(null);
+      else if (comboOrder) setComboOrder(null);
       else if (showDiscard) {
         setShowDiscard(false);
         setEchoPick(null);
@@ -594,7 +600,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker]);
+  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, comboOrder, attacker]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {
@@ -1012,8 +1018,9 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
-  const toCombat = () => {
-    comboCheck(g);
+  const finishComboCheck = (order?: string[]) => {
+    comboCheck(g, order);
+    setComboOrder(null);
     bump();
     if (g.winner) {
       setStage('over');
@@ -1029,6 +1036,26 @@ export function GameV4({
     setRallyPick(null);
     setEchoPick(null);
     setStage('combat');
+  };
+
+  const toCombat = () => {
+    // §3.5: qualifying Combo cards trigger "in an order you choose" — only
+    // worth asking when 2+ would fire off this roll (order can't matter for
+    // 0 or 1), so a single-Combo board skips straight to resolving as before.
+    const candidates = comboCheckCandidates(g);
+    if (candidates.length >= 2) {
+      setComboOrder([]);
+      return;
+    }
+    finishComboCheck();
+  };
+
+  const toggleComboOrder = (iid: string) => {
+    setComboOrder((cur) => {
+      if (!cur) return cur;
+      if (cur.includes(iid)) return cur.filter((x) => x !== iid);
+      return [...cur, iid];
+    });
   };
 
   const finishTurn = (picks?: string[]) => {
@@ -1176,7 +1203,8 @@ export function GameV4({
           {stage === 'placement' && (
             <button
               onClick={toCombat}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
+              disabled={!!comboOrder}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm disabled:opacity-40"
             >
               COMBO CHECK → COMBAT
             </button>
@@ -1274,6 +1302,54 @@ export function GameV4({
               >
                 ✕
               </button>
+            </div>
+          );
+        })()}
+      {comboOrder &&
+        (() => {
+          const candidates = comboCheckCandidates(g);
+          const remaining = candidates.filter((c) => !comboOrder.includes(c.iid));
+          const picked = comboOrder
+            .map((iid) => candidates.find((c) => c.iid === iid))
+            .filter((c): c is Inst => !!c);
+          return (
+            <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#B45309] text-white heading-font text-[11px] px-3 py-2 ink-border-sm flex flex-col gap-1.5 items-center max-w-[90vw]">
+              <div>{candidates.length} COMBOS QUALIFY — CLICK TO SET RESOLUTION ORDER</div>
+              <div className="flex gap-1 flex-wrap justify-center">
+                {picked.map((c, i) => (
+                  <button
+                    key={c.iid}
+                    onClick={() => toggleComboOrder(c.iid)}
+                    className="bg-[var(--c-yellow)] text-[var(--c-ink)] px-1.5 py-0.5 text-[10px] font-bold"
+                  >
+                    {i + 1}. {c.def.name}
+                  </button>
+                ))}
+                {remaining.map((c) => (
+                  <button
+                    key={c.iid}
+                    onClick={() => toggleComboOrder(c.iid)}
+                    className="bg-[var(--c-ink)] px-1.5 py-0.5 text-[10px] font-bold"
+                  >
+                    {c.def.name}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => finishComboCheck(comboOrder)}
+                  className="bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 text-[10px] font-bold"
+                >
+                  RESOLVE ▸
+                </button>
+                <button
+                  onClick={() => setComboOrder(null)}
+                  aria-label="Cancel combo order picker"
+                  className="bg-[var(--c-ink)] px-1"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           );
         })()}

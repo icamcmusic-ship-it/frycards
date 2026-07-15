@@ -68,6 +68,10 @@ export interface Inst {
   ultimateUsed?: boolean;
   /** v4.2 Excavate: accumulated per-controller-turn threshold reduction while this Location is in play. */
   excavateStacks?: number;
+  /** True while this card's current Ability Slot activation was itself paid
+   * for via Rally (a borrowed die from another exhausted permanent), rather
+   * than its own die — prevents Rally chaining (see activateViaRally). */
+  viaRally?: boolean;
 }
 
 export interface Die {
@@ -575,10 +579,34 @@ export function applyEffect(
     case 'bind': {
       // Ward only stops damage/Removal (§10) — Bind is neither, so it isn't
       // checked or consumed by Ward.
+      if (eff.target === 'allEnemyUnits') {
+        for (const u of opp.board) u.boundNextTurn = true;
+        if (opp.board.length > 0) g.log.push(`All enemy Units were Bound.`);
+        break;
+      }
       const t = findFor(eff.target, targetIid);
       if (t && t.def.type === 'Unit') {
         t.boundNextTurn = true;
         g.log.push(`${t.def.name} was Bound.`);
+      }
+      break;
+    }
+    case 'bounce': {
+      // §5 Removal: destroy, bounce to hand, or banish. Bounce is Removal
+      // (checked/consumed by Ward like destroy) and — per the Leader-immunity
+      // clause ("no effect can ever change a Leader's zone") — Units only.
+      const t = findFor(eff.target, targetIid);
+      if (t && t.def.type === 'Unit' && !wardCheck(g, t, t.owner !== ownerId)) {
+        const owner = g.players[t.owner];
+        const idx = owner.board.findIndex((u) => u.iid === t.iid);
+        if (idx >= 0) {
+          owner.board.splice(idx, 1);
+          // An Echoed card that's Removed again would banish on a *discard*
+          // (§10) — bounce isn't a discard, it just goes to hand normally,
+          // still eligible to Echo again later from a future Discard.
+          owner.hand.push(t);
+          g.log.push(`${t.def.name} was bounced to hand.`);
+        }
       }
       break;
     }
@@ -621,12 +649,14 @@ export function startTurn(g: Game) {
     u.attacksMade = 0;
     u.abilityUsed = false;
     u.abilityDie = undefined;
+    u.viaRally = false;
     u.enteredThisTurn = false;
     u.boundThisTurn = u.boundNextTurn;
     u.boundNextTurn = false;
   }
   if (p.location) {
     p.location.abilityUsed = false;
+    p.location.viaRally = false;
     p.location.abilityDie = undefined;
     // v4.2 Excavate X: Ability Slot threshold drops by X per controller turn in play.
     if (p.location.def.excavate) p.location.excavateStacks = (p.location.excavateStacks || 0) + 1;
@@ -762,6 +792,7 @@ function enterPlay(
     c.attacksMade = 0;
     c.abilityUsed = false;
     c.abilityDie = undefined;
+    c.viaRally = false;
     c.wardUsed = false;
     c.boundThisTurn = false;
     c.boundNextTurn = false;
@@ -1030,8 +1061,15 @@ export function activateViaRally(
   if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
   if (src.iid === c.iid || !src.abilityUsed || src.abilityDie === undefined) return false;
   if (src.abilityDie < effAbilityThreshold(g, c)) return false;
+  // A card activated via Rally can't itself serve as a Rally source this
+  // turn — without this, a single die could chain through arbitrarily many
+  // Rally cards in one Placement Phase (the "once per turn" cap in §10 is
+  // per Rally-card via abilityUsed, and says nothing about chain length,
+  // but "costs nothing from your rolling pool" was never meant to compound).
+  if (src.viaRally) return false;
   c.abilityUsed = true;
   c.abilityDie = src.abilityDie;
+  c.viaRally = true;
   src.abilityDie = undefined; // die moves; source stays exhausted
   g.stats.rallies++;
   applyEffect(
@@ -1202,13 +1240,35 @@ export function abandonTwin(g: Game, cardIid: string): boolean {
   return true;
 }
 
+/** Every current Combo-passive holder that will actually trigger against
+ * this turn's final roll — used to offer the player a resolution order
+ * (§3.5: "in an order you choose") only when it could matter, i.e. 2+
+ * holders qualify at once. */
+export function comboCheckCandidates(g: Game): Inst[] {
+  const p = g.players[g.active];
+  const values = rollValues(p);
+  return [...p.board, p.location].filter(
+    (c): c is Inst => !!c && !!c.def.combo && matchesPattern(values, c.def.combo.pattern),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Combo Check (§3.5)
 // ---------------------------------------------------------------------------
-export function comboCheck(g: Game) {
+/** `order` lets the active player choose resolution order among qualifying
+ * holders (§3.5) — pass the iids in the desired order; any qualifying
+ * holder not listed resolves after the listed ones, in board order. Omit
+ * for the default (board order), used by the AI and the balance sim. */
+export function comboCheck(g: Game, order?: string[]) {
   const p = g.players[g.active];
   const values = rollValues(p);
-  const holders = [...p.board, p.location].filter((c): c is Inst => !!c && !!c.def.combo);
+  let holders = [...p.board, p.location].filter((c): c is Inst => !!c && !!c.def.combo);
+  if (order && order.length > 0) {
+    const rank = new Map(order.map((iid, i) => [iid, i]));
+    holders = [...holders].sort(
+      (a, b) => (rank.get(a.iid) ?? Infinity) - (rank.get(b.iid) ?? Infinity),
+    );
+  }
   for (const c of holders) {
     if (g.winner) break;
     if (!p.board.includes(c) && p.location !== c) continue; // died mid-loop

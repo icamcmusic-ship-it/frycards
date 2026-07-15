@@ -323,7 +323,9 @@ function CreatorTools() {
     setSearching(true);
     setError('');
     try {
-      setResults(await searchPlayers(query));
+      const { data, error } = await searchPlayers(query);
+      setResults(data);
+      if (error) setError(error);
     } finally {
       setSearching(false);
     }

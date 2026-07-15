@@ -627,10 +627,11 @@ export async function fetchCardsLeaderboard(limit = 50): Promise<CardsLeaderboar
   return (data as CardsLeaderboardEntry[]) || [];
 }
 
-export async function searchPlayers(query: string): Promise<PublicProfile[]> {
+export async function searchPlayers(
+  query: string,
+): Promise<{ data: PublicProfile[]; error: string | null }> {
   const { data, error } = await supabase.rpc('search_players', { p_query: query });
-  if (error || !data) return [];
-  return data as PublicProfile[];
+  return { data: (data as PublicProfile[]) || [], error: rpcError(error) };
 }
 
 export async function sendFriendRequest(username: string): Promise<string | null> {
@@ -675,14 +676,19 @@ export async function fetchTrades(): Promise<Trade[]> {
   return (data as Trade[]) || [];
 }
 
-export async function fetchFriendCollection(friendId: string): Promise<PlayerCard[]> {
+export async function fetchFriendCollection(
+  friendId: string,
+): Promise<{ data: PlayerCard[]; error: string | null }> {
   const { data, error } = await supabase.rpc('get_friend_collection', { p_friend: friendId });
-  if (error || !data) return [];
-  return (data as { card_id: string; quantity: number; foil_quantity: number }[]).map((r) => ({
-    card_id: r.card_id,
-    quantity: r.quantity,
-    foil_quantity: r.foil_quantity,
-  }));
+  if (error || !data) return { data: [], error: rpcError(error) };
+  return {
+    data: (data as { card_id: string; quantity: number; foil_quantity: number }[]).map((r) => ({
+      card_id: r.card_id,
+      quantity: r.quantity,
+      foil_quantity: r.foil_quantity,
+    })),
+    error: null,
+  };
 }
 
 export async function createTrade(

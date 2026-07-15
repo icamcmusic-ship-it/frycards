@@ -18,7 +18,7 @@ export type ComboPattern =
   /** v4.3: at least 3 of your 5 dice show an even value. */
   | 'ThreeEvens';
 
-export type EffectAction = 'sap' | 'mend' | 'draw' | 'bind' | 'destroy' | 'buff';
+export type EffectAction = 'sap' | 'mend' | 'draw' | 'bind' | 'destroy' | 'buff' | 'bounce';
 export type EffectTarget =
   | 'enemyUnit'
   | 'friendlyUnit'
