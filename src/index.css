@@ -387,6 +387,27 @@ h4,
   animation: mythic-bg-kf 6s ease-in-out infinite;
 }
 
+/* Ultra-Rare: a lighter, gold-only pulsing frame — visibly stronger than the
+   static Rare/Super-Rare glow at every card size (not just `full`), but not
+   as intense as the two-tone Mythic frame. See rarity.ts's `isMythic`-style
+   `ultra` flag in CardFaceV4.tsx. */
+@keyframes ultra-border-kf {
+  0%,
+  100% {
+    box-shadow:
+      0 0 14px 3px rgba(212, 175, 55, 0.55),
+      0 0 28px 8px rgba(212, 175, 55, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 22px 6px rgba(255, 215, 90, 0.8),
+      0 0 42px 14px rgba(212, 175, 55, 0.45);
+  }
+}
+.ultra-frame {
+  animation: ultra-border-kf 2.8s ease-in-out infinite;
+}
+
 /* Serialized card treatment — the rarest possible pull (a numbered 1-of-N
    print, never foil, see grant_pack_contents' serialized roll). Distinct from
    foil/Mythic: a rotating prismatic conic-gradient frame plus an

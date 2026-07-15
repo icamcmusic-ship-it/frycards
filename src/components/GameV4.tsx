@@ -7,6 +7,7 @@
  * held in a ref; a version counter forces re-renders after each action.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Game,
   Inst,
@@ -51,6 +52,7 @@ import { cn } from '../lib/utils';
 import {
   CardFace,
   CardInspectorModal,
+  CARD_SIZES,
   GATE_LABEL,
   describeEffect,
   renderKeywordText,
@@ -212,10 +214,57 @@ function AbilityPill({
   );
 }
 
+/** Hover-to-view: board cards render tiny (`micro` tier) so more units fit
+ * on screen, so any card whose text a player actually wants to read needs a
+ * zoomed, read-only preview on hover — for BOTH the player's own board and
+ * the opponent's (previously only the hand had any hover affordance; the
+ * enemy board could only be inspected via a click-through modal). Renders
+ * through a portal at a viewport-fixed position (like the keyword glossary
+ * popover) since board rows sit inside `overflow-x-auto`/`overflow-y-auto`
+ * ancestors that would otherwise clip an absolutely-positioned popup.
+ * Purely a view — pointer-events-none, so it never steals the hover/click
+ * the small card underneath needs for its own targeting affordances. */
+function useHoverPreview<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const { w: fullW, h: fullH } = CARD_SIZES.full;
+  const show = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - fullW / 2), window.innerWidth - fullW - 8);
+    const openAbove = rect.top - fullH - 10 >= 8;
+    const top = openAbove ? rect.top - fullH - 10 : Math.min(rect.bottom + 10, window.innerHeight - fullH - 8);
+    setPos({ top, left });
+  };
+  const hide = () => setPos(null);
+  return { ref, pos, show, hide };
+}
+
+function HoverPreview({
+  pos,
+  children,
+}: {
+  pos: { top: number; left: number } | null;
+  children: React.ReactNode;
+}) {
+  if (!pos) return null;
+  return createPortal(
+    <div
+      className="fixed z-[9990] pointer-events-none drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
+      style={{ top: pos.top, left: pos.left }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // A unit on the battlefield — the same shared CardFace template used
-// everywhere else (standard size), with live effective stats rendered in
-// the normal stat-chip slots and status/damage overlays on a wrapper.
+// everywhere else (condensed `micro` tier so the board reads as a real
+// battlefield instead of a stack of full cards), with live effective stats
+// rendered in the normal stat-chip slots, status/damage overlays on a
+// wrapper, and a hover-to-view full-size preview (see `useHoverPreview`).
 // ---------------------------------------------------------------------------
 function BoardUnit({
   g,
@@ -244,8 +293,12 @@ function BoardUnit({
   const exhausted = u.hasAttacked || u.abilityUsed;
   const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
   const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
+  const hover = useHoverPreview<HTMLDivElement>();
   return (
     <div
+      ref={hover.ref}
+      onMouseEnter={hover.show}
+      onMouseLeave={hover.hide}
       className={cn(
         'relative shrink-0',
         flash && 'gv4-attack-flash',
@@ -256,12 +309,15 @@ function BoardUnit({
     >
       <CardFace
         def={u.def}
-        size="standard"
+        size="micro"
         live={{ atk, hp, maxHp }}
         dimmed={dimmed}
         introduceKeywords
         onClick={onClick}
       />
+      <HoverPreview pos={hover.pos}>
+        <CardFace def={u.def} size="full" live={{ atk, hp, maxHp }} />
+      </HoverPreview>
       <div className="absolute -top-1.5 -right-1.5 z-20 flex gap-0.5">
         {wardUp && (
           <span
@@ -1605,7 +1661,7 @@ export function GameV4({
       )}
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-          PICK A TARGET — {describeEffect(pending.effect)}
+          PICK A TARGET — {renderKeywordText(describeEffect(pending.effect))}
           <button
             onClick={() => setPending(null)}
             aria-label="Cancel targeting"
@@ -1711,9 +1767,9 @@ export function GameV4({
             )}
             {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
           </div>
-          <div className="flex gap-1.5 items-start overflow-x-auto pb-1 min-h-[120px]">
+          <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
             {foe.board.length === 0 && (
-              <div className="w-full h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1951,9 +2007,9 @@ export function GameV4({
         )}
 
         <div className="flex-1 min-w-0">
-          <div className="flex gap-1.5 items-start overflow-x-auto pb-1 min-h-[120px]">
+          <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
             {me.board.length === 0 && (
-              <div className="w-full h-[110px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+              <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
                   Empty Board
                 </span>
@@ -1972,7 +2028,7 @@ export function GameV4({
                 !(u.enteredThisTurn && !hasKw(u.def, 'Swift')) &&
                 hasKw(u.def, 'Rally');
               return (
-                <div key={u.iid} className="flex flex-col items-center gap-0.5 shrink-0 w-[140px]">
+                <div key={u.iid} className="flex flex-col items-center gap-0.5 shrink-0 w-[78px]">
                   <BoardUnit
                     g={g}
                     u={u}
@@ -2122,48 +2178,71 @@ export function GameV4({
             {echoPick ? ' — pick a card to DISCARD for Echo' : ' · hover a card to preview'}
           </span>
         </div>
-        <div className="flex gap-1.5 px-2 pb-1.5 pt-0.5 overflow-x-auto">
-          {me.hand.map((c) => {
-            const chk = canCastNow(c);
-            const canScrapNow = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
-            // Before a die is selected, judge dimming on "could any of my
-            // dice pay for this" rather than the stricter per-die check,
-            // which always fails pre-selection with "Select a die".
-            const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
-            return (
-              <div
-                key={c.iid}
-                className="shrink-0"
-                onMouseEnter={() => {
-                  if (!echoPick) setPreview(c.iid);
-                }}
-              >
-                <CardFace
-                  def={c.def}
-                  size="compact"
-                  dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
-                  highlight={!!echoPick || preview === c.iid}
-                  introduceKeywords
-                  effectiveThreshold={
-                    c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
-                  }
-                  onClick={
-                    echoPick
-                      ? () => tryEchoFodder(c)
-                      : () => {
-                          setPreview(c.iid);
-                          setPreviewPinned(true);
-                        }
-                  }
-                />
-              </div>
-            );
-          })}
+        {/* A real card-fan: each card fanned out on a slight rotation/arc
+            around a shared pivot below the dock, overlapping its neighbors,
+            and docked low enough that only roughly its top half (art +
+            name) shows at rest — mimicking how a fan of physical cards is
+            actually held, and freeing up board space above. Hovering (or
+            focusing) a card lifts it clear of the fan so its full face and
+            the cast preview above are readable. */}
+        <div className="relative h-[100px] overflow-hidden" style={{ perspective: 800 }}>
           {me.hand.length === 0 && (
-            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold py-2">
+            <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
               — empty hand —
             </span>
           )}
+          <div className="absolute left-1/2 bottom-0 -translate-x-1/2 flex">
+            {me.hand.map((c, i) => {
+              const chk = canCastNow(c);
+              const canScrapNow = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
+              // Before a die is selected, judge dimming on "could any of my
+              // dice pay for this" rather than the stricter per-die check,
+              // which always fails pre-selection with "Select a die".
+              const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
+              const n = me.hand.length;
+              const mid = (n - 1) / 2;
+              const off = i - mid;
+              const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));
+              const arcDrop = Math.abs(off) * 3;
+              const isFocused = preview === c.iid;
+              return (
+                <div
+                  key={c.iid}
+                  className="shrink-0 transition-transform duration-150 ease-out"
+                  style={{
+                    marginLeft: i === 0 ? 0 : -46,
+                    zIndex: isFocused ? 50 : i,
+                    transformOrigin: 'bottom center',
+                    transform: isFocused
+                      ? `translateY(-72px) rotate(0deg) scale(1.04)`
+                      : `translateY(${84 + arcDrop}px) rotate(${angle}deg)`,
+                  }}
+                  onMouseEnter={() => {
+                    if (!echoPick) setPreview(c.iid);
+                  }}
+                >
+                  <CardFace
+                    def={c.def}
+                    size="compact"
+                    dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
+                    highlight={!!echoPick || preview === c.iid}
+                    introduceKeywords
+                    effectiveThreshold={
+                      c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
+                    }
+                    onClick={
+                      echoPick
+                        ? () => tryEchoFodder(c)
+                        : () => {
+                            setPreview(c.iid);
+                            setPreviewPinned(true);
+                          }
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
