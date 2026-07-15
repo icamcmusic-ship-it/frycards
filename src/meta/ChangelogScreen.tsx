@@ -12,6 +12,24 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Collector Update',
+    items: [
+      'New rarity order: Full-Art now sits between Super-Rare and Ultra-Rare (it was previously above Ultra-Rare). Four cards returned to the Full-Art tier; prices, shard costs and pack odds all follow the new ladder.',
+      'Serialized cards: every pack has a ~1% chance to also drop a numbered print — only 150 Full-Art, 100 Ultra-Rare and 50 Mythic serialized copies will ever exist, each stamped #1 and counting up. Never foil, never quick-sellable, with a one-of-a-kind prismatic card frame.',
+      'News Center: a new hub off the main menu with the latest update headline, dev blog posts, and a live server-wide feed of every Serialized pull. You can hide your username from the feed in Settings.',
+      'Daily Login Rewards: claim once per day for credits, shards, packs and vouchers — prizes escalate over a 7-day streak cycle, and a longer total streak pays a growing bonus. Miss a day and the streak resets.',
+      'Pity removed everywhere except one rule: a Super-Rare or better is still guaranteed at least once every 10 packs, account-wide. All per-pack "hard pity" counters (e.g. the old Mythic Vault guarantee) are gone.',
+      'Pack odds reworked: Full-Art, Ultra-Rare and Mythic cards are never guaranteed by any product anymore. Chase slots now floor at Rare — real bust potential, but always some value — and top-end odds were lowered across the board. Full odds are always visible in VIEW DROP ODDS.',
+      'New products: a regular Standard Box (36 cards — six boosters in one rip at a bulk discount) and the Leader Pack (a single card that is always a Leader). Every other pack is now at least 5 cards, and prices were rebalanced.',
+      'Mass opening: buy-and-open 5 or 10 copies of a pack in one go, and MY PACKS gained an OPEN ALL button. Big hauls now use a compact grouped summary (duplicates stack with a ×N badge) instead of a wall of full-size cards.',
+      'Opening packs now grants 20 account XP each.',
+      '20 new achievements and 10 new daily/weekly missions covering pack ripping, login streaks, Serialized pulls, trading, the Marketplace and more.',
+      'How to Play is now a full page (not a one-time popup) covering every feature and the complete rarity system.',
+      'Foil cards re-tuned: the shimmering effect is smoother and no longer flashes white bands or stutters against the card art.',
+      'Text is no longer selectable anywhere in the app — no more accidental blue highlights mid-game.',
+    ],
+  },
+  {
     version: 'Economy Update',
     items: [
       'New currencies: Gold is now Credits (shown next to a coin glyph, no currency symbol) and Gems are now Vouchers. All balances, prices and rewards were converted automatically.',

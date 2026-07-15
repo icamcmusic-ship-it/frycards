@@ -173,6 +173,9 @@ export function PackOpening({
   onDone: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  // Big hauls (bulk opens, boxes) skip the one-at-a-time reveal — clicking
+  // through 30+ flips is a chore, and the grouped summary is the payoff.
+  const bigHaul = pulls.length > 12;
   const [stage, setStage] = useState<Stage>('pack');
 
   return (
@@ -184,7 +187,7 @@ export function PackOpening({
           packName={packName}
           packImageUrl={packImageUrl}
           reducedMotion={reducedMotion}
-          onTorn={() => setStage('reveal')}
+          onTorn={() => setStage(bigHaul ? 'summary' : 'reveal')}
         />
       )}
       {stage === 'reveal' && (
@@ -596,6 +599,29 @@ function SummaryStage({
     return [...m.entries()].sort((a, b) => rarityRank(b[0]) - rarityRank(a[0]));
   }, [pulls]);
 
+  // Big hauls (bulk opens, boxes) collapse identical pulls into one compact
+  // card with a ×N count instead of a wall of 30+ full-size cards.
+  const grouped = pulls.length > 12;
+  const groups = useMemo(() => {
+    const m = new Map<
+      string,
+      { pull: PackPull; count: number; indices: number[] }
+    >();
+    pulls.forEach((p, i) => {
+      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_shards}`;
+      const g = m.get(key) || { pull: p, count: 0, indices: [] };
+      g.count += 1;
+      g.indices.push(i);
+      m.set(key, g);
+    });
+    return [...m.values()].sort(
+      (a, b) =>
+        rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
+        Number(b.pull.foil) - Number(a.pull.foil) ||
+        a.pull.name.localeCompare(b.pull.name),
+    );
+  }, [pulls]);
+
   const shardsGained = pulls.reduce((s, p) => s + (p.converted_to_shards ? p.shards : 0), 0);
   const convertedCount = pulls.filter((p) => p.converted_to_shards).length;
 
@@ -697,8 +723,67 @@ function SummaryStage({
         )}
       </div>
 
+      {grouped && (
+        <div className="flex flex-col items-center mb-5">
+          {/* Best-pull spotlight, full size, above the compact haul grid. */}
+          <div className="relative mb-2">
+            <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+              <Sparkles className="w-3 h-3" />{' '}
+              {pulls[bestIndex]?.serialized ? 'SERIALIZED!' : 'BEST PULL'}
+            </div>
+            <div className={cn(rarityGlow(pulls[bestIndex]?.rarity))}>
+              <CardFace
+                def={pullToDef(pulls[bestIndex])}
+                size="full"
+                foil={pulls[bestIndex]?.foil}
+                serial={
+                  pulls[bestIndex]?.serialized
+                    ? {
+                        number: pulls[bestIndex].serial_number!,
+                        cap: pulls[bestIndex].serial_cap!,
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 max-w-5xl px-2 max-h-[38vh] overflow-y-auto">
+            {groups.map((grp, gi) => {
+              const allSold = grp.indices.every((i) => sold.has(i));
+              return (
+                <div key={gi} className="relative">
+                  <CardFace
+                    def={pullToDef(grp.pull)}
+                    size="compact"
+                    foil={grp.pull.foil}
+                    count={grp.count > 1 ? grp.count : undefined}
+                    dimmed={grp.pull.converted_to_shards || allSold}
+                    serial={
+                      grp.pull.serialized
+                        ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
+                        : undefined
+                    }
+                  />
+                  {(grp.pull.converted_to_shards || allSold) && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+                        {allSold && !grp.pull.converted_to_shards
+                          ? 'SOLD'
+                          : `✦ +${grp.pull.shards * grp.count}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap justify-center items-end gap-5 max-w-6xl mb-4 px-2">
-        {pulls.map((pull, i) => {
+        {!grouped &&
+          pulls.map((pull, i) => {
           const def = pullToDef(pull);
           const isBest = i === bestIndex && pulls.length > 1;
           return (

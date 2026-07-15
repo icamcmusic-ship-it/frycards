@@ -7,6 +7,8 @@ import {
   claimDailyPack,
   buyPackToInventory,
   openInventoryPack,
+  buyAndOpenPacks,
+  openInventoryPacks,
   claimStarterBox,
   PackType,
   ShopItem,
@@ -97,6 +99,53 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
     refreshProfile();
     refreshCollection();
+  };
+
+  /** Buy-and-open several copies at once — one server call, one big reveal. */
+  const handleOpenPacksBulk = async (
+    pack: PackType,
+    count: number,
+    currency: 'credits' | 'vouchers',
+  ) => {
+    if (!profile || busyId) return;
+    setError('');
+    setNotice('');
+    setBusyId('bulk:' + pack.id);
+    const { data, error } = await buyAndOpenPacks(pack.id, count, currency);
+    setBusyId(null);
+    if (error || !data) {
+      setError(error || 'Pack opening failed.');
+      return;
+    }
+    setOpening({
+      packName: `${pack.name} ×${data.packs_opened}`,
+      packImageUrl: pack.image_url,
+      pulls: data.cards,
+    });
+    refreshProfile();
+    refreshCollection();
+  };
+
+  const handleOpenAllFromInventory = async (pack: PackType, count: number) => {
+    if (!profile || busyId) return;
+    const n = Math.min(count, 24);
+    setError('');
+    setNotice('');
+    setBusyId('openall:' + pack.id);
+    const { data, error } = await openInventoryPacks(pack.id, n);
+    setBusyId(null);
+    if (error || !data) {
+      setError(error || 'Pack opening failed.');
+      return;
+    }
+    setOpening({
+      packName: `${pack.name} ×${data.packs_opened}`,
+      packImageUrl: pack.image_url,
+      pulls: data.cards,
+    });
+    refreshProfile();
+    refreshCollection();
+    refreshInventory();
   };
 
   const handleBuyToInventory = async (pack: PackType, currency: 'credits' | 'vouchers') => {
@@ -352,6 +401,29 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
                 </div>
+                {/* Mass opening: buy-and-open 5 or 10 copies in one rip. */}
+                {pack.price_credits != null && pack.price_credits > 0 && (
+                  <div className="mx-3 mb-1.5 flex gap-1.5">
+                    {[5, 10].map((n) => (
+                      <button
+                        key={n}
+                        disabled={
+                          !profile || !!busyId || profile.credits < pack.price_credits! * n
+                        }
+                        onClick={() => handleOpenPacksBulk(pack, n, 'credits')}
+                        className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {busyId === 'bulk:' + pack.id ? (
+                          'OPENING…'
+                        ) : (
+                          <>
+                            OPEN ×{n} (<Credits amount={pack.price_credits! * n} />)
+                          </>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="mx-3 mb-3 flex gap-1.5">
                   {pack.price_credits != null && (
                     <button
@@ -429,6 +501,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     >
                       {busyId === 'open:' + pack.id ? 'OPENING…' : 'OPEN PACK ▸'}
                     </PopButton>
+                    {pack.acquisition !== 'starter_grant' && entry.quantity > 1 && (
+                      <PopButton
+                        color="black"
+                        disabled={!!busyId}
+                        onClick={() => handleOpenAllFromInventory(pack, entry.quantity)}
+                      >
+                        {busyId === 'openall:' + pack.id
+                          ? 'OPENING…'
+                          : `OPEN ALL ×${Math.min(entry.quantity, 24)}`}
+                      </PopButton>
+                    )}
                     {pack.acquisition !== 'starter_grant' && (
                       <button
                         onClick={() => setOddsPack(pack)}
@@ -636,12 +719,6 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             every pack you open — you're {packsSinceSuperRare}/10 packs into the current streak.
           </div>
 
-          {pack.pity_note && (
-            <div className="text-[10px] font-bold text-[var(--c-red)] mb-3 ink-border-sm p-2 bg-[var(--c-red)]/10">
-              {pack.pity_note}
-            </div>
-          )}
-
           {rows.map((row, i) => (
             <div key={i} className="mb-3 ink-border-sm p-2.5 bg-[var(--c-paper)]">
               <div className="flex items-center justify-between mb-1.5">
@@ -679,8 +756,10 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                   </span>
                 </div>
               ))}
-              {row.pity && (
-                <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">{row.pity}</div>
+              {row.cardType && (
+                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+                  Always a {row.cardType} card.
+                </div>
               )}
             </div>
           ))}

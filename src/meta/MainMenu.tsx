@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Swords,
   Library,
@@ -15,10 +15,14 @@ import {
   Gavel,
   Building2,
   Newspaper,
+  CalendarCheck,
+  Flame,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { CreditChip, VoucherChip, LevelBadge } from './ui';
+import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
 import { RoleBadge } from './RoleBadge';
+import { claimDailyLogin, DailyLoginResult } from '../lib/supabase';
+import { fmtCredits } from './economy';
 
 export type MetaScreen =
   | 'menu'
@@ -36,6 +40,105 @@ export type MetaScreen =
   | 'changelog'
   | 'news'
   | 'howtoplay';
+
+/** The 7-day login reward cycle — mirrors claim_daily_login's CASE table.
+ * Day 5's pack is whichever active credits pack is cheapest at claim time. */
+const LOGIN_CYCLE: { label: string }[] = [
+  { label: '250cr' },
+  { label: '400cr' },
+  { label: '300cr + 100✦' },
+  { label: '600cr' },
+  { label: '250cr + PACK' },
+  { label: '800cr + 150✦' },
+  { label: '1,000cr + 5 VOUCHERS' },
+];
+
+function DailyLoginPanel() {
+  const { profile, refreshProfile, refreshInventory } = useMeta();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [claimed, setClaimed] = useState<DailyLoginResult | null>(null);
+
+  if (!profile) return null;
+  const lastClaim = profile.last_login_claim_at
+    ? new Date(profile.last_login_claim_at).toISOString().slice(0, 10)
+    : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const claimable = lastClaim !== today && !claimed;
+  const streak = claimed?.streak ?? profile.login_streak;
+  const cycleDay = ((Math.max(1, claimable ? streak + 1 : streak) - 1) % 7) + 1;
+
+  const claim = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    const { data, error } = await claimDailyLogin();
+    setBusy(false);
+    if (error || !data) {
+      setError(error || 'Claim failed.');
+      return;
+    }
+    setClaimed(data);
+    refreshProfile();
+    if (data.pack_awarded) refreshInventory();
+  };
+
+  return (
+    <div className="relative z-10 max-w-5xl mx-auto px-6 mb-8">
+      <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <CalendarCheck className="w-5 h-5 shrink-0" />
+          <div>
+            <div className="heading-font text-sm leading-none">DAILY LOGIN REWARD</div>
+            <div className="text-[10px] font-bold text-[var(--c-steel)] flex items-center gap-1 mt-0.5">
+              <Flame className="w-3 h-3 text-[var(--c-red)]" /> {streak}-day streak — day{' '}
+              {cycleDay} of 7. Bigger prizes the longer you keep it alive.
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1 flex-1 justify-center">
+          {LOGIN_CYCLE.map((d, i) => {
+            const dayNum = i + 1;
+            const isNext = claimable && dayNum === cycleDay;
+            // Already-collected days this cycle: everything before today's
+            // slot — inclusive of it once today's claim is in.
+            const done = claimable ? dayNum < cycleDay : dayNum <= cycleDay;
+            return (
+              <span
+                key={i}
+                className={`text-[8px] font-black px-1.5 py-1 ink-border-sm text-center leading-tight ${
+                  isNext
+                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs'
+                    : done
+                      ? 'bg-[var(--c-steel)] text-[var(--c-paper)] opacity-70'
+                      : 'bg-[var(--c-paper)] text-[var(--c-steel)]'
+                }`}
+                title={`Day ${dayNum}: ${d.label}`}
+              >
+                D{dayNum}
+                <br />
+                {d.label.split(' ')[0]}
+              </span>
+            );
+          })}
+        </div>
+        {error && <Notice text={error} />}
+        {claimed ? (
+          <div className="text-[10px] font-black text-[var(--c-steel)]">
+            CLAIMED: {fmtCredits(claimed.credits_awarded)} credits
+            {claimed.shards_awarded > 0 && ` · ${claimed.shards_awarded}✦`}
+            {claimed.vouchers_awarded > 0 && ` · ${claimed.vouchers_awarded} vouchers`}
+            {claimed.pack_awarded && ` · 1× ${claimed.pack_awarded}`}
+          </div>
+        ) : (
+          <PopButton color={claimable ? 'red' : 'steel'} disabled={!claimable || busy} onClick={claim}>
+            {busy ? 'CLAIMING…' : claimable ? 'CLAIM ▸' : 'CLAIMED TODAY ✓'}
+          </PopButton>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }) {
   const { profile, guest, signOut, shopItems } = useMeta();
@@ -227,6 +330,9 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
           </span>
         </h1>
       </div>
+
+      {/* Daily login reward strip */}
+      {!guest && <DailyLoginPanel />}
 
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">

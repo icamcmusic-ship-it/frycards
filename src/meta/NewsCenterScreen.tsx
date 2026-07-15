@@ -13,7 +13,8 @@ import { RARITY_CHIP } from './rarity';
 
 /** Mirrors ChangelogScreen's newest entry headline — kept as a short pointer
  * here rather than duplicating the full log (see ChangelogScreen.tsx). */
-const LATEST_UPDATE_HEADLINE = 'Unreleased — Player Shops, Full-Art & Serialized cards, News Center';
+const LATEST_UPDATE_HEADLINE =
+  'Collector Update — Serialized cards, daily login rewards, reworked packs, new boxes & Leader Pack';
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
