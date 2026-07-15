@@ -102,7 +102,7 @@ export function ProfileScreen({
                 <img src={avatar.image_url} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-3xl">
-                  {profile.username[0]?.toUpperCase()}
+                  {(profile.username || '?')[0]?.toUpperCase()}
                 </div>
               )}
             </div>
@@ -140,12 +140,12 @@ export function ProfileScreen({
               ) : (
                 <button
                   onClick={() => {
-                    setNameDraft(profile.username);
+                    setNameDraft(profile.username || '');
                     setEditingName(true);
                   }}
                   className="heading-font text-2xl text-[var(--c-paper)] flex items-center gap-2 hover:text-[var(--c-yellow)]"
                 >
-                  {profile.username}
+                  {profile.username || 'Unnamed operative'}
                   <RoleBadge role={profile.role} size="md" />
                   <Pencil className="w-4 h-4" />
                 </button>

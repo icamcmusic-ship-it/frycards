@@ -103,9 +103,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   const grouped = useMemo(() => {
     const g = new Map<string, Achievement[]>();
     for (const a of achievements) {
-      const list = g.get(a.category) || [];
+      const cat = a.category || 'general';
+      const list = g.get(cat) || [];
       list.push(a);
-      g.set(a.category, list);
+      g.set(cat, list);
     }
     return g;
   }, [achievements]);
@@ -186,6 +187,11 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
           </div>
         ) : tab === 'missions' ? (
           <>
+            {missions.length === 0 && (
+              <div className="text-center font-bold text-[var(--c-steel)] py-16">
+                No missions available right now — check back after the next reset.
+              </div>
+            )}
             {(['daily', 'weekly'] as const).map((cadence) => {
               const list = missions.filter((m) => m.cadence === cadence);
               if (list.length === 0) return null;
@@ -245,6 +251,11 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
           </>
         ) : (
           <>
+            {achievements.length === 0 && (
+              <div className="text-center font-bold text-[var(--c-steel)] py-16">
+                No achievements to show yet.
+              </div>
+            )}
             {[...grouped.entries()].map(([category, list]) => (
               <div key={category} className="mb-7">
                 <h2 className="heading-font text-base mb-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">

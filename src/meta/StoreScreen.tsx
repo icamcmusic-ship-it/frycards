@@ -237,7 +237,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const inventoryCount = inventory.reduce((s, e) => s + e.quantity, 0);
+  const inventoryCount = inventory.reduce((s, e) => s + (e.quantity ?? 0), 0);
   const tabs: { key: Tab; label: string }[] = [
     { key: 'packs', label: 'CARD PACKS' },
     { key: 'my_packs', label: `MY PACKS${inventoryCount > 0 ? ` (${inventoryCount})` : ''}` },
@@ -324,7 +324,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     {pack.name}
                   </span>
                   <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
-                    {pack.pack_tier.replace('_', ' ')}
+                    {(pack.pack_tier || 'standard').replace(/_/g, ' ')}
                   </span>
                 </div>
                 <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative">
@@ -364,6 +364,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         color="yellow"
                         className="w-full"
                         disabled={!profile || profile.credits < pack.price_credits || !!busyId}
+                        title={
+                          profile && profile.credits < pack.price_credits
+                            ? 'Not enough credits'
+                            : undefined
+                        }
                         onClick={() => handleOpenPack(pack, 'credits')}
                       >
                         {busyId === pack.id ? (
@@ -387,6 +392,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         color="steel"
                         className="w-full"
                         disabled={!profile || profile.vouchers < pack.price_vouchers || !!busyId}
+                        title={
+                          profile && profile.vouchers < pack.price_vouchers
+                            ? 'Not enough vouchers'
+                            : undefined
+                        }
                         onClick={() => handleOpenPack(pack, 'vouchers')}
                       >
                         {busyId === pack.id
@@ -572,7 +582,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                             RARITY_CHIP[item.rarity] || RARITY_CHIP.Common,
                           )}
                         >
-                          {item.rarity.toUpperCase()}
+                          {(item.rarity || 'Common').toUpperCase()}
                         </span>
                       </span>
                     </div>

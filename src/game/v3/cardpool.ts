@@ -438,18 +438,18 @@ function mapLocation(c: CardTemplate): CardDef {
 // Leader mapping (64 HP, one Ability Slot + one Ultimate, no ATK)
 // ---------------------------------------------------------------------------
 const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
-  avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 3, target: 'anyTarget' } },
+  avatar_of_the_abyss: { threshold: 6, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
   // v4.1 balance: Bind's retaliation-stop buff + 64 HP long games made an
   // every-turn threshold-4 leader Bind a permanent board lock (96.6% archetype
   // win rate) — raised to 6 so it's a high roll, not a routine.
-  ethereal_sea_witch: { threshold: 6, effect: { action: 'bind', target: 'enemyUnit' } },
+  ethereal_sea_witch: { threshold: 5, effect: { action: 'bind', target: 'enemyUnit' } },
   // v4.0 balance: Mer King and Apex were the two weakest leaders (~24%); make
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
-  mer_king: { threshold: 4, effect: { action: 'mend', value: 4, target: 'friendlyAny' } },
+  mer_king: { threshold: 5, effect: { action: 'mend', value: 3, target: 'friendlyAny' } },
   legendary_diver: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
   crimson_vector_commander: {
-    threshold: 5,
-    effect: { action: 'sap', value: 3, target: 'enemyLeader' },
+    threshold: 4,
+    effect: { action: 'sap', value: 4, target: 'enemyLeader' },
   },
   apex_nanite_shinobi: {
     threshold: 4,
@@ -465,9 +465,9 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
 const LEADER_RESOLVE: Record<string, number> = {
   mer_king: 2,
   apex_nanite_shinobi: 2,
-  ethereal_sea_witch: 1,
+  ethereal_sea_witch: 2,
   legendary_diver: 1,
-  crimson_vector_commander: 1,
+  crimson_vector_commander: 2,
 };
 
 // v4.2 Ultimate(N): a second, once-per-game Ability Slot from the controller's
@@ -484,14 +484,14 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     effect: { action: 'sap', value: 4, target: 'allEnemyUnits' },
   },
   ethereal_sea_witch: {
-    unlockTurn: 6,
-    threshold: 6,
+    unlockTurn: 5,
+    threshold: 5,
     effect: { action: 'destroy', target: 'allEnemyUnits' },
   },
   mer_king: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'mend', value: 12, target: 'friendlyAny' },
+    effect: { action: 'mend', value: 8, target: 'friendlyAny' },
   },
   legendary_diver: {
     unlockTurn: 5,
@@ -499,14 +499,14 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     effect: { action: 'draw', value: 3, target: 'none' },
   },
   crimson_vector_commander: {
-    unlockTurn: 5,
-    threshold: 6,
-    effect: { action: 'sap', value: 8, target: 'enemyLeader' },
+    unlockTurn: 4,
+    threshold: 5,
+    effect: { action: 'sap', value: 12, target: 'enemyLeader' },
   },
   apex_nanite_shinobi: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'buff', value: 4, target: 'allFriendlyUnits' },
+    effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' },
   },
 };
 

@@ -245,7 +245,9 @@ export function Card3DInspector({
         <div className="flex flex-col gap-3 shrink-0">
           {meta && meta.length > 0 && (
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px]">
-              <div className="heading-font text-xs mb-2">{def.name.toUpperCase()}</div>
+              <div className="heading-font text-xs mb-2">
+                {(def.name || def.id || 'CARD').toUpperCase()}
+              </div>
               <div className="flex flex-col gap-1">
                 {meta.map((m) => (
                   <div

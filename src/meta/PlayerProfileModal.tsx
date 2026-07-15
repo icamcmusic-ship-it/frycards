@@ -102,7 +102,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                     <img src={avatar.image_url} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-2xl">
-                      {card.username[0]?.toUpperCase()}
+                      {(card.username || '?')[0]?.toUpperCase()}
                     </div>
                   )}
                 </div>

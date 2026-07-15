@@ -7,6 +7,39 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Fixed (full-stack audit)
+
+- **Shop crash**: hardened every meta screen against missing/null backend
+  data — the `total_cards.toLocaleString()` crash class (Social leaderboard,
+  Store, Marketplace, Player Shops, Battle Pass, Achievements, Profile,
+  Pack Opening, News Center) is guarded everywhere with sensible fallbacks.
+- **Credits display unit**: credits are whole units server-side; the client
+  was rendering them divided by 100 ("26.99" for a 2699-credit pack).
+  Amounts now match server messages exactly.
+- **Backend (Supabase) fixes** applied as migrations: multi-pack opens now
+  report duplicate-conversion credits (`credits_gained` was summed from a
+  removed `shards_gained` key); the pity Super-Rare slot honors the copy-cap
+  auto-convert; signup role assignment (creator/25-founder) is serialized
+  against races; trade acceptance locks both wallets so balances can't go
+  negative; and client EXECUTE was revoked on internal SECURITY DEFINER
+  helpers (`transfer_cards`, `grant_xp`, etc.) that any logged-in user could
+  previously call directly.
+- **Engine rulings & fixes**: cards can no longer be cast during Combat or
+  in the dead window between turns; Bind's retaliation-stop window, Resolve
+  vs Ultimate thresholds, and Bulwark-before-Frenzy retaliation order are
+  now ruled, documented, and covered by 14 new regression tests (61 total).
+
+### Changed (gameplay)
+
+- **CPU personas**: the AI now rolls a per-game persona (aggro / tempo /
+  balanced / control) that shapes cast priority, trade-vs-face decisions,
+  and tie-breaking — games no longer play out identically. Lethal is always
+  taken; free kills and big-threat answers are never skipped.
+- **Leader rebalance** (11k-game simulations per round): Avatar of the
+  Abyss toned down; Ethereal Sea Witch and Crimson Vector Commander brought
+  up; Mer-King and Apex Nanite Shinobi trimmed. Leader win-rate spread
+  flattened from 34–65% to 44–56%.
+
 ### Added (player shops)
 
 - **Player Shops** (`PlayerShopsScreen`, unlocks at level 50): a one-time

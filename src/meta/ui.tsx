@@ -45,8 +45,8 @@ export function PopButton({
   );
 }
 
-/** Credits — the base currency. Stored as integer cents, shown as a bare
- * number next to the Coins glyph — no "$" is used anywhere in this app. */
+/** Credits — the base currency. Stored as a plain integer credit count, shown
+ * as a bare number next to the Coins glyph — no "$" is used anywhere in this app. */
 export function CreditChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm heading-font text-xs">

@@ -16,8 +16,9 @@ import { RARITY_CHIP } from './rarity';
 const LATEST_UPDATE_HEADLINE =
   'Collector Update — Serialized cards, daily login rewards, reworked packs, new boxes & Leader Pack';
 
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
+function timeAgo(iso: string | null | undefined): string {
+  const ms = iso ? Date.now() - new Date(iso).getTime() : NaN;
+  if (Number.isNaN(ms)) return 'recently';
   const min = Math.floor(ms / 60000);
   if (min < 1) return 'just now';
   if (min < 60) return `${min}m ago`;

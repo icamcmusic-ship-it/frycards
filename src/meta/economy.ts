@@ -1,12 +1,14 @@
 /**
- * Currency display. Credits are the base currency, stored server-side as
- * integer cents. No "$" prefix — the credits Coins icon (see CreditChip /
- * fmtCreditsIcon) is the only currency symbol used anywhere in the UI.
+ * Currency display. Credits are the base currency, stored server-side as a
+ * plain integer number of credits (NOT cents — see e.g. shop_setup_fee()=5000,
+ * shop_maintenance_fee_per_slot()=15, and server errors like "Bid must be at
+ * least % credits", which all speak in whole credits). No "$" prefix — the
+ * credits Coins icon (see CreditChip) is the only currency symbol in the UI.
  * Vouchers are the secondary/premium currency (plain integer).
  */
-export function fmtCredits(cents: number | null | undefined): string {
-  const n = Math.max(0, Math.round(cents ?? 0));
-  return (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export function fmtCredits(credits: number | null | undefined): string {
+  const n = Math.max(0, Math.round(credits ?? 0));
+  return n.toLocaleString('en-US');
 }
 
 export function fmtVouchers(n: number | null | undefined): string {
@@ -22,13 +24,13 @@ export function fmtVouchers(n: number | null | undefined): string {
 import { Rarity } from '../types';
 
 export const QUICKSELL_PRICES: Record<Rarity, number> = {
-  Common: 10, // $0.10 bulk
-  Uncommon: 25, // $0.25
-  Rare: 100, // $1.00
-  'Super-Rare': 300, // $3.00
-  'Full-Art': 500, // $5.00
-  'Ultra-Rare': 800, // $8.00
-  Mythic: 3000, // $30.00
+  Common: 10,
+  Uncommon: 25,
+  Rare: 100,
+  'Super-Rare': 300,
+  'Full-Art': 500,
+  'Ultra-Rare': 800,
+  Mythic: 3000,
 };
 
 export const FOIL_QUICKSELL_MULTIPLIER = 2.5;
