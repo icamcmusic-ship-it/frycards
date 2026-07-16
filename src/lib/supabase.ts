@@ -1317,15 +1317,28 @@ export interface OwnedSerializedCard {
   card_id: string;
   rarity: string;
   serial_number: number;
+  /** Total print run for this rarity (`serialized_supply.cap`) — no FK
+   * relationship exists for PostgREST to embed this automatically, so it's
+   * joined client-side against a second small query. Lets each owned
+   * serialized print render its own "#N of cap" plate (see CollectionScreen)
+   * instead of just a bare serial number. */
+  cap: number;
   acquired_at: string;
 }
 
 export async function fetchMySerializedCards(userId: string): Promise<OwnedSerializedCard[]> {
-  const { data } = await supabase
-    .from('player_serialized_cards')
-    .select('card_id, rarity, serial_number, acquired_at')
-    .eq('user_id', userId);
-  return (data as OwnedSerializedCard[]) || [];
+  const [{ data }, { data: supply }] = await Promise.all([
+    supabase
+      .from('player_serialized_cards')
+      .select('card_id, rarity, serial_number, acquired_at')
+      .eq('user_id', userId),
+    supabase.from('serialized_supply').select('rarity, cap'),
+  ]);
+  const capByRarity = new Map((supply || []).map((s) => [s.rarity, s.cap as number]));
+  return ((data as Omit<OwnedSerializedCard, 'cap'>[]) || []).map((r) => ({
+    ...r,
+    cap: capByRarity.get(r.rarity) ?? 0,
+  }));
 }
 
 export async function setHideSerializedAnnouncements(hide: boolean): Promise<string | null> {

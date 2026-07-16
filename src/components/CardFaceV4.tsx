@@ -938,26 +938,23 @@ export function CardFace({
 
       {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
           gold-on-red name banner instead of the shared tinted-paper header.
-          Full-Art floats this as a semi-transparent bar over the full-bleed
-          art (the art sits behind it as an absolutely-positioned layer)
-          instead of pushing the art down like every other rarity. */}
+          Full-Art drops the boxed panel entirely — the name/icon float
+          directly on the full-bleed art (which sits behind as an absolutely-
+          positioned layer) with a text-shadow for legibility instead of a
+          background chip, so nothing visually competes with the art itself.
+          The vignette overlay (below, layered under this header) carries the
+          actual contrast work at the top edge. */}
       <div
         className={cn(
-          'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 border-b-2 z-10',
+          'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 z-10',
           cfg.headerPy,
-          mythic
-            ? 'mythic-bg border-[#7A1420]'
-            : fullArt
-              ? 'border-white/10'
-              : 'border-[var(--c-ink)]/15',
-          fullArt && 'backdrop-blur-[2px]',
+          !fullArt && 'border-b-2',
+          mythic ? 'mythic-bg border-[#7A1420]' : !fullArt && 'border-[var(--c-ink)]/15',
         )}
         style={
-          mythic
+          mythic || fullArt
             ? undefined
-            : fullArt
-              ? { backgroundColor: 'rgba(10,10,14,0.55)' }
-              : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
+            : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
         }
       >
         <span
@@ -965,10 +962,20 @@ export function CardFace({
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
             mythic ? 'text-[var(--c-yellow)]' : fullArt && 'text-white',
           )}
+          style={
+            fullArt
+              ? { textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5)' }
+              : undefined
+          }
           title={def.name}
         >
           <TypeIcon
-            className={cn('shrink-0 opacity-70', cfg.typeIconSize, mythic && 'opacity-90')}
+            className={cn(
+              'shrink-0 opacity-70',
+              cfg.typeIconSize,
+              mythic && 'opacity-90',
+              fullArt && 'opacity-95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]',
+            )}
           />
           <span className="break-words" style={{ fontSize: nameFontPx }}>
             {def.name}
@@ -1063,13 +1070,29 @@ export function CardFace({
           style={
             fullArt
               ? {
-                  background:
-                    'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.65) 100%)',
+                  // A single continuous scrim carries all the contrast work
+                  // now that the header/type-line/text-box no longer paint
+                  // their own boxed backgrounds — dark enough at the very
+                  // top for the name and at the bottom ~45% for stats/
+                  // keywords/rules/flavor to always read regardless of the
+                  // art's own brightness, clear through the middle so the
+                  // art still reads as the whole card. The radial pass adds
+                  // a soft edge/corner vignette so any art unifies with the
+                  // frame instead of looking like a cropped rectangle.
+                  background: [
+                    'radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%)',
+                    'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.08) 16%, rgba(0,0,0,0.02) 38%, rgba(0,0,0,0.15) 52%, rgba(0,0,0,0.62) 66%, rgba(0,0,0,0.96) 100%)',
+                  ].join(', '),
                 }
               : { boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }
           }
         />
-        {def.rarity && (
+        {/* Full-Art's art box IS the whole card (absolute inset-0), so this
+            chip's usual top-right corner is the same corner the header's
+            cost badge occupies in normal flow — showing both collided the
+            two together. The Full-Art treatment already reads as its own
+            rarity at a glance, so skip the redundant chip there instead. */}
+        {def.rarity && !fullArt && (
           <span
             className={cn(
               'absolute top-1 right-1 font-black rounded-full leading-tight',
@@ -1123,142 +1146,172 @@ export function CardFace({
         )}
       </div>
 
-      {/* Type / rarity / stat line — Full-Art gives it its own semi-transparent
-          pill so it stays legible sitting directly on the art behind it. */}
-      <div
-        className={cn(
-          'relative z-10 flex items-center justify-between shrink-0',
-          cfg.typeLine,
-          fullArt ? 'mx-1.5 px-1.5 py-0.5 rounded-sm backdrop-blur-[2px]' : 'px-1.5',
-        )}
-        style={fullArt ? { backgroundColor: 'rgba(10,10,14,0.5)' } : undefined}
-      >
-        <span
+      {/* Full-Art pins the type-line + text-box group to the bottom edge as
+          one block (via this wrapper) instead of letting it sit directly
+          under the header like every other rarity — that leaves a real
+          clear window of art in the middle of the card instead of the art
+          only ever peeking through above/below two stacked text panels.
+          `display: contents` makes the wrapper invisible to layout for
+          every other rarity, so their structure/behavior is unchanged. */}
+      <div className={fullArt ? 'flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
+        {/* Type / rarity / stat line — sits on the same continuous bottom
+          scrim as the text box below it now (no boxed pill of its own),
+          reading as one unbroken panel over the art instead of a stack of
+          separate floating chips. */}
+        <div
           className={cn(
-            'font-bold uppercase truncate',
-            fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+            'relative z-10 flex items-center justify-between shrink-0',
+            cfg.typeLine,
+            'px-1.5',
           )}
         >
-          {def.type}
-          {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
-        </span>
-        {def.type === 'Unit' &&
-          (live ? (
-            // Live battlefield stats in the same StatChip slots the printed
-            // values use: green = buffed above printed, red = below printed /
-            // damaged, printed value struck through inside the chip.
-            <span
-              className="flex items-center gap-1 shrink-0"
-              title={`Printed ${def.atk}/${def.hp}`}
-            >
-              <StatChip
-                icon={Swords}
-                value={live.atk}
-                printed={def.atk}
-                tier={size}
-                tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
-              />
+          <span
+            className={cn(
+              'font-bold uppercase truncate',
+              fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+            )}
+            style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+          >
+            {def.type}
+            {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+          </span>
+          {def.type === 'Unit' &&
+            (live ? (
+              // Live battlefield stats in the same StatChip slots the printed
+              // values use: green = buffed above printed, red = below printed /
+              // damaged, printed value struck through inside the chip.
+              <span
+                className="flex items-center gap-1 shrink-0"
+                title={`Printed ${def.atk}/${def.hp}`}
+              >
+                <StatChip
+                  icon={Swords}
+                  value={live.atk}
+                  printed={def.atk}
+                  tier={size}
+                  tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
+                />
+                <StatChip
+                  icon={Heart}
+                  value={live.hp}
+                  maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
+                  printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                  tier={size}
+                  tint={
+                    live.hp < live.maxHp
+                      ? 'var(--c-red)'
+                      : live.maxHp > (def.hp ?? 0)
+                        ? '#16A34A'
+                        : '#22C55E'
+                  }
+                />
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 shrink-0">
+                <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
+                <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
+              </span>
+            ))}
+          {def.type === 'Leader' && (
+            <span className="shrink-0">
               <StatChip
                 icon={Heart}
-                value={live.hp}
-                maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                value={def.hp}
+                maxValue={maxHp}
                 tier={size}
                 tint={
-                  live.hp < live.maxHp
+                  maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
                     ? 'var(--c-red)'
-                    : live.maxHp > (def.hp ?? 0)
-                      ? '#16A34A'
-                      : '#22C55E'
+                    : '#22C55E'
                 }
               />
             </span>
-          ) : (
-            <span className="flex items-center gap-1 shrink-0">
-              <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
-              <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
-            </span>
-          ))}
-        {def.type === 'Leader' && (
-          <span className="shrink-0">
-            <StatChip
-              icon={Heart}
-              value={def.hp}
-              maxValue={maxHp}
-              tier={size}
-              tint={
-                maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
-                  ? 'var(--c-red)'
-                  : '#22C55E'
-              }
-            />
-          </span>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
+        {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
           panel (a real "text box" like a printed card) instead of floating
           directly on the paper background. flex-1 so it fills the remaining
-          height and pushes the footer to the bottom. Full-Art swaps this for
-          a dark, semi-transparent glass panel so it reads over the art
-          behind it instead of the paper-tinted version. */}
-      <div
-        className={cn(
-          'relative z-10 flex-1 min-h-0 flex flex-col mx-1.5 mt-1 mb-1 rounded-[3px] border',
-          cfg.textBoxPad,
-          fullArt
-            ? 'border-white/15 backdrop-blur-[2px] text-white'
-            : mythic
-              ? 'border-[#7A1420]/40'
-              : 'border-[var(--c-ink)]/15',
-        )}
-        style={{
-          backgroundColor: fullArt
-            ? 'rgba(10,10,14,0.55)'
-            : mythic
-              ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-              : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
-        }}
-      >
-        {kwList(def).length > 0 && cfg.keywordMax > 0 && (
-          <div className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}>
-            {kwList(def)
-              .slice(0, cfg.keywordMax)
-              .map((kw) => (
-                <KeywordChip
-                  key={kw}
-                  kw={kw}
-                  small={cfg.keywordSmall}
-                  autoIntroduce={introduceKeywords}
-                />
-              ))}
-          </div>
-        )}
-
-        {rules.length > 0 && (
-          <div
-            className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
-          >
-            {cfg.rulesMultiline ? (
-              rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
-            ) : (
-              <div>{renderKeywordText(rules.join(' · '), true)}</div>
-            )}
-          </div>
-        )}
-
-        {cfg.showFlavor && def.flavor && (
-          <div className="mt-1 pt-1 border-t border-[var(--c-ink)]/15">
-            <p
-              className={cn('leading-snug break-words', set.className)}
-              style={{ fontSize: flavorFontPx }}
+          height and pushes the footer to the bottom. Full-Art drops the
+          boxed panel — no border, no background of its own, no side margin
+          — so it reads as the same unbroken bottom scrim as the type line
+          above it rather than a separate floating glass rectangle; the
+          vignette overlay behind the art is what actually darkens this
+          whole region, with a per-line text-shadow as a legibility backstop
+          for whatever the art itself looks like underneath. */}
+        <div
+          className={cn(
+            'relative z-10 flex flex-col',
+            fullArt ? 'shrink-0' : 'flex-1 min-h-0',
+            cfg.textBoxPad,
+            fullArt
+              ? 'text-white'
+              : cn(
+                  'mx-1.5 mt-1 mb-1 rounded-[3px] border',
+                  mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
+                ),
+          )}
+          style={
+            fullArt
+              ? undefined
+              : {
+                  backgroundColor: mythic
+                    ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
+                    : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
+                }
+          }
+        >
+          {kwList(def).length > 0 && cfg.keywordMax > 0 && (
+            <div
+              className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}
             >
-              {def.flavor}
-            </p>
-          </div>
-        )}
+              {kwList(def)
+                .slice(0, cfg.keywordMax)
+                .map((kw) => (
+                  <KeywordChip
+                    key={kw}
+                    kw={kw}
+                    small={cfg.keywordSmall}
+                    autoIntroduce={introduceKeywords}
+                  />
+                ))}
+            </div>
+          )}
 
-        <div className="flex-1" />
+          {rules.length > 0 && (
+            <div
+              className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
+              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+            >
+              {cfg.rulesMultiline ? (
+                rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
+              ) : (
+                <div>{renderKeywordText(rules.join(' · '), true)}</div>
+              )}
+            </div>
+          )}
+
+          {cfg.showFlavor && def.flavor && (
+            <div
+              className={cn(
+                'mt-1 pt-1 border-t',
+                fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
+              )}
+            >
+              <p
+                className={cn('leading-snug break-words', set.className)}
+                style={{
+                  fontSize: flavorFontPx,
+                  textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+                }}
+              >
+                {def.flavor}
+              </p>
+            </div>
+          )}
+
+          {!fullArt && <div className="flex-1" />}
+        </div>
       </div>
 
       {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}
