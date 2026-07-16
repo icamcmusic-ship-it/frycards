@@ -224,18 +224,28 @@ function AbilityPill({
  * ancestors that would otherwise clip an absolutely-positioned popup.
  * Purely a view — pointer-events-none, so it never steals the hover/click
  * the small card underneath needs for its own targeting affordances. */
+/** The `full` card tier (240×336) is still too small to comfortably read
+ * rules text once it's shrunk to fit a text-heavy card (see the dynamic
+ * shrink-to-fit in CardFaceV4) — this scales the hover preview up further,
+ * on top of already being the largest fixed tier, purely as a visual
+ * transform (layout box is unaffected, which is fine: this preview is a
+ * pointer-events-none portal overlay, never part of document flow). */
+export const HOVER_PREVIEW_SCALE = 1.55;
+
 function useHoverPreview<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const { w: fullW, h: fullH } = CARD_SIZES.full;
+  const scaledW = fullW * HOVER_PREVIEW_SCALE;
+  const scaledH = fullH * HOVER_PREVIEW_SCALE;
   const show = () => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const vw = window.visualViewport?.width ?? window.innerWidth;
     const vh = window.visualViewport?.height ?? window.innerHeight;
-    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - fullW / 2), vw - fullW - 8);
-    const openAbove = rect.top - fullH - 10 >= 8;
-    const top = openAbove ? rect.top - fullH - 10 : Math.min(rect.bottom + 10, vh - fullH - 8);
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - scaledW / 2), vw - scaledW - 8);
+    const openAbove = rect.top - scaledH - 10 >= 8;
+    const top = openAbove ? rect.top - scaledH - 10 : Math.min(rect.bottom + 10, vh - scaledH - 8);
     setPos({ top, left });
   };
   const hide = () => setPos(null);
@@ -320,7 +330,7 @@ function HoverPreview({
   return createPortal(
     <div
       className="fixed z-[9990] pointer-events-none drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
-      style={{ top: pos.top, left: pos.left }}
+      style={{ top: pos.top, left: pos.left, transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
     >
       {children}
     </div>,
@@ -2176,16 +2186,29 @@ export function GameV4({
       >
         {previewCard && previewInfo && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-stretch gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs">
-            <CardFace
-              def={previewCard.def}
-              size="full"
-              introduceKeywords
-              effectiveThreshold={
-                previewCard.def.threshold !== undefined
-                  ? effThreshold(g, HUMAN, previewCard.def)
-                  : undefined
-              }
-            />
+            <div
+              className="relative shrink-0"
+              style={{
+                width: CARD_SIZES.full.w * HOVER_PREVIEW_SCALE,
+                height: CARD_SIZES.full.h * HOVER_PREVIEW_SCALE,
+              }}
+            >
+              <div
+                className="absolute top-0 left-0"
+                style={{ transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
+              >
+                <CardFace
+                  def={previewCard.def}
+                  size="full"
+                  introduceKeywords
+                  effectiveThreshold={
+                    previewCard.def.threshold !== undefined
+                      ? effThreshold(g, HUMAN, previewCard.def)
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
             <div className="flex flex-col gap-1.5 w-[160px]">
               <button
                 onClick={closePreview}
