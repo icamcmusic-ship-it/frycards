@@ -57,7 +57,13 @@ export function CreditChip({ amount }: { amount: number }) {
 
 /** Inline "coin glyph + amount" — the standalone equivalent of CreditChip's
  * number for use inline in running text/buttons instead of a "$" prefix. */
-export function Credits({ amount, className }: { amount: number | null | undefined; className?: string }) {
+export function Credits({
+  amount,
+  className,
+}: {
+  amount: number | null | undefined;
+  className?: string;
+}) {
   return (
     <span className={cn('inline-flex items-center gap-0.5', className)}>
       <Coins className="w-3 h-3 shrink-0" /> {fmtCredits(amount)}
@@ -120,12 +126,12 @@ export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: 
 export function MetaHeader({ title, onBack }: { title: string; onBack: () => void }) {
   const { profile } = useMeta();
   return (
-    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-ink)]">
-      <div className="flex items-center gap-3">
+    <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-ink)]">
+      <div className="flex items-center gap-3 min-w-0">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">{title}</h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)] truncate">{title}</h1>
       </div>
       {profile && (
         <div className="flex items-center gap-2">

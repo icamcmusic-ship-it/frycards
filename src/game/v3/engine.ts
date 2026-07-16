@@ -581,8 +581,18 @@ export function applyEffect(
       break;
     }
     case 'mend': {
-      const t = eff.target === 'friendlyLeader' ? p.leader : (find(targetIid) ?? p.leader);
-      if (t.owner === ownerId) t.damage = Math.max(0, t.damage - v);
+      // §5 targeting: a 'friendlyUnit'-only Mend must fizzle when no legal
+      // Unit target exists (or the supplied iid is illegal) — it never
+      // spills onto the Leader. Only 'friendlyAny'/'friendlyLeader' may
+      // default to the Leader.
+      let t: Inst | undefined;
+      if (eff.target === 'friendlyLeader') t = p.leader;
+      else if (eff.target === 'self') t = self;
+      else {
+        t = findFor(eff.target, targetIid);
+        if (!t && eff.target === 'friendlyAny') t = p.leader;
+      }
+      if (t && t.owner === ownerId) t.damage = Math.max(0, t.damage - v);
       break;
     }
     case 'draw':
@@ -984,8 +994,11 @@ export function castFromHand(
   }
   if (c.def.onCast && targetIid) {
     // Caller-specified target overrides autoTarget: pre-resolve here.
-    g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
+    // (Stat counting stays inside the Charm/Event branch — a targeted Unit
+    // falls through to enterPlay(), which counts the cast itself; counting
+    // here too double-counted every targeted Unit cast.)
     if (c.def.type === 'Charm' || c.def.type === 'Event') {
+      g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
       applyEffect(g, p.id, withCrescendo(p, c, c.def.onCast), targetIid, c);
       queueAftershock(g, p, c);
       const eff = effThreshold(g, p.id, c.def);

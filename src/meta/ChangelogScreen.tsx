@@ -73,7 +73,7 @@ const ENTRIES: ChangelogEntry[] = [
       'Fixed a visible "snap" on the pack-opening summary screen where the BEST PULL card jumped right as its entrance animation finished.',
       'Pack opening: click a revealed card to advance to the next one, and quicksell commons/uncommons straight from the haul summary. Collection also gained a "QUICKSELL ALL FOIL" button and a one-click bulk quicksell for spare commons/uncommons.',
       'Removed the twelve prebuilt archetype decks — playing without a saved deck (or as a guest) now rolls one freshly randomized legal deck instead, the same way the CPU always has.',
-      'Pity reworked: removed the foil-streak and Full-Art/Mythic pity mechanics — the only one left is a Super-Rare (or better) guaranteed every 10 packs, shown as a progress readout in the Store\'s drop-odds panel.',
+      "Pity reworked: removed the foil-streak and Full-Art/Mythic pity mechanics — the only one left is a Super-Rare (or better) guaranteed every 10 packs, shown as a progress readout in the Store's drop-odds panel.",
       'Four Leaders were rebalanced down to Rare rarity; the Starter Box Leader picker now only offers Rare-or-below Leaders.',
       'Full-Art retired from the active card list for now — those 8 cards were reassigned to Mythic, Ultra-Rare or Super-Rare.',
       'New universal card template with a dice-medallion cost badge, rounded rarity/keyword pill styling and a rarity-tinted header — used everywhere a card is shown: match, Collection, Deck Builder, pack opening and the new expanded card viewer.',

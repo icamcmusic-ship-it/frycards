@@ -225,9 +225,12 @@ function playSnaps(g: Game, p: Player) {
 }
 
 function chooseReroll(g: Game, p: Player): number[] {
-  const values = rollValues(p);
+  // Count only unplaced dice — Snap casts can place dice before the reroll
+  // window, and a placed die's value must not anchor the "keep" cluster
+  // (we can't keep-or-reroll it anyway).
   const counts: Record<number, number> = {};
-  for (const v of values) counts[v] = (counts[v] || 0) + 1;
+  for (const d of p.dice) if (!d.placed) counts[d.value] = (counts[d.value] || 0) + 1;
+  if (Object.keys(counts).length === 0) return [];
 
   // Figure out what this hand actually wants: straight-family or matching-family
   // combos, and the set of Cast thresholds we'd like at least one die to reach.
@@ -282,7 +285,15 @@ function locScore(
   let s = 0;
   if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
   if (c.def.ability) s += 2;
-  const tierOrder = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'];
+  const tierOrder = [
+    'Common',
+    'Uncommon',
+    'Rare',
+    'Super-Rare',
+    'Full-Art',
+    'Ultra-Rare',
+    'Mythic',
+  ];
   s += tierOrder.indexOf(c.def.rarity || 'Common') * 0.3;
   return s;
 }
@@ -467,7 +478,8 @@ function playPlacement(g: Game, p: Player) {
         continue;
       // Only skip a board-wide buff on a near-empty board — a self/single-
       // target buff is still worth using even with just one Unit in play.
-      if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2) continue;
+      if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2)
+        continue;
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
       if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) {
         progress = true;
@@ -581,7 +593,7 @@ function playCombat(g: Game, p: Player) {
         // Free kills (no death-back) are always taken; only the optional
         // trade-with-losses is subject to the face-vs-trade roll.
         target =
-          bigThreat ?? safeKill ?? (wantsFace ? undefined : valueKill ?? clearKill) ?? opp.leader;
+          bigThreat ?? safeKill ?? (wantsFace ? undefined : (valueKill ?? clearKill)) ?? opp.leader;
       }
     }
     if (!attack(g, att.iid, target.iid)) {

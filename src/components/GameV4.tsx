@@ -231,9 +231,14 @@ function useHoverPreview<T extends HTMLElement>() {
   const show = () => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
-    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - fullW / 2), window.innerWidth - fullW - 8);
+    const left = Math.min(
+      Math.max(8, rect.left + rect.width / 2 - fullW / 2),
+      window.innerWidth - fullW - 8,
+    );
     const openAbove = rect.top - fullH - 10 >= 8;
-    const top = openAbove ? rect.top - fullH - 10 : Math.min(rect.bottom + 10, window.innerHeight - fullH - 8);
+    const top = openAbove
+      ? rect.top - fullH - 10
+      : Math.min(rect.bottom + 10, window.innerHeight - fullH - 8);
     setPos({ top, left });
   };
   const hide = () => setPos(null);
@@ -293,12 +298,17 @@ function BoardUnit({
   const exhausted = u.hasAttacked || u.abilityUsed;
   const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
   const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
-  const hover = useHoverPreview<HTMLDivElement>();
+  const {
+    ref: hoverRef,
+    pos: hoverPos,
+    show: hoverShow,
+    hide: hoverHide,
+  } = useHoverPreview<HTMLDivElement>();
   return (
     <div
-      ref={hover.ref}
-      onMouseEnter={hover.show}
-      onMouseLeave={hover.hide}
+      ref={hoverRef}
+      onMouseEnter={hoverShow}
+      onMouseLeave={hoverHide}
       className={cn(
         'relative shrink-0',
         flash && 'gv4-attack-flash',
@@ -315,7 +325,7 @@ function BoardUnit({
         introduceKeywords
         onClick={onClick}
       />
-      <HoverPreview pos={hover.pos}>
+      <HoverPreview pos={hoverPos}>
         <CardFace def={u.def} size="full" live={{ atk, hp, maxHp }} />
       </HoverPreview>
       <div className="absolute -top-1.5 -right-1.5 z-20 flex gap-0.5">
@@ -421,9 +431,7 @@ function LeaderPanel({
         maxHp={maxHp}
         introduceKeywords
         onClick={onClickTarget ?? onInspect}
-        badge={
-          resolveOn ? `RESOLVE −${l.def.resolve!.x}` : toll > 0 ? `TOLL −${toll}` : undefined
-        }
+        badge={resolveOn ? `RESOLVE −${l.def.resolve!.x}` : toll > 0 ? `TOLL −${toll}` : undefined}
       />
       {ab && (
         <AbilityPill
@@ -899,9 +907,7 @@ export function GameV4({
     if (stage === 'preRoll' && !c.def.snap)
       return { ok: false, why: 'Only Snap Charms before the reroll' };
     const dv =
-      dieIdx !== null && me.dice[dieIdx] && !me.dice[dieIdx].placed
-        ? me.dice[dieIdx].value
-        : null;
+      dieIdx !== null && me.dice[dieIdx] && !me.dice[dieIdx].placed ? me.dice[dieIdx].value : null;
     if (c.def.comboGate) {
       if (me.comboGateCastThisTurn) return { ok: false, why: 'One Combo-gated card per turn' };
       if (!matchesPattern(rollValues(me), c.def.comboGate))
@@ -1125,7 +1131,12 @@ export function GameV4({
     }
     let ok = false;
     if (pending.kind === 'cast')
-      ok = castFromHand(g, pending.dieIndices ?? pending.dieIndex ?? selDie!, pending.cardIid, targetIid);
+      ok = castFromHand(
+        g,
+        pending.dieIndices ?? pending.dieIndex ?? selDie!,
+        pending.cardIid,
+        targetIid,
+      );
     else if (pending.kind === 'ability')
       ok = pending.rallySourceIid
         ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
@@ -1542,8 +1553,7 @@ export function GameV4({
         chk: canCastNow(previewCard),
         auto: pickAutoDie(previewCard),
         isSum: previewCard.def.castCostKind === 'sum' && !previewCard.def.comboGate,
-        canScrapNow:
-          hasKw(previewCard.def, 'Scrap') && stage === 'placement' && selDie !== null,
+        canScrapNow: hasKw(previewCard.def, 'Scrap') && stage === 'placement' && selDie !== null,
       }
     : null;
   const previewCastable =
@@ -2175,7 +2185,7 @@ export function GameV4({
         <div className="flex items-center gap-2 px-2 pt-1">
           <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
             HAND {me.hand.length}/{HAND_LIMIT}
-            {echoPick ? ' — pick a card to DISCARD for Echo' : ' · hover a card to preview'}
+            {echoPick ? ' — pick a card to DISCARD for Echo' : ' · tap or hover a card to preview'}
           </span>
         </div>
         {/* A real card-fan: each card fanned out on a slight rotation/arc
@@ -2352,8 +2362,8 @@ export function GameV4({
 
       {/* Forced discard (hand size &gt; 8 at End Phase) — player picks which cards */}
       {forcedDiscard && (
-        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl">
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl my-auto">
             <div className="heading-font text-xl mb-1">Discard Down to {HAND_LIMIT}</div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
               Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
@@ -2383,7 +2393,7 @@ export function GameV4({
               onClick={confirmForcedDiscard}
               disabled={forcedDiscard.picks.length !== forcedDiscard.needed}
               className={cn(
-                'heading-font text-xs px-5 py-2 ink-border-sm shadow-hard-black-xs',
+                'heading-font text-xs px-5 py-2 ink-border-sm shadow-hard-black-xs sticky bottom-2',
                 forcedDiscard.picks.length === forcedDiscard.needed
                   ? 'btn-pop bg-[var(--c-red)] text-white'
                   : 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/50 cursor-not-allowed',
@@ -2424,7 +2434,9 @@ export function GameV4({
                 </React.Fragment>
               ))}
             </div>
-            <div className="flex gap-4 justify-center flex-wrap">
+            {/* Sticky so the actions stay reachable on phones, where 7 stacked
+                cards push the bottom of the panel well past the viewport. */}
+            <div className="flex gap-4 justify-center flex-wrap sticky bottom-0 bg-[var(--c-paper)] py-2 -mb-2">
               <button
                 onClick={afterMulligan}
                 className="btn-pop heading-font text-base bg-[var(--c-yellow)] px-8 py-3 ink-border-md shadow-hard-black-xs"

@@ -200,7 +200,7 @@ const SECTIONS = [
       ],
       [
         'Reading it',
-        'The pair of 3s satisfies Any Pair — the Event can be cast with ANY one die (the 2 is perfect, it pays nothing else). The 5 or 6 pays the Unit. The remaining 6+3 (or 5+3) covers the Charm\'s Σ7 sum cost.',
+        "The pair of 3s satisfies Any Pair — the Event can be cast with ANY one die (the 2 is perfect, it pays nothing else). The 5 or 6 pays the Unit. The remaining 6+3 (or 5+3) covers the Charm's Σ7 sum cost.",
       ],
       [
         'Order matters',
@@ -258,7 +258,7 @@ const SECTIONS = [
       ],
       [
         'Fighting from behind',
-        'Behind on board? Look for board wipes and mass Sap on high-rarity Events, your Leader\'s Ultimate (unlocks on a fixed turn — plan around it), and Resolve Leaders whose abilities get CHEAPER below half HP. The comeback tools are real — losing the early board is not losing the game.',
+        "Behind on board? Look for board wipes and mass Sap on high-rarity Events, your Leader's Ultimate (unlocks on a fixed turn — plan around it), and Resolve Leaders whose abilities get CHEAPER below half HP. The comeback tools are real — losing the early board is not losing the game.",
       ],
       [
         'Ability vs attack',
@@ -270,7 +270,7 @@ const SECTIONS = [
       ],
       [
         'Hand discipline',
-        'The End Phase cap is 8 — banking cards is fine, flooding is not. If you\'re at 9+ going into End Phase, cast something cheap rather than discarding it for free.',
+        "The End Phase cap is 8 — banking cards is fine, flooding is not. If you're at 9+ going into End Phase, cast something cheap rather than discarding it for free.",
       ],
     ],
   },
@@ -287,7 +287,7 @@ const SECTIONS = [
       ],
       [
         'Full-Art',
-        "A visually distinct print tier whose art fills the entire card edge-to-edge (some Full-Art cards are short looping video clips instead of a still image) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, pack odds).",
+        'A visually distinct print tier whose art fills the entire card edge-to-edge (some Full-Art cards are short looping video clips instead of a still image) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, pack odds).',
       ],
       [
         'Foil',
@@ -316,7 +316,7 @@ const SECTIONS = [
       ],
       [
         'Boxes',
-        'Boxes are big multi-booster rips at a bulk discount — the Standard Box is six boosters\' worth (36 cards) in one opening, ending in a guaranteed-foil box topper (Rare floor).',
+        "Boxes are big multi-booster rips at a bulk discount — the Standard Box is six boosters' worth (36 cards) in one opening, ending in a guaranteed-foil box topper (Rare floor).",
       ],
       [
         'Leader Pack',
@@ -406,7 +406,7 @@ const SECTIONS = [
       ],
       [
         'News Center',
-        "One place for the newest changelog headline, dev blog posts, and a live feed of every Serialized card pulled server-wide.",
+        'One place for the newest changelog headline, dev blog posts, and a live feed of every Serialized card pulled server-wide.',
       ],
       [
         'Profile & Settings',

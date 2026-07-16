@@ -8,13 +8,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyCardPool, POOL_V4 } from '../src/game/v3/cardpool';
+import { GENERATED_CARDS } from '../src/game/generated-cards';
 import { CardTemplate } from '../src/types';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const templates: CardTemplate[] = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'live-cards.json'), 'utf8'),
-);
-applyCardPool(templates);
+const livePath = path.join(__dirname, 'live-cards.json');
+if (fs.existsSync(livePath)) {
+  const templates: CardTemplate[] = JSON.parse(fs.readFileSync(livePath, 'utf8'));
+  applyCardPool(templates);
+  console.log(`Loaded ${templates.length} live card templates.`);
+} else {
+  applyCardPool(GENERATED_CARDS);
+  console.log('live-cards.json not found — analyzing the bundled generated-cards.ts catalog.');
+}
 
 function costKind(def: (typeof POOL_V4)[number]): string {
   if (def.type === 'Location') return 'free (Location)';

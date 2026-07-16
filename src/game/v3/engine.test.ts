@@ -838,7 +838,9 @@ test('§4: a die resting on an Ability Slot returns to the supply the instant it
   // Unit case: activate an ability, then let the unit die mid-turn (Sap) —
   // its Ability Slot die must also come back.
   const healer = makeInst(
-    mkU('healer', { ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } } }),
+    mkU('healer', {
+      ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } },
+    }),
     'A',
   );
   p.board.push(healer);
@@ -996,11 +998,24 @@ test('Snap casts during the Reroll Phase, plain Charms cannot, and the Snap die 
   startTurn(g);
   const p = g.players.A;
   const snapC = makeInst(
-    { id: 'snapc', name: 'snapc', type: 'Charm', threshold: 1, snap: true, onCast: { action: 'draw', value: 1, target: 'none' } },
+    {
+      id: 'snapc',
+      name: 'snapc',
+      type: 'Charm',
+      threshold: 1,
+      snap: true,
+      onCast: { action: 'draw', value: 1, target: 'none' },
+    },
     'A',
   );
   const plainC = makeInst(
-    { id: 'plainc', name: 'plainc', type: 'Charm', threshold: 1, onCast: { action: 'draw', value: 1, target: 'none' } },
+    {
+      id: 'plainc',
+      name: 'plainc',
+      type: 'Charm',
+      threshold: 1,
+      onCast: { action: 'draw', value: 1, target: 'none' },
+    },
     'A',
   );
   p.hand.push(snapC, plainC);
@@ -1031,7 +1046,14 @@ test('Crescendo counts every placed 6 this turn including its own casting die, n
   p.dice[2].placed = true; // placed non-6: must not count
   p.dice[3].value = 6; // UNplaced 6: must not count
   const ev = makeInst(
-    { id: 'cre', name: 'cre', type: 'Event', threshold: 1, crescendo: { x: 1 }, onCast: { action: 'sap', value: 2, target: 'enemyLeader' } },
+    {
+      id: 'cre',
+      name: 'cre',
+      type: 'Event',
+      threshold: 1,
+      crescendo: { x: 1 },
+      onCast: { action: 'sap', value: 2, target: 'enemyLeader' },
+    },
     'A',
   );
   p.hand.push(ev);
@@ -1047,7 +1069,10 @@ test("Aftershock fires exactly once, at the start of the owner's next turn — n
   const p = g.players.A;
   const ev = makeInst(
     {
-      id: 'aft', name: 'aft', type: 'Event', threshold: 1,
+      id: 'aft',
+      name: 'aft',
+      type: 'Event',
+      threshold: 1,
       onCast: { action: 'sap', value: 4, target: 'enemyLeader' },
       aftershock: { action: 'sap', value: 2, target: 'enemyLeader' },
     },
@@ -1083,7 +1108,13 @@ test('Excavate: no discount the turn cast, -X per full controller turn (opponent
   reroll(g, []);
   const p = g.players.A;
   const loc = makeInst(
-    { id: 'exl', name: 'exl', type: 'Location', excavate: { x: 2 }, ability: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } } },
+    {
+      id: 'exl',
+      name: 'exl',
+      type: 'Location',
+      excavate: { x: 2 },
+      ability: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
+    },
     'A',
   );
   p.hand.push(loc);
@@ -1115,7 +1146,10 @@ test('Excavate: no discount the turn cast, -X per full controller turn (opponent
 test('Contested doubles the Location passive only while the opponent controls no Location', () => {
   const g = freshGame();
   const p = g.players.A;
-  p.location = makeInst({ id: 'cl', name: 'cl', type: 'Location', contested: true, locPassive: 'ATK_ALL' }, 'A');
+  p.location = makeInst(
+    { id: 'cl', name: 'cl', type: 'Location', contested: true, locPassive: 'ATK_ALL' },
+    'A',
+  );
   const u = makeInst(mkU('cu', { atk: 2 }), 'A');
   p.board.push(u);
   expect(effAtk(g, u)).toBe(4); // 2 + 1x2 while uncontested
@@ -1131,7 +1165,12 @@ test('Pitch mends 1 per unplaced die at End Phase; Tribute needs 2+ pitched dice
   const p = g.players.A;
   p.leader.damage = 10;
   p.location = makeInst(
-    { id: 'tl', name: 'tl', type: 'Location', tribute: { action: 'mend', value: 3, target: 'friendlyLeader' } },
+    {
+      id: 'tl',
+      name: 'tl',
+      type: 'Location',
+      tribute: { action: 'mend', value: 3, target: 'friendlyLeader' },
+    },
     'A',
   );
   p.dice.forEach((d, i) => (d.placed = i !== 0)); // exactly 1 unplaced
@@ -1155,7 +1194,12 @@ test('Twin staged passive ticks at the start of each controller turn AFTER stagi
   const p = g.players.A;
   const tw = makeInst(
     {
-      id: 'twp', name: 'twp', type: 'Unit', threshold: 1, atk: 1, hp: 1,
+      id: 'twp',
+      name: 'twp',
+      type: 'Unit',
+      threshold: 1,
+      atk: 1,
+      hp: 1,
       keywords: ['Twin'],
       stagedPassive: { action: 'sap', value: 1, target: 'enemyLeader' },
     },
@@ -1197,6 +1241,52 @@ test('RULING: Bulwark reduces retaliation BEFORE Frenzy doubles it on the bonus 
   expect(fz.damage).toBe(2 + 4); // second swing: (3 - 1) x 2, not 3x2 - 1
 });
 
+test('BUG FIXED: a targeted Unit cast with onCast is counted once in stats.casts, not twice', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  const enemy = makeInst(mkU('statsTgt', { atk: 0, hp: 5 }), 'B');
+  g.players.B.board.push(enemy);
+  const u = makeInst(
+    mkU('statsUnit', { onCast: { action: 'sap', value: 1, target: 'enemyUnit' } }),
+    'A',
+  );
+  p.hand.push(u);
+  p.dice[0].placed = false;
+  p.dice[0].value = 6;
+  expect(castFromHand(g, 0, u.iid, enemy.iid)).toBe(true);
+  expect(g.stats.casts['statsUnit']).toBe(1); // was 2: pre-resolve branch + enterPlay
+  expect(enemy.damage).toBe(1); // effect itself only ever applied once
+});
+
+test("BUG FIXED: a 'friendlyUnit' Mend fizzles with no legal Unit target — it never spills onto the Leader (§5)", () => {
+  const g = freshGame();
+  const p = g.players.A;
+  p.board = [];
+  p.leader.damage = 5;
+  // Empty board, no target: must do nothing at all.
+  applyEffect(g, 'A', { action: 'mend', value: 3, target: 'friendlyUnit' });
+  expect(p.leader.damage).toBe(5);
+  // An illegal (enemy) targetIid must also fizzle, not redirect to the Leader.
+  const enemy = makeInst(mkU('mendEnemy'), 'B');
+  g.players.B.board.push(enemy);
+  enemy.damage = 1;
+  applyEffect(g, 'A', { action: 'mend', value: 3, target: 'friendlyUnit' }, enemy.iid);
+  expect(p.leader.damage).toBe(5);
+  expect(enemy.damage).toBe(1);
+  // A real friendly Unit target still heals normally.
+  const mine = makeInst(mkU('mendMine', { hp: 5 }), 'A');
+  mine.damage = 3;
+  p.board.push(mine);
+  applyEffect(g, 'A', { action: 'mend', value: 2, target: 'friendlyUnit' }, mine.iid);
+  expect(mine.damage).toBe(1);
+  // friendlyAny with no pick still defaults to the Leader (unchanged).
+  applyEffect(g, 'A', { action: 'mend', value: 2, target: 'friendlyAny' });
+  expect(p.leader.damage).toBe(3);
+});
+
 test('VERIFIED CORRECT: exact-cost cards key off the EFFECTIVE threshold — Anchor shifts the exact number required', () => {
   const g = freshGame();
   g.active = 'A';
@@ -1205,7 +1295,15 @@ test('VERIFIED CORRECT: exact-cost cards key off the EFFECTIVE threshold — Anc
   const p = g.players.A;
   p.board.push(makeInst(mkU('ax', { keywords: ['Anchor'] }), 'A'));
   const c = makeInst(
-    { id: 'exc', name: 'exc', type: 'Charm', threshold: 4, castCostKind: 'exact', keywords: ['Anchor'], onCast: { action: 'draw', value: 1, target: 'none' } },
+    {
+      id: 'exc',
+      name: 'exc',
+      type: 'Charm',
+      threshold: 4,
+      castCostKind: 'exact',
+      keywords: ['Anchor'],
+      onCast: { action: 'draw', value: 1, target: 'none' },
+    },
     'A',
   );
   p.hand.push(c);

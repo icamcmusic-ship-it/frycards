@@ -176,7 +176,9 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
       }
       if (!error) return; // legitimately no reward to report (e.g. cooldown)
     }
-    setRewardError("Couldn't record this match's result — check your connection and try again from the menu.");
+    setRewardError(
+      "Couldn't record this match's result — check your connection and try again from the menu.",
+    );
   };
 
   return (
