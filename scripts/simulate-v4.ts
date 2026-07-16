@@ -692,6 +692,21 @@ for (const a of ARCHETYPES) {
   );
 }
 
+console.log('\n--- Pure-random deck win rates (zero deckbuilding skill, whole-pool control group) ---');
+let randW = 0,
+  randN = 0;
+for (const key of Object.keys(R.archN)) {
+  if (!key.startsWith('Random Build #')) continue;
+  console.log(`${key.padEnd(28)} ${pct(R.archW[key] || 0, R.archN[key])}%  (n=${R.archN[key]})`);
+  randW += R.archW[key] || 0;
+  randN += R.archN[key];
+}
+const archAvgW = ARCHETYPES.reduce((s, a) => s + (R.archW[a.label] || 0), 0);
+const archAvgN = ARCHETYPES.reduce((s, a) => s + (R.archN[a.label] || 0), 0);
+console.log(
+  `=> All 8 random decks combined: ${pct(randW, randN)}%  (n=${randN})  vs. all 20 hand-built archetypes combined: ${pct(archAvgW, archAvgN)}%  (n=${archAvgN})`,
+);
+
 console.log('\n--- ISOLATED Location contribution ---');
 console.log(`Location decks:        ${pct(R.locW.loc, R.locW.locN)}%  (n=${R.locW.locN})`);
 console.log(`Location-stripped:     ${pct(R.locW.noloc, R.locW.nolocN)}%  (n=${R.locW.nolocN})`);
