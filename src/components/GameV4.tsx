@@ -697,6 +697,13 @@ export function GameV4({
     dieIndices?: number[];
   } | null>(null);
   const [showDiscard, setShowDiscard] = useState(false);
+  // In-game replacement for window.confirm — native confirm dialogs look
+  // jarring against the styled UI and are easy to accidentally dismiss with
+  // a stray tap outside on mobile.
+  const [confirmDialog, setConfirmDialog] = useState<{
+    text: string;
+    onConfirm: () => void;
+  } | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   // v4.3 hand preview: the hand card currently enlarged above the bottom
@@ -1640,11 +1647,14 @@ export function GameV4({
       {/* Top bar */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
         <button
-          onClick={() =>
-            (stage === 'over' ||
-              window.confirm('Concede this match? This will count as a loss.')) &&
-            concede()
-          }
+          onClick={() => {
+            if (stage === 'over') concede();
+            else
+              setConfirmDialog({
+                text: 'Concede this match? This will count as a loss.',
+                onConfirm: concede,
+              });
+          }}
           className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
         >
           ✕ CONCEDE
@@ -1879,8 +1889,8 @@ export function GameV4({
       </div>
 
       {/* Midline: dice tray + log */}
-      <div className="flex items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-        <div className="flex gap-1.5 items-center">
+      <div className="flex flex-wrap items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
+        <div className="flex gap-1.5 items-center shrink-0">
           {me.dice.map((d, i) => {
             const isRolling = rollingDice.has(i);
             const faceDown = stage === 'awaitRoll';
@@ -1971,7 +1981,7 @@ export function GameV4({
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-0 max-h-[58px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+        <div className="flex-1 min-w-[140px] max-h-[58px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
           <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
             Battle Log
           </div>
@@ -2066,9 +2076,13 @@ export function GameV4({
                 {stage === 'preRoll' && (
                   <button
                     onClick={() => {
-                      if (!window.confirm(`Abandon ${s.def.name} and return it to hand?`)) return;
-                      abandonTwin(g, s.iid);
-                      bump();
+                      setConfirmDialog({
+                        text: `Abandon ${s.def.name} and return it to hand?`,
+                        onConfirm: () => {
+                          abandonTwin(g, s.iid);
+                          bump();
+                        },
+                      });
                     }}
                     title="Abandon (return to hand)"
                     aria-label={`Abandon ${s.def.name} and return it to hand`}
@@ -2324,7 +2338,7 @@ export function GameV4({
 
       {/* Discard drawer */}
       {showDiscard && (
-        <div className="absolute right-2 top-16 bottom-24 w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
+        <div className="absolute right-2 left-2 sm:left-auto top-16 bottom-24 w-auto sm:w-[260px] max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
           <div className="flex justify-between items-center mb-1">
             <span className="heading-font text-[10px] text-[var(--c-yellow)]">DISCARD PILE</span>
             <button
@@ -2425,6 +2439,34 @@ export function GameV4({
           (deck builder, collection, pack reveals), so a card reads
           identically no matter where it's inspected from. */}
       {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
+
+      {/* In-game confirm dialog — styled replacement for window.confirm (see
+          the `confirmDialog` state above). */}
+      {confirmDialog && (
+        <div className="absolute inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center">
+            <div className="text-[12px] font-bold mb-3">{confirmDialog.text}</div>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => {
+                  const { onConfirm } = confirmDialog;
+                  setConfirmDialog(null);
+                  onConfirm();
+                }}
+                className="btn-pop text-[10px] font-bold bg-[var(--c-red)] text-white px-3 py-1 ink-border-sm"
+              >
+                CONFIRM
+              </button>
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="btn-pop text-[10px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-1 ink-border-sm"
+              >
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Forced discard (hand size &gt; 8 at End Phase) — player picks which cards */}
       {forcedDiscard && (

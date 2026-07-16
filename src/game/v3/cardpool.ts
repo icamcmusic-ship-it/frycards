@@ -267,9 +267,14 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.onCast = { action: 'sap', value: 20, target: 'enemyLeader' };
     return base;
   }
-  // v4.1: reactive-support answer — half of all Super-Rare+ Events are board
-  // wipes (Sap X to all enemy Units), the removal density reactive shells need.
-  if (!asCharm && tier >= 3 && hash(c.id) % 2 === 0) {
+  // v4.1: reactive-support answer — half of all Super-Rare Events (tier 3
+  // exactly) are board wipes (Sap X to all enemy Units), the removal density
+  // reactive shells need. Must be tier === 3, not >= 3: the tier >= 4 branch
+  // right below reuses this same `hash(c.id) % 2` roll for its own decision,
+  // so `>= 3` here silently ate every tier >= 4 Event with an even hash,
+  // permanently routing them away from the dedicated tier >= 4 "comeback
+  // pass" logic (its Echo keyword, steeper :bomb cost format, etc).
+  if (!asCharm && tier === 3 && hash(c.id) % 2 === 0) {
     base.onCast = { action: 'sap', value: 2 + tier, target: 'allEnemyUnits' };
     // v4.3: a board wipe earns its old "threshold 6" steepness via a hard
     // numeric/gate cost format instead of a flat die minimum.
