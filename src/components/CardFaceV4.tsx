@@ -67,6 +67,8 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Resolve: 'While your Leader is at or below half HP, its Ability Slot threshold drops.',
   Ultimate:
     'A second, once-per-game Leader Ability Slot, usable starting on a specific turn of yours.',
+  Sap: 'Deals damage directly to the named target, bypassing normal combat.',
+  Mend: 'Heals that much damage from the named target.',
 };
 
 /** v4.3: player-facing display label for each dice-pattern gate. */
@@ -385,6 +387,12 @@ function KeywordPopover({
   );
 }
 
+/** v4.4: Magic the Gathering-style keyword line — the bare keyword name
+ * (clickable/underlined, same glossary popover as any other keyword mention)
+ * immediately followed by its reminder text in italics, so the explainer is
+ * readable straight off the card without needing to click anything. Replaces
+ * the old opaque yellow "badge" pill, which hid the definition behind a tap
+ * and read as a UI chip rather than card text. */
 export function KeywordChip({
   kw,
   small,
@@ -393,9 +401,9 @@ export function KeywordChip({
   key?: React.Key;
   kw: string;
   small?: boolean;
-  /** Auto-opens this chip's popover once per device the first time this
-   * keyword is ever seen (tracked in localStorage), so new players discover
-   * the glossary exists instead of needing to guess a pill is clickable.
+  /** Auto-opens this keyword's popover once per device the first time it's
+   * ever seen (tracked in localStorage), so new players discover the
+   * glossary exists instead of needing to guess the name is clickable.
    * Only pass this from live-match contexts (hand/board) — passing it from
    * a screen that renders many cards at once (Collection, Deck Builder)
    * would fire a stack of popovers simultaneously. */
@@ -404,19 +412,19 @@ export function KeywordChip({
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
 
   return (
-    <span className="relative inline-block">
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={open}
-        className={cn(
-          'font-bold bg-[var(--c-yellow)] border border-[var(--c-ink)] leading-tight rounded-full cursor-help',
-          small ? 'text-[6.5px] px-1' : 'text-[9px] px-1.5',
-        )}
-      >
-        {kw}
-      </button>
-      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
+    <span className={cn('leading-snug', small ? 'text-[6.5px]' : 'text-[9px]')}>
+      <span className="relative inline-block">
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={open}
+          className="font-bold underline decoration-dotted underline-offset-2 cursor-help"
+        >
+          {kw}
+        </button>
+        {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
+      </span>
+      {text && <span className="italic opacity-80"> ({text})</span>}
     </span>
   );
 }
@@ -1262,9 +1270,7 @@ export function CardFace({
           }
         >
           {kwList(def).length > 0 && cfg.keywordMax > 0 && (
-            <div
-              className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}
-            >
+            <div className={cn('flex flex-col shrink-0', size !== 'full' && 'min-h-[9px]')}>
               {kwList(def)
                 .slice(0, cfg.keywordMax)
                 .map((kw) => (
