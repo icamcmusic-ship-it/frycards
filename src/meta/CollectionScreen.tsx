@@ -31,7 +31,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('Name');
-  const [inspect, setInspect] = useState<CardDef | null>(null);
+  // Which standalone tile in the grid is open in the inspector — normal,
+  // foil, and each serialized print are now separate tiles (see `entries`
+  // below), so this tracks which variant was actually clicked in addition
+  // to the card itself. The sell/showcase panel below still operates on the
+  // card id as a whole (selling doesn't care which tile you opened it from).
+  const [inspect, setInspect] = useState<{
+    def: CardDef;
+    foil?: boolean;
+    serial?: { number: number; cap: number };
+  } | null>(null);
   const [sellError, setSellError] = useState('');
   const [selling, setSelling] = useState(false);
   const [showcaseBusy, setShowcaseBusy] = useState(false);
@@ -60,6 +69,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     for (const pc of collection) m.set(pc.card_id, { q: pc.quantity, f: pc.foil_quantity });
     return m;
   }, [collection]);
+
+  const serializedByCard = useMemo(() => {
+    const m = new Map<string, typeof serializedCards>();
+    for (const s of serializedCards) {
+      const list = m.get(s.card_id);
+      if (list) list.push(s);
+      else m.set(s.card_id, [s]);
+    }
+    return m;
+  }, [serializedCards]);
 
   // Copies locked into any of the player's decks can't be quicksold until
   // they're removed from every deck — mirrors the quicksell_cards RPC check.
@@ -157,6 +176,35 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     return a.name.localeCompare(b.name);
   });
 
+  // Foil and Serialized copies are their own standalone tiles in the grid —
+  // not a count badge folded into the normal tile — so each is inspectable/
+  // showcaseable on its own. A card's `quantity` (`o.q`) includes any
+  // serialized copies of it (see quicksell_cards' serialized-reserved
+  // check), so those are subtracted out of the normal tile's count here.
+  const entries = useMemo(() => {
+    const out: {
+      def: CardDef;
+      kind: 'normal' | 'foil' | 'serialized';
+      count?: number;
+      serial?: { number: number; cap: number };
+    }[] = [];
+    for (const c of filtered) {
+      const o = owned.get(c.id);
+      const serials = serializedByCard.get(c.id) || [];
+      const normalQty = Math.max(0, (o?.q || 0) - serials.length);
+      const foilQty = o?.f || 0;
+      if (normalQty > 0) out.push({ def: c, kind: 'normal', count: normalQty });
+      if (foilQty > 0) out.push({ def: c, kind: 'foil', count: foilQty });
+      for (const s of serials) {
+        out.push({ def: c, kind: 'serialized', serial: { number: s.serial_number, cap: s.cap } });
+      }
+      if (normalQty === 0 && foilQty === 0 && serials.length === 0) {
+        out.push({ def: c, kind: 'normal', count: 0 });
+      }
+    }
+    return out;
+  }, [filtered, owned, serializedByCard]);
+
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
 
@@ -180,23 +228,23 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
-  const inspectOwned = inspect ? owned.get(inspect.id) : undefined;
+  const inspectOwned = inspect ? owned.get(inspect.def.id) : undefined;
   const inspectLocked = inspect
-    ? inspect.type === 'Leader'
-      ? leadersInUse.has(inspect.id)
+    ? inspect.def.type === 'Leader'
+      ? leadersInUse.has(inspect.def.id)
         ? 1
         : 0
-      : lockedByDecks.get(inspect.id) || 0
+      : lockedByDecks.get(inspect.def.id) || 0
     : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
   const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
-  const inspectShowcased = inspect ? showcase.includes(inspect.id) : false;
+  const inspectShowcased = inspect ? showcase.includes(inspect.def.id) : false;
   // Serialized prints are never foil and can never be quick sold
   // (see quicksell_cards' serialized-reserved check) — reserve that many
   // normal copies from the sell UI so it never offers a sale the
   // server will reject.
   const inspectSerializedReserved = inspect
-    ? serializedCards.filter((s) => s.card_id === inspect.id).length
+    ? serializedCards.filter((s) => s.card_id === inspect.def.id).length
     : 0;
   const normalSellable = Math.max(
     0,
@@ -207,7 +255,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (!inspect || selling || quantity < 1) return;
     setSelling(true);
     setSellError('');
-    const { error } = await quicksellCards(inspect.id, quantity, foil);
+    const { error } = await quicksellCards(inspect.def.id, quantity, foil);
     setSelling(false);
     if (error) {
       setSellError(error);
@@ -361,25 +409,21 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
         )}
 
         <div className="flex flex-wrap gap-3">
-          {filtered.map((c) => {
-            const o = owned.get(c.id);
-            const total = (o?.q || 0) + (o?.f || 0);
-            return (
-              <CardFace
-                key={c.id}
-                def={c}
-                size="full"
-                count={o?.q || 0}
-                foilCount={o?.f || 0}
-                foil={(o?.f || 0) > 0 && (o?.q || 0) === 0}
-                dimmed={total === 0}
-                onClick={() => {
-                  setInspect(c);
-                  setSellError('');
-                }}
-              />
-            );
-          })}
+          {entries.map((e) => (
+            <CardFace
+              key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
+              def={e.def}
+              size="full"
+              count={e.kind !== 'serialized' ? e.count : undefined}
+              foil={e.kind === 'foil'}
+              serial={e.serial}
+              dimmed={e.kind === 'normal' && e.count === 0}
+              onClick={() => {
+                setInspect({ def: e.def, foil: e.kind === 'foil', serial: e.serial });
+                setSellError('');
+              }}
+            />
+          ))}
           {dataLoading && (
             <div className="w-full text-center font-bold text-[var(--c-steel)] py-14 animate-pulse">
               Loading your collection…
@@ -395,13 +439,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
 
       {inspect && (
         <Card3DInspector
-          def={inspect}
-          foil={(inspectOwned?.f || 0) > 0 && (inspectOwned?.q || 0) === 0}
-          canToggleFoil={(inspectOwned?.f || 0) > 0}
+          def={inspect.def}
+          foil={inspect.foil}
+          canToggleFoil={!inspect.serial && (inspectOwned?.f || 0) > 0}
+          serial={inspect.serial}
           meta={[
-            { label: 'Rarity', value: inspect.rarity || 'Common' },
-            { label: 'Set', value: inspect.set || '—' },
-            { label: 'Type', value: inspect.type },
+            { label: 'Rarity', value: inspect.def.rarity || 'Common' },
+            { label: 'Set', value: inspect.def.set || '—' },
+            { label: 'Type', value: inspect.def.type },
+            ...(inspect.serial
+              ? [{ label: 'Serial', value: `#${inspect.serial.number}/${inspect.serial.cap}` }]
+              : []),
             { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
             ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
@@ -409,10 +457,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           onClose={() => setInspect(null)}
           actions={
             <div className="flex flex-col gap-3">
-              <CardMarketValuePanel
-                cardId={inspect.id}
-                foil={(inspectOwned?.f || 0) > 0 && (inspectOwned?.q || 0) === 0}
-              />
+              <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
               <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
                 {inspectTotal > 0 && (
                   <>
@@ -423,7 +468,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       disabled={
                         showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
                       }
-                      onClick={() => toggleShowcase(inspect.id)}
+                      onClick={() => toggleShowcase(inspect.def.id)}
                     >
                       {inspectShowcased
                         ? '★ REMOVE FROM SHOWCASE'
@@ -437,7 +482,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                 {inspectTotal > 0 && (
                   <>
                     <div className="heading-font text-xs text-center mt-1">QUICKSELL</div>
-                    {inspect.type === 'Leader' && (
+                    {inspect.def.type === 'Leader' && (
                       <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
                         Leaders can be sold like any other card — one copy stays reserved while a
                         saved deck still uses it.
@@ -445,7 +490,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     )}
                     {inspectLocked > 0 && (
                       <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
-                        {inspect.type === 'Leader'
+                        {inspect.def.type === 'Leader'
                           ? 'In use by a saved deck — 1 copy reserved'
                           : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
                       </div>
@@ -459,7 +504,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     {sellError && <Notice text={sellError} />}
                     <div className="flex items-center justify-between text-[10px] font-bold">
                       <span>Normal ×{inspectOwned?.q || 0}</span>
-                      <Credits amount={quicksellPrice(inspect.rarity, false)} />
+                      <Credits amount={quicksellPrice(inspect.def.rarity, false)} />
                     </div>
                     <PopButton
                       color="yellow"
@@ -476,7 +521,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                         disabled={selling || normalSellable <= 0}
                         onClick={() => {
                           const n = normalSellable;
-                          if (confirm(`Quicksell all ${n} spare copies of ${inspect.name}?`))
+                          if (confirm(`Quicksell all ${n} spare copies of ${inspect.def.name}?`))
                             handleSell(false, n);
                         }}
                       >
@@ -487,7 +532,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       <>
                         <div className="flex items-center justify-between text-[10px] font-bold mt-1">
                           <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
-                          <Credits amount={quicksellPrice(inspect.rarity, true)} />
+                          <Credits amount={quicksellPrice(inspect.def.rarity, true)} />
                         </div>
                         <PopButton
                           color="red"
@@ -505,7 +550,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                             onClick={() => {
                               const n = Math.min(inspectOwned?.f || 0, inspectSellable);
                               if (
-                                confirm(`Quicksell all ${n} spare foil copies of ${inspect.name}?`)
+                                confirm(
+                                  `Quicksell all ${n} spare foil copies of ${inspect.def.name}?`,
+                                )
                               )
                                 handleSell(true, n);
                             }}

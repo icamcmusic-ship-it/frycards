@@ -962,7 +962,11 @@ export function CardFace({
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
             mythic ? 'text-[var(--c-yellow)]' : fullArt && 'text-white',
           )}
-          style={fullArt ? { textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5)' } : undefined}
+          style={
+            fullArt
+              ? { textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5)' }
+              : undefined
+          }
           title={def.name}
         >
           <TypeIcon
@@ -1150,82 +1154,82 @@ export function CardFace({
           `display: contents` makes the wrapper invisible to layout for
           every other rarity, so their structure/behavior is unchanged. */}
       <div className={fullArt ? 'flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
-      {/* Type / rarity / stat line — sits on the same continuous bottom
+        {/* Type / rarity / stat line — sits on the same continuous bottom
           scrim as the text box below it now (no boxed pill of its own),
           reading as one unbroken panel over the art instead of a stack of
           separate floating chips. */}
-      <div
-        className={cn(
-          'relative z-10 flex items-center justify-between shrink-0',
-          cfg.typeLine,
-          'px-1.5',
-        )}
-      >
-        <span
+        <div
           className={cn(
-            'font-bold uppercase truncate',
-            fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+            'relative z-10 flex items-center justify-between shrink-0',
+            cfg.typeLine,
+            'px-1.5',
           )}
-          style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
         >
-          {def.type}
-          {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
-        </span>
-        {def.type === 'Unit' &&
-          (live ? (
-            // Live battlefield stats in the same StatChip slots the printed
-            // values use: green = buffed above printed, red = below printed /
-            // damaged, printed value struck through inside the chip.
-            <span
-              className="flex items-center gap-1 shrink-0"
-              title={`Printed ${def.atk}/${def.hp}`}
-            >
-              <StatChip
-                icon={Swords}
-                value={live.atk}
-                printed={def.atk}
-                tier={size}
-                tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
-              />
+          <span
+            className={cn(
+              'font-bold uppercase truncate',
+              fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+            )}
+            style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+          >
+            {def.type}
+            {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+          </span>
+          {def.type === 'Unit' &&
+            (live ? (
+              // Live battlefield stats in the same StatChip slots the printed
+              // values use: green = buffed above printed, red = below printed /
+              // damaged, printed value struck through inside the chip.
+              <span
+                className="flex items-center gap-1 shrink-0"
+                title={`Printed ${def.atk}/${def.hp}`}
+              >
+                <StatChip
+                  icon={Swords}
+                  value={live.atk}
+                  printed={def.atk}
+                  tier={size}
+                  tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
+                />
+                <StatChip
+                  icon={Heart}
+                  value={live.hp}
+                  maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
+                  printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                  tier={size}
+                  tint={
+                    live.hp < live.maxHp
+                      ? 'var(--c-red)'
+                      : live.maxHp > (def.hp ?? 0)
+                        ? '#16A34A'
+                        : '#22C55E'
+                  }
+                />
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 shrink-0">
+                <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
+                <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
+              </span>
+            ))}
+          {def.type === 'Leader' && (
+            <span className="shrink-0">
               <StatChip
                 icon={Heart}
-                value={live.hp}
-                maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                value={def.hp}
+                maxValue={maxHp}
                 tier={size}
                 tint={
-                  live.hp < live.maxHp
+                  maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
                     ? 'var(--c-red)'
-                    : live.maxHp > (def.hp ?? 0)
-                      ? '#16A34A'
-                      : '#22C55E'
+                    : '#22C55E'
                 }
               />
             </span>
-          ) : (
-            <span className="flex items-center gap-1 shrink-0">
-              <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
-              <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
-            </span>
-          ))}
-        {def.type === 'Leader' && (
-          <span className="shrink-0">
-            <StatChip
-              icon={Heart}
-              value={def.hp}
-              maxValue={maxHp}
-              tier={size}
-              tint={
-                maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
-                  ? 'var(--c-red)'
-                  : '#22C55E'
-              }
-            />
-          </span>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
+        {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
           panel (a real "text box" like a printed card) instead of floating
           directly on the paper background. flex-1 so it fills the remaining
           height and pushes the footer to the bottom. Full-Art drops the
@@ -1235,77 +1239,79 @@ export function CardFace({
           vignette overlay behind the art is what actually darkens this
           whole region, with a per-line text-shadow as a legibility backstop
           for whatever the art itself looks like underneath. */}
-      <div
-        className={cn(
-          'relative z-10 flex flex-col',
-          fullArt ? 'shrink-0' : 'flex-1 min-h-0',
-          cfg.textBoxPad,
-          fullArt
-            ? 'text-white'
-            : cn(
-                'mx-1.5 mt-1 mb-1 rounded-[3px] border',
-                mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
-              ),
-        )}
-        style={
-          fullArt
-            ? undefined
-            : {
-                backgroundColor: mythic
-                  ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-                  : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
-              }
-        }
-      >
-        {kwList(def).length > 0 && cfg.keywordMax > 0 && (
-          <div className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}>
-            {kwList(def)
-              .slice(0, cfg.keywordMax)
-              .map((kw) => (
-                <KeywordChip
-                  key={kw}
-                  kw={kw}
-                  small={cfg.keywordSmall}
-                  autoIntroduce={introduceKeywords}
-                />
-              ))}
-          </div>
-        )}
-
-        {rules.length > 0 && (
-          <div
-            className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
-            style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
-          >
-            {cfg.rulesMultiline ? (
-              rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
-            ) : (
-              <div>{renderKeywordText(rules.join(' · '), true)}</div>
-            )}
-          </div>
-        )}
-
-        {cfg.showFlavor && def.flavor && (
-          <div
-            className={cn(
-              'mt-1 pt-1 border-t',
-              fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
-            )}
-          >
-            <p
-              className={cn('leading-snug break-words', set.className)}
-              style={{
-                fontSize: flavorFontPx,
-                textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
-              }}
+        <div
+          className={cn(
+            'relative z-10 flex flex-col',
+            fullArt ? 'shrink-0' : 'flex-1 min-h-0',
+            cfg.textBoxPad,
+            fullArt
+              ? 'text-white'
+              : cn(
+                  'mx-1.5 mt-1 mb-1 rounded-[3px] border',
+                  mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
+                ),
+          )}
+          style={
+            fullArt
+              ? undefined
+              : {
+                  backgroundColor: mythic
+                    ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
+                    : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
+                }
+          }
+        >
+          {kwList(def).length > 0 && cfg.keywordMax > 0 && (
+            <div
+              className={cn('flex flex-wrap gap-0.5 shrink-0', size !== 'full' && 'min-h-[9px]')}
             >
-              {def.flavor}
-            </p>
-          </div>
-        )}
+              {kwList(def)
+                .slice(0, cfg.keywordMax)
+                .map((kw) => (
+                  <KeywordChip
+                    key={kw}
+                    kw={kw}
+                    small={cfg.keywordSmall}
+                    autoIntroduce={introduceKeywords}
+                  />
+                ))}
+            </div>
+          )}
 
-        {!fullArt && <div className="flex-1" />}
-      </div>
+          {rules.length > 0 && (
+            <div
+              className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
+              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+            >
+              {cfg.rulesMultiline ? (
+                rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
+              ) : (
+                <div>{renderKeywordText(rules.join(' · '), true)}</div>
+              )}
+            </div>
+          )}
+
+          {cfg.showFlavor && def.flavor && (
+            <div
+              className={cn(
+                'mt-1 pt-1 border-t',
+                fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
+              )}
+            >
+              <p
+                className={cn('leading-snug break-words', set.className)}
+                style={{
+                  fontSize: flavorFontPx,
+                  textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+                }}
+              >
+                {def.flavor}
+              </p>
+            </div>
+          )}
+
+          {!fullArt && <div className="flex-1" />}
+        </div>
       </div>
 
       {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}

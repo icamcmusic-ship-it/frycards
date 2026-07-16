@@ -34,6 +34,7 @@ export function Card3DInspector({
   def,
   foil,
   canToggleFoil,
+  serial,
   meta,
   actions,
   onClose,
@@ -43,6 +44,10 @@ export function Card3DInspector({
   foil?: boolean;
   /** When the player owns both normal and foil copies, show a variant toggle. */
   canToggleFoil?: boolean;
+  /** This exact numbered print — mutually exclusive with foil (serialized
+   * copies are never foil, see quicksell_cards' serialized-reserved check),
+   * so passing this suppresses the foil toggle entirely. */
+  serial?: { number: number; cap: number };
   /** Metadata rows shown beside the card (rarity, set, owned counts, …). */
   meta?: { label: string; value: React.ReactNode }[];
   /** Context-specific controls (e.g. a quicksell panel). */
@@ -50,7 +55,7 @@ export function Card3DInspector({
   onClose: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
-  const [showFoil, setShowFoil] = useState(!!foil);
+  const [showFoil, setShowFoil] = useState(!!foil && !serial);
   const [flipped, setFlipped] = useState(false);
   // Tilt state: rotation in degrees + pointer position as 0..1 fractions of
   // the card, used to place the glare/holo highlight.
@@ -166,7 +171,13 @@ export function Card3DInspector({
                         holographic sheen below, so CardFace's built-in animated
                         shimmer is suppressed — stacking both caused visible
                         flicker/banding where the two competing overlays met. */}
-                    <CardFace def={def} size="full" foil={showFoil} foilEffect={false} />
+                    <CardFace
+                      def={def}
+                      size="full"
+                      foil={showFoil}
+                      foilEffect={false}
+                      serial={serial}
+                    />
                     {/* Dynamic glare / light sweep following the tilt */}
                     {!reducedMotion && (
                       <div
@@ -236,7 +247,7 @@ export function Card3DInspector({
                 {flipped ? '↺ SHOW FRONT' : '↻ SHOW BACK'}
               </button>
             )}
-            {canToggleFoil && (
+            {canToggleFoil && !serial && (
               <button
                 onClick={() => setShowFoil((f) => !f)}
                 className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs"
