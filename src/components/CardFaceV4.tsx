@@ -111,62 +111,109 @@ export function costSummary(def: CardDef): string | null {
   return `Cast: one die ${def.threshold}+`;
 }
 
+/** Plain-English phrase for who/what an effect hits — spelled out so a rules
+ * line never leaves the reader guessing (e.g. a bare "Sap 2" used to not say
+ * *who* takes the 2 damage). */
+function targetPhrase(target: Effect['target']): string {
+  switch (target) {
+    case 'enemyLeader':
+      return 'the enemy Leader';
+    case 'friendlyLeader':
+      return 'your Leader';
+    case 'enemyUnit':
+      return 'a target enemy Unit';
+    case 'friendlyUnit':
+      return 'a target friendly Unit';
+    case 'friendlyAny':
+      return 'your Leader or a friendly Unit';
+    case 'anyTarget':
+      return 'a target enemy Unit or the enemy Leader';
+    case 'allEnemyUnits':
+      return 'ALL enemy Units';
+    case 'allFriendlyUnits':
+      return 'ALL friendly Units';
+    case 'self':
+      return 'this card';
+    case 'none':
+      return '';
+  }
+}
+
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
   switch (eff.action) {
     case 'sap':
-      return eff.target === 'enemyLeader'
-        ? `Sap ${v} enemy Leader`
-        : eff.target === 'allEnemyUnits'
-          ? `Sap ${v} ALL enemy Units`
-          : `Sap ${v}`;
+      return `Sap ${v} to ${targetPhrase(eff.target)}`;
     case 'mend':
-      return `Mend ${v}`;
+      return `Mend ${v} to ${targetPhrase(eff.target)}`;
     case 'draw':
-      return `Surge (draw ${v})`;
+      return `Surge — draw ${v || 1} card${(v || 1) === 1 ? '' : 's'}`;
     case 'bind':
-      return 'Bind an enemy Unit';
+      return `Bind ${targetPhrase(eff.target)} (can't attack, use its Ability Slot, or retaliate next turn)`;
     case 'destroy':
-      return eff.target === 'allEnemyUnits' ? 'Destroy ALL enemy Units' : 'Destroy a Unit';
-    case 'buff':
-      return eff.target === 'allFriendlyUnits'
-        ? `All friendly +${v}/+${v}`
-        : eff.target === 'self'
-          ? `This gains +${v}/+${v}`
-          : `A friendly Unit +${v}/+${v}`;
+      return `Destroy ${targetPhrase(eff.target)}`;
+    case 'buff': {
+      const isAll = eff.target === 'allFriendlyUnits';
+      const subject =
+        eff.target === 'self' ? 'This card' : isAll ? 'ALL friendly Units' : 'A target friendly Unit';
+      return `${subject} ${isAll ? 'get' : 'gets'} +${v}/+${v}`;
+    }
   }
 }
 
-/** Every rules line this card prints, one entry per ability/keyword effect. */
+/** Every rules line this card prints, one entry per ability/keyword effect —
+ * phrased as a plain-English trigger ("when this happens") followed by what
+ * it does, so a line reads on its own without needing outside context. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
   if (def.comboGate && def.onCast)
     bits.push(
-      `Cast (${GATE_LABEL[def.comboGate] || def.comboGate}): ${describeEffect(def.onCast)}`,
+      `Cast by rolling ${GATE_LABEL[def.comboGate] || def.comboGate}: ${describeEffect(def.onCast)}`,
     );
-  else if (def.onCast) bits.push(`On cast: ${describeEffect(def.onCast)}`);
+  else if (def.onCast) bits.push(`When cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
-    bits.push(`Ability ${def.ability.threshold}+: ${describeEffect(def.ability.effect)}`);
-  if (def.combo) bits.push(`Combo ${def.combo.pattern}: ${describeEffect(def.combo.effect)}`);
+    bits.push(
+      `Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
+    );
+  if (def.combo)
+    bits.push(
+      `Combo (if your roll has ${GATE_LABEL[def.combo.pattern] || def.combo.pattern}): ${describeEffect(def.combo.effect)}`,
+    );
   if (def.overflow)
-    bits.push(`Overflow ${def.overflow.amount}: ${describeEffect(def.overflow.effect)}`);
-  if (def.twinBonus) bits.push(`Twin bonus: ${describeEffect(def.twinBonus)}`);
-  if (def.stagedPassive) bits.push(`While staged: ${describeEffect(def.stagedPassive)} each turn`);
-  if (def.aftershock) bits.push(`Aftershock: ${describeEffect(def.aftershock)} next turn`);
-  if (def.crescendo) bits.push(`Crescendo ${def.crescendo.x}: +${def.crescendo.x} per 6 placed`);
-  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}`);
-  if (def.toll) bits.push(`Toll ${def.toll.x}`);
-  if (def.avenge) bits.push('Avenge: +1/+1 when another friendly Unit dies');
+    bits.push(
+      `Overflow (die beats this card's cost by ${def.overflow.amount}+): also ${describeEffect(def.overflow.effect)}`,
+    );
+  if (def.twinBonus) bits.push(`Twin bonus (once both dice are placed): ${describeEffect(def.twinBonus)}`);
+  if (def.stagedPassive)
+    bits.push(`While staged, waiting for its match (Twin): ${describeEffect(def.stagedPassive)} each of your turns`);
+  if (def.aftershock)
+    bits.push(`Aftershock — at the start of your next turn: ${describeEffect(def.aftershock)}`);
+  if (def.crescendo)
+    bits.push(`Crescendo: +${def.crescendo.x} for each die showing a 6 you placed this turn`);
+  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}: reduces damage from attacks by ${def.bulwark.x}`);
+  if (def.toll) bits.push(`Toll ${def.toll.x}: reduces all damage to your Leader by ${def.toll.x}`);
+  if (def.avenge) bits.push('Avenge: whenever another friendly Unit dies, this gets +1/+1');
   if (def.locPassive)
-    bits.push(def.locPassive === 'ATK_ALL' ? 'Your Units get +1 ATK' : 'Your Units get +1 max HP');
-  if (def.contested) bits.push('Contested: passive doubled while opponent has no Location');
-  if (def.excavate) bits.push(`Excavate ${def.excavate.x}: ability cheapens each turn`);
-  if (def.tribute) bits.push(`Tribute: ${describeEffect(def.tribute)} if you Pitch 2+`);
-  if (def.snap) bits.push('Snap: castable during Reroll Phase');
-  if (def.resolve) bits.push(`Resolve ${def.resolve.x}: ability cheapens below half HP`);
+    bits.push(
+      def.locPassive === 'ATK_ALL'
+        ? 'Passive: all your Units get +1 ATK'
+        : 'Passive: all your Units get +1 max HP',
+    );
+  if (def.contested) bits.push("Contested: this Location's passive is doubled while your opponent controls no Location");
+  if (def.excavate)
+    bits.push(
+      `Excavate ${def.excavate.x}: this Location's Ability cost drops ${def.excavate.x} lower for each turn it's stayed in play`,
+    );
+  if (def.tribute)
+    bits.push(`Tribute — at your End Phase, if you Pitched 2+ dice this turn: ${describeEffect(def.tribute)}`);
+  if (def.snap) bits.push('Snap: may be cast during your Reroll Phase, not just Placement');
+  if (def.resolve)
+    bits.push(
+      `Resolve ${def.resolve.x}: this card's Ability cost drops ${def.resolve.x} while your Leader is at half HP or less`,
+    );
   if (def.ultimate)
     bits.push(
-      `Ultimate turn ${def.ultimate.unlockTurn}+ (${def.ultimate.threshold}+): ${describeEffect(def.ultimate.effect)}`,
+      `Ultimate — starting your turn ${def.ultimate.unlockTurn}, once per game (place a die showing ${def.ultimate.threshold}+): ${describeEffect(def.ultimate.effect)}`,
     );
   return bits;
 }
