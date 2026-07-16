@@ -11,6 +11,7 @@ import {
   applyEffect,
   abandonTwin,
   mulliganRedraw,
+  MAX_COMBO_SELF_BUFF_STACKS,
 } from './engine';
 import { CardDef } from './cards';
 import { Archetype, buildDeck } from './decks';
@@ -1312,4 +1313,34 @@ test('VERIFIED CORRECT: exact-cost cards key off the EFFECTIVE threshold — Anc
   expect(castFromHand(g, 0, c.iid)).toBe(false);
   p.dice[0].value = 3; // effective = 4 - 1 Anchor
   expect(castFromHand(g, 0, c.iid)).toBe(true);
+});
+
+test('BUG FIXED: a self-buff Combo caps its stacking instead of snowballing forever', () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  const prowler = makeInst(
+    mkU('prowler', {
+      atk: 2,
+      hp: 2,
+      combo: { pattern: 'AnyPair', effect: { action: 'buff', value: 1, target: 'self' } },
+    }),
+    'A',
+  );
+  p.board.push(prowler);
+
+  // Force an AnyPair on every Placement window, well past MAX_COMBO_SELF_BUFF_STACKS turns.
+  for (let i = 0; i < MAX_COMBO_SELF_BUFF_STACKS + 4; i++) {
+    startTurn(g);
+    reroll(g, []);
+    p.dice.forEach((d, idx) => (d.value = idx === 0 ? 1 : 2)); // guarantees a pair of 2s
+    comboCheck(g);
+    endTurn(g);
+    startTurn(g); // B's turn, just to advance back to A
+    endTurn(g);
+  }
+
+  expect(prowler.comboSelfBuffStacks).toBe(MAX_COMBO_SELF_BUFF_STACKS);
+  expect(prowler.permAtk).toBe(MAX_COMBO_SELF_BUFF_STACKS);
+  expect(prowler.permHp).toBe(MAX_COMBO_SELF_BUFF_STACKS);
 });
