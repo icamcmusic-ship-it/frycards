@@ -231,18 +231,82 @@ function useHoverPreview<T extends HTMLElement>() {
   const show = () => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
-    const left = Math.min(
-      Math.max(8, rect.left + rect.width / 2 - fullW / 2),
-      window.innerWidth - fullW - 8,
-    );
+    const vw = window.visualViewport?.width ?? window.innerWidth;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const left = Math.min(Math.max(8, rect.left + rect.width / 2 - fullW / 2), vw - fullW - 8);
     const openAbove = rect.top - fullH - 10 >= 8;
-    const top = openAbove
-      ? rect.top - fullH - 10
-      : Math.min(rect.bottom + 10, window.innerHeight - fullH - 8);
+    const top = openAbove ? rect.top - fullH - 10 : Math.min(rect.bottom + 10, vh - fullH - 8);
     setPos({ top, left });
   };
   const hide = () => setPos(null);
   return { ref, pos, show, hide };
+}
+
+/** Long-press (touch) equivalent of hover, so board-unit inspection works on
+ * mobile where there is no hover event. A long press shows the preview and
+ * suppresses the click that would otherwise fire on touch-end (so a peek
+ * never accidentally triggers an attack/target selection); a short tap
+ * behaves as a normal click. */
+function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fired = useRef(false);
+  const start = () => {
+    fired.current = false;
+    timer.current = setTimeout(() => {
+      fired.current = true;
+      onLongPress();
+    }, 350);
+  };
+  const clear = (e: React.TouchEvent, wasTap: boolean) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    if (fired.current) {
+      e.preventDefault();
+      onEnd();
+    } else if (wasTap) {
+      onTap?.();
+    }
+  };
+  return {
+    onTouchStart: start,
+    onTouchEnd: (e: React.TouchEvent) => clear(e, true),
+    onTouchCancel: (e: React.TouchEvent) => clear(e, false),
+  };
+}
+
+/** `title=` tooltips never appear on touch devices (no hover event). This
+ * wraps a badge so tapping it also reveals the same text in a small popover,
+ * while desktop keeps the native hover tooltip. */
+function Tip({
+  text,
+  className,
+  children,
+}: {
+  text: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      title={text}
+      className={cn('relative', className)}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen((v) => !v);
+      }}
+    >
+      {children}
+      {open && (
+        <span
+          className="absolute z-[9995] top-full right-0 mt-1 w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function HoverPreview({
@@ -304,11 +368,13 @@ function BoardUnit({
     show: hoverShow,
     hide: hoverHide,
   } = useHoverPreview<HTMLDivElement>();
+  const longPress = useLongPress(hoverShow, hoverHide);
   return (
     <div
       ref={hoverRef}
       onMouseEnter={hoverShow}
       onMouseLeave={hoverHide}
+      {...longPress}
       className={cn(
         'relative shrink-0',
         flash && 'gv4-attack-flash',
@@ -330,36 +396,36 @@ function BoardUnit({
       </HoverPreview>
       <div className="absolute -top-1.5 -right-1.5 z-20 flex gap-0.5">
         {wardUp && (
-          <span
-            title="Ward available — the first damage/Removal against this Unit is prevented"
+          <Tip
+            text="Ward available — the first damage/Removal against this Unit is prevented"
             className="text-[10px] bg-[#29B6F6] ink-border-sm px-0.5"
           >
             🛡
-          </span>
+          </Tip>
         )}
         {u.boundThisTurn && (
-          <span
-            title="Bound — cannot attack, use abilities, or retaliate this turn"
+          <Tip
+            text="Bound — cannot attack, use abilities, or retaliate this turn"
             className="text-[10px] bg-[#8E44AD] text-white ink-border-sm px-0.5"
           >
             ⛓
-          </span>
+          </Tip>
         )}
         {sick && (
-          <span
-            title="Just played — can't act until your next turn (no Swift)"
+          <Tip
+            text="Just played — can't act until your next turn (no Swift)"
             className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             z
-          </span>
+          </Tip>
         )}
         {exhausted && !sick && (
-          <span
-            title="Exhausted — already attacked or used an ability this turn"
+          <Tip
+            text="Exhausted — already attacked or used an ability this turn"
             className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             ✓
-          </span>
+          </Tip>
         )}
       </div>
       {floats?.map((f) => (

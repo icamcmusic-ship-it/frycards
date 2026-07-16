@@ -115,9 +115,9 @@ export interface CardDef {
   snap?: boolean;
 }
 
-// v4.1: raised (28 -> 60) to lengthen games by ~4 rounds toward the 8-10 round
+// v4.1: raised (28 -> 64) to lengthen games by ~4 rounds toward the 8-10 round
 // target — a ~6-round meta at 28 HP was ending before reactive decks could
-// stabilize. 60 HP lands the average near ~10 rounds in the sim's length
+// stabilize. 64 HP lands the average near ~10 rounds in the sim's length
 // distribution while keeping deck-out rare on 30-card decks.
 export const LEADER_HP = 64;
 
@@ -131,7 +131,7 @@ const U = (
 ): CardDef => ({ id, name, type: 'Unit', threshold, atk, hp, ...extra });
 
 export const CARDS_V3: CardDef[] = [
-  // ---- Leaders (20 HP, no ATK, one Ability Slot) ----
+  // ---- Leaders (LEADER_HP HP, no ATK, one Ability Slot) ----
   {
     id: 'leader_ember',
     name: 'Emberlord Kaz',

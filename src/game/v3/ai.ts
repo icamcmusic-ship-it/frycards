@@ -461,11 +461,23 @@ function playPlacement(g: Game, p: Player) {
         }
       }
     }
-    if (p.location?.def.ability && !p.location.abilityUsed && p.hand.length < 8) {
-      const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
-      if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) {
-        progress = true;
-        continue;
+    if (p.location?.def.ability && !p.location.abilityUsed) {
+      // Skip pointless activations — same per-effect check as the Leader
+      // block above, not a blanket hand-size gate (Locations can roll sap/
+      // mend/buff abilities too, which are never pointless just because the
+      // hand happens to be full).
+      const eff = p.location.def.ability.effect;
+      const pointless =
+        (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+        ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+          opp.board.length === 0) ||
+        (eff.action === 'draw' && p.hand.length >= 8);
+      if (!pointless) {
+        const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
+        if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) {
+          progress = true;
+          continue;
+        }
       }
     }
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
@@ -476,6 +488,7 @@ function playPlacement(g: Game, p: Player) {
       const eff = u.def.ability.effect;
       if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0))
         continue;
+      if (eff.action === 'draw' && p.hand.length >= 8) continue;
       // Only skip a board-wide buff on a near-empty board — a self/single-
       // target buff is still worth using even with just one Unit in play.
       if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2)

@@ -66,14 +66,26 @@ export function Card3DInspector({
   }, [onClose]);
 
   // Enlarged size: ~2x the normal full card, clamped so the whole card (plus
-  // some room for the side panels) always fits on screen.
+  // some room for the side panels) always fits on screen. Recomputed on
+  // resize/orientation change so rotating a phone mid-inspect doesn't leave
+  // the card mis-sized or clipped.
+  const [viewport, setViewport] = useState(() => ({
+    w: window.innerWidth,
+    h: window.innerHeight,
+  }));
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
   const scale = useMemo(() => {
     const { w, h } = CARD_SIZES.full;
-    return Math.max(
-      1.1,
-      Math.min(2, (window.innerHeight * 0.72) / h, (window.innerWidth * 0.92) / w),
-    );
-  }, []);
+    return Math.max(1.1, Math.min(2, (viewport.h * 0.72) / h, (viewport.w * 0.92) / w));
+  }, [viewport]);
   const { w, h } = CARD_SIZES.full;
 
   const handleMove = (clientX: number, clientY: number) => {

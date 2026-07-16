@@ -77,6 +77,9 @@ export interface Inst {
   ultimateUsed?: boolean;
   /** v4.2 Excavate: accumulated per-controller-turn threshold reduction while this Location is in play. */
   excavateStacks?: number;
+  /** v4.4: stacks of a Combo's own self-buff already applied to this permanent
+   * (see the "ramp, not a collapse/snowball" cap comment at comboCheck()). */
+  comboSelfBuffStacks?: number;
 }
 
 export interface Die {
@@ -244,6 +247,10 @@ export function wouldSapKill(g: Game, target: Inst, rawValue: number): boolean {
   if (hasUnspentWard(target)) return false;
   return rawValue >= remainingHp(g, target);
 }
+
+/** v4.4: cap on how many times a card's own self-buff Combo may re-trigger
+ * (see comboCheck()) — same "ramp, not a collapse" ceiling Anchor/Toll use. */
+export const MAX_COMBO_SELF_BUFF_STACKS = 3;
 
 /** Anchor: effective Cast threshold = printed - (# other in-play Anchor cards), min 1. */
 export function effThreshold(g: Game, pid: string, def: CardDef): number {
@@ -805,6 +812,7 @@ function enterPlay(
     c.damage = 0;
     c.permAtk = 0;
     c.permHp = 0;
+    c.comboSelfBuffStacks = 0;
     c.hasAttacked = false;
     c.attacksMade = 0;
     c.abilityUsed = false;
@@ -860,6 +868,13 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       const v = eff.value || 0;
       const killable = opp.board.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
       if (killable) return killable.iid;
+      // `destroy` ignores `v` (wouldSapKill(_,_,0) never matches a living
+      // unit) and `sap` fully fizzles against Ward (applyEffect's `destroy`/
+      // `sap` branches both check hasUnspentWard) — an uncapped fallback
+      // that only sorts by ATK can burn removal on a Warded target while an
+      // unwarded, actually-killable one sits right there. Prefer unwarded.
+      const unwarded = opp.board.filter((u) => !hasUnspentWard(u)).sort(byAtk)[0];
+      if (unwarded) return unwarded.iid;
       const t = [...opp.board].sort(byAtk)[0];
       return t?.iid;
     }
@@ -1294,8 +1309,19 @@ export function comboCheck(g: Game) {
     if (g.winner) break;
     if (!p.board.includes(c) && p.location !== c) continue; // died mid-loop
     if (matchesPattern(values, c.def.combo!.pattern)) {
+      const combo = c.def.combo!;
+      // v4.4: a self-buff Combo re-triggers every one of the controller's
+      // turns for as long as the card survives, unlike every other repeating
+      // mechanic in the game (Anchor capped at 2, Toll capped at 3) — left
+      // uncapped this snowballs a cheap Unit into an unkillable permanent
+      // stat monster. Cap it the same "ramp, not a collapse" way.
+      if (combo.effect.action === 'buff' && combo.effect.target === 'self') {
+        c.comboSelfBuffStacks = c.comboSelfBuffStacks || 0;
+        if (c.comboSelfBuffStacks >= MAX_COMBO_SELF_BUFF_STACKS) continue;
+        c.comboSelfBuffStacks++;
+      }
       g.stats.comboTriggers[c.def.id] = (g.stats.comboTriggers[c.def.id] || 0) + 1;
-      applyEffect(g, p.id, c.def.combo!.effect, autoTarget(g, p.id, c.def.combo!.effect), c);
+      applyEffect(g, p.id, combo.effect, autoTarget(g, p.id, combo.effect), c);
     }
   }
   // §3.5 -> §3.6: Combo Check is the one-way turnstile into the Combat Phase
