@@ -176,6 +176,26 @@ export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
 }
 
+/** Keywords whose numeric detail (e.g. "Bulwark 2", "Resolve 1") is already
+ * printed as its own line by `cardRuleLines` above. These are still tagged
+ * in `def.keywords` (for deck-building/filtering), but must be skipped in
+ * the top-of-box keyword row — otherwise the same ability shows up twice on
+ * the card: once as a bare name up top, once with its real number in the
+ * rules text below. Plain keywords with no dedicated rules line of their
+ * own (Guard, Swift, Ward, ...) still belong in the top row. */
+const RULES_LINE_KEYWORDS = new Set([
+  'Bulwark',
+  'Toll',
+  'Avenge',
+  'Crescendo',
+  'Aftershock',
+  'Tribute',
+  'Excavate',
+  'Contested',
+  'Resolve',
+  'Ultimate',
+]);
+
 /** Scales a font size down as text grows past a soft length target, so long
  * names/flavor text shrink to fit instead of getting clipped or truncated.
  * Never shrinks below `min`. */
@@ -402,6 +422,7 @@ export function KeywordChip({
   kw,
   small,
   autoIntroduce,
+  explainer = true,
 }: {
   key?: React.Key;
   kw: string;
@@ -413,6 +434,11 @@ export function KeywordChip({
    * a screen that renders many cards at once (Collection, Deck Builder)
    * would fire a stack of popovers simultaneously. */
   autoIntroduce?: boolean;
+  /** Print the reminder text inline after the keyword name — only the
+   * `full` card tier has room for this; smaller tiers pass false and rely
+   * on the click-to-open popover instead, so the definition never runs the
+   * card's text box past its edges. */
+  explainer?: boolean;
 }) {
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
 
@@ -429,7 +455,7 @@ export function KeywordChip({
         </button>
         {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
       </span>
-      {text && <span className="italic opacity-80"> ({text})</span>}
+      {explainer && text && <span className="italic opacity-80"> ({text})</span>}
     </span>
   );
 }
@@ -682,6 +708,11 @@ const TIER: Record<
     textBoxPad: string;
     keywordMax: number;
     keywordSmall: boolean;
+    /** Only the `full` tier has room to print each keyword's reminder text
+     * inline (MTG-style); smaller tiers show just the clickable keyword name
+     * — tap/click still opens the same popover — to avoid running long
+     * definitions off the edge of a small card. */
+    keywordExplainer: boolean;
     rules: string;
     rulesMultiline: boolean;
     showFlavor: boolean;
@@ -710,6 +741,7 @@ const TIER: Record<
     textBoxPad: 'p-0.5',
     keywordMax: 0,
     keywordSmall: true,
+    keywordExplainer: false,
     rules: 'hidden',
     rulesMultiline: false,
     showFlavor: false,
@@ -737,6 +769,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 2,
     keywordSmall: true,
+    keywordExplainer: false,
     rules: 'mt-0.5 text-[6.5px] line-clamp-1',
     rulesMultiline: false,
     showFlavor: false,
@@ -764,6 +797,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 4,
     keywordSmall: false,
+    keywordExplainer: false,
     rules: 'mt-0.5 text-[7.5px] line-clamp-2',
     rulesMultiline: false,
     showFlavor: false,
@@ -791,6 +825,7 @@ const TIER: Record<
     textBoxPad: 'p-1.5',
     keywordMax: 8,
     keywordSmall: false,
+    keywordExplainer: true,
     rules: 'mt-1 text-[9.5px] space-y-0.5',
     rulesMultiline: true,
     showFlavor: true,
@@ -862,6 +897,10 @@ export function CardFace({
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
   const rules = cardRuleLines(def);
+  // Skip keywords whose numeric detail is already printed as its own rules
+  // line (see RULES_LINE_KEYWORDS) so the top-of-box row never repeats what
+  // the rules text below it already says.
+  const topKeywords = kwList(def).filter((kw) => !RULES_LINE_KEYWORDS.has(kw));
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
@@ -1274,24 +1313,30 @@ export function CardFace({
                 }
           }
         >
-          {kwList(def).length > 0 && cfg.keywordMax > 0 && (
-            <div className={cn('flex flex-col shrink-0', size !== 'full' && 'min-h-[9px]')}>
-              {kwList(def)
-                .slice(0, cfg.keywordMax)
-                .map((kw) => (
-                  <KeywordChip
-                    key={kw}
-                    kw={kw}
-                    small={cfg.keywordSmall}
-                    autoIntroduce={introduceKeywords}
-                  />
-                ))}
+          {topKeywords.length > 0 && cfg.keywordMax > 0 && (
+            <div
+              className={cn(
+                'shrink-0',
+                cfg.keywordExplainer
+                  ? 'flex flex-col'
+                  : 'flex flex-row flex-wrap gap-x-1.5 gap-y-0 min-h-[9px]',
+              )}
+            >
+              {topKeywords.slice(0, cfg.keywordMax).map((kw) => (
+                <KeywordChip
+                  key={kw}
+                  kw={kw}
+                  small={cfg.keywordSmall}
+                  autoIntroduce={introduceKeywords}
+                  explainer={cfg.keywordExplainer}
+                />
+              ))}
             </div>
           )}
 
           {rules.length > 0 && (
             <div
-              className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
+              className={cn('shrink-0 leading-snug', cfg.rules, topKeywords.length === 0 && 'mt-0')}
               style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
             >
               {cfg.rulesMultiline ? (
