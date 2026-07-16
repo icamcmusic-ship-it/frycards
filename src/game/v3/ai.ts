@@ -149,6 +149,18 @@ function castPriority(g: Game, p: Player, c: Inst): number {
   const act = c.def.onCast?.action;
   if (act === 'destroy' || act === 'sap' || act === 'bind') v -= persona.curveBias;
   if (c.def.comboGate) v += 40; // free value when the gate is met
+  // v4.4: board-state-aware defensive priority — when this player controls
+  // fewer Units than their opponent, a Steel/Bulwark/Toll/Guard/Ward Unit
+  // gets a priority bump. Previously priority was purely persona- and
+  // curve-driven with no read on what the board actually needs, so a
+  // reactive-shell deck (the wider v4.4 archetype roster leans harder into
+  // these keywords as primary themes, not just a persona flavor) would dump
+  // cards in raw threshold order instead of stabilizing when it's actually
+  // behind.
+  if (c.def.type === 'Unit' && p.board.length < opponentOf(g, p.id).board.length) {
+    const isDefensive = !!(c.def.steel || c.def.bulwark || c.def.toll) || hasKw(c.def, 'Guard') || hasKw(c.def, 'Ward');
+    if (isDefensive) v += 6;
+  }
   return v + tieBreak(g);
 }
 

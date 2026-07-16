@@ -241,6 +241,20 @@ function mapUnit(c: CardTemplate): CardDef {
     def.steel = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }
+  // v4.4: two named cards manually granted Steel as a discrete identity
+  // buff, independent of the procedural roll above — both were flagged as
+  // underperforming in the balance sim (Tang's Refuge was the weakest
+  // Common in the whole pool; Nanite Division Marshal one of the
+  // least-cast Ultra-Rares). A defensive identity gives them a reason to
+  // see play instead of just scaling their raw stats up.
+  const MANUAL_STEEL: Record<string, number> = {
+    tang_s_refuge: 2,
+    nanite_division_marshal: 3,
+  };
+  if (MANUAL_STEEL[c.id] !== undefined && !def.steel) {
+    def.steel = { x: MANUAL_STEEL[c.id] };
+    def.keywords = [...(def.keywords || []), 'Steel'];
+  }
   return def;
 }
 
