@@ -33,6 +33,7 @@ import {
   opponentOf,
   autoTarget,
   defaultDiscardChoice,
+  rarityTier,
 } from './engine';
 import { CardDef, hasKw } from './cards';
 
@@ -427,15 +428,20 @@ function playPlacement(g: Game, p: Player) {
     if (progress) continue;
 
     // 3. Echo recasts — any Echo card type (Units, Charms, Events all print
-    // it; see cardpool.ts), only with spare hand fodder.
-    if (p.hand.length >= 2) {
+    // it; see cardpool.ts). Mid-rarity cards waive the fodder discard
+    // entirely (v4.4, see engine.ts echoRecast), so they only need a spare
+    // die/target, not spare hand fodder; low/high rarity still need one card
+    // to sacrifice.
+    if (p.hand.length >= 1) {
       const echoes = p.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
       for (const c of echoes) {
+        const waiveFodder = rarityTier(c.def.rarity) === 'mid';
+        if (!waiveFodder && p.hand.length < 2) continue;
         const sel = bestSelectionFor(g, p, c.def);
         if (!sel) continue;
-        const fodder = defaultDiscardChoice(p.hand);
+        const fodder = waiveFodder ? undefined : defaultDiscardChoice(p.hand);
         const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
-        if (echoRecast(g, sel, c.iid, fodder.iid, target)) {
+        if (echoRecast(g, sel, c.iid, fodder?.iid, target)) {
           progress = true;
           break;
         }
@@ -560,15 +566,17 @@ function playCombat(g: Game, p: Player) {
   while (!g.winner && guard-- > 0) {
     const attackers = p.board.filter((u) => canAttack(g, u));
     if (attackers.length === 0) break;
-    // Lethal check: if total available ATK >= leader hp and no guards, go face.
-    const targets = legalTargets(g, p.id);
-    const guardsUp = targets.every((t) => t.def.type !== 'Leader');
     // Score once per attacker (a seeded jitter INSIDE a sort comparator makes
     // the comparator inconsistent) — jittered so near-tied attacker choices
     // vary game to game while staying reproducible under a fixed seed.
     const att = attackers
       .map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) }))
       .sort((a, b) => b.s - a.s)[0].u;
+    // v4.4: attacker-aware — excludes the enemy Leader on a Frenzy second
+    // swing (see engine.ts legalTargets), so the AI never attempts an
+    // illegal face attack with a bonus swing and wastes it.
+    const targets = legalTargets(g, p.id, att.iid);
+    const guardsUp = targets.every((t) => t.def.type !== 'Leader');
     const atk = effAtk(g, att);
     if (atk === 0) {
       att.hasAttacked = true;
@@ -578,10 +586,12 @@ function playCombat(g: Game, p: Player) {
 
     let target: Inst | undefined;
     if (guardsUp) {
-      // Must hit a guard: pick the one we kill, else the biggest threat.
+      // Must hit a guard (or this is a Frenzy 2nd swing with the Leader
+      // excluded and no Guards up either): pick the one we kill, else the
+      // biggest threat among whatever's actually legal right now.
       target =
         targets.find((t) => willKillInCombat(g, t, atk)) ??
-        targets.map((t) => ({ t, s: effAtk(g, t) + tieBreak(g) })).sort((a, b) => b.s - a.s)[0].t;
+        targets.map((t) => ({ t, s: effAtk(g, t) + tieBreak(g) })).sort((a, b) => b.s - a.s)[0]?.t;
     } else {
       const totalAtk = attackers.reduce((s, u) => s + effAtk(g, u), 0);
       const lethal = totalAtk >= remainingHp(g, opp.leader);
@@ -609,8 +619,8 @@ function playCombat(g: Game, p: Player) {
           bigThreat ?? safeKill ?? (wantsFace ? undefined : (valueKill ?? clearKill)) ?? opp.leader;
       }
     }
-    if (!attack(g, att.iid, target.iid)) {
-      att.hasAttacked = true; // avoid infinite loop on illegal picks
+    if (!target || !attack(g, att.iid, target.iid)) {
+      att.hasAttacked = true; // avoid infinite loop on illegal/no picks
       att.attacksMade = 99;
     }
   }

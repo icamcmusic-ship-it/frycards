@@ -101,6 +101,10 @@ export interface CardDef {
   bulwark?: { x: number };
   /** Toll X (Unit): reduces ALL incoming damage to your Leader (any source) by X while this Unit lives. */
   toll?: { x: number };
+  /** v4.4 Steel X (Unit): the first X damage this Unit would take EACH TURN, from any source
+   * (attacks, Sap, Pierce overflow), is prevented instead of reduced — a per-turn absorption
+   * pool, refreshing every End Phase like Ward, distinct from Bulwark (flat, attacks only). */
+  steel?: { x: number };
   /** Avenge (Unit): +1/+1 permanently whenever another friendly Unit dies (state-based, no priority window). */
   avenge?: boolean;
   /** Aftershock (Event): after resolving, queues this effect to fire at the very start of your next turn, before Draw Phase. */

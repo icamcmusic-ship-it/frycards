@@ -35,6 +35,7 @@ const FIELD_KEYWORDS: Record<string, (c: CardDef) => boolean> = {
   Contested: (c) => !!c.contested,
   Resolve: (c) => !!c.resolve,
   Ultimate: (c) => !!c.ultimate,
+  Steel: (c) => !!c.steel,
 };
 
 const ACTIONS = new Set(['sap', 'mend', 'draw', 'bind', 'destroy', 'buff']);

@@ -1,12 +1,32 @@
-# FryCards — Definitive Rulebook v4.3
+# FryCards — Definitive Rulebook v4.4
 
-Supersedes v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.4 errata (applied from a 33,120-game v4.3 balance-sim pass):** Pierce,
+Frenzy and Guard were the sim's clearest overperformers (every deck built
+around Pierce or Frenzy cleared 50%+ win rate); Anchor, Ward and mid-rarity
+Echo recasts were the clearest underperformers. This pass rebalances rather
+than power-creeps: **Pierce** overflow is now capped at **half the
+attacker's effective ATK** (rounded down, minimum 1) — a flat "ATK minus 1"
+cap turns out to be a no-op, since the naive leftover against any 1-HP
+blocker is already exactly ATK minus 1; **Frenzy**'s second swing can no longer target the
+enemy Leader directly unless it's the only target left; the **Anchor** ramp
+cap rises 2→3 and a card gains a one-time permanent +1/+1 the first time its
+own discount hits that cap; **Ward** now spikes 1 damage back at the attacker
+in combat when it prevents a hit; **Echo**'s extra-discard cost is waived
+entirely for Rare/Super-Rare ("mid" tier) cards, where it was measurably
+correlated with losing rather than low/high tier's positive correlation;
+Location passives double from +1 to +2; a new keyword, **Steel X** (per-turn
+damage absorption from any source), gives slower decks a defensive answer
+distinct from Bulwark/Toll; and a new systemic rule, **Momentum**, grants a
+losing player a bonus 6th die. See §7, §8 and §10 for details, and §3.2 for
+Momentum. Changes are marked *(v4.4)* inline.
 
 **v4.3 errata:** the Reroll Phase now allows **two rerolls** (was one); every
 Unit/Charm/Event prints one of five Cast Slot cost formats (at-least, exact,
@@ -114,6 +134,16 @@ Draw 1 card. (Skipped by the first player on their first turn only.)
 
 ### 3.2 Roll Phase
 Roll five d6 from your own supply.
+
+**Momentum *(v4.4)*:** if, at the start of this Roll Phase, your Leader is at
+or below half its maximum HP **and** you control fewer Units than your
+opponent, roll a **sixth** d6 this turn only. A systemic, symmetric comeback
+lever — not a card, not a keyword, just a state-based check — that answers
+the balance-sim finding that using your Leader's Ultimate and casting a board
+wipe both correlated with *losing*, not winning: the game didn't have a
+reliable way to help a player who's actually behind claw back without
+drawing a specific "answer" card. Checked fresh every turn; it doesn't stack
+or persist once you're no longer behind on both conditions.
 
 ### 3.3 Reroll Phase
 Reroll any subset of your five dice, up to **two times** *(v4.3 — raised from one reroll; the §6 hit-rate table below still reflects the old one-reroll baseline and understates actual hit rates under the current rule)*.
@@ -228,7 +258,7 @@ Anchor and Overflow (below) both key off a card's **effective** threshold regard
 Cards in play may print one or more **Ability Slots** — repeatable thresholds. **Exhaustion is tracked per Ability Slot**, not per card: a card with two different Ability Slots can have both activated in the same turn, each once. However, **activating any Ability Slot and attacking are mutually exclusive on the same Unit in the same turn** — a Unit that has used an Ability Slot this turn cannot also attack this turn, and vice versa.
 
 - **Default is one Cast Slot per card**, unless it has Twin.
-- **Locations *(v4.1)*: no die, no Cast Slot.** Once per turn, you may cast one Location from hand **for free, as a bonus action** alongside your normal five die placements. This doesn't consume a die and doesn't compete with anything else you do this turn. Location cards no longer print a threshold number at all — just their passive and (optionally) an Ability Slot, which still costs a die to activate as normal. *(Rationale: a Location competing for a die had to beat a Unit's entire value with a passive alone — an opportunity-cost fight it structurally loses, as v4.0's +0.7–1.5% isolated contribution showed. This is the free-land-drop move: it takes Locations out of the die economy instead of trying to make them competitive inside it.)*
+- **Locations *(v4.1)*: no die, no Cast Slot.** Once per turn, you may cast one Location from hand **for free, as a bonus action** alongside your normal five die placements. This doesn't consume a die and doesn't compete with anything else you do this turn. Location cards no longer print a threshold number at all — just their passive and (optionally) an Ability Slot, which still costs a die to activate as normal. *(Rationale: a Location competing for a die had to beat a Unit's entire value with a passive alone — an opportunity-cost fight it structurally loses, as v4.0's +0.7–1.5% isolated contribution showed. This is the free-land-drop move: it takes Locations out of the die economy instead of trying to make them competitive inside it.)* *(v4.4)* The flat passive value doubles from **+1 to +2 ATK/max HP** for all your Units — the balance sim measured Locations at −1.4 win% versus spending that Cast Slot on a cheap Unit instead, meaning +1 wasn't pulling its weight over an ~11-round average game.
 - A Location entering play replaces whatever Location you currently control, sending the old one to Discard. **You may not cast a Location sharing a name with the one you control, and you may cast at most one Location total per turn** — this second restriction closes a loophole where alternating between two differently-named Locations could otherwise reset an Ability Slot repeatedly in one turn.
 
 ### Combo-gated Events
@@ -250,6 +280,17 @@ A Twin X card has two Cast Slots. The moment the first is filled, move it face-u
 ### Anchor
 Anchor counts only cards you control **already in play**, never cards in hand. Only reduces Cast Slot thresholds, never Ability Slots. *(v4.1)* The total reduction is **capped at 2**, regardless of how many Anchor cards are in play — v4.0's uncapped text was exactly the "collapses to 1 with barely any investment" problem playtesting found. *Design constraint:* Anchor provides no benefit on a card already printed at threshold 1, since that's the minimum possible.
 
+*(v4.4)* The cap is now **3**, and reaching it grants a payoff: the first
+time an Anchor Unit's own discount would hit the cap (that is, it has 3 or
+more *other* Anchor cards already in play the moment it enters), it
+permanently gains **+1/+1**, once per card life. This is checked only for the
+card that's actually entering play, not retroactively applied to Anchor cards
+already on board — casting your 4th Anchor card rewards that card, not a
+silent buff to the three already there. The balance sim measured pure Anchor
+decks as consistently underperforming (a flat, diminishing-returns curve with
+no swing potential in an aggression-favoring meta) — the deeper ramp plus a
+real payoff moment are the fix.
+
 ---
 
 ## 8. Combat Rules
@@ -261,15 +302,16 @@ Combat uses a **targeted-attack model**. Attacks are **declared and resolved one
 3. **Damage resolution** for this single attack:
    - Against the Leader: attacker's ATK is subtracted from Leader HP. **Leaders have no ATK and never deal or take retaliation damage** — attacking a Leader directly is entirely one-directional.
    - Against a Unit: attacker's ATK is subtracted from the target's HP, and simultaneously the target's ATK is subtracted from the attacker's HP. **ATK and HP are never treated as below 0** — a Unit with reduced ATK below 0 simply deals 0 damage, it never heals its target.
-   - **Pierce:** Guard only restricts which target you may legally declare — once an attack against a Guard Unit is legal and declared, Pierce's overflow damage is a consequence of that already-legal hit, not a new target, and proceeds to the Leader normally regardless of Guard. The overflow amount is exactly the leftover damage (attacker's ATK minus what was needed to destroy the target) — never the attacker's full ATK. All of this (damage to target, retaliation to attacker, Pierce overflow) is calculated simultaneously off both units' stats the instant before the attack resolves — if the attacker is also destroyed by retaliation in this same exchange, its Pierce overflow still goes through.
-   - **Ward:** only prevents damage from instances where this Unit is the one being attacked or targeted. It does not prevent retaliation damage a Unit takes as a result of an attack it declared — attacking is never "free" just because the attacker has Ward. Applied before any multiplier (see below).
-4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack. *(v4.0)* Its **first attack is entirely normal**; **only its second (bonus) attack** doubles the retaliation damage it takes (see Damage Resolution Order). This keeps the "risk on the bonus action" identity without a Frenzy unit dying to doubled retaliation before it ever gets to use its keyword.
+   - **Pierce:** Guard only restricts which target you may legally declare — once an attack against a Guard Unit is legal and declared, Pierce's overflow damage is a consequence of that already-legal hit, not a new target, and proceeds to the Leader normally regardless of Guard. The overflow amount is the leftover damage (attacker's ATK minus what was needed to destroy the target), **capped at half the attacker's effective ATK** *(v4.4, rounded down, minimum 1)* — never the attacker's full ATK. All of this (damage to target, retaliation to attacker, Pierce overflow) is calculated simultaneously off both units' stats the instant before the attack resolves — if the attacker is also destroyed by retaliation in this same exchange, its Pierce overflow still goes through. *(The cap was added after the balance sim showed Pierce decks consistently overperforming — see the changelog. A flat "ATK minus 1" cap was considered and rejected: the naive leftover against any 1-HP blocker is already exactly ATK minus 1, so that cap would never actually change anything.)*
+   - **Ward:** only prevents damage from instances where this Unit is the one being attacked or targeted. It does not prevent retaliation damage a Unit takes as a result of an attack it declared — attacking is never "free" just because the attacker has Ward. Applied before any multiplier (see below). *(v4.4)* When Ward prevents a combat hit, it also **spikes 1 damage back at the attacker** — a reactive punish so Ward decks can answer the aggression that's beating them instead of just delaying it by one turn.
+   - **Steel *(v4.4)*:** a per-turn absorption pool, checked Ward → Steel → Bulwark → Frenzy. Unlike Ward (one full prevention) or Bulwark (flat, attacks only), Steel can blunt several smaller hits across a turn — from attacks, Sap, or Pierce overflow alike — before running dry, refreshing every End Phase.
+4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack. *(v4.0)* Its **first attack is entirely normal**; **only its second (bonus) attack** doubles the retaliation damage it takes (see Damage Resolution Order). *(v4.4)* That second attack also **can't target the enemy Leader directly**, unless no other legal target remains — Frenzy stays a board-control tool instead of also functioning as a second face-attack roll, which the balance sim flagged as the single strongest win predictor in the game. This keeps the "risk on the bonus action" identity without a Frenzy unit dying to doubled retaliation before it ever gets to use its keyword.
 5. Damage is **persistent** and does not reset at end of turn. Any Unit reaching 0 HP is destroyed immediately and moves to Discard, checked continuously.
 
 **Design note on big stat-stick Units:** intentional, not a bug — Pierce, Sap, and direct-removal Events are the answer to a wall.
 
 ### Damage Resolution Order
-Prevention effects (Ward) apply before multiplication effects (Frenzy). If Ward fully prevents an instance of damage, there's nothing left for Frenzy to double.
+Full-prevention (Ward) applies before absorption (Steel *(v4.4)*), before flat reduction (Bulwark), before multiplication (Frenzy): **Ward → Steel → Bulwark → Frenzy**. If Ward fully prevents an instance of damage, there's nothing left for Steel, Bulwark, or Frenzy to touch.
 
 ### HP maximums
 A Unit's or **Leader's** maximum HP is always its printed/starting value, unless a card effect explicitly and permanently raises it. Mend can never heal past the current maximum. *(v4.1: Leader starting/max HP is **64** — raised from v4.0's 28 after ~6-round games proved still short of the 8–10 round target; 64 lands the simulated average at ~9–10 rounds and gives reactive decks the turns they need to stabilize.)*
@@ -302,7 +344,7 @@ You lose immediately if either is true:
 
 **Scrap** — Discard this card from hand to reroll one **unplaced** die of your choice, at any point during Placement Phase.
 
-**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 2** *(v4.1)*, minimum threshold 1. See §7 for the printed-vs-effective interaction with Overflow.
+**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 3** *(v4.4, was 2 in v4.1)*, minimum threshold 1. *(v4.4)* The first time a card's own discount hits that cap, it permanently gains +1/+1, once per card life. See §7 for the printed-vs-effective interaction with Overflow and full detail on the cap bonus.
 
 **Crescendo X** *(v4.2, Event)* — +X to this Event's numeric effect for each die showing a **6** that you placed this turn (including the die that cast this Event). The preferred pattern for a "big roll payoff" card going forward: it scales with a hot roll but is **never a dead card** on a bad one, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
 
@@ -314,13 +356,15 @@ You lose immediately if either is true:
 
 **Swift** — This Unit may attack **or** use an Ability Slot the turn it's cast (subject to the same mutual-exclusivity as any other turn — see §7). Without Swift, it can do neither until your next turn.
 
-**Pierce** — See §8 for full interaction with Guard and simultaneous-death timing.
+**Pierce** — See §8 for full interaction with Guard and simultaneous-death timing. *(v4.4)* Overflow is capped at half the attacker's effective ATK (rounded down, minimum 1).
 
-**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before multipliers (§8). *(v4.0)* Refreshes at the end of the **next End Phase to occur, whether it's yours or your opponent's** — see §3.7.
+**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before Steel/Bulwark/multipliers (§8). *(v4.0)* Refreshes at the end of the **next End Phase to occur, whether it's yours or your opponent's** — see §3.7. *(v4.4)* When it prevents a combat hit, it also spikes 1 damage back at the attacker.
 
-**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. *(v4.0)* Its first attack is normal; **only its second attack** takes doubled retaliation.
+**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. *(v4.0)* Its first attack is normal; **only its second attack** takes doubled retaliation. *(v4.4)* That second attack also can't target the enemy Leader directly, unless no other legal target remains.
 
-**Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
+**Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** *(v4.4)* (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
+
+**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*.
 
 **Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
 
@@ -336,7 +380,7 @@ You lose immediately if either is true:
 
 **Bind** — Target Unit cannot attack, use an Ability Slot, **or deal retaliation damage** *(v4.0)*, during its controller's **next** turn. The retaliation clause turns Bind from "skip a turn" (measured at a weak 41.3% in v3.0) into a genuine tempo tool: it converts a threatening blocker or attacker into a completely safe target for one turn — a real answer to a Guard wall, not a minor speed bump. (By design, self-targeting Bind does nothing on your current turn — it's disruption aimed at an opponent's upcoming turn, so self-targeting is simply useless rather than exploitable.)
 
-**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard — and is subject to the same **one Combo-gated card per turn** cap as an ordinary cast (§6). *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard — and is subject to the same **one Combo-gated card per turn** cap as an ordinary cast (§6). *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* *(v4.4)* **The extra-discard cost is waived entirely for Rare/Super-Rare ("mid" tier) cards** — place the die (and satisfy any pattern/target requirement) with no hand cost at all. The balance sim measured recasting a mid-rarity card via Echo as correlated with *losing* (a losing player reaching for a comeback that wasn't one), while low- and high-rarity Echo recasts both correlated with winning; this fixes the cost curve for the one tier where it was miscalibrated rather than touching the mechanic everywhere. Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
 
 **Aftershock** *(v4.2, Event)* — After this Event resolves, it leaves behind a delayed, lower-value repeat of its own effect. That delayed effect resolves at the **very start of your next turn, before Draw Phase** — the same timing hook Twin's voluntary-abandon already uses (§7). Turns a big Event into something that feels like a genuine two-turn commitment (and is telegraphed for the opponent to see coming), rather than a single burst.
 

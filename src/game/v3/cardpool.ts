@@ -234,6 +234,13 @@ function mapUnit(c: CardTemplate): CardDef {
     def.avenge = true;
     def.keywords = [...(def.keywords || []), 'Avenge'];
   }
+  // v4.4 Steel X: a per-turn damage-absorption pool from ANY source (attacks,
+  // Sap, Pierce overflow) — the balance-sim answer to an aggression-dominant
+  // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
+  if (tier >= 2 && hash(c.id) % 9 === 4) {
+    def.steel = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
+    def.keywords = [...(def.keywords || []), 'Steel'];
+  }
   return def;
 }
 

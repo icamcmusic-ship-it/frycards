@@ -44,6 +44,7 @@ import {
   defaultDiscardChoice,
   rerollsRemaining,
   HAND_LIMIT,
+  rarityTier,
 } from '../game/v3/engine';
 import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
@@ -1178,9 +1179,35 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
+  /** v4.4: mid-rarity Echo waives the extra-discard cost entirely (see
+   * engine.ts echoRecast) — resolve those immediately instead of routing
+   * through the fodder-pick step every other Echo still needs. */
+  const startEchoRecast = (cardIid: string, dice: number | number[], targetIid?: string) => {
+    const c = me.discard.find((h) => h.iid === cardIid);
+    if (!c) return;
+    if (rarityTier(c.def.rarity) === 'mid') {
+      if (echoRecast(g, dice, cardIid, undefined, targetIid)) {
+        setEchoPick(null);
+        setSelDie(null);
+        setSumCast(null);
+        setShowDiscard(false);
+        bump();
+        say(`${c.def.name} echoes back into play (Echo cost waived — mid-rarity).`);
+      } else {
+        say('Illegal Echo.');
+      }
+      if (g.winner) setStage('over');
+      return;
+    }
+    setEchoPick({ cardIid, dieIndices: Array.isArray(dice) ? dice : undefined, targetIid });
+    setSumCast(null);
+    say('Now pick a hand card to discard.');
+  };
+
   // ---- 'sum'-cost Echo recast: same dice-picker as confirmSumCast, but the
   // card lives in discard and resolution still needs a fodder discard from
-  // hand — hands off to echoPick/tryEchoFodder instead of casting directly.
+  // hand — hands off to echoPick/tryEchoFodder instead of casting directly
+  // (unless mid-rarity, which startEchoRecast resolves right away).
   const confirmSumEcho = () => {
     if (!sumCast || sumCast.sel.size === 0) return;
     const c = me.discard.find((h) => h.iid === sumCast.cardIid);
@@ -1198,22 +1225,19 @@ export function GameV4({
       setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
       return;
     }
-    setEchoPick({ cardIid: c.iid, dieIndices });
-    setSumCast(null);
-    say('Now pick a hand card to discard.');
+    startEchoRecast(c.iid, dieIndices);
   };
 
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
     if (pending.kind === 'echo') {
-      // Echo still needs a fodder discard from hand — stash the chosen
-      // target (and, for a 'sum'-cost Echo, the dice already picked to pay
-      // it) and hand off to the fodder-picking step instead of resolving
-      // immediately.
-      setEchoPick({ cardIid: pending.cardIid, targetIid, dieIndices: pending.dieIndices });
+      // Echo (unless mid-rarity — see startEchoRecast) still needs a fodder
+      // discard from hand: hand off to the fodder-picking step instead of
+      // resolving immediately, carrying the target (and, for a 'sum'-cost
+      // Echo, the dice already picked to pay it) along.
+      const dice = pending.dieIndices ?? selDie!;
       setPending(null);
-      setSumCast(null);
-      say('Now pick a hand card to discard.');
+      startEchoRecast(pending.cardIid, dice, targetIid);
       return;
     }
     let ok = false;
@@ -1529,7 +1553,10 @@ export function GameV4({
   };
 
   // ---- combat helpers -----------------------------------------------------
-  const combatTargets = attacker ? legalTargets(g, HUMAN) : [];
+  // v4.4: attacker-aware — excludes the enemy Leader when `attacker` is
+  // mid-Frenzy's second swing (see engine.ts legalTargets), so the target
+  // picker never even offers an illegal face attack for that swing.
+  const combatTargets = attacker ? legalTargets(g, HUMAN, attacker) : [];
 
   const tryAttackTarget = (iid: string) => {
     if (!attacker) return;
@@ -2439,8 +2466,7 @@ export function GameV4({
                           setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast! });
                           return;
                         }
-                        setEchoPick({ cardIid: c.iid });
-                        say('Now pick a hand card to discard.');
+                        startEchoRecast(c.iid, selDie!);
                       }}
                       className={cn(
                         'btn-pop text-[8px] font-bold px-1 ink-border-sm',

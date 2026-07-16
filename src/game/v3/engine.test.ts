@@ -244,6 +244,10 @@ import {
   endTurn,
   comboCheck,
   Game,
+  effMaxHp,
+  remainingHp,
+  wouldSapKill,
+  ANCHOR_CAP,
 } from './engine';
 
 const mkU = (id: string, over: Partial<CardDef> = {}): CardDef => ({
@@ -311,15 +315,16 @@ test('Guard wall restricts targets; killing the last Guard frees later attacks (
   expect(attack(g, att2.iid, g.players.B.leader.iid)).toBe(true);
 });
 
-test('Pierce overflow is exactly the leftover, goes through even if attacker dies, blocked by Ward', () => {
+test('Pierce overflow is the leftover capped at half ATK (v4.4), goes through even if attacker dies, blocked by Ward', () => {
   const g = combatGame();
   const att = makeInst(mkU('p1', { atk: 5, hp: 1, keywords: ['Pierce'] }), 'A');
   const blocker = makeInst(mkU('b1', { atk: 4, hp: 2 }), 'B');
   g.players.A.board.push(att);
   g.players.B.board.push(blocker);
   expect(attack(g, att.iid, blocker.iid)).toBe(true);
-  // leftover = 5 - 2 = 3 to Leader; attacker died to retaliation but overflow still lands
-  expect(g.players.B.leader.damage).toBe(3);
+  // naive leftover = 5 - 2 = 3, but v4.4 caps overflow at floor(atk/2) = 2 ->
+  // to the Leader; attacker died to retaliation but overflow still lands.
+  expect(g.players.B.leader.damage).toBe(2);
   expect(g.players.A.board.length).toBe(0);
   expect(g.players.B.board.length).toBe(0);
 
@@ -329,7 +334,7 @@ test('Pierce overflow is exactly the leftover, goes through even if attacker die
   g.players.A.board.push(att2);
   g.players.B.board.push(warded);
   expect(attack(g, att2.iid, warded.iid)).toBe(true);
-  expect(g.players.B.leader.damage).toBe(3); // unchanged
+  expect(g.players.B.leader.damage).toBe(2); // unchanged
   expect(warded.damage).toBe(0);
 });
 
@@ -384,16 +389,17 @@ test('ATK is never negative: a debuffed 0-ATK unit deals 0, never heals (§8)', 
   expect(tgt.damage).toBe(2); // 0 damage dealt, no "healing"
 });
 
-test('Anchor reduction caps at 2 and floors at 1; Overflow keys off the effective threshold', () => {
+test('Anchor reduction caps at 3 (v4.4) and floors at 1; Overflow keys off the effective threshold', () => {
   const g = freshGame();
   const p = g.players.A;
   for (let i = 0; i < 3; i++) p.board.push(makeInst(mkU(`an${i}`, { keywords: ['Anchor'] }), 'A'));
   const costly = mkU('anc', { threshold: 6, keywords: ['Anchor'] });
-  expect(effThreshold(g, 'A', costly)).toBe(4); // -2 cap despite 3 Anchors in play
+  expect(ANCHOR_CAP).toBe(3);
+  expect(effThreshold(g, 'A', costly)).toBe(3); // -3 cap with 3 Anchors in play
   const cheap = mkU('anc2', { threshold: 2, keywords: ['Anchor'] });
   expect(effThreshold(g, 'A', cheap)).toBe(1); // floor 1
 
-  // Overflow vs effective threshold: printed 6, effective 4, Overflow 2 -> a 6 triggers it.
+  // Overflow vs effective threshold: printed 6, effective 3, Overflow 2 -> a 6 triggers it.
   g.active = 'A';
   startTurn(g);
   reroll(g, []);
@@ -410,7 +416,11 @@ test('Anchor reduction caps at 2 and floors at 1; Overflow keys off the effectiv
   p.dice[die].value = 6;
   expect(castFromHand(g, die, of.iid)).toBe(true);
   const onBoard = p.board.find((u) => u.iid === of.iid)!;
-  expect(onBoard.permAtk).toBe(1); // Overflow fired off 6 - 4 >= 2
+  // Overflow fired off 6 - 3 >= 2 (+1/+1 buff), and entering with 3 other
+  // Anchors already at the ANCHOR_CAP grants the one-time v4.4 cap bonus
+  // (another +1/+1) — 2/2 total.
+  expect(onBoard.permAtk).toBe(2);
+  expect(onBoard.permHp).toBe(2);
 });
 
 test('Echo: a spent-Echo unit that dies is banished, and can never be recast a second time', () => {
@@ -1153,9 +1163,9 @@ test('Contested doubles the Location passive only while the opponent controls no
   );
   const u = makeInst(mkU('cu', { atk: 2 }), 'A');
   p.board.push(u);
-  expect(effAtk(g, u)).toBe(4); // 2 + 1x2 while uncontested
+  expect(effAtk(g, u)).toBe(6); // 2 + 2x2 while uncontested (v4.4: passive is +2, was +1)
   g.players.B.location = makeInst({ id: 'ol', name: 'ol', type: 'Location' }, 'B');
-  expect(effAtk(g, u)).toBe(3); // 2 + 1 once the opponent has a Location
+  expect(effAtk(g, u)).toBe(4); // 2 + 2 once the opponent has a Location
 });
 
 test('Pitch mends 1 per unplaced die at End Phase; Tribute needs 2+ pitched dice, not 1', () => {
@@ -1343,4 +1353,162 @@ test('BUG FIXED: a self-buff Combo caps its stacking instead of snowballing fore
   expect(prowler.comboSelfBuffStacks).toBe(MAX_COMBO_SELF_BUFF_STACKS);
   expect(prowler.permAtk).toBe(MAX_COMBO_SELF_BUFF_STACKS);
   expect(prowler.permHp).toBe(MAX_COMBO_SELF_BUFF_STACKS);
+});
+
+// ---------------------------------------------------------------------------
+// v4.4 balance-sim rebalance: Steel, Ward punish, Pierce cap, Frenzy target
+// restriction, Anchor cap bonus, mid-rarity Echo waiver, Momentum, Location
+// passive bump.
+// ---------------------------------------------------------------------------
+
+test('v4.4 Steel X absorbs damage from any source (attacks, Sap), checked Ward -> Steel -> Bulwark, refreshes at End Phase', () => {
+  const g = combatGame();
+  const steeled = makeInst(mkU('st1', { atk: 0, hp: 10, steel: { x: 2 }, bulwark: { x: 1 } }), 'B');
+  g.players.B.board.push(steeled);
+  const att = makeInst(mkU('att1', { atk: 4, hp: 10 }), 'A');
+  g.players.A.board.push(att);
+  expect(attack(g, att.iid, steeled.iid)).toBe(true);
+  // Steel absorbs 2 of the 4, Bulwark reduces 1 more -> 1 damage gets through.
+  expect(steeled.damage).toBe(1);
+  expect(g.stats.steelAbsorbed).toBe(2);
+
+  // Steel's pool is spent for the turn -> a second hit only gets Bulwark's help.
+  const att2 = makeInst(mkU('att2', { atk: 3, hp: 10 }), 'A');
+  g.players.A.board.push(att2);
+  expect(attack(g, att2.iid, steeled.iid)).toBe(true);
+  expect(steeled.damage).toBe(1 + 2); // 3 - 1 Bulwark, no Steel left this turn
+  expect(g.stats.steelAbsorbed).toBe(2); // unchanged
+
+  // Non-combat Sap draws from Steel too ("any source") but Steel is already empty.
+  applyEffect(g, 'A', { action: 'sap', value: 5, target: 'enemyUnit' }, steeled.iid);
+  expect(steeled.damage).toBe(1 + 2 + 5); // Bulwark never applies outside combat
+
+  endTurn(g); // one full End Phase
+  expect(steeled.steelUsed).toBe(0); // refreshed, same as Ward
+});
+
+test('v4.4 Steel X also absorbs a would-be-lethal Sap (wouldSapKill accounts for it)', () => {
+  const g = freshGame();
+  const p = g.players.B;
+  const steeled = makeInst(mkU('st2', { atk: 0, hp: 3, steel: { x: 2 } }), 'B');
+  p.board.push(steeled);
+  expect(wouldSapKill(g, steeled, 6)).toBe(true); // 6 - 2 Steel = 4, lethal vs 3 HP
+  expect(wouldSapKill(g, steeled, 4)).toBe(false); // 4 - 2 Steel = 2, survives
+});
+
+test('v4.4 Ward spikes 1 damage back at the attacker when it prevents a combat hit', () => {
+  const g = combatGame();
+  const warded = makeInst(mkU('wd1', { atk: 0, hp: 5, keywords: ['Ward'] }), 'B');
+  g.players.B.board.push(warded);
+  const att = makeInst(mkU('att3', { atk: 6, hp: 10 }), 'A');
+  g.players.A.board.push(att);
+  expect(attack(g, att.iid, warded.iid)).toBe(true);
+  expect(warded.damage).toBe(0); // fully prevented, as before
+  expect(att.damage).toBe(1); // new: Ward spikes 1 back
+  expect(g.stats.wardPunishDamage).toBe(1);
+});
+
+test('v4.4 Pierce overflow is capped at half the attacker\'s effective ATK (floor, min 1)', () => {
+  const g = combatGame();
+  // A naive "leftover damage" cap at (atk - 1) would be a no-op here — the
+  // leftover against any 1-HP blocker is ALWAYS exactly atk - 1 already.
+  // The real v4.4 nerf is a floor(atk/2) cap, which this exercises.
+  const att = makeInst(mkU('bigpierce', { atk: 10, hp: 10, keywords: ['Pierce'] }), 'A');
+  const blocker = makeInst(mkU('chip', { atk: 0, hp: 1 }), 'B');
+  g.players.A.board.push(att);
+  g.players.B.board.push(blocker);
+  expect(attack(g, att.iid, blocker.iid)).toBe(true);
+  // Naive leftover = 10 - 1 = 9; capped at floor(10/2) = 5.
+  expect(g.players.B.leader.damage).toBe(5);
+
+  // Low-ATK attacker: the min-1 floor keeps Pierce from being zeroed out.
+  const att2 = makeInst(mkU('smallpierce', { atk: 2, hp: 10, keywords: ['Pierce'] }), 'A');
+  const blocker2 = makeInst(mkU('chip2', { atk: 0, hp: 1 }), 'B');
+  g.players.A.board.push(att2);
+  g.players.B.board.push(blocker2);
+  const before = g.players.B.leader.damage;
+  expect(attack(g, att2.iid, blocker2.iid)).toBe(true);
+  // Naive leftover = 2 - 1 = 1; cap = max(1, floor(2/2)) = 1 -> unaffected.
+  expect(g.players.B.leader.damage - before).toBe(1);
+});
+
+test("v4.4 Frenzy's second swing can't target the enemy Leader directly unless it's the only target", () => {
+  const g = combatGame();
+  const fz = makeInst(mkU('fzL', { atk: 2, hp: 20, keywords: ['Frenzy'] }), 'A');
+  g.players.A.board.push(fz);
+  const wall = makeInst(mkU('wallL', { atk: 0, hp: 20 }), 'B');
+  g.players.B.board.push(wall);
+  // First swing: Leader is a legal target (a Unit exists too, but no Guard).
+  expect(legalTargets(g, 'A', fz.iid).some((t) => t.def.type === 'Leader')).toBe(true);
+  expect(attack(g, fz.iid, wall.iid)).toBe(true); // first swing at the Unit
+  // Second swing: Leader is now excluded from legal targets (a Unit still exists).
+  const secondTargets = legalTargets(g, 'A', fz.iid);
+  expect(secondTargets.some((t) => t.def.type === 'Leader')).toBe(false);
+  expect(attack(g, fz.iid, g.players.B.leader.iid)).toBe(false); // illegal, rejected
+
+  // With no enemy Units left, the Leader becomes the only legal target again.
+  g.players.B.board = [];
+  const onlyTargets = legalTargets(g, 'A', fz.iid);
+  expect(onlyTargets).toHaveLength(1);
+  expect(onlyTargets[0].def.type).toBe('Leader');
+  expect(attack(g, fz.iid, g.players.B.leader.iid)).toBe(true);
+});
+
+test('v4.4 Echo waives the extra-discard fodder cost for mid-rarity (Rare/Super-Rare) cards only', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  const midCard = makeInst({ ...echoUnit, id: 'mid_echo', rarity: 'Rare' }, 'A');
+  p.discard.push(midCard);
+  const spareHandCard = p.hand[0];
+  const handSizeBefore = p.hand.length;
+  const die = p.dice.findIndex((d) => !d.placed);
+  p.dice[die].value = 6;
+  // No discardIid supplied at all — should still work for a mid-rarity card.
+  expect(echoRecast(g, die, midCard.iid, undefined)).toBe(true);
+  expect(p.hand.length).toBe(handSizeBefore); // nothing was discarded as fodder
+  expect(p.hand.some((c) => c.iid === spareHandCard.iid)).toBe(true);
+
+  // A low-rarity (Common) card still requires real fodder.
+  startTurn(g);
+  reroll(g, []);
+  const lowCard = makeInst({ ...echoUnit, id: 'low_echo', rarity: 'Common' }, 'A');
+  p.discard.push(lowCard);
+  const die2 = p.dice.findIndex((d) => !d.placed);
+  p.dice[die2].value = 6;
+  expect(echoRecast(g, die2, lowCard.iid, undefined)).toBe(false); // no fodder id -> rejected
+});
+
+test('v4.4 Momentum grants a 6th die when behind (Leader <= half HP, fewer Units), not otherwise', () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  const opp = g.players.B;
+  // Even board, full HP -> no Momentum.
+  startTurn(g);
+  expect(p.dice.length).toBe(5);
+
+  // Behind on both counts -> Momentum grants a 6th die.
+  endTurn(g);
+  endTurn(g); // back to A's turn
+  p.leader.damage = Math.ceil(effMaxHp(g, p.leader) / 2); // at/below half HP
+  opp.board.push(makeInst(mkU('oppUnit', {}), 'B'));
+  startTurn(g);
+  expect(p.dice.length).toBe(6);
+  expect(remainingHp(g, p.leader) * 2).toBeLessThanOrEqual(effMaxHp(g, p.leader));
+});
+
+test('v4.4 Location passives are +2 (was +1)', () => {
+  const g = freshGame();
+  const p = g.players.A;
+  const loc = makeInst(
+    { id: 'locbump', name: 'locbump', type: 'Location', locPassive: 'ATK_ALL' },
+    'A',
+  );
+  p.location = loc;
+  const u = makeInst(mkU('lu', { atk: 1 }), 'A');
+  p.board.push(u);
+  expect(effAtk(g, u)).toBe(3); // printed 1 + 2 from the Location passive
 });
