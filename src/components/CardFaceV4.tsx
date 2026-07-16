@@ -69,6 +69,11 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
     'A second, once-per-game Leader Ability Slot, usable starting on a specific turn of yours.',
   Sap: 'Deals damage directly to the named target, bypassing normal combat.',
   Mend: 'Heals that much damage from the named target.',
+  Bind: "Target enemy Unit can't attack, use an Ability Slot, or deal retaliation damage during its controller's next turn.",
+  Surge: 'Draw a card (does nothing if your deck is empty — it never causes a loss).',
+  Overflow:
+    "If the die placed on this slot beats its effective threshold by this much or more, the bonus effect triggers immediately in addition to the card's normal effect.",
+  Combo: "Triggers if your final five-die roll contains the named pattern as a subset, checked once at Combo Check regardless of when the card was cast.",
 };
 
 /** v4.3: player-facing display label for each dice-pattern gate. */
