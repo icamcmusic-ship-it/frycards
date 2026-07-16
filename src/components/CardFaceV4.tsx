@@ -423,6 +423,7 @@ export function KeywordChip({
   small,
   autoIntroduce,
   explainer = true,
+  fontSize,
 }: {
   key?: React.Key;
   kw: string;
@@ -439,11 +440,18 @@ export function KeywordChip({
    * on the click-to-open popover instead, so the definition never runs the
    * card's text box past its edges. */
   explainer?: boolean;
+  /** Explicit px font size, overriding the small/normal default — used by
+   * the `full` tier to shrink long keyword+rules text as a unit so it fits
+   * the fixed-height card instead of clipping at the bottom edge. */
+  fontSize?: number;
 }) {
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
 
   return (
-    <span className={cn('leading-snug', small ? 'text-[6.5px]' : 'text-[9px]')}>
+    <span
+      className={cn('leading-snug', !fontSize && (small ? 'text-[6.5px]' : 'text-[9px]'))}
+      style={fontSize ? { fontSize } : undefined}
+    >
       <span className="relative inline-block">
         <button
           ref={btnRef}
@@ -901,6 +909,21 @@ export function CardFace({
   // line (see RULES_LINE_KEYWORDS) so the top-of-box row never repeats what
   // the rules text below it already says.
   const topKeywords = kwList(def).filter((kw) => !RULES_LINE_KEYWORDS.has(kw));
+  // Cards printing full inline reminder text (the `full` tier) can easily
+  // out-grow the fixed-height card — a card with a long keyword like Echo
+  // plus several rules lines was clipping mid-sentence at the card's bottom
+  // edge. Shrink the keyword+rules text together, the same way the name
+  // already shrinks for a long title, instead of letting it silently
+  // overflow the (overflow-hidden) card box.
+  const textBoxChars = cfg.keywordExplainer
+    ? topKeywords.reduce((sum, kw) => {
+        const explainer = KEYWORD_GLOSSARY[kw];
+        return sum + kw.length + (explainer ? explainer.length + 3 : 0);
+      }, 0) + rules.join(' ').length
+    : 0;
+  const textBoxScale = cfg.keywordExplainer
+    ? fitFontSize('x'.repeat(textBoxChars), 1, 0.55, 160)
+    : 1;
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
@@ -1329,6 +1352,9 @@ export function CardFace({
                   small={cfg.keywordSmall}
                   autoIntroduce={introduceKeywords}
                   explainer={cfg.keywordExplainer}
+                  fontSize={
+                    cfg.keywordExplainer ? (cfg.keywordSmall ? 6.5 : 9) * textBoxScale : undefined
+                  }
                 />
               ))}
             </div>
@@ -1337,7 +1363,10 @@ export function CardFace({
           {rules.length > 0 && (
             <div
               className={cn('shrink-0 leading-snug', cfg.rules, topKeywords.length === 0 && 'mt-0')}
-              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+              style={{
+                ...(fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined),
+                ...(cfg.keywordExplainer ? { fontSize: 9.5 * textBoxScale } : undefined),
+              }}
             >
               {cfg.rulesMultiline ? (
                 rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
