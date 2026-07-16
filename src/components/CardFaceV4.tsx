@@ -111,62 +111,109 @@ export function costSummary(def: CardDef): string | null {
   return `Cast: one die ${def.threshold}+`;
 }
 
+/** Plain-English phrase for who/what an effect hits — spelled out so a rules
+ * line never leaves the reader guessing (e.g. a bare "Sap 2" used to not say
+ * *who* takes the 2 damage). */
+function targetPhrase(target: Effect['target']): string {
+  switch (target) {
+    case 'enemyLeader':
+      return 'the enemy Leader';
+    case 'friendlyLeader':
+      return 'your Leader';
+    case 'enemyUnit':
+      return 'a target enemy Unit';
+    case 'friendlyUnit':
+      return 'a target friendly Unit';
+    case 'friendlyAny':
+      return 'your Leader or a friendly Unit';
+    case 'anyTarget':
+      return 'a target enemy Unit or the enemy Leader';
+    case 'allEnemyUnits':
+      return 'ALL enemy Units';
+    case 'allFriendlyUnits':
+      return 'ALL friendly Units';
+    case 'self':
+      return 'this card';
+    case 'none':
+      return '';
+  }
+}
+
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
   switch (eff.action) {
     case 'sap':
-      return eff.target === 'enemyLeader'
-        ? `Sap ${v} enemy Leader`
-        : eff.target === 'allEnemyUnits'
-          ? `Sap ${v} ALL enemy Units`
-          : `Sap ${v}`;
+      return `Sap ${v} to ${targetPhrase(eff.target)}`;
     case 'mend':
-      return `Mend ${v}`;
+      return `Mend ${v} to ${targetPhrase(eff.target)}`;
     case 'draw':
-      return `Surge (draw ${v})`;
+      return `Surge — draw ${v || 1} card${(v || 1) === 1 ? '' : 's'}`;
     case 'bind':
-      return 'Bind an enemy Unit';
+      return `Bind ${targetPhrase(eff.target)} (can't attack, use its Ability Slot, or retaliate next turn)`;
     case 'destroy':
-      return eff.target === 'allEnemyUnits' ? 'Destroy ALL enemy Units' : 'Destroy a Unit';
-    case 'buff':
-      return eff.target === 'allFriendlyUnits'
-        ? `All friendly +${v}/+${v}`
-        : eff.target === 'self'
-          ? `This gains +${v}/+${v}`
-          : `A friendly Unit +${v}/+${v}`;
+      return `Destroy ${targetPhrase(eff.target)}`;
+    case 'buff': {
+      const isAll = eff.target === 'allFriendlyUnits';
+      const subject =
+        eff.target === 'self' ? 'This card' : isAll ? 'ALL friendly Units' : 'A target friendly Unit';
+      return `${subject} ${isAll ? 'get' : 'gets'} +${v}/+${v}`;
+    }
   }
 }
 
-/** Every rules line this card prints, one entry per ability/keyword effect. */
+/** Every rules line this card prints, one entry per ability/keyword effect —
+ * phrased as a plain-English trigger ("when this happens") followed by what
+ * it does, so a line reads on its own without needing outside context. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
   if (def.comboGate && def.onCast)
     bits.push(
-      `Cast (${GATE_LABEL[def.comboGate] || def.comboGate}): ${describeEffect(def.onCast)}`,
+      `Cast by rolling ${GATE_LABEL[def.comboGate] || def.comboGate}: ${describeEffect(def.onCast)}`,
     );
-  else if (def.onCast) bits.push(`On cast: ${describeEffect(def.onCast)}`);
+  else if (def.onCast) bits.push(`When cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
-    bits.push(`Ability ${def.ability.threshold}+: ${describeEffect(def.ability.effect)}`);
-  if (def.combo) bits.push(`Combo ${def.combo.pattern}: ${describeEffect(def.combo.effect)}`);
+    bits.push(
+      `Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
+    );
+  if (def.combo)
+    bits.push(
+      `Combo (if your roll has ${GATE_LABEL[def.combo.pattern] || def.combo.pattern}): ${describeEffect(def.combo.effect)}`,
+    );
   if (def.overflow)
-    bits.push(`Overflow ${def.overflow.amount}: ${describeEffect(def.overflow.effect)}`);
-  if (def.twinBonus) bits.push(`Twin bonus: ${describeEffect(def.twinBonus)}`);
-  if (def.stagedPassive) bits.push(`While staged: ${describeEffect(def.stagedPassive)} each turn`);
-  if (def.aftershock) bits.push(`Aftershock: ${describeEffect(def.aftershock)} next turn`);
-  if (def.crescendo) bits.push(`Crescendo ${def.crescendo.x}: +${def.crescendo.x} per 6 placed`);
-  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}`);
-  if (def.toll) bits.push(`Toll ${def.toll.x}`);
-  if (def.avenge) bits.push('Avenge: +1/+1 when another friendly Unit dies');
+    bits.push(
+      `Overflow (die beats this card's cost by ${def.overflow.amount}+): also ${describeEffect(def.overflow.effect)}`,
+    );
+  if (def.twinBonus) bits.push(`Twin bonus (once both dice are placed): ${describeEffect(def.twinBonus)}`);
+  if (def.stagedPassive)
+    bits.push(`While staged, waiting for its match (Twin): ${describeEffect(def.stagedPassive)} each of your turns`);
+  if (def.aftershock)
+    bits.push(`Aftershock — at the start of your next turn: ${describeEffect(def.aftershock)}`);
+  if (def.crescendo)
+    bits.push(`Crescendo: +${def.crescendo.x} for each die showing a 6 you placed this turn`);
+  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}: reduces damage from attacks by ${def.bulwark.x}`);
+  if (def.toll) bits.push(`Toll ${def.toll.x}: reduces all damage to your Leader by ${def.toll.x}`);
+  if (def.avenge) bits.push('Avenge: whenever another friendly Unit dies, this gets +1/+1');
   if (def.locPassive)
-    bits.push(def.locPassive === 'ATK_ALL' ? 'Your Units get +1 ATK' : 'Your Units get +1 max HP');
-  if (def.contested) bits.push('Contested: passive doubled while opponent has no Location');
-  if (def.excavate) bits.push(`Excavate ${def.excavate.x}: ability cheapens each turn`);
-  if (def.tribute) bits.push(`Tribute: ${describeEffect(def.tribute)} if you Pitch 2+`);
-  if (def.snap) bits.push('Snap: castable during Reroll Phase');
-  if (def.resolve) bits.push(`Resolve ${def.resolve.x}: ability cheapens below half HP`);
+    bits.push(
+      def.locPassive === 'ATK_ALL'
+        ? 'Passive: all your Units get +1 ATK'
+        : 'Passive: all your Units get +1 max HP',
+    );
+  if (def.contested) bits.push("Contested: this Location's passive is doubled while your opponent controls no Location");
+  if (def.excavate)
+    bits.push(
+      `Excavate ${def.excavate.x}: this Location's Ability cost drops ${def.excavate.x} lower for each turn it's stayed in play`,
+    );
+  if (def.tribute)
+    bits.push(`Tribute — at your End Phase, if you Pitched 2+ dice this turn: ${describeEffect(def.tribute)}`);
+  if (def.snap) bits.push('Snap: may be cast during your Reroll Phase, not just Placement');
+  if (def.resolve)
+    bits.push(
+      `Resolve ${def.resolve.x}: this card's Ability cost drops ${def.resolve.x} while your Leader is at half HP or less`,
+    );
   if (def.ultimate)
     bits.push(
-      `Ultimate turn ${def.ultimate.unlockTurn}+ (${def.ultimate.threshold}+): ${describeEffect(def.ultimate.effect)}`,
+      `Ultimate — starting your turn ${def.ultimate.unlockTurn}, once per game (place a die showing ${def.ultimate.threshold}+): ${describeEffect(def.ultimate.effect)}`,
     );
   return bits;
 }
@@ -175,6 +222,26 @@ export function cardRuleLines(def: CardDef): string[] {
 export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
 }
+
+/** Keywords whose numeric detail (e.g. "Bulwark 2", "Resolve 1") is already
+ * printed as its own line by `cardRuleLines` above. These are still tagged
+ * in `def.keywords` (for deck-building/filtering), but must be skipped in
+ * the top-of-box keyword row — otherwise the same ability shows up twice on
+ * the card: once as a bare name up top, once with its real number in the
+ * rules text below. Plain keywords with no dedicated rules line of their
+ * own (Guard, Swift, Ward, ...) still belong in the top row. */
+const RULES_LINE_KEYWORDS = new Set([
+  'Bulwark',
+  'Toll',
+  'Avenge',
+  'Crescendo',
+  'Aftershock',
+  'Tribute',
+  'Excavate',
+  'Contested',
+  'Resolve',
+  'Ultimate',
+]);
 
 /** Scales a font size down as text grows past a soft length target, so long
  * names/flavor text shrink to fit instead of getting clipped or truncated.
@@ -402,6 +469,8 @@ export function KeywordChip({
   kw,
   small,
   autoIntroduce,
+  explainer = true,
+  fontSize,
 }: {
   key?: React.Key;
   kw: string;
@@ -413,11 +482,23 @@ export function KeywordChip({
    * a screen that renders many cards at once (Collection, Deck Builder)
    * would fire a stack of popovers simultaneously. */
   autoIntroduce?: boolean;
+  /** Print the reminder text inline after the keyword name — only the
+   * `full` card tier has room for this; smaller tiers pass false and rely
+   * on the click-to-open popover instead, so the definition never runs the
+   * card's text box past its edges. */
+  explainer?: boolean;
+  /** Explicit px font size, overriding the small/normal default — used by
+   * the `full` tier to shrink long keyword+rules text as a unit so it fits
+   * the fixed-height card instead of clipping at the bottom edge. */
+  fontSize?: number;
 }) {
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
 
   return (
-    <span className={cn('leading-snug', small ? 'text-[6.5px]' : 'text-[9px]')}>
+    <span
+      className={cn('leading-snug', !fontSize && (small ? 'text-[6.5px]' : 'text-[9px]'))}
+      style={fontSize ? { fontSize } : undefined}
+    >
       <span className="relative inline-block">
         <button
           ref={btnRef}
@@ -429,7 +510,7 @@ export function KeywordChip({
         </button>
         {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
       </span>
-      {text && <span className="italic opacity-80"> ({text})</span>}
+      {explainer && text && <span className="italic opacity-80"> ({text})</span>}
     </span>
   );
 }
@@ -682,6 +763,11 @@ const TIER: Record<
     textBoxPad: string;
     keywordMax: number;
     keywordSmall: boolean;
+    /** Only the `full` tier has room to print each keyword's reminder text
+     * inline (MTG-style); smaller tiers show just the clickable keyword name
+     * — tap/click still opens the same popover — to avoid running long
+     * definitions off the edge of a small card. */
+    keywordExplainer: boolean;
     rules: string;
     rulesMultiline: boolean;
     showFlavor: boolean;
@@ -710,6 +796,7 @@ const TIER: Record<
     textBoxPad: 'p-0.5',
     keywordMax: 0,
     keywordSmall: true,
+    keywordExplainer: false,
     rules: 'hidden',
     rulesMultiline: false,
     showFlavor: false,
@@ -737,6 +824,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 2,
     keywordSmall: true,
+    keywordExplainer: false,
     rules: 'mt-0.5 text-[6.5px] line-clamp-1',
     rulesMultiline: false,
     showFlavor: false,
@@ -764,6 +852,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 4,
     keywordSmall: false,
+    keywordExplainer: false,
     rules: 'mt-0.5 text-[7.5px] line-clamp-2',
     rulesMultiline: false,
     showFlavor: false,
@@ -791,6 +880,7 @@ const TIER: Record<
     textBoxPad: 'p-1.5',
     keywordMax: 8,
     keywordSmall: false,
+    keywordExplainer: true,
     rules: 'mt-1 text-[9.5px] space-y-0.5',
     rulesMultiline: true,
     showFlavor: true,
@@ -862,6 +952,25 @@ export function CardFace({
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
   const rules = cardRuleLines(def);
+  // Skip keywords whose numeric detail is already printed as its own rules
+  // line (see RULES_LINE_KEYWORDS) so the top-of-box row never repeats what
+  // the rules text below it already says.
+  const topKeywords = kwList(def).filter((kw) => !RULES_LINE_KEYWORDS.has(kw));
+  // Cards printing full inline reminder text (the `full` tier) can easily
+  // out-grow the fixed-height card — a card with a long keyword like Echo
+  // plus several rules lines was clipping mid-sentence at the card's bottom
+  // edge. Shrink the keyword+rules text together, the same way the name
+  // already shrinks for a long title, instead of letting it silently
+  // overflow the (overflow-hidden) card box.
+  const textBoxChars = cfg.keywordExplainer
+    ? topKeywords.reduce((sum, kw) => {
+        const explainer = KEYWORD_GLOSSARY[kw];
+        return sum + kw.length + (explainer ? explainer.length + 3 : 0);
+      }, 0) + rules.join(' ').length
+    : 0;
+  const textBoxScale = cfg.keywordExplainer
+    ? fitFontSize('x'.repeat(textBoxChars), 1, 0.55, 160)
+    : 1;
   const set = setStyle(def.set);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
@@ -1274,25 +1383,37 @@ export function CardFace({
                 }
           }
         >
-          {kwList(def).length > 0 && cfg.keywordMax > 0 && (
-            <div className={cn('flex flex-col shrink-0', size !== 'full' && 'min-h-[9px]')}>
-              {kwList(def)
-                .slice(0, cfg.keywordMax)
-                .map((kw) => (
-                  <KeywordChip
-                    key={kw}
-                    kw={kw}
-                    small={cfg.keywordSmall}
-                    autoIntroduce={introduceKeywords}
-                  />
-                ))}
+          {topKeywords.length > 0 && cfg.keywordMax > 0 && (
+            <div
+              className={cn(
+                'shrink-0',
+                cfg.keywordExplainer
+                  ? 'flex flex-col'
+                  : 'flex flex-row flex-wrap gap-x-1.5 gap-y-0 min-h-[9px]',
+              )}
+            >
+              {topKeywords.slice(0, cfg.keywordMax).map((kw) => (
+                <KeywordChip
+                  key={kw}
+                  kw={kw}
+                  small={cfg.keywordSmall}
+                  autoIntroduce={introduceKeywords}
+                  explainer={cfg.keywordExplainer}
+                  fontSize={
+                    cfg.keywordExplainer ? (cfg.keywordSmall ? 6.5 : 9) * textBoxScale : undefined
+                  }
+                />
+              ))}
             </div>
           )}
 
           {rules.length > 0 && (
             <div
-              className={cn('shrink-0 leading-snug', cfg.rules, kwList(def).length === 0 && 'mt-0')}
-              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+              className={cn('shrink-0 leading-snug', cfg.rules, topKeywords.length === 0 && 'mt-0')}
+              style={{
+                ...(fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined),
+                ...(cfg.keywordExplainer ? { fontSize: 9.5 * textBoxScale } : undefined),
+              }}
             >
               {cfg.rulesMultiline ? (
                 rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
