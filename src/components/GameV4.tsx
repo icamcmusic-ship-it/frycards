@@ -511,7 +511,7 @@ function LeaderPanel({
       />
       {ab && (
         <AbilityPill
-          label={`ABILITY ${abThr}+${abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
+          label={`BASE ABILITY ${abThr}+${abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
           desc={describeEffect(ab.effect)}
           usable={isHuman && !abilityWhy}
           used={l.abilityUsed}
@@ -573,14 +573,18 @@ function LocationPanel({
       )}
     >
       <CardFace
-        def={loc.def}
+        // Ability renders as the labeled pill below (see AbilityPill) —
+        // strip it from the def the shared rules section would otherwise
+        // print, same as LeaderPanel already does, so the cost/effect isn't
+        // shown twice on screen at once.
+        def={{ ...loc.def, ability: undefined }}
         size="standard"
         introduceKeywords
         onClick={isRallySource ? onRallyClick : onInspect}
       />
       {ab && (
         <AbilityPill
-          label={`ABILITY ${thr}+${thr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
+          label={`BASE ABILITY ${thr}+${thr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
           desc={describeEffect(ab.effect)}
           usable={!abilityWhy}
           used={loc.abilityUsed}
@@ -2148,7 +2152,7 @@ export function GameV4({
                   />
                   {u.def.ability && (
                     <AbilityPill
-                      label={`ABILITY ${effAbilityThreshold(g, u)}+${
+                      label={`BASE ABILITY ${effAbilityThreshold(g, u)}+${
                         effAbilityThreshold(g, u) !== u.def.ability.threshold
                           ? ` (was ${u.def.ability.threshold}+)`
                           : ''

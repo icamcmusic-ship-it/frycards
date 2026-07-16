@@ -173,7 +173,7 @@ export function cardRuleLines(def: CardDef): string[] {
   else if (def.onCast) bits.push(`When cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
     bits.push(
-      `Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
+      `Base Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
     );
   if (def.combo)
     bits.push(
