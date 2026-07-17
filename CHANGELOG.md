@@ -22,16 +22,58 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   Yahtzee/FourKind should be flavor-only rarity (1-3 trophy cards total) —
   5 FourKind-gated cards existed in the live pool as a result. FourKind is
   now excluded from the general picker, same treatment Yahtzee already had.
-- **22,560-game v4.4.2 balance-sim pass** (`npm run sim:v4 10`) flagged
-  (not yet acted on): Leader win-rate spread still 18pt wide (Mer-King
-  57.8% / Shinobi 57.3% vs. Diver 39.6% / Abyss 42.7%); archetype spread up
-  to 78pt (Shinobi Avenge Grind 90.9% vs. Abyss Excavate Ramp 12.8%); a
-  hard keyword-tier split (Avenge/Twin/Pierce/Guard all >53% vs.
-  Excavate/Foothold/Crescendo/Contested all <33%); Momentum still measuring
-  as a failed comeback lever (17.3% win rate when triggered); Ultimate(N)
-  usage still correlated with losing (-10.8pt); Locations still a net
-  negative in isolation (-3.7%) after two direct buff rounds. See
-  `docs/RULEBOOK.md`'s new v4.5 findings block for the full breakdown.
+- **22,560-game v4.4.2 balance-sim pass** (`npm run sim:v4 10`) flagged, then
+  **acted on in a follow-up pass** (see `docs/BALANCE_SIM_FINDINGS_v4.5.md`
+  §0 for the full before/after): 6 CPU AI heuristic fixes (gate-costed cards
+  no longer read as "free" in combat trades/cast priority via a rarity
+  proxy; Location choice now weighs Foothold/Excavate/Tribute/Contested;
+  mulligan treats easy-gate hands as keepable; Echo recasts are
+  value-ordered; buff auto-targeting spreads to the weakest Unit instead of
+  always reinforcing the biggest); Avenge capped at 3 stacks/card (was the
+  only uncapped repeating stat mechanic in the game); Excavate/Crescendo
+  buffed, Contested's on-cast doubling added, Location on-cast scaled by
+  rarity, Anchor's ramp payoff doubled, Momentum given a Leader-Ability
+  discount; Mer-King and Apex Nanite Shinobi (the two strongest leaders)
+  nerfed, Legendary Diver and Avatar of the Abyss (the two weakest) buffed;
+  `pattern-hitrate.ts` and the §6 hit-rate table updated to model the
+  actual 2-reroll rule (was 1-reroll only). **Verified results**: Excavate/
+  Contested/Crescendo/Foothold keyword win rates all up 6-7.5pt, Locations'
+  isolated contribution more than halved (-3.7% → -1.2%), Mer-King nerf
+  landed (57.8% → 52.9%). **Flagged, not yet resolved**: Avenge's cap
+  barely moved its dominant archetype (Shinobi Avenge Grind still 92.3%);
+  Momentum's decision correlation barely moved (still -65.9pt); Ultimate(N)
+  usage correlation got worse (-15.2pt, more evidence for a deck-membership
+  confound rather than the mechanic itself); and the two Straight-family
+  Combo-gated archetypes (Diver Straight-Combo, Sea Witch Bind-Straight
+  Combo) dropped sharply for reasons not yet confirmed (likely relative
+  redistribution from the other buffs landing elsewhere in the same
+  round-robin metric, but unconfirmed — needs its own isolate-and-measure
+  pass before further tuning).
+- **v4.5.1 root-cause pass**: investigated the Straight-family archetype
+  regression flagged above with a dedicated isolate-and-measure sim (a
+  `git worktree` checkout of the commit right after the FourKind fix, run
+  independently) — the crash was **already fully present there**, before
+  any AI/keyword/Leader change, ruling those out and pointing at the
+  FourKind fix itself. Root cause: `pick()` indexes a picker array with
+  `hash(id) % arr.length`, so shrinking `HARD_GATES` from 3 entries to 2
+  (the FourKind fix) silently reassigned which cards are FullHouse-gated
+  vs. LargeStraight-gated **pool-wide**, not just the ones that would've
+  been FourKind. Fixed properly: `pick()` against the original, unchanged
+  3-entry array, then remap only an actual FourKind result to
+  FullHouse/LargeStraight via an independent hash (`pickHardGate()`) — every
+  card that previously resolved to FullHouse/LargeStraight is unaffected.
+  Two more CPU AI lapses found in the same re-audit and fixed: `chooseReroll()`'s
+  reroll strategy was `wantStraight && !wantMatch`, so a single stray
+  match-gated card in a straight-heavy hand silently overrode the deck's
+  actual reroll plan (now counts each family and follows the majority); and
+  the Unit-ability loop always chose attacking over an ability once ATK hit
+  3, even when the ability was unconditional removal against a live target
+  (now `destroy` with a target overrides the attack default). Re-verified:
+  Diver Straight-Combo 14.6%→24.0%, Diver Rally Tempo 17.9%→26.3% (real
+  recovery, not full — see `docs/BALANCE_SIM_FINDINGS_v4.5.md` §0.1 for the
+  residual-gap discussion and a new finding that the overall Leader spread
+  actually widened this round, 18.2pt→21.2pt, with Diver and Sea Witch now
+  the clearest outliers).
 
 ### Fixed (full-stack audit)
 

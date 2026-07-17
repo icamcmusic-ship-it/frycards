@@ -8,31 +8,65 @@ playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
 
-**v4.5 balance-sim findings (22,560-game v4.4.2 pass, `npm run sim:v4 10`):**
-this pass is a **findings report**, not a rebalance — only one fix shipped
-from it (the FourKind gate-pool fix in §7 above); everything else below is
-flagged for a future pass rather than acted on blind, since several of the
-v4.4.1/v4.4.2 rebalance attempts already "barely moved the needle" on their
-first try. Headline results: **Leader spread is still wide** (Mer-King 57.8%
-/ Apex Nanite Shinobi 57.3% vs. Legendary Diver 39.6% / Avatar of the Abyss
-42.7% — an 18pt spread); **archetype spread is severe** (Shinobi Avenge
-Grind 90.9%, Crimson Toll-Bulwark Fortress 80.0%, Mer King Guard-Bulwark
-Turtle 78.7% vs. Abyss Excavate Ramp 12.8%, Sea Witch Anchor-Scrap Ramp
-22.7%, Shinobi Tempo-Anchor 24.3% — attrition/durability shells stacking
-Guard+Bulwark+Toll+Steel+Avenge dominate, Anchor-ramp archetypes are close
-to unplayable); **keyword tiers split hard** — Avenge 57.2%, Twin 55.9%,
-Pierce 53.7%, Guard 53.4% win rate vs. Excavate 32.3%, Foothold 30.8%,
-Crescendo 28.6%, Contested 28.4% (a full tier below everything else, not a
-marginal gap); **Momentum is still failing at its one job** as a comeback
-lever (17.3% win rate when triggered, a -66.5pt decision delta — the
-v4.4.2 +1 ATK addition barely moved it from 16.5%); **Ultimate(N) usage
-still correlates with losing** (-10.8pt) despite the v4.2/v4.3 buffs aimed
-at it; and **Locations remain a net negative in isolation** (-3.7 win%)
-even after two consecutive direct buffs (doubled passive, then an on-cast
-+1/+1), suggesting the "opportunity cost" diagnosis from v4.1/v4.4 wasn't
-the whole story. Full findings (CPU AI reasoning gaps, cost-vs-ability
-outliers, per-card buff/nerf candidates) are tracked outside this rulebook
-pending the next implementation pass.
+**v4.5 balance-sim pass (22,560-game v4.4.2 baseline, `npm run sim:v4 10`,
+findings acted on and re-verified):** the initial pass measured a still-wide
+18pt Leader spread (Mer-King 57.8%/Shinobi 57.3% vs. Diver 39.6%/Abyss
+42.7%), a severe archetype spread (Shinobi Avenge Grind 90.9% down to Abyss
+Excavate Ramp 12.8%), a hard keyword-tier split (Avenge/Twin/Pierce/Guard
+all >53% vs. Excavate/Foothold/Crescendo/Contested all <33%), a failing
+Momentum (17.3% win rate when triggered), Ultimate(N) usage still
+correlating with losing (-10.8pt), and Locations still net-negative in
+isolation (-3.7%). A follow-up pass acted on every one of those findings —
+**Anchor**'s ramp payoff (+1/+1 → +2/+2), **Avenge** capped at 3 stacks/card
+(§10), **Momentum** now also discounts the Leader's own Ability Slot by 1,
+**Contested** now doubles a Location's on-cast effect too (not just its
+ambient passive), **Excavate**/**Crescendo** values raised, Location on-cast
+value now scales with rarity, and Mer-King/Shinobi trimmed while Diver/Abyss
+were buffed (see cardpool.ts's `LEADER_ABILITIES`/`LEADER_ULTIMATE`) — plus
+6 CPU AI heuristic fixes in `src/game/v3/ai.ts` (gate-costed cards no longer
+read as worthless in combat-trade/cast-priority math, Location choice now
+weighs Foothold/Excavate/Tribute/Contested, the mulligan heuristic treats
+easy-gate hands as keepable, Echo recasts go in value order, and buff
+auto-targeting spreads to the weakest Unit instead of always reinforcing the
+biggest). **Re-verified**: Excavate/Contested/Crescendo/Foothold keyword win
+rates all rose 6-7.5pt, Locations' isolated contribution more than halved
+(-3.7% → -1.2%), Mer-King's win rate came down as intended (57.8% → 52.9%).
+**Still unresolved, flagged rather than chased further blind**: Avenge's
+cap barely dented its dominant archetype (Shinobi Avenge Grind still 92.3%
+— needs a tighter cap or a Leader-level cut next); Momentum's decision
+correlation barely moved (still ~-66pt); Ultimate(N) usage correlation got
+*worse* (-15.2pt, more evidence the deck-membership confound flagged
+alongside it is real); and the Straight-family Combo-gated archetypes
+(Diver Straight-Combo, Sea Witch Bind-Straight Combo) dropped sharply for a
+reason not yet confirmed (a tested hypothesis — the AI's cast-priority
+change — was reverted and re-measured with no effect, ruling it out; the
+likely explanation is relative redistribution from the other buffs landing
+elsewhere in the same round-robin win-rate metric, but this needs its own
+isolate-and-measure pass before further tuning). Full writeup:
+`docs/BALANCE_SIM_FINDINGS_v4.5.md`.
+
+**v4.5.1 (root-cause follow-up):** the flagged Straight-family regression
+was traced with a dedicated isolate-and-measure sim (a `git worktree`
+checkout of the pre-AI/keyword/Leader-change commit, re-run independently)
+to the FourKind gate-pool fix above, not anything downstream of it —
+shrinking `HARD_GATES` from 3 entries to 2 silently reassigned which cards
+are FullHouse- vs. LargeStraight-gated **pool-wide**, via `pick()`'s
+`hash(id) % arr.length` indexing, not just the ~5 cards that would've been
+FourKind-gated. Fixed with `pickHardGate()`: pick against the original,
+unchanged 3-entry array, then remap only an actual FourKind result via a
+second, independent hash — every card that previously resolved to
+FullHouse/LargeStraight is now byte-for-byte unaffected. Two more CPU AI
+heuristic lapses found in the same re-audit: `chooseReroll()`'s pattern
+strategy was `wantStraight && !wantMatch` (a single stray match-gated card
+in a straight-heavy hand silently overrode the deck's actual plan — now
+counts each family and follows the majority), and the Unit-ability loop
+always chose attacking over an ability once a Unit's ATK hit 3 regardless
+of what the ability did (now unconditional removal against a live target
+overrides that default). Re-verified: Diver Straight-Combo 14.6%→24.0%,
+Rally Tempo 17.9%→26.3% — real recovery, not full; see
+`docs/BALANCE_SIM_FINDINGS_v4.5.md` §0.1 for the residual-gap analysis and
+a new finding that the overall Leader spread widened this round (18.2pt →
+21.2pt), with Diver and Ethereal Sea Witch now the clearest outliers.
 
 **v4.4.1/v4.4.2 errata (documentation catch-up — these shipped in the engine
 across two follow-up balance passes after v4.4 but were never written back to
@@ -280,22 +314,22 @@ Combo checks only ever read **your own** roll and can only trigger cards **you**
 
 **One Combo-gated card per turn *(v4.2)*:** you may cast at most **one Combo-gated card per turn**, regardless of how many qualify. This is a systemic cap, not a fix targeted at one card — it closes off any future card that gates on an achievable pattern from chaining with a second one on the same lucky roll. (It also covers Echo-recasting a Combo-gated card from Discard — see §10.)
 
-### Measured hit rate under directed rerolling *(v4.2 design data)*
+### Measured hit rate under directed rerolling *(v4.2 design data, re-measured v4.5)*
 
-The table above ranks patterns by rough feel, not a measured number — and the naive single-roll probability is the wrong metric anyway, because a player with one reroll doesn't roll blind: they reroll *toward* their target pattern. `scripts/pattern-hitrate.ts` measures actual hit rate under a directed-reroll strategy (200,000 trials per pattern, keep-and-reroll-toward-the-goal):
+The table above ranks patterns by rough feel, not a measured number — and the naive single-roll probability is the wrong metric anyway, because a player rerolling doesn't roll blind: they reroll *toward* their target pattern. `scripts/pattern-hitrate.ts` measures actual hit rate under a directed-reroll strategy (200,000 trials per pattern, keep-and-reroll-toward-the-goal). *(v4.5)* Re-measured under the **current two-reroll rule** (§3.3, in effect since v4.3) — the original table below only ever modeled one reroll and understated every number; both are shown for reference, but **Directed (2 rerolls) is the number that reflects live play**:
 
-| Pattern | Naive (no reroll) | Directed (1 reroll toward it) |
-|---|---:|---:|
-| Any Pair | 90.7% | 99.1% |
-| Two Pair | 27.0% | 56.0% |
-| Three of a Kind | 21.3% | 54.2% |
-| Small Straight | 15.5% | 32.5% |
-| Full House | 3.8% | 18.2% |
-| Four of a Kind | 2.0% | 13.2% |
-| Large Straight | 3.1% | 10.4% |
-| Yahtzee | 0.1% | 1.3% |
+| Pattern | Naive (no reroll) | Directed (1 reroll) | Directed (2 rerolls, current rule) |
+|---|---:|---:|---:|
+| Any Pair | 90.7% | 99.2% | 99.9% |
+| Two Pair | 26.9% | 55.9% | 74.0% |
+| Three of a Kind | 21.2% | 54.0% | 74.2% |
+| Small Straight | 15.5% | 32.5% | 44.0% |
+| Full House | 3.8% | 18.2% | 34.6% |
+| Four of a Kind | 2.1% | 13.2% | 29.0% |
+| Large Straight | 3.1% | 10.6% | 17.4% |
+| Yahtzee | 0.1% | 1.3% | 4.6% |
 
-**This data does not support "straight-family patterns need a harder tier than matching-family at the same nominal difficulty."** That was the hypothesis behind the v4.1→v4.2 review's recalibration flag, and measuring it directly shows the opposite in most comparisons: Three of a Kind (54.2%) is nearly **double** Small Straight's hit rate (32.5%) under directed rerolling, and Full House (18.2%) is actually *easier* to hit than Large Straight (10.4%) despite sharing the same "big swing" price tag — Large Straight is the single hardest pattern in the "bomb" cluster, harder even than Four of a Kind. If anything, straight-family patterns are *harder* to hit than their nominal matching-family counterpart, not easier. Card design should price off this table, not off intuition about "keeping a run vs. keeping duplicates."
+**This data does not support "straight-family patterns need a harder tier than matching-family at the same nominal difficulty."** That was the hypothesis behind the v4.1→v4.2 review's recalibration flag, and measuring it directly shows the opposite in most comparisons: Three of a Kind (74.2%) is nearly **double** Small Straight's hit rate (44.0%) under directed two-reroll play, and Full House (34.6%) is actually *easier* to hit than Large Straight (17.4%) despite sharing the same "big swing" price tag — Large Straight is the single hardest pattern in the "bomb" cluster, harder even than Four of a Kind (29.0%). If anything, straight-family patterns are *harder* to hit than their nominal matching-family counterpart, not easier. Card design should price off this table, not off intuition about "keeping a run vs. keeping duplicates." *(v4.5 note: the two-reroll numbers land meaningfully higher across the board — e.g. Full House 18.2%→34.6% — so gate-tier pricing done off the old one-reroll column was working from understated hit rates; the FourKind general-pool fix elsewhere in this pass was flagged independently of this re-measurement, but the two findings point the same direction.)*
 
 The v4.2 fix to the specific offending Large-Straight-gated Event (see Changelog) wasn't because the gate was too easy — it measures as the hardest pattern in its tier — it's because a repeatable, high-value, face-only burn effect compounds badly over a ~10-round game even at a "only" ~10%-per-turn hit rate, especially with multiple copies in hand (any copy is castable the instant the roll qualifies). The fix (retarget off pure face damage, lower the value, and the new one-Combo-gated-card-per-turn cap) addresses that compounding directly.
 

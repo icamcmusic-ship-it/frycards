@@ -24,6 +24,160 @@ another sim-verify cycle rather than being applied blind.
 
 ---
 
+## 0. Update: every finding below was acted on and verified (follow-up pass)
+
+A second pass implemented every remaining item in this doc — all 6 AI
+heuristic fixes, the Avenge cap, the Excavate/Crescendo/Contested/Foothold-
+adjacent buffs, the Momentum Leader-Ability discount, Location on-cast
+rarity scaling, and the four-Leader rebalance (Mer-King/Shinobi nerfed,
+Diver/Abyss buffed) — then re-ran the full 22,560-game sim to verify. One
+regression surfaced and got a corrective follow-up within the same pass;
+the rest is reported honestly below rather than chased further blind,
+consistent with this doc's own stated philosophy.
+
+**What verifiably worked (confirmed by re-sim):**
+- Excavate: 32.3% → 39.5% keyword win rate (+7.2pt)
+- Contested: 28.4% → 35.9% (+7.5pt)
+- Crescendo: 28.6% → 34.7% (+6.1pt)
+- Foothold: 30.8% → 37.4% (+6.6pt, from the `locScore()` AI fix alone —
+  its own numeric value wasn't touched)
+- Locations isolated contribution: −3.7% → −1.2% (more than halved)
+- Mer-King (the nerf target): 57.8% → 52.9% leader win rate
+
+**What barely moved (same "barely moves the needle" pattern the git
+history already warned about for prior passes):**
+- Avenge keyword win rate: 57.2% → 56.7%; Shinobi Avenge Grind archetype:
+  90.9% → 92.3% (*higher*, despite the new AVENGE_CAP=3). The cap wasn't
+  tight enough to matter — most games apparently don't rack up 3+ Avenge
+  triggers on a single card before the game ends, or the archetype's power
+  was never really about the tail-end stacking in the first place. Needs a
+  tighter cap (2?) or a Shinobi-adjacent Leader-level cut next, not another
+  Avenge-keyword-wide change.
+- Momentum decision correlation: −66.5pt → −65.9pt (17.3% → 18.0% win rate
+  when triggered). The Leader-Ability threshold discount essentially didn't
+  register. Momentum needs a structurally different lever, not another
+  small discount stacked on the same trigger condition.
+- Ultimate(N) usage correlation: −10.8pt → **−15.2pt (worse)**. Consistent
+  with the "deck membership, not card power" confound flagged in §3 above —
+  Diver's Ultimate got directly buffed this pass and its usage correlation
+  still got worse, because Diver's *overall* win rate moved the wrong
+  direction (see below) for reasons unrelated to its Ultimate. This is
+  stronger evidence for the confound theory, not against it.
+
+**A real regression, diagnosed and partially corrected in-pass:**
+Avatar of the Abyss overshot hard on the first verification (42.7% → 55.8%,
+Pierce Aggro specifically 67.8% → 79.9%) — buffing both its Ability *and*
+Ultimate in the same pass double-counted the same fix. Corrected by
+reverting the Ultimate value back to 4 (keeping only the Ability bump);
+re-verified at 54.8%, Pierce Aggro 78.6% — better, but still runs hot and
+may need the Ability trimmed back toward 2-3 territory next round instead
+of pushing Ultimate further.
+
+**An unresolved finding, NOT chased further this pass:** the two
+comboFamily:`'straight'` archetypes (unrelated Leaders — Legendary Diver
+and Ethereal Sea Witch) both cratered: Diver Straight-Combo 32.7% → 14.6%,
+Sea Witch Bind-Straight Combo 69.1% → 51.5%, and Diver Rally Tempo also
+dropped (32.8% → 17.9%). A hypothesis (AI's `castPriority` switched to a
+rarity-based proxy for gate-costed cards, demoting cheap common/uncommon
+gate cards specifically) was tested by reverting that one change and
+re-running the full sim — **the numbers didn't move**, disproving it. The
+more likely explanation: this is a **relative-redistribution artifact** of
+the round-robin win-rate metric itself — win rate across a fixed 48-deck
+round robin is inherently zero-sum-ish (points gained by the archetypes
+that got direct buffs this pass — Excavate/Crescendo/Contested/Foothold/
+Location decks, six of them — have to come from somewhere), and the two
+Straight-family archetypes got no direct buff of their own this pass, so
+they absorbed a disproportionate share of the redistribution. This is a
+plausible, self-consistent explanation but **not confirmed** — it deserves
+its own dedicated sim pass (e.g., isolate the Straight-Combo archetypes
+against a *fixed* opponent roster before/after, instead of reading their
+round-robin win rate) before deciding whether they need a direct buff or
+the "crash" is mostly measurement artifact. Left as-is rather than reverting
+working buffs to chase a hypothesis that hasn't been confirmed either.
+
+**Bottom line:** this pass net-improved the clearest, most confidently-
+diagnosed problems (the four weakest keywords, Locations, one Leader
+nerf/buff pair) and left the harder, less-understood problems (Avenge's
+dominance, Momentum's failure, the Straight-family archetype swing) exactly
+as flagged rather than guessing at them — the next pass should start with a
+dedicated isolate-and-measure sim for the Straight-family question before
+touching any more numbers.
+
+---
+
+## 0.1 Root cause of the Straight-family crash, found (v4.5.1)
+
+The "relative redistribution" hypothesis above was investigated with the
+dedicated isolate-and-measure sim it called for: a `git worktree` checkout
+of the commit **before** any AI/keyword/Leader changes (i.e. right after
+only the FourKind gate-pool fix + docs sync) was built and re-run through
+the full sim independently. **The Straight-family crash was already fully
+present at that commit** — Diver Straight-Combo was already 14.6%, before
+a single AI/keyword/Leader line had changed. That ruled out every
+AI/keyword/Leader change as the cause and pointed straight at the FourKind
+fix itself from the pass before.
+
+**The real bug:** `pick()` (cardpool.ts) indexes a picker array with
+`hash(id) % arr.length`. The FourKind fix shrank `HARD_GATES` from
+`['FullHouse', 'FourKind', 'LargeStraight']` (3 entries) to `['FullHouse',
+'LargeStraight']` (2 entries) — changing the array's **length** silently
+reassigns the modulo bucket for **every** card that rolls into that picker,
+not just the ones that would have landed on FourKind. That reshuffled which
+specific cards are FullHouse-gated vs. LargeStraight-gated pool-wide as an
+unintended side effect of what was meant to be a narrow, surgical fix — the
+exact kind of fragility a deterministic hash-based content-assignment
+system is prone to, and worth calling out as a lesson for any future change
+to a `pick()`-driven array: **shrinking or reordering a picker array is
+never neutral**, even when the change is logically "just remove one
+option."
+
+**Proper fix:** `pick()` against the original, full three-entry array
+(unchanged, so every card that previously resolved to FullHouse or
+LargeStraight resolves identically to the true original baseline), then
+remap only an actual FourKind *result* to FullHouse/LargeStraight via a
+second, independent hash (`pickHardGate()`). This changes exactly the ~5
+cards that need to change (the ones that would've been FourKind-gated) and
+nothing else.
+
+**Re-verified impact** (22,560-game re-sim after the fix):
+
+| Metric | True original baseline | After FourKind array-shrink bug | After pickHardGate fix |
+|---|---:|---:|---:|
+| Diver Straight-Combo | 32.7% | 14.6% | 24.0% |
+| Sea Witch Bind-Straight Combo | 69.1% | 51.4-54.8% | 54.8% |
+| Diver Rally Tempo | 32.8% | 17.9% | 26.3% |
+| FourKind cards in live pool | 5 | 0 | 0 |
+| FullHouse cards in live pool | 2 | 6 | 6 |
+| LargeStraight cards in live pool | 4 | 5 | 5 |
+
+The fix recovered a large share of the damage (Diver Straight-Combo +9.4pt,
+Rally Tempo +8.4pt) but **not all of it** — both archetypes are still well
+below their true original baseline. Two AI heuristic lapses were fixed in
+the same pass (see §1 below, items 7-8) that could plausibly account for
+some of the remainder, but a clean before/after on those two specific fixes
+wasn't isolated separately. The most likely explanation for the residual
+gap is the same relative-redistribution effect flagged in §0 — six other
+keywords/archetypes got direct buffs this pass-family, and round-robin win
+rate is a relative metric — but this is **still not fully confirmed**. A
+genuinely isolating test (Straight-family archetypes vs. a *fixed*,
+never-buffed opponent subset, not the full round-robin) is the next step
+before deciding whether these two archetypes need a further direct buff.
+
+**A new, related finding:** the overall Leader win-rate spread **widened**
+this round instead of narrowing — 21.2pt (Crimson 55.4% to Diver 34.2%),
+up from 18.2pt in the true original baseline. Diver in particular sits
+*below* its original baseline (39.6% → 34.2%) despite two rounds of direct
+Ability/Ultimate buffs to its Leader kit — because 2 of its 3 archetypes
+(Straight-Combo, Rally Tempo) are still recovering from the bug above, and
+a Leader-kit buff can't outrun two of three archetypes being structurally
+crippled. Ethereal Sea Witch also dropped (50.8% → 43.8%) despite no direct
+nerf, the clearest evidence yet for the relative-redistribution effect:
+several other archetypes got real, confirmed buffs (§0), and win rate
+being a round-robin-relative measure means an unbuffed deck can look worse
+in the standings even with unchanged absolute power.
+
+---
+
 ## 1. CPU/AI reasoning lapses (`src/game/v3/ai.ts`)
 
 1. **Combat "value trade" heuristic silently zeroes out gate-costed cards.**
@@ -84,6 +238,37 @@ another sim-verify cycle rather than being applied blind.
    higher-value mid/high-rarity one sitting deeper in the pile is even
    considered. (Partial mitigation: the loop can recast more than one Echo
    card per turn if dice remain, so this mostly matters when dice are tight.)
+
+**Found in the v4.5.1 re-audit (fixed same pass):**
+
+7. **`chooseReroll()`'s pattern-family strategy collapsed to a boolean AND.**
+   `const wantStraight = ...; const wantMatch = ...; if (wantStraight &&
+   !wantMatch) { /* straight strategy */ }` — any hand containing even a
+   single match-family gate card fell all the way through to the matching
+   reroll strategy, silently overriding a straight-heavy hand's actual plan.
+   Since `decks.ts`'s archetype scoring only *biases* toward a comboFamily
+   (a −6/+5 weight, not an exclusion), a straight-family deck's hand
+   regularly contains at least one stray match-gated card, and every one of
+   those hands rerolled toward matching instead of the straight pattern the
+   deck was built around. Now counts each family's gate cards in the current
+   hand and follows whichever has more, rather than requiring the other
+   family to be completely absent.
+
+8. **The Unit-ability loop always preferred attacking over an ability once a
+   Unit's ATK hit 3, with no read on what the ability actually does.**
+   `const wouldAttack = canAttack(g, u) && effAtk(g, u) >= 3; if (wouldAttack)
+   continue;` — a 3+ ATK Unit whose Ability Slot holds unconditional removal
+   (`destroy`) against a live enemy target skipped it every time in favor of
+   a few points of combat damage, even though Ability-use and attacking are
+   mutually exclusive (§7) and a clean kill is almost always the better play.
+   `destroy` with a legal target now overrides the "attack instead" default;
+   every other ability action (sap/mend/draw/buff) keeps the existing
+   threshold, since those are close enough in value to raw combat damage
+   that a blanket override isn't clearly correct.
+
+Both were verified with a full re-sim (§0.1): no invariant violations, and
+combined with the `pickHardGate()` fix they recovered part — not all — of
+the Straight-family archetypes' win rate.
 
 None of these are correctness bugs (the AI never takes an illegal action),
 they're heuristic gaps — the AI plays a legal, "sensible" game per its own
@@ -217,6 +402,8 @@ higher sample sizes.
 
 ## 6. Leader / archetype summary
 
+**Original baseline** (before any v4.5 changes):
+
 | Leader | Win% | n |
 |---|---:|---:|
 | Mer-King | 57.8% | 7,520 |
@@ -230,8 +417,33 @@ higher sample sizes.
 claimed to achieve, meaning some regression happened between that pass and
 now (or that pass's numbers were themselves archetype-roster-dependent and
 the widened 20-archetype v4.4 roster surfaces a real gap the old 12-archetype
-roster didn't). **Legendary Diver and Avatar of the Abyss are the clearest
-buff candidates; Mer-King and Apex Nanite Shinobi the clearest nerf
-candidates**, consistent with the archetype-level Avenge/Guard-Bulwark
-findings above (both strong leaders' best archetypes lean on the
-now-flagged-for-nerf keyword combinations).
+roster didn't).
+
+**After v4.5 + v4.5.1** (Mer-King/Shinobi nerfed, Diver/Abyss buffed, plus
+the `pickHardGate()` fix and the two new AI fixes from §0.1/§1):
+
+| Leader | Win% | n | Δ vs. original |
+|---|---:|---:|---:|
+| Crimson Vector Commander | 55.4% | 6,580 | +4.0pt |
+| Mer-King | 54.3% | 7,520 | **−3.5pt (nerf landed)** |
+| Avatar of the Abyss | 53.7% | 10,340 | +11.0pt (overshot, see §0) |
+| Apex Nanite Shinobi | 52.8% | 8,460 | **−4.5pt (nerf landed)** |
+| Ethereal Sea Witch | 43.8% | 6,580 | −7.0pt (no direct change — redistribution) |
+| Legendary Diver | 34.2% | 5,640 | −5.4pt (buffed twice, still net down) |
+
+**21.2pt spread — wider than the original 18.2pt**, not narrower. Both
+nerfs landed cleanly (Mer-King, Shinobi). Abyss overshot from double-
+buffing in the same pass (§0) and needs its Ability trimmed back next
+round. The real problem is **Diver and Sea Witch**: Diver got two direct
+buff rounds to its Leader kit and still sits *below* its original baseline,
+because 2 of its 3 archetypes are still recovering from the `pickHardGate`
+bug (§0.1) — no amount of Leader-level buffing fixes an archetype-level
+card-pool problem. Sea Witch got no direct change at all and still dropped
+7pt, which is the clearest single piece of evidence for the
+relative-redistribution effect flagged throughout this doc: several other
+archetypes/keywords received real, confirmed buffs, and win rate in a fixed
+round-robin is a relative measure, not an absolute one. **Next pass should
+buff Diver's Straight-Combo/Rally Tempo archetypes and Sea Witch directly,
+instead of further Leader-kit-level changes**, and should re-verify against
+a *fixed* opponent subset rather than the full round-robin to avoid the
+same redistribution confound.
