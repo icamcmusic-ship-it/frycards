@@ -55,17 +55,42 @@ export type CostPick =
 
 const EASY_GATES: ComboPattern[] = ['AnyPair', 'ThreeOdds', 'ThreeEvens'];
 const MID_GATES: ComboPattern[] = ['ThreeKind', 'TwoPair', 'SmallStraight'];
-// v4.5: FourKind removed from the general picker. §7's own guidance says
-// "Full House and Large Straight are the practical ceiling... Yahtzee/
-// Four-of-a-Kind gates are flavor-only rarity — a tiny handful of true
-// trophy cards (1-3 in the whole pool)" — but HARD_GATES was assigning it
-// as a co-equal third option at every tier>=3 roll, landing 5 FourKind-gated
-// cards in the live pool (more than the "1-3" the design guidance calls
-// for) at a directed hit rate barely above Full House. Yahtzee is already
-// excluded from the general picker per v4.1 guidance, reserved for the
-// single Mythic trophy card (see TROPHY_ID in mapSpell) — FourKind now gets
-// the same treatment instead of only being flavor-gated in name.
-const HARD_GATES: ComboPattern[] = ['FullHouse', 'LargeStraight'];
+// v4.5 (§7): FullHouse/FourKind/LargeStraight, unchanged from their
+// original three-way split — kept here ONLY so pickHardGate() below can
+// `pick()` against it with the exact same indices every other card in the
+// pool has always resolved against. Do not shrink this array — see the
+// v4.5.1 note on pickHardGate() for why a naive removal is a correctness
+// bug, not just a design tweak.
+const HARD_GATES_RAW: ComboPattern[] = ['FullHouse', 'FourKind', 'LargeStraight'];
+
+/**
+ * v4.5.1: FourKind is excluded from general assignment per §7's guidance
+ * ("Full House and Large Straight are the practical ceiling... Yahtzee/
+ * Four-of-a-Kind gates are flavor-only rarity — a tiny handful of true
+ * trophy cards"), but a v4.5 first attempt did this by shrinking the
+ * picker array (`HARD_GATES = ['FullHouse', 'LargeStraight']`), which was a
+ * correctness bug: `pick()` indexes with `hash(id) % arr.length`, so
+ * changing the array's LENGTH reassigns the modulo bucket for every card
+ * that rolls into this picker, not just the ones that would've landed on
+ * FourKind. That silently reshuffled which specific cards are
+ * FullHouse-gated vs. LargeStraight-gated pool-wide — including cards that
+ * had nothing to do with FourKind — and a balance-sim re-run traced a
+ * severe, otherwise-unexplained regression in both Straight-family
+ * Combo-gated archetypes (Diver Straight-Combo 32.7%->14.6%, Sea Witch
+ * Bind-Straight Combo 69.1%->54.8%) directly to this one array-shrink, via
+ * a dedicated isolate-and-measure sim run against a git worktree checkout
+ * of the exact pre/post commit. Fixed the RIGHT way here: `pick()` against
+ * the full, original three-option array (stable — every card that
+ * previously resolved to FullHouse or LargeStraight still does, byte for
+ * byte), then remap ONLY a FourKind result to FullHouse/LargeStraight via a
+ * second, independent hash. This changes exactly the cards that need to
+ * change and nothing else.
+ */
+function pickHardGate(id: string): ComboPattern {
+  const p = pick(id, 41, HARD_GATES_RAW);
+  if (p !== 'FourKind') return p;
+  return hash(`${id}:fourkind-remap`) % 2 === 0 ? 'FullHouse' : 'LargeStraight';
+}
 
 export function pickCostFormat(id: string, tier: number): CostPick {
   const roll = hash(`${id}:cost`) % 10;
@@ -83,11 +108,11 @@ export function pickCostFormat(id: string, tier: number): CostPick {
   if (tier === 3) {
     if (roll < 3) return { kind: 'sum', value: 9 + (hash(`${id}:sv`) % 5) }; // 9-13
     if (roll < 7) return { kind: 'gate', pattern: pick(id, 41, MID_GATES) };
-    return { kind: 'gate', pattern: pick(id, 41, HARD_GATES) };
+    return { kind: 'gate', pattern: pickHardGate(id) };
   }
   // tier 4-5 (Ultra-Rare, Mythic): the hardest, highest-payoff formats.
   if (roll < 3) return { kind: 'sum', value: 13 + (hash(`${id}:sv`) % 6) }; // 13-18
-  return { kind: 'gate', pattern: pick(id, 41, HARD_GATES) };
+  return { kind: 'gate', pattern: pickHardGate(id) };
 }
 
 /** Apply a cost pick to a CardDef, clearing whichever numeric/gate field it doesn't use. */

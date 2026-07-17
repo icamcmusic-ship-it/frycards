@@ -304,16 +304,28 @@ function chooseReroll(g: Game, p: Player): number[] {
     if (c.def.combo) g2.push(c.def.combo.pattern);
     return g2;
   });
-  const wantStraight = gates.some((x) => x === 'SmallStraight' || x === 'LargeStraight');
-  const wantMatch = gates.some((x) =>
+  // v4.5.1: was two booleans (`wantStraight && !wantMatch`) — a hand with
+  // ANY match-family gate card at all (even a single off-theme Unit drafted
+  // for an unrelated keyword) silently overrode a straight-heavy hand's
+  // reroll strategy entirely, since the matching branch was the unconditional
+  // fallback for "wantStraight AND wantMatch" too. decks.ts's score() only
+  // *biases* toward an archetype's comboFamily (a -6/+5 weight), it doesn't
+  // exclude the other family outright, so a straight-family deck's hand
+  // regularly contains a stray match-gated card — and every one of those
+  // hands rerolled toward matching instead of the straight the deck was
+  // actually built around. Count instead of boolean-AND, so the reroll
+  // strategy follows whichever family the CURRENT hand actually leans on.
+  const straightWantCount = gates.filter((x) => x === 'SmallStraight' || x === 'LargeStraight')
+    .length;
+  const matchWantCount = gates.filter((x) =>
     ['AnyPair', 'TwoPair', 'ThreeKind', 'FourKind', 'FullHouse', 'Yahtzee'].includes(x),
-  );
+  ).length;
   const stagedNeeds = new Set(
     p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined),
   );
 
   const out: number[] = [];
-  if (wantStraight && !wantMatch) {
+  if (straightWantCount > 0 && straightWantCount >= matchWantCount) {
     // Keep distinct values; reroll duplicates and isolated extremes.
     const seen = new Set<number>();
     p.dice.forEach((d, i) => {
@@ -593,9 +605,21 @@ function playPlacement(g: Game, p: Player) {
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
     for (const u of p.board) {
       if (!u.def.ability || u.abilityUsed || u.hasAttacked) continue;
-      const wouldAttack = canAttack(g, u) && effAtk(g, u) >= 3;
-      if (wouldAttack) continue;
       const eff = u.def.ability.effect;
+      // v4.5.1: was a blanket "any 3+ ATK unit always attacks instead,
+      // regardless of what its ability does" — a 3 ATK Unit whose Ability
+      // is unconditional removal (`destroy`) got skipped in favor of a
+      // few points of combat damage, even when a real enemy target was
+      // sitting right there. Ability Slot use and attacking are mutually
+      // exclusive (§7), so this was leaving high-value removal on the
+      // table every time its body happened to clear the arbitrary 3-ATK
+      // bar. `destroy` against a live target is the one case worth
+      // overriding the "attack instead" default for — every other action
+      // (sap/mend/draw/buff) is close enough in value to raw combat damage
+      // that the existing threshold is a reasonable default.
+      const removalWorthIt = eff.action === 'destroy' && opp.board.length > 0;
+      const wouldAttack = canAttack(g, u) && effAtk(g, u) >= 3 && !removalWorthIt;
+      if (wouldAttack) continue;
       if (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((x) => x.damage > 0))
         continue;
       if (eff.action === 'draw' && p.hand.length >= 8) continue;
