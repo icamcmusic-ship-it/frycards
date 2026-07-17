@@ -7,6 +7,32 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### Fixed (v4.5 balance-sim pass)
+
+- **`docs/RULEBOOK.md` was out of sync with the shipped engine**: the v4.4.1
+  and v4.4.2 balance passes (Overrun keyword, Foothold keyword, Momentum's
+  +1 ATK addition, Frenzy's behind-on-board Leader-targeting carve-out,
+  Locations' on-cast +1/+1, Shinobi/Diver Leader Ability retuning) landed in
+  code and tests but were never written back to the rulebook. Documented all
+  of it (new errata block, keyword glossary entries for Overrun/Foothold,
+  inline notes on Frenzy/Momentum/Locations).
+- **FourKind Combo-gate pool bug**: `pickCostFormat()`'s general `HARD_GATES`
+  picker was assigning FourKind as a co-equal option alongside Full House
+  and Large Straight, contradicting the rulebook's own guidance that
+  Yahtzee/FourKind should be flavor-only rarity (1-3 trophy cards total) —
+  5 FourKind-gated cards existed in the live pool as a result. FourKind is
+  now excluded from the general picker, same treatment Yahtzee already had.
+- **22,560-game v4.4.2 balance-sim pass** (`npm run sim:v4 10`) flagged
+  (not yet acted on): Leader win-rate spread still 18pt wide (Mer-King
+  57.8% / Shinobi 57.3% vs. Diver 39.6% / Abyss 42.7%); archetype spread up
+  to 78pt (Shinobi Avenge Grind 90.9% vs. Abyss Excavate Ramp 12.8%); a
+  hard keyword-tier split (Avenge/Twin/Pierce/Guard all >53% vs.
+  Excavate/Foothold/Crescendo/Contested all <33%); Momentum still measuring
+  as a failed comeback lever (17.3% win rate when triggered); Ultimate(N)
+  usage still correlated with losing (-10.8pt); Locations still a net
+  negative in isolation (-3.7%) after two direct buff rounds. See
+  `docs/RULEBOOK.md`'s new v4.5 findings block for the full breakdown.
+
 ### Fixed (full-stack audit)
 
 - **Shop crash**: hardened every meta screen against missing/null backend

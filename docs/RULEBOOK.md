@@ -1,12 +1,63 @@
-# FryCards — Definitive Rulebook v4.4
+# FryCards — Definitive Rulebook v4.4.2
 
-Supersedes v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.5 balance-sim findings (22,560-game v4.4.2 pass, `npm run sim:v4 10`):**
+this pass is a **findings report**, not a rebalance — only one fix shipped
+from it (the FourKind gate-pool fix in §7 above); everything else below is
+flagged for a future pass rather than acted on blind, since several of the
+v4.4.1/v4.4.2 rebalance attempts already "barely moved the needle" on their
+first try. Headline results: **Leader spread is still wide** (Mer-King 57.8%
+/ Apex Nanite Shinobi 57.3% vs. Legendary Diver 39.6% / Avatar of the Abyss
+42.7% — an 18pt spread); **archetype spread is severe** (Shinobi Avenge
+Grind 90.9%, Crimson Toll-Bulwark Fortress 80.0%, Mer King Guard-Bulwark
+Turtle 78.7% vs. Abyss Excavate Ramp 12.8%, Sea Witch Anchor-Scrap Ramp
+22.7%, Shinobi Tempo-Anchor 24.3% — attrition/durability shells stacking
+Guard+Bulwark+Toll+Steel+Avenge dominate, Anchor-ramp archetypes are close
+to unplayable); **keyword tiers split hard** — Avenge 57.2%, Twin 55.9%,
+Pierce 53.7%, Guard 53.4% win rate vs. Excavate 32.3%, Foothold 30.8%,
+Crescendo 28.6%, Contested 28.4% (a full tier below everything else, not a
+marginal gap); **Momentum is still failing at its one job** as a comeback
+lever (17.3% win rate when triggered, a -66.5pt decision delta — the
+v4.4.2 +1 ATK addition barely moved it from 16.5%); **Ultimate(N) usage
+still correlates with losing** (-10.8pt) despite the v4.2/v4.3 buffs aimed
+at it; and **Locations remain a net negative in isolation** (-3.7 win%)
+even after two consecutive direct buffs (doubled passive, then an on-cast
++1/+1), suggesting the "opportunity cost" diagnosis from v4.1/v4.4 wasn't
+the whole story. Full findings (CPU AI reasoning gaps, cost-vs-ability
+outliers, per-card buff/nerf candidates) are tracked outside this rulebook
+pending the next implementation pass.
+
+**v4.4.1/v4.4.2 errata (documentation catch-up — these shipped in the engine
+across two follow-up balance passes after v4.4 but were never written back to
+this rulebook):** a durability-stack meta (Ward/Steel/Bulwark decks all fully
+zeroing hits) got a direct counter, new keyword **Overrun** (a Unit whose
+combat damage would be fully prevented/absorbed by Ward, Steel, or Bulwark
+still punches through **1 damage**, never off a 0-ATK attacker and never on
+retaliation); a new Location keyword **Foothold** discounts the first Unit
+cast each turn by 1 (stacks with Anchor) on a slice of Locations; every
+Location now resolves **+1/+1 to a friendly Unit** the instant it enters play
+(`onCast`, previously ignored for this card type entirely — an earlier
+attempt at Mend 1 to the Leader on cast made Locations' isolated contribution
+*worse*, -2.1→-5.3 win%, confirming a Location competes against a Unit's
+immediate board impact, not Leader HP); Frenzy's second-swing Leader-target
+restriction (below) now only applies while its controller is even or ahead
+on board Units, and Frenzy Units get an unconditional **+2 ATK** (was a 50%
+chance of +1); Apex Nanite Shinobi's Leader Ability can no longer buff the
+same permanent on two consecutive activations (`abilityNoRepeatTarget`) and
+had its own value/threshold trimmed further after the targeting restriction
+alone barely moved its archetypes' win rates; Legendary Diver's Ability
+(`abilityGrantsTempo`) now also grants a permanent +1/+1 alongside its
+sickness-skip, at a lowered threshold. See §8 and §10 for the keyword text,
+and the class comments on `abilityNoRepeatTarget`/`abilityGrantsTempo` in
+`src/game/v3/cards.ts` for the two Leader-specific mechanics. Changes are
+marked *(v4.4.1)*/*(v4.4.2)* inline.
 
 **v4.4 errata (applied from a 33,120-game v4.3 balance-sim pass):** Pierce,
 Frenzy and Guard were the sim's clearest overperformers (every deck built
@@ -143,7 +194,10 @@ the balance-sim finding that using your Leader's Ultimate and casting a board
 wipe both correlated with *losing*, not winning: the game didn't have a
 reliable way to help a player who's actually behind claw back without
 drawing a specific "answer" card. Checked fresh every turn; it doesn't stack
-or persist once you're no longer behind on both conditions.
+or persist once you're no longer behind on both conditions. *(v4.4.2)* Also
+grants **+1 ATK to all your Units this turn** — the bonus die alone measured
+at only a 16.5% win rate when triggered, so the fix ties the comeback lever
+to actual pressure, not just more raw material.
 
 ### 3.3 Reroll Phase
 Reroll any subset of your five dice, up to **two times** *(v4.3 — raised from one reroll; the §6 hit-rate table below still reflects the old one-reroll baseline and understates actual hit rates under the current rule)*.
@@ -258,13 +312,15 @@ Anchor and Overflow (below) both key off a card's **effective** threshold regard
 Cards in play may print one or more **Ability Slots** — repeatable thresholds. **Exhaustion is tracked per Ability Slot**, not per card: a card with two different Ability Slots can have both activated in the same turn, each once. However, **activating any Ability Slot and attacking are mutually exclusive on the same Unit in the same turn** — a Unit that has used an Ability Slot this turn cannot also attack this turn, and vice versa.
 
 - **Default is one Cast Slot per card**, unless it has Twin.
-- **Locations *(v4.1)*: no die, no Cast Slot.** Once per turn, you may cast one Location from hand **for free, as a bonus action** alongside your normal five die placements. This doesn't consume a die and doesn't compete with anything else you do this turn. Location cards no longer print a threshold number at all — just their passive and (optionally) an Ability Slot, which still costs a die to activate as normal. *(Rationale: a Location competing for a die had to beat a Unit's entire value with a passive alone — an opportunity-cost fight it structurally loses, as v4.0's +0.7–1.5% isolated contribution showed. This is the free-land-drop move: it takes Locations out of the die economy instead of trying to make them competitive inside it.)* *(v4.4)* The flat passive value doubles from **+1 to +2 ATK/max HP** for all your Units — the balance sim measured Locations at −1.4 win% versus spending that Cast Slot on a cheap Unit instead, meaning +1 wasn't pulling its weight over an ~11-round average game.
+- **Locations *(v4.1)*: no die, no Cast Slot.** Once per turn, you may cast one Location from hand **for free, as a bonus action** alongside your normal five die placements. This doesn't consume a die and doesn't compete with anything else you do this turn. Location cards no longer print a threshold number at all — just their passive and (optionally) an Ability Slot, which still costs a die to activate as normal. *(Rationale: a Location competing for a die had to beat a Unit's entire value with a passive alone — an opportunity-cost fight it structurally loses, as v4.0's +0.7–1.5% isolated contribution showed. This is the free-land-drop move: it takes Locations out of the die economy instead of trying to make them competitive inside it.)* *(v4.4)* The flat passive value doubles from **+1 to +2 ATK/max HP** for all your Units — the balance sim measured Locations at −1.4 win% versus spending that Cast Slot on a cheap Unit instead, meaning +1 wasn't pulling its weight over an ~11-round average game. *(v4.4.2)* Every Location also resolves a small effect the instant it enters play, the same `onCast` field Units/Charms/Events already use (previously ignored for this card type): **+1/+1 to a friendly Unit.** An earlier attempt at Mend 1 to the Leader here made Locations' isolated contribution *worse* (−2.1% → −5.3%), confirming a Location competes against a Unit's immediate board impact, not Leader HP.
 - A Location entering play replaces whatever Location you currently control, sending the old one to Discard. **You may not cast a Location sharing a name with the one you control, and you may cast at most one Location total per turn** — this second restriction closes a loophole where alternating between two differently-named Locations could otherwise reset an Ability Slot repeatedly in one turn.
 
 ### Combo-gated Events
 Some Events have no numeric threshold — their entire cost is "Combo: [Pattern]." Casting one still requires placing one of your five dice onto it during Placement Phase (any value — only your live roll qualifying matters).
 
 **Gate calibration *(v4.1 design guidance)*:** with one reroll, Yahtzee is a ~1–2% roll and Four of a Kind not much better — cards gated behind them are dead in hand essentially every game (measured at 0.02×/game in v4.0), and Echo can't rescue them because bricking-in-hand was never the problem. So: **Full House and Large Straight are the practical ceiling** for any Combo-gated card meant to see regular play. Yahtzee/Four-of-a-Kind gates are flavor-only rarity — a tiny handful of true trophy cards (1–3 in the whole pool) is fine as a memorable once-in-fifty-games moment, but don't budget deck slots around them. If a design wants a Yahtzee payoff to *matter*, don't gate it behind Yahtzee: print a high numeric threshold and put the Yahtzee reward on a **Combo bonus** (a rider, not a requirement) so the card is never dead.
+
+**v4.5 fix:** `pickCostFormat()`'s general `HARD_GATES` picker (`src/game/v3/cardpool.ts`) was assigning FourKind as a co-equal third option alongside Full House and Large Straight at every tier-3+ roll — contradicting the guidance immediately above. That put 5 FourKind-gated cards in the live pool (2.7% of it), more than the "1–3 in the whole pool" this section calls for. Yahtzee was already excluded from the general picker per v4.1; FourKind now gets the same treatment and is reserved for hand-picked trophy/bonus placements only (see the tier≥4 "comeback pass" Combo-bonus riders in `mapSpell`, which still use it as a bonus, not a gate).
 
 ### Twin cards and the Staging Zone
 A Twin X card has two Cast Slots. The moment the first is filled, move it face-up into your Staging Zone. **The second die placed must show the exact same face value as the first** — not merely independently meet the printed threshold. The card isn't in play while staged (can't be attacked or targeted) and can sit there across turns. The moment the second slot is filled, it fully enters play, both resting dice immediately return to your supply, and its bonus triggers. Every card with Twin must print its own bonus effect text (e.g. "Twin 1: Draw a card") — Twin has no generic effect on its own.
@@ -305,7 +361,7 @@ Combat uses a **targeted-attack model**. Attacks are **declared and resolved one
    - **Pierce:** Guard only restricts which target you may legally declare — once an attack against a Guard Unit is legal and declared, Pierce's overflow damage is a consequence of that already-legal hit, not a new target, and proceeds to the Leader normally regardless of Guard. The overflow amount is the leftover damage (attacker's ATK minus what was needed to destroy the target), **capped at half the attacker's effective ATK** *(v4.4, rounded down, minimum 1)* — never the attacker's full ATK. All of this (damage to target, retaliation to attacker, Pierce overflow) is calculated simultaneously off both units' stats the instant before the attack resolves — if the attacker is also destroyed by retaliation in this same exchange, its Pierce overflow still goes through. *(The cap was added after the balance sim showed Pierce decks consistently overperforming — see the changelog. A flat "ATK minus 1" cap was considered and rejected: the naive leftover against any 1-HP blocker is already exactly ATK minus 1, so that cap would never actually change anything.)*
    - **Ward:** only prevents damage from instances where this Unit is the one being attacked or targeted. It does not prevent retaliation damage a Unit takes as a result of an attack it declared — attacking is never "free" just because the attacker has Ward. Applied before any multiplier (see below). *(v4.4)* When Ward prevents a combat hit, it also **spikes 1 damage back at the attacker** — a reactive punish so Ward decks can answer the aggression that's beating them instead of just delaying it by one turn.
    - **Steel *(v4.4)*:** a per-turn absorption pool, checked Ward → Steel → Bulwark → Frenzy. Unlike Ward (one full prevention) or Bulwark (flat, attacks only), Steel can blunt several smaller hits across a turn — from attacks, Sap, or Pierce overflow alike — before running dry, refreshing every End Phase.
-4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack. *(v4.0)* Its **first attack is entirely normal**; **only its second (bonus) attack** doubles the retaliation damage it takes (see Damage Resolution Order). *(v4.4)* That second attack also **can't target the enemy Leader directly**, unless no other legal target remains — Frenzy stays a board-control tool instead of also functioning as a second face-attack roll, which the balance sim flagged as the single strongest win predictor in the game. This keeps the "risk on the bonus action" identity without a Frenzy unit dying to doubled retaliation before it ever gets to use its keyword.
+4. Repeat for the next attacking Unit. **Frenzy** Units may go through this sequence twice in the same Combat Phase, but only if they survive their first attack. *(v4.0)* Its **first attack is entirely normal**; **only its second (bonus) attack** doubles the retaliation damage it takes (see Damage Resolution Order). *(v4.4)* That second attack also **can't target the enemy Leader directly**, unless no other legal target remains — Frenzy stays a board-control tool instead of also functioning as a second face-attack roll, which the balance sim flagged as the single strongest win predictor in the game. This keeps the "risk on the bonus action" identity without a Frenzy unit dying to doubled retaliation before it ever gets to use its keyword. *(v4.4.1)* The Leader-targeting restriction only applies while its controller is **even or ahead** on board Units — a player who's actually behind keeps Frenzy's face-damage upside as a comeback tool (the unconditional version measured as an overcorrection, dropping Frenzy's keyword-wide win rate well below average). *(v4.4.2)* Frenzy Units also get an unconditional **+2 ATK** (was a coin-flip +1) to compensate for the overflow/targeting nerfs directly, since the "behind on board" carve-out alone barely moved the keyword's measured win rate.
 5. Damage is **persistent** and does not reset at end of turn. Any Unit reaching 0 HP is destroyed immediately and moves to Discard, checked continuously.
 
 **Design note on big stat-stick Units:** intentional, not a bug — Pierce, Sap, and direct-removal Events are the answer to a wall.
@@ -370,6 +426,8 @@ You lose immediately if either is true:
 
 **Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own.
 
+**Overrun** *(v4.4.1, Unit)* — If this Unit's combat damage to its target would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals **1 damage anyway**. Never fires off a 0-ATK attacker, and never applies to retaliation damage. A direct, targeted counter to the durability-stack meta (Ward/Steel/Bulwark all fully zeroing a hit) without touching the numbers that make those keywords good answers to Pierce/Frenzy.
+
 ### Utility keywords
 
 **Surge** — Draw a card. See §9 for the empty-deck interaction.
@@ -397,6 +455,8 @@ You lose immediately if either is true:
 **Excavate X** *(v4.2)* — This Location's Ability Slot threshold drops by X for every one of your turns it has remained continuously in play (minimum 1). A ramp identity: holding a Location long-term instead of replacing it becomes a deliberate payoff, not just inertia.
 
 **Contested** *(v4.2)* — This Location's passive is **doubled** while your opponent controls no Location of their own. Creates a genuine arms-race decision around whether to commit to your own Location or race to deny theirs.
+
+**Foothold** *(v4.4.1)* — The first Unit you cast each turn while this Location is in play costs **1 less** (stacks with Anchor). Gives ramp identities (Excavate/Anchor especially) a real floor on the turns they're otherwise doing nothing.
 
 ---
 
