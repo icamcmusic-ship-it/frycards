@@ -1512,3 +1512,174 @@ test('v4.4 Location passives are +2 (was +1)', () => {
   p.board.push(u);
   expect(effAtk(g, u)).toBe(3); // printed 1 + 2 from the Location passive
 });
+
+// ---------------------------------------------------------------------------
+// v4.4.1 second-pass proposals: Overrun, Foothold, Momentum +1 ATK, Frenzy's
+// behind-on-board carve-out, Shinobi's no-repeat-target Ability, Diver's
+// tempo-granting Ability, and Locations resolving an immediate onCast.
+// ---------------------------------------------------------------------------
+
+test('v4.4.1 Overrun punches 1 damage through a fully-prevented/absorbed hit, never off a 0-ATK attacker', () => {
+  const g = combatGame();
+  const warded = makeInst(mkU('ov-wd', { atk: 0, hp: 10, keywords: ['Ward'] }), 'B');
+  const att = makeInst(mkU('ov-att', { atk: 5, hp: 10, keywords: ['Overrun'] }), 'A');
+  g.players.B.board.push(warded);
+  g.players.A.board.push(att);
+  expect(attack(g, att.iid, warded.iid)).toBe(true);
+  expect(warded.damage).toBe(1); // fully warded, but Overrun forces 1 through
+
+  // Fully absorbed by Steel instead of Ward — Overrun still applies.
+  const steeled = makeInst(mkU('ov-st', { atk: 0, hp: 10, steel: { x: 5 } }), 'B');
+  const att2 = makeInst(mkU('ov-att2', { atk: 4, hp: 10, keywords: ['Overrun'] }), 'A');
+  g.players.B.board.push(steeled);
+  g.players.A.board.push(att2);
+  expect(attack(g, att2.iid, steeled.iid)).toBe(true);
+  expect(steeled.damage).toBe(1);
+
+  // A 0-ATK Overrun attacker never manufactures damage from nothing.
+  const zeroAtt = makeInst(mkU('ov-zero', { atk: 0, hp: 10, keywords: ['Overrun'] }), 'A');
+  const plain = makeInst(mkU('ov-plain', { atk: 0, hp: 10, keywords: ['Ward'] }), 'B');
+  g.players.A.board.push(zeroAtt);
+  g.players.B.board.push(plain);
+  expect(attack(g, zeroAtt.iid, plain.iid)).toBe(true);
+  expect(plain.damage).toBe(0);
+});
+
+test('v4.4.1 Foothold discounts only the first Unit cast each turn, stacks with Anchor', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.location = makeInst({ id: 'fh1', name: 'fh1', type: 'Location', foothold: true }, 'A');
+  const cheapUnit = mkU('fh-u1', { threshold: 3 });
+  expect(effThreshold(g, 'A', cheapUnit)).toBe(2); // 3 - 1 Foothold
+  const c1 = makeInst(cheapUnit, 'A');
+  p.hand.push(c1);
+  const die = p.dice.findIndex((d) => !d.placed);
+  p.dice[die].value = 2;
+  expect(castFromHand(g, die, c1.iid)).toBe(true);
+
+  // Second Unit this turn gets no discount — Foothold is spent.
+  const secondUnit = mkU('fh-u2', { threshold: 3 });
+  expect(effThreshold(g, 'A', secondUnit)).toBe(3);
+});
+
+test('v4.4.1 Momentum grants +1 ATK on top of the bonus die, only during the granted turn', () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  const opp = g.players.B;
+  const u = makeInst(mkU('mom-u', { atk: 2 }), 'A');
+  p.board.push(u);
+  p.leader.damage = Math.ceil(effMaxHp(g, p.leader) / 2);
+  opp.board.push(makeInst(mkU('mom-opp1', {}), 'B'), makeInst(mkU('mom-opp2', {}), 'B'));
+  startTurn(g); // p.board.length(1) < opp.board.length(2) -> Momentum
+  expect(p.momentumActive).toBe(true);
+  expect(effAtk(g, u)).toBe(3); // printed 2 + 1 Momentum
+  endTurn(g);
+  expect(p.momentumActive).toBe(false);
+  expect(effAtk(g, u)).toBe(2); // bonus gone once the turn ends
+});
+
+test("v4.4.1 Frenzy's second-swing Leader restriction lifts when its controller is behind on Units", () => {
+  const g = combatGame();
+  const fz = makeInst(mkU('fz-behind', { atk: 2, hp: 20, keywords: ['Frenzy'] }), 'A');
+  g.players.A.board.push(fz);
+  g.players.B.board.push(makeInst(mkU('b1', { atk: 0, hp: 20 }), 'B'));
+  g.players.B.board.push(makeInst(mkU('b2', { atk: 0, hp: 20 }), 'B'));
+  // A controls 1 Unit, B controls 2 -> A is behind.
+  expect(attack(g, fz.iid, g.players.B.board[0].iid)).toBe(true); // first swing
+  const secondTargets = legalTargets(g, 'A', fz.iid);
+  expect(secondTargets.some((t) => t.def.type === 'Leader')).toBe(true); // restriction lifted
+  expect(attack(g, fz.iid, g.players.B.leader.iid)).toBe(true);
+});
+
+test("v4.4.1 Shinobi-style Ability can't repeat last turn's target; auto-pick excludes it, explicit re-pick is illegal", () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  const noRepeatDef: CardDef = {
+    id: 'nr-leader',
+    name: 'nr-leader',
+    type: 'Leader',
+    hp: 20,
+    ability: { threshold: 1, effect: { action: 'buff', value: 2, target: 'friendlyUnit' } },
+    abilityNoRepeatTarget: true,
+  };
+  p.leader = makeInst(noRepeatDef, 'A');
+  const u1 = makeInst(mkU('nr-u1', {}), 'A');
+  const u2 = makeInst(mkU('nr-u2', {}), 'A');
+  p.board.push(u1, u2);
+  startTurn(g);
+  reroll(g, []);
+  const die1 = p.dice.findIndex((d) => !d.placed);
+  p.dice[die1].value = 5;
+  expect(activateAbility(g, die1, p.leader.iid, u1.iid)).toBe(true);
+  expect(p.leader.lastAbilityTargetIid).toBe(u1.iid);
+  expect(u1.permAtk).toBe(2);
+
+  startTurn(g);
+  reroll(g, []);
+  // Explicit re-pick of the same permanent is illegal.
+  const die2 = p.dice.findIndex((d) => !d.placed);
+  p.dice[die2].value = 5;
+  expect(activateAbility(g, die2, p.leader.iid, u1.iid)).toBe(false);
+  // Auto-pick (no explicit target) lands on the other Unit instead.
+  expect(activateAbility(g, die2, p.leader.iid)).toBe(true);
+  expect(u2.permAtk).toBe(2);
+  expect(p.leader.lastAbilityTargetIid).toBe(u2.iid);
+});
+
+test('v4.4.1 Diver-style Ability grants the next Unit cast this turn freedom from summoning sickness', () => {
+  const g = freshGame();
+  g.active = 'A';
+  const p = g.players.A;
+  const tempoDef: CardDef = {
+    id: 'tempo-leader',
+    name: 'tempo-leader',
+    type: 'Leader',
+    hp: 20,
+    ability: { threshold: 1, effect: { action: 'draw', value: 1, target: 'none' } },
+    abilityGrantsTempo: true,
+  };
+  p.leader = makeInst(tempoDef, 'A');
+  startTurn(g);
+  reroll(g, []);
+  p.turnsTaken = 3; // canAttack() forbids attacking on a player's first turn
+  const die1 = p.dice.findIndex((d) => !d.placed);
+  p.dice[die1].value = 6;
+  expect(activateAbility(g, die1, p.leader.iid)).toBe(true);
+  expect(p.swiftGrantThisTurn).toBe(true);
+
+  const freshUnit = mkU('tempo-u', { threshold: 1 });
+  const c = makeInst(freshUnit, 'A');
+  p.hand.push(c);
+  const die2 = p.dice.findIndex((d) => !d.placed);
+  p.dice[die2].value = 6;
+  expect(castFromHand(g, die2, c.iid)).toBe(true);
+  const onBoard = p.board.find((u) => u.iid === c.iid)!;
+  expect(onBoard.enteredThisTurn).toBe(false); // treated as if it had Swift
+  expect(p.swiftGrantThisTurn).toBe(false); // one-shot, spent
+});
+
+test('v4.4.1 Locations resolve an immediate onCast effect (Mend 1), not just their passive', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.leader.damage = 5;
+  const loc = makeInst(
+    {
+      id: 'loc-oncast',
+      name: 'loc-oncast',
+      type: 'Location',
+      onCast: { action: 'mend', value: 1, target: 'friendlyLeader' },
+    },
+    'A',
+  );
+  p.hand.push(loc);
+  expect(castLocationFree(g, loc.iid)).toBe(true);
+  expect(p.leader.damage).toBe(4);
+});

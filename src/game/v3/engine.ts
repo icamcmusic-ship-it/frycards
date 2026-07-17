@@ -63,6 +63,9 @@ export interface Inst {
    * at End Phase, so a stale index from an earlier turn safely resolves to
    * nothing (see enterPlay's Location-replacement branch / cleanupDeaths). */
   abilityDieIndex?: number;
+  /** v4.4: last iid this card's `abilityNoRepeatTarget` Ability buffed —
+   * only ever set/read for a Leader whose def carries that flag. */
+  lastAbilityTargetIid?: string;
   enteredThisTurn: boolean;
   wardUsed: boolean;
   /** v4.4 Steel X: damage already absorbed by this turn's pool (resets to 0
@@ -112,6 +115,18 @@ export interface Player {
   turnsTaken: number;
   /** v4.2: at most one Combo-gated card (cast or Echo-recast) per Placement Phase. */
   comboGateCastThisTurn: boolean;
+  /** v4.4 Foothold (Location): true once this turn's first-Unit-cast discount
+   * has been spent — see footholdActive()/castFromHand(). */
+  footholdUsedThisTurn: boolean;
+  /** v4.4: true when a Leader ability with `abilityGrantsTempo` (currently
+   * only Legendary Diver) has fired this turn and not yet been spent — the
+   * next friendly Unit to enter play this turn skips summoning sickness
+   * (see enterPlay()). */
+  swiftGrantThisTurn: boolean;
+  /** v4.4 Momentum: true for the duration of this player's own turn only
+   * (set in startTurn, cleared in finishEndPhase) when they qualified —
+   * grants +1 ATK to all their Units (see effAtk) on top of the bonus die. */
+  momentumActive: boolean;
 }
 
 /** v4.2 Snap: the Reroll Phase window closes (and the Placement window opens)
@@ -227,7 +242,10 @@ export function effAtk(g: Game, u: Inst): number {
   if (u.def.type === 'Unit' && p.location?.def.locPassive === 'ATK_ALL') {
     loc = LOC_PASSIVE_FLAT * locPassiveMultiplier(g, u);
   }
-  return Math.max(0, (u.def.atk || 0) + u.permAtk + loc);
+  // v4.4 Momentum: +1 ATK to every Unit this player controls, only during
+  // their own turn while active (see startTurn/finishEndPhase).
+  const momentum = u.def.type === 'Unit' && p.momentumActive ? 1 : 0;
+  return Math.max(0, (u.def.atk || 0) + u.permAtk + loc + momentum);
 }
 export function effMaxHp(g: Game, u: Inst): number {
   const p = g.players[u.owner];
@@ -285,16 +303,31 @@ export const MAX_COMBO_SELF_BUFF_STACKS = 3;
 export const ANCHOR_CAP = 3;
 
 /** Anchor: effective Cast threshold = printed - (# other in-play Anchor cards), min 1. */
+/** v4.4 Foothold (Location): true while this player's first-Unit-cast
+ * discount is still available this turn — read-only (no side effects), so
+ * it's safe for the UI to query repeatedly; castFromHand() is what actually
+ * spends it. */
+export function footholdActive(g: Game, pid: string): boolean {
+  const p = g.players[pid];
+  return !!p.location?.def.foothold && !p.footholdUsedThisTurn;
+}
+
 export function effThreshold(g: Game, pid: string, def: CardDef): number {
   const t = def.threshold ?? 1;
-  if (!hasKw(def, 'Anchor')) return t;
-  const p = g.players[pid];
-  const inPlay = [...p.board, p.location].filter(
-    (c): c is Inst => !!c && hasKw(c.def, 'Anchor'),
-  ).length;
-  // v4.0: cap the reduction so Anchor is ramp, not a threshold collapse that
-  // lets a wide Anchor board dump its whole hand at threshold 1.
-  return Math.max(1, t - Math.min(ANCHOR_CAP, inPlay));
+  let reduction = 0;
+  if (hasKw(def, 'Anchor')) {
+    const p = g.players[pid];
+    const inPlay = [...p.board, p.location].filter(
+      (c): c is Inst => !!c && hasKw(c.def, 'Anchor'),
+    ).length;
+    // v4.0: cap the reduction so Anchor is ramp, not a threshold collapse
+    // that lets a wide Anchor board dump its whole hand at threshold 1.
+    reduction += Math.min(ANCHOR_CAP, inPlay);
+  }
+  // v4.4 Foothold: stacks with Anchor — a ramp deck built around both gets
+  // to actually feel it on the turn that matters most (the first Unit).
+  if (def.type === 'Unit' && footholdActive(g, pid)) reduction += 1;
+  return Math.max(1, t - reduction);
 }
 
 /** v4.4: the first time an Anchor Unit's own discount would hit ANCHOR_CAP
@@ -432,6 +465,9 @@ export function newGame(
       locationCastThisTurn: false,
       turnsTaken: 0,
       comboGateCastThisTurn: false,
+      footholdUsedThisTurn: false,
+      swiftGrantThisTurn: false,
+      momentumActive: false,
     };
   };
   const g: Game = {
@@ -713,6 +749,8 @@ export function startTurn(g: Game) {
   p.rerollsUsed = 0;
   p.locationCastThisTurn = false;
   p.comboGateCastThisTurn = false;
+  p.footholdUsedThisTurn = false;
+  p.swiftGrantThisTurn = false;
   g.stage = 'PRE_REROLL';
   g.turnStarted = true;
   for (const u of [...p.board, p.leader]) {
@@ -783,10 +821,15 @@ export function startTurn(g: Game) {
     remainingHp(g, p.leader) * 2 <= effMaxHp(g, p.leader) && p.board.length < opp.board.length;
   const diceCount = momentumOn ? 6 : 5;
   p.dice = Array.from({ length: diceCount }, () => ({ value: d6(g.rng), placed: false }));
+  p.momentumActive = momentumOn;
   if (momentumOn) {
     g.stats.momentumDiceGranted++;
     decide(g, p.id, 'momentum');
-    g.log.push(`${p.id} is behind — Momentum grants a 6th die this turn.`);
+    // v4.4: also +1 ATK to all this player's Units this turn (see effAtk) —
+    // the bonus die alone measured as barely helping (16.5% win rate when
+    // triggered), so this ties the comeback lever to actual pressure instead
+    // of just more raw material.
+    g.log.push(`${p.id} is behind — Momentum grants a 6th die and +1 ATK this turn.`);
   }
 }
 
@@ -903,6 +946,13 @@ function enterPlay(
     c.anchorCapBonused = false;
     c.boundThisTurn = false;
     c.boundNextTurn = false;
+    // v4.4: a pending Diver-style tempo grant (abilityGrantsTempo) is spent
+    // by the next Unit to enter play this turn, whichever destination it
+    // came through — treats it as if it had innate Swift for this stint.
+    if (p.swiftGrantThisTurn) {
+      c.enteredThisTurn = false;
+      p.swiftGrantThisTurn = false;
+    }
     p.board.push(c);
     applyAnchorCapBonus(g, p, c);
   } else if (c.def.type === 'Location') {
@@ -914,6 +964,17 @@ function enterPlay(
     c.excavateStacks = 0; // fresh Location life: no unearned Excavate discount
     p.location = c;
     p.locationCastThisTurn = true;
+    // v4.4: Locations can now carry an onCast effect, same field Units and
+    // Charms/Events already use — previously ignored for this type entirely.
+    // The balance sim found Locations a persistent net negative even after
+    // doubling their passive value; the diagnosis was opportunity cost, not
+    // passive size — a Location competing for a deck slot against a Unit
+    // that gives an immediate, upfront effect always loses that comparison
+    // if the Location's own value is 100% deferred to "the passive adds up
+    // eventually." A modest immediate effect narrows that gap directly.
+    if (c.def.onCast) {
+      applyEffect(g, p.id, c.def.onCast, targetIid ?? autoTarget(g, p.id, c.def.onCast), c);
+    }
     cleanupDeaths(g); // HP_ALL leaving can kill units
   } else {
     // Charm / Event: resolve then discard.
@@ -939,7 +1000,16 @@ function enterPlay(
  * Default target chooser for effects whose caller didn't pick one (Combo
  * bonuses, Overflow, Twin bonuses). Simple but sensible.
  */
-export function autoTarget(g: Game, ownerId: string, eff: Effect): string | undefined {
+/** `excludeIid`: skip this specific permanent when picking a target — used
+ * by activateAbility() for a `abilityNoRepeatTarget` Leader Ability so the
+ * auto-pick path (no explicit UI/AI target) never just re-selects whatever
+ * it bought last turn. */
+export function autoTarget(
+  g: Game,
+  ownerId: string,
+  eff: Effect,
+  excludeIid?: string,
+): string | undefined {
   const p = g.players[ownerId];
   const opp = opponentOf(g, ownerId);
   const byAtk = (a: Inst, b: Inst) => effAtk(g, b) - effAtk(g, a);
@@ -971,7 +1041,7 @@ export function autoTarget(g: Game, ownerId: string, eff: Effect): string | unde
       return opp.leader.iid;
     }
     case 'friendlyUnit': {
-      const t = [...p.board].sort(byAtk)[0];
+      const t = p.board.filter((u) => u.iid !== excludeIid).sort(byAtk)[0];
       return t?.iid;
     }
     case 'friendlyAny': {
@@ -1071,6 +1141,11 @@ export function castFromHand(
     c.def.castCostKind === 'sum' ? dice.reduce((s, d) => s + d.value, 0) : dice[0].value;
   p.hand.splice(idx, 1);
   if (c.def.comboGate) p.comboGateCastThisTurn = true;
+  // v4.4 Foothold: the discount effThreshold() already applied above (via
+  // payableNumeric's effective-threshold check) is spent the moment a Unit
+  // is actually cast — "the first Unit you cast," not every Unit for the
+  // rest of the turn.
+  if (c.def.type === 'Unit' && footholdActive(g, p.id)) p.footholdUsedThisTurn = true;
 
   if (hasKw(c.def, 'Twin')) {
     // First Twin slot filled -> Staging Zone.
@@ -1160,6 +1235,19 @@ export function activateAbility(
     if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
   }
   if (die.value < effAbilityThreshold(g, c)) return false;
+  // v4.4: an `abilityNoRepeatTarget` Ability (currently only Apex Nanite
+  // Shinobi's Leader Ability) can't buff the same permanent two
+  // activations in a row. An explicit re-pick of last turn's target is
+  // rejected outright; the auto-pick path (AI, or UI with no target chosen)
+  // just excludes it and picks the next-best legal target instead.
+  let resolvedTarget: string | undefined;
+  if (c.def.abilityNoRepeatTarget) {
+    if (targetIid && targetIid === c.lastAbilityTargetIid) return false;
+    resolvedTarget = targetIid ?? autoTarget(g, p.id, c.def.ability.effect, c.lastAbilityTargetIid);
+    if (!resolvedTarget) return false; // no other legal target exists this turn
+  } else {
+    resolvedTarget = targetIid ?? autoTarget(g, p.id, c.def.ability.effect);
+  }
   die.placed = true;
   c.abilityUsed = true;
   c.abilityDie = die.value;
@@ -1168,13 +1256,11 @@ export function activateAbility(
     g.stats.leaderAbilityUses[c.def.id] = (g.stats.leaderAbilityUses[c.def.id] || 0) + 1;
     decide(g, p.id, 'leaderAbility');
   }
-  applyEffect(
-    g,
-    p.id,
-    c.def.ability.effect,
-    targetIid ?? autoTarget(g, p.id, c.def.ability.effect),
-    c,
-  );
+  applyEffect(g, p.id, c.def.ability.effect, resolvedTarget, c);
+  if (c.def.abilityNoRepeatTarget) c.lastAbilityTargetIid = resolvedTarget;
+  // v4.4 Diver: draw-a-card Ability that also grants tempo — the next
+  // friendly Unit cast this turn skips summoning sickness (see enterPlay).
+  if (c.def.abilityGrantsTempo) p.swiftGrantThisTurn = true;
   return true;
 }
 
@@ -1469,13 +1555,21 @@ export function legalTargets(g: Game, attackerOwner: string, attackerIid?: strin
   if (guards.length > 0) return guards;
   const targets: Inst[] = [...opp.board, opp.leader];
   if (attackerIid) {
-    const att = g.players[attackerOwner].board.find((u) => u.iid === attackerIid);
+    const owner = g.players[attackerOwner];
+    const att = owner.board.find((u) => u.iid === attackerIid);
     // v4.4 Frenzy: the second (bonus) swing can't target the enemy Leader
     // directly — keeps Frenzy a board-control tool instead of also doubling
     // as a second face-attack roll (the sim's single strongest win signal).
     // Falls back to allowing the Leader if it's the only target left (an
     // empty enemy board shouldn't leave a Frenzy swing with nothing to hit).
-    if (att && hasKw(att.def, 'Frenzy') && att.attacksMade >= 1) {
+    // v4.4.1: the restriction only applies while this player is even or
+    // ahead on board — the first version measured as an overcorrection
+    // (Frenzy's keyword-wide win rate fell from ~60%+ to below average), so
+    // Frenzy keeps its face-damage upside as a comeback tool specifically
+    // when its controller is BEHIND on Units, while staying a board-control
+    // tool the rest of the time.
+    const behind = owner.board.length < opp.board.length;
+    if (att && hasKw(att.def, 'Frenzy') && att.attacksMade >= 1 && !behind) {
       const noLeader = targets.filter((t) => t.def.type !== 'Leader');
       return noLeader.length > 0 ? noLeader : targets;
     }
@@ -1550,6 +1644,14 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
       g.stats.bulwarkReduced += reduced;
       dmgToTarget -= reduced;
     }
+  }
+  // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
+  // (Ward/Steel/Bulwark all fully zeroing this hit) without touching the
+  // numbers that made those keywords good answers to Pierce/Frenzy. Doesn't
+  // apply to retaliation, and never fires off a 0-ATK attacker.
+  if (hasKw(att.def, 'Overrun') && dmgToTarget === 0 && atk > 0) {
+    dmgToTarget = 1;
+    g.log.push(`${att.def.name}'s Overrun punched 1 damage through.`);
   }
   // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
   // RULING on Bind's retaliation window (§10): boundThisTurn is set at the
@@ -1685,6 +1787,8 @@ export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst)
       u.steelUsed = 0;
     }
   }
+  // v4.4 Momentum: the +1 ATK window is this player's own turn only.
+  p.momentumActive = false;
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
   g.turnStarted = false;

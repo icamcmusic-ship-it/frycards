@@ -21,6 +21,7 @@ const SIMPLE_KEYWORDS = new Set([
   'Scrap',
   'Rally',
   'Twin',
+  'Overrun',
 ]);
 // Marker keywords whose behavior lives in a structured CardDef field.
 const FIELD_KEYWORDS: Record<string, (c: CardDef) => boolean> = {
@@ -36,6 +37,7 @@ const FIELD_KEYWORDS: Record<string, (c: CardDef) => boolean> = {
   Resolve: (c) => !!c.resolve,
   Ultimate: (c) => !!c.ultimate,
   Steel: (c) => !!c.steel,
+  Foothold: (c) => !!c.foothold,
 };
 
 const ACTIONS = new Set(['sap', 'mend', 'draw', 'bind', 'destroy', 'buff']);

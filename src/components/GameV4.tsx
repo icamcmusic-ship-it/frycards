@@ -513,7 +513,11 @@ function LeaderPanel({
       {ab && (
         <AbilityPill
           label={`BASE ABILITY ${abThr}+${abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
-          desc={describeEffect(ab.effect)}
+          desc={
+            describeEffect(ab.effect) +
+            (l.def.abilityNoRepeatTarget ? " (can't repeat last turn's target)" : '') +
+            (l.def.abilityGrantsTempo ? " — next Unit cast this turn skips summoning sickness" : '')
+          }
           usable={isHuman && !abilityWhy}
           used={l.abilityUsed}
           why={isHuman ? abilityWhy : 'Opponent ability — shown for information'}

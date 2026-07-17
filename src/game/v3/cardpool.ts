@@ -142,6 +142,10 @@ function mapUnit(c: CardTemplate): CardDef {
     if (secondary !== primaryKw) keywords.push(secondary);
   }
   if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
+  // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
+  // (Ward/Steel/Bulwark fully zeroing a hit) — layered independently, same
+  // pattern as the Pierce secondary roll above.
+  if (tier >= 2 && !keywords.includes('Overrun') && hash(c.id) % 8 === 6) keywords.push('Overrun');
 
   const def: CardDef = {
     id: c.id,
@@ -446,6 +450,21 @@ function mapLocation(c: CardTemplate): CardDef {
     flavor: c.flavor,
   };
   def.locPassive = hash(c.id) % 2 === 0 ? 'ATK_ALL' : 'HP_ALL';
+  // v4.4: every Location now resolves a small effect the moment it enters
+  // play (see enterPlay in engine.ts, which previously ignored `onCast` for
+  // this type entirely) — the balance sim's diagnosis was that a Location's
+  // value being 100% deferred to "the passive adds up eventually" is what
+  // made it lose the opportunity-cost fight against a Unit's immediate
+  // impact, not the passive's raw size (already doubled once this patch
+  // with no measurable improvement).
+  def.onCast = { action: 'mend', value: 1, target: 'friendlyLeader' };
+  // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
+  // each turn — gives ramp identities (Excavate/Anchor especially) an actual
+  // floor instead of doing nothing on the turns they're setting up.
+  if (hash(c.id) % 6 === 3) {
+    def.foothold = true;
+    def.keywords = ['Foothold'];
+  }
   if (tier >= 1) {
     def.ability = pick(c.id, 6, [
       { threshold: 3, effect: { action: 'draw', value: 1, target: 'none' } },
@@ -461,13 +480,13 @@ function mapLocation(c: CardTemplate): CardDef {
       { action: 'draw', value: 1, target: 'none' } as Effect,
       { action: 'mend', value: 2, target: 'friendlyAny' } as Effect,
     ]);
-    def.keywords = ['Tribute'];
+    def.keywords = [...(def.keywords || []), 'Tribute'];
   } else if (def.ability && hash(c.id) % 5 === 1) {
     def.excavate = { x: 1 };
-    def.keywords = ['Excavate'];
+    def.keywords = [...(def.keywords || []), 'Excavate'];
   } else if (tier >= 1 && hash(c.id) % 5 === 2) {
     def.contested = true;
-    def.keywords = ['Contested'];
+    def.keywords = [...(def.keywords || []), 'Contested'];
   }
   return def;
 }

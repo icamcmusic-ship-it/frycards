@@ -117,6 +117,19 @@ export interface CardDef {
   contested?: boolean;
   /** Snap (Charm): may be cast during the Reroll Phase (before the reroll window closes), not just Placement. */
   snap?: boolean;
+  /** v4.4 Foothold (Location): the first Unit you cast each turn costs 1 less while this Location is in play. */
+  foothold?: boolean;
+  /** v4.4 (Leader): this Leader's Ability grants tempo instead of pure card
+   * advantage — the next friendly Unit cast this same turn enters play
+   * without summoning sickness (as if it had Swift). Currently only
+   * Legendary Diver. */
+  abilityGrantsTempo?: boolean;
+  /** v4.4 (Leader): this Leader's Ability can't target the same permanent
+   * two activations in a row — still repeatable every turn, just can't
+   * compound onto one already-tough Unit forever. Currently only Apex
+   * Nanite Shinobi, whose uncapped repeat-buff was a stat-snowball engine
+   * when paired with any sticky defensive body. */
+  abilityNoRepeatTarget?: boolean;
 }
 
 // v4.1: raised (28 -> 64) to lengthen games by ~4 rounds toward the 8-10 round
