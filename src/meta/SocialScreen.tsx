@@ -653,7 +653,6 @@ function TradeComposerModal({
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
-  // Credits are integer cents — inputs below are dollar-denominated for humans.
   const [offerCredits, setOfferCredits] = useState(0);
   const [requestCredits, setRequestCredits] = useState(0);
   const [error, setError] = useState('');
@@ -794,17 +793,14 @@ function TradeComposerModal({
             <input
               type="number"
               min={0}
-              max={(profile?.credits ?? 0) / 100}
-              step="0.01"
-              value={offerCredits / 100}
+              max={profile?.credits ?? 0}
+              step={1}
+              value={offerCredits}
               onChange={(e) =>
                 setOfferCredits(
                   Math.max(
                     0,
-                    Math.min(
-                      profile?.credits ?? 0,
-                      Math.round((Number(e.target.value) || 0) * 100),
-                    ),
+                    Math.min(profile?.credits ?? 0, Math.round(Number(e.target.value) || 0)),
                   ),
                 )
               }
@@ -828,10 +824,10 @@ function TradeComposerModal({
             <input
               type="number"
               min={0}
-              step="0.01"
-              value={requestCredits / 100}
+              step={1}
+              value={requestCredits}
               onChange={(e) =>
-                setRequestCredits(Math.max(0, Math.round((Number(e.target.value) || 0) * 100)))
+                setRequestCredits(Math.max(0, Math.round(Number(e.target.value) || 0)))
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />

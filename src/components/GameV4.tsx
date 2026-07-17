@@ -849,7 +849,9 @@ export function GameV4({
   const doRollDice = () => {
     flashPhase('ROLL');
     setStage('rolling');
-    setRollingDice(new Set([0, 1, 2, 3, 4]));
+    // Dice are already rolled by startTurn — Momentum can make it six, so
+    // animate however many the engine actually dealt.
+    setRollingDice(new Set(me.dice.map((_, i) => i)));
     if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
     rollTimeoutRef.current = window.setTimeout(() => {
       rollTimeoutRef.current = null;
@@ -1104,6 +1106,9 @@ export function GameV4({
     }
     if (castFromHand(g, dieIdx!, c.iid)) {
       setSelDie(null);
+      // A Snap cast can place a die that was marked for reroll — drop it from
+      // the selection so the mark doesn't linger on a disabled die.
+      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
       bump();
       say(
         hasKw(c.def, 'Twin')
@@ -1196,7 +1201,11 @@ export function GameV4({
         setSumCast(null);
         setShowDiscard(false);
         bump();
-        say(`${c.def.name} echoes back into play (Echo cost waived — mid-rarity).`);
+        say(
+          hasKw(c.def, 'Twin')
+            ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later (Echo cost waived — mid-rarity).`
+            : `${c.def.name} echoes back into play (Echo cost waived — mid-rarity).`,
+        );
       } else {
         say('Illegal Echo.');
       }
@@ -1227,6 +1236,9 @@ export function GameV4({
         return;
       }
       setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
+      // Dice are captured in pending.dieIndices — disarm the SUM ECHO bar so
+      // dice clicks aren't stuck in sum-toggle mode behind the target picker.
+      setSumCast(null);
       return;
     }
     startEchoRecast(c.iid, dieIndices);
@@ -1260,6 +1272,9 @@ export function GameV4({
     setPending(null);
     if (ok) {
       setSelDie(null);
+      // A Snap cast can place a die that was marked for reroll — drop it from
+      // the selection so the mark doesn't linger on a disabled die.
+      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
       bump();
     } else say('Illegal target.');
     if (g.winner) setStage('over');
@@ -1540,7 +1555,15 @@ export function GameV4({
   };
 
   const doReroll = () => {
-    const picks = [...rerollSel];
+    // A Snap cast during preRoll can place a die that was already marked for
+    // reroll (its tray button goes disabled, so it can't be unmarked) — the
+    // engine skips placed dice but would still spend the reroll charge.
+    const picks = [...rerollSel].filter((i) => !me.dice[i].placed);
+    if (picks.length === 0 && rerollSel.size > 0) {
+      setRerollSel(new Set());
+      say('Those dice are already placed — mark unplaced dice to reroll, or KEEP ALL.');
+      return;
+    }
     reroll(g, picks);
     setRerollSel(new Set());
     if (picks.length > 0) {
@@ -1645,7 +1668,7 @@ export function GameV4({
     if (echoPick) return 'Pick a card in your hand to discard — that pays the Echo cost.';
     switch (stage) {
       case 'awaitRoll':
-        return 'Dice are your only resource — no mana. Click ROLL DICE to roll five.';
+        return 'Dice are your only resource — no mana. Click ROLL DICE to roll them.';
       case 'rolling':
         return 'Rolling…';
       case 'preRoll':
@@ -1886,6 +1909,7 @@ export function GameV4({
           <div className="flex gap-1 text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
             <span>
               CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}
+              {foe.banished.length > 0 && <> · banished {foe.banished.length}</>}
             </span>
             {foe.location && (
               <span
@@ -2004,7 +2028,7 @@ export function GameV4({
           })}
           {stage === 'awaitRoll' && (
             <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[150px] leading-tight">
-              Click ROLL DICE to roll your five dice.
+              Click ROLL DICE to roll your dice.
             </span>
           )}
           {stage === 'cpu' && (
@@ -2457,7 +2481,12 @@ export function GameV4({
                           }
                         } else {
                           const thr = effThreshold(g, HUMAN, c.def);
-                          if (dieVal !== null && dieVal < thr) {
+                          if (c.def.castCostKind === 'exact') {
+                            if (dieVal !== thr) {
+                              say(`Needs exactly ${thr} to Echo this.`);
+                              return;
+                            }
+                          } else if (dieVal !== null && dieVal < thr) {
                             say(`Needs ${thr}+ to Echo this.`);
                             return;
                           }

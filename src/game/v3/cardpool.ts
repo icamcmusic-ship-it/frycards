@@ -131,15 +131,108 @@ export function applyCostFormat(def: CardDef, cost: CostPick) {
 // The primary keyword wheel each Unit draws from (weights via repetition).
 const UNIT_KEYWORDS = ['Ward', 'Guard', 'Guard', 'Frenzy', 'Swift', 'Echo', 'Twin', 'Anchor'];
 
+/**
+ * v4.6: a cast cost's real difficulty on a 1-6 "threshold-equivalent" scale,
+ * measured (not guessed) from `npm run pattern-hitrate` under the actual
+ * 2-reroll rule. The old stat-budget formula priced every Unit off its
+ * pre-format `threshold` even though `applyCostFormat` then replaced that
+ * cost with something wildly easier or harder:
+ * - 'exact' is near-FLAT in difficulty regardless of the printed face
+ *   (any specific value among 5 dice with 2 directed rerolls lands ~90% of
+ *   the time) — yet an exact-6 card kept stats budgeted for threshold 6.
+ *   The balance sim's "most likely OP" list was dominated by exact-cost
+ *   Units as a result (Cavernous Watcher: a 9/3 for exact-6; Vector Blade
+ *   Captain: a 5/6 Guard/Avenge for exact-2).
+ * - straight-family gates are far HARDER than the match-family gates they
+ *   shared a tier with (directed 2-reroll hit rates: SmallStraight 44.1%
+ *   vs ThreeKind 74.4%/TwoPair 74.1%; LargeStraight 17.7% vs FullHouse
+ *   34.7%) — the structural reason every straight-gate archetype in the
+ *   sim roster sat 20+pt below its match-family siblings.
+ * Gate difficulties also price in the one-Combo-gated-cast-per-turn cap.
+ */
+const GATE_DIFFICULTY: Record<ComboPattern, number> = {
+  AnyPair: 1.5,
+  ThreeOdds: 2,
+  ThreeEvens: 2,
+  ThreeKind: 3.5,
+  TwoPair: 3.5,
+  SmallStraight: 4.5,
+  FullHouse: 5,
+  FourKind: 5.5,
+  LargeStraight: 6,
+  Yahtzee: 6,
+};
+export function costDifficulty(cost: CostPick): number {
+  if (cost.kind === 'exact') return 2;
+  // 'sum' spends SEVERAL dice — the difficulty is the opportunity cost of
+  // the dice consumed, scaling with the target (avg die = 3.5).
+  if (cost.kind === 'sum') return Math.min(6, 1 + cost.value / 3);
+  return GATE_DIFFICULTY[cost.pattern];
+}
+
 // ---------------------------------------------------------------------------
 // Unit mapping
 // ---------------------------------------------------------------------------
 function mapUnit(c: CardTemplate): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
-  // Threshold scales gently with rarity (bombs cost more to land).
+  // Legacy threshold, still the cost basis for Twin cards only (their
+  // two-slot exact-face mechanic never went through the v4.3 cost formats).
   const threshold = Math.min(6, 1 + Math.min(4, tier) + (hash(c.id) % 2 === 0 ? 1 : 0));
-  // Stat budget scales with threshold; split by a hashed bias.
-  const budget = 2 + threshold * 2 + (tier >= 4 ? 2 : 0);
+  // v4.6: pick the REAL cost first (deterministic, so this is the same cost
+  // applyCostFormat gets below) — the stat budget must price off what the
+  // card actually costs to cast, not the pre-format threshold.
+  const cost = pickCostFormat(c.id, tier);
+
+  // Keyword selection first, so Twin-ness is known before budgeting.
+  // IMPORTANT: every pick() salt and hash(...) condition here is unchanged
+  // from v4.5 — reordering must never reassign which keywords a card gets
+  // (see pickHardGate's warning about hash-assignment fragility).
+  const keywords: string[] = [];
+  let primaryKw = pick(c.id, 9, UNIT_KEYWORDS);
+  // v4.0 balance: Swift (haste) on cheap bodies was the dominant aggro engine.
+  // On a threshold <= 2 Unit it becomes Guard instead (a cheap early wall),
+  // so Swift only shows up where paying for a real tempo body is a choice.
+  // v4.6 NOTE: a first attempt keyed this off costDifficulty(cost) <= 2 —
+  // that converted Swift on every exact-cost/easy-gate card at EVERY tier
+  // (a pool-wide keyword reassignment, the exact fragility pickHardGate's
+  // comment warns about), and a verification sim measured the fallout
+  // directly: Swift's keyword win rate 51.3% -> 33.3%, and Legendary Diver
+  // (the Swift-identity Leader) 34.2% -> 27.4%. Reverted to the stable
+  // legacy-threshold check.
+  if (primaryKw === 'Swift' && threshold <= 2) primaryKw = 'Guard';
+  keywords.push(primaryKw);
+
+  // Higher rarity grants a second keyword sometimes.
+  if (tier >= 2 && hash(c.id) % 3 !== 0) {
+    const secondary = pick(c.id, 13, UNIT_KEYWORDS);
+    if (secondary !== primaryKw) keywords.push(secondary);
+  }
+  if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
+  // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
+  // (Ward/Steel/Bulwark fully zeroing a hit) — layered independently, same
+  // pattern as the Pierce secondary roll above.
+  // v4.6: prevalence doubled (%8===6 -> %4===2, i.e. also %8===2) — the
+  // three durability-stack archetypes (Steel-Scrap Control 81.4%,
+  // Guard-Bulwark Turtle 78.0%, Toll-Bulwark Fortress 77.3%) stayed
+  // dominant with Overrun too rare to matter as the printed answer. Purely
+  // additive: every card that had Overrun still has it.
+  if (tier >= 2 && !keywords.includes('Overrun') && hash(c.id) % 4 === 2) keywords.push('Overrun');
+
+  // v4.6 stat budget: the balance sim's "most likely OP" list was dominated
+  // by exact-cost Units whose stats were budgeted off the pre-format
+  // threshold even though an exact-face cost is near-flat easy regardless
+  // of the printed value (~90% with 2 directed rerolls — Cavernous Watcher
+  // was a 9/3 for "exactly 6"). Clamp ONLY the exact-cost basis down to the
+  // measured difficulty; every other format keeps the legacy threshold
+  // basis. (A first attempt re-priced ALL formats off measured difficulty —
+  // a verification sim showed that trimming match-gate/easy-gate bodies
+  // pool-wide crashed the match-combo archetypes, Crimson Match-Combo
+  // 58.6% -> 29.7%, without helping the straight decks it was meant to fix,
+  // since almost no straight-gated Units exist. Surgical beats sweeping.)
+  const isTwin = keywords.includes('Twin');
+  const D =
+    !isTwin && cost.kind === 'exact' ? Math.min(threshold, costDifficulty(cost)) : threshold;
+  const budget = 2 + Math.round(D * 2) + (tier >= 4 ? 2 : 0);
   const bias = (hash(c.id) >> 3) % 3; // 0 aggro, 1 balanced, 2 defensive
   let atk =
     bias === 0
@@ -150,12 +243,6 @@ function mapUnit(c: CardTemplate): CardDef {
   let hp = Math.max(1, budget - atk);
   atk = Math.max(1, atk);
 
-  const keywords: string[] = [];
-  let primaryKw = pick(c.id, 9, UNIT_KEYWORDS);
-  // v4.0 balance: Swift (haste) on cheap bodies was the dominant aggro engine.
-  // On a threshold <= 2 Unit it becomes Guard instead (a cheap early wall),
-  // so Swift only shows up where paying for a real tempo body is a choice.
-  if (primaryKw === 'Swift' && threshold <= 2) primaryKw = 'Guard';
   // Guard wants more HP to actually wall aggro; Frenzy wants a nudged ATK
   // now that its downside is softer (only the 2nd swing doubles retaliation).
   if (primaryKw === 'Guard') {
@@ -174,18 +261,6 @@ function mapUnit(c: CardTemplate): CardDef {
   if (primaryKw === 'Frenzy') {
     atk += 2;
   }
-  keywords.push(primaryKw);
-
-  // Higher rarity grants a second keyword sometimes.
-  if (tier >= 2 && hash(c.id) % 3 !== 0) {
-    const secondary = pick(c.id, 13, UNIT_KEYWORDS);
-    if (secondary !== primaryKw) keywords.push(secondary);
-  }
-  if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
-  // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
-  // (Ward/Steel/Bulwark fully zeroing a hit) — layered independently, same
-  // pattern as the Pierce secondary roll above.
-  if (tier >= 2 && !keywords.includes('Overrun') && hash(c.id) % 8 === 6) keywords.push('Overrun');
 
   const def: CardDef = {
     id: c.id,
@@ -208,6 +283,17 @@ function mapUnit(c: CardTemplate): CardDef {
   // which is a distinct mechanic from the new 'exact' cost format.
   if (!keywords.includes('Twin')) {
     applyCostFormat(def, pickCostFormat(c.id, tier));
+    // v4.6: same straight-gate compensation mapSpell applies to payoffs —
+    // a straight gate is far harder to hit than its match-family tier
+    // sibling (see GATE_DIFFICULTY), so the few straight-gated Units get a
+    // stat bump for the harder, once-per-turn-capped cast.
+    if (def.comboGate === 'SmallStraight') {
+      def.atk = (def.atk || 0) + 1;
+      def.hp = (def.hp || 0) + 1;
+    } else if (def.comboGate === 'LargeStraight') {
+      def.atk = (def.atk || 0) + 2;
+      def.hp = (def.hp || 0) + 2;
+    }
   }
 
   // Twin units carry a printed Twin bonus (required by §7).
@@ -422,6 +508,22 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // v4.3: assign the real Cast Slot cost format.
   applyCostFormat(base, pickCostFormat(c.id, costTier));
 
+  // v4.6: straight-family gates are measurably HARDER than the match-family
+  // gates they share a cost tier with (directed 2-reroll hit rates:
+  // SmallStraight 44.1% vs ThreeKind 74.4%/TwoPair 74.1%; LargeStraight
+  // 17.7% vs FullHouse 34.7% — `npm run pattern-hitrate`), yet a
+  // straight-gated spell printed the same power as its match-gated tier
+  // sibling. That structural under-payment is why all three straight-family
+  // archetypes in the sim roster (two Leaders' Straight-Combo decks plus
+  // Shinobi Echo-Straight) sat 20+pt below their match-family siblings.
+  // Compensate the payoff for the rarer, harder cast.
+  if (base.onCast && (base.onCast.value ?? 0) >= 1) {
+    if (base.comboGate === 'SmallStraight')
+      base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + 1 };
+    if (base.comboGate === 'LargeStraight')
+      base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + 2 };
+  }
+
   // Overflow riders on some spells — numeric cost formats only, excluding
   // 'exact' (see mapUnit: an exact-cost die can never exceed its own
   // threshold, so overflowHit could never fire).
@@ -507,7 +609,11 @@ function mapLocation(c: CardTemplate): CardDef {
   // rarity-scaled effect in the pool (Unit stat budgets, Event power) grows
   // with tier, but this one didn't, undervaluing higher-rarity Locations
   // relative to the Units they compete against for a deck slot.
-  def.onCast = { action: 'buff', value: 1 + (tier >= 3 ? 1 : 0), target: 'friendlyUnit' };
+  // v4.6: base 1 -> 2 — Locations still measured net negative in isolation
+  // (-1.9 win% vs. Location-stripped twins) after the v4.4.2 on-cast add
+  // and the v4.5 rarity scaling; the on-cast effect is the one lever that
+  // directly closes the "a Unit gives immediate board value" gap.
+  def.onCast = { action: 'buff', value: 2 + (tier >= 3 ? 1 : 0), target: 'friendlyUnit' };
   // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
   // each turn — gives ramp identities (Excavate/Anchor especially) an actual
   // floor instead of doing nothing on the turns they're setting up.
@@ -674,6 +780,19 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   },
 };
 
+// v4.6 BUG FIX: the v4.4 Leader-Ability behavior flags were implemented in
+// the engine (enterPlay's tempo grant, activateAbility's no-repeat-target
+// rule), documented in the rulebook, and referenced by two rounds of balance
+// notes — but mapLeader() below NEVER actually assigned them to any Leader,
+// so neither has ever been live in a sim or a real match. This silently
+// explains two long-standing findings-doc mysteries: Diver "buffed twice,
+// still net down" (its v4.4.2 tempo-grant buff never activated), and
+// Shinobi's targeting nerf that "barely moved the needle" (it was never on).
+const LEADER_ABILITY_FLAGS: Record<string, Partial<CardDef>> = {
+  legendary_diver: { abilityGrantsTempo: true },
+  apex_nanite_shinobi: { abilityNoRepeatTarget: true },
+};
+
 function mapLeader(c: CardTemplate): CardDef {
   const resolveX = LEADER_RESOLVE[c.id];
   return {
@@ -685,6 +804,7 @@ function mapLeader(c: CardTemplate): CardDef {
       threshold: 5,
       effect: { action: 'sap', value: 2, target: 'anyTarget' },
     },
+    ...LEADER_ABILITY_FLAGS[c.id],
     resolve: resolveX ? { x: resolveX } : undefined,
     ultimate: LEADER_ULTIMATE[c.id],
     keywords: [...(resolveX ? ['Resolve'] : []), ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : [])],

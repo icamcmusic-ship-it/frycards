@@ -379,15 +379,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <Coins className="w-4 h-4" />
               <input
                 type="number"
-                value={bidAmount / 100}
+                value={bidAmount}
                 min={0}
-                step="0.01"
-                onChange={(e) => setBidAmount(Math.round((Number(e.target.value) || 0) * 100))}
+                step={1}
+                onChange={(e) => setBidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                 className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
               />
-              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
-                = <Credits amount={bidAmount} />
-              </span>
             </div>
             <div className="flex gap-2 justify-end">
               <PopButton color="steel" onClick={() => setBidFor(null)}>
@@ -579,17 +576,14 @@ function SellForm({
               {type === 'fixed' ? 'Price' : 'Starting bid'}
               <input
                 type="number"
-                min={0.01}
-                step="0.01"
-                value={price / 100}
+                min={1}
+                step={1}
+                value={price}
                 onChange={(e) =>
-                  setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))
+                  setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))
                 }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
-              <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                = <Credits amount={price} />
-              </span>
             </label>
             {type === 'auction' && (
               <label className="flex items-center gap-2 text-xs font-bold">
@@ -597,22 +591,17 @@ function SellForm({
                 <input
                   type="number"
                   min={0}
-                  step="0.01"
-                  value={buyout === '' ? '' : buyout / 100}
+                  step={1}
+                  value={buyout}
                   onChange={(e) =>
                     setBuyout(
                       e.target.value === ''
                         ? ''
-                        : Math.max(0, Math.round((Number(e.target.value) || 0) * 100)),
+                        : Math.max(0, Math.round(Number(e.target.value) || 0)),
                     )
                   }
                   className="w-24 px-2 py-1 ink-border-sm"
                 />
-                {buyout !== '' && (
-                  <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
-                    = <Credits amount={buyout} />
-                  </span>
-                )}
               </label>
             )}
             <label className="flex items-center gap-2 text-xs font-bold">

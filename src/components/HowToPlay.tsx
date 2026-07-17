@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MetaHeader } from '../meta/ui';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
 
-// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.2), plus a
+// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.6), plus a
 // standalone rarity-system explainer and an app feature guide — this used to
 // be a popup shown only on first launch; it's now its own page reachable
 // any time from the Main Menu's HOW TO PLAY button.
@@ -24,7 +24,7 @@ const SECTIONS = [
       ],
       [
         'Dice',
-        'Every turn you roll five six-sided dice and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
+        'Every turn you roll five six-sided dice (six when Momentum triggers — see §6) and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
       ],
     ],
   },
@@ -32,7 +32,7 @@ const SECTIONS = [
     title: '2 · Turn Structure',
     body: [
       ['Draw', 'Draw 1 card (any pending Aftershock effects resolve just before this).'],
-      ['Roll', 'Roll your five dice.'],
+      ['Roll', 'Roll your five dice (six if Momentum triggers).'],
       [
         'Reroll',
         'Reroll any subset of your dice, up to two times. Charms with Snap may be cast during this window, before you lock your reroll.',
@@ -43,7 +43,7 @@ const SECTIONS = [
       ],
       [
         'Combo Check',
-        'Your five final die values are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
+        'Your final die values — all five (or six with Momentum), placed or not — are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
       ],
       [
         'Combat',
@@ -64,7 +64,7 @@ const SECTIONS = [
       ],
       [
         'Combo-gated',
-        'Some Events cost a pattern instead of a number (e.g. "Combo: Full House") — any die casts them the moment your roll contains the pattern. Max ONE Combo-gated card per turn.',
+        'Any card type can cost a pattern instead of a number (e.g. "Combo: Full House") — any die casts it the moment your roll contains the pattern. Max ONE Combo-gated card per turn.',
       ],
       [
         'Ability Slot',
@@ -94,15 +94,19 @@ const SECTIONS = [
       ['Guard', 'While the defender controls any Guard Unit, attacks must target a Guard Unit.'],
       [
         'Pierce',
-        'If a Pierce attacker destroys its target, the leftover damage carries through to the enemy Leader — even through Guard.',
+        "If a Pierce attacker destroys its target, the leftover damage carries through to the enemy Leader — even through Guard — capped at half the attacker's ATK (rounded down, min 1).",
       ],
       [
         'Ward',
-        'Prevents the first instance of damage or removal against this Unit each turn (not retaliation on its own attack). Refreshes every End Phase, both players.',
+        'Prevents the first instance of damage or removal against this Unit each turn (not retaliation on its own attack); a prevented ATTACK also spikes 1 damage back at the attacker. Refreshes every End Phase, both players.',
       ],
       [
         'Damage order',
-        'Ward (full prevention) → Bulwark (flat reduction) → Frenzy (multiplier). Damage is persistent; a Unit at 0 HP dies immediately.',
+        'Ward (full prevention) → Steel (per-turn pool) → Bulwark (flat reduction) → Frenzy (multiplier). Damage is persistent; a Unit at 0 HP dies immediately.',
+      ],
+      [
+        'Overrun',
+        'If a hit is fully prevented (Ward/Steel/Bulwark zero it) and the attacker has ATK above 0, an Overrun attacker still punches 1 damage through.',
       ],
       [
         'Frenzy',
@@ -116,10 +120,14 @@ const SECTIONS = [
     body: [
       ['Guard', 'Enemies must attack your Guard Units first.'],
       ['Swift', 'May attack or use an ability the turn it is played.'],
-      ['Pierce', 'Excess damage from killing a Unit hits the enemy Leader.'],
-      ['Ward', 'Blocks the first hit or hostile effect each turn.'],
+      ['Pierce', 'Excess damage from killing a Unit hits the enemy Leader (capped at half ATK, min 1).'],
+      ['Ward', 'Blocks the first hit or hostile effect each turn; a blocked attack spikes 1 damage back at the attacker.'],
       ['Frenzy', 'Second attack if it survives; doubled retaliation on that second swing only.'],
-      ['Bulwark X', 'Takes X less damage from every attack (after Ward, before Frenzy).'],
+      ['Bulwark X', 'Takes X less damage from every attack (after Ward and Steel, before Frenzy).'],
+      [
+        'Steel X',
+        'A per-turn pool absorbing up to X damage from ANY source — combat, retaliation, Sap, Removal. Refreshes every turn, both players.',
+      ],
       [
         'Toll X',
         'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives (total reduction from every Toll source caps at 3).',
@@ -129,14 +137,17 @@ const SECTIONS = [
         'Twin',
         'Two Cast Slots needing the SAME face value, placed on different turns; it waits in your Staging Zone in between (and may grant a small passive while parked). Completing it triggers a printed bonus.',
       ],
-      ['Anchor', 'Threshold −1 per other Anchor card you have in play (max −2, min 1).'],
+      [
+        'Anchor',
+        "Threshold −1 per other Anchor card you have in play (max −3, min 1). The first time a card's own discount hits that cap, it permanently gains +2/+2.",
+      ],
       [
         'Echo',
-        'After it hits your Discard: recast it with a die + discarding one card. Once per copy — the next discard banishes it.',
+        'After it hits your Discard: recast it with a die + discarding one card (Rare and Super-Rare cards skip the extra discard). Once per copy — the next discard banishes it.',
       ],
       [
         'Rally',
-        "Once per turn across your whole board, activate a Rally card's ability for free using a die already resting on another used Ability Slot.",
+        "Once per Rally card each turn (its own Ability exhaustion), activate its ability for free using a die already resting on another used Ability Slot.",
       ],
     ],
   },
@@ -162,6 +173,11 @@ const SECTIONS = [
       ['Snap (Charm)', 'Castable during your Reroll Phase, before you lock the reroll.'],
       ['Overflow X', 'Bonus if the die placed beats the threshold by X or more.'],
       ['Combo: [Pattern]', 'Passive bonus at Combo Check when your roll contains the pattern.'],
+      ['Foothold (Location)', 'Your first Unit cast each turn costs 1 less (stacks with Anchor).'],
+      [
+        'Momentum',
+        'Not a keyword — a built-in comeback. Start your turn at/below half HP AND with fewer Units than the enemy: this turn only, roll a 6th die, your Units get +1 ATK, your Leader Ability threshold drops 1, and you draw a card.',
+      ],
       ['Tribute (Location)', 'Bonus at your End Phase if you Pitched 2+ dice this turn.'],
       ['Excavate X (Location)', 'Its ability threshold drops by X every turn it stays in play.'],
       ['Contested (Location)', 'Its passive is doubled while your opponent has no Location.'],
@@ -203,8 +219,8 @@ const SECTIONS = [
         "The pair of 3s satisfies Any Pair — the Event can be cast with ANY one die (the 2 is perfect, it pays nothing else). The 5 or 6 pays the Unit. The remaining 6+3 (or 5+3) covers the Charm's Σ7 sum cost.",
       ],
       [
-        'Order matters',
-        'Cast the Event first with the 2 (Combo-gated cards check your CURRENT roll — spending the 3s first would break the pair). Then the Unit with the 5, then the Charm with 6+3. One die (a 3) is left.',
+        "Order doesn't",
+        'Patterns read die VALUES, placed or not — a spent 3 still counts toward the pair all turn, so casting order never breaks a Combo. Cast the Event with the 2, the Unit with the 5, the Charm with 6+3, in any order. One die (a 3) is left.',
       ],
       [
         'The leftover',
@@ -461,7 +477,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          DEFINITIVE RULEBOOK V4.2 · docs/RULEBOOK.md
+          DEFINITIVE RULEBOOK V4.6 · docs/RULEBOOK.md
         </div>
       </div>
     </div>

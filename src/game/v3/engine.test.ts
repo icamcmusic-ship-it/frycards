@@ -12,6 +12,7 @@ import {
   abandonTwin,
   mulliganRedraw,
   MAX_COMBO_SELF_BUFF_STACKS,
+  AVENGE_CAP,
 } from './engine';
 import { CardDef } from './cards';
 import { Archetype, buildDeck } from './decks';
@@ -604,7 +605,7 @@ test('Mend never over-heals: damage floors at 0 (never past max HP, §8)', () =>
   expect(g.players.A.leader.damage).toBe(0);
 });
 
-test('Avenge: +1/+1 per friendly death including simultaneous deaths; a dying Avenge unit gains nothing', () => {
+test('Avenge: +1/+1 per friendly death, capped at AVENGE_CAP lifetime; a dying Avenge unit gains nothing', () => {
   const g = freshGame();
   const p = g.players.A;
   const av = makeInst(mkU('av', { hp: 9, avenge: true }), 'A');
@@ -617,8 +618,11 @@ test('Avenge: +1/+1 per friendly death including simultaneous deaths; a dying Av
   d1.damage = 9;
   d2.damage = 9;
   cleanupDeaths(g);
-  expect(av.permAtk).toBe(1 + 2); // 1 from dyingAv, 2 from the simultaneous pair
-  expect(av.permHp).toBe(3);
+  // v4.6: 1 from dyingAv, then the simultaneous pair only grants 1 more —
+  // AVENGE_CAP (2) is a lifetime ceiling per card, so the second death of
+  // the pair is absorbed by the cap.
+  expect(av.permAtk).toBe(AVENGE_CAP);
+  expect(av.permHp).toBe(AVENGE_CAP);
   expect(p.board.some((u) => u.iid === dyingAv.iid)).toBe(false);
 });
 
@@ -1519,14 +1523,14 @@ test('v4.4 Location passives are +2 (was +1)', () => {
 // tempo-granting Ability, and Locations resolving an immediate onCast.
 // ---------------------------------------------------------------------------
 
-test('v4.4.1 Overrun punches 1 damage through a fully-prevented/absorbed hit, never off a 0-ATK attacker', () => {
+test('v4.6 Overrun punches floor(ATK/2) (min 1) through a fully-prevented/absorbed hit, never off a 0-ATK attacker', () => {
   const g = combatGame();
   const warded = makeInst(mkU('ov-wd', { atk: 0, hp: 10, keywords: ['Ward'] }), 'B');
   const att = makeInst(mkU('ov-att', { atk: 5, hp: 10, keywords: ['Overrun'] }), 'A');
   g.players.B.board.push(warded);
   g.players.A.board.push(att);
   expect(attack(g, att.iid, warded.iid)).toBe(true);
-  expect(warded.damage).toBe(1); // fully warded, but Overrun forces 1 through
+  expect(warded.damage).toBe(2); // fully warded, but Overrun forces floor(5/2)=2 through
 
   // Fully absorbed by Steel instead of Ward — Overrun still applies.
   const steeled = makeInst(mkU('ov-st', { atk: 0, hp: 10, steel: { x: 5 } }), 'B');
@@ -1534,7 +1538,7 @@ test('v4.4.1 Overrun punches 1 damage through a fully-prevented/absorbed hit, ne
   g.players.B.board.push(steeled);
   g.players.A.board.push(att2);
   expect(attack(g, att2.iid, steeled.iid)).toBe(true);
-  expect(steeled.damage).toBe(1);
+  expect(steeled.damage).toBe(2); // floor(4/2)=2
 
   // A 0-ATK Overrun attacker never manufactures damage from nothing.
   const zeroAtt = makeInst(mkU('ov-zero', { atk: 0, hp: 10, keywords: ['Overrun'] }), 'A');

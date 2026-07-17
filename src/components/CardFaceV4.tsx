@@ -43,7 +43,7 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Frenzy:
     "May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation, and it can't target the enemy Leader directly unless no other target remains or you're behind on Units.",
   Anchor:
-    "This card's effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -3. The first time a card's own discount hits that cap, it permanently gains +1/+1.",
+    "This card's effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -3. The first time a card's own discount hits that cap, it permanently gains +2/+2.",
   Echo: "After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand — waived entirely for Rare/Super-Rare cards.",
   Scrap:
     'Discard this card from hand to reroll one of your unplaced dice, any time during Placement Phase.',
@@ -93,6 +93,22 @@ export const GATE_LABEL: Record<string, string> = {
   LargeStraight: 'LG. STRAIGHT',
   ThreeOdds: '3 ODDS',
   ThreeEvens: '3 EVENS',
+};
+
+/** Measured chance a focused player rolls each gate pattern within the
+ * standard two rerolls (from scripts/pattern-hitrate.ts) — surfaced in the
+ * combo-gate cost popover so players can judge how reliable a gate is. */
+export const GATE_HIT_RATE: Record<string, number> = {
+  AnyPair: 100,
+  ThreeOdds: 97,
+  ThreeEvens: 97,
+  ThreeKind: 74,
+  TwoPair: 74,
+  SmallStraight: 44,
+  FullHouse: 35,
+  FourKind: 29,
+  LargeStraight: 18,
+  Yahtzee: 5,
 };
 
 /** v4.3: short badge text for this card's Cast Slot cost, any format.
@@ -1083,10 +1099,14 @@ export function CardFace({
           'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 z-10',
           cfg.headerPy,
           !fullArt && 'border-b-2',
-          mythic ? 'mythic-bg border-[#7A1420]' : !fullArt && 'border-[var(--c-ink)]/15',
+          mythic
+            ? 'mythic-bg border-[#7A1420]'
+            : ultra
+              ? 'ultra-banner border-[#8a6d1f]'
+              : !fullArt && 'border-[var(--c-ink)]/15',
         )}
         style={
-          mythic || fullArt
+          mythic || fullArt || ultra
             ? undefined
             : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
         }
@@ -1094,7 +1114,9 @@ export function CardFace({
         <span
           className={cn(
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
-            mythic ? 'text-[var(--c-yellow)]' : fullArt && 'text-white',
+            // Ultra's gold-leaf banner always needs dark text regardless of
+            // theme (var(--c-ink) can be light in dark themes).
+            mythic ? 'text-[var(--c-yellow)]' : ultra ? 'text-[#241a04]' : fullArt && 'text-white',
           )}
           style={
             fullArt
@@ -1117,7 +1139,11 @@ export function CardFace({
         </span>
         {def.comboGate ? (
           <CostInfoButton
-            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.`}
+            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.${
+              GATE_HIT_RATE[def.comboGate] !== undefined
+                ? ` A focused player hits this ~${GATE_HIT_RATE[def.comboGate]}% of turns (two rerolls).`
+                : ''
+            }`}
             className={cn(
               'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
               cfg.comboBadge,
@@ -1140,7 +1166,7 @@ export function CardFace({
             <CostInfoButton
               text={
                 effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
-                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn (Anchor).`
+                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn.`
                   : `${costSummary(def)}.`
               }
               className={cn(
@@ -1477,6 +1503,24 @@ export function CardFace({
             mythic ? 'opacity-80' : ultra ? 'opacity-70' : 'opacity-50',
           )}
         />
+      )}
+      {/* v4.6 Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
+          gold corner brackets, over the animated gold-leaf name banner. */}
+      {ultra && !dimmed && (
+        <>
+          <div aria-hidden className="ultra-sparkle absolute inset-0 pointer-events-none" />
+          <div aria-hidden className="absolute inset-0 pointer-events-none z-20">
+            <span className="absolute top-0.5 left-0.5 w-3 h-3 border-t-2 border-l-2 border-[#d4af37] rounded-tl-[3px]" />
+            <span className="absolute top-0.5 right-0.5 w-3 h-3 border-t-2 border-r-2 border-[#d4af37] rounded-tr-[3px]" />
+            <span className="absolute bottom-0.5 left-0.5 w-3 h-3 border-b-2 border-l-2 border-[#d4af37] rounded-bl-[3px]" />
+            <span className="absolute bottom-0.5 right-0.5 w-3 h-3 border-b-2 border-r-2 border-[#d4af37] rounded-br-[3px]" />
+          </div>
+        </>
+      )}
+      {/* v4.6 Mythic "Living Inferno": embers rising off the card face, on
+          top of the animated red/gold banner and pulsing two-tone frame. */}
+      {mythic && !dimmed && (
+        <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
       )}
     </div>
   );

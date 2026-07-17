@@ -1,4 +1,4 @@
-# FryCards — Definitive Rulebook v4.4.2
+# FryCards — Definitive Rulebook v4.6
 
 Supersedes v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
@@ -7,6 +7,68 @@ built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.6 balance-sim pass (fresh 22,560-game baseline + three verification
+re-runs; full writeup `docs/BALANCE_SIM_FINDINGS_v4.6.md`):**
+
+- **BUG FIX (long-standing): the v4.4 Leader-Ability flags were never wired
+  up.** `mapLeader()` never assigned `abilityGrantsTempo` (Legendary Diver's
+  documented tempo-grant buff) or `abilityNoRepeatTarget` (Apex Nanite
+  Shinobi's documented targeting nerf) to any Leader — both features existed
+  only in the engine and this rulebook, never in the live pool. This is the
+  root cause of two v4.5 mysteries: Diver "buffed twice, still net down"
+  (the buff never activated) and Shinobi's nerf that "barely moved the
+  needle" (it was never on). Both flags now actually ship; with them live,
+  Diver finally moved above its true baseline (34.2% → 36.4%, Aggro-Swift
+  59.5% → 63.3%).
+- **Cost vs. ability, exact-cost formats (§7):** an exact-face cost is
+  near-flat in difficulty regardless of the printed value (~90% hit with two
+  directed rerolls), but Unit stat budgets were still priced off the
+  pre-format threshold — the sim's "most likely OP" list was dominated by
+  exact-cost Units (a 9/3 for "exactly 6"). Exact-cost Units now budget off
+  the measured difficulty. (A first attempt re-priced *every* cost format
+  off measured difficulty; verification showed it crashed the match-combo
+  archetypes without helping anything else, and it was narrowed to
+  exact-only. Surgical beats sweeping.)
+- **Straight-gate compensation (§6/§7):** straight-family gates are
+  measurably harder than the match-family gates they share a tier with
+  (Small Straight 44% vs. Three of a Kind 74%; Large Straight 18% vs. Full
+  House 35%), so straight-gated cards now print a compensating bump (+1
+  effect value / +1/+1 stats for Small Straight; +2 for Large Straight).
+- **Avenge** cap tightened 3 → 2 (§10) — the cap-at-3 measurably didn't bite
+  (Mer King Avenge Swarm 72.4% → 62.3% after this change).
+- **Overrun** now punches **half the attacker's ATK** (rounded down, min 1)
+  through a fully-prevented hit, up from a flat 1 (§10) — mirrors Pierce's
+  established floor(ATK/2) magnitude.
+- **Steel + Bulwark combined prevention capped at 4 per hit** (§8/§10) —
+  the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge already use,
+  aimed at the dual-keyword bodies anchoring the durability-stack decks.
+- **Momentum** additionally **draws a card** on trigger (§3.2) — three
+  passes of dice/stat/threshold levers never touched the *options* axis a
+  behind player actually lacks.
+- **Locations**: on-cast buff base value 1 → 2 (still +1 more at Rare+).
+  Isolated Location contribution measured **-0.2%** after this change —
+  effectively neutral for the first time since Locations were introduced
+  (they'd measured net-negative through four straight buff attempts).
+- **Ultimate(N) exonerated (instrumented):** usage is now split by board
+  state at activation. Used while *ahead*: **+30pt** win correlation. Used
+  while *behind*: -39pt. The long-standing "Ultimates correlate with losing"
+  finding was the deck-membership/desperation confound all along — losing
+  players reach for their Ultimate *because* they're losing. No further
+  Ultimate buffs are warranted on that metric alone.
+- **CPU AI lapse fixed:** `chooseReroll()` was actively rerolling away dice
+  that paid exact-cost cards in hand (any small singleton ≤ 3 got rerolled),
+  which is why exact-cost removal sat at 0.29-0.44 casts/game. The AI now
+  protects one die per exact-cost value it holds.
+- **Still unresolved, documented rather than chased blind:** Shinobi Avenge
+  Grind (93.4%) shrugged off the Avenge cap, two Leader-kit nerfs *and* the
+  newly-live targeting restriction; the durability-stack archetypes
+  (Ward-Steel/Guard-Bulwark/Steel-Scrap, 82-84%) resisted both Overrun
+  levers and the new prevention cap; Anchor-ramp archetypes remain the
+  weakest decks in the roster; Momentum's raw decision delta is unchanged
+  (~-66pt — though the instrumented Ultimate result above suggests this
+  metric is structurally incapable of crediting a comeback mechanic, since
+  it conditions on already losing).
 
 **v4.5 balance-sim pass (22,560-game v4.4.2 baseline, `npm run sim:v4 10`,
 findings acted on and re-verified):** the initial pass measured a still-wide
@@ -454,13 +516,13 @@ You lose immediately if either is true:
 
 **Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** *(v4.4)* (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
 
-**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*.
+**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **4** — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies.
 
 **Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
 
-**Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own.
+**Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own. *(v4.5)* Capped at **3** total +1/+1 over a card's lifetime; *(v4.6)* tightened to **2** — the cap-at-3 measurably never bit (Avenge was still the strongest keyword and its archetypes were unmoved), the same "ramp, not a collapse" ceiling every other repeating stat mechanic already has.
 
-**Overrun** *(v4.4.1, Unit)* — If this Unit's combat damage to its target would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals **1 damage anyway**. Never fires off a 0-ATK attacker, and never applies to retaliation damage. A direct, targeted counter to the durability-stack meta (Ward/Steel/Bulwark all fully zeroing a hit) without touching the numbers that make those keywords good answers to Pierce/Frenzy.
+**Overrun** *(v4.4.1, Unit)* — If this Unit's combat damage to its target would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals **half its effective ATK (rounded down, minimum 1) anyway** *(v4.6, was a flat 1 — the flat version measured as no answer at all to the durability-stack decks it was printed against; half-ATK mirrors Pierce's established overflow magnitude)*. Never fires off a 0-ATK attacker, and never applies to retaliation damage. A direct, targeted counter to the durability-stack meta (Ward/Steel/Bulwark all fully zeroing a hit) without touching the numbers that make those keywords good answers to Pierce/Frenzy.
 
 ### Utility keywords
 

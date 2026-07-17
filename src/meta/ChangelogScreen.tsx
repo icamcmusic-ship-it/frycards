@@ -12,6 +12,20 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Balance & Bug-Hunt Update',
+    items: [
+      'Big balance pass, verified across three full 22,560-game simulations: Leader win rates are the closest they have ever been (top five within 2 points). Full details in the rulebook changelog.',
+      'Fixed a long-standing bug where two Leader abilities never actually worked: Legendary Diver\'s tempo grant (the next Unit you cast after his Ability skips summoning sickness and now gets +2/+2) and Apex Nanite Shinobi\'s "can\'t buff the same Unit twice in a row" restriction are finally live.',
+      'Keyword changes: Avenge now caps at +2/+2 per card; Overrun punches through half its ATK instead of 1; a Unit\'s Steel and Bulwark together prevent at most 4 damage per hit; Momentum now also draws you a card; Locations give a bigger +2/+2 (or +3/+3 at Rare+) on cast.',
+      'Cards costed as "one die showing exactly N" had over-tuned stats for how easy that cost really is — those Units were rebalanced. Straight-gated cards (Small/Large Straight) got stronger stats and effects to match how much harder straights are to roll than pairs.',
+      'The CPU no longer rerolls away dice that pay for its exact-cost cards, and plays them far more often.',
+      'New premium card looks: Ultra-Rare cards now print with an animated gold-leaf "Gilded Relic" frame, and Mythics with a "Living Inferno" treatment — embers rising off the card face.',
+      'Fixed every credit price box (marketplace bids, shop listings, trades, mystery packs) silently multiplying what you typed by 100 — typing 500 used to submit a 50,000-credit bid.',
+      'Combo-gate cost popups now show your real odds of hitting the pattern with two rerolls.',
+      'Lots of smaller fixes: wasted rerolls after Snap casts, wrong Echo messages, a stale How to Play (now matches the current rules), the Momentum bonus die not animating, deck validation letting you keep a Leader you no longer own, and card animations now respect your system\'s reduced-motion setting.',
+    ],
+  },
+  {
     version: 'Full-Art Update',
     items: [
       'Crafting and Disenchanting are gone, along with the Shards currency entirely. Any spare copy that would have converted to Shards past your per-rarity copy cap now converts straight to credits instead.',

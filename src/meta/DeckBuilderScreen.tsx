@@ -72,7 +72,8 @@ export function validateDeckList(
         });
       }
     }
-    if (!owned.has(leader.id)) issues.push({ text: `You do not own the Leader ${leader.name}.` });
+    if ((owned.get(leader.id) || 0) <= 0)
+      issues.push({ text: `You do not own the Leader ${leader.name}.` });
   }
   // dedupe messages
   return [...new Map(issues.map((i) => [i.text, i])).values()];

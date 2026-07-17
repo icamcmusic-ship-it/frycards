@@ -323,6 +323,25 @@ function chooseReroll(g: Game, p: Player): number[] {
   const stagedNeeds = new Set(
     p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined),
   );
+  // v4.6: exact-cost cards in hand need one die showing EXACTLY their
+  // (effective) threshold — but this heuristic was rerolling every small
+  // singleton (<= 3) away, actively destroying the payability of exact-1/2/3
+  // cards it was holding. The sim's cast-rate data showed exactly that:
+  // exact-cost removal spells sat at 0.29-0.44 casts/game (the "useless"
+  // list) while comparable at-least-cost cards cast 3-5x as often. Protect
+  // ONE die per exact-cost value needed (not every copy — spare duplicates
+  // are still better rerolled toward the hand's combo plan).
+  const exactNeeds = new Set(
+    p.hand
+      .filter((c) => c.def.castCostKind === 'exact' && c.def.threshold !== undefined)
+      .map((c) => effThreshold(g, p.id, c.def)),
+  );
+  const exactKept = new Set<number>();
+  const keepForExact = (v: number): boolean => {
+    if (!exactNeeds.has(v) || exactKept.has(v)) return false;
+    exactKept.add(v);
+    return true;
+  };
 
   const out: number[] = [];
   if (straightWantCount > 0 && straightWantCount >= matchWantCount) {
@@ -332,6 +351,7 @@ function chooseReroll(g: Game, p: Player): number[] {
       if (d.placed) return; // Snap casts may have placed dice pre-reroll
       if (stagedNeeds.has(d.value)) return;
       if (seen.has(d.value)) {
+        if (keepForExact(d.value)) return; // a duplicate can still pay an exact cost
         out.push(i);
         return;
       }
@@ -340,7 +360,8 @@ function chooseReroll(g: Game, p: Player): number[] {
     return out;
   }
   // Default / matching: keep the mode cluster and any die >= 4 (thresholds),
-  // plus dice matching a staged Twin need; reroll small singletons.
+  // plus dice matching a staged Twin need or paying an exact-cost card in
+  // hand; reroll small singletons.
   const modeValue = Number(
     Object.entries(counts).sort((a, b) => b[1] - a[1] || Number(b[0]) - Number(a[0]))[0][0],
   );
@@ -349,7 +370,10 @@ function chooseReroll(g: Game, p: Player): number[] {
     if (d.placed) return; // Snap casts may have placed dice pre-reroll
     if (stagedNeeds.has(d.value)) return;
     const partOfPair = d.value === modeValue && modeCount >= 2;
-    if (!partOfPair && d.value <= 3) out.push(i);
+    if (!partOfPair && d.value <= 3) {
+      if (keepForExact(d.value)) return;
+      out.push(i);
+    }
   });
   return out;
 }

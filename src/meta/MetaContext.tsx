@@ -211,7 +211,17 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, refreshInventory]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Server sign-out failed (e.g. network error) — clear the local session
+      // anyway so the user isn't stuck signed in.
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // Ignore — local cleanup below still runs.
+      }
+    }
     setGuest(false);
   }, []);
 
