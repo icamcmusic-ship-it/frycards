@@ -38,13 +38,13 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
     'While you control any Guard Unit, your opponent must attack a Guard Unit first — resolved one at a time until none remain.',
   Swift: "May attack or use an Ability Slot the turn it's cast, instead of waiting a turn.",
   Pierce:
-    "Leftover damage past what's needed to destroy the target Unit carries through to the enemy Leader.",
-  Ward: 'Prevents the first instance of damage or Removal against this card each turn (not retaliation from its own attack). Refreshes every End Phase.',
+    "Leftover damage past what's needed to destroy the target Unit carries through to the enemy Leader, capped at half this card's ATK (rounded down, minimum 1).",
+  Ward: "Prevents the first instance of damage or Removal against this card each turn (not retaliation from its own attack) and spikes 1 damage back at the attacker in combat. Refreshes every End Phase.",
   Frenzy:
-    'May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation.',
+    "May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation, and it can't target the enemy Leader directly unless no other target remains or you're behind on Units.",
   Anchor:
-    "This card's effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -2.",
-  Echo: 'After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand.',
+    "This card's effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -3. The first time a card's own discount hits that cap, it permanently gains +1/+1.",
+  Echo: "After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand — waived entirely for Rare/Super-Rare cards.",
   Scrap:
     'Discard this card from hand to reroll one of your unplaced dice, any time during Placement Phase.',
   Rally:
@@ -74,6 +74,11 @@ export const KEYWORD_GLOSSARY: Record<string, string> = {
   Overflow:
     "If the die placed on this slot beats its effective threshold by this much or more, the bonus effect triggers immediately in addition to the card's normal effect.",
   Combo: "Triggers if your final five-die roll contains the named pattern as a subset, checked once at Combo Check regardless of when the card was cast.",
+  Steel:
+    'The first X damage this Unit would take each turn, from any source (attacks, Sap, Pierce overflow), is prevented instead of reduced. Refreshes every End Phase, checked Ward -> Steel -> Bulwark -> Frenzy.',
+  Overrun:
+    "If this Unit's combat damage would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals 1 damage anyway. Doesn't apply to retaliation.",
+  Foothold: 'The first Unit you cast each turn costs 1 less while this Location is in play.',
 };
 
 /** v4.3: player-facing display label for each dice-pattern gate. */
@@ -173,7 +178,7 @@ export function cardRuleLines(def: CardDef): string[] {
   else if (def.onCast) bits.push(`When cast: ${describeEffect(def.onCast)}`);
   if (def.ability)
     bits.push(
-      `Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
+      `Base Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
     );
   if (def.combo)
     bits.push(
@@ -192,12 +197,16 @@ export function cardRuleLines(def: CardDef): string[] {
     bits.push(`Crescendo: +${def.crescendo.x} for each die showing a 6 you placed this turn`);
   if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}: reduces damage from attacks by ${def.bulwark.x}`);
   if (def.toll) bits.push(`Toll ${def.toll.x}: reduces all damage to your Leader by ${def.toll.x}`);
+  if (def.steel)
+    bits.push(
+      `Steel ${def.steel.x}: the first ${def.steel.x} damage this Unit would take each turn, from any source, is prevented`,
+    );
   if (def.avenge) bits.push('Avenge: whenever another friendly Unit dies, this gets +1/+1');
   if (def.locPassive)
     bits.push(
       def.locPassive === 'ATK_ALL'
-        ? 'Passive: all your Units get +1 ATK'
-        : 'Passive: all your Units get +1 max HP',
+        ? 'Passive: all your Units get +2 ATK'
+        : 'Passive: all your Units get +2 max HP',
     );
   if (def.contested) bits.push("Contested: this Location's passive is doubled while your opponent controls no Location");
   if (def.excavate)
@@ -207,6 +216,8 @@ export function cardRuleLines(def: CardDef): string[] {
   if (def.tribute)
     bits.push(`Tribute — at your End Phase, if you Pitched 2+ dice this turn: ${describeEffect(def.tribute)}`);
   if (def.snap) bits.push('Snap: may be cast during your Reroll Phase, not just Placement');
+  if (def.foothold)
+    bits.push("Foothold: the first Unit you cast each turn costs 1 less while this is in play");
   if (def.resolve)
     bits.push(
       `Resolve ${def.resolve.x}: this card's Ability cost drops ${def.resolve.x} while your Leader is at half HP or less`,
@@ -233,6 +244,7 @@ export function cardRules(def: CardDef): string {
 const RULES_LINE_KEYWORDS = new Set([
   'Bulwark',
   'Toll',
+  'Steel',
   'Avenge',
   'Crescendo',
   'Aftershock',

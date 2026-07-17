@@ -101,6 +101,10 @@ export interface CardDef {
   bulwark?: { x: number };
   /** Toll X (Unit): reduces ALL incoming damage to your Leader (any source) by X while this Unit lives. */
   toll?: { x: number };
+  /** v4.4 Steel X (Unit): the first X damage this Unit would take EACH TURN, from any source
+   * (attacks, Sap, Pierce overflow), is prevented instead of reduced — a per-turn absorption
+   * pool, refreshing every End Phase like Ward, distinct from Bulwark (flat, attacks only). */
+  steel?: { x: number };
   /** Avenge (Unit): +1/+1 permanently whenever another friendly Unit dies (state-based, no priority window). */
   avenge?: boolean;
   /** Aftershock (Event): after resolving, queues this effect to fire at the very start of your next turn, before Draw Phase. */
@@ -113,6 +117,19 @@ export interface CardDef {
   contested?: boolean;
   /** Snap (Charm): may be cast during the Reroll Phase (before the reroll window closes), not just Placement. */
   snap?: boolean;
+  /** v4.4 Foothold (Location): the first Unit you cast each turn costs 1 less while this Location is in play. */
+  foothold?: boolean;
+  /** v4.4 (Leader): this Leader's Ability grants tempo instead of pure card
+   * advantage — the next friendly Unit cast this same turn enters play
+   * without summoning sickness (as if it had Swift). Currently only
+   * Legendary Diver. */
+  abilityGrantsTempo?: boolean;
+  /** v4.4 (Leader): this Leader's Ability can't target the same permanent
+   * two activations in a row — still repeatable every turn, just can't
+   * compound onto one already-tough Unit forever. Currently only Apex
+   * Nanite Shinobi, whose uncapped repeat-buff was a stat-snowball engine
+   * when paired with any sticky defensive body. */
+  abilityNoRepeatTarget?: boolean;
 }
 
 // v4.1: raised (28 -> 64) to lengthen games by ~4 rounds toward the 8-10 round

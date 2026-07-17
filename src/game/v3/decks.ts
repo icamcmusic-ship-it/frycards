@@ -169,3 +169,40 @@ export function randomArchetype(rng: () => number = Math.random): Archetype {
     comboFamily,
   };
 }
+
+/**
+ * v4.4: a genuinely uniform-random 30-card deck spanning the ENTIRE pool —
+ * unlike `randomArchetype()` above, which still runs every card through
+ * `score()`'s keyword/effect/comboFamily weighting (so its output is
+ * "random-but-coherent", never actually a stress-test of nonsense
+ * combinations). This skips scoring entirely: shuffle every non-Leader card
+ * in the pool and take copies (up to MAX_COPIES) until the deck is full. No
+ * unit/spell/location ratio, no keyword theme, no curve consideration — the
+ * balance-sim control group for "what happens with zero deckbuilding skill,
+ * across the whole card table," not a strategy anyone would actually pilot.
+ */
+export function buildPureRandomDeck(rng: () => number = Math.random, label?: string): DeckDef {
+  const leaderId =
+    POOL_LEADERS[Math.floor(rng() * POOL_LEADERS.length)]?.id || 'avatar_of_the_abyss';
+  const pool = poolByType('Unit')
+    .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'));
+  const shuffled = shuffle(pool, rng);
+  const cards: Record<string, number> = {};
+  let total = 0;
+  let i = 0;
+  let guard = shuffled.length * MAX_COPIES + 10; // safety valve against an empty pool
+  while (total < DECK_SIZE && guard-- > 0) {
+    const c = shuffled[i % shuffled.length];
+    i++;
+    const have = cards[c.id] || 0;
+    if (have >= MAX_COPIES) continue;
+    cards[c.id] = have + 1;
+    total++;
+  }
+  return {
+    leaderId,
+    cards,
+    resolve: (id) => POOL_BY_ID[id],
+    label: label || `${POOL_BY_ID[leaderId]?.name || 'Unknown Leader'} — Pure Random`,
+  };
+}

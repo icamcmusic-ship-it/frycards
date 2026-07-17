@@ -25,68 +25,107 @@ import {
   HAND_LIMIT,
 } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
-import { Archetype, buildDeck } from '../src/game/v3/decks';
+import { Archetype, buildDeck, buildPureRandomDeck } from '../src/game/v3/decks';
 import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
 
-// A varied roster of archetypes across all six real Leaders — sim-only (the
-// player-facing "prebuilt archetype" deck picker was removed from the app;
-// this fixed, hand-tuned roster is kept here purely so balance simulations
-// stay comparable run-over-run).
+// v4.4: a widened, 20-archetype roster across all six real Leaders — sim-only
+// (the player-facing "prebuilt archetype" deck picker was removed from the
+// app; this fixed, hand-tuned roster is kept here purely so balance
+// simulations stay comparable run-over-run). Replaces the earlier 12-deck
+// roster, which only ever themed around the nine "simple" keywords
+// (Guard/Swift/Pierce/Ward/Frenzy/Anchor/Echo/Rally/Twin) — this widens
+// coverage to Bulwark, Toll, Steel, Scrap and Avenge as PRIMARY archetype
+// themes (score() in decks.ts weights toward any keyword tag a card
+// carries, so these work exactly like the original nine), and adds a
+// Location-heavy build to stress-test the v4.4 passive buff specifically.
 const ARCHETYPES: Archetype[] = [
+  // --- Avatar of the Abyss (4) ---
   {
-    label: 'Abyss Echo-Recursion',
+    label: 'Abyss Sap-Echo Control',
     leaderId: 'avatar_of_the_abyss',
-    keywords: ['Echo', 'Twin'],
-    effects: ['draw', 'sap'],
-    units: 17,
-    spells: 9,
+    keywords: ['Echo', 'Toll'],
+    effects: ['sap', 'destroy'],
+    units: 15,
+    spells: 11,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Abyss Pierce Aggro',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Pierce', 'Frenzy'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Abyss Twin Value',
+    leaderId: 'avatar_of_the_abyss',
+    keywords: ['Twin', 'Rally'],
+    effects: ['draw', 'buff'],
+    units: 16,
+    spells: 10,
     locations: 4,
     comboFamily: 'match',
   },
   {
-    label: 'Abyss Sap Burn',
+    label: 'Abyss Excavate Ramp',
     leaderId: 'avatar_of_the_abyss',
-    keywords: ['Frenzy', 'Pierce'],
-    effects: ['sap', 'destroy'],
+    keywords: ['Anchor', 'Scrap'],
+    effects: ['sap', 'draw'],
+    units: 14,
+    spells: 11,
+    locations: 5,
+    comboFamily: 'none',
+  },
+
+  // --- Ethereal Sea Witch (3) ---
+  {
+    label: 'Sea Witch Ward-Steel Wall',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Ward', 'Steel'],
+    effects: ['bind', 'mend'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Sea Witch Anchor-Scrap Ramp',
+    leaderId: 'ethereal_sea_witch',
+    keywords: ['Anchor', 'Scrap'],
+    effects: ['draw', 'bind'],
     units: 15,
     spells: 12,
     locations: 3,
     comboFamily: 'none',
   },
-
   {
-    label: 'Sea Witch Bind-Control',
+    label: 'Sea Witch Bind-Straight Combo',
     leaderId: 'ethereal_sea_witch',
     keywords: ['Ward', 'Anchor'],
-    effects: ['bind', 'destroy', 'draw'],
+    effects: ['bind', 'destroy'],
     units: 16,
     spells: 11,
     locations: 3,
     comboFamily: 'straight',
   },
-  {
-    label: 'Sea Witch Anchor-Ramp',
-    leaderId: 'ethereal_sea_witch',
-    keywords: ['Anchor', 'Ward'],
-    effects: ['draw', 'bind'],
-    units: 18,
-    spells: 8,
-    locations: 4,
-    comboFamily: 'none',
-  },
 
+  // --- Mer-King (3) ---
   {
-    label: 'Mer King Guard-Wall',
+    label: 'Mer King Guard-Bulwark Turtle',
     leaderId: 'mer_king',
-    keywords: ['Guard', 'Ward'],
+    keywords: ['Guard', 'Bulwark'],
     effects: ['mend', 'destroy'],
-    units: 18,
-    spells: 8,
+    units: 19,
+    spells: 7,
     locations: 4,
     comboFamily: 'none',
   },
   {
-    label: 'Mer King Heal-Midrange',
+    label: 'Mer King Twin Heal',
     leaderId: 'mer_king',
     keywords: ['Guard', 'Twin'],
     effects: ['mend', 'buff'],
@@ -95,7 +134,18 @@ const ARCHETYPES: Archetype[] = [
     locations: 4,
     comboFamily: 'match',
   },
+  {
+    label: 'Mer King Avenge Swarm',
+    leaderId: 'mer_king',
+    keywords: ['Avenge', 'Guard'],
+    effects: ['buff', 'mend'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
 
+  // --- Legendary Diver (3) ---
   {
     label: 'Diver Straight-Combo',
     leaderId: 'legendary_diver',
@@ -116,7 +166,18 @@ const ARCHETYPES: Archetype[] = [
     locations: 3,
     comboFamily: 'none',
   },
+  {
+    label: 'Diver Rally Tempo',
+    leaderId: 'legendary_diver',
+    keywords: ['Rally', 'Swift'],
+    effects: ['buff', 'draw'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'match',
+  },
 
+  // --- Crimson Vector Commander (3) ---
   {
     label: 'Crimson Frenzy-Aggro',
     leaderId: 'crimson_vector_commander',
@@ -137,7 +198,28 @@ const ARCHETYPES: Archetype[] = [
     locations: 3,
     comboFamily: 'match',
   },
+  {
+    label: 'Crimson Toll-Bulwark Fortress',
+    leaderId: 'crimson_vector_commander',
+    keywords: ['Toll', 'Bulwark'],
+    effects: ['mend', 'destroy'],
+    units: 18,
+    spells: 8,
+    locations: 4,
+    comboFamily: 'none',
+  },
 
+  // --- Apex Nanite Shinobi (4) ---
+  {
+    label: 'Shinobi Echo-Straight',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Echo', 'Anchor'],
+    effects: ['draw', 'sap'],
+    units: 16,
+    spells: 11,
+    locations: 3,
+    comboFamily: 'straight',
+  },
   {
     label: 'Shinobi Tempo-Anchor',
     leaderId: 'apex_nanite_shinobi',
@@ -149,14 +231,24 @@ const ARCHETYPES: Archetype[] = [
     comboFamily: 'none',
   },
   {
-    label: 'Shinobi Echo-Straight',
+    label: 'Shinobi Steel-Scrap Control',
     leaderId: 'apex_nanite_shinobi',
-    keywords: ['Echo', 'Anchor'],
-    effects: ['draw', 'sap'],
+    keywords: ['Steel', 'Scrap'],
+    effects: ['destroy', 'bind'],
     units: 16,
-    spells: 11,
-    locations: 3,
-    comboFamily: 'straight',
+    spells: 10,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Shinobi Avenge Grind',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Avenge', 'Toll'],
+    effects: ['mend', 'sap'],
+    units: 19,
+    spells: 7,
+    locations: 4,
+    comboFamily: 'none',
   },
 ];
 
@@ -211,6 +303,27 @@ function buildRoster(): Entry[] {
       });
     }
   }
+  // v4.4: 8 genuinely uniform-random decks spanning the ENTIRE pool (see
+  // buildPureRandomDeck in decks.ts) — no keyword theme, no curve, no
+  // unit/spell/location ratio. Not a strategy anyone would pilot on
+  // purpose; the point is a control group for "what does zero deckbuilding
+  // skill look like against real archetypes," and a stress test that
+  // exercises card combinations the hand-tuned archetypes above never will.
+  // Fixed seeds (not Math.random) so this roster — and therefore every
+  // downstream stat — is reproducible run-over-run, same as the rest of
+  // the harness.
+  const RANDOM_DECK_COUNT = 8;
+  for (let i = 0; i < RANDOM_DECK_COUNT; i++) {
+    const rng = mulberry32(70000 + i);
+    const d = buildPureRandomDeck(rng, `Random Build #${i + 1}`);
+    decks.push({
+      key: d.label!,
+      label: d.label!,
+      leaderId: d.leaderId,
+      deck: d,
+      hasLoc: Object.keys(d.cards).some((id) => POOL_BY_ID[id].type === 'Location'),
+    });
+  }
   return decks;
 }
 
@@ -233,6 +346,7 @@ const DECISION_KEYS = [
   'tributeTriggered',
   'wentFirst',
   'mulliganed',
+  'momentum',
 ];
 
 interface SuiteResult {
@@ -251,6 +365,11 @@ interface SuiteResult {
   cardCast: Record<string, number>;
   cardInWinDeck: Record<string, number>;
   cardInDeck: Record<string, number>;
+  /** v4.4: deck-level keyword presence (once per deck per game, regardless
+   * of copy count) -> win rate. A direct, per-card-tag measure of "OP/weak
+   * keyword," independent of how any one archetype happens to be labeled. */
+  keywordInWinDeck: Record<string, number>;
+  keywordInDeck: Record<string, number>;
   comboTriggers: Record<string, number>;
   echoRecasts: number;
   twinCompletions: number;
@@ -263,6 +382,9 @@ interface SuiteResult {
   attacks: number;
   bulwarkReduced: number;
   tollReduced: number;
+  steelAbsorbed: number;
+  wardPunishDamage: number;
+  momentumDiceGranted: number;
   decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
   errors: string[];
 }
@@ -284,6 +406,8 @@ function newResult(): SuiteResult {
     cardCast: {},
     cardInWinDeck: {},
     cardInDeck: {},
+    keywordInWinDeck: {},
+    keywordInDeck: {},
     comboTriggers: {},
     echoRecasts: 0,
     twinCompletions: 0,
@@ -296,6 +420,9 @@ function newResult(): SuiteResult {
     attacks: 0,
     bulwarkReduced: 0,
     tollReduced: 0,
+    steelAbsorbed: 0,
+    wardPunishDamage: 0,
+    momentumDiceGranted: 0,
     decisionAgg: {},
     errors: [],
   };
@@ -429,6 +556,9 @@ function runGame(
   r.attacks += s.attacks;
   r.bulwarkReduced += s.bulwarkReduced;
   r.tollReduced += s.tollReduced;
+  r.steelAbsorbed += s.steelAbsorbed;
+  r.wardPunishDamage += s.wardPunishDamage;
+  r.momentumDiceGranted += s.momentumDiceGranted;
   for (const [id, n] of Object.entries(s.comboTriggers))
     r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
   for (const [id, n] of Object.entries(s.casts)) r.cardCast[id] = (r.cardCast[id] || 0) + n;
@@ -440,6 +570,16 @@ function runGame(
     for (const id of Object.keys(entry.deck.cards)) {
       r.cardInDeck[id] = (r.cardInDeck[id] || 0) + 1;
       if (won) r.cardInWinDeck[id] = (r.cardInWinDeck[id] || 0) + 1;
+    }
+    // v4.4: once per keyword actually present in this deck (not per copy),
+    // so a 3-of doesn't triple-count against a 1-of.
+    const kws = new Set<string>();
+    for (const id of Object.keys(entry.deck.cards)) {
+      for (const kw of POOL_BY_ID[id].keywords || []) kws.add(kw);
+    }
+    for (const kw of kws) {
+      r.keywordInDeck[kw] = (r.keywordInDeck[kw] || 0) + 1;
+      if (won) r.keywordInWinDeck[kw] = (r.keywordInWinDeck[kw] || 0) + 1;
     }
   }
 }
@@ -502,7 +642,7 @@ console.log(
   `(Twin completions logged: oneDiePerTurn=${abResults.oneDiePerTurn.twinCompletions}, sameTurn=${abResults.sameTurn.twinCompletions}, stagedPassive=${abResults.stagedPassive.twinCompletions})`,
 );
 console.log('\nTwin-heavy archetype win rate by mode (decks that draft Twin cards):');
-for (const label of ['Abyss Echo-Recursion', 'Mer King Heal-Midrange']) {
+for (const label of ['Abyss Twin Value', 'Mer King Twin Heal']) {
   const cells = modes.map((mode) => {
     const r = abResults[mode];
     return `${mode}=${pct(r.archW[label] || 0, r.archN[label] || 0)}%`;
@@ -528,7 +668,7 @@ console.log(
 const R = runSuite(roster, PER_PAIR, winningMode, 1000);
 
 console.log(
-  `\n\n=== v4.2 Full Playtest Report (twinMode='${winningMode}'): ${R.games} games, ${roster.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins), ${PER_PAIR}/pairing ===`,
+  `\n\n=== v4.4 Full Playtest Report (twinMode='${winningMode}'): ${R.games} games, ${roster.length} decks (${ARCHETYPES.length} archetypes +Location-stripped twins +8 pure-random), ${PER_PAIR}/pairing ===`,
 );
 console.log(
   `avg length: ${(R.totalRounds / R.games).toFixed(1)} rounds   draws: ${R.draws}   deckouts: ${R.deckouts}   timeouts@${MAX_TURNS}t: ${R.timeouts}`,
@@ -552,6 +692,21 @@ for (const a of ARCHETYPES) {
   );
 }
 
+console.log('\n--- Pure-random deck win rates (zero deckbuilding skill, whole-pool control group) ---');
+let randW = 0,
+  randN = 0;
+for (const key of Object.keys(R.archN)) {
+  if (!key.startsWith('Random Build #')) continue;
+  console.log(`${key.padEnd(28)} ${pct(R.archW[key] || 0, R.archN[key])}%  (n=${R.archN[key]})`);
+  randW += R.archW[key] || 0;
+  randN += R.archN[key];
+}
+const archAvgW = ARCHETYPES.reduce((s, a) => s + (R.archW[a.label] || 0), 0);
+const archAvgN = ARCHETYPES.reduce((s, a) => s + (R.archN[a.label] || 0), 0);
+console.log(
+  `=> All 8 random decks combined: ${pct(randW, randN)}%  (n=${randN})  vs. all 20 hand-built archetypes combined: ${pct(archAvgW, archAvgN)}%  (n=${archAvgN})`,
+);
+
 console.log('\n--- ISOLATED Location contribution ---');
 console.log(`Location decks:        ${pct(R.locW.loc, R.locW.locN)}%  (n=${R.locW.locN})`);
 console.log(`Location-stripped:     ${pct(R.locW.noloc, R.locW.nolocN)}%  (n=${R.locW.nolocN})`);
@@ -570,6 +725,9 @@ console.log({
   attacks: R.attacks,
   bulwarkReduced: R.bulwarkReduced,
   tollReduced: R.tollReduced,
+  steelAbsorbed: R.steelAbsorbed,
+  wardPunishDamage: R.wardPunishDamage,
+  momentumDiceGranted: R.momentumDiceGranted,
 });
 console.log(
   `Pitch (v4.0): dice pitched for Mend 1 = ${R.dicePitched}; truly wasted (leader full) = ${R.diceWasted}`,
@@ -577,6 +735,18 @@ console.log(
 console.log(
   `avg dice pitched+wasted per player-turn: ${((R.dicePitched + R.diceWasted) / (R.totalRounds * 2)).toFixed(2)}`,
 );
+
+console.log('\n--- Keyword win rate (deck contains >=1 card with this keyword), min n=200 ---');
+const kwRows = Object.keys(R.keywordInDeck)
+  .filter((kw) => R.keywordInDeck[kw] >= 200)
+  .map((kw) => ({
+    kw,
+    winPct: (100 * (R.keywordInWinDeck[kw] || 0)) / R.keywordInDeck[kw],
+    n: R.keywordInDeck[kw],
+  }))
+  .sort((a, b) => b.winPct - a.winPct);
+for (const r of kwRows)
+  console.log(`${r.kw.padEnd(12)} win%=${r.winPct.toFixed(1).padStart(5)}  (n=${r.n})`);
 
 console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
 const decRows = DECISION_KEYS.map((k) => {
