@@ -55,10 +55,17 @@ export type CostPick =
 
 const EASY_GATES: ComboPattern[] = ['AnyPair', 'ThreeOdds', 'ThreeEvens'];
 const MID_GATES: ComboPattern[] = ['ThreeKind', 'TwoPair', 'SmallStraight'];
-const HARD_GATES: ComboPattern[] = ['FullHouse', 'FourKind', 'LargeStraight'];
-// Yahtzee is deliberately excluded from the general picker — per v4.1
-// guidance it's flavor-only rarity, reserved for the single Mythic trophy
-// card (see TROPHY_ID in mapSpell), never assigned generally.
+// v4.5: FourKind removed from the general picker. §7's own guidance says
+// "Full House and Large Straight are the practical ceiling... Yahtzee/
+// Four-of-a-Kind gates are flavor-only rarity — a tiny handful of true
+// trophy cards (1-3 in the whole pool)" — but HARD_GATES was assigning it
+// as a co-equal third option at every tier>=3 roll, landing 5 FourKind-gated
+// cards in the live pool (more than the "1-3" the design guidance calls
+// for) at a directed hit rate barely above Full House. Yahtzee is already
+// excluded from the general picker per v4.1 guidance, reserved for the
+// single Mythic trophy card (see TROPHY_ID in mapSpell) — FourKind now gets
+// the same treatment instead of only being flavor-gated in name.
+const HARD_GATES: ComboPattern[] = ['FullHouse', 'LargeStraight'];
 
 export function pickCostFormat(id: string, tier: number): CostPick {
   const roll = hash(`${id}:cost`) % 10;
