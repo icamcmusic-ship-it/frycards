@@ -81,57 +81,77 @@ function keepMask(dice: number[], pattern: ComboPattern): boolean[] {
   }
 }
 
-console.log(`\n=== Directed-reroll Combo pattern hit-rate (${TRIALS} trials, 1 reroll) ===`);
+// v4.5: the ruleset has allowed TWO rerolls since v4.3 (§3.3), but this
+// script (and the §6 hit-rate table it produced) only ever modeled one —
+// the rulebook itself flagged this as understating actual hit rates. Now
+// reports both `directed1` (old, one-reroll baseline, kept for comparison)
+// and `directed2` (current two-reroll rule) side by side.
 console.log(
-  '(naive = single fresh 5d6 roll with NO reroll; directed = reroll toward the pattern)\n',
+  `\n=== Directed-reroll Combo pattern hit-rate (${TRIALS} trials, 1 vs 2 rerolls) ===`,
 );
-const results: { pattern: ComboPattern; naive: number; directed: number }[] = [];
+console.log(
+  '(naive = single fresh 5d6 roll with NO reroll; directedN = reroll toward the pattern N times — v4.3+ allows 2)\n',
+);
+const results: { pattern: ComboPattern; naive: number; directed1: number; directed2: number }[] =
+  [];
 for (const pattern of PATTERNS) {
   let naiveHits = 0;
-  let directedHits = 0;
+  let directed1Hits = 0;
+  let directed2Hits = 0;
   for (let i = 0; i < TRIALS; i++) {
     const dice = roll5();
-    if (matchesPattern(dice, pattern)) naiveHits++;
     if (matchesPattern(dice, pattern)) {
-      directedHits++;
+      naiveHits++;
+      directed1Hits++;
+      directed2Hits++;
       continue;
-    } // already hit, no reroll needed
-    const mask = keepMask(dice, pattern);
-    const rerolled = rerollAt(dice, mask);
-    if (matchesPattern(rerolled, pattern)) directedHits++;
+    }
+    const mask1 = keepMask(dice, pattern);
+    const rerolled1 = rerollAt(dice, mask1);
+    if (matchesPattern(rerolled1, pattern)) {
+      directed1Hits++;
+      directed2Hits++;
+      continue;
+    }
+    const mask2 = keepMask(rerolled1, pattern);
+    const rerolled2 = rerollAt(rerolled1, mask2);
+    if (matchesPattern(rerolled2, pattern)) directed2Hits++;
   }
   results.push({
     pattern,
     naive: (100 * naiveHits) / TRIALS,
-    directed: (100 * directedHits) / TRIALS,
+    directed1: (100 * directed1Hits) / TRIALS,
+    directed2: (100 * directed2Hits) / TRIALS,
   });
 }
 
-results.sort((a, b) => b.directed - a.directed);
+results.sort((a, b) => b.directed2 - a.directed2);
 console.log(
   'Pattern'.padEnd(16),
   'Naive%'.padStart(8),
-  'Directed%'.padStart(11),
-  'Lift'.padStart(8),
+  'Directed1%'.padStart(12),
+  'Directed2%'.padStart(12),
+  'Lift(2v1)'.padStart(10),
 );
 for (const r of results) {
-  const lift = r.directed - r.naive;
+  const lift = r.directed2 - r.directed1;
   console.log(
     r.pattern.padEnd(16),
     r.naive.toFixed(1).padStart(7) + '%',
-    r.directed.toFixed(1).padStart(10) + '%',
-    ('+' + lift.toFixed(1)).padStart(8),
+    r.directed1.toFixed(1).padStart(11) + '%',
+    r.directed2.toFixed(1).padStart(11) + '%',
+    ('+' + lift.toFixed(1)).padStart(10),
   );
 }
 
-console.log('\n--- Straight-family vs matching-family, same nominal "tier" ---');
+console.log('\n--- Straight-family vs matching-family, same nominal "tier" (2-reroll) ---');
 const byName = Object.fromEntries(results.map((r) => [r.pattern, r]));
 console.log(
-  `Large Straight (5 distinct)  directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Yahtzee (5 same)      directed=${byName.Yahtzee.directed.toFixed(1)}%`,
+  `Large Straight (5 distinct)  directed2=${byName.LargeStraight.directed2.toFixed(1)}%  vs  Yahtzee (5 same)      directed2=${byName.Yahtzee.directed2.toFixed(1)}%`,
 );
 console.log(
-  `Small Straight (4 distinct)  directed=${byName.SmallStraight.directed.toFixed(1)}%  vs  Three of a Kind      directed=${byName.ThreeKind.directed.toFixed(1)}%`,
+  `Small Straight (4 distinct)  directed2=${byName.SmallStraight.directed2.toFixed(1)}%  vs  Three of a Kind      directed2=${byName.ThreeKind.directed2.toFixed(1)}%`,
 );
 console.log(
-  `Large Straight               directed=${byName.LargeStraight.directed.toFixed(1)}%  vs  Full House (3+2)      directed=${byName.FullHouse.directed.toFixed(1)}%`,
+  `Large Straight               directed2=${byName.LargeStraight.directed2.toFixed(1)}%  vs  Full House (3+2)      directed2=${byName.FullHouse.directed2.toFixed(1)}%`,
 );

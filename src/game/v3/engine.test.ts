@@ -417,10 +417,10 @@ test('Anchor reduction caps at 3 (v4.4) and floors at 1; Overflow keys off the e
   expect(castFromHand(g, die, of.iid)).toBe(true);
   const onBoard = p.board.find((u) => u.iid === of.iid)!;
   // Overflow fired off 6 - 3 >= 2 (+1/+1 buff), and entering with 3 other
-  // Anchors already at the ANCHOR_CAP grants the one-time v4.4 cap bonus
-  // (another +1/+1) — 2/2 total.
-  expect(onBoard.permAtk).toBe(2);
-  expect(onBoard.permHp).toBe(2);
+  // Anchors already at the ANCHOR_CAP grants the one-time v4.5 cap bonus
+  // (+2/+2, raised from v4.4's +1/+1) — 3/3 total.
+  expect(onBoard.permAtk).toBe(3);
+  expect(onBoard.permHp).toBe(3);
 });
 
 test('Echo: a spent-Echo unit that dies is banished, and can never be recast a second time', () => {

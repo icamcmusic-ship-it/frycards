@@ -280,22 +280,22 @@ Combo checks only ever read **your own** roll and can only trigger cards **you**
 
 **One Combo-gated card per turn *(v4.2)*:** you may cast at most **one Combo-gated card per turn**, regardless of how many qualify. This is a systemic cap, not a fix targeted at one card — it closes off any future card that gates on an achievable pattern from chaining with a second one on the same lucky roll. (It also covers Echo-recasting a Combo-gated card from Discard — see §10.)
 
-### Measured hit rate under directed rerolling *(v4.2 design data)*
+### Measured hit rate under directed rerolling *(v4.2 design data, re-measured v4.5)*
 
-The table above ranks patterns by rough feel, not a measured number — and the naive single-roll probability is the wrong metric anyway, because a player with one reroll doesn't roll blind: they reroll *toward* their target pattern. `scripts/pattern-hitrate.ts` measures actual hit rate under a directed-reroll strategy (200,000 trials per pattern, keep-and-reroll-toward-the-goal):
+The table above ranks patterns by rough feel, not a measured number — and the naive single-roll probability is the wrong metric anyway, because a player rerolling doesn't roll blind: they reroll *toward* their target pattern. `scripts/pattern-hitrate.ts` measures actual hit rate under a directed-reroll strategy (200,000 trials per pattern, keep-and-reroll-toward-the-goal). *(v4.5)* Re-measured under the **current two-reroll rule** (§3.3, in effect since v4.3) — the original table below only ever modeled one reroll and understated every number; both are shown for reference, but **Directed (2 rerolls) is the number that reflects live play**:
 
-| Pattern | Naive (no reroll) | Directed (1 reroll toward it) |
-|---|---:|---:|
-| Any Pair | 90.7% | 99.1% |
-| Two Pair | 27.0% | 56.0% |
-| Three of a Kind | 21.3% | 54.2% |
-| Small Straight | 15.5% | 32.5% |
-| Full House | 3.8% | 18.2% |
-| Four of a Kind | 2.0% | 13.2% |
-| Large Straight | 3.1% | 10.4% |
-| Yahtzee | 0.1% | 1.3% |
+| Pattern | Naive (no reroll) | Directed (1 reroll) | Directed (2 rerolls, current rule) |
+|---|---:|---:|---:|
+| Any Pair | 90.7% | 99.2% | 99.9% |
+| Two Pair | 26.9% | 55.9% | 74.0% |
+| Three of a Kind | 21.2% | 54.0% | 74.2% |
+| Small Straight | 15.5% | 32.5% | 44.0% |
+| Full House | 3.8% | 18.2% | 34.6% |
+| Four of a Kind | 2.1% | 13.2% | 29.0% |
+| Large Straight | 3.1% | 10.6% | 17.4% |
+| Yahtzee | 0.1% | 1.3% | 4.6% |
 
-**This data does not support "straight-family patterns need a harder tier than matching-family at the same nominal difficulty."** That was the hypothesis behind the v4.1→v4.2 review's recalibration flag, and measuring it directly shows the opposite in most comparisons: Three of a Kind (54.2%) is nearly **double** Small Straight's hit rate (32.5%) under directed rerolling, and Full House (18.2%) is actually *easier* to hit than Large Straight (10.4%) despite sharing the same "big swing" price tag — Large Straight is the single hardest pattern in the "bomb" cluster, harder even than Four of a Kind. If anything, straight-family patterns are *harder* to hit than their nominal matching-family counterpart, not easier. Card design should price off this table, not off intuition about "keeping a run vs. keeping duplicates."
+**This data does not support "straight-family patterns need a harder tier than matching-family at the same nominal difficulty."** That was the hypothesis behind the v4.1→v4.2 review's recalibration flag, and measuring it directly shows the opposite in most comparisons: Three of a Kind (74.2%) is nearly **double** Small Straight's hit rate (44.0%) under directed two-reroll play, and Full House (34.6%) is actually *easier* to hit than Large Straight (17.4%) despite sharing the same "big swing" price tag — Large Straight is the single hardest pattern in the "bomb" cluster, harder even than Four of a Kind (29.0%). If anything, straight-family patterns are *harder* to hit than their nominal matching-family counterpart, not easier. Card design should price off this table, not off intuition about "keeping a run vs. keeping duplicates." *(v4.5 note: the two-reroll numbers land meaningfully higher across the board — e.g. Full House 18.2%→34.6% — so gate-tier pricing done off the old one-reroll column was working from understated hit rates; the FourKind general-pool fix elsewhere in this pass was flagged independently of this re-measurement, but the two findings point the same direction.)*
 
 The v4.2 fix to the specific offending Large-Straight-gated Event (see Changelog) wasn't because the gate was too easy — it measures as the hardest pattern in its tier — it's because a repeatable, high-value, face-only burn effect compounds badly over a ~10-round game even at a "only" ~10%-per-turn hit rate, especially with multiple copies in hand (any copy is castable the instant the roll qualifies). The fix (retarget off pure face damage, lower the value, and the new one-Combo-gated-card-per-turn cap) addresses that compounding directly.
 

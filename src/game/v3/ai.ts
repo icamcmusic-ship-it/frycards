@@ -42,9 +42,22 @@ import { CardDef, hasKw } from './cards';
  * flooded with expensive cards (no cheap early plays) or has no Units, then
  * bottom one card (London-style). Called by the harness before turn 1.
  */
+// v4.5: a Combo-gate-costed card has no numeric threshold at all (undefined
+// falls back to 6, i.e. "expensive"), but an easy-gate card (AnyPair/
+// ThreeOdds/ThreeEvens — ~90%+ hit rate even before a reroll, per §6) is
+// realistically just as reliable as a threshold-1 numeric card. Without
+// this the mulligan heuristic could send back a perfectly fine hand full of
+// easy-gate cards for looking "expensive," or keep a hand of hard-gated
+// cards that genuinely are unplayable most games.
+const EASY_GATE_PATTERNS = new Set(['AnyPair', 'ThreeOdds', 'ThreeEvens']);
+
 /** True if this hand is worth keeping by the CPU's opening-hand heuristic. */
 function handIsKeepable(p: Player): boolean {
-  const cheapPlays = p.hand.filter((c) => (c.def.threshold ?? 6) <= 3).length;
+  const cheapPlays = p.hand.filter(
+    (c) =>
+      (c.def.threshold ?? 6) <= 3 ||
+      (c.def.comboGate !== undefined && EASY_GATE_PATTERNS.has(c.def.comboGate)),
+  ).length;
   const units = p.hand.filter((c) => c.def.type === 'Unit').length;
   return cheapPlays >= 2 && units >= 1;
 }
@@ -136,19 +149,44 @@ function unplacedDice(p: Player): number[] {
   return p.dice.map((d, i) => (d.placed ? -1 : i)).filter((i) => i >= 0);
 }
 
+/** v4.5: a card's numeric Cast Slot threshold is `undefined` for any
+ * Combo-gate-costed card (cleared in applyCostFormat) — every heuristic
+ * that used `def.threshold ?? 0/3` as a stand-in for "how much is this
+ * card worth" was silently treating gate-costed cards (a meaningful slice
+ * of the tier-3+ pool since v4.3) as the cheapest, least valuable cards in
+ * hand/on board. This proxies the same 1-6 scale off rarity tier instead,
+ * so gate-costed cards compare sensibly against numeric-costed ones. */
+const RARITY_THRESHOLD_PROXY: Record<'low' | 'mid' | 'high', number> = {
+  low: 2,
+  mid: 4,
+  high: 6,
+};
+function costWeight(def: CardDef): number {
+  return def.threshold ?? RARITY_THRESHOLD_PROXY[rarityTier(def.rarity)];
+}
+
 /** value of a card for cast-priority: bigger threshold first, units before spells.
  * Includes a small seeded jitter so priority ties (and near-ties) don't always
  * resolve the same way — without it, the AI's line of play is 100%
  * reproducible from board state alone and gets predictable/exploitable. */
 function castPriority(g: Game, p: Player, c: Inst): number {
   const persona = personaFor(g, p.id);
-  let v = (c.def.threshold ?? 3) * 10;
+  let v = costWeight(c.def) * 10;
   if (c.def.type === 'Unit') v += 5 + persona.curveBias;
   // Removal/disruption gets the mirror-image skew, so control personas answer
   // the board first while aggro personas develop theirs.
   const act = c.def.onCast?.action;
   if (act === 'destroy' || act === 'sap' || act === 'bind') v -= persona.curveBias;
   if (c.def.comboGate) v += 40; // free value when the gate is met
+  // v4.5: a recurring Combo passive (checked every Combo Check while the
+  // card survives, not just once at cast) had no priority weight at all —
+  // the sim's own Combo-trigger totals span two orders of magnitude on
+  // cards of comparable cost (29,482 triggers vs. 263), but the AI never
+  // preferred casting the proven engine piece over a same-cost vanilla
+  // body. Units/Locations keep the passive every turn they survive; a
+  // Charm/Event's `.combo` is only a one-shot rider at cast time, so it
+  // gets a smaller bump.
+  if (c.def.combo) v += c.def.type === 'Unit' || c.def.type === 'Location' ? 8 : 3;
   // v4.4: board-state-aware defensive priority — when this player controls
   // fewer Units than their opponent, a Steel/Bulwark/Toll/Guard/Ward Unit
   // gets a priority bump. Previously priority was purely persona- and
@@ -292,12 +330,35 @@ function chooseReroll(g: Game, p: Player): number[] {
 }
 
 function locScore(
-  c: { def: { locPassive?: string; rarity?: string; ability?: unknown } },
+  c: {
+    def: {
+      locPassive?: string;
+      rarity?: string;
+      ability?: unknown;
+      foothold?: boolean;
+      excavate?: unknown;
+      tribute?: unknown;
+      contested?: boolean;
+    };
+  },
   goingWide: boolean,
+  oppHasLocation: boolean,
 ): number {
   let s = 0;
   if (c.def.locPassive === (goingWide ? 'ATK_ALL' : 'HP_ALL')) s += 3;
   if (c.def.ability) s += 2;
+  // v4.5: locScore previously only ever looked at locPassive/ability/rarity
+  // — blind to 3 of the 4 dedicated Location keywords, so the AI picked
+  // among Locations in hand with no read on Foothold/Excavate/Tribute/
+  // Contested at all. Foothold is the highest-value immediate tempo (cheapens
+  // the very next Unit cast this turn); Excavate rewards committing to one
+  // Location over time rather than replacing it every time something newer
+  // shows up; Contested is only worth racing for while the opponent has no
+  // Location of their own.
+  if (c.def.foothold) s += 4;
+  if (c.def.excavate) s += 2;
+  if (c.def.tribute) s += 1;
+  if (c.def.contested) s += oppHasLocation ? 1 : 3;
   const tierOrder = [
     'Common',
     'Uncommon',
@@ -321,7 +382,11 @@ function playPlacement(g: Game, p: Player) {
     const locs = p.hand.filter((c) => c.def.type === 'Location' && p.location?.def.id !== c.def.id);
     if (locs.length > 0) {
       const goingWide = p.board.length >= 2;
-      const best = locs.sort((a, b) => locScore(b, goingWide) - locScore(a, goingWide))[0];
+      const oppHasLocation = !!opp.location;
+      const best = locs.sort(
+        (a, b) =>
+          locScore(b, goingWide, oppHasLocation) - locScore(a, goingWide, oppHasLocation),
+      )[0];
       castLocationFree(g, best.iid);
     }
   }
@@ -445,7 +510,21 @@ function playPlacement(g: Game, p: Player) {
     // die/target, not spare hand fodder; low/high rarity still need one card
     // to sacrifice.
     if (p.hand.length >= 1) {
-      const echoes = p.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
+      // v4.5: was iterated in raw discard-pile order (insertion order), not
+      // by value — when dice/fodder are tight, a low-value low-rarity Echo
+      // card could consume the turn's one realistic recast before a
+      // higher-value mid/high-rarity card sitting deeper in the pile was
+      // ever considered. Mid-rarity cards are cheapest to recast (no fodder
+      // cost since v4.4), so they go first when otherwise tied; within a
+      // rarity tier, prefer the pricier (more impactful) card.
+      const rarityOrder: Record<'low' | 'mid' | 'high', number> = { mid: 2, high: 1, low: 0 };
+      const echoes = p.discard
+        .filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent)
+        .sort(
+          (a, b) =>
+            rarityOrder[rarityTier(b.def.rarity)] - rarityOrder[rarityTier(a.def.rarity)] ||
+            costWeight(b.def) - costWeight(a.def),
+        );
       for (const c of echoes) {
         const waiveFodder = rarityTier(c.def.rarity) === 'mid';
         if (!waiveFodder && p.hand.length < 2) continue;
@@ -613,7 +692,14 @@ function playCombat(g: Game, p: Player) {
         // Favorable trade: kill an enemy unit without dying, or kill something bigger.
         const kills = opp.board.filter((t) => willKillInCombat(g, t, atk));
         const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
-        const valueKill = kills.find((t) => (t.def.threshold ?? 0) > (att.def.threshold ?? 0));
+        // v4.5: was `t.def.threshold ?? 0`, which reads as 0 for any
+        // Combo-gate-costed target — a Mythic bomb gated behind Full House
+        // registered as cheaper than a threshold-1 Common in this
+        // comparison, so the AI would never recognize it as the better
+        // kill in an optional trade. costWeight() proxies gate-costed cards
+        // off rarity instead so this comparison means the same thing
+        // regardless of which of the three cast-cost formats a card uses.
+        const valueKill = kills.find((t) => costWeight(t.def) > costWeight(att.def));
         // Threat check: clear big attackers even with a trade — every persona
         // answers a 5+ ATK unit before doing anything cute.
         const bigThreat = kills.find((t) => effAtk(g, t) >= 5);

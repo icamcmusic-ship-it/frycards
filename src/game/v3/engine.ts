@@ -91,6 +91,10 @@ export interface Inst {
   /** v4.4: stacks of a Combo's own self-buff already applied to this permanent
    * (see the "ramp, not a collapse/snowball" cap comment at comboCheck()). */
   comboSelfBuffStacks?: number;
+  /** v4.5: cumulative +1/+1 already granted to this permanent by its own
+   * Avenge trigger (see cleanupDeaths' AVENGE_CAP) — same "ramp, not an
+   * uncapped snowball" treatment Anchor/Toll/Combo-self-buff already get. */
+  avengeStacks?: number;
 }
 
 export interface Die {
@@ -296,6 +300,11 @@ export function wouldSapKill(g: Game, target: Inst, rawValue: number): boolean {
  * (see comboCheck()) — same "ramp, not a collapse" ceiling Anchor/Toll use. */
 export const MAX_COMBO_SELF_BUFF_STACKS = 3;
 
+/** v4.5: cap on total permanent +1/+1 a single card may gain from its own
+ * Avenge trigger over its lifetime (see cleanupDeaths()) — same "ramp, not
+ * a collapse" ceiling as MAX_COMBO_SELF_BUFF_STACKS/ANCHOR_CAP/Toll's cap. */
+export const AVENGE_CAP = 3;
+
 /** v4.4: raised from 2 to 3 — the sim showed Anchor decks underperforming
  * (see docs/RULEBOOK.md's Anchor entry) with a flat diminishing-returns
  * curve and no swing potential; a deeper ramp plus the one-time cap bonus
@@ -344,9 +353,16 @@ function applyAnchorCapBonus(g: Game, p: Player, c: Inst) {
   ).length;
   if (others >= ANCHOR_CAP) {
     c.anchorCapBonused = true;
-    c.permAtk += 1;
-    c.permHp += 1;
-    g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +1/+1.`);
+    // v4.5: +1/+1 -> +2/+2 — Anchor-ramp archetypes measured as the weakest
+    // decks in the whole roster (Abyss Excavate Ramp 12.8%, Sea Witch
+    // Anchor-Scrap Ramp 22.7%, Shinobi Tempo-Anchor 24.3%), and Anchor
+    // itself was the weakest of the "core nine" v4.0 keywords (48.1% win
+    // rate) even after the v4.4 cap-to-3 change. A bigger one-time payoff
+    // gives the archetype an actual swing moment instead of just a smaller
+    // discount ceiling.
+    c.permAtk += 2;
+    c.permHp += 2;
+    g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +2/+2.`);
   }
 }
 
@@ -363,6 +379,13 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
   if (u.def.excavate && u.def.type === 'Location') {
     t -= u.def.excavate.x * (u.excavateStacks || 0);
   }
+  // v4.5: Momentum also discounts the Leader's own Ability Slot by 1, same
+  // threshold-reduction language Resolve/Anchor already use — the balance
+  // sim measured Momentum's bonus die (v4.4) and the +1 ATK add-on (v4.4.2)
+  // as barely moving its own trigger's win rate (16.5% -> 17.3%, still a
+  // -66.5pt decision delta), so this ties the comeback trigger to the
+  // Leader's actual answer instead of only more raw material.
+  if (u.def.type === 'Leader' && g.players[u.owner].momentumActive) t -= 1;
   return Math.max(1, t);
 }
 
@@ -536,10 +559,21 @@ export function cleanupDeaths(g: Game) {
     const survivors = p.board.filter((u) => remainingHp(g, u) > 0);
     // v4.2 Avenge: state-based, no priority window — every surviving Avenge
     // Unit gets +1/+1 for each friendly Unit that just died, automatically.
+    // v4.5: capped at AVENGE_CAP total — this was the one repeating stat
+    // mechanic in the game with NO cap (Anchor/Toll/Combo-self-buff all use
+    // the same "ramp, not a collapse" ceiling), and the sim measured it as
+    // the single strongest keyword (57.2% win rate) anchoring a 90.9%-win
+    // archetype even after two rounds of unrelated Leader-Ability nerfs to
+    // that archetype's Leader.
     for (const u of survivors) {
       if (u.def.avenge) {
-        u.permAtk += dead.length;
-        u.permHp += dead.length;
+        u.avengeStacks = u.avengeStacks || 0;
+        const gain = Math.min(dead.length, Math.max(0, AVENGE_CAP - u.avengeStacks));
+        if (gain > 0) {
+          u.permAtk += gain;
+          u.permHp += gain;
+          u.avengeStacks += gain;
+        }
       }
     }
     p.board = survivors;
@@ -936,6 +970,7 @@ function enterPlay(
     c.permAtk = 0;
     c.permHp = 0;
     c.comboSelfBuffStacks = 0;
+    c.avengeStacks = 0;
     c.hasAttacked = false;
     c.attacksMade = 0;
     c.abilityUsed = false;
@@ -977,7 +1012,18 @@ function enterPlay(
     // if the Location's own value is 100% deferred to "the passive adds up
     // eventually." A modest immediate effect narrows that gap directly.
     if (c.def.onCast) {
-      applyEffect(g, p.id, c.def.onCast, targetIid ?? autoTarget(g, p.id, c.def.onCast), c);
+      // v4.5 Contested: previously only doubled the ambient locPassive
+      // (ATK_ALL/HP_ALL) — the on-cast effect (a Location's only other
+      // source of value since v4.4.2) was left out, so Contested measured
+      // as the weakest keyword in the game (28.4% win rate) despite
+      // Locations overall still running a net-negative isolated
+      // contribution even a doubled ambient passive alone can't fix.
+      const contestedMult = c.def.contested && !opponentOf(g, p.id).location ? 2 : 1;
+      const onCast =
+        contestedMult > 1
+          ? { ...c.def.onCast, value: (c.def.onCast.value || 0) * contestedMult }
+          : c.def.onCast;
+      applyEffect(g, p.id, onCast, targetIid ?? autoTarget(g, p.id, onCast), c);
     }
     cleanupDeaths(g); // HP_ALL leaving can kill units
   } else {
@@ -1045,7 +1091,13 @@ export function autoTarget(
       return opp.leader.iid;
     }
     case 'friendlyUnit': {
-      const t = p.board.filter((u) => u.iid !== excludeIid).sort(byAtk)[0];
+      // v4.5: was `.sort(byAtk)[0]` — always the biggest-ATK Unit, which is
+      // "rich get richer": whichever Unit is already the board's biggest
+      // threat gets even bigger, instead of spreading the buff to the Unit
+      // that actually needs it to trade favorably. Target `target: 'friendlyUnit'`
+      // is buff-only (see catalog.test.ts's TARGETS_BY_ACTION), so lowest
+      // ATK first is the more useful default fallback.
+      const t = [...p.board].filter((u) => u.iid !== excludeIid).sort((a, b) => byAtk(b, a))[0];
       return t?.iid;
     }
     case 'friendlyAny': {

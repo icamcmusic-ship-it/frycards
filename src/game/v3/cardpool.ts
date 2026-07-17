@@ -416,7 +416,11 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // turn) without ever being a dead card, sidestepping the trophy-gate problem
   // structurally instead of needing rarity guidance to manage it.
   if (!asCharm && hash(c.id) % 5 === 3) {
-    base.crescendo = { x: 1 + (tier >= 3 ? 1 : 0) };
+    // v4.5: baseline x 1 -> 2 — Crescendo measured as the third-weakest
+    // keyword (28.6% win rate). A die of value 6 is only a ~1-in-6 shot per
+    // die placed, so the old +1-per-six rarely moved the needle on its own
+    // effect; doubling it makes a hot roll actually feel like a payoff.
+    base.crescendo = { x: 2 + (tier >= 3 ? 1 : 0) };
     base.keywords = [...(base.keywords || []), 'Crescendo'];
   }
   // v4.2 Aftershock (Event only): a delayed half-value echo of the main
@@ -474,7 +478,11 @@ function mapLocation(c: CardTemplate): CardDef {
   // effect instead: +1/+1 to a friendly Unit (a no-op turn 1 before any
   // Unit is out, same as most tempo tools are early, but real value every
   // turn after).
-  def.onCast = { action: 'buff', value: 1, target: 'friendlyUnit' };
+  // v4.5: scales with rarity tier (was a flat 1 regardless) — every other
+  // rarity-scaled effect in the pool (Unit stat budgets, Event power) grows
+  // with tier, but this one didn't, undervaluing higher-rarity Locations
+  // relative to the Units they compete against for a deck slot.
+  def.onCast = { action: 'buff', value: 1 + (tier >= 3 ? 1 : 0), target: 'friendlyUnit' };
   // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
   // each turn — gives ramp identities (Excavate/Anchor especially) an actual
   // floor instead of doing nothing on the turns they're setting up.
@@ -499,7 +507,11 @@ function mapLocation(c: CardTemplate): CardDef {
     ]);
     def.keywords = [...(def.keywords || []), 'Tribute'];
   } else if (def.ability && hash(c.id) % 5 === 1) {
-    def.excavate = { x: 1 };
+    // v4.5: x 1 -> 2 — Excavate measured as the second-weakest keyword in
+    // the game (32.3% win rate), and it's a slow ramp by design (needs
+    // several of the controller's own turns in play to matter); doubling
+    // the per-turn rate lets it actually pay off before the game ends.
+    def.excavate = { x: 2 };
     def.keywords = [...(def.keywords || []), 'Excavate'];
   } else if (tier >= 1 && hash(c.id) % 5 === 2) {
     def.contested = true;
@@ -515,14 +527,21 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // v4.4 balance: weakest leader after the Crimson/Mer-King pass (44.4%) — the
   // only Leader still gated at a threshold-6 ability. Lowered to 5 so it fires
   // at the same rate as the rest of the roster.
-  avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
+  // v4.5: value 2 -> 3 — Abyss is now the second-weakest leader (42.7%,
+  // 22,560-game pass), and the every-turn ability's value hadn't moved since
+  // v4.4's threshold fix. A direct power bump instead of another frequency
+  // change, since frequency was already brought in line with the roster.
+  avatar_of_the_abyss: { threshold: 5, effect: { action: 'sap', value: 3, target: 'anyTarget' } },
   // v4.1 balance: Bind's retaliation-stop buff + 64 HP long games made an
   // every-turn threshold-4 leader Bind a permanent board lock (96.6% archetype
   // win rate) — raised to 6 so it's a high roll, not a routine.
   ethereal_sea_witch: { threshold: 5, effect: { action: 'bind', target: 'enemyUnit' } },
-  // v4.0 balance: Mer King and Apex were the two weakest leaders (~24%); make
-  // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
-  mer_king: { threshold: 5, effect: { action: 'mend', value: 3, target: 'friendlyAny' } },
+  // v4.5: value 3 -> 2 — Mer-King is now the strongest leader (57.8%), and
+  // its Guard-Bulwark/Avenge-adjacent archetypes (Guard-Bulwark Turtle
+  // 78.7%, Twin Heal 62.0%) lean on this every-turn sustain more than any
+  // other single lever on the Leader. A direct value cut, not another
+  // frequency change (threshold 5 already matches the rest of the roster).
+  mer_king: { threshold: 5, effect: { action: 'mend', value: 2, target: 'friendlyAny' } },
   // v4.4.2: threshold 5 -> 3 — the first tempo-grant version (unlocked at 5,
   // same as everyone else) barely moved Diver's win rate (33.7% -> 34.2%).
   // Firing 2-3 turns earlier on average is a much bigger lever than the
@@ -542,8 +561,14 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // between them, so total stat investment across the game barely dropped.
   // Cutting the value in half AND raising the gate is a direct cut to the
   // engine's total output per game, not just its distribution.
+  // v4.5: threshold 5 -> 6 — Shinobi is still the second-strongest leader
+  // (57.3%) and anchors the two most dominant archetypes in the whole
+  // roster (Avenge Grind 90.9%, Steel-Scrap Control 83.9%) even after two
+  // rounds of value/targeting cuts. Both of those cuts changed the
+  // Ability's output per activation; this cuts its *frequency* instead —
+  // the one lever not yet touched.
   apex_nanite_shinobi: {
-    threshold: 5,
+    threshold: 6,
     effect: { action: 'buff', value: 1, target: 'friendlyUnit' },
   },
 };
@@ -572,10 +597,13 @@ const LEADER_RESOLVE: Record<string, number> = {
 // got a straight power bump, so a player behind on board always has a
 // once-per-game out sitting on their Leader.
 const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
+  // v4.5: value 4 -> 5 — Abyss buff, paired with the Ability value bump
+  // above; still the reactive-leader board-wipe identity, just with more
+  // teeth now that its every-turn plan also hits harder.
   avatar_of_the_abyss: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'sap', value: 4, target: 'allEnemyUnits' },
+    effect: { action: 'sap', value: 5, target: 'allEnemyUnits' },
   },
   ethereal_sea_witch: {
     unlockTurn: 5,
@@ -584,15 +612,23 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   },
   // v4.4 balance: strongest leader at 55.6% — Ultimate mend 8 -> 6 trims the
   // top without touching his every-turn plan.
+  // v4.5: value 6 -> 5 — still the strongest leader (57.8%) after the v4.4
+  // trim; cutting the once-per-game top-up alongside the Ability value cut
+  // above trims both compounding sustain sources at once.
   mer_king: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'mend', value: 6, target: 'friendlyAny' },
+    effect: { action: 'mend', value: 5, target: 'friendlyAny' },
   },
+  // v4.5: threshold 6 -> 5, value 3 -> 4 — Diver is the weakest leader in
+  // the roster (39.6%) and its Ultimate was gated at the single hardest
+  // threshold in the game while granting the least game-swinging effect
+  // (pure card draw, no board/face impact). Easier to land and stronger
+  // once it lands.
   legendary_diver: {
     unlockTurn: 5,
-    threshold: 6,
-    effect: { action: 'draw', value: 3, target: 'none' },
+    threshold: 5,
+    effect: { action: 'draw', value: 4, target: 'none' },
   },
   crimson_vector_commander: {
     unlockTurn: 4,
