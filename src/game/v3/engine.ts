@@ -280,10 +280,22 @@ export function steelRemaining(target: Inst): number {
  * `remainingHp(g, t) <= atk` ignores all three and mistakes a warded/
  * steeled/bulwarked unit for a safe kill.
  */
+/** v4.6: a single Unit's combined Steel+Bulwark prevention per hit is capped
+ * (same "ramp, not a collapse" ceiling Toll/Anchor/Avenge/Combo-self-buff
+ * use) — dual Steel+Bulwark bodies were the stickiest piece of the
+ * durability-stack decks that have topped every sim roster (Steel-Scrap
+ * Control 86.0%, Guard-Bulwark Turtle 84.4%, Ward-Steel Wall 83.0%), and
+ * both keyword-prevalence and Overrun-strength levers failed to dent them. */
+export const STEEL_BULWARK_CAP = 4;
+
 export function willKillInCombat(g: Game, target: Inst, rawAtk: number): boolean {
   if (target.def.type !== 'Unit') return false;
   if (hasUnspentWard(target)) return false;
-  const dmg = Math.max(0, rawAtk - steelRemaining(target) - (target.def.bulwark?.x || 0));
+  const prevention = Math.min(
+    STEEL_BULWARK_CAP,
+    steelRemaining(target) + (target.def.bulwark?.x || 0),
+  );
+  const dmg = Math.max(0, rawAtk - prevention);
   return dmg >= remainingHp(g, target);
 }
 
@@ -303,7 +315,12 @@ export const MAX_COMBO_SELF_BUFF_STACKS = 3;
 /** v4.5: cap on total permanent +1/+1 a single card may gain from its own
  * Avenge trigger over its lifetime (see cleanupDeaths()) — same "ramp, not
  * a collapse" ceiling as MAX_COMBO_SELF_BUFF_STACKS/ANCHOR_CAP/Toll's cap. */
-export const AVENGE_CAP = 3;
+// v4.6: 3 -> 2 — the cap-at-3 barely moved Avenge's numbers (keyword win
+// rate 57.2% -> 56.5%, Shinobi Avenge Grind 90.9% -> 91.6% across two full
+// 22,560-game passes), exactly the "needs a tighter cap (2?)" follow-up the
+// v4.5 findings doc predicted. Mer King Avenge Swarm (72.4%) is the second
+// data point that the keyword itself, not one Leader kit, is the outlier.
+export const AVENGE_CAP = 2;
 
 /** v4.4: raised from 2 to 3 — the sim showed Anchor decks underperforming
  * (see docs/RULEBOOK.md's Anchor entry) with a flat diminishing-returns
@@ -863,7 +880,14 @@ export function startTurn(g: Game) {
     // the bonus die alone measured as barely helping (16.5% win rate when
     // triggered), so this ties the comeback lever to actual pressure instead
     // of just more raw material.
-    g.log.push(`${p.id} is behind — Momentum grants a 6th die and +1 ATK this turn.`);
+    // v4.6: also draw a card. Three straight passes of dice/stat/threshold
+    // levers (bonus die, +1 ATK, Leader-Ability discount) each failed to
+    // move Momentum's trigger win rate (16.5% -> 17.3% -> 17.8%) — a player
+    // behind on board AND at half HP is usually behind on *options*, not
+    // just material, and none of the prior levers touched the option axis.
+    // Cards are the one comeback resource this trigger never granted.
+    drawCards(g, p, 1);
+    g.log.push(`${p.id} is behind — Momentum grants a 6th die, +1 ATK and a card this turn.`);
   }
 }
 
@@ -986,10 +1010,15 @@ function enterPlay(
     // it came through — treats it as if it had innate Swift for this stint
     // AND now also a permanent +1/+1 (v4.4.1's sickness-skip alone barely
     // moved Diver's win rate, 33.7% -> 34.2%).
+    // v4.6: +1/+1 -> +2/+2 — Diver stayed the weakest Leader through two
+    // rounds of kit buffs, and this pass's exact-cost stat clamp (correct
+    // pool-wide) incidentally trimmed the cheap aggressive bodies Diver's
+    // tempo plan leans on hardest. Strengthening the tempo grant compensates
+    // inside Diver's own identity instead of another threshold change.
     if (p.swiftGrantThisTurn) {
       c.enteredThisTurn = false;
-      c.permAtk += 1;
-      c.permHp += 1;
+      c.permAtk += 2;
+      c.permHp += 2;
       p.swiftGrantThisTurn = false;
     }
     p.board.push(c);
@@ -1374,6 +1403,16 @@ export function activateUltimate(g: Game, dieIndex: number, targetIid?: string):
   die.placed = true;
   leader.ultimateUsed = true;
   decide(g, p.id, 'ultimateUsed');
+  // v4.6 instrumentation: the balance sim kept measuring Ultimate usage as
+  // correlated with LOSING, but couldn't separate "already losing, used it
+  // anyway" from "using it caused the loss" (the deck-membership confound
+  // flagged in docs/BALANCE_SIM_FINDINGS_v4.5.md §3). Record the board state
+  // at the moment of activation so the sim can split the win-delta by it.
+  const oppAtUlt = opponentOf(g, p.id);
+  const behindAtUlt =
+    remainingHp(g, p.leader) * 2 <= effMaxHp(g, p.leader) ||
+    p.board.length < oppAtUlt.board.length;
+  decide(g, p.id, behindAtUlt ? 'ultimateUsedBehind' : 'ultimateUsedAhead');
   applyEffect(g, p.id, ult.effect, targetIid ?? autoTarget(g, p.id, ult.effect), leader);
   return true;
 }
@@ -1685,20 +1724,30 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     // v4.4 Steel X: absorbs up to X damage from ANY source each turn, checked
     // Ward (full prevention) -> Steel (per-turn pool) -> Bulwark (flat
     // reduction) -> Frenzy (multiplier).
+    // v4.6: combined Steel+Bulwark prevention per hit caps at
+    // STEEL_BULWARK_CAP (see its comment).
+    let prevented = 0;
     if (tgt.def.steel) {
-      const absorbed = Math.min(dmgToTarget, Math.max(0, tgt.def.steel.x - tgt.steelUsed));
+      const absorbed = Math.min(
+        dmgToTarget,
+        Math.max(0, tgt.def.steel.x - tgt.steelUsed),
+        STEEL_BULWARK_CAP - prevented,
+      );
       if (absorbed > 0) {
         tgt.steelUsed += absorbed;
         g.stats.steelAbsorbed += absorbed;
         dmgToTarget -= absorbed;
+        prevented += absorbed;
       }
     }
     if (tgt.def.bulwark) {
       // v4.2 Bulwark X: flat reduction to damage taken from attacks, checked
       // Ward (full prevention) -> Bulwark (flat reduction) -> Frenzy (multiplier).
-      const reduced = Math.min(dmgToTarget, tgt.def.bulwark.x);
-      g.stats.bulwarkReduced += reduced;
-      dmgToTarget -= reduced;
+      const reduced = Math.min(dmgToTarget, tgt.def.bulwark.x, STEEL_BULWARK_CAP - prevented);
+      if (reduced > 0) {
+        g.stats.bulwarkReduced += reduced;
+        dmgToTarget -= reduced;
+      }
     }
   }
   // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
@@ -1706,8 +1755,15 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   // numbers that made those keywords good answers to Pierce/Frenzy. Doesn't
   // apply to retaliation, and never fires off a 0-ATK attacker.
   if (hasKw(att.def, 'Overrun') && dmgToTarget === 0 && atk > 0) {
-    dmgToTarget = 1;
-    g.log.push(`${att.def.name}'s Overrun punched 1 damage through.`);
+    // v4.6: 1 -> half the attacker's ATK (rounded down, min 1). A flat 1
+    // measured as no answer at all: the four durability-stack archetypes
+    // (Ward-Steel Wall 87.8%, Guard-Bulwark Turtle 85.9%, Steel-Scrap
+    // Control 83.6%, Toll-Bulwark Fortress 74.6%) stayed the top of the
+    // roster through both a prevalence doubling and every adjacent nerf.
+    // Mirrors Pierce's existing floor(atk/2) overflow cap, so "half ATK"
+    // is already the established magnitude for punch-through effects.
+    dmgToTarget = Math.max(1, Math.floor(atk / 2));
+    g.log.push(`${att.def.name}'s Overrun punched ${dmgToTarget} damage through.`);
   }
   // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
   // RULING on Bind's retaliation window (§10): boundThisTurn is set at the
@@ -1723,20 +1779,29 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   // before Bulwark and Frenzy's multiplier — Ward never protects the
   // attacker on its own attack, but Steel (a per-turn pool, not a single
   // prevented instance) still does.
+  // v4.6: the STEEL_BULWARK_CAP applies here too, symmetric with defense.
+  let retPrevented = 0;
   if (att.def.steel) {
-    const absorbed = Math.min(retaliation, Math.max(0, att.def.steel.x - att.steelUsed));
+    const absorbed = Math.min(
+      retaliation,
+      Math.max(0, att.def.steel.x - att.steelUsed),
+      STEEL_BULWARK_CAP - retPrevented,
+    );
     if (absorbed > 0) {
       att.steelUsed += absorbed;
       g.stats.steelAbsorbed += absorbed;
       retaliation -= absorbed;
+      retPrevented += absorbed;
     }
   }
   // v4.2 Bulwark X: also reduces retaliation damage the attacker itself takes,
   // before Frenzy's multiplier — same Ward -> Bulwark -> Frenzy sequence.
   if (att.def.bulwark) {
-    const reduced = Math.min(retaliation, att.def.bulwark.x);
-    g.stats.bulwarkReduced += reduced;
-    retaliation -= reduced;
+    const reduced = Math.min(retaliation, att.def.bulwark.x, STEEL_BULWARK_CAP - retPrevented);
+    if (reduced > 0) {
+      g.stats.bulwarkReduced += reduced;
+      retaliation -= reduced;
+    }
   }
   // v4.0 Frenzy: only the SECOND (bonus) swing takes doubled retaliation.
   if (hasKw(att.def, 'Frenzy') && attackNumber === 2) retaliation *= 2;

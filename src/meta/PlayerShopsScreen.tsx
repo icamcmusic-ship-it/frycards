@@ -178,7 +178,7 @@ function CardStackPicker({
       const idx = items.findIndex((i) => i.card_id === cardId && i.foil === foil);
       if (idx >= 0) {
         const next = [...items];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + qty };
+        next[idx] = { ...next[idx], quantity: Math.min(maxQty, next[idx].quantity + qty) };
         onChange(next);
       } else {
         onChange([...items, { card_id: cardId, foil, quantity: qty }]);
@@ -1264,10 +1264,10 @@ function NewCardListingForm({
           Price
           <input
             type="number"
-            min={0.01}
-            step="0.01"
-            value={price / 100}
-            onChange={(e) => setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))}
+            min={1}
+            step={1}
+            value={price}
+            onChange={(e) => setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))}
             className="w-24 px-2 py-1 ink-border-sm"
           />
         </label>
@@ -1521,11 +1521,11 @@ function MysteryBuilderPanel({
               Price per pack
               <input
                 type="number"
-                min={0.01}
-                step="0.01"
-                value={price / 100}
+                min={1}
+                step={1}
+                value={price}
                 onChange={(e) =>
-                  setPrice(Math.max(1, Math.round((Number(e.target.value) || 0) * 100)))
+                  setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))
                 }
                 className="w-24 px-2 py-1 ink-border-sm"
               />

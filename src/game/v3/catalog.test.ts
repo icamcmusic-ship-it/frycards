@@ -6,7 +6,7 @@
  * each keyword's implementation assumes.
  */
 import { test, expect } from 'vitest';
-import { POOL_V4 } from './cardpool';
+import { POOL_V4, POOL_BY_ID } from './cardpool';
 import { CARDS_V3, CardDef, Effect } from './cards';
 
 // Simple keywords the engine reads via hasKw().
@@ -227,4 +227,22 @@ test('per-keyword structural invariants (Twin bonus, ability thresholds, type ga
       expect(c.hp ?? 0, `${c.id}: Unit needs HP >= 1`).toBeGreaterThanOrEqual(1);
     }
   }
+});
+
+// v4.6 regression guard: engine tests hand-build their own CardDefs, so an
+// engine feature can be fully implemented and tested while NO live card
+// actually carries its def flag — exactly what happened to the v4.4 Leader
+// flags (Diver's abilityGrantsTempo buff and Shinobi's abilityNoRepeatTarget
+// nerf were documented as shipped but never assigned in mapLeader, silently
+// inert for two full balance passes). Assert the live pool itself.
+test('v4.4 Leader-Ability flags are actually assigned in the live pool', () => {
+  const diver = POOL_BY_ID['legendary_diver'];
+  const shinobi = POOL_BY_ID['apex_nanite_shinobi'];
+  // Only meaningful when the real catalog includes these Leaders (it does in
+  // the bundled fallback pool the tests run against).
+  expect(diver?.abilityGrantsTempo, 'legendary_diver must carry abilityGrantsTempo').toBe(true);
+  expect(
+    shinobi?.abilityNoRepeatTarget,
+    'apex_nanite_shinobi must carry abilityNoRepeatTarget',
+  ).toBe(true);
 });

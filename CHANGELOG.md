@@ -7,6 +7,69 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.6 balance/feature/bug pass
+
+- **Long-standing balance bug — the v4.4 Leader-Ability flags were never
+  wired up**: `mapLeader()` never assigned `abilityGrantsTempo` (Legendary
+  Diver's documented tempo-grant buff) or `abilityNoRepeatTarget` (Apex
+  Nanite Shinobi's documented targeting nerf) to any Leader; both features
+  lived only in the engine and docs, inert in every real match and sim for
+  two full balance passes. Found via a byte-identical verification sim
+  (deterministic seeds can't produce identical output across a real code
+  change); now assigned, plus a new catalog test asserting the live pool
+  actually carries every Leader def flag. With the tempo grant finally live
+  (and strengthened to +2/+2), Diver rose above its true baseline for the
+  first time (34.2% → 36.4%).
+- **Balance (verified by three full 22,560-game re-sims; details in
+  `docs/BALANCE_SIM_FINDINGS_v4.6.md`)**: Leader win-rate spread narrowed
+  21.2pt → 17.6pt (top five Leaders within 2pt). Exact-cost Units now
+  budget stats off the measured ~flat difficulty of an exact-face cost
+  (the baseline's "most OP" list was wall-to-wall exact-cost stat-sticks);
+  straight-family gate cards get +1/+1 (Small Straight) / +2/+2 (Large
+  Straight) compensation for hit rates half their match-family tier
+  siblings; Avenge capped at 2 stacks (Mer King Avenge Swarm 72.4% →
+  62.3%); Overrun punches floor(ATK/2) instead of a flat 1; a Unit's
+  combined Steel+Bulwark prevention caps at 4 per hit; Momentum also draws
+  a card; Location on-cast buff base 2 — Locations measured **neutral in
+  isolation for the first time** (-1.9% → -0.2%). Two attempted changes
+  were reverted after verification sims showed regressions (full-pool
+  difficulty re-pricing; a cost-difficulty-keyed Swift conversion) — both
+  documented as negative results.
+- **Ultimate(N) exonerated**: new instrumentation splits Ultimate usage by
+  board state at activation — used while ahead it's a +30pt win signal,
+  used while behind -39pt. The old "Ultimates correlate with losing"
+  finding was the desperation confound, not weak Ultimates.
+- **CPU AI**: the reroll heuristic no longer rerolls away dice that pay
+  exact-cost cards in hand (exact-cost removal was sitting at 0.29-0.44
+  casts/game because the AI kept destroying its own payment dice).
+- **Bug-hunt fixes (game UI)**: the discard-drawer Echo button now
+  enforces exact-cost correctly instead of walking the player through
+  target/fodder pickers before failing; a reroll charge is no longer
+  silently wasted when a Snap cast places a die that was marked for
+  reroll; Momentum's 6th die now animates on roll; the sum-Echo bar
+  clears when a target picker opens; mid-rarity Echo of a Twin card says
+  "staged", not "in play"; the threshold-discount popover no longer
+  mis-credits Foothold discounts to Anchor; How-to-Play was a full engine
+  version stale (wrong combo-gate/order rule, missing Steel/Overrun/
+  Foothold/Momentum, wrong Pierce cap, wrong Rally/Echo text, Anchor cap)
+  and now matches the v4.6 engine, with the Anchor glossary +2/+2 fix.
+- **Bug-hunt fixes (meta/economy)**: every credit input (marketplace bids,
+  sell/buyout prices, shop listings, mystery-pack pricing, trade credits,
+  creator grants) was still converting ×100 from a stale "cents"
+  convention — typing 500 submitted a 50,000-credit bid; all are plain
+  integer credits now. Theme loading no longer white-screens browsers with
+  blocked storage; deck validation now rejects a Leader you own zero
+  copies of; shop bundles can't claim more copies than owned; a failed
+  sign-out no longer strands the session.
+- **New card templates**: Ultra-Rare "Gilded Relic" (animated gold-leaf
+  name banner, engraved corner brackets, twinkling gold-dust layer) and
+  Mythic "Living Inferno" (rising ember layer over the animated red/gold
+  banner and pulsing frame).
+- **QoL**: combo-gate cost popovers now show the measured hit chance
+  ("a focused player hits this ~44% of turns"); decorative card
+  animations respect `prefers-reduced-motion`; the opponent's banished
+  count is visible in-match.
+
 ### Fixed (v4.5 balance-sim pass)
 
 - **`docs/RULEBOOK.md` was out of sync with the shipped engine**: the v4.4.1

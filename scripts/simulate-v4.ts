@@ -341,6 +341,8 @@ const DECISION_KEYS = [
   'twinStagedPassive',
   'leaderAbility',
   'ultimateUsed',
+  'ultimateUsedBehind',
+  'ultimateUsedAhead',
   'aftershockQueued',
   'aftershockResolved',
   'tributeTriggered',

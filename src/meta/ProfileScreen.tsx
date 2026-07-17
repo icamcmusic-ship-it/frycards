@@ -307,7 +307,7 @@ function CreatorTools() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Grant inputs. Credits entered in dollars, stored as integer cents.
+  // Grant inputs.
   const [credits, setCredits] = useState(0);
   const [vouchers, setVouchers] = useState(0);
   const [cardId, setCardId] = useState('');
@@ -427,14 +427,14 @@ function CreatorTools() {
             <div className="heading-font text-xs mb-1">2 · GRANT CURRENCY</div>
             <div className="flex flex-wrap items-end gap-3 mb-3">
               <label className="flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]">
-                CREDITS ($)
+                CREDITS
                 <input
                   type="number"
                   min={0}
-                  step="0.01"
-                  value={credits / 100}
+                  step={1}
+                  value={credits}
                   onChange={(e) =>
-                    setCredits(Math.max(0, Math.round((Number(e.target.value) || 0) * 100)))
+                    setCredits(Math.max(0, Math.round(Number(e.target.value) || 0)))
                   }
                   className={`${input} w-24`}
                 />
