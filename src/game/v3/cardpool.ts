@@ -131,8 +131,16 @@ function mapUnit(c: CardTemplate): CardDef {
   }
   // Ward refreshing every End Phase already soaks ~one attack per round for
   // free — no stat bonus on top (Ward-stacked shells dominated with one).
-  if (primaryKw === 'Frenzy' && hash(c.id) % 2 === 0) {
-    atk += 1;
+  // v4.4.2: unconditional +2 (was a coin-flip +1) — the v4.4.1 Leader-target
+  // carve-out for a behind-on-board Frenzy attacker barely moved the
+  // keyword's win rate (48.1% -> 48.5%): the overlap between "behind on
+  // Units" and "still has a live Frenzy attacker to swing with" is narrow.
+  // A direct raw-stat buff helps every Frenzy card regardless of board
+  // state, compensating for the real (and correct) overflow/targeting
+  // nerfs from earlier this patch instead of relying on a rarely-triggered
+  // conditional.
+  if (primaryKw === 'Frenzy') {
+    atk += 2;
   }
   keywords.push(primaryKw);
 
@@ -450,14 +458,16 @@ function mapLocation(c: CardTemplate): CardDef {
     flavor: c.flavor,
   };
   def.locPassive = hash(c.id) % 2 === 0 ? 'ATK_ALL' : 'HP_ALL';
-  // v4.4: every Location now resolves a small effect the moment it enters
-  // play (see enterPlay in engine.ts, which previously ignored `onCast` for
-  // this type entirely) — the balance sim's diagnosis was that a Location's
-  // value being 100% deferred to "the passive adds up eventually" is what
-  // made it lose the opportunity-cost fight against a Unit's immediate
-  // impact, not the passive's raw size (already doubled once this patch
-  // with no measurable improvement).
-  def.onCast = { action: 'mend', value: 1, target: 'friendlyLeader' };
+  // v4.4.2: every Location resolves a small effect the moment it enters play
+  // (see enterPlay in engine.ts, which previously ignored `onCast` for this
+  // type entirely). v4.4.1 tried Mend 1 to the Leader here and Locations'
+  // isolated contribution got WORSE (-2.1 -> -5.3 win%), not better — Leader
+  // HP isn't what a Location is actually competing against; a Unit's
+  // immediate impact is board presence. Switched to a direct board-impact
+  // effect instead: +1/+1 to a friendly Unit (a no-op turn 1 before any
+  // Unit is out, same as most tempo tools are early, but real value every
+  // turn after).
+  def.onCast = { action: 'buff', value: 1, target: 'friendlyUnit' };
   // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
   // each turn — gives ramp identities (Excavate/Anchor especially) an actual
   // floor instead of doing nothing on the turns they're setting up.
@@ -506,16 +516,28 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // v4.0 balance: Mer King and Apex were the two weakest leaders (~24%); make
   // their abilities cheaper / more impactful so a defensive/tempo plan can keep up.
   mer_king: { threshold: 5, effect: { action: 'mend', value: 3, target: 'friendlyAny' } },
-  legendary_diver: { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
+  // v4.4.2: threshold 5 -> 3 — the first tempo-grant version (unlocked at 5,
+  // same as everyone else) barely moved Diver's win rate (33.7% -> 34.2%).
+  // Firing 2-3 turns earlier on average is a much bigger lever than the
+  // tempo grant's own mechanics; see enterPlay() for the now-stronger grant
+  // (skips summoning sickness AND +1/+1, not just the sickness skip).
+  legendary_diver: { threshold: 3, effect: { action: 'draw', value: 1, target: 'none' } },
   // v4.4 balance: weakest leader of the six at 44.0% (11k-game pass) — face
   // sap 4 -> 5 keeps its identity (pure reach) with a small power nudge.
   crimson_vector_commander: {
     threshold: 4,
     effect: { action: 'sap', value: 5, target: 'enemyLeader' },
   },
+  // v4.4.2: threshold 4 -> 5, value 2 -> 1 — the abilityNoRepeatTarget
+  // targeting restriction (still on) barely moved the needle (Steel-Scrap
+  // Control 90.1% -> 90.0%, Avenge Grind 95.1% -> 94.5%): with only 2-3
+  // Units usually in play, "can't repeat the same target" just alternates
+  // between them, so total stat investment across the game barely dropped.
+  // Cutting the value in half AND raising the gate is a direct cut to the
+  // engine's total output per game, not just its distribution.
   apex_nanite_shinobi: {
-    threshold: 4,
-    effect: { action: 'buff', value: 2, target: 'friendlyUnit' },
+    threshold: 5,
+    effect: { action: 'buff', value: 1, target: 'friendlyUnit' },
   },
 };
 
@@ -570,10 +592,14 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     threshold: 5,
     effect: { action: 'sap', value: 12, target: 'enemyLeader' },
   },
+  // v4.4.2: value 3 -> 2 — a second compounding source on top of the
+  // Ability nerf above; trimming both matters more than trimming either
+  // alone against a durability-stack board that survives to cash in every
+  // buff it's given.
   apex_nanite_shinobi: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'buff', value: 3, target: 'allFriendlyUnits' },
+    effect: { action: 'buff', value: 2, target: 'allFriendlyUnits' },
   },
 };
 

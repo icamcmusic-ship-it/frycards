@@ -946,11 +946,15 @@ function enterPlay(
     c.anchorCapBonused = false;
     c.boundThisTurn = false;
     c.boundNextTurn = false;
-    // v4.4: a pending Diver-style tempo grant (abilityGrantsTempo) is spent
-    // by the next Unit to enter play this turn, whichever destination it
-    // came through — treats it as if it had innate Swift for this stint.
+    // v4.4.2: a pending Diver-style tempo grant (abilityGrantsTempo) is
+    // spent by the next Unit to enter play this turn, whichever destination
+    // it came through — treats it as if it had innate Swift for this stint
+    // AND now also a permanent +1/+1 (v4.4.1's sickness-skip alone barely
+    // moved Diver's win rate, 33.7% -> 34.2%).
     if (p.swiftGrantThisTurn) {
       c.enteredThisTurn = false;
+      c.permAtk += 1;
+      c.permHp += 1;
       p.swiftGrantThisTurn = false;
     }
     p.board.push(c);
