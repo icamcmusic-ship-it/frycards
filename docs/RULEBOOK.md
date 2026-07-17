@@ -8,31 +8,42 @@ playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
 
-**v4.5 balance-sim findings (22,560-game v4.4.2 pass, `npm run sim:v4 10`):**
-this pass is a **findings report**, not a rebalance — only one fix shipped
-from it (the FourKind gate-pool fix in §7 above); everything else below is
-flagged for a future pass rather than acted on blind, since several of the
-v4.4.1/v4.4.2 rebalance attempts already "barely moved the needle" on their
-first try. Headline results: **Leader spread is still wide** (Mer-King 57.8%
-/ Apex Nanite Shinobi 57.3% vs. Legendary Diver 39.6% / Avatar of the Abyss
-42.7% — an 18pt spread); **archetype spread is severe** (Shinobi Avenge
-Grind 90.9%, Crimson Toll-Bulwark Fortress 80.0%, Mer King Guard-Bulwark
-Turtle 78.7% vs. Abyss Excavate Ramp 12.8%, Sea Witch Anchor-Scrap Ramp
-22.7%, Shinobi Tempo-Anchor 24.3% — attrition/durability shells stacking
-Guard+Bulwark+Toll+Steel+Avenge dominate, Anchor-ramp archetypes are close
-to unplayable); **keyword tiers split hard** — Avenge 57.2%, Twin 55.9%,
-Pierce 53.7%, Guard 53.4% win rate vs. Excavate 32.3%, Foothold 30.8%,
-Crescendo 28.6%, Contested 28.4% (a full tier below everything else, not a
-marginal gap); **Momentum is still failing at its one job** as a comeback
-lever (17.3% win rate when triggered, a -66.5pt decision delta — the
-v4.4.2 +1 ATK addition barely moved it from 16.5%); **Ultimate(N) usage
-still correlates with losing** (-10.8pt) despite the v4.2/v4.3 buffs aimed
-at it; and **Locations remain a net negative in isolation** (-3.7 win%)
-even after two consecutive direct buffs (doubled passive, then an on-cast
-+1/+1), suggesting the "opportunity cost" diagnosis from v4.1/v4.4 wasn't
-the whole story. Full findings (CPU AI reasoning gaps, cost-vs-ability
-outliers, per-card buff/nerf candidates) are tracked outside this rulebook
-pending the next implementation pass.
+**v4.5 balance-sim pass (22,560-game v4.4.2 baseline, `npm run sim:v4 10`,
+findings acted on and re-verified):** the initial pass measured a still-wide
+18pt Leader spread (Mer-King 57.8%/Shinobi 57.3% vs. Diver 39.6%/Abyss
+42.7%), a severe archetype spread (Shinobi Avenge Grind 90.9% down to Abyss
+Excavate Ramp 12.8%), a hard keyword-tier split (Avenge/Twin/Pierce/Guard
+all >53% vs. Excavate/Foothold/Crescendo/Contested all <33%), a failing
+Momentum (17.3% win rate when triggered), Ultimate(N) usage still
+correlating with losing (-10.8pt), and Locations still net-negative in
+isolation (-3.7%). A follow-up pass acted on every one of those findings —
+**Anchor**'s ramp payoff (+1/+1 → +2/+2), **Avenge** capped at 3 stacks/card
+(§10), **Momentum** now also discounts the Leader's own Ability Slot by 1,
+**Contested** now doubles a Location's on-cast effect too (not just its
+ambient passive), **Excavate**/**Crescendo** values raised, Location on-cast
+value now scales with rarity, and Mer-King/Shinobi trimmed while Diver/Abyss
+were buffed (see cardpool.ts's `LEADER_ABILITIES`/`LEADER_ULTIMATE`) — plus
+6 CPU AI heuristic fixes in `src/game/v3/ai.ts` (gate-costed cards no longer
+read as worthless in combat-trade/cast-priority math, Location choice now
+weighs Foothold/Excavate/Tribute/Contested, the mulligan heuristic treats
+easy-gate hands as keepable, Echo recasts go in value order, and buff
+auto-targeting spreads to the weakest Unit instead of always reinforcing the
+biggest). **Re-verified**: Excavate/Contested/Crescendo/Foothold keyword win
+rates all rose 6-7.5pt, Locations' isolated contribution more than halved
+(-3.7% → -1.2%), Mer-King's win rate came down as intended (57.8% → 52.9%).
+**Still unresolved, flagged rather than chased further blind**: Avenge's
+cap barely dented its dominant archetype (Shinobi Avenge Grind still 92.3%
+— needs a tighter cap or a Leader-level cut next); Momentum's decision
+correlation barely moved (still ~-66pt); Ultimate(N) usage correlation got
+*worse* (-15.2pt, more evidence the deck-membership confound flagged
+alongside it is real); and the Straight-family Combo-gated archetypes
+(Diver Straight-Combo, Sea Witch Bind-Straight Combo) dropped sharply for a
+reason not yet confirmed (a tested hypothesis — the AI's cast-priority
+change — was reverted and re-measured with no effect, ruling it out; the
+likely explanation is relative redistribution from the other buffs landing
+elsewhere in the same round-robin win-rate metric, but this needs its own
+isolate-and-measure pass before further tuning). Full writeup:
+`docs/BALANCE_SIM_FINDINGS_v4.5.md`.
 
 **v4.4.1/v4.4.2 errata (documentation catch-up — these shipped in the engine
 across two follow-up balance passes after v4.4 but were never written back to

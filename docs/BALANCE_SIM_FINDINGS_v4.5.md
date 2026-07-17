@@ -24,6 +24,87 @@ another sim-verify cycle rather than being applied blind.
 
 ---
 
+## 0. Update: every finding below was acted on and verified (follow-up pass)
+
+A second pass implemented every remaining item in this doc — all 6 AI
+heuristic fixes, the Avenge cap, the Excavate/Crescendo/Contested/Foothold-
+adjacent buffs, the Momentum Leader-Ability discount, Location on-cast
+rarity scaling, and the four-Leader rebalance (Mer-King/Shinobi nerfed,
+Diver/Abyss buffed) — then re-ran the full 22,560-game sim to verify. One
+regression surfaced and got a corrective follow-up within the same pass;
+the rest is reported honestly below rather than chased further blind,
+consistent with this doc's own stated philosophy.
+
+**What verifiably worked (confirmed by re-sim):**
+- Excavate: 32.3% → 39.5% keyword win rate (+7.2pt)
+- Contested: 28.4% → 35.9% (+7.5pt)
+- Crescendo: 28.6% → 34.7% (+6.1pt)
+- Foothold: 30.8% → 37.4% (+6.6pt, from the `locScore()` AI fix alone —
+  its own numeric value wasn't touched)
+- Locations isolated contribution: −3.7% → −1.2% (more than halved)
+- Mer-King (the nerf target): 57.8% → 52.9% leader win rate
+
+**What barely moved (same "barely moves the needle" pattern the git
+history already warned about for prior passes):**
+- Avenge keyword win rate: 57.2% → 56.7%; Shinobi Avenge Grind archetype:
+  90.9% → 92.3% (*higher*, despite the new AVENGE_CAP=3). The cap wasn't
+  tight enough to matter — most games apparently don't rack up 3+ Avenge
+  triggers on a single card before the game ends, or the archetype's power
+  was never really about the tail-end stacking in the first place. Needs a
+  tighter cap (2?) or a Shinobi-adjacent Leader-level cut next, not another
+  Avenge-keyword-wide change.
+- Momentum decision correlation: −66.5pt → −65.9pt (17.3% → 18.0% win rate
+  when triggered). The Leader-Ability threshold discount essentially didn't
+  register. Momentum needs a structurally different lever, not another
+  small discount stacked on the same trigger condition.
+- Ultimate(N) usage correlation: −10.8pt → **−15.2pt (worse)**. Consistent
+  with the "deck membership, not card power" confound flagged in §3 above —
+  Diver's Ultimate got directly buffed this pass and its usage correlation
+  still got worse, because Diver's *overall* win rate moved the wrong
+  direction (see below) for reasons unrelated to its Ultimate. This is
+  stronger evidence for the confound theory, not against it.
+
+**A real regression, diagnosed and partially corrected in-pass:**
+Avatar of the Abyss overshot hard on the first verification (42.7% → 55.8%,
+Pierce Aggro specifically 67.8% → 79.9%) — buffing both its Ability *and*
+Ultimate in the same pass double-counted the same fix. Corrected by
+reverting the Ultimate value back to 4 (keeping only the Ability bump);
+re-verified at 54.8%, Pierce Aggro 78.6% — better, but still runs hot and
+may need the Ability trimmed back toward 2-3 territory next round instead
+of pushing Ultimate further.
+
+**An unresolved finding, NOT chased further this pass:** the two
+comboFamily:`'straight'` archetypes (unrelated Leaders — Legendary Diver
+and Ethereal Sea Witch) both cratered: Diver Straight-Combo 32.7% → 14.6%,
+Sea Witch Bind-Straight Combo 69.1% → 51.5%, and Diver Rally Tempo also
+dropped (32.8% → 17.9%). A hypothesis (AI's `castPriority` switched to a
+rarity-based proxy for gate-costed cards, demoting cheap common/uncommon
+gate cards specifically) was tested by reverting that one change and
+re-running the full sim — **the numbers didn't move**, disproving it. The
+more likely explanation: this is a **relative-redistribution artifact** of
+the round-robin win-rate metric itself — win rate across a fixed 48-deck
+round robin is inherently zero-sum-ish (points gained by the archetypes
+that got direct buffs this pass — Excavate/Crescendo/Contested/Foothold/
+Location decks, six of them — have to come from somewhere), and the two
+Straight-family archetypes got no direct buff of their own this pass, so
+they absorbed a disproportionate share of the redistribution. This is a
+plausible, self-consistent explanation but **not confirmed** — it deserves
+its own dedicated sim pass (e.g., isolate the Straight-Combo archetypes
+against a *fixed* opponent roster before/after, instead of reading their
+round-robin win rate) before deciding whether they need a direct buff or
+the "crash" is mostly measurement artifact. Left as-is rather than reverting
+working buffs to chase a hypothesis that hasn't been confirmed either.
+
+**Bottom line:** this pass net-improved the clearest, most confidently-
+diagnosed problems (the four weakest keywords, Locations, one Leader
+nerf/buff pair) and left the harder, less-understood problems (Avenge's
+dominance, Momentum's failure, the Straight-family archetype swing) exactly
+as flagged rather than guessing at them — the next pass should start with a
+dedicated isolate-and-measure sim for the Straight-family question before
+touching any more numbers.
+
+---
+
 ## 1. CPU/AI reasoning lapses (`src/game/v3/ai.ts`)
 
 1. **Combat "value trade" heuristic silently zeroes out gate-costed cards.**

@@ -171,7 +171,20 @@ function costWeight(def: CardDef): number {
  * reproducible from board state alone and gets predictable/exploitable. */
 function castPriority(g: Game, p: Player, c: Inst): number {
   const persona = personaFor(g, p.id);
-  let v = costWeight(c.def) * 10;
+  // v4.5 correction: castPriority intentionally keeps the flat `?? 3`
+  // fallback here, NOT costWeight() — a first pass switched this to
+  // costWeight() too, but a verification sim showed it was a real
+  // regression (Sea Witch Bind-Straight Combo 69.1%->51.4%, Diver
+  // Straight-Combo 32.7%->14.4%): every comboGate card already gets a flat
+  // +40 bonus below regardless of rarity, so this base value was already
+  // "compensated" as originally diagnosed — switching it to a rarity proxy
+  // on top of that flat bonus instead *demoted* common/uncommon gate cards
+  // (the bread-and-butter of straight/combo-gated archetypes) relative to
+  // higher-rarity ones, delaying exactly the cheap combo pieces those decks
+  // depend on. costWeight() stays reserved for the combat valueKill fix and
+  // Echo recast ordering below, where the original flat fallback was a
+  // genuine bug (not compensated by anything else).
+  let v = (c.def.threshold ?? 3) * 10;
   if (c.def.type === 'Unit') v += 5 + persona.curveBias;
   // Removal/disruption gets the mirror-image skew, so control personas answer
   // the board first while aggro personas develop theirs.

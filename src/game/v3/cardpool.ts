@@ -597,13 +597,16 @@ const LEADER_RESOLVE: Record<string, number> = {
 // got a straight power bump, so a player behind on board always has a
 // once-per-game out sitting on their Leader.
 const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
-  // v4.5: value 4 -> 5 — Abyss buff, paired with the Ability value bump
-  // above; still the reactive-leader board-wipe identity, just with more
-  // teeth now that its every-turn plan also hits harder.
+  // v4.5: left at 4 (not also bumped) — a verification sim after buffing
+  // BOTH the Ability (above) and this Ultimate together overshot hard
+  // (Abyss 42.7% -> 55.8%, Pierce Aggro specifically 67.8% -> 79.9%): the
+  // every-turn Ability alone compounds enough across an ~11-round game.
+  // Stacking a second buff on the once-per-game Ultimate on top of that was
+  // double-counting the same fix.
   avatar_of_the_abyss: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'sap', value: 5, target: 'allEnemyUnits' },
+    effect: { action: 'sap', value: 4, target: 'allEnemyUnits' },
   },
   ethereal_sea_witch: {
     unlockTurn: 5,
