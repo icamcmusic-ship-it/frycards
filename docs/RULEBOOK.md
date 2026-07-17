@@ -45,6 +45,29 @@ elsewhere in the same round-robin win-rate metric, but this needs its own
 isolate-and-measure pass before further tuning). Full writeup:
 `docs/BALANCE_SIM_FINDINGS_v4.5.md`.
 
+**v4.5.1 (root-cause follow-up):** the flagged Straight-family regression
+was traced with a dedicated isolate-and-measure sim (a `git worktree`
+checkout of the pre-AI/keyword/Leader-change commit, re-run independently)
+to the FourKind gate-pool fix above, not anything downstream of it —
+shrinking `HARD_GATES` from 3 entries to 2 silently reassigned which cards
+are FullHouse- vs. LargeStraight-gated **pool-wide**, via `pick()`'s
+`hash(id) % arr.length` indexing, not just the ~5 cards that would've been
+FourKind-gated. Fixed with `pickHardGate()`: pick against the original,
+unchanged 3-entry array, then remap only an actual FourKind result via a
+second, independent hash — every card that previously resolved to
+FullHouse/LargeStraight is now byte-for-byte unaffected. Two more CPU AI
+heuristic lapses found in the same re-audit: `chooseReroll()`'s pattern
+strategy was `wantStraight && !wantMatch` (a single stray match-gated card
+in a straight-heavy hand silently overrode the deck's actual plan — now
+counts each family and follows the majority), and the Unit-ability loop
+always chose attacking over an ability once a Unit's ATK hit 3 regardless
+of what the ability did (now unconditional removal against a live target
+overrides that default). Re-verified: Diver Straight-Combo 14.6%→24.0%,
+Rally Tempo 17.9%→26.3% — real recovery, not full; see
+`docs/BALANCE_SIM_FINDINGS_v4.5.md` §0.1 for the residual-gap analysis and
+a new finding that the overall Leader spread widened this round (18.2pt →
+21.2pt), with Diver and Ethereal Sea Witch now the clearest outliers.
+
 **v4.4.1/v4.4.2 errata (documentation catch-up — these shipped in the engine
 across two follow-up balance passes after v4.4 but were never written back to
 this rulebook):** a durability-stack meta (Ward/Steel/Bulwark decks all fully

@@ -49,6 +49,31 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   redistribution from the other buffs landing elsewhere in the same
   round-robin metric, but unconfirmed — needs its own isolate-and-measure
   pass before further tuning).
+- **v4.5.1 root-cause pass**: investigated the Straight-family archetype
+  regression flagged above with a dedicated isolate-and-measure sim (a
+  `git worktree` checkout of the commit right after the FourKind fix, run
+  independently) — the crash was **already fully present there**, before
+  any AI/keyword/Leader change, ruling those out and pointing at the
+  FourKind fix itself. Root cause: `pick()` indexes a picker array with
+  `hash(id) % arr.length`, so shrinking `HARD_GATES` from 3 entries to 2
+  (the FourKind fix) silently reassigned which cards are FullHouse-gated
+  vs. LargeStraight-gated **pool-wide**, not just the ones that would've
+  been FourKind. Fixed properly: `pick()` against the original, unchanged
+  3-entry array, then remap only an actual FourKind result to
+  FullHouse/LargeStraight via an independent hash (`pickHardGate()`) — every
+  card that previously resolved to FullHouse/LargeStraight is unaffected.
+  Two more CPU AI lapses found in the same re-audit and fixed: `chooseReroll()`'s
+  reroll strategy was `wantStraight && !wantMatch`, so a single stray
+  match-gated card in a straight-heavy hand silently overrode the deck's
+  actual reroll plan (now counts each family and follows the majority); and
+  the Unit-ability loop always chose attacking over an ability once ATK hit
+  3, even when the ability was unconditional removal against a live target
+  (now `destroy` with a target overrides the attack default). Re-verified:
+  Diver Straight-Combo 14.6%→24.0%, Diver Rally Tempo 17.9%→26.3% (real
+  recovery, not full — see `docs/BALANCE_SIM_FINDINGS_v4.5.md` §0.1 for the
+  residual-gap discussion and a new finding that the overall Leader spread
+  actually widened this round, 18.2pt→21.2pt, with Diver and Sea Witch now
+  the clearest outliers).
 
 ### Fixed (full-stack audit)
 
