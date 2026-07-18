@@ -95,20 +95,24 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [bidFor]);
 
-  const run = async (fn: () => Promise<string | null>, success?: string) => {
-    if (busy) return;
+  /** Returns true on success so callers can gate follow-up UI (e.g. the sell
+   * form switching tabs) on the action actually having gone through. */
+  const run = async (fn: () => Promise<string | null>, success?: string): Promise<boolean> => {
+    if (busy) return false;
     setBusy(true);
     setError('');
     setNotice('');
     const err = await fn();
     setBusy(false);
-    if (err) setError(err);
-    else {
-      if (success) setNotice(success);
-      refreshProfile();
-      refreshCollection();
-      reload();
+    if (err) {
+      setError(err);
+      return false;
     }
+    if (success) setNotice(success);
+    refreshProfile();
+    refreshCollection();
+    reload();
+    return true;
   };
 
   const browse = listings.filter((l) => {
@@ -119,6 +123,15 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   });
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
+
+  // Minimum legal bid for the open bid modal — mirror of place_bid's 5% raise
+  // rule, so the button greys out instead of letting a too-low bid round-trip
+  // to the server just to be rejected.
+  const minBid = bidFor
+    ? bidFor.current_bid != null
+      ? bidFor.current_bid + Math.max(1, Math.ceil(bidFor.current_bid * 0.05))
+      : bidFor.price
+    : 0;
 
   const listingCard = (l: MarketListing, mine: boolean) => {
     const def = defFor(l.card_id);
@@ -350,7 +363,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               run(
                 () => createListing(opts),
                 opts.type === 'auction' ? 'Auction created!' : 'Listing created!',
-              ).then(() => setTab('mine'))
+              ).then((ok) => {
+                // Only leave the sell form when the listing actually went
+                // through — flipping tabs on a server rejection hid the form
+                // (and the player's inputs) while the error banner showed.
+                if (ok) setTab('mine');
+              })
             }
           />
         )}
@@ -392,7 +410,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </PopButton>
               <PopButton
                 color="red"
-                disabled={busy || !profile || profile.credits < bidAmount}
+                disabled={busy || !profile || profile.credits < bidAmount || bidAmount < minBid}
+                title={bidAmount < minBid ? `Minimum bid is ${fmtCredits(minBid)}` : undefined}
                 onClick={() => {
                   const l = bidFor;
                   setBidFor(null);
@@ -460,7 +479,12 @@ function SellForm({
     [collection, locked, search],
   );
 
-  const selected = sellable.find((c) => c.card_id === cardId);
+  // Look the selected card up in the full collection, not the search-filtered
+  // `sellable` list — otherwise typing in the search box mid-flow silently
+  // deselected the card and collapsed the price/quantity form.
+  const selectedEntry = collection.find((c) => c.card_id === cardId);
+  const selected =
+    selectedEntry && POOL_BY_ID[cardId] ? { ...selectedEntry, def: POOL_BY_ID[cardId]! } : undefined;
   const maxQty = selected
     ? Math.max(
         0,
@@ -473,12 +497,16 @@ function SellForm({
     : 0;
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
+  // Buyout only applies to auctions — a stale buyout value left over from
+  // auction mode must neither block a fixed-price listing's validation nor
+  // get sent along with it.
+  const effectiveBuyout = type === 'auction' && buyout !== '' ? buyout : null;
   const valid =
     selected &&
     quantity >= 1 &&
     quantity <= maxQty &&
     price >= 1 &&
-    (buyout === '' || buyout > price);
+    (effectiveBuyout === null || effectiveBuyout > price);
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
@@ -630,7 +658,7 @@ function SellForm({
                 quantity,
                 type,
                 price,
-                buyout: buyout === '' ? null : buyout,
+                buyout: effectiveBuyout,
                 hours,
               })
             }

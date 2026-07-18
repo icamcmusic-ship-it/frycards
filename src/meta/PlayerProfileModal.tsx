@@ -60,6 +60,15 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
     };
   }, [userId]);
 
+  // Escape closes the modal, matching the other overlays in the app.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const banner = card ? shopItems.find((s) => s.id === card.equipped_banner) : undefined;
   const avatar = card ? shopItems.find((s) => s.id === card.equipped_avatar) : undefined;
   const winRate =

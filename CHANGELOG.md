@@ -7,6 +7,64 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.7 balance/feature/bug pass
+
+- **Rule change — Fatigue replaces the instant deck-out loss**: a new
+  ablation harness (`scripts/simulate-ablation.ts`, one engine dial per arm
+  via `SIM_TUNING`) proved that NO labeled keyword powers the durability
+  decks that topped three straight sims — a `tollCap 3→1` arm measured
+  *identically to baseline to the decimal*, and removing Avenge outright
+  moved its 92% flagship deck under 3pt. The real engine was §9's
+  instant deck-out loss: **24% of all games** ended on it, silently
+  punishing every card-draw effect and crowning unit-hoarding attrition
+  lists. Drawing from an empty deck now deals escalating Fatigue damage
+  (1, 2, 3...) instead. Verified: deck-outs 10,999 → 0 across 45,120 games,
+  Leader win-rate spread 18.6pt → **12.0pt (best measured to date)**,
+  Legendary Diver finally off the floor (36.3% → 43.0%).
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.7.md`)**: Twin bodies
+  re-budgeted off their real printed threshold (they cast at legacy−1 with
+  full stats plus a rider — Lurking Coral-Prowler was a 9/8 for threshold
+  4; Twin drops off the #1 keyword spot); Steel X prints trimmed 2/2/3 →
+  1/1/2 by tier (the one keyword dial the ablation showed actually bites);
+  Anchor Units +2 HP (their 4/2 glass bodies died before any ramp existed —
+  biggest floor recovery ever measured, Abyss Excavate Ramp 24.7% → 40.6%).
+  Negative results kept honest: Toll cap, Mend halving, Anchor cap-bonus
+  draw, and a Guard +3→+2 HP trim all measured as no-ops and were reverted.
+- **CPU AI**: the face-lethal calculation now subtracts the defender's Toll
+  (it was dumping whole boards into blunted face attacks); board-wide-buff
+  Ultimates are never burned with fewer than 2 Units in play
+  (`ultimateUsedBehind` decision delta −38.5 → −29.4pt); low-rarity Echo
+  recasts only happen when hand fodder is nearly free (that decision's
+  delta went **−9.4pt → −0.4pt**).
+- **Bug-hunt fixes (game UI)**: the Shinobi no-repeat-target rule is now
+  respected by the target picker (it offered last turn's target, which the
+  engine always rejected); Echo with an empty hand no longer soft-locks the
+  discard-fodder picker; non-mid-rarity Echo of a Twin card says "staged"
+  with the die face; Snap sum-casts prune stale reroll marks; the staged-
+  Twin SET button explains it only works during Placement; failed Ultimates
+  give feedback; How-to-Play caught up on Overrun half-ATK, the
+  Steel+Bulwark cap, the Avenge cap, Frenzy's second-swing Leader rule,
+  Rally's die-threshold rule, and the new Fatigue rule; Bind now shows a
+  pending ⛓ badge the turn it lands; the turn-1 hint no longer asks you to
+  attack when attacks are illegal.
+- **Bug-hunt fixes (meta/economy)**: mode-toggle buttons no longer submit
+  the auth form (missing `type="button"` on every PopButton); a stale
+  auction buyout no longer corrupts/blocks fixed-price listings; the sell
+  form no longer switches tabs when listing creation fails; searching while
+  selling no longer deselects the card; mystery-pack pools re-require
+  validation after edits; "packs left" counters refresh after purchases;
+  cosmetic equips are serialized against a race; a React key collision in
+  the news feed fixed.
+- **QoL**: bid modal enforces the 5% minimum raise client-side with the
+  minimum shown; Escape closes the profile/pack-odds/report modals; store
+  tab switches clear stale notices; new deck-code tests.
+- **New premium card templates**: Ultra-Rare "Gilded Reliquary" (engraved
+  cut-corner SVG filigree frame with an animated light-trace and hover
+  prismatic sheen) and Mythic "Molten Sovereign" (drifting magma-vein
+  border, faceted gold corner fangs, pulsing flame-crown sigil, embossed
+  stat gems, and a pointer-tracking ember glow in the 3D inspector). Pure
+  CSS/inline-SVG, reduced-motion aware, grid-performance gated.
+
 ### v4.6 balance/feature/bug pass
 
 - **Long-standing balance bug — the v4.4 Leader-Ability flags were never

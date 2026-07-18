@@ -414,6 +414,14 @@ function BoardUnit({
             🛡
           </Tip>
         )}
+        {!u.boundThisTurn && u.boundNextTurn && (
+          <Tip
+            text="Bound — will be unable to attack, use abilities, or retaliate on its controller's next turn"
+            className="text-[10px] bg-[#8E44AD]/70 text-white ink-border-sm px-0.5"
+          >
+            ⛓
+          </Tip>
+        )}
         {u.boundThisTurn && (
           <Tip
             text="Bound — cannot attack, use abilities, or retaliate this turn"
@@ -1181,6 +1189,10 @@ export function GameV4({
       return;
     }
     if (castFromHand(g, dieIndices, c.iid)) {
+      // A Snap sum-cast during preRoll can place dice that were marked for
+      // reroll — drop them from the selection so the marks don't linger on
+      // disabled dice (same cleanup the single-die cast path does).
+      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
       say(`${c.def.name} resolves.`);
       bump();
     } else say('Illegal placement.');
@@ -1210,6 +1222,15 @@ export function GameV4({
         say('Illegal Echo.');
       }
       if (g.winner) setStage('over');
+      return;
+    }
+    // Non-mid Echo needs a hand card as fodder (engine: echoRecast fails
+    // without one) — with an empty hand the fodder prompt would just strand
+    // the player in a pick that can never be completed.
+    if (me.hand.length === 0) {
+      say('Echo needs a card in hand to discard — your hand is empty.');
+      setEchoPick(null);
+      setSumCast(null);
       return;
     }
     setEchoPick({ cardIid, dieIndices: Array.isArray(dice) ? dice : undefined, targetIid });
@@ -1312,7 +1333,12 @@ export function GameV4({
       return;
     }
     if (needsTarget(c.def.ability.effect)) {
-      if (targetsFor(g, HUMAN, c.def.ability.effect).length === 0) {
+      let ts = targetsFor(g, HUMAN, c.def.ability.effect);
+      // Mirror the engine's abilityNoRepeatTarget rule — last turn's target
+      // is never a legal explicit pick, so don't count (or later offer) it.
+      if (c.def.abilityNoRepeatTarget && c.lastAbilityTargetIid)
+        ts = ts.filter((t) => t.iid !== c.lastAbilityTargetIid);
+      if (ts.length === 0) {
         say('No legal target.');
         return;
       }
@@ -1408,7 +1434,7 @@ export function GameV4({
     if (activateUltimate(g, selDie!)) {
       setSelDie(null);
       bump();
-    }
+    } else say('Illegal.');
     if (g.winner) setStage('over');
   };
 
@@ -1428,7 +1454,10 @@ export function GameV4({
   };
 
   const tryCompleteTwin = (s: Inst) => {
-    if (stage !== 'placement') return;
+    if (stage !== 'placement') {
+      say('Twin completes during Placement.');
+      return;
+    }
     if (dieVal === null) {
       say('Select a die.');
       return;
@@ -1465,7 +1494,13 @@ export function GameV4({
       setSelDie(null);
       setShowDiscard(false);
       bump();
-      say(`${target.def.name} echoes back into play.`);
+      // A Twin card Echoes back into STAGING (engine: echoRecast's Twin
+      // branch), not straight into play — mirror the mid-rarity path's text.
+      say(
+        hasKw(target.def, 'Twin')
+          ? `${target.def.name} staged — match a ${me.staging.find((s) => s.iid === target.iid)?.stagedDie} later.`
+          : `${target.def.name} echoes back into play.`,
+      );
     } else {
       say('Illegal Echo.');
       setEchoPick(null);
@@ -1602,8 +1637,23 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
-  // Targeting overlay for pending effects
-  const pendingTargets = pending ? targetsFor(g, HUMAN, pending.effect) : [];
+  // Targeting overlay for pending effects. An `abilityNoRepeatTarget`
+  // ability (engine: activateAbility rejects an explicit re-pick of last
+  // turn's target) must not offer that target — otherwise the picker
+  // highlights a card that always resolves to "Illegal target."
+  const pendingTargets = pending
+    ? (() => {
+        let ts = targetsFor(g, HUMAN, pending.effect);
+        if (pending.kind === 'ability') {
+          const src = [...me.board, me.leader, me.location].find(
+            (x): x is Inst => !!x && x.iid === pending.cardIid,
+          );
+          if (src?.def.abilityNoRepeatTarget && src.lastAbilityTargetIid)
+            ts = ts.filter((t) => t.iid !== src.lastAbilityTargetIid);
+        }
+        return ts;
+      })()
+    : [];
   const isPendingTarget = (iid: string) => pendingTargets.some((t) => t.iid === iid);
 
   const rallyUnit = rallyPick
@@ -1678,6 +1728,8 @@ export function GameV4({
           ? `Die ${dieVal ?? '?'} selected — hover a hand card and press CAST, or press an ABILITY pill · dice left: ${unplaced.length}`
           : `Hover a card in hand to preview & cast it · Locations cast free · dice left: ${unplaced.length} (leftovers Pitch = heal your Leader 1 each)`;
       case 'combat':
+        if (me.turnsTaken <= 1)
+          return 'No attacks on your very first turn — END TURN when ready (leftover dice Pitch to heal your Leader).';
         return attacker
           ? 'Now click a highlighted enemy to attack it (Guards must fall first).'
           : 'Click one of your ready Units, then an enemy target. END TURN when done.';

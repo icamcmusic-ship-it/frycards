@@ -12,7 +12,7 @@ const SECTIONS = [
     body: [
       [
         'Win Condition',
-        'Reduce the enemy Leader from 64 HP to 0. You also lose if you must draw during your Draw Phase with an empty deck. Simultaneous KOs are a draw.',
+        'Reduce the enemy Leader from 64 HP to 0. Drawing with an empty deck no longer loses the game outright — instead your Leader takes escalating Fatigue damage (1, then 2, then 3...) each Draw Phase you cannot draw. Simultaneous KOs are a draw.',
       ],
       [
         'Deck',
@@ -102,15 +102,15 @@ const SECTIONS = [
       ],
       [
         'Damage order',
-        'Ward (full prevention) → Steel (per-turn pool) → Bulwark (flat reduction) → Frenzy (multiplier). Damage is persistent; a Unit at 0 HP dies immediately.',
+        'Ward (full prevention) → Steel (per-turn pool) → Bulwark (flat reduction) → Frenzy (multiplier). A Unit’s combined Steel + Bulwark prevention is capped at 4 per hit. Damage is persistent; a Unit at 0 HP dies immediately.',
       ],
       [
         'Overrun',
-        'If a hit is fully prevented (Ward/Steel/Bulwark zero it) and the attacker has ATK above 0, an Overrun attacker still punches 1 damage through.',
+        "If a hit is fully prevented (Ward/Steel/Bulwark zero it) and the attacker has ATK above 0, an Overrun attacker still punches through half its ATK (rounded down, min 1).",
       ],
       [
         'Frenzy',
-        'May attack twice if it survives its first attack; only the SECOND swing takes doubled retaliation.',
+        'May attack twice if it survives its first attack; only the SECOND swing takes doubled retaliation. Unless you have fewer Units than the defender, that second swing cannot target the enemy Leader directly (except when nothing else is left to hit).',
       ],
       ['Bind', 'A Bound Unit cannot attack, use abilities, or deal retaliation next turn.'],
     ],
@@ -132,7 +132,10 @@ const SECTIONS = [
         'Toll X',
         'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives (total reduction from every Toll source caps at 3).',
       ],
-      ['Avenge', 'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic.'],
+      [
+        'Avenge',
+        'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic; caps at +2/+2 total per card.',
+      ],
       [
         'Twin',
         'Two Cast Slots needing the SAME face value, placed on different turns; it waits in your Staging Zone in between (and may grant a small passive while parked). Completing it triggers a printed bonus.',
@@ -147,7 +150,7 @@ const SECTIONS = [
       ],
       [
         'Rally',
-        "Once per Rally card each turn (its own Ability exhaustion), activate its ability for free using a die already resting on another used Ability Slot.",
+        "Once per Rally card each turn (its own Ability exhaustion), activate its ability for free using a die already resting on another used Ability Slot — that resting die must still meet this ability's threshold.",
       ],
     ],
   },

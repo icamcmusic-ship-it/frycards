@@ -27,3 +27,16 @@ test('rejects garbage, unknown leaders, unknown cards, bad counts', () => {
   expect(decodeDeckCode('FRY1:lead_1:mystery', db)).toHaveProperty('error');
   expect(decodeDeckCode('FRY1:lead_1:unit_a*999', db)).toHaveProperty('error');
 });
+
+test('caps the aggregate copy count across repeated entries for the same id', () => {
+  // Each entry alone is legal (2 ≤ MAX_COPIES) but the total (4) is not.
+  expect(decodeDeckCode('FRY1:lead_1:unit_a*2,unit_a*2', db)).toHaveProperty('error');
+  // At exactly the cap across entries it decodes fine.
+  const ok = decodeDeckCode('FRY1:lead_1:unit_a*2,unit_a', db);
+  expect(ok).toEqual({ leaderId: 'lead_1', cardIds: ['unit_a', 'unit_a', 'unit_a'] });
+});
+
+test('tolerates surrounding whitespace', () => {
+  const res = decodeDeckCode('  FRY1:lead_1:unit_a \n', db);
+  expect(res).toEqual({ leaderId: 'lead_1', cardIds: ['unit_a'] });
+});

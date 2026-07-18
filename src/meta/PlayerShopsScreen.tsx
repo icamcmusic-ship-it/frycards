@@ -421,6 +421,13 @@ function ReportModal({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
@@ -504,7 +511,10 @@ function MysteryListingCard({
     return () => {
       cancelled = true;
     };
-  }, [listing.id, listing.status]);
+    // remaining_packs in the deps: after a purchase the parent reloads the
+    // listing row — refetch the live stats then too, or the "N packs left"
+    // counter (fetched separately) stays frozen at its pre-purchase value.
+  }, [listing.id, listing.status, listing.remaining_packs]);
 
   const remaining = live?.remaining_packs ?? listing.remaining_packs ?? 0;
   // Live stock (fetched separately) can hit zero moments before the listing
@@ -905,7 +915,6 @@ function MyShopTab() {
 
   const emptySlots = slots.filter((s) => s.status === 'empty');
   const nextSlotCost = shopSlotCost(shop.slots_purchased + 1);
-  const myPurchaseIds = new Set(myRatings.map((r) => r.purchase_id));
 
   return (
     <div>
@@ -1135,7 +1144,6 @@ function MyShopTab() {
           </div>
         )}
       </div>
-      {!myPurchaseIds && null}
     </div>
   );
 }
@@ -1323,6 +1331,15 @@ function MysteryBuilderPanel({
   const [validation, setValidation] = useState<MysteryPoolValidation | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState('');
+
+  // Any edit to the pool invalidates a previous PREVIEW POOL result — without
+  // this, a seller could validate a pool, then swap cards out and submit the
+  // modified pool with the stale "✓ Valid" gate still open.
+  const handlePoolChange = (next: ShopListingCardItem[]) => {
+    setPool(next);
+    setValidation(null);
+    setCheckError('');
+  };
 
   useEffect(() => {
     setSlotSpecs((prev) => {
@@ -1515,7 +1532,12 @@ function MysteryBuilderPanel({
               of {template.pack_size}.
             </div>
           )}
-          <CardStackPicker collection={collection} decks={decks} items={pool} onChange={setPool} />
+          <CardStackPicker
+            collection={collection}
+            decks={decks}
+            items={pool}
+            onChange={handlePoolChange}
+          />
           <div className="flex flex-wrap gap-3 items-center mb-2">
             <label className="flex items-center gap-2 text-xs font-bold">
               Price per pack

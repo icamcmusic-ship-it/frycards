@@ -131,6 +131,9 @@ export interface Player {
    * (set in startTurn, cleared in finishEndPhase) when they qualified —
    * grants +1 ATK to all their Units (see effAtk) on top of the bonus die. */
   momentumActive: boolean;
+  /** v4.7 Fatigue: escalating damage taken per empty-deck Draw Phase
+   * (1, then 2, then 3, ...) — see startTurn's Draw Phase. */
+  fatigue: number;
 }
 
 /** v4.2 Snap: the Reroll Phase window closes (and the Placement window opens)
@@ -257,7 +260,9 @@ export function effMaxHp(g: Game, u: Inst): number {
   if (u.def.type === 'Unit' && p.location?.def.locPassive === 'HP_ALL') {
     loc = LOC_PASSIVE_FLAT * locPassiveMultiplier(g, u);
   }
-  return Math.max(0, (u.def.hp || 0) + u.permHp + loc);
+  const anchor =
+    u.def.type === 'Unit' && hasKw(u.def, 'Anchor') ? SIM_TUNING.anchorHpBonus : 0;
+  return Math.max(0, (u.def.hp || 0) + u.permHp + loc + anchor);
 }
 export function remainingHp(g: Game, u: Inst): number {
   return effMaxHp(g, u) - u.damage;
@@ -269,8 +274,37 @@ export function hasUnspentWard(target: Inst): boolean {
 }
 
 /** v4.4: remaining Steel X absorption this turn, or 0 if this card has none. */
+/**
+ * v4.7 sim-only ablation knobs. Production code never mutates these — they
+ * exist so the ablation harness (scripts/simulate-ablation.ts) can isolate
+ * which mechanic actually powers an overperforming archetype by turning one
+ * dial per arm, instead of guessing from aggregate keyword win rates (the
+ * v4.6 findings §5.1/§5.2 lesson: three straight passes of lever-pulling on
+ * Avenge failed because the archetype's label wasn't its engine). Defaults
+ * MUST equal live behavior.
+ */
+export const SIM_TUNING = {
+  /** cap in tollReduction() — live value 3. */
+  tollCap: 3,
+  /** lifetime Avenge +1/+1 cap — live value AVENGE_CAP. */
+  avengeCap: 2,
+  /** multiplier on Steel X absorption — live value 1. */
+  steelMult: 1,
+  /** multiplier on all Mend values — live value 1. */
+  mendMult: 1,
+  /** empty-deck Draw Phase rule — 'loss' (§9 instant deck-out) or 'fatigue'
+   * (escalating 1, 2, 3... Leader damage per missed draw). */
+  deckout: 'fatigue' as 'loss' | 'fatigue',
+  /** v4.7 candidate: Anchor's one-time full-ramp bonus also draws a card. */
+  anchorCapBonusDraw: false,
+  /** v4.7 candidate: flat bonus HP on Anchor-keyword Units (they must
+   * survive on board for the ramp to exist at all). */
+  anchorHpBonus: 0,
+};
+
 export function steelRemaining(target: Inst): number {
-  return Math.max(0, (target.def.steel?.x || 0) - target.steelUsed);
+  const x = Math.floor((target.def.steel?.x || 0) * SIM_TUNING.steelMult);
+  return Math.max(0, x - target.steelUsed);
 }
 
 /**
@@ -380,6 +414,7 @@ function applyAnchorCapBonus(g: Game, p: Player, c: Inst) {
     c.permAtk += 2;
     c.permHp += 2;
     g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +2/+2.`);
+    if (SIM_TUNING.anchorCapBonusDraw) drawCards(g, p, 1);
   }
 }
 
@@ -412,7 +447,7 @@ export function tollReduction(g: Game, ownerId: string): number {
   // Same "ramp, not a collapse" cap Anchor uses: uncapped, a wide Toll board
   // could zero out an entire class of face damage (Sap, Pierce overflow,
   // Crescendo burn) at once rather than just blunting it.
-  return Math.min(3, total);
+  return Math.min(SIM_TUNING.tollCap, total);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +531,7 @@ export function newGame(
       deck,
       hand: [],
       discard: [],
+      fatigue: 0,
       banished: [],
       staging: [],
       board: [],
@@ -585,7 +621,7 @@ export function cleanupDeaths(g: Game) {
     for (const u of survivors) {
       if (u.def.avenge) {
         u.avengeStacks = u.avengeStacks || 0;
-        const gain = Math.min(dead.length, Math.max(0, AVENGE_CAP - u.avengeStacks));
+        const gain = Math.min(dead.length, Math.max(0, SIM_TUNING.avengeCap - u.avengeStacks));
         if (gain > 0) {
           u.permAtk += gain;
           u.permHp += gain;
@@ -697,7 +733,7 @@ export function applyEffect(
     // per turn too — "from any source" per its rules text, not attacks-only
     // like Bulwark.
     if (hostile && t.def.type === 'Unit' && t.def.steel) {
-      const absorbed = Math.min(amount, Math.max(0, t.def.steel.x - t.steelUsed));
+      const absorbed = Math.min(amount, steelRemaining(t));
       if (absorbed > 0) {
         t.steelUsed += absorbed;
         g.stats.steelAbsorbed += absorbed;
@@ -752,7 +788,8 @@ export function applyEffect(
         t = findFor(eff.target, targetIid);
         if (!t && eff.target === 'friendlyAny') t = p.leader;
       }
-      if (t && t.owner === ownerId) t.damage = Math.max(0, t.damage - v);
+      if (t && t.owner === ownerId)
+        t.damage = Math.max(0, t.damage - Math.floor(v * SIM_TUNING.mendMult));
       break;
     }
     case 'draw':
@@ -853,12 +890,26 @@ export function startTurn(g: Game) {
   const isFirstPlayerFirstTurn = g.turn === 1;
   if (!isFirstPlayerFirstTurn) {
     if (p.deck.length === 0) {
-      // Deck-out loss (§9).
-      g.winner = opponentOf(g, p.id).id;
-      g.log.push(`${p.id} decked out.`);
-      return;
+      if (SIM_TUNING.deckout === 'loss') {
+        // Deck-out loss (§9, pre-v4.7).
+        g.winner = opponentOf(g, p.id).id;
+        g.log.push(`${p.id} decked out.`);
+        return;
+      }
+      // v4.7 Fatigue: escalating Leader damage (1, then 2, then 3, ...)
+      // instead of an instant loss. The v4.7 ablation showed the four
+      // dominant "durability" archetypes weren't powered by their labeled
+      // keywords at all — 24% of all games ended in instant deckouts, and
+      // the instant-loss rule made every card-draw effect a liability in
+      // long games while unit-heavy grinders won attrition by default.
+      p.fatigue += 1;
+      g.log.push(`${p.id} is out of cards — fatigue ${p.fatigue} damage.`);
+      p.leader.damage += p.fatigue;
+      checkWin(g);
+      if (g.winner) return;
+    } else {
+      p.hand.push(p.deck.pop()!);
     }
-    p.hand.push(p.deck.pop()!);
   }
 
   // Roll Phase. v4.4 Momentum: a losing player — Leader at or below half HP
@@ -1730,7 +1781,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     if (tgt.def.steel) {
       const absorbed = Math.min(
         dmgToTarget,
-        Math.max(0, tgt.def.steel.x - tgt.steelUsed),
+        steelRemaining(tgt),
         STEEL_BULWARK_CAP - prevented,
       );
       if (absorbed > 0) {
@@ -1784,7 +1835,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   if (att.def.steel) {
     const absorbed = Math.min(
       retaliation,
-      Math.max(0, att.def.steel.x - att.steelUsed),
+      steelRemaining(att),
       STEEL_BULWARK_CAP - retPrevented,
     );
     if (absorbed > 0) {

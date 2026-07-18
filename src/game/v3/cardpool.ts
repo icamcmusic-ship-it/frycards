@@ -230,8 +230,20 @@ function mapUnit(c: CardTemplate): CardDef {
   // 58.6% -> 29.7%, without helping the straight decks it was meant to fix,
   // since almost no straight-gated Units exist. Surgical beats sweeping.)
   const isTwin = keywords.includes('Twin');
+  // v4.7: Twin bodies were budgeted off the legacy threshold, then printed
+  // at threshold-1 with full stats PLUS a twinBonus rider and a staged
+  // passive — and under the 'sameTurn' Twin mode a matching pair is nearly
+  // as easy as AnyPair (99.9% hit rate). Twin topped the keyword table
+  // (58.1%) and both Twin-labeled archetypes beat 74% with Location decks;
+  // Lurking Coral-Prowler was a 9/8 for a printed threshold of 4. Budget
+  // off the ACTUAL printed cast threshold instead (see the Twin block
+  // below: min(5, max(2, threshold-1))).
   const D =
-    !isTwin && cost.kind === 'exact' ? Math.min(threshold, costDifficulty(cost)) : threshold;
+    !isTwin && cost.kind === 'exact'
+      ? Math.min(threshold, costDifficulty(cost))
+      : isTwin
+        ? Math.min(5, Math.max(2, threshold - 1))
+        : threshold;
   const budget = 2 + Math.round(D * 2) + (tier >= 4 ? 2 : 0);
   const bias = (hash(c.id) >> 3) % 3; // 0 aggro, 1 balanced, 2 defensive
   let atk =
@@ -260,6 +272,15 @@ function mapUnit(c: CardTemplate): CardDef {
   // conditional.
   if (primaryKw === 'Frenzy') {
     atk += 2;
+  }
+  // v4.7: Anchor bodies must SURVIVE on board for the ramp to exist at all,
+  // and the pool's cheap Anchor units were glass (4/2 exact-4 walls that die
+  // to everything). The v4.7 ablation measured +2 HP on Anchor Units as the
+  // single biggest recovery for the roster-floor ramp archetypes (Abyss
+  // Excavate Ramp 14.4% -> 39.2% under the fatigue rule; every Anchor deck
+  // improved) while barely moving the top decks.
+  if (keywords.includes('Anchor')) {
+    hp += 2;
   }
 
   const def: CardDef = {
@@ -368,7 +389,12 @@ function mapUnit(c: CardTemplate): CardDef {
   // Sap, Pierce overflow) — the balance-sim answer to an aggression-dominant
   // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
   if (tier >= 2 && hash(c.id) % 9 === 4) {
-    def.steel = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
+    // v4.7: 2/2/3 by tier -> 1/1/2 — the ablation harness measured halved
+    // Steel as the ONLY keyword dial that moved the two Steel-labeled
+    // durability decks (Steel-Scrap 82->71, Ward-Steel 79->71) after Toll,
+    // Avenge and Mend dials all measured ~zero. Steel refreshes every turn,
+    // so each point is worth far more than a point of HP.
+    def.steel = { x: 1 + (tier >= 4 ? 1 : 0) };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }
   // v4.4: two named cards manually granted Steel as a discrete identity

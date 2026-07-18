@@ -12,6 +12,18 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Fatigue Update',
+    items: [
+      'Big rule change: running out of cards no longer loses the game instantly. Instead your Leader takes growing Fatigue damage (1, then 2, then 3...) each turn you cannot draw. A quarter of all simulated games were ending on the old sudden-death rule, and it quietly punished every card-draw effect.',
+      'Balance pass (verified across 45,000+ simulated games): Leader win rates are the closest ever measured. Twin cards were over-statted for their real cost and came down; Steel now absorbs less per turn; Anchor units gained +2 HP so ramp decks can actually survive to ramp.',
+      'The CPU got smarter: it accounts for Toll before going face, saves its board-wide-buff Ultimate until it has a board, and stops paying cards to re-cast cheap Echo spells.',
+      'Even fancier premium cards: Ultra-Rares now print with an engraved "Gilded Reliquary" frame with a moving light-trace, and Mythics with a "Molten Sovereign" treatment — magma-vein borders, a flame-crown sigil, and embossed stat gems. Tilt them in the inspector for the full effect.',
+      'Bug fixes in matches: the target picker no longer offers targets the Shinobi Leader rule forbids, Echo with an empty hand no longer gets stuck, Bind shows a pending chain badge the turn it lands, and How to Play now matches the current rules (including Fatigue).',
+      'Bug fixes in menus: buttons no longer accidentally submit the sign-in form, auction/fixed-price sell forms no longer interfere with each other, mystery-pack pools must be re-validated after edits, and bids below the 5% minimum raise are caught before they reach the server.',
+      'Quality of life: Escape closes more dialogs, stale notices clear when switching store tabs, and pack counters update immediately after purchases.',
+    ],
+  },
+  {
     version: 'Balance & Bug-Hunt Update',
     items: [
       'Big balance pass, verified across three full 22,560-game simulations: Leader win rates are the closest they have ever been (top five within 2 points). Full details in the rulebook changelog.',

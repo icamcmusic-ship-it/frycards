@@ -174,7 +174,7 @@ export function NewsCenterScreen({
           <div className="flex flex-col gap-2">
             {feed.map((f) => (
               <div
-                key={`${f.rarity}-${f.serial_number}`}
+                key={`${f.card_id}-${f.rarity}-${f.serial_number}`}
                 className="flex items-center gap-3 ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] px-3 py-2"
               >
                 {f.image_url && (

@@ -23,6 +23,212 @@ export function kwList(def: CardDef): string[] {
   return def.keywords || [];
 }
 
+/**
+ * v4.7 premium templates — Ultra-Rare "Gilded Reliquary" and Mythic "Molten
+ * Sovereign". These styles are injected from this component (rather than
+ * index.css) so the whole premium template system lives in one file with the
+ * markup that uses it. Injected exactly once per document.
+ *
+ * Performance rules baked in:
+ * - Grid-safe layers (filigree stroke-trace, crest pulse) animate only
+ *   opacity/stroke-dashoffset — cheap even with dozens of cards on screen.
+ * - Expensive layers (prismatic conic sheen, heat shimmer) are mounted at
+ *   opacity 0 and only fade in on :hover of the card (or when a container
+ *   opts in via .premium-boost, which the 3D inspector sets), so a
+ *   collection grid never runs them all at once.
+ * - Everything honors prefers-reduced-motion: animations stop and the
+ *   hover-gated layers settle to a faint static state.
+ */
+const PREMIUM_STYLE_ID = 'frycards-premium-templates-v47';
+const PREMIUM_CSS = `
+/* ---- Ultra-Rare "Gilded Reliquary" ---- */
+@keyframes ur-trace-kf {
+  to { stroke-dashoffset: -72; }
+}
+.ur-filigree { pointer-events: none; }
+.ur-filigree .ur-trace {
+  fill: none;
+  stroke: #ffe9a3;
+  stroke-width: 0.9;
+  stroke-dasharray: 10 8;
+  animation: ur-trace-kf 7s linear infinite;
+  opacity: 0.9;
+}
+.ur-filigree .ur-line {
+  fill: none;
+  stroke: #d4af37;
+  stroke-width: 0.7;
+  opacity: 0.85;
+}
+.ur-filigree .ur-orn { fill: #d4af37; stroke: #8a6d1f; stroke-width: 0.4; }
+@keyframes ur-prisma-kf {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.ur-prisma {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  background: linear-gradient(115deg,
+    rgba(255, 233, 163, 0.0) 10%,
+    rgba(255, 215, 90, 0.45) 30%,
+    rgba(255, 255, 255, 0.55) 42%,
+    rgba(212, 175, 55, 0.4) 55%,
+    rgba(255, 233, 163, 0.0) 75%);
+  background-size: 240% 240%;
+  animation: ur-prisma-kf 3.4s ease-in-out infinite;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.premium-card:hover .ur-prisma,
+.premium-boost .ur-prisma { opacity: 1; }
+
+/* ---- Mythic "Molten Sovereign" ---- */
+@keyframes my-magma-kf {
+  0% { background-position: 0% 100%; filter: hue-rotate(0deg); }
+  50% { background-position: 100% 0%; filter: hue-rotate(-12deg); }
+  100% { background-position: 0% 100%; filter: hue-rotate(0deg); }
+}
+.my-magma {
+  /* slow-drifting magma veins around the card edge — painted as a border-
+     hugging frame (masked center) so the art/text stay untouched */
+  background:
+    linear-gradient(130deg, #e11d2e, #ffb300, #7a1420, #ff6a00, #e11d2e);
+  background-size: 320% 320%;
+  animation: my-magma-kf 7s ease-in-out infinite;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  padding: 3px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+@keyframes my-crest-kf {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+.my-crest { animation: my-crest-kf 2.6s ease-in-out infinite; pointer-events: none; }
+@keyframes my-heat-kf {
+  0% { background-position: 50% 120%; }
+  100% { background-position: 50% -40%; }
+}
+.my-heat {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  background:
+    radial-gradient(60% 35% at 30% 80%, rgba(255, 179, 0, 0.5) 0%, transparent 70%),
+    radial-gradient(50% 30% at 75% 60%, rgba(225, 29, 46, 0.45) 0%, transparent 70%);
+  background-size: 100% 60%, 100% 80%;
+  background-repeat: repeat-y;
+  animation: my-heat-kf 3.2s linear infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.premium-card:hover .my-heat,
+.premium-boost .my-heat { opacity: 1; }
+/* Embossed stat gem — Mythic-exclusive faceted look for ATK/HP chips */
+.my-gem {
+  background-image: linear-gradient(160deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.18) 100%) !important;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 233, 163, 0.7),
+    inset 0 -1px 2px rgba(122, 20, 32, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  border-color: #8a6d1f !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ur-filigree .ur-trace,
+  .ur-prisma,
+  .my-magma,
+  .my-crest,
+  .my-heat { animation: none; }
+  .premium-card:hover .ur-prisma,
+  .premium-boost .ur-prisma,
+  .premium-card:hover .my-heat,
+  .premium-boost .my-heat { opacity: 0.25; }
+}
+`;
+
+function ensurePremiumStyles(): void {
+  if (typeof document === 'undefined' || document.getElementById(PREMIUM_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = PREMIUM_STYLE_ID;
+  el.textContent = PREMIUM_CSS;
+  document.head.appendChild(el);
+}
+
+ensurePremiumStyles();
+
+/** Inline-SVG gold filigree frame for Ultra-Rare (full tier only): a double
+ * hairline border with cut-corner geometry, diamond ornaments at the side
+ * midpoints, and an animated light-trace running along the inner line.
+ * Non-uniform viewBox scaling is fine — everything drawn is decorative
+ * line-work meant to hug the card edges. */
+function UltraFiligree() {
+  return (
+    <svg
+      aria-hidden
+      className="ur-filigree absolute inset-0 w-full h-full z-20"
+      viewBox="0 0 100 140"
+      preserveAspectRatio="none"
+    >
+      {/* outer hairline with cut corners */}
+      <path
+        className="ur-line"
+        d="M 7 1.5 L 93 1.5 L 98.5 7 L 98.5 133 L 93 138.5 L 7 138.5 L 1.5 133 L 1.5 7 Z"
+      />
+      {/* inner animated trace, echoing the cut-corner octagon */}
+      <path
+        className="ur-trace"
+        d="M 8.5 3.5 L 91.5 3.5 L 96.5 8.5 L 96.5 131.5 L 91.5 136.5 L 8.5 136.5 L 3.5 131.5 L 3.5 8.5 Z"
+      />
+      {/* corner cut accents */}
+      <path className="ur-line" d="M 1.5 10 L 10 1.5" />
+      <path className="ur-line" d="M 90 1.5 L 98.5 10" />
+      <path className="ur-line" d="M 98.5 130 L 90 138.5" />
+      <path className="ur-line" d="M 10 138.5 L 1.5 130" />
+      {/* side-midpoint diamond ornaments */}
+      <path className="ur-orn" d="M 1.5 70 L 4 67 L 6.5 70 L 4 73 Z" />
+      <path className="ur-orn" d="M 93.5 70 L 96 67 L 98.5 70 L 96 73 Z" />
+    </svg>
+  );
+}
+
+/** Inline-SVG crest for Mythic (full tier only): a small embossed flame-crown
+ * sigil at the top-center of the frame plus faceted corner fangs — unique
+ * frame geometry no other rarity has. Pulses gently via .my-crest. */
+function MythicCrest() {
+  return (
+    <svg
+      aria-hidden
+      className="my-crest absolute inset-0 w-full h-full z-20"
+      viewBox="0 0 100 140"
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <linearGradient id="myGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffe9a3" />
+          <stop offset="1" stopColor="#e11d2e" />
+        </linearGradient>
+      </defs>
+      {/* corner fangs */}
+      <path d="M 0 0 L 9 0 L 0 7 Z" fill="url(#myGold)" opacity="0.9" />
+      <path d="M 100 0 L 91 0 L 100 7 Z" fill="url(#myGold)" opacity="0.9" />
+      <path d="M 0 140 L 9 140 L 0 133 Z" fill="url(#myGold)" opacity="0.9" />
+      <path d="M 100 140 L 91 140 L 100 133 Z" fill="url(#myGold)" opacity="0.9" />
+      {/* flame-crown sigil, top center */}
+      <path
+        d="M 44 0 L 45.5 3.2 L 47.5 0.8 L 48.8 3.6 L 50 0.4 L 51.2 3.6 L 52.5 0.8 L 54.5 3.2 L 56 0 Z"
+        fill="url(#myGold)"
+        stroke="#7a1420"
+        strokeWidth="0.35"
+      />
+    </svg>
+  );
+}
+
 /** Small per-type glyph shown next to the name — a quick visual "what is this" cue. */
 const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> = {
   Leader: Crown,
@@ -289,6 +495,7 @@ function StatChip({
   printed,
   tier,
   tint,
+  emboss,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value?: number;
@@ -300,6 +507,9 @@ function StatChip({
   printed?: number;
   tier: CardSize;
   tint: string;
+  /** v4.7 Mythic-exclusive: render the chip as an embossed faceted "stat
+   * gem" (gold bevel + inner shadow) instead of the flat tinted pill. */
+  emboss?: boolean;
 }) {
   const textClass =
     tier === 'full'
@@ -321,6 +531,7 @@ function StatChip({
     <span
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full font-mono font-black border',
+        emboss && 'my-gem',
         textClass,
       )}
       style={{
@@ -1071,6 +1282,10 @@ export function CardFace({
         // element causes the two animations to visibly stutter against each
         // other, so a mythic foil gets only the (already more intense) frame.
         isFoil && !dimmed && !mythic && 'foil-glow',
+        // v4.7: opts this card into the hover-gated premium layers
+        // (.ur-prisma / .my-heat) — cheap at rest, full effect on hover or
+        // inside a .premium-boost container (the 3D inspector).
+        (ultra || mythic) && !dimmed && 'premium-card',
       )}
     >
       {/* Corner gem — a small decorative flourish marking Rare+ prints,
@@ -1350,6 +1565,7 @@ export function CardFace({
                   printed={def.atk}
                   tier={size}
                   tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
+                  emboss={mythic}
                 />
                 <StatChip
                   icon={Heart}
@@ -1364,12 +1580,13 @@ export function CardFace({
                         ? '#16A34A'
                         : '#22C55E'
                   }
+                  emboss={mythic}
                 />
               </span>
             ) : (
               <span className="flex items-center gap-1 shrink-0">
-                <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" />
-                <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" />
+                <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" emboss={mythic} />
+                <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" emboss={mythic} />
               </span>
             ))}
           {def.type === 'Leader' && (
@@ -1384,6 +1601,7 @@ export function CardFace({
                     ? 'var(--c-red)'
                     : '#22C55E'
                 }
+                emboss={mythic}
               />
             </span>
           )}
@@ -1509,18 +1727,45 @@ export function CardFace({
       {ultra && !dimmed && (
         <>
           <div aria-hidden className="ultra-sparkle absolute inset-0 pointer-events-none" />
-          <div aria-hidden className="absolute inset-0 pointer-events-none z-20">
-            <span className="absolute top-0.5 left-0.5 w-3 h-3 border-t-2 border-l-2 border-[#d4af37] rounded-tl-[3px]" />
-            <span className="absolute top-0.5 right-0.5 w-3 h-3 border-t-2 border-r-2 border-[#d4af37] rounded-tr-[3px]" />
-            <span className="absolute bottom-0.5 left-0.5 w-3 h-3 border-b-2 border-l-2 border-[#d4af37] rounded-bl-[3px]" />
-            <span className="absolute bottom-0.5 right-0.5 w-3 h-3 border-b-2 border-r-2 border-[#d4af37] rounded-br-[3px]" />
-          </div>
+          {/* v4.7 "Gilded Reliquary" (full tier only): engraved cut-corner
+              filigree frame with an animated light-trace, replacing the old
+              plain corner brackets, plus a hover/inspector-gated prismatic
+              gold sheen. Smaller tiers keep just the sparkle + gold frame —
+              hairline SVG line-work turns to mud below ~140px wide, and
+              grids of small cards shouldn't pay for the extra layers. */}
+          {size === 'full' ? (
+            <>
+              <UltraFiligree />
+              <div aria-hidden className="ur-prisma absolute inset-0 z-10" />
+            </>
+          ) : (
+            <div aria-hidden className="absolute inset-0 pointer-events-none z-20">
+              <span className="absolute top-0.5 left-0.5 w-3 h-3 border-t-2 border-l-2 border-[#d4af37] rounded-tl-[3px]" />
+              <span className="absolute top-0.5 right-0.5 w-3 h-3 border-t-2 border-r-2 border-[#d4af37] rounded-tr-[3px]" />
+              <span className="absolute bottom-0.5 left-0.5 w-3 h-3 border-b-2 border-l-2 border-[#d4af37] rounded-bl-[3px]" />
+              <span className="absolute bottom-0.5 right-0.5 w-3 h-3 border-b-2 border-r-2 border-[#d4af37] rounded-br-[3px]" />
+            </div>
+          )}
         </>
       )}
       {/* v4.6 Mythic "Living Inferno": embers rising off the card face, on
           top of the animated red/gold banner and pulsing two-tone frame. */}
       {mythic && !dimmed && (
-        <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
+        <>
+          <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
+          {/* v4.7 "Molten Sovereign" (full tier only): drifting magma-vein
+              border frame (masked to the edge so art/text stay clear), a
+              pulsing flame-crown crest + faceted corner fangs, and a
+              hover/inspector-gated rising heat glow. Embossed stat gems
+              (see StatChip's `emboss`) apply at every tier. */}
+          {size === 'full' && (
+            <>
+              <div aria-hidden className={cn('my-magma absolute inset-0 z-20', cfg.rounded)} />
+              <MythicCrest />
+              <div aria-hidden className="my-heat absolute inset-0 z-10" />
+            </>
+          )}
+        </>
       )}
     </div>
   );
