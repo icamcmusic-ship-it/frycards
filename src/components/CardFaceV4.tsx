@@ -39,115 +39,144 @@ export function kwList(def: CardDef): string[] {
  * - Everything honors prefers-reduced-motion: animations stop and the
  *   hover-gated layers settle to a faint static state.
  */
-const PREMIUM_STYLE_ID = 'frycards-premium-templates-v47';
+const PREMIUM_STYLE_ID = 'frycards-premium-templates-v48';
 const PREMIUM_CSS = `
-/* ---- Ultra-Rare "Gilded Reliquary" ---- */
+/* ---- Ultra-Rare "Aurora Vault" (v4.8) ----
+   Cool iridescence replaces v4.7's gold reliquary: a chromatic teal/violet
+   lattice frame with an orbiting light-trace, plus a hover-gated aurora
+   ribbon that sweeps diagonally across the face. */
 @keyframes ur-trace-kf {
-  to { stroke-dashoffset: -72; }
+  to { stroke-dashoffset: -84; }
 }
 .ur-filigree { pointer-events: none; }
 .ur-filigree .ur-trace {
   fill: none;
-  stroke: #ffe9a3;
+  stroke: #9ff2ff;
   stroke-width: 0.9;
-  stroke-dasharray: 10 8;
-  animation: ur-trace-kf 7s linear infinite;
-  opacity: 0.9;
+  stroke-dasharray: 12 9;
+  animation: ur-trace-kf 6s linear infinite;
+  opacity: 0.95;
+}
+.ur-filigree .ur-trace2 {
+  fill: none;
+  stroke: #d6a6ff;
+  stroke-width: 0.7;
+  stroke-dasharray: 7 14;
+  animation: ur-trace-kf 9s linear infinite reverse;
+  opacity: 0.8;
 }
 .ur-filigree .ur-line {
   fill: none;
-  stroke: #d4af37;
+  stroke: #58c7d8;
   stroke-width: 0.7;
-  opacity: 0.85;
+  opacity: 0.9;
 }
-.ur-filigree .ur-orn { fill: #d4af37; stroke: #8a6d1f; stroke-width: 0.4; }
-@keyframes ur-prisma-kf {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+.ur-filigree .ur-orn { fill: #b388ff; stroke: #2b6f7d; stroke-width: 0.4; }
+@keyframes ur-aurora-kf {
+  0% { background-position: 0% 100%; }
+  50% { background-position: 100% 0%; }
+  100% { background-position: 0% 100%; }
 }
-.ur-prisma {
+.ur-aurora {
   opacity: 0;
   transition: opacity 400ms ease;
   background: linear-gradient(115deg,
-    rgba(255, 233, 163, 0.0) 10%,
-    rgba(255, 215, 90, 0.45) 30%,
-    rgba(255, 255, 255, 0.55) 42%,
-    rgba(212, 175, 55, 0.4) 55%,
-    rgba(255, 233, 163, 0.0) 75%);
-  background-size: 240% 240%;
-  animation: ur-prisma-kf 3.4s ease-in-out infinite;
+    rgba(80, 255, 218, 0) 12%,
+    rgba(80, 255, 218, 0.4) 30%,
+    rgba(140, 120, 255, 0.5) 44%,
+    rgba(255, 255, 255, 0.45) 52%,
+    rgba(64, 200, 255, 0.4) 62%,
+    rgba(80, 255, 218, 0) 80%);
+  background-size: 260% 260%;
+  animation: ur-aurora-kf 4.2s ease-in-out infinite;
   mix-blend-mode: overlay;
   pointer-events: none;
 }
-.premium-card:hover .ur-prisma,
-.premium-boost .ur-prisma { opacity: 1; }
+.premium-card:hover .ur-aurora,
+.premium-boost .ur-aurora { opacity: 1; }
 
-/* ---- Mythic "Molten Sovereign" ---- */
-@keyframes my-magma-kf {
+/* ---- Mythic "Void Eclipse" (v4.8) ----
+   Dark cosmic replaces v4.7's molten sovereign: a slow-rotating nebula
+   border (masked to the edge), a pulsing eclipse-corona sigil, drifting
+   starfield, and a hover-gated violet/crimson corona bloom. */
+@keyframes my-void-kf {
   0% { background-position: 0% 100%; filter: hue-rotate(0deg); }
-  50% { background-position: 100% 0%; filter: hue-rotate(-12deg); }
+  50% { background-position: 100% 0%; filter: hue-rotate(18deg); }
   100% { background-position: 0% 100%; filter: hue-rotate(0deg); }
 }
-.my-magma {
-  /* slow-drifting magma veins around the card edge — painted as a border-
-     hugging frame (masked center) so the art/text stay untouched */
+.my-void {
   background:
-    linear-gradient(130deg, #e11d2e, #ffb300, #7a1420, #ff6a00, #e11d2e);
-  background-size: 320% 320%;
-  animation: my-magma-kf 7s ease-in-out infinite;
+    linear-gradient(130deg, #1b1035, #7b2ff7, #0b0b18, #e11d5e, #2f145e, #1b1035);
+  background-size: 340% 340%;
+  animation: my-void-kf 9s ease-in-out infinite;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   padding: 3px;
-  opacity: 0.85;
+  opacity: 0.9;
   pointer-events: none;
 }
 @keyframes my-crest-kf {
-  0%, 100% { opacity: 0.75; }
+  0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }
 }
-.my-crest { animation: my-crest-kf 2.6s ease-in-out infinite; pointer-events: none; }
-@keyframes my-heat-kf {
-  0% { background-position: 50% 120%; }
-  100% { background-position: 50% -40%; }
+.my-crest { animation: my-crest-kf 3s ease-in-out infinite; pointer-events: none; }
+@keyframes my-stars-kf {
+  0% { background-position: 0% 0%, 50% 20%, 20% 60%; }
+  100% { background-position: -30% 100%, 40% 130%, 5% 170%; }
 }
-.my-heat {
-  opacity: 0;
-  transition: opacity 400ms ease;
-  background:
-    radial-gradient(60% 35% at 30% 80%, rgba(255, 179, 0, 0.5) 0%, transparent 70%),
-    radial-gradient(50% 30% at 75% 60%, rgba(225, 29, 46, 0.45) 0%, transparent 70%);
-  background-size: 100% 60%, 100% 80%;
-  background-repeat: repeat-y;
-  animation: my-heat-kf 3.2s linear infinite;
+.my-stars {
+  /* three parallax layers of pin-prick stars, drawn with radial gradients */
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.9) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 68% 42%, rgba(214,166,255,0.9) 50%, transparent 51%),
+    radial-gradient(1px 1px at 38% 78%, rgba(159,242,255,0.8) 50%, transparent 51%);
+  background-size: 90px 120px, 130px 160px, 70px 110px;
+  animation: my-stars-kf 24s linear infinite;
+  opacity: 0.6;
   mix-blend-mode: screen;
   pointer-events: none;
 }
-.premium-card:hover .my-heat,
-.premium-boost .my-heat { opacity: 1; }
-/* Embossed stat gem — Mythic-exclusive faceted look for ATK/HP chips */
+@keyframes my-corona-kf {
+  0%, 100% { opacity: 0; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+.my-corona {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  background:
+    radial-gradient(45% 30% at 50% 12%, rgba(123, 47, 247, 0.55) 0%, transparent 70%),
+    radial-gradient(60% 35% at 50% 95%, rgba(225, 29, 94, 0.45) 0%, transparent 72%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.premium-card:hover .my-corona,
+.premium-boost .my-corona { opacity: 1; animation: my-corona-kf 3.6s ease-in-out infinite; }
+/* Embossed stat gem — Mythic-exclusive faceted look for ATK/HP chips,
+   restyled amethyst for the Void Eclipse template */
 .my-gem {
-  background-image: linear-gradient(160deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.18) 100%) !important;
+  background-image: linear-gradient(160deg, rgba(255,255,255,0.35) 0%, rgba(214,166,255,0.12) 45%, rgba(10,6,24,0.35) 100%) !important;
   box-shadow:
-    inset 0 1px 1px rgba(255, 233, 163, 0.7),
-    inset 0 -1px 2px rgba(122, 20, 32, 0.55),
-    0 1px 2px rgba(0, 0, 0, 0.35);
-  border-color: #8a6d1f !important;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+    inset 0 1px 1px rgba(214, 166, 255, 0.75),
+    inset 0 -1px 2px rgba(43, 16, 78, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  border-color: #7b2ff7 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ur-filigree .ur-trace,
-  .ur-prisma,
-  .my-magma,
+  .ur-filigree .ur-trace2,
+  .ur-aurora,
+  .my-void,
   .my-crest,
-  .my-heat { animation: none; }
-  .premium-card:hover .ur-prisma,
-  .premium-boost .ur-prisma,
-  .premium-card:hover .my-heat,
-  .premium-boost .my-heat { opacity: 0.25; }
+  .my-stars,
+  .my-corona { animation: none; }
+  .premium-card:hover .ur-aurora,
+  .premium-boost .ur-aurora,
+  .premium-card:hover .my-corona,
+  .premium-boost .my-corona { opacity: 0.25; }
 }
 `;
 
@@ -161,11 +190,11 @@ function ensurePremiumStyles(): void {
 
 ensurePremiumStyles();
 
-/** Inline-SVG gold filigree frame for Ultra-Rare (full tier only): a double
- * hairline border with cut-corner geometry, diamond ornaments at the side
- * midpoints, and an animated light-trace running along the inner line.
- * Non-uniform viewBox scaling is fine — everything drawn is decorative
- * line-work meant to hug the card edges. */
+/** Inline-SVG chromatic lattice frame for Ultra-Rare "Aurora Vault" (full
+ * tier only): a cut-corner double hairline in teal, TWO counter-rotating
+ * light-traces (cyan clockwise, violet counter-clockwise), and faceted gem
+ * ornaments at the side midpoints. Non-uniform viewBox scaling is fine —
+ * everything drawn is decorative line-work meant to hug the card edges. */
 function UltraFiligree() {
   return (
     <svg
@@ -179,26 +208,33 @@ function UltraFiligree() {
         className="ur-line"
         d="M 7 1.5 L 93 1.5 L 98.5 7 L 98.5 133 L 93 138.5 L 7 138.5 L 1.5 133 L 1.5 7 Z"
       />
-      {/* inner animated trace, echoing the cut-corner octagon */}
+      {/* counter-rotating light traces, echoing the cut-corner octagon */}
       <path
         className="ur-trace"
         d="M 8.5 3.5 L 91.5 3.5 L 96.5 8.5 L 96.5 131.5 L 91.5 136.5 L 8.5 136.5 L 3.5 131.5 L 3.5 8.5 Z"
+      />
+      <path
+        className="ur-trace2"
+        d="M 10 5.5 L 90 5.5 L 94.5 10 L 94.5 130 L 90 134.5 L 10 134.5 L 5.5 130 L 5.5 10 Z"
       />
       {/* corner cut accents */}
       <path className="ur-line" d="M 1.5 10 L 10 1.5" />
       <path className="ur-line" d="M 90 1.5 L 98.5 10" />
       <path className="ur-line" d="M 98.5 130 L 90 138.5" />
       <path className="ur-line" d="M 10 138.5 L 1.5 130" />
-      {/* side-midpoint diamond ornaments */}
-      <path className="ur-orn" d="M 1.5 70 L 4 67 L 6.5 70 L 4 73 Z" />
-      <path className="ur-orn" d="M 93.5 70 L 96 67 L 98.5 70 L 96 73 Z" />
+      {/* side-midpoint faceted gems */}
+      <path className="ur-orn" d="M 1.5 70 L 4 66.5 L 6.5 70 L 4 73.5 Z" />
+      <path className="ur-orn" d="M 93.5 70 L 96 66.5 L 98.5 70 L 96 73.5 Z" />
+      <path className="ur-orn" d="M 47 1.5 L 50 0 L 53 1.5 L 50 3 Z" />
+      <path className="ur-orn" d="M 47 138.5 L 50 137 L 53 138.5 L 50 140 Z" />
     </svg>
   );
 }
 
-/** Inline-SVG crest for Mythic (full tier only): a small embossed flame-crown
- * sigil at the top-center of the frame plus faceted corner fangs — unique
- * frame geometry no other rarity has. Pulses gently via .my-crest. */
+/** Inline-SVG sigil for Mythic "Void Eclipse" (full tier only): an eclipse
+ * disc with a thin corona ring at the top-center of the frame plus beveled
+ * corner shards — unique frame geometry no other rarity has. Pulses gently
+ * via .my-crest. */
 function MythicCrest() {
   return (
     <svg
@@ -208,23 +244,22 @@ function MythicCrest() {
       preserveAspectRatio="none"
     >
       <defs>
-        <linearGradient id="myGold" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffe9a3" />
-          <stop offset="1" stopColor="#e11d2e" />
+        <linearGradient id="myVoid" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#d6a6ff" />
+          <stop offset="1" stopColor="#e11d5e" />
         </linearGradient>
       </defs>
-      {/* corner fangs */}
-      <path d="M 0 0 L 9 0 L 0 7 Z" fill="url(#myGold)" opacity="0.9" />
-      <path d="M 100 0 L 91 0 L 100 7 Z" fill="url(#myGold)" opacity="0.9" />
-      <path d="M 0 140 L 9 140 L 0 133 Z" fill="url(#myGold)" opacity="0.9" />
-      <path d="M 100 140 L 91 140 L 100 133 Z" fill="url(#myGold)" opacity="0.9" />
-      {/* flame-crown sigil, top center */}
-      <path
-        d="M 44 0 L 45.5 3.2 L 47.5 0.8 L 48.8 3.6 L 50 0.4 L 51.2 3.6 L 52.5 0.8 L 54.5 3.2 L 56 0 Z"
-        fill="url(#myGold)"
-        stroke="#7a1420"
-        strokeWidth="0.35"
-      />
+      {/* corner shards */}
+      <path d="M 0 0 L 9 0 L 0 7 Z" fill="url(#myVoid)" opacity="0.9" />
+      <path d="M 100 0 L 91 0 L 100 7 Z" fill="url(#myVoid)" opacity="0.9" />
+      <path d="M 0 140 L 9 140 L 0 133 Z" fill="url(#myVoid)" opacity="0.9" />
+      <path d="M 100 140 L 91 140 L 100 133 Z" fill="url(#myVoid)" opacity="0.9" />
+      {/* eclipse disc + corona ring, top center */}
+      <circle cx="50" cy="2.4" r="2" fill="#0b0b18" stroke="url(#myVoid)" strokeWidth="0.6" />
+      <circle cx="50" cy="2.4" r="3.4" fill="none" stroke="#7b2ff7" strokeWidth="0.35" opacity="0.8" />
+      {/* corona flares flanking the disc */}
+      <path d="M 44.5 2.4 L 46.5 1.6 L 46.5 3.2 Z" fill="url(#myVoid)" opacity="0.85" />
+      <path d="M 55.5 2.4 L 53.5 1.6 L 53.5 3.2 Z" fill="url(#myVoid)" opacity="0.85" />
     </svg>
   );
 }
@@ -1727,16 +1762,16 @@ export function CardFace({
       {ultra && !dimmed && (
         <>
           <div aria-hidden className="ultra-sparkle absolute inset-0 pointer-events-none" />
-          {/* v4.7 "Gilded Reliquary" (full tier only): engraved cut-corner
-              filigree frame with an animated light-trace, replacing the old
-              plain corner brackets, plus a hover/inspector-gated prismatic
-              gold sheen. Smaller tiers keep just the sparkle + gold frame —
-              hairline SVG line-work turns to mud below ~140px wide, and
-              grids of small cards shouldn't pay for the extra layers. */}
+          {/* v4.8 "Aurora Vault" (full tier only): chromatic cut-corner
+              lattice with two counter-rotating light-traces, plus a hover/
+              inspector-gated aurora ribbon sweep. Smaller tiers keep just
+              the sparkle + frame — hairline SVG line-work turns to mud
+              below ~140px wide, and grids of small cards shouldn't pay for
+              the extra layers. */}
           {size === 'full' ? (
             <>
               <UltraFiligree />
-              <div aria-hidden className="ur-prisma absolute inset-0 z-10" />
+              <div aria-hidden className="ur-aurora absolute inset-0 z-10" />
             </>
           ) : (
             <div aria-hidden className="absolute inset-0 pointer-events-none z-20">
@@ -1753,16 +1788,18 @@ export function CardFace({
       {mythic && !dimmed && (
         <>
           <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
-          {/* v4.7 "Molten Sovereign" (full tier only): drifting magma-vein
+          {/* v4.8 "Void Eclipse" (full tier only): slow-rotating nebula
               border frame (masked to the edge so art/text stay clear), a
-              pulsing flame-crown crest + faceted corner fangs, and a
-              hover/inspector-gated rising heat glow. Embossed stat gems
+              pulsing eclipse-corona sigil + beveled corner shards, a
+              drifting parallax starfield, and a hover/inspector-gated
+              violet/crimson corona bloom. Embossed amethyst stat gems
               (see StatChip's `emboss`) apply at every tier. */}
           {size === 'full' && (
             <>
-              <div aria-hidden className={cn('my-magma absolute inset-0 z-20', cfg.rounded)} />
+              <div aria-hidden className={cn('my-void absolute inset-0 z-20', cfg.rounded)} />
               <MythicCrest />
-              <div aria-hidden className="my-heat absolute inset-0 z-10" />
+              <div aria-hidden className="my-stars absolute inset-0 z-10" />
+              <div aria-hidden className="my-corona absolute inset-0 z-10" />
             </>
           )}
         </>

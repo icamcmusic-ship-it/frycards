@@ -35,6 +35,7 @@ import {
   autoTarget,
   defaultDiscardChoice,
   rarityTier,
+  SIM_TUNING,
 } from './engine';
 import { CardDef, hasKw } from './cards';
 
@@ -576,7 +577,8 @@ function playPlacement(g: Game, p: Player) {
             costWeight(b.def) - costWeight(a.def),
         );
       for (const c of echoes) {
-        const waiveFodder = rarityTier(c.def.rarity) === 'mid';
+        const waiveFodder =
+          SIM_TUNING.echoWaiveAllFodder || rarityTier(c.def.rarity) !== 'low';
         if (!waiveFodder && p.hand.length < 2) continue;
         // v4.7: recasting a LOW-rarity Echo card costs a die AND a real card
         // from hand — the decision table has measured it as a consistent
@@ -827,9 +829,95 @@ export function playTurn(g: Game) {
   }
   playPlacement(g, p);
   if (g.winner) return;
+  recordPlacementLapses(g, p);
   comboCheck(g);
   if (g.winner) return;
   playCombat(g, p);
   if (g.winner) return;
+  recordCombatLapses(g, p);
   endTurn(g, defaultDiscardChoice);
+}
+
+/**
+ * v4.8 instrumentation: detect CPU reasoning lapses — recorded into
+ * g.stats.decisions so the harness gets a win-correlation on them for free.
+ * Placement lapses are measured at the END of the Placement Phase (before
+ * Combo Check), because that's the last moment the flagged actions were
+ * still legal — a first version measured after combat and mis-flagged every
+ * Mend hold as a lapse the moment retaliation damage appeared, damage that
+ * did not exist while the ability window was open. These flag turns where
+ * the heuristics demonstrably left value on the table:
+ *  - lapseWastedCastableDie: an unplaced die that could legally pay for a
+ *    non-gated card in hand the AI had no documented reason to hold.
+ *  - lapseIdleLeaderAbility: the Leader's every-turn Ability went unused
+ *    while a qualifying die was about to be pitched.
+ * These are diagnostics, not gameplay — they must never mutate state.
+ */
+function lapse(g: Game, pid: string, key: string) {
+  const d = (g.stats.decisions[pid] ||= {});
+  d[key] = (d[key] || 0) + 1;
+}
+
+function recordPlacementLapses(g: Game, p: Player) {
+  const opp = opponentOf(g, p.id);
+  const unplaced = p.dice.filter((d) => !d.placed).map((d) => d.value);
+  if (unplaced.length > 0) {
+    const maxDie = Math.max(...unplaced);
+    const castable = p.hand.some((c) => {
+      if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
+        return false;
+      const thr = effThreshold(g, p.id, c.def);
+      const payable =
+        c.def.castCostKind === 'exact'
+          ? unplaced.includes(thr)
+          : c.def.castCostKind === 'sum'
+            ? unplaced.reduce((a, b) => a + b, 0) >= thr
+            : maxDie >= thr;
+      if (!payable) return false;
+      // Mirror playPlacement's deliberate holds — those aren't lapses.
+      const eff = c.def.onCast;
+      if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return false;
+      if (
+        (eff?.action === 'sap' || eff?.action === 'destroy' || eff?.action === 'bind') &&
+        eff?.target !== 'enemyLeader' &&
+        eff?.target !== 'anyTarget' &&
+        opp.board.length === 0
+      )
+        return false;
+      if (
+        eff?.action === 'mend' &&
+        p.leader.damage === 0 &&
+        !p.board.some((u) => u.damage > 0)
+      )
+        return false;
+      if (hasKw(c.def, 'Twin')) return false; // deliberate staging economy
+      return true;
+    });
+    if (castable) lapse(g, p.id, 'lapseWastedCastableDie');
+    const ab = p.leader.def.ability;
+    if (ab && !p.leader.abilityUsed && maxDie >= effAbilityThreshold(g, p.leader)) {
+      const eff = ab.effect;
+      const pointless =
+        (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+        ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+          opp.board.length === 0) ||
+        (eff.action === 'draw' && p.hand.length >= 8);
+      if (!pointless) lapse(g, p.id, 'lapseIdleLeaderAbility');
+    }
+  }
+}
+
+/** lapseMissedLethal: unspent attackers whose combined (Toll-adjusted) ATK
+ * was face-lethal with no Guard wall up, yet the game didn't end — measured
+ * after the AI's combat step, when attacking was still legal. */
+function recordCombatLapses(g: Game, p: Player) {
+  const opp = opponentOf(g, p.id);
+  const guardsUp = opp.board.some((u) => hasKw(u.def, 'Guard'));
+  if (!guardsUp && p.turnsTaken > 1) {
+    const toll = tollReduction(g, opp.id);
+    const avail = p.board
+      .filter((u) => canAttack(g, u))
+      .reduce((s, u) => s + Math.max(0, effAtk(g, u) - toll), 0);
+    if (avail >= remainingHp(g, opp.leader)) lapse(g, p.id, 'lapseMissedLethal');
+  }
 }

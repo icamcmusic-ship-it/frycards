@@ -733,6 +733,9 @@ export function GameV4({
   } | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  // v4.8 QoL: the Battle Log is the only record of combos/ward spikes/
+  // fatigue — allow expanding it beyond the 58px strip.
+  const [logExpanded, setLogExpanded] = useState(false);
   // v4.3 hand preview: the hand card currently enlarged above the bottom
   // dock (hover opens it, click pins it so it survives the mouse leaving).
   const [preview, setPreview] = useState<string | null>(null);
@@ -833,11 +836,17 @@ export function GameV4({
   // that click is what triggers the reveal animation, so it reads as the
   // player's own roll rather than numbers just appearing.
   const beginHumanTurn = () => {
+    const fatigueBefore = me.fatigue;
     startTurn(g);
     bump();
     if (g.winner) {
       setStage('over');
       return;
+    }
+    // v4.8 QoL: Fatigue used to be a Battle Log whisper — surface the
+    // escalating self-damage with the same banner treatment big plays get.
+    if (me.fatigue > fatigueBefore) {
+      say(`OUT OF CARDS — Fatigue deals ${me.fatigue} damage (and it keeps climbing)`);
     }
     setRerollSel(new Set());
     setSelDie(null);
@@ -857,7 +866,7 @@ export function GameV4({
   const doRollDice = () => {
     flashPhase('ROLL');
     setStage('rolling');
-    // Dice are already rolled by startTurn — Momentum can make it six, so
+    // Dice are already rolled by startTurn — render however many exist, so
     // animate however many the engine actually dealt.
     setRollingDice(new Set(me.dice.map((_, i) => i)));
     if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
@@ -1548,7 +1557,7 @@ export function GameV4({
     runCpuTurn();
   };
 
-  // End Phase discards down to hand size 6 (§3.7) — the rulebook gives the
+  // End Phase discards down to HAND_LIMIT (§3.7) — the rulebook gives the
   // player the choice of which cards, so route through a picker modal
   // whenever ending the turn would otherwise force a discard. Pitch/Tribute
   // are resolved first since Tribute can draw a card and push the hand over
@@ -2102,11 +2111,23 @@ export function GameV4({
             </span>
           )}
         </div>
-        <div className="flex-1 min-w-[140px] max-h-[58px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
-          <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
-            Battle Log
+        <div
+          className={cn(
+            'flex-1 min-w-[140px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight',
+            logExpanded ? 'max-h-[220px]' : 'max-h-[58px]',
+          )}
+        >
+          <div className="flex items-center justify-between text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
+            <span>Battle Log</span>
+            <button
+              onClick={() => setLogExpanded((e) => !e)}
+              className="text-[8px] px-1 text-[var(--c-yellow)]/80 hover:text-[var(--c-yellow)]"
+              title={logExpanded ? 'Collapse the Battle Log' : 'Expand the Battle Log'}
+            >
+              {logExpanded ? '▾ LESS' : '▴ MORE'}
+            </button>
           </div>
-          {g.log.slice(-40).map((l, i) => (
+          {g.log.slice(logExpanded ? -160 : -40).map((l, i) => (
             <div key={i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
@@ -2635,6 +2656,25 @@ export function GameV4({
                 );
               })}
             </div>
+            <button
+              onClick={() => {
+                // v4.8 QoL: fill the selection with the engine's own default
+                // discard heuristic (duplicates first, then highest cost) —
+                // one click instead of hunting for safe cuts by hand.
+                const picks: string[] = [];
+                let rest = [...me.hand];
+                while (picks.length < forcedDiscard.needed && rest.length > 0) {
+                  const pick = defaultDiscardChoice(rest);
+                  picks.push(pick.iid);
+                  rest = rest.filter((c) => c.iid !== pick.iid);
+                }
+                setForcedDiscard({ needed: forcedDiscard.needed, picks });
+              }}
+              className="heading-font text-xs px-4 py-2 mr-2 ink-border-sm shadow-hard-black-xs btn-pop bg-[var(--c-steel)] text-[var(--c-paper)]"
+              title="Auto-select the suggested discards (spare duplicates, then the most expensive cards)"
+            >
+              SUGGEST
+            </button>
             <button
               onClick={confirmForcedDiscard}
               disabled={forcedDiscard.picks.length !== forcedDiscard.needed}
