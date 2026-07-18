@@ -321,7 +321,18 @@ function mapUnit(c: CardTemplate): CardDef {
       { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
       { threshold: 3, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
     ]);
-    if (hash(c.id) % 3 === 0) def.keywords = [...(def.keywords || []), 'Rally'];
+    if (hash(c.id) % 3 === 0) {
+      def.keywords = [...(def.keywords || []), 'Rally'];
+      // v4.7: Rally cards get their own Ability Slot threshold cheapened by
+      // 1 (min 1) — Rally's whole identity is "reuse a die already resting
+      // on another exhausted Ability Slot," so a Rally card that can't even
+      // clear its OWN first activation easily is dead weight twice over.
+      // Diver Rally Tempo was the one Diver archetype that didn't recover
+      // once the rest of the Leader's kit did; the keyword itself measured
+      // mid-pack (49.7%) while that archetype sat at 25%, pointing at a
+      // curve/floor problem specific to the Rally cards themselves.
+      if (def.ability) def.ability = { ...def.ability, threshold: Math.max(1, def.ability.threshold - 1) };
+    }
   }
 
   // A Combo passive on a slice of units (points toward archetypes).
@@ -384,6 +395,34 @@ function mapUnit(c: CardTemplate): CardDef {
   if (MANUAL_STEEL[c.id] !== undefined && !def.steel) {
     def.steel = { x: MANUAL_STEEL[c.id] };
     def.keywords = [...(def.keywords || []), 'Steel'];
+  }
+  // v4.7: stacking tax, narrowly scoped to the two SPECIFIC keyword pairs
+  // the findings docs identified as the mechanism behind two
+  // still-unresolved dominant archetypes: Steel+Bulwark (the durability
+  // decks) and Avenge+Toll (Shinobi Avenge Grind, confirmed NOT a
+  // round-robin artifact via the new `--isolate` sim mode: 92%+ against a
+  // FIXED opponent roster). Both keyword pairs get layered onto a card
+  // with zero stat cost — unlike Guard/Frenzy, which already carry an
+  // explicit compensating stat adjustment above.
+  //
+  // A first version taxed ANY 2-of-6 sustain-keyword combination
+  // (Guard/Ward/Bulwark/Toll/Avenge/Steel) — verification showed it was
+  // too blunt: it also caught ordinary Guard+Ward / Guard+Avenge commons
+  // that were never part of the problem, collapsing unrelated archetypes
+  // as collateral damage (Mer King Twin Heal 48.6%->36.4%, Avenge Swarm
+  // 62.3%->44.5%, Leader spread widening 17.6pt->20.6pt — worse than
+  // before this fix). Narrowed to the three flagged pairs — Guard+Bulwark
+  // added after a Steel+Bulwark/Avenge+Toll-only version (verified safe,
+  // no collateral damage) turned out too narrow to move Mer King
+  // Guard-Bulwark Turtle at all (its durability comes from Guard+Bulwark
+  // dual-tagged bodies, not Steel+Bulwark ones).
+  let sustainTax = 0;
+  if (def.keywords?.includes('Steel') && def.keywords?.includes('Bulwark')) sustainTax++;
+  if (def.keywords?.includes('Avenge') && def.keywords?.includes('Toll')) sustainTax++;
+  if (def.keywords?.includes('Guard') && def.keywords?.includes('Bulwark')) sustainTax++;
+  if (sustainTax > 0) {
+    def.atk = Math.max(1, (def.atk || 1) - sustainTax);
+    def.hp = Math.max(1, (def.hp || 1) - sustainTax);
   }
   return def;
 }
@@ -773,10 +812,22 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   // Ability nerf above; trimming both matters more than trimming either
   // alone against a durability-stack board that survives to cash in every
   // buff it's given.
+  // v4.7: retargeted from `allFriendlyUnits` to a single `friendlyUnit`
+  // (value 2 -> 3 to keep the single-target version meaningful). Four
+  // rounds of frequency/value/targeting cuts to this Leader's normal
+  // Ability all failed to dent Shinobi Avenge Grind (still 93%+, confirmed
+  // NOT a round-robin artifact via the new `--isolate` sim mode: 92.1%
+  // aggregate against a fixed 47-deck opponent roster). A board-WIDE
+  // once-per-game buff is the one lever that scales *multiplicatively*
+  // with how wide the board already is — exactly backwards on a
+  // 19-Unit grind deck, where it hands out its single biggest lump of
+  // stats to the board that least needs help closing games out. Every
+  // other Leader's Ultimate in the roster is already single-target or a
+  // one-shot Sap/mend/draw; this brings Shinobi's in line with them.
   apex_nanite_shinobi: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'buff', value: 2, target: 'allFriendlyUnits' },
+    effect: { action: 'buff', value: 3, target: 'friendlyUnit' },
   },
 };
 

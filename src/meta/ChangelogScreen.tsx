@@ -12,6 +12,16 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Fine-Tuning Update',
+    items: [
+      'Ultra-Rare and Mythic cards got a much bigger visual upgrade: the Gilded Relic twinkle and Living Inferno embers are now layered, multi-speed effects instead of one flat animation, so premium cards feel noticeably more alive.',
+      'Anchor now also cheapens a card\'s own Ability Slot, not just its Cast Slot — ramp decks built around it finally have something to ramp into.',
+      'Mer King\'s Guard-Bulwark deck came down a notch after cards that stacked two defensive keywords for free got a small stat adjustment.',
+      'Rally cards are now easier to activate on their own, and a few more tuning passes on Toll, Steel/Bulwark, and Shinobi\'s Ultimate ability.',
+      'Leader win rates are the closest they have ever been across three balance updates in a row.',
+    ],
+  },
+  {
     version: 'Balance & Bug-Hunt Update',
     items: [
       'Big balance pass, verified across three full 22,560-game simulations: Leader win rates are the closest they have ever been (top five within 2 points). Full details in the rulebook changelog.',

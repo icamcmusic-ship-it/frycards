@@ -285,8 +285,14 @@ export function steelRemaining(target: Inst): number {
  * use) — dual Steel+Bulwark bodies were the stickiest piece of the
  * durability-stack decks that have topped every sim roster (Steel-Scrap
  * Control 86.0%, Guard-Bulwark Turtle 84.4%, Ward-Steel Wall 83.0%), and
- * both keyword-prevalence and Overrun-strength levers failed to dent them. */
-export const STEEL_BULWARK_CAP = 4;
+ * both keyword-prevalence and Overrun-strength levers failed to dent them.
+ * v4.7: 4 -> 3 — a re-verify after that same pass showed the durability
+ * decks actually ROSE (the exact-cost stat clamp trimmed the cheap
+ * aggressive bodies that used to punch through them), so the cap wasn't
+ * tight enough yet. Tightened alongside a CPU removal-priority fix (see
+ * ai.ts castPriority) that targets the same decks from the play-skill
+ * side, not just the numbers side. */
+export const STEEL_BULWARK_CAP = 3;
 
 export function willKillInCombat(g: Game, target: Inst, rawAtk: number): boolean {
   if (target.def.type !== 'Unit') return false;
@@ -396,6 +402,21 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
   if (u.def.excavate && u.def.type === 'Location') {
     t -= u.def.excavate.x * (u.excavateStacks || 0);
   }
+  // v4.7: Anchor now ALSO discounts its own card's Ability Slot, not just
+  // Cast Slot cost (effThreshold, below). The v4.6 findings flagged
+  // Anchor-ramp archetypes as the floor of the whole roster and specifically
+  // called out why: a ramp deck that drafts Combo-gate-costed payoffs (no
+  // numeric Cast Slot at all) got literally nothing from Anchor's discount
+  // — there was nothing left to ramp INTO. Same in-play-Anchor-count/cap
+  // math as the Cast Slot version, so a wide Anchor board now cheapens
+  // BOTH the cards it draws and the abilities already on its board.
+  if (hasKw(u.def, 'Anchor') && (u.def.type === 'Unit' || u.def.type === 'Location')) {
+    const p = g.players[u.owner];
+    const inPlay = [...p.board, p.location].filter(
+      (c): c is Inst => !!c && c.iid !== u.iid && hasKw(c.def, 'Anchor'),
+    ).length;
+    t -= Math.min(ANCHOR_CAP, inPlay);
+  }
   // v4.5: Momentum also discounts the Leader's own Ability Slot by 1, same
   // threshold-reduction language Resolve/Anchor already use — the balance
   // sim measured Momentum's bonus die (v4.4) and the +1 ATK add-on (v4.4.2)
@@ -407,12 +428,19 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
 }
 
 /** v4.2 Toll X: sum of Toll on a player's board, reducing all incoming Leader damage. */
+/** v4.7: 3 -> 2 — Shinobi Avenge Grind (93%+ across every v4.5/v4.6 pass,
+ * unmoved by two Avenge caps, three Leader-kit cuts, and the newly-live
+ * abilityNoRepeatTarget restriction) is built as Avenge+Toll+mend, not
+ * Avenge alone; every lever aimed at "Avenge" specifically failed because
+ * Avenge wasn't the sole engine. This is the Toll ablation the v4.6
+ * findings called for. */
+export const TOLL_CAP = 2;
 export function tollReduction(g: Game, ownerId: string): number {
   const total = g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
   // Same "ramp, not a collapse" cap Anchor uses: uncapped, a wide Toll board
   // could zero out an entire class of face damage (Sap, Pierce overflow,
   // Crescendo burn) at once rather than just blunting it.
-  return Math.min(3, total);
+  return Math.min(TOLL_CAP, total);
 }
 
 // ---------------------------------------------------------------------------

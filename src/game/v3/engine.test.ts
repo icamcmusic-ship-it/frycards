@@ -249,6 +249,7 @@ import {
   remainingHp,
   wouldSapKill,
   ANCHOR_CAP,
+  TOLL_CAP,
 } from './engine';
 
 const mkU = (id: string, over: Partial<CardDef> = {}): CardDef => ({
@@ -339,13 +340,14 @@ test('Pierce overflow is the leftover capped at half ATK (v4.4), goes through ev
   expect(warded.damage).toBe(0);
 });
 
-test('Toll stacks are capped at 3 and reduce attack, Sap and Pierce-overflow Leader damage', () => {
+test('Toll stacks are capped at TOLL_CAP and reduce attack, Sap and Pierce-overflow Leader damage', () => {
   const g = combatGame();
   for (let i = 0; i < 4; i++) {
     g.players.B.board.push(makeInst(mkU(`t${i}`, { atk: 0, hp: 9, toll: { x: 1 } }), 'B'));
   }
   applyEffect(g, 'A', { action: 'sap', value: 5, target: 'enemyLeader' });
-  expect(g.players.B.leader.damage).toBe(2); // 5 - min(3, 4 stacks)
+  // v4.7: cap 3 -> 2 (Shinobi Avenge Grind ablation, see TOLL_CAP's comment).
+  expect(g.players.B.leader.damage).toBe(5 - TOLL_CAP); // 5 - min(TOLL_CAP, 4 stacks)
   // Unit damage is NOT Toll-reduced
   applyEffect(g, 'A', { action: 'sap', value: 2, target: 'enemyUnit' }, g.players.B.board[0].iid);
   expect(g.players.B.board[0].damage).toBe(2);
@@ -1533,12 +1535,16 @@ test('v4.6 Overrun punches floor(ATK/2) (min 1) through a fully-prevented/absorb
   expect(warded.damage).toBe(2); // fully warded, but Overrun forces floor(5/2)=2 through
 
   // Fully absorbed by Steel instead of Ward — Overrun still applies.
+  // v4.7: attacker ATK must be <= STEEL_BULWARK_CAP for this hit to be
+  // FULLY absorbed (partial absorption leaves nonzero leftover damage
+  // already through, so Overrun's own "fully prevented" trigger condition
+  // wouldn't fire) — atk 3 stays under the cap of 3.
   const steeled = makeInst(mkU('ov-st', { atk: 0, hp: 10, steel: { x: 5 } }), 'B');
-  const att2 = makeInst(mkU('ov-att2', { atk: 4, hp: 10, keywords: ['Overrun'] }), 'A');
+  const att2 = makeInst(mkU('ov-att2', { atk: 3, hp: 10, keywords: ['Overrun'] }), 'A');
   g.players.B.board.push(steeled);
   g.players.A.board.push(att2);
   expect(attack(g, att2.iid, steeled.iid)).toBe(true);
-  expect(steeled.damage).toBe(2); // floor(4/2)=2
+  expect(steeled.damage).toBe(1); // floor(3/2)=1
 
   // A 0-ATK Overrun attacker never manufactures damage from nothing.
   const zeroAtt = makeInst(mkU('ov-zero', { atk: 0, hp: 10, keywords: ['Overrun'] }), 'A');

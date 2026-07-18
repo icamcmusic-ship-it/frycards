@@ -425,62 +425,185 @@ h4,
   background-size: 250% 100%;
   animation: mythic-bg-kf 7s ease-in-out infinite;
 }
-@keyframes ultra-sparkle-kf {
+/* v4.7: two independently-timed twinkle layers (a dense fast-flicker field
+   plus a sparser slow field of bigger, brighter points) instead of one
+   uniform dot field — real twinkle reads as points popping in and out of
+   sync with each other, not a whole field pulsing in lockstep. */
+@keyframes ultra-sparkle-kf-a {
   0%,
   100% {
-    opacity: 0.25;
+    opacity: 0.15;
   }
-  35% {
-    opacity: 0.75;
+  20% {
+    opacity: 0.9;
   }
-  65% {
-    opacity: 0.45;
+  40% {
+    opacity: 0.2;
+  }
+  60% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.3;
+  }
+}
+@keyframes ultra-sparkle-kf-b {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
   }
 }
 .ultra-sparkle {
   background-image:
-    radial-gradient(circle 1.5px at 12% 22%, rgba(255, 233, 163, 0.95) 40%, transparent 60%),
-    radial-gradient(circle 1px at 78% 14%, rgba(255, 215, 90, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 88% 55%, rgba(255, 233, 163, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 30% 68%, rgba(255, 215, 90, 0.85) 40%, transparent 60%),
-    radial-gradient(circle 1.5px at 58% 84%, rgba(255, 233, 163, 0.9) 40%, transparent 60%),
-    radial-gradient(circle 1px at 8% 90%, rgba(255, 215, 90, 0.8) 40%, transparent 60%),
-    radial-gradient(circle 1px at 45% 38%, rgba(255, 245, 200, 0.85) 40%, transparent 60%);
-  animation: ultra-sparkle-kf 2.6s ease-in-out infinite;
+    radial-gradient(circle 1.5px at 12% 22%, rgba(255, 233, 163, 0.95) 45%, transparent 65%),
+    radial-gradient(circle 1px at 78% 14%, rgba(255, 215, 90, 0.9) 45%, transparent 65%),
+    radial-gradient(circle 1.5px at 88% 55%, rgba(255, 233, 163, 0.8) 45%, transparent 65%),
+    radial-gradient(circle 1px at 30% 68%, rgba(255, 215, 90, 0.85) 45%, transparent 65%),
+    radial-gradient(circle 1.5px at 58% 84%, rgba(255, 233, 163, 0.9) 45%, transparent 65%),
+    radial-gradient(circle 1px at 8% 90%, rgba(255, 215, 90, 0.8) 45%, transparent 65%),
+    radial-gradient(circle 1px at 45% 38%, rgba(255, 245, 200, 0.85) 45%, transparent 65%),
+    radial-gradient(circle 1px at 65% 28%, rgba(255, 233, 163, 0.75) 45%, transparent 65%),
+    radial-gradient(circle 1px at 20% 48%, rgba(255, 215, 90, 0.7) 45%, transparent 65%),
+    radial-gradient(circle 1px at 95% 78%, rgba(255, 245, 200, 0.8) 45%, transparent 65%);
+  animation: ultra-sparkle-kf-a 1.9s ease-in-out infinite;
   mix-blend-mode: screen;
 }
+.ultra-sparkle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle 2.5px at 25% 30%, rgba(255, 248, 220, 1) 45%, transparent 70%),
+    radial-gradient(circle 2px at 70% 20%, rgba(255, 233, 163, 1) 45%, transparent 70%),
+    radial-gradient(circle 2.5px at 85% 65%, rgba(255, 248, 220, 0.95) 45%, transparent 70%),
+    radial-gradient(circle 2px at 15% 75%, rgba(255, 233, 163, 0.95) 45%, transparent 70%),
+    radial-gradient(circle 2px at 50% 88%, rgba(255, 248, 220, 0.9) 45%, transparent 70%);
+  animation: ultra-sparkle-kf-b 2.7s ease-in-out infinite;
+  animation-delay: 0.6s;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 3px rgba(255, 233, 163, 0.9));
+}
 
-/* v4.6 Mythic "Living Inferno" template — a layer of embers rising off the
-   card face (two drifting radial-gradient dot fields at different speeds),
-   on top of the existing animated red/gold gradient banner + pulsing frame. */
-@keyframes mythic-embers-kf {
+/* v4.6/v4.7 Mythic "Living Inferno" template — THREE layers of embers
+   rising off the card face at different sizes/speeds/opacities (parallax
+   depth, not one flat field), a hot flicker pass on top, and the whole
+   stack breathes with a slow bellows pulse. Sits on top of the existing
+   animated red/gold gradient banner + pulsing two-tone frame. */
+@keyframes mythic-embers-kf-far {
   0% {
     background-position:
-      0% 110%,
-      50% 130%;
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.8;
+      5% 115%,
+      55% 130%,
+      85% 120%;
+    opacity: 0.25;
   }
   100% {
     background-position:
-      0% -30%,
-      50% -60%;
+      5% -20%,
+      55% -35%,
+      85% -25%;
+    opacity: 0.55;
+  }
+}
+@keyframes mythic-embers-kf-near {
+  0% {
+    background-position:
+      18% 120%,
+      72% 135%,
+      40% 125%,
+      95% 140%;
+    opacity: 0.4;
+  }
+  100% {
+    background-position:
+      12% -30%,
+      78% -45%,
+      35% -35%,
+      100% -50%;
+    opacity: 0.9;
+  }
+}
+@keyframes mythic-flicker-kf {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  30% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.85;
+  }
+  70% {
     opacity: 0.35;
+  }
+  85% {
+    opacity: 0.75;
+  }
+}
+@keyframes mythic-bellows-kf {
+  0%,
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.25) saturate(1.3);
   }
 }
 .mythic-embers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: mythic-bellows-kf 3.2s ease-in-out infinite;
+}
+/* Far layer: small, dim, slow — the depth backdrop. */
+.mythic-embers::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background-image:
-    radial-gradient(circle 1.5px at 18% 80%, rgba(255, 179, 0, 0.9) 40%, transparent 65%),
-    radial-gradient(circle 2px at 72% 60%, rgba(225, 29, 46, 0.85) 40%, transparent 65%);
+    radial-gradient(circle 1px at 18% 80%, rgba(255, 140, 0, 0.7) 45%, transparent 70%),
+    radial-gradient(circle 1px at 60% 70%, rgba(225, 29, 46, 0.65) 45%, transparent 70%),
+    radial-gradient(circle 1px at 85% 60%, rgba(255, 179, 0, 0.7) 45%, transparent 70%);
   background-size:
-    100% 55%,
-    100% 70%;
+    100% 60%,
+    100% 65%,
+    100% 55%;
   background-repeat: repeat-y;
-  animation: mythic-embers-kf 4.5s linear infinite;
+  animation: mythic-embers-kf-far 6s linear infinite;
   mix-blend-mode: screen;
-  filter: blur(0.3px);
+  filter: blur(0.6px);
+}
+/* Near layer: bigger, brighter, faster — the foreground embers, plus a hot
+   flicker so individual embers visibly pulse instead of drifting uniformly. */
+.mythic-embers::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle 2px at 18% 80%, rgba(255, 179, 0, 0.95) 40%, transparent 68%),
+    radial-gradient(circle 2.5px at 72% 60%, rgba(225, 29, 46, 0.9) 40%, transparent 68%),
+    radial-gradient(circle 1.5px at 40% 88%, rgba(255, 220, 120, 0.95) 40%, transparent 68%),
+    radial-gradient(circle 2px at 92% 75%, rgba(255, 100, 20, 0.9) 40%, transparent 68%);
+  background-size:
+    100% 50%,
+    100% 62%,
+    100% 45%,
+    100% 58%;
+  background-repeat: repeat-y;
+  animation:
+    mythic-embers-kf-near 3.8s linear infinite,
+    mythic-flicker-kf 1.4s ease-in-out infinite;
+  mix-blend-mode: screen;
+  filter: blur(0.2px) drop-shadow(0 0 4px rgba(255, 140, 0, 0.7));
 }
 
 /* Serialized card treatment — the rarest possible pull (a numbered 1-of-N
@@ -580,9 +703,12 @@ h4,
   .mythic-frame,
   .mythic-bg,
   .mythic-embers,
+  .mythic-embers::before,
+  .mythic-embers::after,
   .ultra-frame,
   .ultra-banner,
   .ultra-sparkle,
+  .ultra-sparkle::after,
   .serialized-frame,
   .serialized-frame::before,
   .serialized-sheen {

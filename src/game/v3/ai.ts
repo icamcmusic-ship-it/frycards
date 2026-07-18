@@ -212,6 +212,20 @@ function castPriority(g: Game, p: Player, c: Inst): number {
     const isDefensive = !!(c.def.steel || c.def.bulwark || c.def.toll) || hasKw(c.def, 'Guard') || hasKw(c.def, 'Ward');
     if (isDefensive) v += 6;
   }
+  // v4.7: unconditional `destroy` removal bypasses Steel and Bulwark
+  // entirely (engine.ts's destroy case sets damage += 999 directly, never
+  // routing through the dmg() helper those two check) — only Ward stops
+  // it. That makes it the one clean answer to a Steel/Bulwark-stacked
+  // board (Guard-Bulwark Turtle, Steel-Scrap Control — the top of every
+  // sim pass to date). The AI had no read on this: a `destroy` Charm/Event
+  // scored identically whether the opponent's board was durability-stacked
+  // or not, so it got held or misused as often as played into the matchup
+  // where it's actually the best tool in hand.
+  if (act === 'destroy' && c.def.onCast?.target !== 'allEnemyUnits') {
+    const opp = opponentOf(g, p.id);
+    const durableTargets = opp.board.filter((u) => u.def.steel || u.def.bulwark).length;
+    if (durableTargets > 0) v += 10;
+  }
   return v + tieBreak(g);
 }
 

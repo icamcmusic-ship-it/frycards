@@ -606,9 +606,64 @@ function runSuite(
 const pct = (w: number, n: number) => (n ? ((100 * w) / n).toFixed(1) : '—');
 
 // ---------------------------------------------------------------------------
+// v4.7 ISOLATE mode: pit ONE named archetype against every other deck in
+// the roster as a FIXED opponent set (not the full round-robin), reporting
+// a per-opponent breakdown. Every balance-findings doc since v4.5 has asked
+// for exactly this before further tuning a stuck archetype/keyword — the
+// full round-robin's win rate is a relative, zero-sum-ish metric (points
+// gained by a direct buff elsewhere have to come from somewhere), which is
+// a real confound when the question is "is THIS one thing actually strong"
+// rather than "how does it rank against a shifting field."
+//
+// Usage: npx tsx scripts/simulate-v4.ts [gamesPerPairing] --isolate="Shinobi Avenge Grind"
+// ---------------------------------------------------------------------------
+const isolateArg = process.argv.find((a) => a.startsWith('--isolate='));
+const roster = buildRoster();
+if (isolateArg) {
+  const label = isolateArg.slice('--isolate='.length).replace(/^["']|["']$/g, '');
+  const target = roster.find((d) => d.key === label);
+  if (!target) {
+    console.error(
+      `No deck matches --isolate="${label}". Available keys:\n  ${roster.map((d) => d.key).join('\n  ')}`,
+    );
+    process.exit(1);
+  }
+  const GAMES_PER_OPP = Math.max(20, PER_PAIR * 4);
+  const opponents = roster.filter((d) => d.key !== label);
+  let seed = 900000;
+  let totalW = 0;
+  let totalN = 0;
+  const perOpp: { key: string; w: number; n: number }[] = [];
+  for (const opp of opponents) {
+    let w = 0;
+    for (let k = 0; k < GAMES_PER_OPP; k++) {
+      const g = newGame(target.deck, opp.deck, mulberry32(seed++), { twinMode: 'sameTurn' });
+      maybeMulligan(g, g.rng);
+      let rounds = 0;
+      while (!g.winner && rounds < MAX_TURNS) {
+        playTurn(g);
+        rounds++;
+      }
+      if (g.winner === 'A') w++;
+    }
+    perOpp.push({ key: opp.key, w, n: GAMES_PER_OPP });
+    totalW += w;
+    totalN += GAMES_PER_OPP;
+  }
+  console.log(
+    `\n=== ISOLATE: '${label}' vs a FIXED ${opponents.length}-deck opponent roster (${GAMES_PER_OPP} games/opponent, ${totalN} total) ===`,
+  );
+  console.log(`Aggregate win rate: ${pct(totalW, totalN)}%  (n=${totalN})\n`);
+  console.log('Weakest matchups first:');
+  for (const r of perOpp.sort((a, b) => a.w / a.n - b.w / b.n)) {
+    console.log(`  vs ${r.key.padEnd(32)} ${pct(r.w, r.n)}%  (n=${r.n})`);
+  }
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
 // Pass 1: Twin A/B/C test (errata B) — isolate which fix actually works.
 // ---------------------------------------------------------------------------
-const roster = buildRoster();
 const abPerPair = Math.max(4, Math.floor(PER_PAIR / 2));
 console.log(`\n=== Twin A/B/C test: ${abPerPair}/pairing per mode, ${roster.length} decks ===`);
 const modes: TwinMode[] = ['oneDiePerTurn', 'sameTurn', 'stagedPassive'];

@@ -1,4 +1,4 @@
-# FryCards — Definitive Rulebook v4.6
+# FryCards — Definitive Rulebook v4.7
 
 Supersedes v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
@@ -7,6 +7,51 @@ built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.7 balance-sim pass (v4.6 baseline re-run four times across this
+pass, plus new `--isolate` single-deck-vs-fixed-roster sim runs; full
+writeup `docs/BALANCE_SIM_FINDINGS_v4.7.md`):** actioned every item in
+v4.6's unresolved list.
+
+- **Anchor** now also discounts a card's own **Ability Slot** threshold
+  (§7/§10), not just its Cast Slot — closes the exact gap that left
+  gate-costed-payoff ramp decks with nothing to ramp into. Anchor-ramp
+  archetypes improved (no longer regressing).
+- **Toll** cap 3 → 2 (§10, `TOLL_CAP`).
+- **Steel+Bulwark** combined per-hit prevention cap 4 → 3 (§8/§10).
+- **Rally** cards' own Ability Slot threshold is cheapened by 1 (min 1,
+  §10) — Rally is dead weight on a card that can't clear its own first
+  activation either.
+- **A new stat tax** on Units dual-tagged **Steel+Bulwark**,
+  **Avenge+Toll**, or **Guard+Bulwark** (-1/-1 per qualifying pair) —
+  those keywords are otherwise pure additions with zero stat cost. Moved
+  Mer King Guard-Bulwark Turtle for the first time across three balance
+  passes (84% → 78%). A first, broader version of this tax (any 2-of-6
+  sustain keywords) caused real collateral damage to unrelated
+  archetypes and was reverted after verification — see the findings doc
+  for the full negative-result writeup.
+- **Apex Nanite Shinobi's Ultimate** retargeted from a board-wide buff to
+  single-target (value 2 → 3) — a board-wide once-per-game buff scales
+  backwards on a wide grind deck. Verified via the new `--isolate` mode
+  to have essentially no effect; kept anyway since it brings the Ultimate
+  in line with the rest of the roster's single-target/one-shot Ultimates
+  and isn't a regression.
+- **Shinobi Avenge Grind remains unresolved** (93%+) after three
+  independent, verified-safe levers this pass alone (on top of prior
+  passes) — see the findings doc §1a for why this now looks like a
+  decklist-construction property of the balance-sim's own archetype
+  roster rather than a card/keyword-power problem.
+- **Leader spread: 16.6pt, the tightest measured across three
+  consecutive passes** (down from 17.6pt in v4.6, 21.2pt in v4.5.1).
+- **New sim infra**: `scripts/simulate-v4.ts --isolate="<archetype
+  label>"` runs one deck against a FIXED opponent roster instead of the
+  round-robin — the isolate-and-measure capability every findings doc
+  since v4.5 asked for before spending a numeric lever on a stuck
+  archetype.
+- **Visual**: the Ultra-Rare "Gilded Relic" twinkle and Mythic "Living
+  Inferno" embers were both significantly intensified — layered,
+  independently-timed particle fields with parallax depth instead of a
+  single flat animated layer (see `src/index.css`).
 
 **v4.6 balance-sim pass (fresh 22,560-game baseline + three verification
 re-runs; full writeup `docs/BALANCE_SIM_FINDINGS_v4.6.md`):**
@@ -492,11 +537,11 @@ You lose immediately if either is true:
 
 **Twin X** — Two Cast Slots requiring identical face values; see §7 for Staging Zone rules, matching rules, and the voluntary-abandon option.
 
-**Rally** — Once per turn, when you would place a die on this card's Ability Slot, you may instead activate it using a die already resting on another exhausted friendly Ability Slot — this costs you nothing from your rolling pool; the source card remains exhausted regardless of the die moving away.
+**Rally** — Once per turn, when you would place a die on this card's Ability Slot, you may instead activate it using a die already resting on another exhausted friendly Ability Slot — this costs you nothing from your rolling pool; the source card remains exhausted regardless of the die moving away. *(v4.7)* Rally cards also print an Ability Slot threshold 1 lower than they otherwise would (minimum 1) — Rally's whole value proposition depends on the card being able to clear its own first activation too.
 
 **Scrap** — Discard this card from hand to reroll one **unplaced** die of your choice, at any point during Placement Phase.
 
-**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 3** *(v4.4, was 2 in v4.1)*, minimum threshold 1. *(v4.4)* The first time a card's own discount hits that cap, it permanently gains +1/+1, once per card life. See §7 for the printed-vs-effective interaction with Overflow and full detail on the cap bonus.
+**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 3** *(v4.4, was 2 in v4.1)*, minimum threshold 1. *(v4.4)* The first time a card's own discount hits that cap, it permanently gains +2/+2, once per card life (raised from +1/+1 in v4.5). *(v4.7)* The same discount, same cap, now ALSO applies to this card's own **Ability Slot** threshold — a ramp deck that drafts Combo-gate-costed payoffs (no numeric Cast Slot at all) previously got nothing from Anchor; now a wide Anchor board cheapens both the cards it draws and the abilities already on its board. See §7 for the printed-vs-effective interaction with Overflow and full detail on the cap bonus.
 
 **Crescendo X** *(v4.2, Event)* — +X to this Event's numeric effect for each die showing a **6** that you placed this turn (including the die that cast this Event). The preferred pattern for a "big roll payoff" card going forward: it scales with a hot roll but is **never a dead card** on a bad one, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
 
@@ -516,9 +561,9 @@ You lose immediately if either is true:
 
 **Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** *(v4.4)* (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
 
-**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **4** — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies.
+**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **3** *(v4.7, was 4)* — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies. *(v4.7)* A Unit printing BOTH Steel and Bulwark also takes a -1/-1 stat tax at generation — unlike most keywords, neither carries a compensating stat reduction on its own, so stacking them was pure free value; same tax applies to Avenge+Toll and Guard+Bulwark dual-tagged Units.
 
-**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
+**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 2** *(v4.7, was 3 — see `TOLL_CAP`)*, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a third point of Toll is possible but does nothing beyond the cap.
 
 **Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own. *(v4.5)* Capped at **3** total +1/+1 over a card's lifetime; *(v4.6)* tightened to **2** — the cap-at-3 measurably never bit (Avenge was still the strongest keyword and its archetypes were unmoved), the same "ramp, not a collapse" ceiling every other repeating stat mechanic already has.
 

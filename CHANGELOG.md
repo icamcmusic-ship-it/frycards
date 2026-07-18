@@ -7,6 +7,44 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.7 balance pass (actions v4.6's unresolved list) + visual overhaul
+
+- **Ultra-Rare "Gilded Relic" and Mythic "Living Inferno" made significantly
+  more profound**, per direct request: both now use multiple
+  independently-timed particle layers with real parallax depth (a fast
+  dense flicker field plus a sparser slow field of bigger/brighter points
+  for Ultra; three ember layers at different sizes/speeds/opacities plus a
+  hot flicker pass and a slow "bellows" brightness pulse for Mythic)
+  instead of one flat animated layer each.
+- **Anchor now also discounts a card's own Ability Slot**, not just its
+  Cast Slot — closes the gap that left gate-costed-payoff ramp decks with
+  nothing to actually ramp into.
+- **Mer King Guard-Bulwark Turtle moved for the first time across three
+  balance passes** (84% → 78%): Units dual-tagged Steel+Bulwark,
+  Avenge+Toll, or Guard+Bulwark now take a small stat tax — those keyword
+  pairs were otherwise pure free value with zero stat cost, unlike most
+  other keywords. (A broader first version of this tax caused real
+  collateral damage to unrelated decks and was reverted after
+  verification — see `docs/BALANCE_SIM_FINDINGS_v4.7.md` for the full
+  writeup, including why narrower is safer.)
+- Toll's cap tightened (3 → 2), the Steel+Bulwark combined damage-prevention
+  cap tightened (4 → 3), Rally cards got their own Ability Slot cheaper to
+  use, and Shinobi's Ultimate was retargeted off a board-wide buff (which
+  scales backwards on a wide grind deck) to single-target.
+- **Shinobi Avenge Grind remains dominant (93%+)** despite three more
+  independent, verified-safe levers this pass — confirmed via a new
+  isolate-sim mode that this isn't a leaderboard artifact, and increasingly
+  looks like a property of the balance-sim's own hand-built decklist
+  rather than any specific card or keyword. Documented honestly rather
+  than chased with more collateral-damage-risking levers.
+- **Leader win-rate spread is now the tightest measured across three
+  consecutive balance passes** (16.6 points).
+- New sim tooling: `scripts/simulate-v4.ts` can now run
+  `--isolate="<archetype>"` to test one deck against a fixed opponent
+  roster instead of the shifting round-robin — the isolate-and-measure
+  capability every balance doc since v4.5 asked for before tuning a stuck
+  archetype further.
+
 ### v4.6 balance/feature/bug pass
 
 - **Long-standing balance bug — the v4.4 Leader-Ability flags were never
