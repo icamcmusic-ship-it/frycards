@@ -1,12 +1,43 @@
-# FryCards — Definitive Rulebook v4.6
+# FryCards — Definitive Rulebook v4.7
 
-Supersedes v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.7 balance-sim pass (45,120-game baseline + a new single-dial ablation
+harness + full verification re-sim; writeup `docs/BALANCE_SIM_FINDINGS_v4.7.md`):**
+
+- **RULE CHANGE — Fatigue replaces the instant deck-out loss (§9).** The
+  new ablation harness (`scripts/simulate-ablation.ts`) proved no labeled
+  keyword powers the durability decks that topped three straight sims —
+  a `tollCap 3→1` arm measured *identically to baseline*, and deleting
+  Avenge moved its 92% flagship under 3pt. The real engine was §9: 24% of
+  all games ended in the instant deck-out loss, which punished card-draw
+  and crowned unit-hoarding attrition. An empty mandatory draw now deals
+  escalating Fatigue damage (1, 2, 3, ...) instead. Verified: deck-outs
+  10,999 → 0; Leader spread 18.6pt → **12.0pt, best measured to date**.
+- **Twin (§7/§10):** Twin bodies were budgeted off the legacy threshold but
+  printed at threshold−1 with full stats plus a rider and staged passive —
+  and a same-turn matching pair is nearly AnyPair-easy (99.9%). They now
+  budget off the real printed threshold. Twin drops off the #1 keyword spot
+  (58.1 → 54.7).
+- **Steel X (§10):** printed values trimmed 2/2/3 by tier → 1/1/2 — the one
+  keyword dial the ablation showed actually moves the Steel-labeled decks
+  (Ward-Steel Wall 81.3% → 75.6% with Fatigue).
+- **Anchor (§10):** Anchor Units print +2 HP — their cheap bodies were 4/2
+  glass that died before any ramp existed. Biggest floor recovery ever
+  measured (Abyss Excavate Ramp 24.7% → 40.6%).
+- **CPU AI:** face-lethal math now subtracts the defender's Toll; board-wide
+  buff Ultimates are held until 2+ Units are in play; low-rarity Echo
+  recasts only happen with 5+ cards in hand (that decision's win delta went
+  −9.4pt → −0.4pt).
+- **Negative results kept honest (all reverted):** Toll cap changes, Mend
+  halving, Anchor's cap bonus drawing a card, and Guard +3 → +2 HP all
+  measured as no-ops.
 
 **v4.6 balance-sim pass (fresh 22,560-game baseline + three verification
 re-runs; full writeup `docs/BALANCE_SIM_FINDINGS_v4.6.md`):**
@@ -472,13 +503,24 @@ A Unit's or **Leader's** maximum HP is always its printed/starting value, unless
 
 ## 9. Winning & Losing
 
-You lose immediately if either is true:
-- Your Leader's HP reaches 0.
-- You are required to draw during your Draw Phase and your deck is empty.
+You lose immediately if your Leader's HP reaches 0.
 
-**Simultaneous loss:** if a single effect would reduce both Leaders to 0 HP at the same time, or force both players to draw from empty decks at the same time, the game ends in a draw.
+**Fatigue** *(v4.7 — replaces the instant deck-out loss)*: if you are required
+to draw during your Draw Phase and your deck is empty, you instead take
+escalating Fatigue damage to your Leader — 1 the first time, then 2, then 3,
+and so on, increasing by 1 for each missed mandatory draw. (Pre-v4.7 rules
+made an empty mandatory draw an instant loss; simulation showed a quarter of
+all games were ending on that cliff, which quietly punished every card-draw
+effect and rewarded unit-hoarding attrition decks. Fatigue keeps the empty
+deck a real, mounting pressure while letting the game end honestly — on
+Leader HP.)
 
-**Other "draw a card" effects (e.g. Surge)** never cause a loss — the empty-deck loss condition applies only to the mandatory Draw Phase; any other draw effect simply does nothing if your deck is empty.
+**Simultaneous loss:** if a single effect would reduce both Leaders to 0 HP at
+the same time, the game ends in a draw.
+
+**Other "draw a card" effects (e.g. Surge)** never cause Fatigue — Fatigue
+applies only to the mandatory Draw Phase; any other draw effect simply does
+nothing if your deck is empty.
 
 ---
 
@@ -516,7 +558,7 @@ You lose immediately if either is true:
 
 **Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** *(v4.4)* (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
 
-**Steel X** *(v4.4, Unit)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **4** — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies.
+**Steel X** *(v4.4, Unit; printed values reduced in v4.7)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **4** — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies.
 
 **Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
 

@@ -1687,3 +1687,32 @@ test('v4.4.1 Locations resolve an immediate onCast effect (Mend 1), not just the
   expect(castLocationFree(g, loc.iid)).toBe(true);
   expect(p.leader.damage).toBe(4);
 });
+
+test('v4.7 Fatigue: an empty mandatory draw deals escalating Leader damage instead of an instant loss', () => {
+  const g = freshGame();
+  g.active = 'A';
+  g.turn = 2; // past the first-player skipped draw
+  const p = g.players.A;
+  p.deck = [];
+
+  startTurn(g);
+  expect(g.winner ?? undefined).toBeUndefined();
+  expect(p.fatigue).toBe(1);
+  expect(p.leader.damage).toBe(1);
+
+  // Second missed draw escalates to 2 (the End Phase dice pitch may have
+  // mended some of the first point, so assert the delta, not the total).
+  endTurn(g);
+  g.active = 'A';
+  const before = p.leader.damage;
+  startTurn(g);
+  expect(p.fatigue).toBe(2);
+  expect(p.leader.damage).toBe(before + 2);
+
+  // Fatigue lethal ends the game on Leader HP like any other damage.
+  endTurn(g); // (End Phase dice pitch mends first — set damage after it)
+  g.active = 'A';
+  p.leader.damage = effMaxHp(g, p.leader) - 1;
+  startTurn(g);
+  expect(g.winner).toBe('B');
+});

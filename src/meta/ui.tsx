@@ -30,6 +30,11 @@ export function PopButton({
   }[color];
   return (
     <button
+      // Never submit an enclosing <form> — PopButtons are always plain
+      // actions (e.g. AuthScreen's SIGN IN / CREATE ACCOUNT mode toggles sit
+      // inside the auth form; without this they defaulted to type="submit"
+      // and fired the browser's required-field validation on a mere toggle).
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}

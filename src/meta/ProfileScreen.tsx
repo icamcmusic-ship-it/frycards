@@ -32,6 +32,7 @@ export function ProfileScreen({
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [error, setError] = useState('');
+  const [equipping, setEquipping] = useState(false);
 
   const ownedIds = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
   // Free items (cost 0) are always equippable — but battle pass exclusives
@@ -41,10 +42,16 @@ export function ProfileScreen({
     (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
 
   const handleEquip = async (item: ShopItem) => {
+    // Serialize equips — rapid clicks on two different cosmetics used to race
+    // their RPCs and could leave the profile showing whichever refresh
+    // resolved last, not what the player clicked last.
+    if (equipping) return;
+    setEquipping(true);
     setError('');
     const err = await equipCosmetic(item.id);
     if (err) setError(err);
-    else refreshProfile();
+    else await refreshProfile();
+    setEquipping(false);
   };
 
   const handleRename = async () => {

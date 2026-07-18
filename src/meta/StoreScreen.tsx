@@ -261,6 +261,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               onClick={() => {
                 setTab(t.key);
                 setError('');
+                setNotice('');
               }}
             >
               {t.label}
@@ -692,6 +693,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 /** Full per-slot drop table for a pack, mirrored from the server's rolls. */
 function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
   const { profile } = useMeta();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const packsSinceSuperRare = profile?.packs_since_super_rare ?? 0;
   const rows = packOdds(pack);
   const expected = expectedRarities(pack);

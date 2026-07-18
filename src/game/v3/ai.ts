@@ -29,6 +29,7 @@ import {
   effThreshold,
   effAbilityThreshold,
   rollValues,
+  tollReduction,
   matchesPattern,
   opponentOf,
   autoTarget,
@@ -577,6 +578,12 @@ function playPlacement(g: Game, p: Player) {
       for (const c of echoes) {
         const waiveFodder = rarityTier(c.def.rarity) === 'mid';
         if (!waiveFodder && p.hand.length < 2) continue;
+        // v4.7: recasting a LOW-rarity Echo card costs a die AND a real card
+        // from hand — the decision table has measured it as a consistent
+        // net-negative (-9.4pt this pass) while mid/high-rarity Echo is
+        // positive. Only pay a card for a low-rarity recast when hand is
+        // flush enough that the fodder is nearly free.
+        if (!waiveFodder && rarityTier(c.def.rarity) === 'low' && p.hand.length < 5) continue;
         const sel = bestSelectionFor(g, p, c.def);
         if (!sel) continue;
         const fodder = waiveFodder ? undefined : defaultDiscardChoice(p.hand);
@@ -672,7 +679,14 @@ function playPlacement(g: Game, p: Player) {
           opp.board.length === 0) ||
         // v4.3 comeback-pass Ultimates: don't waste a once-per-game board
         // wipe / mass sap on a thin board (same gating as AoE Event casts).
-        (ult.effect.target === 'allEnemyUnits' && opp.board.length < 2);
+        (ult.effect.target === 'allEnemyUnits' && opp.board.length < 2) ||
+        // v4.7: don't burn a once-per-game board-wide buff on an empty/thin
+        // board either — the ahead/behind instrumentation showed Ultimates
+        // spent from a losing position (often an empty board) are the
+        // single worst decision in the table (-39pt).
+        (ult.effect.action === 'buff' &&
+          ult.effect.target === 'allFriendlyUnits' &&
+          p.board.length < 2);
       if (!pointless) {
         const dieIdx = bestDieFor(p, ult.threshold);
         if (dieIdx >= 0 && activateUltimate(g, dieIdx)) {
@@ -745,7 +759,12 @@ function playCombat(g: Game, p: Player) {
         targets.find((t) => willKillInCombat(g, t, atk)) ??
         targets.map((t) => ({ t, s: effAtk(g, t) + tieBreak(g) })).sort((a, b) => b.s - a.s)[0]?.t;
     } else {
-      const totalAtk = attackers.reduce((s, u) => s + effAtk(g, u), 0);
+      // v4.7: Toll reduces EVERY incoming hit to the Leader by up to its cap
+      // (engine.ts tollReduction) — the old raw-ATK sum mistook a heavily
+      // Tolled Leader for lethal range and dumped whole boards into face
+      // attacks that each lost up to 3 damage, instead of trading.
+      const toll = tollReduction(g, opp.id);
+      const totalAtk = attackers.reduce((s, u) => s + Math.max(0, effAtk(g, u) - toll), 0);
       const lethal = totalAtk >= remainingHp(g, opp.leader);
       if (lethal) {
         target = opp.leader;

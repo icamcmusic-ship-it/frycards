@@ -120,6 +120,13 @@ export function Card3DInspector({
   // Glare strength scales with how far the card is tilted.
   const tiltAmount = Math.min(1, Math.hypot(rx, ry) / MAX_TILT_DEG);
 
+  // v4.7 premium templates get their own pointer-driven sheen in here, on
+  // top of CardFace's always-on inspector treatment (see premium-boost):
+  // Ultra-Rare a gold-leaf glint that sweeps with the tilt angle, Mythic a
+  // molten ember glow that pools under the pointer.
+  const premium =
+    def.rarity === 'Ultra-Rare' ? 'ultra' : def.rarity === 'Mythic' ? 'mythic' : null;
+
   return (
     <div
       className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4 overflow-y-auto"
@@ -166,7 +173,15 @@ export function Card3DInspector({
                   style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
                   className="relative"
                 >
-                  <div className="relative overflow-hidden rounded-[4px]" style={{ width: w }}>
+                  {/* premium-boost: keeps CardFace's hover-gated premium
+                      layers (Ultra-Rare prismatic sheen, Mythic heat glow)
+                      always on inside the inspector — this is the "admire
+                      the card" view, so the full treatment should show
+                      without needing the pointer to sit on the face. */}
+                  <div
+                    className="relative overflow-hidden rounded-[4px] premium-boost"
+                    style={{ width: w }}
+                  >
                     {/* foilEffect=false: this view supplies its own pointer-driven
                         holographic sheen below, so CardFace's built-in animated
                         shimmer is suppressed — stacking both caused visible
@@ -207,6 +222,39 @@ export function Card3DInspector({
                             rgba(0,178,255,0.55) ${60 + px * 30}%,
                             rgba(196,0,255,0.5) ${80 + px * 30}%)`,
                           transition: tilt ? 'none' : 'opacity 450ms ease',
+                        }}
+                      />
+                    )}
+                    {/* Ultra-Rare: tilt-tracking gold-leaf glint. */}
+                    {!reducedMotion && premium === 'ultra' && (
+                      <div
+                        aria-hidden
+                        className="absolute inset-0 pointer-events-none mix-blend-overlay"
+                        style={{
+                          opacity: 0.25 + tiltAmount * 0.5,
+                          background: `linear-gradient(${105 + ry * 6 + rx * 4}deg,
+                            transparent ${Math.max(0, px * 60 - 18)}%,
+                            rgba(255, 233, 163, 0.75) ${px * 60}%,
+                            rgba(255, 255, 255, 0.9) ${px * 60 + 8}%,
+                            rgba(212, 175, 55, 0.7) ${px * 60 + 16}%,
+                            transparent ${px * 60 + 34}%)`,
+                          transition: tilt ? 'none' : 'opacity 450ms ease, background 450ms ease',
+                        }}
+                      />
+                    )}
+                    {/* Mythic: molten ember glow pooling under the pointer. */}
+                    {!reducedMotion && premium === 'mythic' && (
+                      <div
+                        aria-hidden
+                        className="absolute inset-0 pointer-events-none mix-blend-screen"
+                        style={{
+                          opacity: 0.3 + tiltAmount * 0.5,
+                          background: `radial-gradient(circle at ${px * 100}% ${py * 100}%,
+                            rgba(255, 179, 0, 0.55) 0%,
+                            rgba(225, 29, 46, 0.4) 28%,
+                            rgba(122, 20, 32, 0.15) 55%,
+                            transparent 75%)`,
+                          transition: tilt ? 'none' : 'opacity 450ms ease, background 450ms ease',
                         }}
                       />
                     )}
