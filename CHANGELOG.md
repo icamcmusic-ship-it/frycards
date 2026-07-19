@@ -7,6 +7,43 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.8 balance/feature/bug pass
+
+- **Rule removed — Momentum**: the dedicated on/off A/B the findings docs
+  kept asking for finally ran (6,768 decisive games per arm): leader spread
+  was slightly *better* without it, games ran a full round shorter, and the
+  weakest roster deck gained +9pt. Four rounds of stacked riders never made
+  the trigger correlate with winning. Every turn is exactly five dice again.
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.8.md`)**: Leader
+  win-rate spread 12.0pt → **8.2pt (new best)** — Diver Resolve 1→2
+  (43.4→50.1), Abyss Ultimate mass-sap 4→3; exact-cost Unit stat basis
+  trimmed again (the entire "most under-priced" list was cheap exact-cost
+  defensive bodies, and a new deck-level ablation proved Avenge Grind's 94%
+  engine is that list, not its Leader); Echo's extra-discard now waived for
+  Rare and higher; Anchor Units +3 HP print (was +2); Crescendo base 2→3;
+  Chrono-Phalanx redesigned (+2/+2 and Overrun) after four passes at the
+  pool's bottom.
+- **Sim harness**: CPU-lapse detectors (missed lethal / wasted castable die
+  / idle Leader Ability — missed lethal measured **zero** in 22,560 games),
+  a cost-vs-value table pricing every card against its real cast-format
+  difficulty, Momentum/Echo A/B arms, deck-level ablation subjects, and
+  fatigue/Overrun/Pierce/Anchor counters.
+- **Bug fixes**: per-rarity deck copy caps (Mythic 1, Super-Rare/Full-Art/
+  Ultra-Rare 2) are now actually enforced in the deck builder AND deck-code
+  import — both previously accepted 3 of anything while the rules screens
+  promised tighter caps; stale rules text cleaned up (hand-limit comment,
+  Echo waiver wording, Momentum references).
+- **New premium card templates**: Ultra-Rare "Aurora Vault" (chromatic
+  teal/violet lattice, counter-rotating light-traces, hover-gated aurora
+  sweep) and Mythic "Void Eclipse" (rotating nebula border, eclipse-corona
+  sigil, drifting parallax starfield, amethyst stat gems) replace the v4.7
+  gold/magma looks. Same performance rules: expensive layers hover/inspector
+  gated, reduced-motion respected.
+- **QoL**: Fatigue damage now gets a center-screen banner (it was a Battle
+  Log whisper); the Battle Log can expand to a tall scrollback; the forced
+  end-of-turn discard picker gained a SUGGEST button that auto-selects the
+  engine's recommended cuts.
+
 ### v4.7 balance/feature/bug pass
 
 - **Rule change — Fatigue replaces the instant deck-out loss**: a new

@@ -238,9 +238,17 @@ function mapUnit(c: CardTemplate): CardDef {
   // Lurking Coral-Prowler was a 9/8 for a printed threshold of 4. Budget
   // off the ACTUAL printed cast threshold instead (see the Twin block
   // below: min(5, max(2, threshold-1))).
+  // v4.8: exact-cost basis trimmed a further half-point (2 -> 1.5). The new
+  // cost-vs-value harness section showed the ENTIRE "most under-priced" top
+  // ten was exact/easy-cost bodies (Flickering Sea Pens/Cavernous Watcher
+  // 75.1%, Vector Blade Captain 67.5%...), and those same cheap defensive
+  // bodies are the measured engine of the wall decks that top the roster
+  // (the v4.8 deck-level ablation put Avenge Grind's list at 93.8% even
+  // under a different Leader — the list IS the deck). Hash-stable: only the
+  // stat budget moves, never keyword/cost assignment.
   const D =
     !isTwin && cost.kind === 'exact'
-      ? Math.min(threshold, costDifficulty(cost))
+      ? Math.min(threshold, 1.5)
       : isTwin
         ? Math.min(5, Math.max(2, threshold - 1))
         : threshold;
@@ -279,8 +287,12 @@ function mapUnit(c: CardTemplate): CardDef {
   // single biggest recovery for the roster-floor ramp archetypes (Abyss
   // Excavate Ramp 14.4% -> 39.2% under the fatigue rule; every Anchor deck
   // improved) while barely moving the top decks.
+  // v4.8: +2 -> +3. The round-4 ablation measured one MORE point of Anchor
+  // HP as the only dial that lifted every ramp-floor deck at once
+  // (Anchor-Scrap 13.8 -> 20.4 -> 29.2 at +1/+2 on top of the v4.7 print)
+  // while leaving the roster's top decks flat.
   if (keywords.includes('Anchor')) {
-    hp += 2;
+    hp += 3;
   }
 
   const def: CardDef = {
@@ -410,6 +422,18 @@ function mapUnit(c: CardTemplate): CardDef {
   if (MANUAL_STEEL[c.id] !== undefined && !def.steel) {
     def.steel = { x: MANUAL_STEEL[c.id] };
     def.keywords = [...(def.keywords || []), 'Steel'];
+  }
+  // v4.8: Chrono-Phalanx has sat at the very bottom of the pool for FOUR
+  // straight passes (26.4% win-in-deck, 0.36 casts/game) regardless of meta
+  // — the v4.7 findings explicitly flagged it as "a redesign, not a stat
+  // bump". It's a hard-gate trophy body; give it a trophy identity: +2/+2
+  // over budget and Overrun, so the rare turn it lands it actually punches
+  // through the durability boards that define the meta.
+  if (c.id === 'chrono_phalanx') {
+    def.atk = (def.atk || 0) + 2;
+    def.hp = (def.hp || 0) + 2;
+    if (!def.keywords?.includes('Overrun'))
+      def.keywords = [...(def.keywords || []), 'Overrun'];
   }
   return def;
 }
@@ -573,7 +597,10 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     // keyword (28.6% win rate). A die of value 6 is only a ~1-in-6 shot per
     // die placed, so the old +1-per-six rarely moved the needle on its own
     // effect; doubling it makes a hot roll actually feel like a payoff.
-    base.crescendo = { x: 2 + (tier >= 3 ? 1 : 0) };
+    // v4.8: 2 -> 3 base — Crescendo is still the weakest keyword in the
+    // game (37.1% this pass, from 28.6% pre-v4.5); the v4.5 doubling helped
+    // but under-shot.
+    base.crescendo = { x: 3 + (tier >= 3 ? 1 : 0) };
     base.keywords = [...(base.keywords || []), 'Crescendo'];
   }
   // v4.2 Aftershock (Event only): a delayed half-value echo of the main
@@ -742,7 +769,11 @@ const LEADER_RESOLVE: Record<string, number> = {
   mer_king: 2,
   apex_nanite_shinobi: 2,
   ethereal_sea_witch: 2,
-  legendary_diver: 1,
+  // v4.8: 1 -> 2 — Diver is still the weakest Leader (43.4%) after the
+  // v4.6 flag fix finally turned its tempo grant on; a deeper Resolve
+  // cheapens the draw+tempo Ability exactly when Diver is losing, without
+  // touching its rate when ahead.
+  legendary_diver: 2,
   crimson_vector_commander: 2,
 };
 
@@ -760,10 +791,15 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   // every-turn Ability alone compounds enough across an ~11-round game.
   // Stacking a second buff on the once-per-game Ultimate on top of that was
   // double-counting the same fix.
+  // v4.8: value 4 -> 3 — Abyss is now the strongest Leader (56.2%) after
+  // holding steady at the top for two passes; trimming the once-per-game
+  // mass sap is the lever that doesn't touch its every-turn identity (the
+  // v4.5 note above already warned the Ability+Ultimate pair overshoots
+  // when buffed together — the same logic applies in reverse).
   avatar_of_the_abyss: {
     unlockTurn: 5,
     threshold: 6,
-    effect: { action: 'sap', value: 4, target: 'allEnemyUnits' },
+    effect: { action: 'sap', value: 3, target: 'allEnemyUnits' },
   },
   ethereal_sea_witch: {
     unlockTurn: 5,

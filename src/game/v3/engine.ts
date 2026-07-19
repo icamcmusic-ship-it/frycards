@@ -127,10 +127,6 @@ export interface Player {
    * next friendly Unit to enter play this turn skips summoning sickness
    * (see enterPlay()). */
   swiftGrantThisTurn: boolean;
-  /** v4.4 Momentum: true for the duration of this player's own turn only
-   * (set in startTurn, cleared in finishEndPhase) when they qualified —
-   * grants +1 ATK to all their Units (see effAtk) on top of the bonus die. */
-  momentumActive: boolean;
   /** v4.7 Fatigue: escalating damage taken per empty-deck Draw Phase
    * (1, then 2, then 3, ...) — see startTurn's Draw Phase. */
   fatigue: number;
@@ -182,11 +178,17 @@ export interface GameStats {
   /** v4.2 new-keyword sanity counters: total damage prevented by each mechanic. */
   bulwarkReduced: number;
   tollReduced: number;
-  /** v4.4: total damage absorbed by Steel pools, damage dealt back to
-   * attackers whose hit a Ward prevented, and bonus dice granted by Momentum. */
+  /** v4.4: total damage absorbed by Steel pools, and damage dealt back to
+   * attackers whose hit a Ward prevented. */
   steelAbsorbed: number;
   wardPunishDamage: number;
-  momentumDiceGranted: number;
+  /** v4.8 instrumentation: total Fatigue damage dealt (empty-deck draws),
+   * Overrun punch-through triggers, Pierce overflow damage to Leaders, and
+   * one-time Anchor full-ramp bonuses granted. */
+  fatigueDamage: number;
+  overrunTriggers: number;
+  pierceOverflowDamage: number;
+  anchorCapBonuses: number;
 }
 
 /** Increment a per-player decision counter (v4.1 tracking). */
@@ -249,10 +251,7 @@ export function effAtk(g: Game, u: Inst): number {
   if (u.def.type === 'Unit' && p.location?.def.locPassive === 'ATK_ALL') {
     loc = LOC_PASSIVE_FLAT * locPassiveMultiplier(g, u);
   }
-  // v4.4 Momentum: +1 ATK to every Unit this player controls, only during
-  // their own turn while active (see startTurn/finishEndPhase).
-  const momentum = u.def.type === 'Unit' && p.momentumActive ? 1 : 0;
-  return Math.max(0, (u.def.atk || 0) + u.permAtk + loc + momentum);
+  return Math.max(0, (u.def.atk || 0) + u.permAtk + loc);
 }
 export function effMaxHp(g: Game, u: Inst): number {
   const p = g.players[u.owner];
@@ -300,6 +299,10 @@ export const SIM_TUNING = {
   /** v4.7 candidate: flat bonus HP on Anchor-keyword Units (they must
    * survive on board for the ramp to exist at all). */
   anchorHpBonus: 0,
+  /** v4.8 A/B arm: waive the Echo extra-discard fodder cost at EVERY rarity
+   * (live behavior only waives mid-rarity) — the dedicated look at Echo's
+   * fodder economics the v4.7 findings called for (§4.3). Live: false. */
+  echoWaiveAllFodder: false,
 };
 
 export function steelRemaining(target: Inst): number {
@@ -413,6 +416,7 @@ function applyAnchorCapBonus(g: Game, p: Player, c: Inst) {
     // discount ceiling.
     c.permAtk += 2;
     c.permHp += 2;
+    g.stats.anchorCapBonuses++;
     g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +2/+2.`);
     if (SIM_TUNING.anchorCapBonusDraw) drawCards(g, p, 1);
   }
@@ -431,13 +435,6 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
   if (u.def.excavate && u.def.type === 'Location') {
     t -= u.def.excavate.x * (u.excavateStacks || 0);
   }
-  // v4.5: Momentum also discounts the Leader's own Ability Slot by 1, same
-  // threshold-reduction language Resolve/Anchor already use — the balance
-  // sim measured Momentum's bonus die (v4.4) and the +1 ATK add-on (v4.4.2)
-  // as barely moving its own trigger's win rate (16.5% -> 17.3%, still a
-  // -66.5pt decision delta), so this ties the comeback trigger to the
-  // Leader's actual answer instead of only more raw material.
-  if (u.def.type === 'Leader' && g.players[u.owner].momentumActive) t -= 1;
   return Math.max(1, t);
 }
 
@@ -543,7 +540,6 @@ export function newGame(
       comboGateCastThisTurn: false,
       footholdUsedThisTurn: false,
       swiftGrantThisTurn: false,
-      momentumActive: false,
     };
   };
   const g: Game = {
@@ -572,7 +568,10 @@ export function newGame(
       tollReduced: 0,
       steelAbsorbed: 0,
       wardPunishDamage: 0,
-      momentumDiceGranted: 0,
+      fatigueDamage: 0,
+      overrunTriggers: 0,
+      pierceOverflowDamage: 0,
+      anchorCapBonuses: 0,
     },
     rules: { ...DEFAULT_RULES, ...rules },
     stage: 'PRE_REROLL',
@@ -905,6 +904,8 @@ export function startTurn(g: Game) {
       p.fatigue += 1;
       g.log.push(`${p.id} is out of cards — fatigue ${p.fatigue} damage.`);
       p.leader.damage += p.fatigue;
+      g.stats.fatigueDamage += p.fatigue;
+      decide(g, p.id, 'fatigued');
       checkWin(g);
       if (g.winner) return;
     } else {
@@ -912,34 +913,15 @@ export function startTurn(g: Game) {
     }
   }
 
-  // Roll Phase. v4.4 Momentum: a losing player — Leader at or below half HP
-  // AND fewer Units in play than their opponent — rolls one bonus die this
-  // turn only. A systemic, symmetric comeback lever (state-based, not tied
-  // to drawing a specific "answer" card) answering the sim's finding that
-  // Ultimate usage and board wipes both correlated with losing, not winning
-  // (see docs/RULEBOOK.md's Momentum entry).
-  const opp = opponentOf(g, p.id);
-  const momentumOn =
-    remainingHp(g, p.leader) * 2 <= effMaxHp(g, p.leader) && p.board.length < opp.board.length;
-  const diceCount = momentumOn ? 6 : 5;
-  p.dice = Array.from({ length: diceCount }, () => ({ value: d6(g.rng), placed: false }));
-  p.momentumActive = momentumOn;
-  if (momentumOn) {
-    g.stats.momentumDiceGranted++;
-    decide(g, p.id, 'momentum');
-    // v4.4: also +1 ATK to all this player's Units this turn (see effAtk) —
-    // the bonus die alone measured as barely helping (16.5% win rate when
-    // triggered), so this ties the comeback lever to actual pressure instead
-    // of just more raw material.
-    // v4.6: also draw a card. Three straight passes of dice/stat/threshold
-    // levers (bonus die, +1 ATK, Leader-Ability discount) each failed to
-    // move Momentum's trigger win rate (16.5% -> 17.3% -> 17.8%) — a player
-    // behind on board AND at half HP is usually behind on *options*, not
-    // just material, and none of the prior levers touched the option axis.
-    // Cards are the one comeback resource this trigger never granted.
-    drawCards(g, p, 1);
-    g.log.push(`${p.id} is behind — Momentum grants a 6th die, +1 ATK and a card this turn.`);
-  }
+  // Roll Phase. v4.8: the Momentum comeback rule (v4.4-v4.7: a bonus die,
+  // +1 ATK, an Ability discount and a card when behind on HP + board) is
+  // REMOVED — the dedicated on/off A/B it finally got measured no systemic
+  // benefit at all: leader spread was slightly BETTER without it (11.3pt vs
+  // 12.3pt), games ran a full round shorter, and the weakest roster deck
+  // gained +9pt with it off. Four rounds of stacking riders never made the
+  // trigger correlate with winning; the rule was complexity without a
+  // comeback (see docs/BALANCE_SIM_FINDINGS_v4.8.md).
+  p.dice = Array.from({ length: 5 }, () => ({ value: d6(g.rng), placed: false }));
 }
 
 /**
@@ -1497,7 +1479,7 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
 }
 
 /** Destination 4: Echo-recast from Discard (die meets threshold + discard one
- * card from hand — waived for mid-rarity cards, see `waiveFodder` below).
+ * card from hand — waived for mid/high-rarity cards, see `waiveFodder` below).
  * `dieIndex` is an array for 'sum'-cost cards. `discardIid` is unused/
  * optional when the recast card is mid-rarity. */
 export function echoRecast(
@@ -1521,7 +1503,12 @@ export function echoRecast(
   // (a losing player reaching for a comeback that isn't one), while low- and
   // high-rarity Echo recasts both correlated with winning. Low/high keep the
   // full "discard one extra card" cost (see docs/RULEBOOK.md's Echo entry).
-  const waiveFodder = rarityTier(c.def.rarity) === 'mid';
+  // v4.8: the waiver widens to HIGH rarity too (was mid-only) — the decision
+  // table has high-rarity Echo recasts as the clearest positive line in the
+  // Echo family (+5.8pt) yet still taxed a real card, while the round-4
+  // echoNoFodder ablation arm lifted the Echo-themed floor decks (Shinobi
+  // Tempo-Anchor 11.5 -> 19.0). Low rarity keeps the full fodder cost.
+  const waiveFodder = SIM_TUNING.echoWaiveAllFodder || rarityTier(c.def.rarity) !== 'low';
   let dIdx = -1;
   if (!waiveFodder) {
     dIdx = p.hand.findIndex((h) => h.iid === discardIid);
@@ -1814,6 +1801,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     // Mirrors Pierce's existing floor(atk/2) overflow cap, so "half ATK"
     // is already the established magnitude for punch-through effects.
     dmgToTarget = Math.max(1, Math.floor(atk / 2));
+    g.stats.overrunTriggers++;
     g.log.push(`${att.def.name}'s Overrun punched ${dmgToTarget} damage through.`);
   }
   // v4.0 Bind: a bound Unit deals no retaliation damage this turn.
@@ -1875,6 +1863,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     const toll = Math.min(pierceOverflow, tollReduction(g, oppLeader.owner));
     g.stats.tollReduced += toll;
     oppLeader.damage += pierceOverflow - toll;
+    g.stats.pierceOverflowDamage += pierceOverflow - toll;
     g.log.push(`${att.def.name} Pierced for ${pierceOverflow}.`);
   }
   cleanupDeaths(g);
@@ -1959,8 +1948,6 @@ export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst)
       u.steelUsed = 0;
     }
   }
-  // v4.4 Momentum: the +1 ATK window is this player's own turn only.
-  p.momentumActive = false;
   p.dice = [];
   g.active = opponentOf(g, p.id).id;
   g.turnStarted = false;

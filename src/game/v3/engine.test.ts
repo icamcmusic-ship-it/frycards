@@ -1361,7 +1361,7 @@ test('BUG FIXED: a self-buff Combo caps its stacking instead of snowballing fore
 
 // ---------------------------------------------------------------------------
 // v4.4 balance-sim rebalance: Steel, Ward punish, Pierce cap, Frenzy target
-// restriction, Anchor cap bonus, mid-rarity Echo waiver, Momentum, Location
+// restriction, Anchor cap bonus, mid-rarity Echo waiver, Location
 // passive bump.
 // ---------------------------------------------------------------------------
 
@@ -1458,7 +1458,7 @@ test("v4.4 Frenzy's second swing can't target the enemy Leader directly unless i
   expect(attack(g, fz.iid, g.players.B.leader.iid)).toBe(true);
 });
 
-test('v4.4 Echo waives the extra-discard fodder cost for mid-rarity (Rare/Super-Rare) cards only', () => {
+test('v4.8 Echo waives the extra-discard fodder cost for mid/high rarity; low still pays', () => {
   const g = freshGame();
   g.active = 'A';
   startTurn(g);
@@ -1485,23 +1485,19 @@ test('v4.4 Echo waives the extra-discard fodder cost for mid-rarity (Rare/Super-
   expect(echoRecast(g, die2, lowCard.iid, undefined)).toBe(false); // no fodder id -> rejected
 });
 
-test('v4.4 Momentum grants a 6th die when behind (Leader <= half HP, fewer Units), not otherwise', () => {
+test('v4.8 Momentum removed — always exactly five dice, regardless of being behind', () => {
   const g = freshGame();
   g.active = 'A';
   const p = g.players.A;
   const opp = g.players.B;
-  // Even board, full HP -> no Momentum.
   startTurn(g);
   expect(p.dice.length).toBe(5);
-
-  // Behind on both counts -> Momentum grants a 6th die.
   endTurn(g);
   endTurn(g); // back to A's turn
   p.leader.damage = Math.ceil(effMaxHp(g, p.leader) / 2); // at/below half HP
   opp.board.push(makeInst(mkU('oppUnit', {}), 'B'));
-  startTurn(g);
-  expect(p.dice.length).toBe(6);
-  expect(remainingHp(g, p.leader) * 2).toBeLessThanOrEqual(effMaxHp(g, p.leader));
+  startTurn(g); // behind on both axes — v4.4-v4.7 would have granted a 6th die
+  expect(p.dice.length).toBe(5);
 });
 
 test('v4.4 Location passives are +2 (was +1)', () => {
@@ -1518,7 +1514,7 @@ test('v4.4 Location passives are +2 (was +1)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// v4.4.1 second-pass proposals: Overrun, Foothold, Momentum +1 ATK, Frenzy's
+// v4.4.1 second-pass proposals: Overrun, Foothold, Frenzy's
 // behind-on-board carve-out, Shinobi's no-repeat-target Ability, Diver's
 // tempo-granting Ability, and Locations resolving an immediate onCast.
 // ---------------------------------------------------------------------------
@@ -1569,7 +1565,7 @@ test('v4.4.1 Foothold discounts only the first Unit cast each turn, stacks with 
   expect(effThreshold(g, 'A', secondUnit)).toBe(3);
 });
 
-test('v4.4.1 Momentum grants +1 ATK on top of the bonus die, only during the granted turn', () => {
+test('v4.8 Momentum removed — no +1 ATK while behind', () => {
   const g = freshGame();
   g.active = 'A';
   const p = g.players.A;
@@ -1578,12 +1574,8 @@ test('v4.4.1 Momentum grants +1 ATK on top of the bonus die, only during the gra
   p.board.push(u);
   p.leader.damage = Math.ceil(effMaxHp(g, p.leader) / 2);
   opp.board.push(makeInst(mkU('mom-opp1', {}), 'B'), makeInst(mkU('mom-opp2', {}), 'B'));
-  startTurn(g); // p.board.length(1) < opp.board.length(2) -> Momentum
-  expect(p.momentumActive).toBe(true);
-  expect(effAtk(g, u)).toBe(3); // printed 2 + 1 Momentum
-  endTurn(g);
-  expect(p.momentumActive).toBe(false);
-  expect(effAtk(g, u)).toBe(2); // bonus gone once the turn ends
+  startTurn(g); // behind on both axes — no Momentum bonus exists anymore
+  expect(effAtk(g, u)).toBe(2);
 });
 
 test("v4.4.1 Frenzy's second-swing Leader restriction lifts when its controller is behind on Units", () => {

@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Eclipse Update',
+    items: [
+      'Big rule change: Momentum is gone. A dedicated on/off test across thousands of simulated games showed the comeback rule never actually helped anyone come back — the game is tighter and a full round faster without it. Every turn is exactly five dice again.',
+      'Balance pass (44,000+ simulated games): Leader win rates are the closest EVER measured — all six within 8 points. Legendary Diver reaches Resolve 2, Avatar of the Abyss\'s Ultimate was trimmed, cheap "exact number" defensive Units came down a stat point, Anchor units gained another HP, Crescendo got stronger, and Chrono-Phalanx was redesigned into an Overrun trophy body.',
+      'Echo is cheaper: only Commons and Uncommons still pay the extra-discard cost to re-cast from your Discard. Rare and above just need the die.',
+      'Brand-new premium card looks: Ultra-Rares now print in the "Aurora Vault" template (chromatic teal-and-violet lattice with counter-rotating light-traces and an aurora sweep on hover), and Mythics in "Void Eclipse" (a slow-turning nebula border, an eclipse-corona sigil, a drifting starfield, and amethyst stat gems).',
+      'Deck rules are enforced for real now: Mythics cap at 1 copy per deck and Super-Rare/Full-Art/Ultra-Rare at 2 — both in the deck builder and when importing a deck code. The rules always said so; the buttons finally agree.',
+      'Quality of life: Fatigue damage announces itself with a proper banner, the Battle Log can expand into a tall scrollback, and the end-of-turn discard picker has a SUGGEST button that auto-selects sensible cuts.',
+    ],
+  },
+  {
     version: 'Fatigue Update',
     items: [
       'Big rule change: running out of cards no longer loses the game instantly. Instead your Leader takes growing Fatigue damage (1, then 2, then 3...) each turn you cannot draw. A quarter of all simulated games were ending on the old sudden-death rule, and it quietly punished every card-draw effect.',

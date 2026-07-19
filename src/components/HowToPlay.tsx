@@ -24,7 +24,7 @@ const SECTIONS = [
       ],
       [
         'Dice',
-        'Every turn you roll five six-sided dice (six when Momentum triggers — see §6) and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
+        'Every turn you roll five six-sided dice and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
       ],
     ],
   },
@@ -32,7 +32,7 @@ const SECTIONS = [
     title: '2 · Turn Structure',
     body: [
       ['Draw', 'Draw 1 card (any pending Aftershock effects resolve just before this).'],
-      ['Roll', 'Roll your five dice (six if Momentum triggers).'],
+      ['Roll', 'Roll your five dice.'],
       [
         'Reroll',
         'Reroll any subset of your dice, up to two times. Charms with Snap may be cast during this window, before you lock your reroll.',
@@ -43,7 +43,7 @@ const SECTIONS = [
       ],
       [
         'Combo Check',
-        'Your final die values — all five (or six with Momentum), placed or not — are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
+        'Your final die values — all five, placed or not — are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
       ],
       [
         'Combat',
@@ -146,7 +146,7 @@ const SECTIONS = [
       ],
       [
         'Echo',
-        'After it hits your Discard: recast it with a die + discarding one card (Rare and Super-Rare cards skip the extra discard). Once per copy — the next discard banishes it.',
+        'After it hits your Discard: recast it with a die + discarding one card (Rare and higher rarities skip the extra discard — only Commons/Uncommons still pay it). Once per copy — the next discard banishes it.',
       ],
       [
         'Rally',
@@ -177,10 +177,6 @@ const SECTIONS = [
       ['Overflow X', 'Bonus if the die placed beats the threshold by X or more.'],
       ['Combo: [Pattern]', 'Passive bonus at Combo Check when your roll contains the pattern.'],
       ['Foothold (Location)', 'Your first Unit cast each turn costs 1 less (stacks with Anchor).'],
-      [
-        'Momentum',
-        'Not a keyword — a built-in comeback. Start your turn at/below half HP AND with fewer Units than the enemy: this turn only, roll a 6th die, your Units get +1 ATK, your Leader Ability threshold drops 1, and you draw a card.',
-      ],
       ['Tribute (Location)', 'Bonus at your End Phase if you Pitched 2+ dice this turn.'],
       ['Excavate X (Location)', 'Its ability threshold drops by X every turn it stays in play.'],
       ['Contested (Location)', 'Its passive is doubled while your opponent has no Location.'],

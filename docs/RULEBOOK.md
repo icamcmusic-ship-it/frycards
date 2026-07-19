@@ -1,12 +1,43 @@
-# FryCards — Definitive Rulebook v4.7
+# FryCards — Definitive Rulebook v4.8
 
-Supersedes v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.8 balance-sim pass (22,560-game baseline + 22,560-game verification +
+a 13-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.8.md`):**
+
+- **RULE REMOVED — Momentum (§3.2).** The dedicated on/off A/B measured no
+  systemic benefit: Leader spread slightly better without it, games a full
+  round shorter, weakest deck +9pt. Every turn is exactly five dice again.
+- **Leader spread 12.0pt → 8.2pt (new best).** Diver 43.4 → 50.1 (Resolve
+  1 → 2), Abyss trimmed off the top (Ultimate mass-sap 4 → 3).
+- **Deck-level ablation named the real Avenge Grind engine:** the same
+  unit-heavy Guard/Toll/Avenge list wins 93.8% under a *different* Leader —
+  the list is the deck, the Shinobi kit and the mend package are not. The
+  cheap exact-cost defensive bodies that list leans on were trimmed again
+  (exact-cost stat basis 2 → 1.5).
+- **Echo fodder economics (§10):** the extra-discard cost is now waived for
+  Rare and higher (was Rare/Super-Rare only) — high-rarity recasts were the
+  clearest positive Echo line (+5.8pt) yet still taxed a real card.
+- **Anchor** Units print +3 HP (was +2) — the round-4 ablation showed one
+  more point lifted every ramp-floor deck at once while the top decks
+  stayed flat. **Crescendo** base 2 → 3 (still the weakest keyword).
+- **Chrono-Phalanx redesigned** (four passes at the pool's bottom): +2/+2
+  over budget plus Overrun — a hard-gate trophy body that now actually
+  punches through the durability boards when it lands.
+- **Per-rarity deck copy caps are now actually enforced** in the deck
+  builder and deck-code import (Mythic 1, Super-Rare/Full-Art/Ultra-Rare 2)
+  — the UI had always advertised them and only ever checked the flat 3.
+- **New harness instrumentation:** CPU-lapse detectors (missed lethal,
+  wasted castable dice, idle Leader Ability), a cost-vs-value table pricing
+  every card's win rate against its real cast-format difficulty, fatigue/
+  Overrun/Pierce-overflow/Anchor-bonus counters, and deck-level ablation
+  subjects.
 
 **v4.7 balance-sim pass (45,120-game baseline + a new single-dial ablation
 harness + full verification re-sim; writeup `docs/BALANCE_SIM_FINDINGS_v4.7.md`):**
@@ -313,18 +344,14 @@ Draw 1 card. (Skipped by the first player on their first turn only.)
 ### 3.2 Roll Phase
 Roll five d6 from your own supply.
 
-**Momentum *(v4.4)*:** if, at the start of this Roll Phase, your Leader is at
-or below half its maximum HP **and** you control fewer Units than your
-opponent, roll a **sixth** d6 this turn only. A systemic, symmetric comeback
-lever — not a card, not a keyword, just a state-based check — that answers
-the balance-sim finding that using your Leader's Ultimate and casting a board
-wipe both correlated with *losing*, not winning: the game didn't have a
-reliable way to help a player who's actually behind claw back without
-drawing a specific "answer" card. Checked fresh every turn; it doesn't stack
-or persist once you're no longer behind on both conditions. *(v4.4.2)* Also
-grants **+1 ATK to all your Units this turn** — the bonus die alone measured
-at only a 16.5% win rate when triggered, so the fix ties the comeback lever
-to actual pressure, not just more raw material.
+**Momentum *(v4.4, REMOVED v4.8)*:** from v4.4 to v4.7 a player behind on
+both HP (at/below half) and board rolled a sixth die, later stacking +1 ATK,
+a Leader-Ability discount and a bonus card. The v4.8 harness finally gave the
+rule the dedicated on/off A/B the findings docs kept asking for, and the
+answer was clear: with Momentum OFF the Leader win-rate spread was slightly
+*better* (11.3pt vs 12.3pt), games ran a full round shorter, and the weakest
+roster deck gained +9pt. Four rounds of stacked riders never made the trigger
+correlate with winning. The rule is removed; every turn is exactly five dice.
 
 ### 3.3 Reroll Phase
 Reroll any subset of your five dice, up to **two times** *(v4.3 — raised from one reroll; the §6 hit-rate table below still reflects the old one-reroll baseline and understates actual hit rates under the current rule)*.

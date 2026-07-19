@@ -8,10 +8,12 @@ import { MetaHeader, PopButton, CardMarketValuePanel } from './ui';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
+import { maxCopiesForRarity } from '../game/v3/decks';
 import { CardDef } from '../game/v3/cards';
 import { cn } from '../lib/utils';
 
-// v4.2 Rulebook §2: 30-card deck, max 3 copies of any card, Leader kept separate.
+// v4.2 Rulebook §2: 30-card deck, max 3 copies of any card (lower caps at
+// high rarity — see maxCopiesForRarity), Leader kept separate.
 export const DECK_SIZE = 30;
 export const MAX_COPIES = 3;
 
@@ -56,8 +58,15 @@ export function validateDeckList(
       issues.push({ text: `${c.name}: Leaders cannot be in the 30-card deck.` });
   }
   for (const [id, n] of byId) {
-    if (n > MAX_COPIES) {
-      issues.push({ text: `Too many copies of ${db.get(id)?.name || id} (max ${MAX_COPIES}).` });
+    // v4.8: per-rarity caps (Mythic 1, Super-Rare/Full-Art/Ultra-Rare 2,
+    // else 3) — the UI previously only enforced the flat 3 while HowToPlay
+    // §11 promised tighter caps.
+    const c = db.get(id);
+    const cap = maxCopiesForRarity(c?.rarity);
+    if (n > cap) {
+      issues.push({
+        text: `Too many copies of ${c?.name || id} (${c?.rarity || 'Common'}: max ${cap}).`,
+      });
     }
   }
 
@@ -286,7 +295,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const addCard = (card: CardDef) => {
     if (!leader) return;
     if (cardIds.length >= DECK_SIZE) return;
-    if (countOf(card.id) >= MAX_COPIES) return;
+    if (countOf(card.id) >= maxCopiesForRarity(card.rarity)) return;
     if (countOf(card.id) >= (availableQty.get(card.id) || 0)) return;
     setCardIds([...cardIds, card.id]);
   };
@@ -308,7 +317,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     const tryAdd = (c: CardDef) => {
       if (picked.length >= DECK_SIZE) return false;
       const cur = countMap.get(c.id) || 0;
-      if (cur >= MAX_COPIES) return false;
+      if (cur >= maxCopiesForRarity(c.rarity)) return false;
       if (cur >= (availableQty.get(c.id) || 0)) return false;
       picked.push(c.id);
       countMap.set(c.id, cur + 1);
@@ -562,7 +571,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             {pool.map((c) => {
               const inDeck = countOf(c.id);
               const maxAddable = Math.min(
-                MAX_COPIES - inDeck,
+                maxCopiesForRarity(c.rarity) - inDeck,
                 (availableQty.get(c.id) || 0) - inDeck,
               );
               return (

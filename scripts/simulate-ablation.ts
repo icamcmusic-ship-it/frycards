@@ -102,6 +102,43 @@ SUBJECTS.push(
   },
 );
 
+// v4.8 deck-level ablation of Shinobi Avenge Grind (findings v4.7 §4.1):
+// same list-shape under a different Leader (isolates the Shinobi kit), and
+// the same Leader with the mend package stripped (isolates the wall/mend
+// engine). Whichever variant collapses names the real power source.
+SUBJECTS.push(
+  {
+    label: 'AvengeGrind-DiverLdr',
+    leaderId: 'legendary_diver',
+    keywords: ['Avenge', 'Toll'],
+    effects: ['mend', 'sap'],
+    units: 19,
+    spells: 7,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeGrind-noMend',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Avenge', 'Toll'],
+    effects: ['sap'],
+    units: 19,
+    spells: 7,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeGrind-noGuard',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Avenge', 'Toll', 'Swift'],
+    effects: ['mend', 'sap'],
+    units: 14,
+    spells: 12,
+    locations: 4,
+    comboFamily: 'none',
+  },
+);
+
 // A fixed, varied opponent roster (mid-tier decks from the main sim — not
 // the other subjects, so subject-vs-subject mirror noise doesn't pollute
 // the read):
@@ -190,6 +227,9 @@ const ARMS: Arm[] = [
   // Round 3 (v4.7, run AFTER the Twin/Steel print nerfs + AI fixes landed):
   { name: 'anchorHp+1', apply: () => (SIM_TUNING.anchorHpBonus = 1) },
   { name: 'fat+anchorHp+2', apply: () => { SIM_TUNING.deckout = 'fatigue'; SIM_TUNING.anchorHpBonus = 2; } },
+  // Round 4 (v4.8): Echo fodder economics (findings v4.7 §4.3). The
+  // momentumOff arm ran here once and led to Momentum's outright removal.
+  { name: 'echoNoFodder', apply: () => (SIM_TUNING.echoWaiveAllFodder = true) },
 ];
 
 const PER_PAIR = parseInt(process.argv[2] || '60', 10);

@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { validateDeckList, DECK_SIZE, MAX_COPIES } from './DeckBuilderScreen';
+import { maxCopiesForRarity } from '../game/v3/decks';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 
 const db = new Map(POOL_V4.map((c) => [c.id, c]));
@@ -9,7 +10,9 @@ const units = POOL_V4.filter((c) => c.type !== 'Leader');
 function fillDeck(n: number, maxPerCard = MAX_COPIES): string[] {
   const ids: string[] = [];
   for (const c of units) {
-    for (let i = 0; i < maxPerCard && ids.length < n; i++) ids.push(c.id);
+    // v4.8: honor the per-rarity copy caps (Mythic 1, SR/FA/UR 2, else 3).
+    const cap = Math.min(maxPerCard, maxCopiesForRarity(c.rarity));
+    for (let i = 0; i < cap && ids.length < n; i++) ids.push(c.id);
     if (ids.length >= n) break;
   }
   return ids.slice(0, n);
@@ -25,7 +28,7 @@ test('flags a deck that is not exactly 30 cards', () => {
   expect(issues.some((i) => i.text.includes('exactly 30'))).toBe(true);
 });
 
-test('accepts an exactly-30-card, max-3-copies-per-card deck', () => {
+test('accepts an exactly-30-card deck within all copy caps', () => {
   const ids = fillDeck(DECK_SIZE);
   const issues = validateDeckList(leader, ids, db);
   expect(issues).toEqual([]);
@@ -62,4 +65,15 @@ test('enforces collection ownership limits when a collection is supplied', () =>
   const collection = [{ card_id: card.id, quantity: 1, foil_quantity: 0 }];
   const issues = validateDeckList(leader, ids, db, collection);
   expect(issues.some((i) => i.text.includes(`available`))).toBe(true);
+});
+
+test('v4.8 enforces per-rarity copy caps (Mythic max 1, Ultra-Rare max 2)', () => {
+  const mythic = units.find((c) => c.rarity === 'Mythic');
+  const ultra = units.find((c) => c.rarity === 'Ultra-Rare');
+  if (!mythic || !ultra) throw new Error('pool is missing Mythic/Ultra-Rare cards');
+  const filler = fillDeck(DECK_SIZE).filter((id) => id !== mythic.id && id !== ultra.id);
+  const ids = [mythic.id, mythic.id, ultra.id, ultra.id, ultra.id, ...filler].slice(0, DECK_SIZE);
+  const issues = validateDeckList(leader, ids, db);
+  expect(issues.some((i) => i.text.includes(`${mythic.name} (Mythic: max 1)`))).toBe(true);
+  expect(issues.some((i) => i.text.includes(`${ultra.name} (Ultra-Rare: max 2)`))).toBe(true);
 });

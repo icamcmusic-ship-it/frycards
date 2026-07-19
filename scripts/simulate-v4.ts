@@ -26,7 +26,7 @@ import {
 } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
 import { Archetype, buildDeck, buildPureRandomDeck } from '../src/game/v3/decks';
-import { POOL_BY_ID, poolByType } from '../src/game/v3/cardpool';
+import { POOL_BY_ID, poolByType, costDifficulty } from '../src/game/v3/cardpool';
 
 // v4.4: a widened, 20-archetype roster across all six real Leaders — sim-only
 // (the player-facing "prebuilt archetype" deck picker was removed from the
@@ -348,7 +348,11 @@ const DECISION_KEYS = [
   'tributeTriggered',
   'wentFirst',
   'mulliganed',
-  'momentum',
+  // v4.8: fatigue exposure + CPU-lapse diagnostics (see ai.ts recordCpuLapses).
+  'fatigued',
+  'lapseMissedLethal',
+  'lapseWastedCastableDie',
+  'lapseIdleLeaderAbility',
 ];
 
 interface SuiteResult {
@@ -386,7 +390,12 @@ interface SuiteResult {
   tollReduced: number;
   steelAbsorbed: number;
   wardPunishDamage: number;
-  momentumDiceGranted: number;
+  /** v4.8: new mechanic totals + raw per-turn CPU-lapse counts. */
+  fatigueDamage: number;
+  overrunTriggers: number;
+  pierceOverflowDamage: number;
+  anchorCapBonuses: number;
+  lapseCounts: Record<string, number>;
   decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
   errors: string[];
 }
@@ -424,7 +433,11 @@ function newResult(): SuiteResult {
     tollReduced: 0,
     steelAbsorbed: 0,
     wardPunishDamage: 0,
-    momentumDiceGranted: 0,
+    fatigueDamage: 0,
+    overrunTriggers: 0,
+    pierceOverflowDamage: 0,
+    anchorCapBonuses: 0,
+    lapseCounts: {},
     decisionAgg: {},
     errors: [],
   };
@@ -560,7 +573,15 @@ function runGame(
   r.tollReduced += s.tollReduced;
   r.steelAbsorbed += s.steelAbsorbed;
   r.wardPunishDamage += s.wardPunishDamage;
-  r.momentumDiceGranted += s.momentumDiceGranted;
+  r.fatigueDamage += s.fatigueDamage;
+  r.overrunTriggers += s.overrunTriggers;
+  r.pierceOverflowDamage += s.pierceOverflowDamage;
+  r.anchorCapBonuses += s.anchorCapBonuses;
+  for (const pid of ['A', 'B'] as const) {
+    const d = s.decisions[pid] || {};
+    for (const key of ['lapseMissedLethal', 'lapseWastedCastableDie', 'lapseIdleLeaderAbility'])
+      r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
+  }
   for (const [id, n] of Object.entries(s.comboTriggers))
     r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
   for (const [id, n] of Object.entries(s.casts)) r.cardCast[id] = (r.cardCast[id] || 0) + n;
@@ -729,8 +750,15 @@ console.log({
   tollReduced: R.tollReduced,
   steelAbsorbed: R.steelAbsorbed,
   wardPunishDamage: R.wardPunishDamage,
-  momentumDiceGranted: R.momentumDiceGranted,
+  fatigueDamage: R.fatigueDamage,
+  overrunTriggers: R.overrunTriggers,
+  pierceOverflowDamage: R.pierceOverflowDamage,
+  anchorCapBonuses: R.anchorCapBonuses,
 });
+console.log('\n--- CPU reasoning lapses (raw per-game rates; see ai.ts recordCpuLapses) ---');
+for (const [key, n] of Object.entries(R.lapseCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`${key.padEnd(26)} total=${n}  per game=${(n / R.games).toFixed(3)}`);
+}
 console.log(
   `Pitch (v4.0): dice pitched for Mend 1 = ${R.dicePitched}; truly wasted (leader full) = ${R.diceWasted}`,
 );
@@ -798,6 +826,11 @@ for (const r of [...rows]
   console.log(
     `${r.name.padEnd(26)} ${r.type.padEnd(9)} casts/g=${r.castsPerGame.toFixed(2)} win%=${r.winPct.toFixed(1)} (n=${r.n})`,
   );
+
+// ---------------------------------------------------------------------------
+// v4.8: cost-vs-value analysis — each card's measured win%/cast-rate against
+// the DIFFICULTY of its actual printed cost format (exact/sum/gate), so
+// mispriced cards surface directly instead of via eyeballing the OP list.
 
 console.log(
   R.errors.length

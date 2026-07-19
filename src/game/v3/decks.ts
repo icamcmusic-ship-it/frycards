@@ -10,6 +10,20 @@ import { POOL_BY_ID, POOL_LEADERS, POOL_V4, poolByType } from './cardpool';
 const DECK_SIZE = 30; // v4.0
 export const MAX_COPIES = 3;
 
+/**
+ * v4.8: per-rarity deck copy caps (Rulebook "Copy caps" / HowToPlay §11):
+ * Common/Uncommon/Rare up to 3, Super-Rare/Full-Art/Ultra-Rare up to 2,
+ * Mythic exactly 1. Previously the UI/deck-code layer only ever enforced the
+ * flat MAX_COPIES=3, contradicting its own stated rules. (The sim's
+ * archetype builder intentionally keeps the flat cap so run-over-run
+ * results stay comparable — sim decks are not player-facing.)
+ */
+export function maxCopiesForRarity(rarity?: string): number {
+  if (rarity === 'Mythic') return 1;
+  if (rarity === 'Super-Rare' || rarity === 'Full-Art' || rarity === 'Ultra-Rare') return 2;
+  return MAX_COPIES;
+}
+
 export interface Archetype {
   label: string;
   leaderId: string;
