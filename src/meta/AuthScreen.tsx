@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useMeta } from './MetaContext';
 import { PopButton, Notice } from './ui';
@@ -16,6 +17,7 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,15 +138,26 @@ export function AuthScreen() {
             required
             onChange={(e) => setEmail(e.target.value)}
           />
-          <input
-            className={input}
-            type="password"
-            placeholder="Password (6+ characters)"
-            value={password}
-            required
-            minLength={6}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="relative">
+            <input
+              className={input + ' pr-10'}
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password (6+ characters)"
+              value={password}
+              required
+              minLength={6}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-steel)] hover:text-[var(--c-ink)]"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
 
           {error && <Notice text={error} />}
           {info && <Notice text={info} kind="success" />}

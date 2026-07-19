@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Palette, Sparkles } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
-import { PopButton } from './ui';
+import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
 import { setHideSerializedAnnouncements } from '../lib/supabase';
 
@@ -17,13 +17,21 @@ export function SettingsScreen({
   const themeList = Object.values(THEMES);
   const { profile, refreshProfile, guest } = useMeta();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   const toggleHideSerialized = async () => {
     if (!profile || busy) return;
     setBusy(true);
-    const err = await setHideSerializedAnnouncements(!profile.hide_serialized_announcements);
-    setBusy(false);
-    if (!err) refreshProfile();
+    setError('');
+    try {
+      const err = await setHideSerializedAnnouncements(!profile.hide_serialized_announcements);
+      if (err) setError(err);
+      else refreshProfile();
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -108,6 +116,11 @@ export function SettingsScreen({
                 {profile.hide_serialized_announcements ? 'HIDDEN' : 'VISIBLE'}
               </PopButton>
             </div>
+            {error && (
+              <div className="mt-2">
+                <Notice text={error} />
+              </div>
+            )}
           </div>
         )}
 

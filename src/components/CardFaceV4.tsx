@@ -983,6 +983,9 @@ function CardArt({
   return (
     <img
       src={def.image}
+      // Decorative: the card wrapper already carries a full aria-label, so an
+      // empty alt suppresses screen readers from reading the raw image URL.
+      alt=""
       className={artClass}
       draggable={false}
       loading="lazy"
@@ -1824,6 +1827,17 @@ export function CardInspectorModal({
   onClose: () => void;
   actions?: React.ReactNode;
 }) {
+  // Every other modal in the app (Card3DInspector, PlayerProfileModal, …)
+  // closes on Escape — this one didn't, a real keyboard-accessibility gap
+  // for a role="dialog" element.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center p-4"

@@ -100,9 +100,16 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (tab !== 'leaderboard' || leaderboard !== null) return;
     let cancelled = false;
-    fetchCardsLeaderboard(50).then((lb) => {
-      if (!cancelled) setLeaderboard(lb);
-    });
+    fetchCardsLeaderboard(50)
+      .then((lb) => {
+        if (!cancelled) setLeaderboard(lb);
+      })
+      .catch(() => {
+        // Leave leaderboard null on failure — the "still loading" state below
+        // would otherwise spin forever; fall back to an empty board so the
+        // tab at least renders something instead of hanging indefinitely.
+        if (!cancelled) setLeaderboard([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -171,12 +178,17 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     setBusy(true);
     setError('');
     setNotice('');
-    const err = await fn();
-    setBusy(false);
-    if (err) setError(err);
-    else {
-      if (success) setNotice(success);
-      reload();
+    try {
+      const err = await fn();
+      if (err) setError(err);
+      else {
+        if (success) setNotice(success);
+        reload();
+      }
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -659,7 +671,20 @@ function TradeComposerModal({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchFriendCollection(partner.id).then(setTheirCollection);
+    let cancelled = false;
+    fetchFriendCollection(partner.id)
+      .then((c) => {
+        if (!cancelled) setTheirCollection(c);
+      })
+      .catch(() => {
+        // Fall back to an empty collection on failure — without this the
+        // modal is stuck on "Loading their collection…" forever with no way
+        // out except Cancel.
+        if (!cancelled) setTheirCollection([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [partner.id]);
 
   useEffect(() => {

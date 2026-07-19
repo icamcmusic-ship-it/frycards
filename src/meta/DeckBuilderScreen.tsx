@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-react';
 import { encodeDeckCode, decodeDeckCode } from './deckcode';
 import { useMeta } from './MetaContext';
@@ -272,13 +272,25 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [inspect, setInspect] = useState<CardDef | null>(null);
+  const copiedTimeoutRef = useRef<number | null>(null);
+
+  // Cancel the pending "copied" reset if the editor unmounts first (e.g. the
+  // player hits BACK within the 1.5s window) — otherwise it still fires
+  // setCopied on an unmounted component.
+  useEffect(
+    () => () => {
+      if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
+    },
+    [],
+  );
 
   const handleExport = async () => {
     if (!leaderId) return;
     try {
       await navigator.clipboard.writeText(encodeDeckCode(leaderId, cardIds));
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1500);
     } catch {
       window.alert('Could not copy to clipboard — clipboard access is blocked in this browser.');
     }

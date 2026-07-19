@@ -830,6 +830,7 @@ export function playTurn(g: Game) {
   playPlacement(g, p);
   if (g.winner) return;
   recordPlacementLapses(g, p);
+  recordDiceSpentDownLapse(g, p);
   comboCheck(g);
   if (g.winner) return;
   playCombat(g, p);
@@ -895,15 +896,55 @@ function recordPlacementLapses(g: Game, p: Player) {
     });
     if (castable) lapse(g, p.id, 'lapseWastedCastableDie');
     const ab = p.leader.def.ability;
-    if (ab && !p.leader.abilityUsed && maxDie >= effAbilityThreshold(g, p.leader)) {
+    if (ab && !p.leader.abilityUsed) {
       const eff = ab.effect;
       const pointless =
         (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
         ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
           opp.board.length === 0) ||
         (eff.action === 'draw' && p.hand.length >= 8);
-      if (!pointless) lapse(g, p.id, 'lapseIdleLeaderAbility');
+      if (!pointless && maxDie >= effAbilityThreshold(g, p.leader)) {
+        // v4.9: split the single lapseIdleLeaderAbility counter by WHY the
+        // die never got spent — v4.8 findings §4 item 3 asked for this
+        // before acting further. 'refusalNoTarget' is a legal refusal (an
+        // abilityNoRepeatTarget Ability with no legal alternate target this
+        // turn — see engine.ts activateAbility) and isn't a heuristic bug;
+        // 'genuine' is everything else left over, the real actionable slice.
+        const isRefusal =
+          !!p.leader.def.abilityNoRepeatTarget &&
+          !autoTarget(g, p.id, eff, p.leader.lastAbilityTargetIid);
+        lapse(g, p.id, isRefusal ? 'lapseIdleLeaderAbility_refusalNoTarget' : 'lapseIdleLeaderAbility_genuine');
+      }
     }
+  }
+}
+
+/**
+ * v4.9: a die that could have paid for the Leader Ability existed SOMEWHERE
+ * in this turn's roll (placed or not) but is no longer available unplaced by
+ * the time Placement ends, and the Ability still went unused — i.e. a
+ * higher-priority cast consumed it. Measured separately from
+ * recordPlacementLapses (which only sees currently-unplaced dice) because it
+ * needs the ability's threshold checked against every die rolled this turn,
+ * not just the survivors — see v4.8 findings §4 item 3's "dice spent down"
+ * half of the open question.
+ */
+function recordDiceSpentDownLapse(g: Game, p: Player) {
+  const ab = p.leader.def.ability;
+  if (!ab || p.leader.abilityUsed) return;
+  const opp = opponentOf(g, p.id);
+  const eff = ab.effect;
+  const pointless =
+    (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+    ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+      opp.board.length === 0) ||
+    (eff.action === 'draw' && p.hand.length >= 8);
+  if (pointless) return;
+  const thr = effAbilityThreshold(g, p.leader);
+  const hadQualifyingDie = p.dice.some((d) => d.value >= thr);
+  const stillHasUnplacedQualifying = p.dice.some((d) => !d.placed && d.value >= thr);
+  if (hadQualifyingDie && !stillHasUnplacedQualifying) {
+    lapse(g, p.id, 'lapseIdleLeaderAbility_diceSpentDown');
   }
 }
 

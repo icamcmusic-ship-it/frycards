@@ -23,6 +23,8 @@ import {
   fmtCredits,
   SHOP_UNLOCK_LEVEL,
   SHOP_SETUP_FEE,
+  SHOP_BASE_SLOTS,
+  SHOP_MAX_SLOTS,
   shopSlotCost,
   shopMinPoolSize,
 } from './economy';
@@ -585,20 +587,28 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
   const [notice, setNotice] = useState('');
   const [reportTarget, setReportTarget] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
-    const [s, ls, sellers] = await Promise.all([
-      fetchShopPublic(owner),
-      fetchShopListings(owner),
-      fetchPublicProfiles([owner]),
-    ]);
-    setShop(s);
-    setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
-    setSeller(sellers[0] || null);
-    setLoading(false);
-  }, [owner]);
+  const reload = useCallback(
+    async (isCancelled?: () => boolean) => {
+      const [s, ls, sellers] = await Promise.all([
+        fetchShopPublic(owner),
+        fetchShopListings(owner),
+        fetchPublicProfiles([owner]),
+      ]);
+      if (isCancelled?.()) return;
+      setShop(s);
+      setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
+      setSeller(sellers[0] || null);
+      setLoading(false);
+    },
+    [owner],
+  );
 
   useEffect(() => {
-    reload();
+    let cancelled = false;
+    reload(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [reload]);
 
   const run = async (fn: () => Promise<string | null>, success?: string) => {
@@ -606,14 +616,19 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
     setBusy(true);
     setError('');
     setNotice('');
-    const err = await fn();
-    setBusy(false);
-    if (err) setError(err);
-    else {
-      if (success) setNotice(success);
-      refreshProfile();
-      refreshCollection();
-      reload();
+    try {
+      const err = await fn();
+      if (err) setError(err);
+      else {
+        if (success) setNotice(success);
+        refreshProfile();
+        refreshCollection();
+        reload();
+      }
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -813,30 +828,40 @@ function MyShopTab() {
   const [notice, setNotice] = useState('');
   const [addMode, setAddMode] = useState<'none' | 'individual' | 'bundle' | 'mystery'>('none');
 
-  const reload = useCallback(async () => {
-    const s = await fetchMyShop(userId);
-    setShop(s);
-    if (s) {
-      const [sl, li, tp] = await Promise.all([
-        fetchShopSlots(userId),
-        fetchShopListings(userId),
-        fetchMysteryTemplates(userId),
+  const reload = useCallback(
+    async (isCancelled?: () => boolean) => {
+      const s = await fetchMyShop(userId);
+      if (isCancelled?.()) return;
+      setShop(s);
+      if (s) {
+        const [sl, li, tp] = await Promise.all([
+          fetchShopSlots(userId),
+          fetchShopListings(userId),
+          fetchMysteryTemplates(userId),
+        ]);
+        if (isCancelled?.()) return;
+        setSlots(sl);
+        setListings(li);
+        setTemplates(tp);
+      }
+      const [pur, rat] = await Promise.all([
+        fetchMyShopPurchases(userId),
+        fetchMyBuyerRatings(userId),
       ]);
-      setSlots(sl);
-      setListings(li);
-      setTemplates(tp);
-    }
-    const [pur, rat] = await Promise.all([
-      fetchMyShopPurchases(userId),
-      fetchMyBuyerRatings(userId),
-    ]);
-    setPurchases(pur.filter((p) => p.buyer === userId));
-    setMyRatings(rat);
-    setLoading(false);
-  }, [userId]);
+      if (isCancelled?.()) return;
+      setPurchases(pur.filter((p) => p.buyer === userId));
+      setMyRatings(rat);
+      setLoading(false);
+    },
+    [userId],
+  );
 
   useEffect(() => {
-    reload();
+    let cancelled = false;
+    reload(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [reload]);
 
   const run = async (fn: () => Promise<string | null>, success?: string) => {
@@ -844,15 +869,20 @@ function MyShopTab() {
     setBusy(true);
     setError('');
     setNotice('');
-    const err = await fn();
-    setBusy(false);
-    if (err) setError(err);
-    else {
-      if (success) setNotice(success);
-      refreshProfile();
-      refreshCollection();
-      setAddMode('none');
-      reload();
+    try {
+      const err = await fn();
+      if (err) setError(err);
+      else {
+        if (success) setNotice(success);
+        refreshProfile();
+        refreshCollection();
+        setAddMode('none');
+        reload();
+      }
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -915,6 +945,8 @@ function MyShopTab() {
 
   const emptySlots = slots.filter((s) => s.status === 'empty');
   const nextSlotCost = shopSlotCost(shop.slots_purchased + 1);
+  const totalSlots = SHOP_BASE_SLOTS + shop.slots_purchased;
+  const atMaxSlots = totalSlots >= SHOP_MAX_SLOTS;
 
   return (
     <div>
@@ -973,11 +1005,18 @@ function MyShopTab() {
       </div>
       <PopButton
         color="yellow"
-        disabled={busy || (profile?.credits || 0) < nextSlotCost}
+        disabled={busy || atMaxSlots || (profile?.credits || 0) < nextSlotCost}
+        title={atMaxSlots ? `Shops cap out at ${SHOP_MAX_SLOTS} slots` : undefined}
         onClick={() => run(() => buyShopSlot().then((r) => r.error), 'Slot purchased!')}
       >
         <span className="inline-flex items-center gap-0.5">
-          + BUY SLOT (<Credits amount={nextSlotCost} /> collateral)
+          {atMaxSlots ? (
+            `MAX SLOTS (${SHOP_MAX_SLOTS})`
+          ) : (
+            <>
+              + BUY SLOT (<Credits amount={nextSlotCost} /> collateral)
+            </>
+          )}
         </span>
       </PopButton>
 
@@ -1169,8 +1208,9 @@ function OpenShopPanel({
       <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4">
         <div className="heading-font text-sm mb-2">OPEN YOUR SHOP</div>
         <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3 inline-flex items-center flex-wrap gap-x-1">
-          One-time setup fee of <Credits amount={SHOP_SETUP_FEE} /> (non-refundable). You start with
-          4 free listing slots — more can be purchased later, each backed by its own collateral.
+          One-time setup fee of <Credits amount={SHOP_SETUP_FEE} /> (non-refundable). You start with{' '}
+          {SHOP_BASE_SLOTS} free listing slots — up to {SHOP_MAX_SLOTS} total can be purchased
+          later, each backed by its own collateral.
         </div>
         <label className="block text-xs font-bold mb-1">Shop name</label>
         <input

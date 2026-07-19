@@ -231,13 +231,24 @@ function TearStage({
   const dragging = useRef<{ startX: number; startProgress: number } | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const tornRef = useRef(false);
+  const tearTimeoutRef = useRef<number | null>(null);
+
+  // Cancel the pending onTorn timer if this stage unmounts before it fires
+  // (e.g. the player navigates away from the Store mid-tear) — otherwise it
+  // still calls the parent's setStage on an unmounted tree.
+  useEffect(
+    () => () => {
+      if (tearTimeoutRef.current !== null) window.clearTimeout(tearTimeoutRef.current);
+    },
+    [],
+  );
 
   const finishTear = () => {
     if (tornRef.current) return;
     tornRef.current = true;
     setProgress(1);
     setTorn(true);
-    window.setTimeout(onTorn, reducedMotion ? 120 : 850);
+    tearTimeoutRef.current = window.setTimeout(onTorn, reducedMotion ? 120 : 850);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {

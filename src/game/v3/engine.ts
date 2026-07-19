@@ -303,6 +303,31 @@ export const SIM_TUNING = {
    * (live behavior only waives mid-rarity) — the dedicated look at Echo's
    * fodder economics the v4.7 findings called for (§4.3). Live: false. */
   echoWaiveAllFodder: false,
+  /** v4.9 ablation dials for the "wall-list meta" open question (v4.8
+   * findings §4 item 1) — cardpool.ts's mapUnit() reads these instead of the
+   * hardcoded constants they replace, so the deck-level durable-body-density
+   * correlation the harness now measures can be traced to a SPECIFIC lever
+   * instead of another guessed sweeping stat cut (the known v4.6 failure
+   * mode). Defaults MUST equal live behavior. */
+  /** stat-budget basis cap for a non-Twin exact-cost Unit — live value 1.5
+   * (cardpool.ts mapUnit's `D` calc). */
+  exactCostBudgetCap: 1.5,
+  /** flat HP bonus a Guard-primary-keyword Unit gets ON TOP of its stat
+   * budget. v4.9: 3 -> 2 — the ablation isolating the wall-list meta (v4.8
+   * findings §4 item 1) found this the one lever that BOTH compresses the
+   * dominant wall decks (Mer King Guard-Bulwark Turtle 77.5% -> 69.4%,
+   * Shinobi Avenge Grind 84.6% -> 78.8%) AND lifts the roster-floor ramp
+   * decks (Shinobi Tempo-Anchor 11.0% -> 19.6%, Abyss Excavate Ramp 42.1% ->
+   * 49.4%) in the same pass — every keyword-targeted lever tried since v4.6
+   * only ever did one of those. A harder cut to 1 measured even bigger
+   * movement (Turtle -> 60.4%) but risked the known v4.6 overshoot failure
+   * mode; see docs/BALANCE_SIM_FINDINGS_v4.9.md. */
+  guardHpBonus: 2,
+  /** v4.9: flat HP surcharge (subtracted) on any Unit that will end up
+   * matching cardpool.ts's isCheapDurableBody() — a per-card "list density"
+   * tax, live value 0 (i.e. off; the wall-list hypothesis needs to be
+   * ablated before this becomes a live rule). */
+  durableBodyTax: 0,
 };
 
 export function steelRemaining(target: Inst): number {
@@ -1548,6 +1573,12 @@ export function echoRecast(
     discardCard(g, p, extra);
   }
   g.stats.echoRecasts++;
+  // v4.9: per-card "was this card Echo-recast at least once this game" flag,
+  // piggybacked on the existing per-player decision counters — the harness
+  // correlates it with the game's win/loss the same way it does every other
+  // decision key, giving a per-card Echo win-delta instead of only the
+  // rarity-tier buckets recorded below (v4.8 findings §4 item 2).
+  decide(g, p.id, `echoCard:${c.def.id}`);
   decide(g, p.id, 'echoRecast');
   // v4.2 errata B: break the Echo win-delta out by what's being recast, so a
   // "commons drag the average down" story can be told apart from "overpriced

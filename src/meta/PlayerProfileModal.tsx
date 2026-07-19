@@ -48,17 +48,19 @@ export function PlayerLink({
 export function PlayerProfileModal({ userId, onClose }: { userId: string; onClose: () => void }) {
   const { session, shopItems } = useMeta();
   const [card, setCard] = useState<PlayerProfileCard | null | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
   const isSelf = session?.user?.id === userId;
 
   useEffect(() => {
     let cancelled = false;
+    setCard(undefined);
     fetchPlayerProfileCard(userId).then((c) => {
       if (!cancelled) setCard(c);
     });
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, attempt]);
 
   // Escape closes the modal, matching the other overlays in the app.
   useEffect(() => {
@@ -94,9 +96,14 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
               Couldn't load this player's profile.
             </p>
-            <PopButton color="yellow" onClick={onClose}>
-              CLOSE
-            </PopButton>
+            <div className="flex gap-2 justify-center">
+              <PopButton color="black" onClick={() => setAttempt((n) => n + 1)}>
+                RETRY
+              </PopButton>
+              <PopButton color="yellow" onClick={onClose}>
+                CLOSE
+              </PopButton>
+            </div>
           </div>
         ) : (
           <>

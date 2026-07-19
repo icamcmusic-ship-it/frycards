@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
 
 /**
@@ -21,6 +21,13 @@ export function SafeImage({
   fallbackText?: string;
 }) {
   const [broken, setBroken] = useState(false);
+  // Reset the broken flag whenever the source changes — otherwise a
+  // component instance that's reused across a changing `src` (e.g. an
+  // equipped avatar/banner swap) would keep showing the fallback forever
+  // after one bad load, even once `src` points at a good image again.
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
   if (!src || broken) {
     return (
       <div

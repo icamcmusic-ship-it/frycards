@@ -7,6 +7,45 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.9 balance/feature/bug pass
+
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.9.md`)**: Guard's
+  print HP bonus trimmed 3 → 2 — a dedicated ablation battery targeting the
+  "wall-list meta" (flagged as unsolved in v4.7 and v4.8) finally found a
+  lever that compresses the dominant wall decks (Avenge Grind 91.0% →
+  85.4%, Guard-Bulwark Turtle 80.2% → 74.7%) AND lifts the roster-floor
+  ramp decks (Tempo-Anchor 18.4% → 21.6%, Excavate Ramp 42.6% → 47.2%) at
+  the same time. Reported honestly: this hit Mer-King (Guard-primary in
+  all 3 of its archetypes) disproportionately — Leader spread widened from
+  v4.8's 8.2pt best-ever to ~15pt — and three Leader-kit compensations
+  were tried with only a small once-per-game Ultimate bump kept; a real
+  fix needs a card-level look at Mer-King's two weak archetypes next pass.
+  Crescendo base 3 → 4 (third straight flat pass, redesign candidate still
+  open).
+- **Sim harness**: the idle-Leader-Ability CPU-lapse detector now splits
+  into three specific reasons instead of one bucket — the genuine-lapse
+  count measured **zero** across 33,840 games, meaning the CPU's
+  placement/combat heuristics have no reasoning gap left that this
+  detector set can see. New per-card Echo recast win-delta table (found to
+  be confounded by deck quality — not actioned, flagged for a
+  per-archetype-normalized version next pass) and a deck-level
+  "durable-body density" metric (the tool that actually surfaced the Guard
+  lever above).
+- **Bug fixes / QoL (full feature-and-bug-hunt pass)**: fixed several
+  stale-closure race conditions in Supabase-backed screens (an old fetch
+  resolving after a newer one started could stomp fresh profile/collection
+  state on a fast account switch), several "busy flag stuck forever"
+  bugs where a failed mutation left buttons permanently disabled with no
+  recovery short of a reload, three uncleared-timer memory leaks, a
+  Collection-screen foil quicksell button that could offer to sell more
+  foil copies than were actually free, a raw SQL error string leaking to
+  the player on a failed deck deletion, and a couple of missing keyboard/
+  accessibility affordances (Escape-to-close on the card inspector modal,
+  alt text on card art, a retry button on a failed profile-modal load).
+  Small QoL additions: a confirm-before-sign-out for real accounts, a
+  password show/hide toggle on the auth screen, and better empty/loading/
+  error states on the News Center and Collection screens.
+
 ### v4.8 balance/feature/bug pass
 
 - **Rule removed — Momentum**: the dedicated on/off A/B the findings docs

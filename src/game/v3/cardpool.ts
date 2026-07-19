@@ -12,6 +12,7 @@
 import { CardDef, ComboPattern, Effect, EffectTarget, LEADER_HP } from './cards';
 import { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
+import { SIM_TUNING } from './engine';
 
 // Deterministic small hash so mechanical assignment is stable per card id.
 function hash(s: string): number {
@@ -248,7 +249,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // stat budget moves, never keyword/cost assignment.
   const D =
     !isTwin && cost.kind === 'exact'
-      ? Math.min(threshold, 1.5)
+      ? Math.min(threshold, SIM_TUNING.exactCostBudgetCap)
       : isTwin
         ? Math.min(5, Math.max(2, threshold - 1))
         : threshold;
@@ -266,7 +267,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // Guard wants more HP to actually wall aggro; Frenzy wants a nudged ATK
   // now that its downside is softer (only the 2nd swing doubles retaliation).
   if (primaryKw === 'Guard') {
-    hp += 3;
+    hp += SIM_TUNING.guardHpBonus;
   }
   // Ward refreshing every End Phase already soaks ~one attack per round for
   // free — no stat bonus on top (Ward-stacked shells dominated with one).
@@ -435,6 +436,13 @@ function mapUnit(c: CardTemplate): CardDef {
     if (!def.keywords?.includes('Overrun'))
       def.keywords = [...(def.keywords || []), 'Overrun'];
   }
+  // v4.9 ablation dial (live default 0, i.e. off): a flat HP surcharge on
+  // any Unit that ends up matching isCheapDurableBody() below — a direct
+  // per-card tax on the "wall-list" shape the v4.8 findings' §4 item 1
+  // flagged, instead of another keyword- or Leader-targeted lever.
+  if (SIM_TUNING.durableBodyTax > 0 && isCheapDurableBody(def)) {
+    def.hp = Math.max(1, (def.hp || 0) - SIM_TUNING.durableBodyTax);
+  }
   return def;
 }
 
@@ -600,7 +608,14 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     // v4.8: 2 -> 3 base — Crescendo is still the weakest keyword in the
     // game (37.1% this pass, from 28.6% pre-v4.5); the v4.5 doubling helped
     // but under-shot.
-    base.crescendo = { x: 3 + (tier >= 3 ? 1 : 0) };
+    // v4.9: 3 -> 4 base — third straight pass at the pool bottom (39.2%
+    // this pass, essentially flat from v4.8's post-buff 37.1%->39.2%). The
+    // v4.8 findings flagged a possible redesign, but this pass's harness
+    // additions were aimed at the wall-list/Echo/lapse questions instead —
+    // one more incremental step here, still watch-listed for an actual
+    // redesign ("+X if you placed any 6", not scaling with count) if this
+    // undershoots again.
+    base.crescendo = { x: 4 + (tier >= 3 ? 1 : 0) };
     base.keywords = [...(base.keywords || []), 'Crescendo'];
   }
   // v4.2 Aftershock (Event only): a delayed half-value echo of the main
@@ -725,6 +740,18 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // 78.7%, Twin Heal 62.0%) lean on this every-turn sustain more than any
   // other single lever on the Leader. A direct value cut, not another
   // frequency change (threshold 5 already matches the rest of the roster).
+  // v4.9: Mer-King is EVERY ONE of its 3 archetypes' primary Guard user, so
+  // this pass's wall-list fix (guardHpBonus 3->2, see SIM_TUNING) landed on
+  // Mer-King alone: 48.4% -> 42.9% leader win rate (worst in the roster)
+  // while every other Leader held or improved, and Mer King Avenge Swarm
+  // specifically cratered 51.0% -> 39.5%. A first attempt bumped THIS
+  // every-turn Ability's value (2 -> 3) — it mostly re-buffed Guard-Bulwark
+  // Turtle back toward its pre-nerf number (73.4% -> 77.4%, nearly the
+  // 77.5%/80.2% pre-v4.9 range) since a repeatable per-turn effect rewards
+  // whichever archetype best exploits repetition (an explicit mend/control
+  // shell) far more than Avenge Swarm (barely moved, 39.5% -> 40.9%).
+  // Reverted; see the Ultimate entry below for the once-per-game version of
+  // this same compensation instead.
   mer_king: { threshold: 5, effect: { action: 'mend', value: 2, target: 'friendlyAny' } },
   // v4.4.2: threshold 5 -> 3 — the first tempo-grant version (unlocked at 5,
   // same as everyone else) barely moved Diver's win rate (33.7% -> 34.2%).
@@ -766,6 +793,13 @@ const LEADER_RESOLVE: Record<string, number> = {
   // v4.4: Abyss was the one roster hole in the v4.3 "nearly every leader"
   // Resolve widening, and measured weakest (44.4%) — Resolve 1 closes it.
   avatar_of_the_abyss: 1,
+  // v4.9: tried 2 -> 3 as a third guardHpBonus-compensation attempt (targeted
+  // at "behind" specifically, unlike the Ability/Ultimate bumps, which both
+  // rewarded Guard-Bulwark Turtle — the archetype LEAST often behind — more
+  // than the two Mer-King archetypes that actually cratered). Measured
+  // ZERO effect (43.0% -> 43.0%, archetypes within noise): the Leader
+  // Ability's threshold 5 was already low enough that Resolve rarely
+  // changed whether it fired. Reverted; see docs/BALANCE_SIM_FINDINGS_v4.9.md.
   mer_king: 2,
   apex_nanite_shinobi: 2,
   ethereal_sea_witch: 2,
@@ -811,10 +845,14 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
   // v4.5: value 6 -> 5 — still the strongest leader (57.8%) after the v4.4
   // trim; cutting the once-per-game top-up alongside the Ability value cut
   // above trims both compounding sustain sources at once.
+  // v4.9: value 5 -> 6 — the once-per-game compensation for the guardHpBonus
+  // 3->2 wall-list fix (see the Ability entry above for why the repeatable
+  // Ability version overshot toward Guard-Bulwark Turtle specifically
+  // instead of lifting Mer-King broadly).
   mer_king: {
     unlockTurn: 4,
     threshold: 5,
-    effect: { action: 'mend', value: 5, target: 'friendlyAny' },
+    effect: { action: 'mend', value: 6, target: 'friendlyAny' },
   },
   // v4.5: threshold 6 -> 5, value 3 -> 4 — Diver is the weakest leader in
   // the roster (39.6%) and its Ultimate was gated at the single hardest
@@ -906,9 +944,11 @@ export const POOL_LEADERS: CardDef[] = [];
  * with the live Supabase catalog; falls back to the bundled data below.
  * Refuses a pool with no Leaders (a broken fetch shouldn't brick the game).
  */
+let lastTemplates: CardTemplate[] = GENERATED_CARDS;
 export function applyCardPool(templates: CardTemplate[]): boolean {
   const defs = templates.map(mapCard);
   if (!defs.some((d) => d.type === 'Leader')) return false;
+  lastTemplates = templates;
   POOL_V4.length = 0;
   POOL_V4.push(...defs);
   for (const k of Object.keys(POOL_BY_ID)) delete POOL_BY_ID[k];
@@ -916,6 +956,18 @@ export function applyCardPool(templates: CardTemplate[]): boolean {
   POOL_LEADERS.length = 0;
   POOL_LEADERS.push(...defs.filter((d) => d.type === 'Leader'));
   return true;
+}
+
+/**
+ * v4.9: re-derive the pool from the last-loaded template set. Needed by the
+ * ablation harness whenever a SIM_TUNING dial affects mapUnit()'s CARD-BUILD
+ * math (exactCostBudgetCap, guardHpBonus, durableBodyTax) rather than
+ * something read live during play (tollCap, steelMult, ...) — those dials
+ * only take effect the moment the pool is rebuilt, since CardDefs are baked
+ * once at import time otherwise. A no-op for every other ablation arm.
+ */
+export function rebuildPool(): boolean {
+  return applyCardPool(lastTemplates);
 }
 
 // Bundled fallback pool, active until/unless the live catalog loads.
@@ -926,4 +978,41 @@ export function poolByType(t: string): CardDef[] {
 }
 export function poolHasKeyword(kw: string): CardDef[] {
   return POOL_V4.filter((c) => c.keywords?.includes(kw));
+}
+
+/**
+ * v4.9: a "cheap durable body" — the v4.8 findings' §4 item 1 open question
+ * ("the lever must target the cheap-durable-body list SHAPE, not keywords or
+ * Leader kits"). An exact-cost Unit is near-flat-easy to cast regardless of
+ * its printed face (~90% with 2 directed rerolls, see costDifficulty), and a
+ * defensive stat split (HP well above ATK, or an explicit durability
+ * keyword) is what actually walls a board rather than trading into it. This
+ * is a measurement helper, not a rule — deckDurableBodyDensity() below feeds
+ * the harness's density-vs-win correlation so the next balance lever (a
+ * second exact-cost budget step, pricing Guard's HP bonus into the budget,
+ * or a per-deck density surcharge) can be picked from data instead of guessed.
+ */
+export function isCheapDurableBody(def: CardDef): boolean {
+  if (def.type !== 'Unit') return false;
+  const durableStats = (def.hp || 0) - (def.atk || 0) >= 2;
+  const durableKw = ['Guard', 'Bulwark', 'Toll', 'Steel', 'Ward'].some((k) =>
+    def.keywords?.includes(k),
+  );
+  if (!durableStats && !durableKw) return false;
+  return def.castCostKind === 'exact' || (def.threshold !== undefined && def.threshold <= 2);
+}
+
+/** Total copies of `isCheapDurableBody` Units in a deck (id -> copies map),
+ * resolved against `resolve` (defaults to POOL_BY_ID) so this works for both
+ * the live pool and a fixed sim-only DeckDef.cards map. */
+export function deckDurableBodyDensity(
+  cards: Record<string, number>,
+  resolve: (id: string) => CardDef = (id) => POOL_BY_ID[id],
+): number {
+  let n = 0;
+  for (const [id, copies] of Object.entries(cards)) {
+    const def = resolve(id);
+    if (def && isCheapDurableBody(def)) n += copies;
+  }
+  return n;
 }

@@ -12,6 +12,15 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Wall-Breaker Update',
+    items: [
+      'Balance pass (67,000+ simulated games): Guard Units print +2 HP instead of +3 — a dedicated round of testing finally found a change that both cools down the strongest "wall" decks and lifts the weakest ramp decks at the same time. Crescendo got another power bump.',
+      'Honest heads-up: this hit Mer-King harder than the other five Leaders since all of his decks lean on Guard — we tried a few ways to compensate his kit directly and are still tuning it; expect another pass at his weaker decks specifically.',
+      'The CPU\'s decision-making was audited from every angle this pass: after splitting out every reason it might skip its Leader Ability, it turns out there are no real gaps left to fix — every skip is either a legal rule restriction or the CPU correctly prioritizing something better.',
+      'Bug-hunt pass: fixed a handful of stuck-loading-forever bugs across several menu screens, a foil "quick sell" button that could offer to sell more copies than you actually had free, a couple of memory leaks, and added Escape-to-close and alt text where they were missing. Small additions: a confirmation before signing out of a real account, a password show/hide toggle, and clearer empty/loading states in a few screens.',
+    ],
+  },
+  {
     version: 'Eclipse Update',
     items: [
       'Big rule change: Momentum is gone. A dedicated on/off test across thousands of simulated games showed the comeback rule never actually helped anyone come back — the game is tighter and a full round faster without it. Every turn is exactly five dice again.',

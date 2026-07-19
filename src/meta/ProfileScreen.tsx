@@ -33,6 +33,7 @@ export function ProfileScreen({
   const [nameDraft, setNameDraft] = useState('');
   const [error, setError] = useState('');
   const [equipping, setEquipping] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const ownedIds = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
   // Free items (cost 0) are always equippable — but battle pass exclusives
@@ -48,19 +49,40 @@ export function ProfileScreen({
     if (equipping) return;
     setEquipping(true);
     setError('');
-    const err = await equipCosmetic(item.id);
-    if (err) setError(err);
-    else await refreshProfile();
-    setEquipping(false);
+    try {
+      const err = await equipCosmetic(item.id);
+      if (err) setError(err);
+      else await refreshProfile();
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setEquipping(false);
+    }
   };
 
   const handleRename = async () => {
+    // Guard against double-submit (Enter + Save button double-fire, or
+    // repeated Enter presses while the request is in flight) and reject an
+    // all-whitespace name client-side instead of round-tripping to the
+    // server just to be told it's invalid.
+    if (renaming) return;
+    if (!nameDraft.trim()) {
+      setError('Name cannot be blank.');
+      return;
+    }
+    setRenaming(true);
     setError('');
-    const err = await setUsername(nameDraft);
-    if (err) setError(err);
-    else {
-      setEditingName(false);
-      refreshProfile();
+    try {
+      const err = await setUsername(nameDraft.trim());
+      if (err) setError(err);
+      else {
+        setEditingName(false);
+        refreshProfile();
+      }
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setRenaming(false);
     }
   };
 
@@ -127,10 +149,16 @@ export function ProfileScreen({
                       }
                     }}
                     maxLength={24}
-                    className="px-2 py-1 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm"
+                    disabled={renaming}
+                    className="px-2 py-1 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm disabled:opacity-60"
                     autoFocus
                   />
-                  <PopButton color="red" onClick={handleRename} title="Save name">
+                  <PopButton
+                    color="red"
+                    onClick={handleRename}
+                    disabled={renaming}
+                    title="Save name"
+                  >
                     <Check className="w-4 h-4" />
                   </PopButton>
                   <PopButton
@@ -340,14 +368,19 @@ function CreatorTools() {
     setBusy(true);
     setError('');
     setNotice('');
-    const err = await fn();
-    setBusy(false);
-    if (err) setError(err);
-    else {
-      setNotice(success);
-      // Grants to yourself should show up immediately in the wallet/collection.
-      refreshProfile();
-      refreshCollection();
+    try {
+      const err = await fn();
+      if (err) setError(err);
+      else {
+        setNotice(success);
+        // Grants to yourself should show up immediately in the wallet/collection.
+        refreshProfile();
+        refreshCollection();
+      }
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusy(false);
     }
   };
 

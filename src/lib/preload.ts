@@ -15,6 +15,13 @@ function loadOne(url: string): Promise<void> {
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      // On a timeout the underlying network request/decode was still in
+      // flight — detach the handlers and clear src so the browser can
+      // cancel/GC it instead of it lingering in the background competing
+      // for bandwidth with whatever loads next.
+      img.onload = null;
+      img.onerror = null;
+      img.src = '';
       resolve();
     };
     const timer = window.setTimeout(settle, PER_IMAGE_TIMEOUT_MS);

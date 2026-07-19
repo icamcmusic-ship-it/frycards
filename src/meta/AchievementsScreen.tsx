@@ -47,12 +47,17 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       setLoading(false);
       return;
     }
-    const [{ all, mine }, ms] = await Promise.all([fetchAchievements(userId), fetchMissions()]);
-    if (isCancelled?.()) return;
-    setAchievements(all);
-    setMine(new Map(mine.map((m) => [m.achievement_id, m])));
-    setMissions(ms);
-    setLoading(false);
+    try {
+      const [{ all, mine }, ms] = await Promise.all([fetchAchievements(userId), fetchMissions()]);
+      if (isCancelled?.()) return;
+      setAchievements(all);
+      setMine(new Map(mine.map((m) => [m.achievement_id, m])));
+      setMissions(ms);
+    } finally {
+      // Runs even if either fetch throws — otherwise a network hiccup would
+      // leave the screen stuck on "LOADING…" forever.
+      if (!isCancelled?.()) setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -72,16 +77,21 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId(a.id);
-    const err = await claimAchievement(a.id);
-    setBusyId(null);
-    if (err) {
-      setError(err);
-      return;
+    try {
+      const err = await claimAchievement(a.id);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setNotice(`"${a.name}" reward claimed!`);
+      refreshProfile();
+      if (a.reward_pack_id) refreshInventory();
+      reload();
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusyId(null);
     }
-    setNotice(`"${a.name}" reward claimed!`);
-    refreshProfile();
-    if (a.reward_pack_id) refreshInventory();
-    reload();
   };
 
   const handleClaimMission = async (m: Mission) => {
@@ -89,15 +99,20 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId(m.id);
-    const err = await claimMission(m.id);
-    setBusyId(null);
-    if (err) {
-      setError(err);
-      return;
+    try {
+      const err = await claimMission(m.id);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setNotice(`"${m.name}" complete — rewards collected!`);
+      refreshProfile();
+      reload();
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusyId(null);
     }
-    setNotice(`"${m.name}" complete — rewards collected!`);
-    refreshProfile();
-    reload();
   };
 
   const grouped = useMemo(() => {
