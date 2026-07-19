@@ -8,14 +8,16 @@ import { MetaHeader, PopButton, CardMarketValuePanel } from './ui';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
-import { maxCopiesForRarity } from '../game/v3/decks';
 import { CardDef } from '../game/v3/cards';
+import { MAX_COPIES as ENGINE_MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
 import { cn } from '../lib/utils';
 
-// v4.2 Rulebook §2: 30-card deck, max 3 copies of any card (lower caps at
-// high rarity — see maxCopiesForRarity), Leader kept separate.
+// v4.2 Rulebook §2: 30-card deck, max 3 copies of any card, Leader kept separate.
 export const DECK_SIZE = 30;
-export const MAX_COPIES = 3;
+// Re-exported from the engine's own constant (also what deckcode.ts imports)
+// instead of a second hand-copied `= 3` — the two used to be independent
+// constants with nothing keeping them in sync.
+export const MAX_COPIES = ENGINE_MAX_COPIES;
 
 // decodeDeckCode wants a Map (its `.get`/`.has` lookups) — POOL_BY_ID is a
 // plain Record, so build the Map once rather than casting the Record and
@@ -59,8 +61,10 @@ export function validateDeckList(
   }
   for (const [id, n] of byId) {
     // v4.8: per-rarity caps (Mythic 1, Super-Rare/Full-Art/Ultra-Rare 2,
-    // else 3) — the UI previously only enforced the flat 3 while HowToPlay
-    // §11 promised tighter caps.
+    // else MAX_COPIES) — the UI previously only enforced the flat cap while
+    // HowToPlay §11 promised tighter caps; a later cleanup that unified the
+    // MAX_COPIES constant across files accidentally reverted this back to
+    // the flat check. Restored.
     const c = db.get(id);
     const cap = maxCopiesForRarity(c?.rarity);
     if (n > cap) {
@@ -81,6 +85,9 @@ export function validateDeckList(
         });
       }
     }
+    // A player_cards row can persist at quantity 0 (e.g. a Leader quicksold
+    // down to zero) — .has() alone would miss that and falsely clear this
+    // check, so the summed quantity must be checked instead.
     if ((owned.get(leader.id) || 0) <= 0)
       issues.push({ text: `You do not own the Leader ${leader.name}.` });
   }
@@ -92,16 +99,23 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const { decks, refreshDecks, dataLoading } = useMeta();
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(null);
   const [listError, setListError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = async (d: DeckRow) => {
+    if (deletingId) return;
     if (!window.confirm(`Delete the deck "${d.name}"? This cannot be undone.`)) return;
-    const err = await deleteDeck(d.id);
-    if (err) {
-      setListError(err);
-      return;
+    setDeletingId(d.id);
+    try {
+      const err = await deleteDeck(d.id);
+      if (err) {
+        setListError(err);
+        return;
+      }
+      setListError('');
+      refreshDecks();
+    } finally {
+      setDeletingId(null);
     }
-    setListError('');
-    refreshDecks();
   };
 
   const handleImport = () => {
@@ -179,6 +193,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                 <div className="aspect-[16/7] overflow-hidden ink-border-sm m-2">
                   <SafeImage
                     src={leader?.image}
+                    alt={leader?.name || 'Leader'}
                     className="w-full h-full object-cover"
                     fallbackText={leader?.name}
                   />
@@ -190,7 +205,11 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                   <PopButton color="yellow" className="flex-1" onClick={() => setEditing(d)}>
                     EDIT
                   </PopButton>
-                  <PopButton color="black" onClick={() => handleDelete(d)}>
+                  <PopButton
+                    color="black"
+                    disabled={deletingId === d.id}
+                    onClick={() => handleDelete(d)}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </PopButton>
                 </div>
@@ -319,6 +338,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   /** Auto-fills a legal 30-card deck from owned cards — any mix of cards
    * is legal (30 cards, max 3 copies). */
   const handleQuickbuild = () => {
+    if (
+      cardIds.length > 0 &&
+      !window.confirm('Replace your current card selections with an auto-built deck?')
+    )
+      return;
     const eligible = poolByType('Unit')
       .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
       .filter((c) => (availableQty.get(c.id) || 0) > 0);
@@ -459,6 +483,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
                 <SafeImage
                   src={l.image}
+                  alt={l.name || 'Leader'}
                   className="w-full h-full object-cover"
                   fallbackText={l.name}
                 />

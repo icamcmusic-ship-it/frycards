@@ -29,7 +29,7 @@ import { Archetype, buildDeck, buildPureRandomDeck } from '../src/game/v3/decks'
 import {
   POOL_BY_ID,
   poolByType,
-  costDifficulty,
+  cardDifficulty,
   deckDurableBodyDensity,
 } from '../src/game/v3/cardpool';
 
@@ -260,6 +260,13 @@ const ARCHETYPES: Archetype[] = [
 const PER_PAIR = parseInt(process.argv[2] || '20', 10);
 const MAX_TURNS = 160;
 
+/** v4.10 (v4.9 findings §4 item 1): archetypes under dedicated per-card
+ * scrutiny this pass — Mer-King's two archetypes the v4.9 wall-list fix hit
+ * hardest (see §2.2). runGame() below only bothers tracking per-card cast
+ * outcomes for archetypes on this list (cheap to extend, no reason to pay
+ * the bookkeeping cost for the other 18). */
+const ARCH_WATCHLIST = ['Mer King Twin Heal', 'Mer King Avenge Swarm'];
+
 interface Entry {
   key: string;
   label: string;
@@ -367,6 +374,11 @@ const DECISION_KEYS = [
   'lapseIdleLeaderAbility_genuine',
   'lapseIdleLeaderAbility_refusalNoTarget',
   'lapseIdleLeaderAbility_diceSpentDown',
+  // v4.10: new detector class — sub-optimal TARGET/ORDER choice within an
+  // action the AI was already taking, not just "did it act" (see ai.ts's
+  // v4.10 doc comment above lapse()).
+  'lapseCombatTradeTargetFixed',
+  'lapseUnitAbilityOrderFixed',
 ];
 
 interface SuiteResult {
@@ -417,6 +429,23 @@ interface SuiteResult {
    * when recast versus which are dead weight in the discard pile). */
   echoCardInGame: Record<string, number>;
   echoCardInWinGame: Record<string, number>;
+  /** v4.10 (v4.9 findings §4 item 3): the same two counters broken out by
+   * archetype, so a per-card Echo win% can be normalized against ITS OWN
+   * archetype's baseline win rate instead of the raw pool-wide number — a
+   * card that's only ever recast by an already-weak archetype shouldn't
+   * read as "bad," and one recast by a strong archetype shouldn't read as
+   * "good," on the card's own merits. cardId -> archKey -> count. */
+  echoCardArchInGame: Record<string, Record<string, number>>;
+  echoCardArchInWinGame: Record<string, Record<string, number>>;
+  /** v4.10 (v4.9 findings §4 item 1, Mer-King's two weak archetypes):
+   * per-archetype "cast this card >=1x this game" -> win%, archKey -> cardId
+   * -> count. NOT the same as cardInDeck: a fixed-decklist archetype's
+   * win-in-deck is identical for every card in the list (every copy is in
+   * every game of that archetype), so it can't distinguish a weak card from
+   * a strong one — whether the card actually got DRAWN AND CAST that
+   * specific game is what varies and correlates with the outcome. */
+  archCardCastInGame: Record<string, Record<string, number>>;
+  archCardCastInWinGame: Record<string, Record<string, number>>;
   errors: string[];
 }
 
@@ -461,6 +490,10 @@ function newResult(): SuiteResult {
     decisionAgg: {},
     echoCardInGame: {},
     echoCardInWinGame: {},
+    echoCardArchInGame: {},
+    echoCardArchInWinGame: {},
+    archCardCastInGame: {},
+    archCardCastInWinGame: {},
     errors: [],
   };
 }
@@ -549,11 +582,27 @@ function runGame(
           if (won) agg.aw++;
         }
       }
+      const archKey = pid === 'A' ? a.key : b.key;
       for (const key of Object.keys(d)) {
-        if (!key.startsWith('echoCard:')) continue;
-        const id = key.slice('echoCard:'.length);
-        r.echoCardInGame[id] = (r.echoCardInGame[id] || 0) + 1;
-        if (won) r.echoCardInWinGame[id] = (r.echoCardInWinGame[id] || 0) + 1;
+        if (key.startsWith('echoCard:')) {
+          const id = key.slice('echoCard:'.length);
+          r.echoCardInGame[id] = (r.echoCardInGame[id] || 0) + 1;
+          if (won) r.echoCardInWinGame[id] = (r.echoCardInWinGame[id] || 0) + 1;
+          (r.echoCardArchInGame[id] ||= {})[archKey] =
+            (r.echoCardArchInGame[id][archKey] || 0) + 1;
+          if (won) {
+            (r.echoCardArchInWinGame[id] ||= {})[archKey] =
+              (r.echoCardArchInWinGame[id][archKey] || 0) + 1;
+          }
+        } else if (key.startsWith('cardCast:') && ARCH_WATCHLIST.includes(archKey)) {
+          const id = key.slice('cardCast:'.length);
+          (r.archCardCastInGame[archKey] ||= {})[id] =
+            (r.archCardCastInGame[archKey][id] || 0) + 1;
+          if (won) {
+            (r.archCardCastInWinGame[archKey] ||= {})[id] =
+              (r.archCardCastInWinGame[archKey][id] || 0) + 1;
+          }
+        }
       }
     }
   }
@@ -613,6 +662,8 @@ function runGame(
       'lapseIdleLeaderAbility_genuine',
       'lapseIdleLeaderAbility_refusalNoTarget',
       'lapseIdleLeaderAbility_diceSpentDown',
+      'lapseCombatTradeTargetFixed',
+      'lapseUnitAbilityOrderFixed',
     ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }
@@ -876,6 +927,46 @@ for (const r of echoRows)
     `${r.name.padEnd(26)} ${r.rarity.padEnd(11)} win%=${r.winPct.toFixed(1).padStart(5)} (n=${r.n})`,
   );
 
+// v4.10 (v4.9 findings §2.4 / §4 item 3): the raw table above can't tell
+// "this card is weak" apart from "this card mostly gets recast by an
+// already-losing deck" — normalize each card's actual recast win% against a
+// weighted average of the ARCHETYPE baseline win rates it was recast in
+// (from R.archW/archN, computed above), so what's left is the card's own
+// contribution once deck quality is divided out.
+console.log(
+  '\n--- Per-card Echo win-delta, normalized by archetype baseline (v4.9 findings §2.4/§4 item 3), min n=15 ---',
+);
+const echoNormRows = Object.keys(R.echoCardArchInGame)
+  .map((id) => {
+    const archIn = R.echoCardArchInGame[id];
+    const archWin = R.echoCardArchInWinGame[id] || {};
+    let n = 0,
+      actualW = 0,
+      baselineW = 0;
+    for (const [archKey, cnt] of Object.entries(archIn)) {
+      const archBaseline = (R.archW[archKey] || 0) / (R.archN[archKey] || 1);
+      n += cnt;
+      actualW += archWin[archKey] || 0;
+      baselineW += archBaseline * cnt;
+    }
+    const actualPct = (100 * actualW) / n;
+    const baselinePct = (100 * baselineW) / n;
+    return {
+      name: POOL_BY_ID[id]?.name || id,
+      rarity: POOL_BY_ID[id]?.rarity || '?',
+      actualPct,
+      baselinePct,
+      delta: actualPct - baselinePct,
+      n,
+    };
+  })
+  .filter((r) => r.n >= 15)
+  .sort((a, b) => a.delta - b.delta);
+for (const r of echoNormRows)
+  console.log(
+    `${r.name.padEnd(26)} ${r.rarity.padEnd(11)} recastWin%=${r.actualPct.toFixed(1).padStart(5)} archBaseline%=${r.baselinePct.toFixed(1).padStart(5)} delta=${r.delta >= 0 ? '+' : ''}${r.delta.toFixed(1)}pt (n=${r.n})`,
+  );
+
 console.log('\n--- Combo passive triggers ---');
 console.log(
   Object.fromEntries(
@@ -908,10 +999,72 @@ for (const r of [...rows]
     `${r.name.padEnd(26)} ${r.type.padEnd(9)} casts/g=${r.castsPerGame.toFixed(2)} win%=${r.winPct.toFixed(1)} (n=${r.n})`,
   );
 
+console.log(
+  '\n--- Per-card "cast >=1x this game" win% for watch-listed archetypes (v4.9 findings §4 item 1), min n=15 ---',
+);
+for (const archKey of ARCH_WATCHLIST) {
+  const castIn = R.archCardCastInGame[archKey] || {};
+  const castWin = R.archCardCastInWinGame[archKey] || {};
+  const cardRows = Object.keys(castIn)
+    .filter((id) => POOL_BY_ID[id]?.type !== 'Leader' && castIn[id] >= 15)
+    .map((id) => ({
+      name: POOL_BY_ID[id].name,
+      type: POOL_BY_ID[id].type,
+      winPct: (100 * (castWin[id] || 0)) / castIn[id],
+      n: castIn[id],
+    }))
+    .sort((a, b) => a.winPct - b.winPct);
+  console.log(
+    `\n${archKey} (deck win%=${pct(R.archW[archKey] || 0, R.archN[archKey] || 0)}, n=${R.archN[archKey] || 0}) — weakest cards by cast-then-win%:`,
+  );
+  for (const r of cardRows.slice(0, 15))
+    console.log(
+      `  ${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} (n=${r.n})`,
+    );
+}
+
 // ---------------------------------------------------------------------------
-// v4.8: cost-vs-value analysis — each card's measured win%/cast-rate against
+// v4.10: cost-vs-value analysis — each card's measured win%/cast-rate against
 // the DIFFICULTY of its actual printed cost format (exact/sum/gate), so
 // mispriced cards surface directly instead of via eyeballing the OP list.
+// v4.8's CHANGELOG entry claimed this shipped ("a cost-vs-value table
+// pricing every card against its real cast-format difficulty") but the code
+// never actually existed — `costDifficulty` was imported into this file and
+// never called. Implemented for real here via cardpool.ts's new
+// cardDifficulty(def), which resolves a built CardDef's difficulty directly
+// (costDifficulty alone only accepts a raw CostPick, which a finished
+// CardDef no longer carries).
+// ---------------------------------------------------------------------------
+console.log(
+  '\n--- Cost-vs-value: win% per unit of cast-format difficulty (win% / difficulty), min n=40 ---',
+);
+// `rows` (above) carries name/type/winPct but not id — rebuild straight from
+// cardInDeck so cardDifficulty() gets the real CardDef.
+const cvRows = Object.keys(R.cardInDeck)
+  .filter((id) => POOL_BY_ID[id]?.type !== 'Leader' && R.cardInDeck[id] >= 40)
+  .map((id) => {
+    const def = POOL_BY_ID[id];
+    const winPct = (100 * (R.cardInWinDeck[id] || 0)) / R.cardInDeck[id];
+    const difficulty = cardDifficulty(def);
+    return {
+      name: def.name,
+      type: def.type,
+      winPct,
+      difficulty,
+      valueRatio: winPct / difficulty,
+      n: R.cardInDeck[id],
+    };
+  });
+console.log('Highest ratio (win% for the difficulty — likely under-priced / OP candidates):');
+for (const r of [...cvRows].sort((a, b) => b.valueRatio - a.valueRatio).slice(0, 12))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} difficulty=${r.difficulty.toFixed(1)} ratio=${r.valueRatio.toFixed(1)} (n=${r.n})`,
+  );
+console.log('Lowest ratio (win% for the difficulty — likely over-priced / weak candidates):');
+for (const r of [...cvRows].sort((a, b) => a.valueRatio - b.valueRatio).slice(0, 12))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} difficulty=${r.difficulty.toFixed(1)} ratio=${r.valueRatio.toFixed(1)} (n=${r.n})`,
+  );
 
 console.log(
   R.errors.length

@@ -37,7 +37,7 @@ import {
   rarityTier,
   SIM_TUNING,
 } from './engine';
-import { CardDef, hasKw } from './cards';
+import { CardDef, Effect, hasKw } from './cards';
 
 /**
  * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
@@ -636,8 +636,24 @@ function playPlacement(g: Game, p: Player) {
       }
     }
     // Unit abilities: only on units that won't attack (bound/sick) or utility units.
+    // v4.10: collect every eligible unit's ability first and activate the
+    // highest-value one, instead of the first eligible in raw board order
+    // (cast order) — a spare "draw" ability body could burn the turn's one
+    // spare die before a "destroy" ability body with a live kill on offer
+    // ever got considered. See unitAbilityValue() below and
+    // recordPlacementLapses' companion measurement of how often this
+    // mattered.
+    const abilityCandidates: { u: Inst; dieIdx: number; value: number }[] = [];
     for (const u of p.board) {
       if (!u.def.ability || u.abilityUsed || u.hasAttacked) continue;
+      // v4.10: activateAbility() itself also refuses a bound-this-turn Unit
+      // or one that entered this turn without Swift — the OLD for-loop-with-
+      // break silently tolerated skipping these (a failed activateAbility()
+      // call just fell through to the next board-order candidate), but this
+      // rewrite only tries its single best-value candidate, so it must
+      // pre-filter exactly what activateAbility would reject or it could
+      // pick a candidate that's guaranteed to fail and waste the die slot.
+      if (u.boundThisTurn || (u.enteredThisTurn && !hasKw(u.def, 'Swift'))) continue;
       const eff = u.def.ability.effect;
       // v4.5.1: was a blanket "any 3+ ATK unit always attacks instead,
       // regardless of what its ability does" — a 3 ATK Unit whose Ability
@@ -661,9 +677,17 @@ function playPlacement(g: Game, p: Player) {
       if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2)
         continue;
       const dieIdx = bestDieFor(p, effAbilityThreshold(g, u));
-      if (dieIdx >= 0 && activateAbility(g, dieIdx, u.iid)) {
+      if (dieIdx < 0) continue;
+      abilityCandidates.push({ u, dieIdx, value: unitAbilityValue(eff, opp.board.length) });
+    }
+    if (abilityCandidates.length > 0) {
+      const best = [...abilityCandidates].sort((a, b) => b.value - a.value)[0];
+      if (abilityCandidates[0].u.iid !== best.u.iid) {
+        lapse(g, p.id, 'lapseUnitAbilityOrderFixed');
+      }
+      if (activateAbility(g, best.dieIdx, best.u.iid)) {
         progress = true;
-        break;
+        continue;
       }
     }
     if (progress) continue;
@@ -728,6 +752,31 @@ function playPlacement(g: Game, p: Player) {
   }
 }
 
+/** v4.10: relative value of activating a Unit's Ability, used to pick the
+ * best of several eligible units when only one spare die is on offer this
+ * turn (see playPlacement's ability-candidate collection above). Mirrors the
+ * same rough action-value ordering castPriority already uses for cast
+ * priority (removal > disruption > sustain > card advantage) rather than
+ * inventing a new scale. `oppBoardSize` breaks the sap tie in favor of
+ * effects that actually have a live target this turn. */
+function unitAbilityValue(eff: Effect, oppBoardSize: number): number {
+  switch (eff.action) {
+    case 'destroy':
+      return 5;
+    case 'bind':
+      return 4;
+    case 'sap':
+      return 3 + (oppBoardSize > 0 ? 0.5 : 0) + (eff.value || 0) * 0.1;
+    case 'buff':
+    case 'mend':
+      return 2;
+    case 'draw':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 function playCombat(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
   let guard = 60; // safety valve
@@ -773,7 +822,27 @@ function playCombat(g: Game, p: Player) {
       } else {
         // Favorable trade: kill an enemy unit without dying, or kill something bigger.
         const kills = opp.board.filter((t) => willKillInCombat(g, t, atk));
-        const safeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
+        // Persona flavor (seeded): aggro personas sometimes push face damage
+        // instead of taking an optional trade; control personas will even
+        // trade down to clear a real attacker (3+ ATK) when nothing free is
+        // on offer. Lethal and bigThreat below are never skipped. (Two rng()
+        // calls, same order as before this v4.10 change — anything that
+        // touches call count/order here reshuffles every downstream roll for
+        // the rest of the seeded game, so this must stay exactly 2 calls.)
+        const persona = personaFor(g, p.id);
+        const wantsFace = g.rng() < persona.aggression;
+        const clearRoll = g.rng() > persona.aggression;
+        // v4.10: every one of these was `kills.find(...)` against `kills` in
+        // raw `opp.board` order (insertion/cast order) — when 2+ enemy Units
+        // BOTH qualified (both die to this attack, both are 5+ ATK, etc.),
+        // the AI took whichever was cast first, not the most valuable one.
+        // A dedicated CPU-lapse detector (see recordCombatLapses below)
+        // measured how often this changed the actual pick. Resolve against
+        // value-sorted views instead so a real choice always finds the best
+        // candidate among the qualifying set.
+        const byValueDesc = [...kills].sort((a, b) => costWeight(b.def) - costWeight(a.def));
+        const byAtkDesc = [...kills].sort((a, b) => effAtk(g, b) - effAtk(g, a));
+        const safeKill = byValueDesc.find((t) => effAtk(g, t) < remainingHp(g, att));
         // v4.5: was `t.def.threshold ?? 0`, which reads as 0 for any
         // Combo-gate-costed target — a Mythic bomb gated behind Full House
         // registered as cheaper than a threshold-1 Common in this
@@ -781,22 +850,31 @@ function playCombat(g: Game, p: Player) {
         // kill in an optional trade. costWeight() proxies gate-costed cards
         // off rarity instead so this comparison means the same thing
         // regardless of which of the three cast-cost formats a card uses.
-        const valueKill = kills.find((t) => costWeight(t.def) > costWeight(att.def));
+        const valueKill = byValueDesc.find((t) => costWeight(t.def) > costWeight(att.def));
         // Threat check: clear big attackers even with a trade — every persona
         // answers a 5+ ATK unit before doing anything cute.
-        const bigThreat = kills.find((t) => effAtk(g, t) >= 5);
-        // Persona flavor (seeded): aggro personas sometimes push face damage
-        // instead of taking an optional trade; control personas will even
-        // trade down to clear a real attacker (3+ ATK) when nothing free is
-        // on offer. Lethal and bigThreat above are never skipped.
-        const persona = personaFor(g, p.id);
-        const wantsFace = g.rng() < persona.aggression;
-        const clearKill =
-          g.rng() > persona.aggression ? kills.find((t) => effAtk(g, t) >= 3) : undefined;
+        const bigThreat = byAtkDesc.find((t) => effAtk(g, t) >= 5);
+        const clearKill = clearRoll ? byValueDesc.find((t) => effAtk(g, t) >= 3) : undefined;
         // Free kills (no death-back) are always taken; only the optional
         // trade-with-losses is subject to the face-vs-trade roll.
         target =
           bigThreat ?? safeKill ?? (wantsFace ? undefined : (valueKill ?? clearKill)) ?? opp.leader;
+
+        // Measurement only (never changes the pick above): what the OLD
+        // first-match-in-board-order logic would have chosen, for the same
+        // rolls. A mismatch is a real lapse this fix closed.
+        if (kills.length >= 2) {
+          const oldSafeKill = kills.find((t) => effAtk(g, t) < remainingHp(g, att));
+          const oldValueKill = kills.find((t) => costWeight(t.def) > costWeight(att.def));
+          const oldBigThreat = kills.find((t) => effAtk(g, t) >= 5);
+          const oldClearKill = clearRoll ? kills.find((t) => effAtk(g, t) >= 3) : undefined;
+          const oldTarget =
+            oldBigThreat ??
+            oldSafeKill ??
+            (wantsFace ? undefined : (oldValueKill ?? oldClearKill)) ??
+            opp.leader;
+          if (oldTarget !== target) lapse(g, p.id, 'lapseCombatTradeTargetFixed');
+        }
       }
     }
     if (!target || !attack(g, att.iid, target.iid)) {
@@ -853,6 +931,25 @@ export function playTurn(g: Game) {
  *  - lapseIdleLeaderAbility: the Leader's every-turn Ability went unused
  *    while a qualifying die was about to be pitched.
  * These are diagnostics, not gameplay — they must never mutate state.
+ *
+ * v4.10: v4.9's findings (§2.3) measured all of the above at ZERO across a
+ * full pass and concluded the detector set had hit a floor — "any further
+ * AI-quality work needs a new class of detector... not just 'did it act'."
+ * Two new detectors below are exactly that new class — SUB-OPTIMAL TARGET/
+ * ORDER CHOICE within an action the AI was already going to take, not
+ * whether it acted at all:
+ *  - lapseCombatTradeTargetFixed (in playCombat): a combat trade with 2+
+ *    legal kill targets used to resolve via `kills.find(...)` in raw board
+ *    order (whichever enemy Unit was cast first), not the most valuable
+ *    qualifying one. Now fixed to always resolve against a value-sorted
+ *    view; this counter fires whenever that fix actually changed the pick
+ *    for the SAME dice/persona rolls, i.e. it's a direct measurement of how
+ *    often the old code was wrong, not just how often the situation arose.
+ *  - lapseUnitAbilityOrderFixed (in playPlacement): with 2+ eligible Unit
+ *    Abilities competing for one spare die, the AI used to activate
+ *    whichever Unit came first in board order, not the highest-value action
+ *    (see unitAbilityValue). Now fixed to always pick the best; this counter
+ *    fires whenever that changed which Unit got the die.
  */
 function lapse(g: Game, pid: string, key: string) {
   const d = (g.stats.decisions[pid] ||= {});

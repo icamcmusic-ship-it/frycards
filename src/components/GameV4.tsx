@@ -301,10 +301,20 @@ function Tip({
   return (
     <span
       title={text}
+      role="button"
+      tabIndex={0}
+      aria-label={text}
       className={cn('relative', className)}
       onClick={(e) => {
         e.stopPropagation();
         setOpen((v) => !v);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }
       }}
     >
       {children}
@@ -1312,8 +1322,9 @@ export function GameV4({
     else if (pending.kind === 'ability')
       ok = pending.rallySourceIid
         ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
-        : activateAbility(g, selDie!, pending.cardIid, targetIid);
-    else if (pending.kind === 'ultimate') ok = activateUltimate(g, selDie!, targetIid);
+        : activateAbility(g, pending.dieIndex ?? selDie!, pending.cardIid, targetIid);
+    else if (pending.kind === 'ultimate')
+      ok = activateUltimate(g, pending.dieIndex ?? selDie!, targetIid);
     setPending(null);
     if (ok) {
       setSelDie(null);
@@ -1366,7 +1377,17 @@ export function GameV4({
         say('No legal target.');
         return;
       }
-      setPending({ kind: 'ability', cardIid: c.iid, effect: c.def.ability.effect });
+      // Capture the paying die now, like 'cast' already does — selDie can
+      // change (or clear) between arming this targeted ability and the
+      // player actually clicking a target (e.g. casting an unrelated hand
+      // card off a different die in between), and resolvePendingOn used to
+      // trust whatever selDie happened to be by then instead of this one.
+      setPending({
+        kind: 'ability',
+        cardIid: c.iid,
+        effect: c.def.ability.effect,
+        dieIndex: selDie ?? undefined,
+      });
       return;
     }
     if (activateAbility(g, selDie!, c.iid)) {
@@ -1452,7 +1473,12 @@ export function GameV4({
         say('No legal target.');
         return;
       }
-      setPending({ kind: 'ultimate', cardIid: me.leader.iid, effect: ult.effect });
+      setPending({
+        kind: 'ultimate',
+        cardIid: me.leader.iid,
+        effect: ult.effect,
+        dieIndex: selDie ?? undefined,
+      });
       return;
     }
     if (activateUltimate(g, selDie!)) {
@@ -2584,7 +2610,16 @@ export function GameV4({
                             say('No legal target.');
                             return;
                           }
-                          setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast! });
+                          // Capture the die now (selDie is non-null here,
+                          // checked above) — otherwise resolvePendingOn falls
+                          // back to whatever selDie is when a target is
+                          // clicked, which can have changed in between.
+                          setPending({
+                            kind: 'echo',
+                            cardIid: c.iid,
+                            effect: c.def.onCast!,
+                            dieIndices: [selDie!],
+                          });
                           return;
                         }
                         startEchoRecast(c.iid, selDie!);

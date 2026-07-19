@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Rising Tide Update',
+    items: [
+      "Locations were quietly a slightly bad deal for over a year of updates — filling that deck slot with a cheap Unit instead usually won more. A dedicated round of testing found the real fix: their on-cast board buff, +3 instead of +2. Locations are now a genuinely good pick, and every Location keyword (Excavate, Foothold, Contested) got stronger right along with them.",
+      "Crescendo got rebuilt, not just re-buffed again: it used to only reward rolling MULTIPLE sixes in the same turn, which is rare — so four updates in a row of raising its power barely moved the needle. Now it just needs one six rolled all turn, whether or not you actually spent that die on the card. Noticeably stronger.",
+      "Mer-King's Twin Heal deck got its first card-by-card checkup and a few of its weakest cards were quietly strengthened — it's meaningfully better now. Its sibling deck, Avenge Swarm, got the same treatment but didn't respond as well; we're still looking for its real fix.",
+      "The CPU's combat AI had a subtle blind spot: when a single attack could kill either of two enemy Units, it would sometimes trade into whichever one happened to be played first instead of the more valuable one. Fixed — it now always takes the better kill.",
+      "Bug-hunt pass: a currency typo bug (typing \"50\" submitting 5,000 instead) had crept back into five different price boxes — found and fixed everywhere. Several \"stuck forever\" buttons (a failed claim, purchase, or save leaving buttons disabled with no way to recover but a reload) fixed across the Store, Marketplace, Social, News Center, and Player Shops, plus a Collection quicksell button that could offer to sell copies you didn't actually have free.",
+      "Small QoL: confirm-before dialogs on a few more destructive actions (mystery pool submission, mystery pack purchase, replacing a deck via QUICKBUILD), retry buttons on a couple of screens that used to just get stuck on \"Loading…\" after a network hiccup, and a live countdown on Marketplace auctions.",
+    ],
+  },
+  {
     version: 'Wall-Breaker Update',
     items: [
       'Balance pass (67,000+ simulated games): Guard Units print +2 HP instead of +3 — a dedicated round of testing finally found a change that both cools down the strongest "wall" decks and lifts the weakest ramp decks at the same time. Crescendo got another power bump.',

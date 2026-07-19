@@ -1045,7 +1045,7 @@ test('Snap casts during the Reroll Phase, plain Charms cannot, and the Snap die 
   expect(p.dice[0].placed).toBe(true);
 });
 
-test('Crescendo counts every placed 6 this turn including its own casting die, never unplaced or non-6 dice', () => {
+test('Crescendo v4.10: flat bonus once ANY die shows 6 this turn, regardless of placed status or count', () => {
   const g = freshGame();
   g.active = 'A';
   startTurn(g);
@@ -1058,8 +1058,8 @@ test('Crescendo counts every placed 6 this turn including its own casting die, n
   p.dice[0].value = 6; // will cast the Event
   p.dice[1].value = 6;
   p.dice[1].placed = true; // a 6 already spent earlier this turn
-  p.dice[2].placed = true; // placed non-6: must not count
-  p.dice[3].value = 6; // UNplaced 6: must not count
+  p.dice[2].placed = true; // placed non-6
+  p.dice[3].value = 6; // UNplaced 6 — still counts under the v4.10 redesign
   const ev = makeInst(
     {
       id: 'cre',
@@ -1073,7 +1073,36 @@ test('Crescendo counts every placed 6 this turn including its own casting die, n
   );
   p.hand.push(ev);
   expect(castFromHand(g, 0, ev.iid)).toBe(true);
-  expect(g.players.B.leader.damage).toBe(2 + 2); // base 2, +1 per placed 6 (own die + the earlier one)
+  // base 2, flat +1 for "rolled any 6 this turn" — not +1 per six, and not
+  // gated on the six being placed.
+  expect(g.players.B.leader.damage).toBe(2 + 1);
+});
+
+test('Crescendo v4.10: no bonus when no die shows 6 this turn', () => {
+  const g = freshGame();
+  g.active = 'A';
+  startTurn(g);
+  reroll(g, []);
+  const p = g.players.A;
+  p.dice.forEach((d) => {
+    d.placed = false;
+    d.value = 3;
+  });
+  p.dice[0].value = 1; // will cast the Event
+  const ev = makeInst(
+    {
+      id: 'cre2',
+      name: 'cre2',
+      type: 'Event',
+      threshold: 1,
+      crescendo: { x: 1 },
+      onCast: { action: 'sap', value: 2, target: 'enemyLeader' },
+    },
+    'A',
+  );
+  p.hand.push(ev);
+  expect(castFromHand(g, 0, ev.iid)).toBe(true);
+  expect(g.players.B.leader.damage).toBe(2);
 });
 
 test("Aftershock fires exactly once, at the start of the owner's next turn — not the opponent's", () => {

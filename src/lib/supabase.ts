@@ -317,10 +317,6 @@ export async function saveDeck(deck: {
 
 export async function deleteDeck(deckId: string): Promise<string | null> {
   const { error } = await supabase.from('decks').delete().eq('id', deckId);
-  // Route through rpcError()'s postgres-prefix stripping like every other
-  // write in this file — without it, a real delete failure (RLS violation,
-  // FK constraint) showed the player a raw Postgres error string instead of
-  // the friendly text used everywhere else.
   return rpcError(error);
 }
 

@@ -44,7 +44,12 @@ export function NewsCenterScreen({
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
+  // A rejected fetch (network failure) here used to leave `loading` stuck
+  // true forever — the .then() callback never ran, `setLoading(false)` never
+  // fired, and both sections just rendered blank with no loading indicator
+  // and no way to tell it had failed.
   const load = () => {
     setLoading(true);
     Promise.all([fetchNewsPosts(), fetchSerializedFeed()])
@@ -121,28 +126,34 @@ export function NewsCenterScreen({
               {err && <div className="text-[11px] font-bold text-[var(--c-red)]">{err}</div>}
               <button
                 onClick={async () => {
+                  if (publishing) return;
                   setErr(null);
-                  const e = await createNewsPost(title.trim(), body.trim());
-                  if (e) {
-                    setErr(e);
-                    return;
+                  setPublishing(true);
+                  try {
+                    const e = await createNewsPost(title.trim(), body.trim());
+                    if (e) {
+                      setErr(e);
+                      return;
+                    }
+                    setTitle('');
+                    setBody('');
+                    setComposing(false);
+                    load();
+                  } finally {
+                    setPublishing(false);
                   }
-                  setTitle('');
-                  setBody('');
-                  setComposing(false);
-                  load();
                 }}
-                disabled={!title.trim() || !body.trim()}
+                disabled={!title.trim() || !body.trim() || publishing}
                 className="btn-pop heading-font text-xs bg-[var(--c-red)] text-white px-3 py-1.5 ink-border-sm shadow-hard-black-xs self-start disabled:opacity-40"
               >
-                PUBLISH
+                {publishing ? 'PUBLISHING…' : 'PUBLISH'}
               </button>
             </div>
           )}
 
           {loading && (
-            <div className="text-[12px] font-bold text-[var(--c-steel)] px-1 animate-pulse">
-              Loading…
+            <div className="text-center font-bold text-[var(--c-steel)] py-8 animate-pulse text-[12px]">
+              LOADING…
             </div>
           )}
           {!loading && posts.length === 0 && (
@@ -193,7 +204,11 @@ export function NewsCenterScreen({
               >
                 {f.image_url && (
                   <div className="w-9 h-9 rounded-[2px] border-2 border-[var(--c-ink)] shrink-0 overflow-hidden">
-                    <SafeImage src={f.image_url} className="w-full h-full object-cover" />
+                    <SafeImage
+                      src={f.image_url}
+                      alt={f.card_name}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 )}
                 <div className="min-w-0 flex-1">

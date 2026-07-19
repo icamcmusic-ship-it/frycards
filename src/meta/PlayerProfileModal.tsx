@@ -62,7 +62,6 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
     };
   }, [userId, attempt]);
 
-  // Escape closes the modal, matching the other overlays in the app.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -97,7 +96,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
               Couldn't load this player's profile.
             </p>
             <div className="flex gap-2 justify-center">
-              <PopButton color="black" onClick={() => setAttempt((n) => n + 1)}>
+              <PopButton color="red" onClick={() => setAttempt((n) => n + 1)}>
                 RETRY
               </PopButton>
               <PopButton color="yellow" onClick={onClose}>
@@ -109,13 +108,21 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
           <>
             <div className="ink-border-md shadow-hard-black-xs overflow-hidden bg-[var(--c-steel)] relative">
               <div className="h-28 relative">
-                <SafeImage src={banner?.image_url} className="w-full h-full object-cover" />
+                <SafeImage
+                  src={banner?.image_url}
+                  alt={`${card.username}'s banner`}
+                  className="w-full h-full object-cover"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--c-ink)]/80 to-transparent" />
               </div>
               <div className="absolute bottom-3 left-4 flex items-end gap-3">
                 <div className="w-16 h-16 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
                   {avatar?.image_url ? (
-                    <img src={avatar.image_url} className="w-full h-full object-cover" />
+                    <img
+                      src={avatar.image_url}
+                      alt={`${card.username}'s avatar`}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-2xl">
                       {(card.username || '?')[0]?.toUpperCase()}

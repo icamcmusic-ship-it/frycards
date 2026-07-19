@@ -151,7 +151,7 @@ const UNIT_KEYWORDS = ['Ward', 'Guard', 'Guard', 'Frenzy', 'Swift', 'Echo', 'Twi
  *   sim roster sat 20+pt below its match-family siblings.
  * Gate difficulties also price in the one-Combo-gated-cast-per-turn cap.
  */
-const GATE_DIFFICULTY: Record<ComboPattern, number> = {
+export const GATE_DIFFICULTY: Record<ComboPattern, number> = {
   AnyPair: 1.5,
   ThreeOdds: 2,
   ThreeEvens: 2,
@@ -169,6 +169,26 @@ export function costDifficulty(cost: CostPick): number {
   // the dice consumed, scaling with the target (avg die = 3.5).
   if (cost.kind === 'sum') return Math.min(6, 1 + cost.value / 3);
   return GATE_DIFFICULTY[cost.pattern];
+}
+
+/**
+ * v4.10: costDifficulty() takes a CostPick, but every already-BUILT CardDef
+ * in the pool only exposes the applied result (threshold/castCostKind/
+ * comboGate), not the original CostPick — so nothing could actually resolve
+ * a live card's difficulty without reconstructing one. This is the "cards
+ * costs vs ability" analysis simulate-v4.ts's cost-vs-value table needs (see
+ * v4.8's CHANGELOG entry, which claimed this table shipped — it never
+ * actually did; `costDifficulty` was imported into the harness and never
+ * called). 'atLeast'/Twin-format cards (undefined castCostKind, threshold
+ * set) aren't a CostPick variant at all — their difficulty is just the
+ * printed threshold directly, same 1-6 scale the others normalize to.
+ */
+export function cardDifficulty(def: CardDef): number {
+  if (def.comboGate) return GATE_DIFFICULTY[def.comboGate];
+  if (def.castCostKind === 'exact') return 2;
+  if (def.castCostKind === 'sum') return Math.min(6, 1 + (def.threshold || 0) / 3);
+  if (def.threshold !== undefined) return def.threshold;
+  return 3; // Location (free cast) or Leader (no Cast Slot cost) — neutral.
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +471,28 @@ function mapUnit(c: CardTemplate): CardDef {
 // ---------------------------------------------------------------------------
 const SAP_TARGETS: EffectTarget[] = ['anyTarget', 'enemyUnit', 'enemyLeader'];
 
+/**
+ * v4.10: Mer-King's two chronically weak archetypes (Twin Heal 37.1%, Avenge
+ * Swarm 43.2% this pass — see docs/BALANCE_SIM_FINDINGS_v4.10.md; three
+ * Leader-kit-level compensation attempts already tried and reverted in
+ * v4.9, findings §2.2) got a dedicated per-card "cast this game -> win%"
+ * breakdown this pass (simulate-v4.ts's archCardCastInGame/InWinGame — a
+ * fixed-decklist archetype's win-IN-DECK is identical for every card since
+ * every copy is in every game; only whether it actually got cast varies).
+ * These six were consistently the bottom of their own archetype's cast-win%
+ * table, not just weak in the abstract pool-wide numbers. Same small
+ * named-card identity-patch pattern as MANUAL_STEEL below — a modest +1 to
+ * each card's on-cast payoff, applied post-hoc in mapSpell/mapLocation.
+ */
+const MANUAL_VALUE_BUFF: Record<string, number> = {
+  kinetic_piercer: 1,
+  isle_of_the_ancients: 1,
+  hive_power_cell: 1,
+  consuming_ash_cloud: 1,
+  towering_tsunami: 1,
+  narwhal_staff: 1,
+};
+
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   const tier = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const type = asCharm ? 'Charm' : 'Event';
@@ -609,12 +651,14 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     // game (37.1% this pass, from 28.6% pre-v4.5); the v4.5 doubling helped
     // but under-shot.
     // v4.9: 3 -> 4 base — third straight pass at the pool bottom (39.2%
-    // this pass, essentially flat from v4.8's post-buff 37.1%->39.2%). The
-    // v4.8 findings flagged a possible redesign, but this pass's harness
-    // additions were aimed at the wall-list/Echo/lapse questions instead —
-    // one more incremental step here, still watch-listed for an actual
-    // redesign ("+X if you placed any 6", not scaling with count) if this
-    // undershoots again.
+    // this pass, essentially flat from v4.8's post-buff 37.1%->39.2%).
+    // v4.10: undershot AGAIN (36.4%, down further) — this confirmed the
+    // v4.8/v4.9-flagged redesign was overdue; see engine.ts's withCrescendo
+    // for the actual mechanic change (flat "rolled any 6" bonus, no more
+    // per-die-placed scaling). Base value left as-is here since the
+    // redesign itself is the lever this pass, not another size bump —
+    // watch-listed for a value tweak once the new trigger's own baseline is
+    // measured.
     base.crescendo = { x: 4 + (tier >= 3 ? 1 : 0) };
     base.keywords = [...(base.keywords || []), 'Crescendo'];
   }
@@ -642,6 +686,9 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   if (asCharm && !base.keywords?.includes('Scrap') && hash(c.id) % 4 === 2) {
     base.snap = true;
     base.keywords = [...(base.keywords || []), 'Snap'];
+  }
+  if (MANUAL_VALUE_BUFF[c.id] !== undefined && base.onCast) {
+    base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
   }
   return base;
 }
@@ -681,7 +728,11 @@ function mapLocation(c: CardTemplate): CardDef {
   // (-1.9 win% vs. Location-stripped twins) after the v4.4.2 on-cast add
   // and the v4.5 rarity scaling; the on-cast effect is the one lever that
   // directly closes the "a Unit gives immediate board value" gap.
-  def.onCast = { action: 'buff', value: 2 + (tier >= 3 ? 1 : 0), target: 'friendlyUnit' };
+  def.onCast = {
+    action: 'buff',
+    value: SIM_TUNING.locOnCastBuffBase + (tier >= 3 ? 1 : 0),
+    target: 'friendlyUnit',
+  };
   // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
   // each turn — gives ramp identities (Excavate/Anchor especially) an actual
   // floor instead of doing nothing on the turns they're setting up.
@@ -710,11 +761,14 @@ function mapLocation(c: CardTemplate): CardDef {
     // the game (32.3% win rate), and it's a slow ramp by design (needs
     // several of the controller's own turns in play to matter); doubling
     // the per-turn rate lets it actually pay off before the game ends.
-    def.excavate = { x: 2 };
+    def.excavate = { x: SIM_TUNING.excavateRate };
     def.keywords = [...(def.keywords || []), 'Excavate'];
   } else if (tier >= 1 && hash(c.id) % 5 === 2) {
     def.contested = true;
     def.keywords = [...(def.keywords || []), 'Contested'];
+  }
+  if (MANUAL_VALUE_BUFF[c.id] !== undefined && def.onCast) {
+    def.onCast = { ...def.onCast, value: (def.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
   }
   return def;
 }

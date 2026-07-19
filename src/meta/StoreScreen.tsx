@@ -85,20 +85,27 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   const packById = useMemo(() => new Map(packTypes.map((p) => [p.id, p])), [packTypes]);
 
+  // Every handler below wraps its RPC in try/finally so a thrown network
+  // exception (offline, timeout — supabase-js rejects rather than resolving
+  // {error} for those) can't leave busyId set forever and lock every buy/open
+  // button on the screen.
   const handleOpenPack = async (pack: PackType, currency: 'credits' | 'vouchers') => {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
     setBusyId(pack.id);
-    const { data, error } = await openPack(pack.id, currency);
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Pack opening failed.');
-      return;
+    try {
+      const { data, error } = await openPack(pack.id, currency);
+      if (error || !data) {
+        setError(error || 'Pack opening failed.');
+        return;
+      }
+      setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
+      refreshProfile();
+      refreshCollection();
+    } finally {
+      setBusyId(null);
     }
-    setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
-    refreshProfile();
-    refreshCollection();
   };
 
   /** Buy-and-open several copies at once — one server call, one big reveal. */
@@ -111,19 +118,22 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('bulk:' + pack.id);
-    const { data, error } = await buyAndOpenPacks(pack.id, count, currency);
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Pack opening failed.');
-      return;
+    try {
+      const { data, error } = await buyAndOpenPacks(pack.id, count, currency);
+      if (error || !data) {
+        setError(error || 'Pack opening failed.');
+        return;
+      }
+      setOpening({
+        packName: `${pack.name} ×${data.packs_opened}`,
+        packImageUrl: pack.image_url,
+        pulls: data.cards,
+      });
+      refreshProfile();
+      refreshCollection();
+    } finally {
+      setBusyId(null);
     }
-    setOpening({
-      packName: `${pack.name} ×${data.packs_opened}`,
-      packImageUrl: pack.image_url,
-      pulls: data.cards,
-    });
-    refreshProfile();
-    refreshCollection();
   };
 
   const handleOpenAllFromInventory = async (pack: PackType, count: number) => {
@@ -132,20 +142,23 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('openall:' + pack.id);
-    const { data, error } = await openInventoryPacks(pack.id, n);
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Pack opening failed.');
-      return;
+    try {
+      const { data, error } = await openInventoryPacks(pack.id, n);
+      if (error || !data) {
+        setError(error || 'Pack opening failed.');
+        return;
+      }
+      setOpening({
+        packName: `${pack.name} ×${data.packs_opened}`,
+        packImageUrl: pack.image_url,
+        pulls: data.cards,
+      });
+      refreshProfile();
+      refreshCollection();
+      refreshInventory();
+    } finally {
+      setBusyId(null);
     }
-    setOpening({
-      packName: `${pack.name} ×${data.packs_opened}`,
-      packImageUrl: pack.image_url,
-      pulls: data.cards,
-    });
-    refreshProfile();
-    refreshCollection();
-    refreshInventory();
   };
 
   const handleBuyToInventory = async (pack: PackType, currency: 'credits' | 'vouchers') => {
@@ -153,15 +166,18 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('inv:' + pack.id + ':' + currency);
-    const err = await buyPackToInventory(pack.id, currency, 1);
-    setBusyId(null);
-    if (err) {
-      setError(err);
-      return;
+    try {
+      const err = await buyPackToInventory(pack.id, currency, 1);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setNotice(`${pack.name} stashed in MY PACKS — open it any time.`);
+      refreshProfile();
+      refreshInventory();
+    } finally {
+      setBusyId(null);
     }
-    setNotice(`${pack.name} stashed in MY PACKS — open it any time.`);
-    refreshProfile();
-    refreshInventory();
   };
 
   const handleOpenFromInventory = async (pack: PackType) => {
@@ -169,16 +185,19 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('open:' + pack.id);
-    const { data, error } = await openInventoryPack(pack.id);
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Pack opening failed.');
-      return;
+    try {
+      const { data, error } = await openInventoryPack(pack.id);
+      if (error || !data) {
+        setError(error || 'Pack opening failed.');
+        return;
+      }
+      setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
+      refreshProfile();
+      refreshCollection();
+      refreshInventory();
+    } finally {
+      setBusyId(null);
     }
-    setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
-    refreshProfile();
-    refreshCollection();
-    refreshInventory();
   };
 
   const handlePickStarterLeader = async (leaderId: string) => {
@@ -187,18 +206,21 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setClaimingStarter(true);
     setError('');
     setNotice('');
-    const { data, error } = await claimStarterBox(leaderId);
-    setClaimingStarter(false);
-    if (error || !data) {
-      setError(error || 'Starter Box claim failed.');
-      return;
+    try {
+      const { data, error } = await claimStarterBox(leaderId);
+      if (error || !data) {
+        setError(error || 'Starter Box claim failed.');
+        return;
+      }
+      setPickingLeaderFor(null);
+      setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
+      refreshProfile();
+      refreshCollection();
+      refreshInventory();
+      refreshDecks();
+    } finally {
+      setClaimingStarter(false);
     }
-    setPickingLeaderFor(null);
-    setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
-    refreshProfile();
-    refreshCollection();
-    refreshInventory();
-    refreshDecks();
   };
 
   const handleClaimDaily = async () => {
@@ -206,19 +228,22 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId('daily');
-    const { data, error } = await claimDailyPack();
-    setBusyId(null);
-    if (error || !data) {
-      setError(error || 'Daily pack claim failed.');
-      return;
+    try {
+      const { data, error } = await claimDailyPack();
+      if (error || !data) {
+        setError(error || 'Daily pack claim failed.');
+        return;
+      }
+      setOpening({
+        packName: dailyPack.name,
+        packImageUrl: dailyPack.image_url,
+        pulls: data.cards,
+      });
+      refreshProfile();
+      refreshCollection();
+    } finally {
+      setBusyId(null);
     }
-    setOpening({
-      packName: dailyPack.name,
-      packImageUrl: dailyPack.image_url,
-      pulls: data.cards,
-    });
-    refreshProfile();
-    refreshCollection();
   };
 
   const handleBuyItem = async (item: ShopItem, currency: 'credits' | 'vouchers') => {
@@ -226,14 +251,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyId(item.id);
-    const err = await buyShopItem(item.id, currency);
-    setBusyId(null);
-    if (err) setError(err);
-    else {
-      setNotice(`${item.name} added to your collection.`);
-      refreshProfile();
-      refreshCosmetics();
-      refreshCollection();
+    try {
+      const err = await buyShopItem(item.id, currency);
+      if (err) setError(err);
+      else {
+        setNotice(`${item.name} added to your collection.`);
+        refreshProfile();
+        refreshCosmetics();
+        refreshCollection();
+      }
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -286,6 +314,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0">
                 <SafeImage
                   src={dailyPack.image_url}
+                  alt={dailyPack.name}
                   className="w-full h-full object-cover"
                   fallbackText={dailyPack.name}
                 />
@@ -467,6 +496,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
             ))}
+            {buyablePacks.length === 0 && (
+              <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
+                No packs are on the shelf right now — check back soon.
+              </div>
+            )}
           </div>
         ) : tab === 'my_packs' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -601,14 +635,12 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                             <PopButton
                               color="yellow"
                               className="w-full"
-                              disabled={
-                                !profile ||
-                                profile.credits < item.cost_credits ||
-                                busyId === item.id
-                              }
+                              disabled={!profile || profile.credits < item.cost_credits || !!busyId}
                               onClick={() => handleBuyItem(item, 'credits')}
                             >
-                              {item.cost_credits === 0 ? (
+                              {busyId === item.id ? (
+                                'BUYING…'
+                              ) : item.cost_credits === 0 ? (
                                 'FREE'
                               ) : (
                                 <Credits amount={item.cost_credits} className="justify-center" />
@@ -627,13 +659,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                               color="steel"
                               className="w-full"
                               disabled={
-                                !profile ||
-                                profile.vouchers < item.cost_vouchers ||
-                                busyId === item.id
+                                !profile || profile.vouchers < item.cost_vouchers || !!busyId
                               }
                               onClick={() => handleBuyItem(item, 'vouchers')}
                             >
-                              {fmtVouchers(item.cost_vouchers)} VOUCHERS
+                              {busyId === item.id
+                                ? 'BUYING…'
+                                : `${fmtVouchers(item.cost_vouchers)} VOUCHERS`}
                             </PopButton>
                             {profile && profile.vouchers < item.cost_vouchers && (
                               <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
@@ -693,6 +725,10 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 /** Full per-slot drop table for a pack, mirrored from the server's rolls. */
 function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
   const { profile } = useMeta();
+  const packsSinceSuperRare = profile?.packs_since_super_rare ?? 0;
+  const rows = packOdds(pack);
+  const expected = expectedRarities(pack);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -700,13 +736,13 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const packsSinceSuperRare = profile?.packs_since_super_rare ?? 0;
-  const rows = packOdds(pack);
-  const expected = expectedRarities(pack);
+
   return (
     <div
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
     >
       <div
         className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-lg w-full max-h-[85vh] overflow-y-auto"
