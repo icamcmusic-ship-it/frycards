@@ -756,6 +756,10 @@ export function GameV4({
   const cpuTimeoutRef = useRef<number | null>(null);
   const bannerTimeoutRef = useRef<number | null>(null);
   const rollTimeoutRef = useRef<number | null>(null);
+  // Every batch of damage floats schedules its own removal timeout — tracked
+  // here so they can all be cancelled on unmount (e.g. conceding mid-combat),
+  // instead of firing later and calling setFloats on an unmounted component.
+  const floatTimeoutsRef = useRef<Set<number>>(new Set());
   // v4.3: CPU turn narration — the AI's whole turn is computed up front (the
   // engine has no resumable/step mode), but its log lines are revealed one
   // at a time on a delay so the player can actually follow what happened,
@@ -785,6 +789,8 @@ export function GameV4({
       if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
       if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
       if (attackFxTimeoutRef.current !== null) window.clearTimeout(attackFxTimeoutRef.current);
+      for (const id of floatTimeoutsRef.current) window.clearTimeout(id);
+      floatTimeoutsRef.current.clear();
     },
     [],
   );
@@ -810,7 +816,11 @@ export function GameV4({
     if (fresh.length > 0) {
       setFloats((f) => [...f, ...fresh]);
       const ids = new Set(fresh.map((f) => f.id));
-      window.setTimeout(() => setFloats((f) => f.filter((x) => !ids.has(x.id))), 1250);
+      const timeoutId = window.setTimeout(() => {
+        floatTimeoutsRef.current.delete(timeoutId);
+        setFloats((f) => f.filter((x) => !ids.has(x.id)));
+      }, 1250);
+      floatTimeoutsRef.current.add(timeoutId);
     }
   }
   const floatsFor = (iid: string) => floats.filter((f) => f.iid === iid);
@@ -970,7 +980,12 @@ export function GameV4({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (inspect) setInspect(null);
+      // The confirm dialog (e.g. "Concede this match?") is always the
+      // frontmost overlay when open — check it first so Escape dismisses it
+      // instead of falling through and silently cancelling whatever state it
+      // happens to be occluding underneath.
+      if (confirmDialog) setConfirmDialog(null);
+      else if (inspect) setInspect(null);
       else if (preview) {
         setPreview(null);
         setPreviewPinned(false);
@@ -985,7 +1000,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker, preview]);
+  }, [confirmDialog, inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker, preview]);
 
   // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
   const doMulligan = () => {

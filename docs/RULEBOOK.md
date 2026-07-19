@@ -1,12 +1,42 @@
-# FryCards — Definitive Rulebook v4.8
+# FryCards — Definitive Rulebook v4.9
 
-Supersedes v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.9 balance-sim pass (33,840-game baseline + 33,840-game verification +
+a 17-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.9.md`):**
+
+- **Guard print HP +3 → +2** — a dedicated ablation battery finally named a
+  real lever for the "wall-list meta" three passes have flagged (v4.7/v4.8):
+  the flat HP bonus a Guard-primary-keyword Unit gets on top of its stat
+  budget. The one dial that both compressed the dominant wall decks
+  (Avenge Grind 91.0% → 85.4%, Guard-Bulwark Turtle 80.2% → 74.7%) AND
+  lifted the roster-floor ramp decks (Shinobi Tempo-Anchor 18.4% → 21.6%,
+  Abyss Excavate Ramp 42.6% → 47.2%) in the same move. Guard's own keyword
+  win rate: 51.2% (top 5) → 50.0% (neutral).
+- **Known trade-off, reported honestly:** Mer-King is the primary Guard
+  user in all three of its archetypes, so this hit it disproportionately
+  (Leader win rate 48.4% → ~42.5%, worst in the roster; Leader spread
+  widened from v4.8's 8.2pt best-ever to ~15.0pt). Three Leader-kit
+  compensations were tried (Ability value, Ultimate value, Resolve) — only
+  the Ultimate bump (5 → 6 mend) was kept; the other two either
+  re-inflated the exact archetype the nerf targeted or measured zero
+  effect. Flagged for a card-level fix next pass instead of another kit
+  lever.
+- **Crescendo** base 3 → 4 (third straight pass at the pool bottom,
+  essentially flat — redesign candidate still on the table).
+- **New harness instrumentation:** the CPU-lapse detector for idle Leader
+  Ability now splits into three reasons (a real gap measured **zero**
+  across 33,840 games — every remaining case is a legal refusal or the AI
+  correctly prioritizing a different cast); a per-card Echo recast
+  win-delta table (confounded by deck quality, not yet actionable); a
+  deck-level "durable-body density" metric that's what actually surfaced
+  the Guard lever above.
 
 **v4.8 balance-sim pass (22,560-game baseline + 22,560-game verification +
 a 13-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.8.md`):**

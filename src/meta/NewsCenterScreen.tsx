@@ -10,6 +10,7 @@ import {
   createNewsPost,
 } from '../lib/supabase';
 import { RARITY_CHIP } from './rarity';
+import { SafeImage } from './SafeImage';
 
 /** Mirrors ChangelogScreen's newest entry headline — kept as a short pointer
  * here rather than duplicating the full log (see ChangelogScreen.tsx). */
@@ -45,11 +46,19 @@ export function NewsCenterScreen({
   const [err, setErr] = useState<string | null>(null);
 
   const load = () => {
-    Promise.all([fetchNewsPosts(), fetchSerializedFeed()]).then(([p, f]) => {
-      setPosts(p);
-      setFeed(f);
-      setLoading(false);
-    });
+    setLoading(true);
+    Promise.all([fetchNewsPosts(), fetchSerializedFeed()])
+      .then(([p, f]) => {
+        setPosts(p);
+        setFeed(f);
+      })
+      .catch(() => {
+        // Leave posts/feed as whatever they were — the empty-state copy
+        // below at least still renders something instead of a silent blank
+        // section with no explanation and no way to retry.
+        setErr("Couldn't load the news feed. Check your connection.");
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -131,6 +140,11 @@ export function NewsCenterScreen({
             </div>
           )}
 
+          {loading && (
+            <div className="text-[12px] font-bold text-[var(--c-steel)] px-1 animate-pulse">
+              Loading…
+            </div>
+          )}
           {!loading && posts.length === 0 && (
             <div className="text-[12px] font-bold text-[var(--c-steel)] px-1">
               No posts yet — check back soon.
@@ -178,10 +192,9 @@ export function NewsCenterScreen({
                 className="flex items-center gap-3 ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] px-3 py-2"
               >
                 {f.image_url && (
-                  <img
-                    src={f.image_url}
-                    className="w-9 h-9 object-cover rounded-[2px] border-2 border-[var(--c-ink)] shrink-0"
-                  />
+                  <div className="w-9 h-9 rounded-[2px] border-2 border-[var(--c-ink)] shrink-0 overflow-hidden">
+                    <SafeImage src={f.image_url} className="w-full h-full object-cover" />
+                  </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] font-bold truncate">

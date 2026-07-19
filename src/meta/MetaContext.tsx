@@ -185,30 +185,45 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     setPackTypes(await fetchPackTypes());
   }, []);
 
-  // Load per-user data when a session appears.
+  // Load per-user data when a session appears. Guarded against a fast
+  // userId change (sign-out immediately followed by a different sign-in, or
+  // guest -> real session) racing an in-flight load for the *previous* user:
+  // without this, an old fetch resolving after a newer one started could
+  // stomp fresh state with stale/wrong-account profile & collection data.
   useEffect(() => {
+    let cancelled = false;
+    if (!userId) {
+      setProfile(null);
+      setCollection([]);
+      setCosmetics([]);
+      setDecks([]);
+      setInventory([]);
+      setSerializedCards([]);
+      setDataLoading(false);
+      return;
+    }
+    setDataLoading(true);
     (async () => {
-      if (!userId) {
-        await Promise.resolve();
-        setProfile(null);
-        setCollection([]);
-        setCosmetics([]);
-        setDecks([]);
-        setInventory([]);
-        setSerializedCards([]);
-        setDataLoading(false);
-        return;
-      }
-      setDataLoading(true);
-      await Promise.all([
-        refreshProfile(),
-        refreshCollection(),
-        refreshCosmetics(),
-        refreshDecks(),
-        refreshInventory(),
-      ]).finally(() => setDataLoading(false));
+      const [profileR, collectionR, cosmeticsR, decksR, inventoryR] = await Promise.all([
+        fetchProfile(userId),
+        Promise.all([fetchCollection(userId), fetchMySerializedCards(userId)]),
+        fetchCosmetics(userId),
+        fetchDecks(userId),
+        fetchInventory(userId),
+      ]);
+      if (cancelled) return;
+      setProfile(profileR);
+      setCollection(collectionR[0]);
+      setSerializedCards(collectionR[1]);
+      setCosmetics(cosmeticsR);
+      setDecks(decksR);
+      setInventory(inventoryR);
+      setDataLoading(false);
     })();
-  }, [userId, refreshProfile, refreshCollection, refreshCosmetics, refreshDecks, refreshInventory]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const signOut = useCallback(async () => {
     try {

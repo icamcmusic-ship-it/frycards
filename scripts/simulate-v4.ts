@@ -26,7 +26,12 @@ import {
 } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
 import { Archetype, buildDeck, buildPureRandomDeck } from '../src/game/v3/decks';
-import { POOL_BY_ID, poolByType, costDifficulty } from '../src/game/v3/cardpool';
+import {
+  POOL_BY_ID,
+  poolByType,
+  costDifficulty,
+  deckDurableBodyDensity,
+} from '../src/game/v3/cardpool';
 
 // v4.4: a widened, 20-archetype roster across all six real Leaders — sim-only
 // (the player-facing "prebuilt archetype" deck picker was removed from the
@@ -261,6 +266,10 @@ interface Entry {
   leaderId: string;
   deck: DeckDef;
   hasLoc: boolean;
+  /** v4.9: count of "cheap durable body" Units in this deck — see
+   * cardpool.ts's isCheapDurableBody/deckDurableBodyDensity and v4.8
+   * findings §4 item 1 (the wall-list meta). */
+  durableDensity: number;
 }
 
 function buildRoster(): Entry[] {
@@ -273,6 +282,7 @@ function buildRoster(): Entry[] {
       leaderId: arch.leaderId,
       deck: d,
       hasLoc: true,
+      durableDensity: deckDurableBodyDensity(d.cards),
     });
     const stripped: Record<string, number> = {};
     let removed = 0;
@@ -300,6 +310,7 @@ function buildRoster(): Entry[] {
         leaderId: arch.leaderId,
         deck: { ...d, cards: stripped },
         hasLoc: false,
+        durableDensity: deckDurableBodyDensity(stripped),
       });
     }
   }
@@ -322,6 +333,7 @@ function buildRoster(): Entry[] {
       leaderId: d.leaderId,
       deck: d,
       hasLoc: Object.keys(d.cards).some((id) => POOL_BY_ID[id].type === 'Location'),
+      durableDensity: deckDurableBodyDensity(d.cards),
     });
   }
   return decks;
@@ -352,7 +364,9 @@ const DECISION_KEYS = [
   'fatigued',
   'lapseMissedLethal',
   'lapseWastedCastableDie',
-  'lapseIdleLeaderAbility',
+  'lapseIdleLeaderAbility_genuine',
+  'lapseIdleLeaderAbility_refusalNoTarget',
+  'lapseIdleLeaderAbility_diceSpentDown',
 ];
 
 interface SuiteResult {
@@ -397,6 +411,12 @@ interface SuiteResult {
   anchorCapBonuses: number;
   lapseCounts: Record<string, number>;
   decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
+  /** v4.9: per-card "recast via Echo at least once this game" -> win rate
+   * (v4.8 findings §4 item 2 — the fodder waiver wasn't the Echo-deck
+   * answer; this isolates which specific Echo cards actually pull weight
+   * when recast versus which are dead weight in the discard pile). */
+  echoCardInGame: Record<string, number>;
+  echoCardInWinGame: Record<string, number>;
   errors: string[];
 }
 
@@ -439,6 +459,8 @@ function newResult(): SuiteResult {
     anchorCapBonuses: 0,
     lapseCounts: {},
     decisionAgg: {},
+    echoCardInGame: {},
+    echoCardInWinGame: {},
     errors: [],
   };
 }
@@ -527,6 +549,12 @@ function runGame(
           if (won) agg.aw++;
         }
       }
+      for (const key of Object.keys(d)) {
+        if (!key.startsWith('echoCard:')) continue;
+        const id = key.slice('echoCard:'.length);
+        r.echoCardInGame[id] = (r.echoCardInGame[id] || 0) + 1;
+        if (won) r.echoCardInWinGame[id] = (r.echoCardInWinGame[id] || 0) + 1;
+      }
     }
   }
   if (g.winner === 'draw') {
@@ -579,7 +607,13 @@ function runGame(
   r.anchorCapBonuses += s.anchorCapBonuses;
   for (const pid of ['A', 'B'] as const) {
     const d = s.decisions[pid] || {};
-    for (const key of ['lapseMissedLethal', 'lapseWastedCastableDie', 'lapseIdleLeaderAbility'])
+    for (const key of [
+      'lapseMissedLethal',
+      'lapseWastedCastableDie',
+      'lapseIdleLeaderAbility_genuine',
+      'lapseIdleLeaderAbility_refusalNoTarget',
+      'lapseIdleLeaderAbility_diceSpentDown',
+    ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }
   for (const [id, n] of Object.entries(s.comboTriggers))
@@ -794,6 +828,53 @@ for (const r of decRows) {
 console.log(
   '\n(Echo broken out by rarity of the card recast — see echoRecast_low/mid/high above.)',
 );
+
+console.log(
+  '\n--- Durable-body density vs. win% (v4.8 findings §4 item 1 — the wall-list meta) ---',
+);
+const densityRows = roster
+  .filter((e) => (R.archN[e.key] || 0) >= 40)
+  .map((e) => ({
+    label: e.key,
+    density: e.durableDensity,
+    winPct: (100 * (R.archW[e.key] || 0)) / R.archN[e.key],
+    n: R.archN[e.key],
+  }))
+  .sort((a, b) => b.density - a.density);
+for (const r of densityRows)
+  console.log(
+    `${r.label.padEnd(30)} density=${String(r.density).padStart(3)}  win%=${r.winPct.toFixed(1).padStart(5)}  (n=${r.n})`,
+  );
+{
+  const densities = densityRows.map((r) => r.density).sort((a, b) => a - b);
+  const tercile = (i: number) => densities[Math.floor((densities.length * i) / 3)];
+  const lo = tercile(1),
+    hi = tercile(2);
+  const buckets = { low: [0, 0], mid: [0, 0], high: [0, 0] } as Record<string, [number, number]>;
+  for (const r of densityRows) {
+    const bucket = r.density <= lo ? 'low' : r.density >= hi ? 'high' : 'mid';
+    buckets[bucket][0] += (r.winPct * r.n) / 100;
+    buckets[bucket][1] += r.n;
+  }
+  console.log(
+    `=> low density (<= ${lo}): ${pct(buckets.low[0], buckets.low[1])}%  mid: ${pct(buckets.mid[0], buckets.mid[1])}%  high density (>= ${hi}): ${pct(buckets.high[0], buckets.high[1])}%`,
+  );
+}
+
+console.log('\n--- Per-card Echo win rate (recast >=1x this game), min n=15 ---');
+const echoRows = Object.keys(R.echoCardInGame)
+  .filter((id) => R.echoCardInGame[id] >= 15)
+  .map((id) => ({
+    name: POOL_BY_ID[id]?.name || id,
+    rarity: POOL_BY_ID[id]?.rarity || '?',
+    winPct: (100 * (R.echoCardInWinGame[id] || 0)) / R.echoCardInGame[id],
+    n: R.echoCardInGame[id],
+  }))
+  .sort((a, b) => a.winPct - b.winPct);
+for (const r of echoRows)
+  console.log(
+    `${r.name.padEnd(26)} ${r.rarity.padEnd(11)} win%=${r.winPct.toFixed(1).padStart(5)} (n=${r.n})`,
+  );
 
 console.log('\n--- Combo passive triggers ---');
 console.log(

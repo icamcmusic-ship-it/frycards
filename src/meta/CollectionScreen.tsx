@@ -246,9 +246,18 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const inspectSerializedReserved = inspect
     ? serializedCards.filter((s) => s.card_id === inspect.def.id).length
     : 0;
+  // Deck-locked copies are drawn from normal stock before foil (mirrors
+  // bulkQuicksell's spareFoil/spareNormal split above) — the foil "sellable"
+  // count must NOT just be the combined inspectSellable total, or a card
+  // with more locked copies than normal copies would let the UI offer to
+  // sell foil copies that are actually the ones covering the lock.
+  const inspectFoilSellable = Math.max(
+    0,
+    (inspectOwned?.f || 0) - Math.max(0, inspectLocked - (inspectOwned?.q || 0)),
+  );
   const normalSellable = Math.max(
     0,
-    Math.min(inspectSellable, (inspectOwned?.q || 0) - inspectSerializedReserved),
+    Math.min(inspectSellable - inspectFoilSellable, (inspectOwned?.q || 0) - inspectSerializedReserved),
   );
 
   const handleSell = async (foil: boolean, quantity: number) => {
@@ -430,8 +439,19 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             </div>
           )}
           {!dataLoading && filtered.length === 0 && (
-            <div className="w-full text-center font-bold text-[var(--c-steel)] py-14">
-              No cards match these filters. Crack some packs in the Store!
+            <div className="w-full flex flex-col items-center gap-3 text-center font-bold text-[var(--c-steel)] py-14">
+              <div>No cards match these filters. Crack some packs in the Store!</div>
+              <PopButton
+                color="yellow"
+                onClick={() => {
+                  setType('All');
+                  setRarity('All');
+                  setSearch('');
+                  setOwnedOnly(true);
+                }}
+              >
+                CLEAR FILTERS
+              </PopButton>
             </div>
           )}
         </div>
@@ -537,7 +557,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                         <PopButton
                           color="red"
                           className="w-full"
-                          disabled={selling || inspectSellable <= 0}
+                          disabled={selling || inspectFoilSellable <= 0}
                           onClick={() => handleSell(true, 1)}
                         >
                           QUICKSELL 1
@@ -546,9 +566,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="black"
                             className="w-full"
-                            disabled={selling || inspectSellable <= 0}
+                            disabled={selling || inspectFoilSellable <= 0}
                             onClick={() => {
-                              const n = Math.min(inspectOwned?.f || 0, inspectSellable);
+                              const n = inspectFoilSellable;
                               if (
                                 confirm(
                                   `Quicksell all ${n} spare foil copies of ${inspect.def.name}?`,

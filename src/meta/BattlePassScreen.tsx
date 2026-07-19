@@ -31,15 +31,20 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { season, tiers } = await fetchActiveSeason();
-      if (cancelled) return;
-      setSeason(season);
-      setTiers(tiers);
-      if (season && userId) {
-        const p = await fetchBattlePassProgress(userId, season.id);
-        if (!cancelled) setProgress(p);
+      try {
+        const { season, tiers } = await fetchActiveSeason();
+        if (cancelled) return;
+        setSeason(season);
+        setTiers(tiers);
+        if (season && userId) {
+          const p = await fetchBattlePassProgress(userId, season.id);
+          if (!cancelled) setProgress(p);
+        }
+      } finally {
+        // Runs even if a fetch throws — otherwise a network hiccup leaves
+        // the screen stuck on "LOADING SEASON…" forever.
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -61,17 +66,24 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
     setError('');
     setNotice('');
     setBusyTier(tier.tier);
-    const err = await claimBpTier(season.id, tier.tier);
-    setBusyTier(null);
-    if (err) {
-      setError(err);
-      return;
+    try {
+      const err = await claimBpTier(season.id, tier.tier);
+      if (err) {
+        setError(err);
+        return;
+      }
+      setNotice(`Tier ${tier.tier} claimed: ${tier.label}!`);
+      setProgress((p) =>
+        p ? { ...p, claimed_tiers: [...(p.claimed_tiers ?? []), tier.tier] } : p,
+      );
+      refreshProfile();
+      if (tier.reward_type === 'pack') refreshInventory();
+      if (tier.reward_type === 'cosmetic') refreshCosmetics();
+    } catch {
+      setError("Something went wrong — check your connection and try again.");
+    } finally {
+      setBusyTier(null);
     }
-    setNotice(`Tier ${tier.tier} claimed: ${tier.label}!`);
-    setProgress((p) => (p ? { ...p, claimed_tiers: [...(p.claimed_tiers ?? []), tier.tier] } : p));
-    refreshProfile();
-    if (tier.reward_type === 'pack') refreshInventory();
-    if (tier.reward_type === 'cosmetic') refreshCosmetics();
   };
 
   const rewardVisual = (tier: BattlePassTier) => {

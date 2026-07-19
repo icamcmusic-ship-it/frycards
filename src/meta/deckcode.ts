@@ -7,7 +7,7 @@
  * field, so this works for both the legacy CardTemplate pool and the v4.2
  * CardDef pool.
  */
-import { MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
+import { maxCopiesForRarity } from '../game/v3/decks';
 
 const PREFIX = 'FRY1';
 

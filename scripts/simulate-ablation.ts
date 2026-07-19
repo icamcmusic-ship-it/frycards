@@ -12,6 +12,7 @@
 import { newGame, mulberry32, DeckDef, SIM_TUNING } from '../src/game/v3/engine';
 import { playTurn, maybeMulligan } from '../src/game/v3/ai';
 import { Archetype, buildDeck } from '../src/game/v3/decks';
+import { rebuildPool } from '../src/game/v3/cardpool';
 
 // The archetypes under the microscope (copied verbatim from simulate-v4.ts
 // so results are comparable):
@@ -230,7 +231,27 @@ const ARMS: Arm[] = [
   // Round 4 (v4.8): Echo fodder economics (findings v4.7 §4.3). The
   // momentumOff arm ran here once and led to Momentum's outright removal.
   { name: 'echoNoFodder', apply: () => (SIM_TUNING.echoWaiveAllFodder = true) },
+  // Round 5 (v4.9): the wall-list meta (v4.8 findings §4 item 1) — three
+  // independent levers on the cheap-durable-body list shape the harness's
+  // new density-vs-win correlation confirmed (low density 46.2% vs high
+  // density 58.4%, same baseline pass). These three mutate mapUnit()'s
+  // CARD-BUILD math, not something read live during play, so they need the
+  // pool actually rebuilt to take effect — see `poolAffecting` below.
+  { name: 'exactCostCap 1.5->1.0', apply: () => (SIM_TUNING.exactCostBudgetCap = 1.0) },
+  { name: 'guardHpBonus 3->1', apply: () => (SIM_TUNING.guardHpBonus = 1) },
+  { name: 'guardHpBonus 3->2', apply: () => (SIM_TUNING.guardHpBonus = 2) },
+  { name: 'durableBodyTax +1', apply: () => (SIM_TUNING.durableBodyTax = 1) },
+  { name: 'durableBodyTax +2', apply: () => (SIM_TUNING.durableBodyTax = 2) },
 ];
+// Arms whose dial only takes effect once the pool is rebuilt from templates
+// (mapUnit()-time math) — every other arm's dial is read live during play.
+const POOL_AFFECTING_ARMS = new Set([
+  'exactCostCap 1.5->1.0',
+  'guardHpBonus 3->1',
+  'guardHpBonus 3->2',
+  'durableBodyTax +1',
+  'durableBodyTax +2',
+]);
 
 const PER_PAIR = parseInt(process.argv[2] || '60', 10);
 const MAX_TURNS = 160;
@@ -259,6 +280,7 @@ console.log(header.join(''));
 for (const arm of ARMS) {
   Object.assign(SIM_TUNING, DEFAULTS);
   arm.apply();
+  if (POOL_AFFECTING_ARMS.has(arm.name)) rebuildPool();
   const cells: string[] = [];
   for (const subj of subjectDecks) {
     let w = 0,
@@ -283,3 +305,4 @@ for (const arm of ARMS) {
   console.log(arm.name.padEnd(18) + cells.join(''));
 }
 Object.assign(SIM_TUNING, DEFAULTS);
+rebuildPool();
