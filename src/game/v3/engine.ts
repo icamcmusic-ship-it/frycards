@@ -1046,6 +1046,11 @@ export function reroll(g: Game, indices: number[]) {
     if (d && !d.placed) d.value = d6(g.rng);
   }
   p.rerollsUsed++;
+  // v4.16 harness upgrade: mechanic-level win-delta instrumentation (task
+  // "dice reroll usage") — a per-game decision flag, same generic
+  // decisionAgg pipeline as locationCast/faceAttack/etc., so its win-rate
+  // correlation shows up in the existing decision-correlation table for free.
+  if (indices.length > 0) decide(g, p.id, 'dieRerolled');
   if (indices.length === 0 || p.rerollsUsed >= g.rules.rerollsAllowed) {
     g.stage = 'PLACEMENT';
   }
@@ -1482,6 +1487,13 @@ export function activateAbility(
   // v4.4 Diver: draw-a-card Ability that also grants tempo — the next
   // friendly Unit cast this turn skips summoning sickness (see enterPlay).
   if (c.def.abilityGrantsTempo) p.swiftGrantThisTurn = true;
+  // A damage-dealing Ability (e.g. lethal removal, or direct Leader damage)
+  // must resolve deaths/checkWin immediately, same as every other effect
+  // source (enterPlay, attack()) — without this, a Leader Ability that
+  // kills a unit or the enemy Leader leaves the "dead" Leader/Unit in play
+  // (still a legal target, still counted in board.length) until some later
+  // unrelated action happens to call cleanupDeaths().
+  cleanupDeaths(g);
   return true;
 }
 
@@ -1515,6 +1527,8 @@ export function activateViaRally(
     targetIid ?? autoTarget(g, p.id, c.def.ability.effect),
     c,
   );
+  // Same as activateAbility: resolve deaths/checkWin right away.
+  cleanupDeaths(g);
   return true;
 }
 
@@ -1550,6 +1564,9 @@ export function activateUltimate(g: Game, dieIndex: number, targetIid?: string):
     p.board.length < oppAtUlt.board.length;
   decide(g, p.id, behindAtUlt ? 'ultimateUsedBehind' : 'ultimateUsedAhead');
   applyEffect(g, p.id, ult.effect, targetIid ?? autoTarget(g, p.id, ult.effect), leader);
+  // Same as activateAbility: an Ultimate that deals lethal damage must
+  // resolve deaths/checkWin right away, not wait for some later action.
+  cleanupDeaths(g);
   return true;
 }
 
@@ -1747,6 +1764,11 @@ export function comboCheck(g: Game) {
         c.comboSelfBuffStacks++;
       }
       g.stats.comboTriggers[c.def.id] = (g.stats.comboTriggers[c.def.id] || 0) + 1;
+      // v4.16 harness upgrade: mechanic-level win-delta instrumentation (task
+      // "existing combo/mechanic tracking") — per-game flag for "did ANY
+      // Combo passive fire this game," same decisionAgg pipeline as other
+      // mechanic flags.
+      decide(g, p.id, 'comboFired');
       applyEffect(g, p.id, combo.effect, autoTarget(g, p.id, combo.effect), c);
     }
   }
@@ -1769,6 +1791,7 @@ function resolveCastComboBonus(g: Game, p: Player, c: Inst) {
   if (!c.def.combo) return;
   if (matchesPattern(rollValues(p), c.def.combo.pattern)) {
     g.stats.comboTriggers[c.def.id] = (g.stats.comboTriggers[c.def.id] || 0) + 1;
+    decide(g, p.id, 'comboFired');
     applyEffect(g, p.id, c.def.combo.effect, autoTarget(g, p.id, c.def.combo.effect), c);
   }
 }
@@ -1840,6 +1863,10 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   const atk = effAtk(g, att);
   decide(g, p.id, tgt.def.type === 'Leader' ? 'faceAttack' : 'unitAttack');
   if (g.turn <= 4 && tgt.def.type === 'Leader') decide(g, p.id, 'earlyFaceAttack');
+  // v4.16 harness upgrade: mechanic-level win-delta instrumentation (task
+  // "Guard interactions") — fires whenever this attack was forced into a
+  // Guard (legalTargets() only ever returns Guards while one is up).
+  if (hasKw(tgt.def, 'Guard')) decide(g, p.id, 'guardBlockOccurred');
   if (tgt.def.type === 'Leader') {
     // One-directional: Leaders have no ATK, no retaliation. Toll (v4.2)
     // reduces this like any other incoming Leader damage.

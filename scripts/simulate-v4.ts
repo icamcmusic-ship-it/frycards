@@ -507,6 +507,19 @@ const DECISION_KEYS = [
   // done differently" detector.
   'guardClearLethalOpportunity',
   'guardClearLethalConverted',
+  // v4.16: mechanic-level win-delta instrumentation (task §3) — generic
+  // decisionAgg flags set directly in engine.ts's reroll()/attack()/
+  // comboCheck()/resolveCastComboBonus(), same pipeline as the keys above.
+  'dieRerolled',
+  'guardBlockOccurred',
+  'comboFired',
+  // v4.16: expanded CPU-lapse capture (task §4) — see ai.ts's
+  // recordMulliganLapse/recordRerollLapse/recordUnusedResourceLapse/
+  // wouldStarveHighValueAbility.
+  'lapseMulliganKeptMarginal',
+  'lapseRerollDeadLowDie',
+  'lapseUnusedDiceAtEndTurn',
+  'lapseEchoOverAbilitySequencing',
 ];
 
 interface SuiteResult {
@@ -856,6 +869,11 @@ function runGame(
       'unitAbilityMultiCandidateTiered',
       'guardClearLethalOpportunity',
       'guardClearLethalConverted',
+      // v4.16: expanded lapse capture (task §4).
+      'lapseMulliganKeptMarginal',
+      'lapseRerollDeadLowDie',
+      'lapseUnusedDiceAtEndTurn',
+      'lapseEchoOverAbilitySequencing',
     ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }

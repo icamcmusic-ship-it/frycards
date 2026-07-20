@@ -60,3 +60,42 @@ export const COLOR_LETTER: Record<Color, string> = {
   Solar: 'S',
   Slate: 'C',
 };
+
+// ---------------------------------------------------------------------------
+// Card-body background, tinted from color identity instead of rarity. Same
+// `color-mix(...) -> var(--c-paper)` structure as `rarity.ts`'s RARITY_BG so
+// the two systems compose visually, but the *hue* now tracks `cardColors()`
+// (the mechanical color identity) while rarity keeps the border/glow/corner
+// gem treatment — see CardFaceV4.tsx. A colorless (Slate) or color-less
+// (Leader — `[]`) card falls back to the same neutral gray tint. A single
+// color gets one soft diagonal tint. Multicolor cards get one color-mix
+// stop per color, stepped across the diagonal, so each color reads as its
+// own band instead of muddying into a single blended hex.
+// ---------------------------------------------------------------------------
+
+const SLATE_BG =
+  'linear-gradient(160deg, color-mix(in srgb, #64748B 12%, var(--c-paper)) 0%, var(--c-paper) 60%)';
+
+export function colorBg(colors: Color[]): string {
+  const real = colors.filter((c) => c !== 'Slate');
+  if (real.length === 0) return SLATE_BG;
+  if (real.length === 1) {
+    const hex = COLOR_HEX[real[0]];
+    return `linear-gradient(160deg, color-mix(in srgb, ${hex} 18%, var(--c-paper)) 0%, var(--c-paper) 60%)`;
+  }
+  const n = real.length;
+  const stops = real.map((c, i) => {
+    const hex = COLOR_HEX[c];
+    const pct = Math.round((i / (n - 1)) * 70); // spread bands across the first 70% of the diagonal
+    return `color-mix(in srgb, ${hex} 20%, var(--c-paper)) ${pct}%`;
+  });
+  return `linear-gradient(135deg, ${stops.join(', ')}, var(--c-paper) 100%)`;
+}
+
+/** Single representative hex for flat-fill UI (header tint, chips) — the
+ * first color in `COLORS` order for multicolor cards, Slate's gray for
+ * colorless/color-less (Leader) cards. */
+export function colorHexPrimary(colors: Color[]): string {
+  const real = colors.filter((c) => c !== 'Slate');
+  return COLOR_HEX[real[0] || 'Slate'];
+}
