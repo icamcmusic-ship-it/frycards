@@ -328,6 +328,28 @@ export const SIM_TUNING = {
    * tax, live value 0 (i.e. off; the wall-list hypothesis needs to be
    * ablated before this becomes a live rule). */
   durableBodyTax: 0,
+  /** v4.10 ablation dials for Locations' persistent small negative isolated
+   * contribution (v4.4-v4.9 findings, never given its own dedicated lever —
+   * see docs/BALANCE_SIM_FINDINGS_v4.9.md §4 item 5). All three are
+   * pool-affecting (read by cardpool.ts's mapLocation at build time) except
+   * footholdDiscount, which is read live by effThreshold below. Defaults
+   * MUST equal live behavior. */
+  /** flat value of a Location's on-cast board-impact buff (cardpool.ts
+   * mapLocation's `def.onCast`, tier>=3 gets +1 on top).
+   * v4.10: 2 -> 3 — a dedicated ablation battery for Locations' persistent
+   * small negative isolated contribution (v4.4-v4.9 findings, never given
+   * its own lever — v4.9 findings §4 item 5) found this the only one of
+   * three Location-only dials (this, excavateRate, footholdDiscount) with
+   * any measured effect at all: excavateRate and footholdDiscount both
+   * moved the one-Excavate/-Foothold-primary subject decks by exactly
+   * ZERO, a genuinely dead lever on both counts. This one moved Sea Witch
+   * Ward-Steel Wall +3.1pt with no measured downside on any other subject —
+   * shipped as the only lever this pass's ablation actually supported. */
+  locOnCastBuffBase: 3,
+  /** Excavate X per-controller-turn Ability threshold discount — live value 2. */
+  excavateRate: 2,
+  /** Foothold's Cast Slot threshold discount on the first Unit cast each turn — live value 1. */
+  footholdDiscount: 1,
 };
 
 export function steelRemaining(target: Inst): number {
@@ -414,7 +436,7 @@ export function effThreshold(g: Game, pid: string, def: CardDef): number {
   }
   // v4.4 Foothold: stacks with Anchor — a ramp deck built around both gets
   // to actually feel it on the turn that matters most (the first Unit).
-  if (def.type === 'Unit' && footholdActive(g, pid)) reduction += 1;
+  if (def.type === 'Unit' && footholdActive(g, pid)) reduction += SIM_TUNING.footholdDiscount;
   return Math.max(1, t - reduction);
 }
 
@@ -688,12 +710,29 @@ function wardCheck(g: Game, target: Inst, hostile: boolean): boolean {
   return false;
 }
 
-/** v4.2 Crescendo X: +X to an Event's numeric effect per die of value 6 placed this turn. */
+/**
+ * v4.2 Crescendo X: bonus to an Event's numeric effect on a hot roll.
+ *
+ * v4.10 redesign: Crescendo sat at the bottom of the keyword table for FOUR
+ * straight passes (28.6% v4.4 -> 36.4% this pass) despite three rounds of
+ * flat base-value bumps (1->2->3->4, docs/RULEBOOK.md's changelog). Scaling
+ * the bonus by the COUNT of sixes placed this turn almost never mattered —
+ * rolling 2+ sixes in one 5-die turn is rare — so every bump just enlarged a
+ * bonus that wasn't reliably firing at all; the real problem was
+ * reliability, not size. It also only counted a six that was specifically
+ * PLACED (spent on some cast), so a six that got rerolled away, or simply
+ * had nothing worth spending it on before this card's own turn, never
+ * counted even though the player visibly rolled a hot die. Redesigned per
+ * the v4.8/v4.9 findings' flagged fix ("+X if you placed any 6," a
+ * deterministic floor instead of scaling with count): a flat bonus the
+ * moment ANY die shows a 6 ROLLED this turn (not just placed), dropping the
+ * per-die multiplier entirely — "did I roll a six" instead of "how many
+ * sixes did I manage to spend."
+ */
 function withCrescendo(p: Player, c: Inst, eff: Effect): Effect {
   if (!c.def.crescendo) return eff;
-  const sixes = p.dice.filter((d) => d.placed && d.value === 6).length;
-  if (sixes <= 0) return eff;
-  return { ...eff, value: (eff.value || 0) + sixes * c.def.crescendo.x };
+  if (!rollValues(p).some((v) => v === 6)) return eff;
+  return { ...eff, value: (eff.value || 0) + c.def.crescendo.x };
 }
 
 /** v4.2 Aftershock: queue the delayed half-value repeat for the caster's next startTurn. */
@@ -1033,6 +1072,15 @@ function enterPlay(
   targetIid?: string,
 ) {
   g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
+  // v4.10: per-player, per-card cast tracking (mirrors the existing
+  // `echoCard:${id}` decision) — the pool-wide `casts` counter above can't
+  // tell which side cast a card when both decks include the same id, and
+  // says nothing about win correlation. Needed to diagnose a specific
+  // archetype's weak cards directly (a fixed-decklist archetype's "card
+  // present in deck -> win%" is always identical to the deck's own win rate,
+  // since every copy is in every one of that archetype's games — only
+  // whether the card actually got CAST that game varies).
+  decide(g, p.id, `cardCast:${c.def.id}`);
   const eff = effThreshold(g, p.id, c.def);
   const overflowHit =
     !!c.def.overflow && c.def.threshold !== undefined && dieValue - eff >= c.def.overflow.amount;
@@ -1315,6 +1363,7 @@ export function castFromHand(
     // here too double-counted every targeted Unit cast.)
     if (c.def.type === 'Charm' || c.def.type === 'Event') {
       g.stats.casts[c.def.id] = (g.stats.casts[c.def.id] || 0) + 1;
+      decide(g, p.id, `cardCast:${c.def.id}`);
       applyEffect(g, p.id, withCrescendo(p, c, c.def.onCast), targetIid, c);
       queueAftershock(g, p, c);
       const eff = effThreshold(g, p.id, c.def);

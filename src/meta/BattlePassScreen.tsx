@@ -80,7 +80,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       if (tier.reward_type === 'pack') refreshInventory();
       if (tier.reward_type === 'cosmetic') refreshCosmetics();
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyTier(null);
     }
@@ -92,7 +92,11 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       return (
         <div className="w-full h-full">
           {pack?.image_url ? (
-            <SafeImage src={pack.image_url} className="w-full h-full object-cover" />
+            <SafeImage
+              src={pack.image_url}
+              alt={pack.name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Package className="w-8 h-8 text-[var(--c-steel)]" />
@@ -106,7 +110,11 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       return (
         <div className="w-full h-full">
           {item?.image_url ? (
-            <SafeImage src={item.image_url} className="w-full h-full object-cover" />
+            <SafeImage
+              src={item.image_url}
+              alt={item.name}
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Gift className="w-8 h-8 text-[var(--c-steel)]" />

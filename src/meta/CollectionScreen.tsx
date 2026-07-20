@@ -16,6 +16,18 @@ const SORTS = ['Name', 'Rarity', 'Type'] as const;
 type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
+/** Spare (unlocked) normal/foil split for one card, modeling decks as
+ * consuming normal copies first and only spilling into foil once normal is
+ * exhausted. Shared by bulk quicksell and the per-card inspector panel so
+ * both agree on what's actually sellable — they used to diverge, letting the
+ * inspector's normal/foil buttons enable off an undifferentiated total. */
+function spareSplit(o: { q: number; f: number } | undefined, locked: number) {
+  if (!o) return { normal: 0, foil: 0 };
+  const spareTotal = Math.max(0, o.q + o.f - locked);
+  const spareFoil = Math.max(0, o.f - Math.max(0, locked - o.q));
+  return { normal: spareTotal - spareFoil, foil: spareFoil };
+}
+
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const {
     profile,
@@ -58,10 +70,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     const next = inShowcase ? showcase.filter((id) => id !== cardId) : [...showcase, cardId];
     setShowcaseBusy(true);
     setShowcaseError('');
-    const err = await setShowcaseCards(next);
-    setShowcaseBusy(false);
-    if (err) setShowcaseError(err);
-    else refreshProfile();
+    try {
+      const err = await setShowcaseCards(next);
+      if (err) setShowcaseError(err);
+      // `showcase` above is derived from `profile.showcase_cards`, and the
+      // next toggle recomputes `next` from that same stale array — release
+      // the busy guard only once the refetched profile actually reflects
+      // this write, or a second quick click can overwrite this one's change.
+      else await refreshProfile();
+    } finally {
+      setShowcaseBusy(false);
+    }
   };
 
   const owned = useMemo(() => {
@@ -124,10 +143,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       const o = owned.get(c.id);
       if (!o) continue;
       const locked = lockedByDecks.get(c.id) || 0;
-      const spareTotal = Math.max(0, o.q + o.f - locked);
-      if (spareTotal <= 0) continue;
-      const spareFoil = Math.max(0, o.f - Math.max(0, locked - o.q));
-      const spareNormal = spareTotal - spareFoil;
+      const { normal: spareNormal, foil: spareFoil } = spareSplit(o, locked);
+      if (spareNormal + spareFoil <= 0) continue;
       for (const [foil, qty] of [
         [false, spareNormal],
         [true, spareFoil],
@@ -237,7 +254,6 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       : lockedByDecks.get(inspect.def.id) || 0
     : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
-  const inspectSellable = Math.max(0, inspectTotal - inspectLocked);
   const inspectShowcased = inspect ? showcase.includes(inspect.def.id) : false;
   // Serialized prints are never foil and can never be quick sold
   // (see quicksell_cards' serialized-reserved check) — reserve that many
@@ -246,32 +262,30 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const inspectSerializedReserved = inspect
     ? serializedCards.filter((s) => s.card_id === inspect.def.id).length
     : 0;
-  // Deck-locked copies are drawn from normal stock before foil (mirrors
-  // bulkQuicksell's spareFoil/spareNormal split above) — the foil "sellable"
-  // count must NOT just be the combined inspectSellable total, or a card
-  // with more locked copies than normal copies would let the UI offer to
-  // sell foil copies that are actually the ones covering the lock.
-  const inspectFoilSellable = Math.max(
-    0,
-    (inspectOwned?.f || 0) - Math.max(0, inspectLocked - (inspectOwned?.q || 0)),
-  );
-  const normalSellable = Math.max(
-    0,
-    Math.min(inspectSellable - inspectFoilSellable, (inspectOwned?.q || 0) - inspectSerializedReserved),
-  );
+  // Same normal-first/foil-spillover model bulkQuicksell uses — this used to
+  // be a single undifferentiated "spare" figure shared by both the normal
+  // and foil buttons, which could show a normal copy as sellable when every
+  // normal copy was actually deck-locked (and only foil was spare), or vice
+  // versa.
+  const { normal: spareNormal, foil: spareFoil } = spareSplit(inspectOwned, inspectLocked);
+  const normalSellable = Math.max(0, spareNormal - inspectSerializedReserved);
+  const foilSellable = spareFoil;
 
   const handleSell = async (foil: boolean, quantity: number) => {
     if (!inspect || selling || quantity < 1) return;
     setSelling(true);
     setSellError('');
-    const { error } = await quicksellCards(inspect.def.id, quantity, foil);
-    setSelling(false);
-    if (error) {
-      setSellError(error);
-      return;
+    try {
+      const { error } = await quicksellCards(inspect.def.id, quantity, foil);
+      if (error) {
+        setSellError(error);
+        return;
+      }
+      refreshCollection();
+      refreshProfile();
+    } finally {
+      setSelling(false);
     }
-    refreshCollection();
-    refreshProfile();
   };
 
   return (
@@ -557,7 +571,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                         <PopButton
                           color="red"
                           className="w-full"
-                          disabled={selling || inspectFoilSellable <= 0}
+                          disabled={selling || foilSellable <= 0}
                           onClick={() => handleSell(true, 1)}
                         >
                           QUICKSELL 1
@@ -566,9 +580,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="black"
                             className="w-full"
-                            disabled={selling || inspectFoilSellable <= 0}
+                            disabled={selling || foilSellable <= 0}
                             onClick={() => {
-                              const n = inspectFoilSellable;
+                              const n = Math.min(inspectOwned?.f || 0, foilSellable);
                               if (
                                 confirm(
                                   `Quicksell all ${n} spare foil copies of ${inspect.def.name}?`,

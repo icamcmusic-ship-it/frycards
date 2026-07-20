@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -115,10 +115,19 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     };
   }, [tab, leaderboard]);
 
+  // Generation counter so every reload() call site — not just the mount
+  // effect's own isCancelled hook — is protected against an older in-flight
+  // reload resolving after a newer one and clobbering fresher state (e.g.
+  // accepting a friend request, then quickly declining another, could
+  // otherwise have the first reload's response land last and revert the
+  // just-accepted friendship back to "pending").
+  const reloadGen = useRef(0);
   const reload = useCallback(
     async (isCancelled?: () => boolean) => {
+      const gen = ++reloadGen.current;
+      const stale = () => isCancelled?.() || gen !== reloadGen.current;
       const [fs, ts] = await Promise.all([fetchFriendships(), fetchTrades()]);
-      if (isCancelled?.()) return;
+      if (stale()) return;
       setFriendships(fs);
       setTrades(ts);
       const ids = new Set<string>();
@@ -132,7 +141,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       }
       if (userId) ids.delete(userId);
       const pp = await fetchPublicProfiles([...ids]);
-      if (isCancelled?.()) return;
+      if (stale()) return;
       setProfiles(new Map(pp.map((p) => [p.id, p])));
     },
     [userId],
@@ -186,7 +195,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
         reload();
       }
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -553,9 +562,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             <PopButton
                               color="steel"
                               disabled={busy}
-                              onClick={() =>
-                                run(() => respondTrade(t.id, false), 'Trade declined.')
-                              }
+                              onClick={() => {
+                                if (!confirm('Decline this trade offer?')) return;
+                                run(() => respondTrade(t.id, false), 'Trade declined.');
+                              }}
                             >
                               DECLINE
                             </PopButton>
@@ -665,6 +675,9 @@ function TradeComposerModal({
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
+  // Credits are a plain integer (same unit as everywhere else in the app —
+  // see fmtCredits) — these inputs used to treat them as dollars-to-cents
+  // (÷100/×100), so offering "100" silently offered 10,000 credits.
   const [offerCredits, setOfferCredits] = useState(0);
   const [requestCredits, setRequestCredits] = useState(0);
   const [error, setError] = useState('');
@@ -719,10 +732,15 @@ function TradeComposerModal({
     if (busy) return;
     setBusy(true);
     setError('');
-    const err = await createTrade(partner.id, offer, request, offerCredits, requestCredits);
-    setBusy(false);
-    if (err) setError(err);
-    else onCreated();
+    try {
+      const err = await createTrade(partner.id, offer, request, offerCredits, requestCredits);
+      if (err) setError(err);
+      else onCreated();
+    } catch {
+      setError('Something went wrong sending this offer — check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const renderPicker = (
@@ -819,7 +837,6 @@ function TradeComposerModal({
               type="number"
               min={0}
               max={profile?.credits ?? 0}
-              step={1}
               value={offerCredits}
               onChange={(e) =>
                 setOfferCredits(
@@ -849,7 +866,6 @@ function TradeComposerModal({
             <input
               type="number"
               min={0}
-              step={1}
               value={requestCredits}
               onChange={(e) =>
                 setRequestCredits(Math.max(0, Math.round(Number(e.target.value) || 0)))

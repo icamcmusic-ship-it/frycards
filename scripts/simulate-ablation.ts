@@ -238,19 +238,42 @@ const ARMS: Arm[] = [
   // CARD-BUILD math, not something read live during play, so they need the
   // pool actually rebuilt to take effect — see `poolAffecting` below.
   { name: 'exactCostCap 1.5->1.0', apply: () => (SIM_TUNING.exactCostBudgetCap = 1.0) },
-  { name: 'guardHpBonus 3->1', apply: () => (SIM_TUNING.guardHpBonus = 1) },
-  { name: 'guardHpBonus 3->2', apply: () => (SIM_TUNING.guardHpBonus = 2) },
+  // v4.10: live default is now 2 (shipped in v4.9) — this arm's label
+  // updated to match; the old 'guardHpBonus 3->2' arm is gone, since it's
+  // now a no-op against the live baseline (was only meaningful pre-v4.9).
+  { name: 'guardHpBonus 2->1', apply: () => (SIM_TUNING.guardHpBonus = 1) },
   { name: 'durableBodyTax +1', apply: () => (SIM_TUNING.durableBodyTax = 1) },
   { name: 'durableBodyTax +2', apply: () => (SIM_TUNING.durableBodyTax = 2) },
+  // Round 6 (v4.10, v4.9 findings §4 item 5): Locations' persistent small
+  // negative isolated contribution (-0.5 to -1.3 win% every pass since
+  // v4.4) never had its own dedicated ablation arm before — only the
+  // general keyword/wall-list levers happened to touch it in passing. These
+  // three isolate each of the three Location-only levers independently
+  // (the on-cast board-impact buff, Excavate's per-turn rate, Foothold's
+  // Cast Slot discount) so whichever one actually moves the isolated
+  // Location-vs-stripped number is identifiable instead of guessed.
+  { name: 'locOnCastBuff 2->3', apply: () => (SIM_TUNING.locOnCastBuffBase = 3) },
+  { name: 'excavateRate 2->3', apply: () => (SIM_TUNING.excavateRate = 3) },
+  { name: 'footholdDiscount 1->2', apply: () => (SIM_TUNING.footholdDiscount = 2) },
+  {
+    name: 'locBundle (all 3)',
+    apply: () => {
+      SIM_TUNING.locOnCastBuffBase = 3;
+      SIM_TUNING.excavateRate = 3;
+      SIM_TUNING.footholdDiscount = 2;
+    },
+  },
 ];
 // Arms whose dial only takes effect once the pool is rebuilt from templates
 // (mapUnit()-time math) — every other arm's dial is read live during play.
 const POOL_AFFECTING_ARMS = new Set([
   'exactCostCap 1.5->1.0',
-  'guardHpBonus 3->1',
-  'guardHpBonus 3->2',
+  'guardHpBonus 2->1',
   'durableBodyTax +1',
   'durableBodyTax +2',
+  'locOnCastBuff 2->3',
+  'excavateRate 2->3',
+  'locBundle (all 3)',
 ]);
 
 const PER_PAIR = parseInt(process.argv[2] || '60', 10);

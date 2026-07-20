@@ -7,6 +7,74 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.10 balance/feature/bug pass
+
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.10.md`)**: Locations'
+  isolated win-rate contribution has been slightly negative every pass
+  since v4.4 — a dedicated ablation battery (never run before this pass)
+  found the one lever that actually moves it: the flat on-cast board-impact
+  buff every Location resolves the instant it enters play, 2 → 3. Isolated
+  contribution flipped from -1.3 win% to **+1.5 win%**, and every
+  Location-only keyword (Excavate, Foothold, Contested) rose 4-5pt as a
+  side effect. Crescendo redesigned after a 4th straight flat-or-declining
+  pass (36.4%, down from 39.5%): the bonus no longer scales with how many
+  dice show a 6 (rolling 2+ sixes in one turn is rare, so the old
+  multiplier almost never applied) — it's now a flat bonus the moment ANY
+  die shows a 6 rolled this turn (not just spent on a cast). 36.4% → 41.3%.
+  Mer-King's Twin Heal archetype (37.1%) got a first-ever per-card look
+  (three of its own weakest cards identified and given a small buff) and
+  recovered to 39.1%; its sibling Avenge Swarm barely moved (43.2% →
+  43.4%) — the per-card signal there is diffuse, no single fix found,
+  flagged for next pass. The wall-list meta (Shinobi Avenge Grind, ~86%)
+  remains open — a further Guard-HP lever is measured and ready but
+  deliberately not shipped this pass, since stacking it now would re-widen
+  Mer-King's Leader spread before that archetype has an independent fix.
+- **Sim harness**: a new class of CPU-lapse detector — sub-optimal
+  target/action choice within a play the AI was already making, not just
+  whether it acted at all (the existing "did it act" detectors have
+  measured zero for four straight passes). Found and fixed a real, if rare,
+  gap: combat trades with multiple legal kill targets used to take
+  whichever enemy Unit was cast first instead of the most valuable one
+  (0.035/game). A companion detector for Unit-Ability activation order
+  measured zero — a working detector with nothing to catch in this
+  roster, which is itself useful information. Also added: a per-archetype
+  "cast this card and win" table (the old per-archetype win-in-deck number
+  turned out to be meaningless for a fixed decklist — literally every card
+  reads as identical to the deck's own win rate), a per-archetype-
+  normalized Echo win-delta table, and the cost-vs-value table the v4.8
+  changelog claimed had shipped but actually hadn't (the import was there;
+  the code wasn't).
+- **Bug fixes / QoL (full feature-and-bug-hunt pass)**: a currency-scaling
+  bug (typing "50" submitting 5,000) had crept back into five separate
+  credit inputs (Creator Tools currency grant, trade offers, marketplace
+  sell/buyout/bid, player-shop listing prices) — fixed everywhere it
+  reappeared. "Busy flag stuck forever" hardening (a failed claim, purchase,
+  save, or report used to leave buttons permanently disabled with no
+  recovery short of a reload) added across the Store's pack/item handlers,
+  Marketplace, Social, News Center, and Player Shops. Retry buttons and
+  friendlier error states added to previously-silent load failures on News
+  Center's feed and all three Player Shops tabs (directory/storefront/my
+  shop). Other real bugs fixed: the Collection screen's per-card foil/normal
+  Quicksell buttons could offer to sell more copies than were actually free
+  (unified with the same math the bulk-quicksell path already used); the
+  deck builder's Leader-ownership check missed a Leader quicksold to exactly
+  zero; a raw Postgres error string could leak to the player on a failed
+  deck deletion; a pack-opening haul-quicksell could mark cards "SOLD" that
+  the server only partially sold; Store purchase buttons only disabled the
+  one being clicked instead of every button while any purchase was in
+  flight. In the live match screen, a Unit/Leader Ability or Ultimate cast
+  with a target picker could resolve against whichever die happened to be
+  selected by the time the target was clicked instead of the one actually
+  committed when the ability was armed (Cast already avoided this;
+  Ability/Ultimate/plain-Echo now capture their die the same way).
+  Small QoL/accessibility additions: confirm-before-destructive dialogs
+  (haul quicksell, declining a trade, cancelling a marketplace or shop
+  listing, submitting a mystery pool, buying a mystery pack, replacing a
+  deck via QUICKBUILD); Escape-to-close on the Leader picker; keyboard focus
+  on in-match status tooltips; missing alt text filled in across profile
+  banners/avatars, pack/cosmetic art, and news-feed thumbnails; a live
+  auction-countdown tick on the Marketplace.
+
 ### v4.9 balance/feature/bug pass
 
 - **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.9.md`)**: Guard's

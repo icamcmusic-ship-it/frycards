@@ -180,6 +180,11 @@ function CardStackPicker({
       const idx = items.findIndex((i) => i.card_id === cardId && i.foil === foil);
       if (idx >= 0) {
         const next = [...items];
+        // Re-clamp to maxQty — the guard above only checks the new `qty`
+        // against maxQty, but a second add for the same card/foil stacks
+        // onto whatever's already in the pool, which can exceed the
+        // player's actual spare copies even though each individual add
+        // passed the guard.
         next[idx] = { ...next[idx], quantity: Math.min(maxQty, next[idx].quantity + qty) };
         onChange(next);
       } else {
@@ -331,20 +336,27 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
   const [sort, setSort] = useState<'featured' | 'trending' | 'new' | 'top_rated'>('featured');
   const [shops, setShops] = useState<BrowseShopEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    browseShops(sort, 40).then((s) => {
-      if (!cancelled) {
-        setShops(s);
-        setLoading(false);
-      }
-    });
+    setError('');
+    browseShops(sort, 40)
+      .then((s) => {
+        if (!cancelled) setShops(s);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load shops. Check your connection and try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [sort]);
+  }, [sort, attempt]);
 
   const tabs: { key: typeof sort; label: string; icon: React.ReactNode }[] = [
     { key: 'featured', label: 'FEATURED', icon: <Sparkles className="w-3.5 h-3.5" /> },
@@ -371,6 +383,13 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
       {loading ? (
         <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
           LOADING SHOPS…
+        </div>
+      ) : error ? (
+        <div className="text-center py-16">
+          <p className="font-bold text-[var(--c-steel)] mb-3">{error}</p>
+          <PopButton color="red" onClick={() => setAttempt((n) => n + 1)}>
+            RETRY
+          </PopButton>
         </div>
       ) : shops.length === 0 ? (
         <div className="text-center font-bold text-[var(--c-steel)] py-16">
@@ -423,6 +442,7 @@ function ReportModal({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -430,10 +450,13 @@ function ReportModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
   return (
     <div
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
     >
       <div
         className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
@@ -470,10 +493,15 @@ function ReportModal({
             disabled={busy}
             onClick={async () => {
               setBusy(true);
-              const err = await reportListing(listingId, reason, note || undefined);
-              setBusy(false);
-              if (err) setError(err);
-              else onDone();
+              try {
+                const err = await reportListing(listingId, reason, note || undefined);
+                if (err) setError(err);
+                else onDone();
+              } catch {
+                setError('Something went wrong — check your connection and try again.');
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             SUBMIT REPORT
@@ -505,7 +533,13 @@ function MysteryListingCard({
 }) {
   const [live, setLive] = useState<MysteryLiveStats | null>(null);
   useEffect(() => {
-    if (listing.status !== 'active') return;
+    if (listing.status !== 'active') {
+      // Without this, a listing that just sold out keeps showing its last
+      // fetched non-zero "N packs left" alongside the fresh SOLD OUT badge —
+      // the ?? below would keep preferring the stale live figure forever.
+      setLive(null);
+      return;
+    }
     let cancelled = false;
     fetchMysteryLiveStats(listing.id).then((s) => {
       if (!cancelled) setLive(s);
@@ -587,18 +621,29 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
   const [notice, setNotice] = useState('');
   const [reportTarget, setReportTarget] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState('');
+  // `isCancelled` guards a fast owner-to-owner navigation (or unmount) from
+  // letting a stale fetch for the PREVIOUS shop overwrite this one's fresh
+  // state — same pattern as the other reload()s in this file.
   const reload = useCallback(
     async (isCancelled?: () => boolean) => {
-      const [s, ls, sellers] = await Promise.all([
-        fetchShopPublic(owner),
-        fetchShopListings(owner),
-        fetchPublicProfiles([owner]),
-      ]);
-      if (isCancelled?.()) return;
-      setShop(s);
-      setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
-      setSeller(sellers[0] || null);
-      setLoading(false);
+      setLoadError('');
+      try {
+        const [s, ls, sellers] = await Promise.all([
+          fetchShopPublic(owner),
+          fetchShopListings(owner),
+          fetchPublicProfiles([owner]),
+        ]);
+        if (isCancelled?.()) return;
+        setShop(s);
+        setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
+        setSeller(sellers[0] || null);
+      } catch {
+        if (!isCancelled?.())
+          setLoadError("Couldn't load this shop. Check your connection and try again.");
+      } finally {
+        if (!isCancelled?.()) setLoading(false);
+      }
     },
     [owner],
   );
@@ -623,10 +668,15 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         if (success) setNotice(success);
         refreshProfile();
         refreshCollection();
-        reload();
+        // Awaited (not fire-and-forget) so `busy` — and every button gated
+        // on it — stays disabled until the refetch actually lands; releasing
+        // it immediately let a second action fire while this reload was
+        // still in flight, and an out-of-order response could overwrite the
+        // second action's fresher state.
+        await reload();
       }
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -645,6 +695,8 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           busy={busy}
           credits={profile?.credits || 0}
           onBuy={() => {
+            if (!confirm(`Buy this mystery pack for ${fmtCredits(l.price)}? Contents are random.`))
+              return;
             run(async () => {
               const { error: e } = await buyMysteryPack(l.id);
               return e;
@@ -722,9 +774,18 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
       <PopButton color="steel" onClick={onBack} className="mb-3">
         &lt; BACK TO DIRECTORY
       </PopButton>
-      {loading || !shop ? (
+      {loading ? (
         <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
           LOADING SHOP…
+        </div>
+      ) : loadError || !shop ? (
+        <div className="text-center py-16">
+          <p className="font-bold text-[var(--c-steel)] mb-3">
+            {loadError || "This shop couldn't be found."}
+          </p>
+          <PopButton color="red" onClick={reload}>
+            RETRY
+          </PopButton>
         </div>
       ) : (
         <>
@@ -828,30 +889,41 @@ function MyShopTab() {
   const [notice, setNotice] = useState('');
   const [addMode, setAddMode] = useState<'none' | 'individual' | 'bundle' | 'mystery'>('none');
 
+  const [loadError, setLoadError] = useState('');
+  // `isCancelled` guards a fast account switch (or unmount) from letting a
+  // stale fetch for the PREVIOUS user overwrite this one's fresh shop state
+  // — same pattern as the other reload()s in this file.
   const reload = useCallback(
     async (isCancelled?: () => boolean) => {
-      const s = await fetchMyShop(userId);
-      if (isCancelled?.()) return;
-      setShop(s);
-      if (s) {
-        const [sl, li, tp] = await Promise.all([
-          fetchShopSlots(userId),
-          fetchShopListings(userId),
-          fetchMysteryTemplates(userId),
+      setLoadError('');
+      try {
+        const s = await fetchMyShop(userId);
+        if (isCancelled?.()) return;
+        setShop(s);
+        if (s) {
+          const [sl, li, tp] = await Promise.all([
+            fetchShopSlots(userId),
+            fetchShopListings(userId),
+            fetchMysteryTemplates(userId),
+          ]);
+          if (isCancelled?.()) return;
+          setSlots(sl);
+          setListings(li);
+          setTemplates(tp);
+        }
+        const [pur, rat] = await Promise.all([
+          fetchMyShopPurchases(userId),
+          fetchMyBuyerRatings(userId),
         ]);
         if (isCancelled?.()) return;
-        setSlots(sl);
-        setListings(li);
-        setTemplates(tp);
+        setPurchases(pur.filter((p) => p.buyer === userId));
+        setMyRatings(rat);
+      } catch {
+        if (!isCancelled?.())
+          setLoadError("Couldn't load your shop. Check your connection and try again.");
+      } finally {
+        if (!isCancelled?.()) setLoading(false);
       }
-      const [pur, rat] = await Promise.all([
-        fetchMyShopPurchases(userId),
-        fetchMyBuyerRatings(userId),
-      ]);
-      if (isCancelled?.()) return;
-      setPurchases(pur.filter((p) => p.buyer === userId));
-      setMyRatings(rat);
-      setLoading(false);
     },
     [userId],
   );
@@ -877,10 +949,14 @@ function MyShopTab() {
         refreshProfile();
         refreshCollection();
         setAddMode('none');
-        reload();
+        // Awaited so `busy` stays true (and every gated button disabled)
+        // until this reload actually lands — see the matching comment in
+        // StorefrontView's run() for why a fire-and-forget reload here let
+        // two quick actions race and show stale post-action state.
+        await reload();
       }
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -890,6 +966,17 @@ function MyShopTab() {
     return (
       <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
         LOADING…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="text-center py-16">
+        <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
+        <PopButton color="red" onClick={reload}>
+          RETRY
+        </PopButton>
       </div>
     );
   }
@@ -1009,15 +1096,13 @@ function MyShopTab() {
         title={atMaxSlots ? `Shops cap out at ${SHOP_MAX_SLOTS} slots` : undefined}
         onClick={() => run(() => buyShopSlot().then((r) => r.error), 'Slot purchased!')}
       >
-        <span className="inline-flex items-center gap-0.5">
-          {atMaxSlots ? (
-            `MAX SLOTS (${SHOP_MAX_SLOTS})`
-          ) : (
-            <>
-              + BUY SLOT (<Credits amount={nextSlotCost} /> collateral)
-            </>
-          )}
-        </span>
+        {atMaxSlots ? (
+          `MAX SLOTS (${SHOP_MAX_SLOTS})`
+        ) : (
+          <span className="inline-flex items-center gap-0.5">
+            + BUY SLOT (<Credits amount={nextSlotCost} /> collateral)
+          </span>
+        )}
       </PopButton>
 
       <div className="heading-font text-xs mt-6 mb-2">LISTINGS</div>
@@ -1041,8 +1126,11 @@ function MyShopTab() {
           </span>
         </PopButton>
         <PopButton
+          // Unlike INDIVIDUAL/BUNDLE, this panel also lets you define a pack
+          // type ("CREATE PACK TYPE") with no slot needed at all — only
+          // actually submitting a pool for sale needs one, and that path is
+          // already gated on its own (SUBMIT POOL & LIST requires slotId).
           color={addMode === 'mystery' ? 'black' : 'yellow'}
-          disabled={emptySlots.length === 0}
           onClick={() => setAddMode(addMode === 'mystery' ? 'none' : 'mystery')}
         >
           <span className="flex items-center gap-1">
@@ -1081,12 +1169,18 @@ function MyShopTab() {
               'Pack type created!',
             )
           }
-          onSubmitPool={(templateId, slotId, pool, price) =>
+          onSubmitPool={(templateId, slotId, pool, price) => {
+            if (
+              !confirm(
+                'Submit this pool and list it for sale? The cards are escrowed immediately and this listing has no cancel button once live.',
+              )
+            )
+              return;
             run(
               () => submitMysteryPool(templateId, slotId, pool, price).then((r) => r.error),
               'Pool submitted!',
-            )
-          }
+            );
+          }}
         />
       )}
 
@@ -1111,7 +1205,10 @@ function MyShopTab() {
                 <PopButton
                   color="steel"
                   disabled={busy}
-                  onClick={() => run(() => cancelShopListing(l.id))}
+                  onClick={() => {
+                    if (!confirm('Cancel this listing? Your cards will be returned.')) return;
+                    run(() => cancelShopListing(l.id));
+                  }}
                 >
                   CANCEL
                 </PopButton>
@@ -1313,7 +1410,6 @@ function NewCardListingForm({
           <input
             type="number"
             min={1}
-            step={1}
             value={price}
             onChange={(e) => setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))}
             className="w-24 px-2 py-1 ink-border-sm"
@@ -1372,15 +1468,6 @@ function MysteryBuilderPanel({
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState('');
 
-  // Any edit to the pool invalidates a previous PREVIEW POOL result — without
-  // this, a seller could validate a pool, then swap cards out and submit the
-  // modified pool with the stale "✓ Valid" gate still open.
-  const handlePoolChange = (next: ShopListingCardItem[]) => {
-    setPool(next);
-    setValidation(null);
-    setCheckError('');
-  };
-
   useEffect(() => {
     setSlotSpecs((prev) => {
       const next = [...prev];
@@ -1395,10 +1482,15 @@ function MysteryBuilderPanel({
     if (!templateId) return;
     setChecking(true);
     setCheckError('');
-    const { data, error } = await previewMysteryPool(templateId, pool);
-    setValidation(data);
-    if (!data && error) setCheckError(error);
-    setChecking(false);
+    try {
+      const { data, error } = await previewMysteryPool(templateId, pool);
+      setValidation(data);
+      if (!data && error) setCheckError(error);
+    } catch {
+      setCheckError('Could not check this pool — check your connection and try again.');
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -1576,7 +1668,15 @@ function MysteryBuilderPanel({
             collection={collection}
             decks={decks}
             items={pool}
-            onChange={handlePoolChange}
+            onChange={(items) => {
+              setPool(items);
+              // The pool changed since the last PREVIEW POOL check — clear
+              // the stale validation/price-band/EV so SUBMIT POOL & LIST
+              // (gated on validation?.ok) can't stay enabled for a pool that
+              // was never actually previewed.
+              setValidation(null);
+              setCheckError('');
+            }}
           />
           <div className="flex flex-wrap gap-3 items-center mb-2">
             <label className="flex items-center gap-2 text-xs font-bold">
@@ -1584,11 +1684,8 @@ function MysteryBuilderPanel({
               <input
                 type="number"
                 min={1}
-                step={1}
                 value={price}
-                onChange={(e) =>
-                  setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))
-                }
+                onChange={(e) => setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))}
                 className="w-24 px-2 py-1 ink-border-sm"
               />
             </label>

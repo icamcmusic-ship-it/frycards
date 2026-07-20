@@ -186,38 +186,45 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Load per-user data when a session appears. Guarded against a fast
-  // userId change (sign-out immediately followed by a different sign-in, or
-  // guest -> real session) racing an in-flight load for the *previous* user:
-  // without this, an old fetch resolving after a newer one started could
-  // stomp fresh state with stale/wrong-account profile & collection data.
+  // sign-out/sign-in-as-different-user (or duplicate auth events) firing this
+  // effect twice in a row — without `cancelled`, an earlier userId's fetch
+  // resolving after a later one started would stomp the newer user's fresh
+  // profile/collection/decks with stale (or another account's) data. Fetches
+  // directly here (not via the refreshX callbacks below) so every setState
+  // this effect makes can be gated on `cancelled` — the shared refreshX
+  // callbacks are called from many other places (e.g. "refresh after a
+  // purchase") where that guard doesn't apply and shouldn't be added.
   useEffect(() => {
     let cancelled = false;
-    if (!userId) {
-      setProfile(null);
-      setCollection([]);
-      setCosmetics([]);
-      setDecks([]);
-      setInventory([]);
-      setSerializedCards([]);
-      setDataLoading(false);
-      return;
-    }
-    setDataLoading(true);
     (async () => {
-      const [profileR, collectionR, cosmeticsR, decksR, inventoryR] = await Promise.all([
+      if (!userId) {
+        await Promise.resolve();
+        if (cancelled) return;
+        setProfile(null);
+        setCollection([]);
+        setCosmetics([]);
+        setDecks([]);
+        setInventory([]);
+        setSerializedCards([]);
+        setDataLoading(false);
+        return;
+      }
+      setDataLoading(true);
+      const [prof, coll, serial, cosm, dks, inv] = await Promise.all([
         fetchProfile(userId),
-        Promise.all([fetchCollection(userId), fetchMySerializedCards(userId)]),
+        fetchCollection(userId),
+        fetchMySerializedCards(userId),
         fetchCosmetics(userId),
         fetchDecks(userId),
         fetchInventory(userId),
       ]);
       if (cancelled) return;
-      setProfile(profileR);
-      setCollection(collectionR[0]);
-      setSerializedCards(collectionR[1]);
-      setCosmetics(cosmeticsR);
-      setDecks(decksR);
-      setInventory(inventoryR);
+      setProfile(prof);
+      setCollection(coll);
+      setSerializedCards(serial);
+      setCosmetics(cosm);
+      setDecks(dks);
+      setInventory(inv);
       setDataLoading(false);
     })();
     return () => {

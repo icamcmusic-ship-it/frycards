@@ -32,8 +32,9 @@ export function ProfileScreen({
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [error, setError] = useState('');
-  const [equipping, setEquipping] = useState(false);
-  const [renaming, setRenaming] = useState(false);
+  // Guards against a rapid double-click firing two concurrent equip RPCs for
+  // the same (or different) cosmetics before the first one's refresh lands.
+  const [equippingId, setEquippingId] = useState<string | null>(null);
 
   const ownedIds = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
   // Free items (cost 0) are always equippable — but battle pass exclusives
@@ -43,23 +44,25 @@ export function ProfileScreen({
     (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
 
   const handleEquip = async (item: ShopItem) => {
-    // Serialize equips — rapid clicks on two different cosmetics used to race
-    // their RPCs and could leave the profile showing whichever refresh
-    // resolved last, not what the player clicked last.
-    if (equipping) return;
-    setEquipping(true);
+    if (equippingId) return;
     setError('');
+    setEquippingId(item.id);
     try {
       const err = await equipCosmetic(item.id);
       if (err) setError(err);
+      // Awaited — releasing the busy guard before this lands let rapid
+      // clicks on two different cosmetics race their RPCs and could leave
+      // the profile showing whichever refresh resolved last, not what the
+      // player clicked last.
       else await refreshProfile();
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
-      setEquipping(false);
+      setEquippingId(null);
     }
   };
 
+  const [renaming, setRenaming] = useState(false);
   const handleRename = async () => {
     // Guard against double-submit (Enter + Save button double-fire, or
     // repeated Enter presses while the request is in flight) and reject an
@@ -80,7 +83,7 @@ export function ProfileScreen({
         refreshProfile();
       }
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setRenaming(false);
     }
@@ -122,13 +125,21 @@ export function ProfileScreen({
       <div className="max-w-4xl mx-auto p-5">
         <div className="ink-border-md shadow-hard-black overflow-hidden bg-[var(--c-steel)] relative">
           <div className="h-40 relative">
-            <SafeImage src={banner?.image_url} className="w-full h-full object-cover" />
+            <SafeImage
+              src={banner?.image_url}
+              alt={banner ? `${banner.name} banner` : undefined}
+              className="w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-[var(--c-ink)]/80 to-transparent" />
           </div>
           <div className="absolute bottom-3 left-4 flex items-end gap-3">
             <div className="w-20 h-20 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
               {avatar?.image_url ? (
-                <img src={avatar.image_url} className="w-full h-full object-cover" />
+                <img
+                  src={avatar.image_url}
+                  alt="Profile avatar"
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-3xl">
                   {(profile.username || '?')[0]?.toUpperCase()}
@@ -278,9 +289,11 @@ export function ProfileScreen({
                     <button
                       key={item.id}
                       onClick={() => handleEquip(item)}
+                      disabled={!!equippingId}
                       className={cn(
                         'btn-pop overflow-hidden ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] text-left transition-all w-36',
                         isEquipped && 'outline outline-3 outline-[var(--c-red)] -translate-y-1',
+                        equippingId && equippingId !== item.id && 'opacity-40 cursor-not-allowed',
                       )}
                     >
                       <div
@@ -295,6 +308,7 @@ export function ProfileScreen({
                       >
                         <SafeImage
                           src={item.image_url}
+                          alt={item.name}
                           className="w-full h-full object-cover"
                           fallbackText={item.name}
                         />
@@ -342,7 +356,9 @@ function CreatorTools() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Grant inputs.
+  // Grant inputs. Credits are a plain integer (same unit the server and every
+  // other screen use — see fmtCredits) — this used to treat the input as
+  // dollars-to-cents (÷100/×100), so a "50" grant silently sent 5,000 credits.
   const [credits, setCredits] = useState(0);
   const [vouchers, setVouchers] = useState(0);
   const [cardId, setCardId] = useState('');
@@ -378,7 +394,7 @@ function CreatorTools() {
         refreshCollection();
       }
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -471,11 +487,8 @@ function CreatorTools() {
                 <input
                   type="number"
                   min={0}
-                  step={1}
                   value={credits}
-                  onChange={(e) =>
-                    setCredits(Math.max(0, Math.round(Number(e.target.value) || 0)))
-                  }
+                  onChange={(e) => setCredits(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                   className={`${input} w-24`}
                 />
               </label>

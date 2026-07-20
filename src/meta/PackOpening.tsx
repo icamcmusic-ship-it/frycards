@@ -65,7 +65,7 @@ function CardBackFace() {
   return (
     <div className="w-full h-full bg-[var(--c-ink)] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center">
       {back ? (
-        <img src={back} className="w-full h-full object-cover" draggable={false} />
+        <img src={back} alt="Card back" className="w-full h-full object-cover" draggable={false} />
       ) : (
         <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRYCARDS</div>
       )}
@@ -231,24 +231,23 @@ function TearStage({
   const dragging = useRef<{ startX: number; startProgress: number } | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const tornRef = useRef(false);
-  const tearTimeoutRef = useRef<number | null>(null);
+  const tearTimer = useRef<number | null>(null);
 
-  // Cancel the pending onTorn timer if this stage unmounts before it fires
-  // (e.g. the player navigates away from the Store mid-tear) — otherwise it
-  // still calls the parent's setStage on an unmounted tree.
-  useEffect(
-    () => () => {
-      if (tearTimeoutRef.current !== null) window.clearTimeout(tearTimeoutRef.current);
-    },
-    [],
-  );
+  // Defense-in-depth: nothing unmounts this stage before the timer fires
+  // today, but nothing guarantees that stays true — an uncleared timer would
+  // call onTorn() (a setState on an unmounted parent) if that ever changes.
+  useEffect(() => {
+    return () => {
+      if (tearTimer.current != null) window.clearTimeout(tearTimer.current);
+    };
+  }, []);
 
   const finishTear = () => {
     if (tornRef.current) return;
     tornRef.current = true;
     setProgress(1);
     setTorn(true);
-    tearTimeoutRef.current = window.setTimeout(onTorn, reducedMotion ? 120 : 850);
+    tearTimer.current = window.setTimeout(onTorn, reducedMotion ? 120 : 850);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -672,6 +671,10 @@ function SummaryStage({
 
   const quicksellClutter = async () => {
     if (sellBusy || clutterIndices.length === 0) return;
+    if (
+      !confirm(`Quicksell ${clutterIndices.length} common/uncommon card(s)? This can't be undone.`)
+    )
+      return;
     setSellBusy(true);
     setSellError('');
     setSellNotice('');
@@ -690,6 +693,7 @@ function SummaryStage({
     }
     let totalCredits = 0;
     let totalCards = 0;
+    let shortfall = false;
     const newlySold = new Set<number>();
     for (const g of groups.values()) {
       const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
@@ -700,14 +704,19 @@ function SummaryStage({
       if (data) {
         totalCredits += data.total;
         totalCards += data.sold;
-        g.indices.forEach((i) => newlySold.add(i));
+        // The server can sell fewer than requested (e.g. another tab already
+        // sold/locked some copies) — only mark that many pulls as sold, not
+        // the whole group, or the UI shows cards as gone that the player
+        // still owns.
+        if (data.sold < g.qty) shortfall = true;
+        g.indices.slice(0, data.sold).forEach((i) => newlySold.add(i));
       }
     }
     setSellBusy(false);
     if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
     if (totalCards > 0) {
       setSellNotice(
-        `Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
+        `Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}${shortfall ? ' (some copies were no longer available)' : ''}.`,
       );
       refreshCollection();
       refreshProfile();

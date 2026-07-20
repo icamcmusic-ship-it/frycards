@@ -259,7 +259,11 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             }
           >
             {avatar?.image_url ? (
-              <img src={avatar.image_url} className="w-full h-full object-cover" />
+              <img
+                src={avatar.image_url}
+                alt="Profile avatar"
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-xl">
                 {(profile?.username || 'G')[0].toUpperCase()}

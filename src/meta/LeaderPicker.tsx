@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { POOL_LEADERS } from '../game/v3/cardpool';
 import { SafeImage } from './SafeImage';
 import { PopButton } from './ui';
@@ -30,8 +30,21 @@ export function LeaderPicker({
   const starterLeaders = POOL_LEADERS.filter(
     (l) => RARITIES.indexOf(l.rarity || 'Common') <= STARTER_MAX_RARITY_IDX,
   );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busy) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
   return (
-    <div className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0">
           <div>

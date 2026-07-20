@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -63,20 +63,29 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   const [rarityFilter, setRarityFilter] = useState('All');
   const [search, setSearch] = useState('');
 
+  // Generation counter guards against an older in-flight reload() resolving
+  // after a newer one (e.g. two quick actions in a row) and clobbering
+  // fresher listings/activity with stale data.
+  const reloadGen = useRef(0);
   const reload = useCallback(async () => {
+    const gen = ++reloadGen.current;
     try {
       const [ls, mine] = await Promise.all([
         fetchMarketListings(),
         userId ? fetchMyMarketActivity(userId) : Promise.resolve([]),
       ]);
+      if (gen !== reloadGen.current) return;
       setListings(ls);
       setMyActivity(mine);
       const ids = [...new Set([...ls, ...mine].map((l) => l.seller))];
-      setSellers(new Map((await fetchPublicProfiles(ids)).map((p) => [p.id, p])));
+      const profiles = await fetchPublicProfiles(ids);
+      if (gen !== reloadGen.current) return;
+      setSellers(new Map(profiles.map((p) => [p.id, p])));
     } catch {
-      setError('Could not load the marketplace. Check your connection and try again.');
+      if (gen === reloadGen.current)
+        setError('Could not load the marketplace. Check your connection and try again.');
     } finally {
-      setLoading(false);
+      if (gen === reloadGen.current) setLoading(false);
     }
   }, [userId]);
 
@@ -95,24 +104,37 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [bidFor]);
 
-  /** Returns true on success so callers can gate follow-up UI (e.g. the sell
-   * form switching tabs) on the action actually having gone through. */
+  // Ticks once a minute so auction countdowns ("Xh Ym left") and "ended"
+  // states advance on their own instead of freezing at whatever "now" was
+  // when the screen mounted, mirroring StoreScreen's daily-pack countdown.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const run = async (fn: () => Promise<string | null>, success?: string): Promise<boolean> => {
     if (busy) return false;
     setBusy(true);
     setError('');
     setNotice('');
-    const err = await fn();
-    setBusy(false);
-    if (err) {
-      setError(err);
+    try {
+      const err = await fn();
+      if (err) {
+        setError(err);
+        return false;
+      }
+      if (success) setNotice(success);
+      refreshProfile();
+      refreshCollection();
+      reload();
+      return true;
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
       return false;
+    } finally {
+      setBusy(false);
     }
-    if (success) setNotice(success);
-    refreshProfile();
-    refreshCollection();
-    reload();
-    return true;
   };
 
   const browse = listings.filter((l) => {
@@ -123,15 +145,6 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   });
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
-
-  // Minimum legal bid for the open bid modal — mirror of place_bid's 5% raise
-  // rule, so the button greys out instead of letting a too-low bid round-trip
-  // to the server just to be rejected.
-  const minBid = bidFor
-    ? bidFor.current_bid != null
-      ? bidFor.current_bid + Math.max(1, Math.ceil(bidFor.current_bid * 0.05))
-      : bidFor.price
-    : 0;
 
   const listingCard = (l: MarketListing, mine: boolean) => {
     const def = defFor(l.card_id);
@@ -210,9 +223,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <PopButton
                 color="steel"
                 disabled={busy || l.bid_count > 0}
-                onClick={() =>
-                  run(() => cancelListing(l.id), 'Listing cancelled — cards returned.')
-                }
+                onClick={() => {
+                  if (!confirm('Cancel this listing? Your cards will be returned.')) return;
+                  run(() => cancelListing(l.id), 'Listing cancelled — cards returned.');
+                }}
                 title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
               >
                 CANCEL LISTING
@@ -268,6 +282,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       </div>
     );
   };
+
+  const minBid = bidFor
+    ? bidFor.current_bid != null
+      ? bidFor.current_bid + Math.max(1, Math.ceil(bidFor.current_bid * 0.05))
+      : bidFor.price
+    : 0;
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -363,12 +383,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               run(
                 () => createListing(opts),
                 opts.type === 'auction' ? 'Auction created!' : 'Listing created!',
-              ).then((ok) => {
-                // Only leave the sell form when the listing actually went
-                // through — flipping tabs on a server rejection hid the form
-                // (and the player's inputs) while the error banner showed.
-                if (ok) setTab('mine');
-              })
+              ).then((ok) => ok && setTab('mine'))
             }
           />
         )}
@@ -399,10 +414,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 type="number"
                 value={bidAmount}
                 min={0}
-                step={1}
                 onChange={(e) => setBidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                 className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
               />
+              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
+                = <Credits amount={bidAmount} />
+              </span>
             </div>
             <div className="flex gap-2 justify-end">
               <PopButton color="steel" onClick={() => setBidFor(null)}>
@@ -484,7 +501,9 @@ function SellForm({
   // deselected the card and collapsed the price/quantity form.
   const selectedEntry = collection.find((c) => c.card_id === cardId);
   const selected =
-    selectedEntry && POOL_BY_ID[cardId] ? { ...selectedEntry, def: POOL_BY_ID[cardId]! } : undefined;
+    selectedEntry && POOL_BY_ID[cardId]
+      ? { ...selectedEntry, def: POOL_BY_ID[cardId]! }
+      : undefined;
   const maxQty = selected
     ? Math.max(
         0,
@@ -605,13 +624,13 @@ function SellForm({
               <input
                 type="number"
                 min={1}
-                step={1}
                 value={price}
-                onChange={(e) =>
-                  setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))
-                }
+                onChange={(e) => setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))}
                 className="w-24 px-2 py-1 ink-border-sm"
               />
+              <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                = <Credits amount={price} />
+              </span>
             </label>
             {type === 'auction' && (
               <label className="flex items-center gap-2 text-xs font-bold">
@@ -619,8 +638,7 @@ function SellForm({
                 <input
                   type="number"
                   min={0}
-                  step={1}
-                  value={buyout}
+                  value={buyout === '' ? '' : buyout}
                   onChange={(e) =>
                     setBuyout(
                       e.target.value === ''
@@ -630,6 +648,11 @@ function SellForm({
                   }
                   className="w-24 px-2 py-1 ink-border-sm"
                 />
+                {buyout !== '' && (
+                  <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                    = <Credits amount={buyout} />
+                  </span>
+                )}
               </label>
             )}
             <label className="flex items-center gap-2 text-xs font-bold">

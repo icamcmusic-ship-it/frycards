@@ -1,12 +1,60 @@
-# FryCards — Definitive Rulebook v4.9
+# FryCards — Definitive Rulebook v4.10
 
-Supersedes v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.9, v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.10 balance-sim pass (33,840-game baseline + 33,840-game verification +
+a 21-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.10.md`):**
+
+- **Locations fixed — first positive isolated contribution ever measured.**
+  A dedicated ablation battery (never run before this pass — v4.9 findings
+  §4 item 5) isolated the on-cast board-impact buff as the only one of three
+  Location-only dials with any effect (Excavate's per-turn rate and
+  Foothold's Cast Slot discount both measured **exactly zero** on their
+  primary subject decks — genuinely dead levers). Buff base 2 → 3: isolated
+  Location contribution flipped from -1.3 win% (persistent since v4.4) to
+  **+1.5 win%**, and every Location-only keyword (Excavate, Foothold,
+  Contested) rose 4-5pt as a side effect of buffing the card type they live
+  on.
+- **Crescendo redesigned, not just re-valued** — a 4th straight pass at the
+  pool bottom (39.5% → 36.4%, actively declining) after three rounds of pure
+  base-value bumps (1→2→3→4) confirmed the v4.8/v4.9-flagged redesign was
+  overdue. The bonus no longer scales with the COUNT of dice showing 6
+  placed this turn (rolling 2+ sixes in one turn is rare, so the multiplier
+  almost never mattered) — it's now a flat bonus the moment ANY die shows a
+  6 rolled this turn, whether or not that die got placed on anything.
+  36.4% → 41.3%.
+- **New CPU-lapse detector class:** v4.9 measured the existing lapse
+  detectors at a hard floor (zero genuine lapses) and called for "a new
+  class... sub-optimal target/order choice within an action, not just did
+  it act." Two shipped: combat trades with 2+ legal kill targets were
+  resolved via first-match-in-board-order instead of the most valuable
+  qualifying target (measured **0.035/game**, now always resolves to the
+  best); Unit-Ability activation with 2+ eligible units competing for one
+  die picked the first in board order instead of the highest-value action
+  (measured **zero** this pass — a real detector, but the situation never
+  actually arose in this roster).
+- **Mer-King's two weak archetypes, first per-card look.** A new
+  per-archetype "cast this card ≥1x this game → win%" table (win-in-deck is
+  meaningless for a fixed decklist — every card reads as identical to the
+  deck's own win rate) found Twin Heal's and Avenge Swarm's own weakest
+  cards (all Common-rarity Charms/Events/a Location) and gave each a small
+  named-card +1 value bump, same pattern as the existing MANUAL_STEEL
+  patches. Twin Heal 37.1% → 39.1%; Avenge Swarm 43.2% → 43.4% (barely
+  moved — the per-card signal there is diffuse, no single fix, carried to
+  next pass).
+- **Wall-list meta still not closed** — Shinobi Avenge Grind remains the
+  roster's top deck (~86%). A further `guardHpBonus` cut (2 → 1) was
+  measured in the ablation battery and still compresses it, but was **not
+  shipped**: it also re-widens Mer-King's still-fragile Leader spread by
+  another ~9pt on Guard-Bulwark Turtle specifically, exactly the compounding
+  risk v4.9 flagged waiting on an independent Mer-King fix for. Carried
+  forward again.
 
 **v4.9 balance-sim pass (33,840-game baseline + 33,840-game verification +
 a 17-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.9.md`):**
@@ -597,7 +645,7 @@ nothing if your deck is empty.
 
 **Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 3** *(v4.4, was 2 in v4.1)*, minimum threshold 1. *(v4.4)* The first time a card's own discount hits that cap, it permanently gains +1/+1, once per card life. See §7 for the printed-vs-effective interaction with Overflow and full detail on the cap bonus.
 
-**Crescendo X** *(v4.2, Event)* — +X to this Event's numeric effect for each die showing a **6** that you placed this turn (including the die that cast this Event). The preferred pattern for a "big roll payoff" card going forward: it scales with a hot roll but is **never a dead card** on a bad one, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
+**Crescendo X** *(v4.2, Event; redesigned v4.10)* — +X to this Event's numeric effect if **any** die shows a **6** this turn (rolled, not just placed/spent — a six that got rerolled away or had nothing else worth spending it on still counts). A flat bonus, not per-six scaling: four straight passes of raising the per-six multiplier (v4.4 → v4.9) barely moved the keyword because rolling 2+ sixes in one 5-die turn is rare, so the multiplier almost never applied — the real fix was reliability, not size. Still never a dead card on a bad roll, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
 
 **Snap** *(v4.2, Charm)* — May be cast during your **Reroll Phase**, before the reroll window closes, instead of waiting for Placement Phase. Still spends a die from your five exactly as an ordinary cast — only the timing changes. Doesn't reopen the no-stack/no-response rule: it's still only ever available on your own turn, before your own reroll decision.
 
