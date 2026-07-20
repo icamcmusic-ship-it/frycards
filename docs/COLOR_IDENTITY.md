@@ -1,4 +1,4 @@
-# Card Colors (v4.13) — Design, Assignment, and First-Pass Results
+# Card Colors (v4.13-v4.14) — Design, Assignment, and Results
 
 ## 1. What shipped
 
@@ -146,3 +146,114 @@ clean color-only signal yet.
    one). This is consistent, not a gap, but worth stating explicitly since
    it means color identity is **not retroactively enforced** on decks
    saved before this pass.
+
+## 6. v4.14 — expanded 5 colors to 7
+
+**What changed** (mechanical, no logic changes to `cardColors()`/
+`isColorLegal()` beyond the fallback rule below): renamed `Umbral` →
+**Obsidian** and `Radiant` → **Prism** (same keywords, new names — Prism
+specifically so it wouldn't read as a synonym of the new Solar). Split
+`Crescendo`/`Foothold`/`Contested`/`Snap` off Prism into a new **Solar**
+color (situational/opportunistic timing), leaving Prism with `Twin`/`Rally`
+(direct dice-pattern synergy). Added **Slate**, a true colorless color for
+cards with no color-mapped keyword — replaces the old `COLOR_OF_ACTION`
+guessed-color fallback entirely; a Slate card is legal in every Leader's
+deck by definition (`isColorLegal` special-cases it), same as a colorless
+card in MTG.
+
+**7 colors: Crimson, Azure, Verdant, Obsidian, Prism, Solar, Slate.**
+
+### Updated distribution audit (`scripts/color-audit.ts`)
+
+```
+Crimson    34
+Azure      70
+Verdant    52
+Obsidian   65
+Prism      23
+Solar      32
+Slate      71
+multicolor cards: 53
+colorless (Slate) cards: 71
+```
+
+Removing the guessed-color fallback (previously 71 cards forced into
+Umbral/Radiant/Verdant/Azure by `onCast.action`) meaningfully shrank the
+two largest colors — Obsidian dropped from 96 to 65, and the old Radiant's
+85 split into Prism 23 + Solar 32 (54 combined, down from 85, the
+difference now honestly labeled Slate instead of guessed). Verdant also
+dropped (62→52) since some of its guessed-fallback `mend` cards moved to
+Slate. **28 orphan cards** (tri-color, legal under no 2-color identity) —
+unchanged from the 5-color count, as expected (renaming/splitting/adding a
+colorless catch-all doesn't change which cards are genuinely 3+ colors).
+
+### Leader identities — re-derived, collision fixed
+
+Every pair below is now **unique** (`color-audit.ts` confirms: "all 8
+Leader identity pairs are unique") — the v4.13 Avatar of the Abyss / Apex
+Nanite Shinobi identity collision (both were Umbral/Verdant) is fixed by
+this re-derivation, computed from each Leader's `ARCHETYPES` keyword-
+instance counts (highest-coverage 2-color pair, ties broken toward an
+unclaimed pair):
+
+| Leader | v4.13 identity | v4.14 identity |
+|---|---|---|
+| Avatar of the Abyss | Umbral/Verdant | **Verdant/Prism** |
+| Ethereal Sea Witch | Azure/Verdant | Azure/Verdant (unchanged) |
+| Mer-King | Azure/Umbral | Azure/Obsidian (renamed only) |
+| Legendary Diver | Crimson/Radiant | Crimson/Prism (renamed only) |
+| Crimson Vector Commander | Crimson/Azure | Crimson/Azure (unchanged) |
+| Apex Nanite Shinobi | Umbral/Verdant | Verdant/Obsidian (renamed only) |
+| Ruin-Walker Overseer | Azure/Umbral | **Azure/Solar** |
+| Sovereign of the Dying Star | Umbral/Crimson | Obsidian/Crimson (renamed only) |
+
+Only Avatar of the Abyss and Ruin-Walker Overseer actually changed which
+*colors* they carry (both had ties or a single-color signal in the raw
+keyword-coverage count — Avatar's Crimson/Verdant/Prism 3-way tie was
+broken toward Prism to avoid re-colliding with Diver's dominant Crimson
+pick; Ruin-Walker's only archetype (`Guard`/`Bulwark`, both Azure) had no
+second-color signal at all, so Solar was picked as the only pairing not
+already claimed by another Azure-identity Leader).
+
+### Verification sim (53,040 games, `npm run sim:v4 -- 20`)
+
+**No invariant violations.** Leader win rates moved again — expected, same
+caveat as §4 (archetypes still tuned pre-split, not re-tuned for the new
+6 real colors + Slate):
+
+| Leader | v4.13 (5 colors) | v4.14 (7 colors) |
+|---|---|---|
+| Avatar of the Abyss | 58.9% | **63.8%** |
+| Mer-King | 61.2% | 63.8% |
+| Ethereal Sea Witch | 59.6% | 60.7% |
+| Crimson Vector Commander | 49.8% | 41.7% |
+| Ruin-Walker Overseer | 70.4% | **40.0%** |
+| Legendary Diver | 40.1% | 39.8% |
+| Apex Nanite Shinobi | 37.4% | 39.2% |
+| Sovereign of the Dying Star | 27.8% | 38.1% |
+
+Ruin-Walker Overseer's drop (70.4%→40.0%) is the headline move, and lines
+up with its identity actually changing color (Azure/Umbral→Azure/Solar) —
+its sole archetype (`Guard`+`Bulwark`, both Azure) lost access to whatever
+Umbral/Obsidian cards it was drafting before and gained access to Solar's
+much smaller, untested-for-this-archetype card pool instead. This is the
+clearest evidence yet for §5 item 1 (every archetype needs a real
+color-aware re-tune, not just a legality patch) — a Leader's win rate
+swinging by 30pt purely from a *rename+recolor* of its identity, with zero
+archetype redesign, means the archetype was never actually built "for"
+either color pairing, just legal under it.
+
+Color-level win rates (min n=200, Leader win% column): Prism 56.5%,
+Verdant 53.8%, Azure 50.6%, Slate 49.1%, Obsidian 46.8%, Crimson 40.3%,
+**Solar 20.7% (n=2040)**. Solar's low reading is a direct symptom of only
+one Leader (Ruin-Walker Overseer, itself now the roster's weakest) even
+carrying it — not yet a trustworthy read on the color itself.
+
+### Still open (adds to §5's list)
+
+6. **Ruin-Walker Overseer needs a second, dedicated archetype** before its
+   Azure/Solar identity can be judged fairly — right now its entire color
+   read (and Solar's entire color read) rests on one archetype that was
+   never built with Solar cards in mind.
+7. Same "every archetype needs a real color-aware re-tune" item as §5-1,
+   now with harder evidence (Ruin-Walker's 30pt swing).

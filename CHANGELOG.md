@@ -7,6 +7,31 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.14 feature pass — expand card colors from 5 to 7
+
+- **Card colors expanded 5→7.** Renamed `Umbral`→**Obsidian** and
+  `Radiant`→**Prism** (same keywords, new names — chosen so Prism wouldn't
+  read as a synonym of the new Solar). Split Crescendo/Foothold/Contested/
+  Snap off Prism into a new **Solar** color (situational/opportunistic
+  timing); Prism keeps Twin/Rally. Added **Slate**, a true colorless color
+  for cards with no color-mapped keyword, replacing the old guessed-color
+  fallback — a Slate card is legal in every Leader's deck by definition.
+  Re-derived all 8 Leader identities from their archetype keyword usage;
+  **fixes a real bug**: Avatar of the Abyss and Apex Nanite Shinobi
+  previously had an identical identity (both Umbral/Verdant) with zero
+  differentiation — now unique for all 8 Leaders. See
+  `docs/COLOR_IDENTITY.md` §6.
+- **Sim harness**: `scripts/color-audit.ts` updated for the 7-color scheme
+  plus a duplicate-identity-pair check. Full 53,040-game verification run:
+  no invariant violations, but another round of large Leader win-rate
+  swings (most notably Ruin-Walker Overseer 70.4%→40.0% from a pure
+  rename+recolor with zero archetype redesign) — hard evidence the
+  22-archetype roster still needs its color-aware re-tune (open item
+  carried from v4.13, not addressed this pass either).
+- No changes needed to DeckBuilder/Collection filters, the card-frame color
+  pip, or deck construction — all already iterate the `COLORS` list
+  generically.
+
 ### v4.13 feature pass — card colors
 
 - **New rule: card colors.** Every card now carries 1+ of 5 colors (Crimson
