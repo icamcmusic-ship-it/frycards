@@ -631,7 +631,12 @@ function mapUnit(c: CardTemplate): CardDef {
 // (procedural Steel prints tier I, the v4.16/v4.18-trimmed flat 1).
 const MANUAL_STEEL: Record<string, number> = {
   tang_s_refuge: 2,
-  nanite_division_marshal: 3,
+  // v4.19.1: 3 -> 2. Steel III made it the pool's only Steel tier-cap
+  // premium card — the premium's full cost-tier discount priced an
+  // Ultra-Rare at ~1.5 pips/cast, and the archetype-normalized table put it
+  // at +21.0pt, the single worst residual in the pool. Tier II keeps the
+  // identity buff without the cap discount.
+  nanite_division_marshal: 2,
 };
 
 const MANUAL_STAT_TRIM: Record<string, number> = {
@@ -656,7 +661,17 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   swaying_garden: -1,
   // buffs (win% far BELOW their cost band's mean)
   void_mother: 2,
-  familiar_in_the_dark: 2,
+  // v4.19.1: familiar_in_the_dark's +2 (v4.12) overshot under the new
+  // archetype-normalized lens (+19.3pt residual, n=2214, spread 4 — a top-3
+  // pool-wide overperformer). Halved rather than removed outright.
+  familiar_in_the_dark: 1,
+  // v4.19.1: first archetype-normalized outlier pass (cardArchNormalized,
+  // n>=400, archSpread>=2 — the lens v4.18 flagged as missing). Uniform
+  // small trims for the residual top of the table; sized -2 for the two
+  // biggest multi-archetype offenders, -1 for the smaller-sample one.
+  cervine_channeler: -2, // +20.9pt, n=1343, spread 4
+  dr_aries_chief_biogeneticist: -2, // +19.0pt, n=1043, ~1.5 pips/cast
+  worm_brain_host: -1, // +19.0pt, n=475, spread 2
   // v4.18: butterflyfish_school's +1 (v4.12) overshot — the v4.18 baseline
   // shows it now at the OPPOSITE extreme (win%=76.5 vs a 42.1 cost-band
   // mean, resid=+34.4pt, cardsToNerf top 3) instead of the under-performer
@@ -996,10 +1011,17 @@ function assignSpellKeywords(
   // (bind/destroy) has no "lower-value repeat" (§10): the delayed copy would
   // be a second FULL destroy/Bind for free, not the intended half-strength
   // echo (seabed_mandala shipped exactly that before this guard).
+  // v4.19.1: gate loosened (tier>=2 + %6===4 -> tier>=1 + %3!==0). The v4.19
+  // value>=1 guard was correct, but only 39 Events exist in the live pool
+  // and every valued tier>=2 Event is consumed by the earlier gate/wipe/bomb
+  // branches (which return before this roll) — the combined conditions left
+  // ZERO Aftershock printings, and the sim measured 0 engagement because
+  // the keyword no longer existed, not because it underperformed. The old
+  // bucket was empty, so no existing card's roll changes.
   if (
     !asCharm &&
-    tier >= 2 &&
-    hash(c.id) % 6 === 4 &&
+    tier >= 1 &&
+    hash(c.id) % 3 !== 0 &&
     base.onCast &&
     (base.onCast.value ?? 0) >= 1 &&
     wouldBeLegalSomewhere([...(base.keywords || []), 'Aftershock'])
@@ -1192,8 +1214,15 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // rounds of value/targeting cuts. Both of those cuts changed the
   // Ability's output per activation; this cuts its *frequency* instead —
   // the one lever not yet touched.
+  // v4.19.1: threshold 6 -> 5, reverting the v4.5 frequency nerf. The
+  // condition that justified three straight Shinobi cuts (Steel-Scrap
+  // Control 84-90%, Avenge Grind 91-95%) has inverted under the keyword
+  // tier system: Steel/Avenge bodies now pay real cost weight, and Shinobi
+  // is the roster floor by 13pt (31.4%; Steel-Scrap Control 33.9%/15.4%,
+  // Echo-Straight 40.5%/15.0%). Value stays 1 and abilityNoRepeatTarget
+  // stays on — only the frequency lever is returned.
   apex_nanite_shinobi: {
-    threshold: 6,
+    threshold: 5,
     effect: { action: 'buff', value: 1, target: 'friendlyUnit' },
   },
   // v4.16: ROOT CAUSE found for Sovereign Crimson Assault sitting at 29.0%
@@ -1276,9 +1305,14 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     threshold: 6,
     effect: { action: 'sap', value: 3, target: 'allEnemyUnits' },
   },
+  // v4.19.1: threshold 5 -> 6. Sea Witch has topped the roster for three
+  // straight passes (61-64%) carrying the strongest Ultimate in the game (a
+  // full board wipe) at an ordinary threshold. Gating it behind a natural 6
+  // keeps the identity swing but makes it a high roll, without touching the
+  // every-turn Bind kit.
   ethereal_sea_witch: {
     unlockTurn: 5,
-    threshold: 5,
+    threshold: 6,
     effect: { action: 'destroy', target: 'allEnemyUnits' },
   },
   // v4.4 balance: strongest leader at 55.6% — Ultimate mend 8 -> 6 trims the

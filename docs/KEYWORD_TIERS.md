@@ -1,4 +1,4 @@
-# Keyword Tier System (v4.19)
+# Keyword Tier System (v4.19; weights last tuned v4.19.1)
 
 Every keyword in FryCards now comes in numbered tiers, **I** up to at most
 **V**. A given keyword+tier always means the same ability and the same cost
@@ -49,14 +49,14 @@ cost into the tier text instead.
 | **Ward** | block first hit/turn, spike 1 back (w 1) | spike 2 back (w 1.5) | | | |
 | **Frenzy** | 2 attacks, 2nd doubles retaliation (w .5) | + printed +2 ATK (w 1) | 2nd swing takes **normal** retaliation (w 1.5) | | |
 | **Anchor** | −1/other Anchor, cap −2 (w .5) | cap −3, +2/+2 at full ramp (w 1) | full-ramp bonus **+3/+3** (w 1.5) | | |
-| **Echo** ⚙ | recast: cost + discard 1 (w .5) | recast: cost only, **no fodder** (w 1) | | | |
+| **Echo** ⚙ | recast: cost + discard 1 (w .5) | recast: cost only, **no fodder** (w .5) | | | |
 | **Scrap** ⚙ | discard: reroll 1 die, keep-highest-of-2 (w .5) | keep-highest-of-**3** (w 1) | | | |
 | **Rally** ⚙ | reuse a die on an exhausted friendly Ability Slot (w .5) | borrowed die counts **+1** (w 1) | | | |
 | **Twin** | small completion rider (w 1) | medium rider (w 1.5) | large rider (w 2) | | |
 | **Bulwark** | −1 attack damage (w .5) | −2 (w 1) | −3 (w 1.5) | | |
-| **Toll** | Leader damage −1 (w 1) | −2 (w 1.5) | −3 (w 2) | | |
-| **Steel** | prevent first 1/turn, any source (w 1.5) | first 2 (w 2) | first 3 (w 2.5) | | |
-| **Avenge** | +1/+1 per friendly death, cap +2/+2 (w 1) | cap +3/+3 (w 1.5) | | | |
+| **Toll** | Leader damage −1 (w .5) | −2 (w 1) | −3 (w 1.5) | | |
+| **Steel** | prevent first 1/turn, any source (w 2.5) | first 2 (w 3) | first 3 (w 3.5) | | |
+| **Avenge** | +1/+1 per friendly death, cap +2/+2 (w 2) | cap +3/+3 (w 2.5) | | | |
 | **Overrun** | punch ⌊ATK/2⌋ min 1 through full prevention (w .5) | +1 on top (w 1) | | | |
 | **Crescendo** | +4 on a rolled 5–6 (w .5) | +5 (w 1) | +6 (w 1.5) | +7 (w 2) | +8 (w 2.5) |
 | **Aftershock** | half-value delayed repeat (w 1) | **full-value** repeat (w 1.5) | | | |

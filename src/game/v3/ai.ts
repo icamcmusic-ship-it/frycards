@@ -1538,16 +1538,21 @@ function recordRerollLapse(g: Game, p: Player) {
 }
 
 /**
- * v4.16 harness upgrade: "wasted resources/mana-like resource left unused" —
- * a raw per-turn flag for "at least one die was never placed at all by the
- * time the turn ended," independent of `lapseWastedCastableDie` (which only
- * fires when a SPECIFIC card in hand could legally have used it). This is
- * the broader resource-utilization signal the task calls out separately.
+ * v4.16 harness upgrade: "wasted resources/mana-like resource left unused."
+ *
+ * v4.19.1 RE-POINT: the original per-turn binary ("any die unplaced at end
+ * of turn") pinned at ~15.5-16.6/game across four passes and was confirmed
+ * structural — 5 fresh dice a turn vs ~1 drawn card means auto-Pitch is the
+ * DESIGNED sink for the remainder, so the counter measured the rules, not
+ * the AI. Per the harness recommendation it now counts only turns where a
+ * stranded die had a LEGAL, non-deliberately-held use (a payable non-gated
+ * card in hand, or the unspent Leader Ability) — i.e. dice stranded WITH a
+ * legal use. The raw volume companion (`unusedDiceCount`) is unchanged.
  */
 function recordUnusedResourceLapse(g: Game, p: Player) {
   const unused = p.dice.filter((d) => !d.placed).length;
   if (unused === 0) return;
-  lapse(g, p.id, 'lapseUnusedDiceAtEndTurn');
+  if (strandedDieHadLegalUse(g, p)) lapse(g, p.id, 'lapseUnusedDiceAtEndTurn');
   // v4.19: die-count companion (not just the per-turn binary above) — the
   // avg unused dice per game/turn, so harness runs can see whether the
   // assignment solver moves the actual VOLUME of stranded dice even when the
@@ -1557,41 +1562,71 @@ function recordUnusedResourceLapse(g: Game, p: Player) {
   lapse(g, p.id, 'unusedDiceCount', unused);
 }
 
+/** v4.19.1: shared "a stranded die could still have paid for something real"
+ * check — a payable non-gated card in hand (mirroring playPlacement's
+ * deliberate holds, which aren't lapses) or the unspent, non-pointless
+ * Leader Ability. Used by recordPlacementLapses (per-cause counters) and by
+ * the re-pointed lapseUnusedDiceAtEndTurn (see recordUnusedResourceLapse). */
+function strandedDieHadLegalUse(g: Game, p: Player): boolean {
+  const opp = opponentOf(g, p.id);
+  const unplaced = p.dice.filter((d) => !d.placed).map((d) => d.value);
+  if (unplaced.length === 0) return false;
+  const maxDie = Math.max(...unplaced);
+  if (strandedCastableCard(g, p, opp, unplaced, maxDie)) return true;
+  const ab = p.leader.def.ability;
+  if (ab && !p.leader.abilityUsed) {
+    const eff = ab.effect;
+    const pointless =
+      (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+      ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+        opp.board.length === 0) ||
+      (eff.action === 'draw' && p.hand.length >= 8);
+    if (!pointless && maxDie >= effAbilityThreshold(g, p.leader)) return true;
+  }
+  return false;
+}
+
+function strandedCastableCard(
+  g: Game,
+  p: Player,
+  opp: Player,
+  unplaced: number[],
+  maxDie: number,
+): boolean {
+  return p.hand.some((c) => {
+    if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
+      return false;
+    const thr = effThreshold(g, p.id, c.def);
+    const payable =
+      c.def.castCostKind === 'exact'
+        ? unplaced.includes(thr)
+        : c.def.castCostKind === 'sum'
+          ? unplaced.reduce((a, b) => a + b, 0) >= thr
+          : maxDie >= thr;
+    if (!payable) return false;
+    // Mirror playPlacement's deliberate holds — those aren't lapses.
+    const eff = c.def.onCast;
+    if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return false;
+    if (
+      (eff?.action === 'sap' || eff?.action === 'destroy' || eff?.action === 'bind') &&
+      eff?.target !== 'enemyLeader' &&
+      eff?.target !== 'anyTarget' &&
+      opp.board.length === 0
+    )
+      return false;
+    if (eff?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0))
+      return false;
+    if (hasKw(c.def, 'Twin')) return false; // deliberate staging economy
+    return true;
+  });
+}
+
 function recordPlacementLapses(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
   const unplaced = p.dice.filter((d) => !d.placed).map((d) => d.value);
   if (unplaced.length > 0) {
     const maxDie = Math.max(...unplaced);
-    const castable = p.hand.some((c) => {
-      if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
-        return false;
-      const thr = effThreshold(g, p.id, c.def);
-      const payable =
-        c.def.castCostKind === 'exact'
-          ? unplaced.includes(thr)
-          : c.def.castCostKind === 'sum'
-            ? unplaced.reduce((a, b) => a + b, 0) >= thr
-            : maxDie >= thr;
-      if (!payable) return false;
-      // Mirror playPlacement's deliberate holds — those aren't lapses.
-      const eff = c.def.onCast;
-      if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return false;
-      if (
-        (eff?.action === 'sap' || eff?.action === 'destroy' || eff?.action === 'bind') &&
-        eff?.target !== 'enemyLeader' &&
-        eff?.target !== 'anyTarget' &&
-        opp.board.length === 0
-      )
-        return false;
-      if (
-        eff?.action === 'mend' &&
-        p.leader.damage === 0 &&
-        !p.board.some((u) => u.damage > 0)
-      )
-        return false;
-      if (hasKw(c.def, 'Twin')) return false; // deliberate staging economy
-      return true;
-    });
+    const castable = strandedCastableCard(g, p, opp, unplaced, maxDie);
     if (castable) lapse(g, p.id, 'lapseWastedCastableDie');
     const ab = p.leader.def.ability;
     if (ab && !p.leader.abilityUsed) {

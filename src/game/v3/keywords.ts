@@ -135,7 +135,11 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
   Echo: KW(
     [
       T('Recast once from Discard: pay its cost and discard one extra card from hand.', 0.5, 1, 'its cast cost + discard 1 card'),
-      T('Recast once from Discard by paying only its cast cost — no extra discard.', 1, 2, 'its cast cost'),
+      // v4.19.1: costWeight 1 -> 0.5. Echo measured a near-zero +0.4pt delta
+      // across 163k casts with a 42.2% deck baseline (the weakest keyword
+      // family) — the fodder-free tier II was priced like a premium it
+      // doesn't deliver. Now weighs the same as tier I.
+      T('Recast once from Discard by paying only its cast cost — no extra discard.', 0.5, 2, 'its cast cost'),
     ],
     true,
   ),
@@ -163,19 +167,31 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
     T('Attacks against this Unit (and its retaliation taken) deal 2 less damage.', 1, 2),
     T('Attacks against this Unit (and its retaliation taken) deal 3 less damage.', 1.5, 3),
   ]),
+  // v4.19.1: costWeight 1/1.5/2 -> 0.5/1/1.5. Toll measured only +2.8pt
+  // delta at the roster's steepest non-Steel pricing, and both Toll-identity
+  // archetypes (Crimson Toll-Bulwark Fortress, Mer King Toll-Echo Control)
+  // sat in the roster's bottom half — a uniform one-step cheapening.
   Toll: KW([
-    T('All incoming damage to your Leader is reduced by 1 while this Unit lives.', 1, 1),
-    T('All incoming damage to your Leader is reduced by 2 while this Unit lives.', 1.5, 2),
-    T('All incoming damage to your Leader is reduced by 3 while this Unit lives.', 2, 3),
+    T('All incoming damage to your Leader is reduced by 1 while this Unit lives.', 0.5, 1),
+    T('All incoming damage to your Leader is reduced by 2 while this Unit lives.', 1, 2),
+    T('All incoming damage to your Leader is reduced by 3 while this Unit lives.', 1.5, 3),
   ]),
+  // v4.19.1: costWeight 1.5/2/2.5 -> 2.5/3/3.5. Steel measured +17.7pt
+  // cast-win delta in the first tier-system run — the #1 keyword offender
+  // again despite three prior power/print trims (its per-fire magnitude is
+  // already at the floor). The cost recalculation rounds sum(w)/2, so a
+  // +0.5 step is a no-op for most cards; +1 reliably prices multi-keyword
+  // Steel bodies one full cost tier up while leaving solo Steel I intact.
   Steel: KW([
-    T('The first 1 damage this Unit would take each turn, from any source, is prevented.', 1.5, 1),
-    T('The first 2 damage this Unit would take each turn, from any source, is prevented.', 2, 2),
-    T('The first 3 damage this Unit would take each turn, from any source, is prevented.', 2.5, 3),
+    T('The first 1 damage this Unit would take each turn, from any source, is prevented.', 2.5, 1),
+    T('The first 2 damage this Unit would take each turn, from any source, is prevented.', 3, 2),
+    T('The first 3 damage this Unit would take each turn, from any source, is prevented.', 3.5, 3),
   ]),
+  // v4.19.1: costWeight 1/1.5 -> 2/2.5. Avenge measured +15.0pt delta
+  // (second-worst keyword this run) — same +1 pricing step as Steel above.
   Avenge: KW([
-    T('Permanently +1/+1 whenever another friendly Unit dies, up to +2/+2 lifetime.', 1, 2),
-    T('Permanently +1/+1 whenever another friendly Unit dies, up to +3/+3 lifetime.', 1.5, 3),
+    T('Permanently +1/+1 whenever another friendly Unit dies, up to +2/+2 lifetime.', 2, 2),
+    T('Permanently +1/+1 whenever another friendly Unit dies, up to +3/+3 lifetime.', 2.5, 3),
   ]),
   Overrun: KW([
     T('If its combat damage is fully prevented, punches floor(ATK/2) (min 1) through anyway.', 0.5, 0),
