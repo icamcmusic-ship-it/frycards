@@ -50,11 +50,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // carries, so these work exactly like the original nine), and adds a
 // Location-heavy build to stress-test the v4.4 passive buff specifically.
 const ARCHETYPES: Archetype[] = [
-  // --- Avatar of the Abyss (4) ---
+  // --- Avatar of the Abyss (4) — v4.14 color-identity re-tune
+  // (Verdant/Prism, colors.ts LEADER_COLORS): the first two archetypes
+  // below were themed around Echo/Toll and Pierce/Frenzy, none of which
+  // fall in Verdant/Prism — post-color they were drafting from whatever
+  // Verdant/Prism cards score best on unrelated criteria (curve, effect
+  // match) rather than their labeled keyword theme, which is exactly the
+  // "archetype legal but not redesigned" gap docs/COLOR_IDENTITY.md §5
+  // item 1 flagged. Retuned to genuinely Verdant/Prism keyword themes;
+  // labels kept stable (only `keywords` changed) since several docs and
+  // ARCH_WATCHLIST reference archetypes by label. ---
   {
     label: 'Abyss Sap-Echo Control',
     leaderId: 'avatar_of_the_abyss',
-    keywords: ['Echo', 'Toll'],
+    keywords: ['Anchor', 'Twin'],
     effects: ['sap', 'destroy'],
     units: 15,
     spells: 11,
@@ -64,7 +73,7 @@ const ARCHETYPES: Archetype[] = [
   {
     label: 'Abyss Pierce Aggro',
     leaderId: 'avatar_of_the_abyss',
-    keywords: ['Pierce', 'Frenzy'],
+    keywords: ['Rally', 'Scrap'],
     effects: ['sap'],
     units: 19,
     spells: 8,
@@ -92,11 +101,12 @@ const ARCHETYPES: Archetype[] = [
     comboFamily: 'none',
   },
 
-  // --- Ethereal Sea Witch (3) ---
+  // --- Ethereal Sea Witch (3) — Azure/Verdant identity; v4.14 retune:
+  // Steel is Obsidian, outside identity, swapped for Bulwark (Azure). ---
   {
     label: 'Sea Witch Ward-Steel Wall',
     leaderId: 'ethereal_sea_witch',
-    keywords: ['Ward', 'Steel'],
+    keywords: ['Ward', 'Bulwark'],
     effects: ['bind', 'mend'],
     units: 18,
     spells: 8,
@@ -124,7 +134,9 @@ const ARCHETYPES: Archetype[] = [
     comboFamily: 'straight',
   },
 
-  // --- Mer-King (3) ---
+  // --- Mer-King (3) — Azure/Obsidian identity; v4.14 retune: Twin is
+  // Prism, outside identity, swapped for Steel (Obsidian) — a defensive
+  // damage-absorption keyword closer to "Heal" than Twin ever was anyway. ---
   {
     label: 'Mer King Guard-Bulwark Turtle',
     leaderId: 'mer_king',
@@ -138,7 +150,7 @@ const ARCHETYPES: Archetype[] = [
   {
     label: 'Mer King Twin Heal',
     leaderId: 'mer_king',
-    keywords: ['Guard', 'Twin'],
+    keywords: ['Guard', 'Steel'],
     effects: ['mend', 'buff'],
     units: 16,
     spells: 10,
@@ -220,7 +232,9 @@ const ARCHETYPES: Archetype[] = [
     comboFamily: 'none',
   },
 
-  // --- Apex Nanite Shinobi (4) ---
+  // --- Apex Nanite Shinobi (4) — Verdant/Obsidian identity; v4.14 retune:
+  // Swift (Crimson) and Toll (Azure) were both outside identity, swapped
+  // for Steel (Obsidian) and Excavate (Verdant) respectively. ---
   {
     label: 'Shinobi Echo-Straight',
     leaderId: 'apex_nanite_shinobi',
@@ -234,7 +248,7 @@ const ARCHETYPES: Archetype[] = [
   {
     label: 'Shinobi Tempo-Anchor',
     leaderId: 'apex_nanite_shinobi',
-    keywords: ['Anchor', 'Echo', 'Swift'],
+    keywords: ['Anchor', 'Echo', 'Steel'],
     effects: ['buff', 'sap'],
     units: 17,
     spells: 10,
@@ -254,7 +268,7 @@ const ARCHETYPES: Archetype[] = [
   {
     label: 'Shinobi Avenge Grind',
     leaderId: 'apex_nanite_shinobi',
-    keywords: ['Avenge', 'Toll'],
+    keywords: ['Avenge', 'Excavate'],
     effects: ['mend', 'sap'],
     units: 19,
     spells: 7,
@@ -272,6 +286,19 @@ const ARCHETYPES: Archetype[] = [
   // print a plain threshold-5 Sap ability with no distinctive kit rider) —
   // same Guard/Bulwark defensive-midrange shape used elsewhere in the roster
   // as a neutral baseline build.
+  //
+  // v4.14 color-identity re-tune (docs/COLOR_IDENTITY.md §6 items 3 and 6):
+  // both Leaders had exactly ONE archetype each, and each one's original
+  // keyword theme only partially matched its derived 2-color identity
+  // (Ruin-Walker Overseer = Azure/Solar, but 'Guard'/'Bulwark' are both
+  // Azure — zero Solar representation at all; Sovereign of the Dying Star
+  // = Obsidian/Crimson, but 'Toll' is Azure, outside identity). A single
+  // archetype resting on an off-identity or one-sided keyword pick meant
+  // neither Leader's win rate, nor Solar's color win rate (which depended
+  // entirely on Ruin-Walker), was a trustworthy read. Fixed by (a)
+  // retuning Sovereign's Toll -> Frenzy (Crimson), and (b) giving BOTH
+  // Leaders a genuine second archetype that actually exercises their
+  // second color, matching every other Leader's 2-4-archetype roster.
   {
     label: 'Ruin-Walker Guard Grind',
     leaderId: 'ruinwalker_overseer',
@@ -283,13 +310,33 @@ const ARCHETYPES: Archetype[] = [
     comboFamily: 'none',
   },
   {
+    label: 'Ruin-Walker Solar Tempo',
+    leaderId: 'ruinwalker_overseer',
+    keywords: ['Snap', 'Foothold'],
+    effects: ['buff', 'draw'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
     label: 'Sovereign Steel Control',
     leaderId: 'sovereign_of_the_dying_star',
-    keywords: ['Steel', 'Toll'],
+    keywords: ['Steel', 'Frenzy'],
     effects: ['sap', 'destroy'],
     units: 16,
     spells: 10,
     locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Sovereign Crimson Assault',
+    leaderId: 'sovereign_of_the_dying_star',
+    keywords: ['Pierce', 'Avenge'],
+    effects: ['sap'],
+    units: 19,
+    spells: 8,
+    locations: 3,
     comboFamily: 'none',
   },
 ];

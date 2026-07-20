@@ -257,3 +257,99 @@ carrying it — not yet a trustworthy read on the color itself.
    never built with Solar cards in mind.
 7. Same "every archetype needs a real color-aware re-tune" item as §5-1,
    now with harder evidence (Ruin-Walker's 30pt swing).
+
+## 7. v4.14b — archetype color-aware re-tune, and answers to the open questions
+
+Went through every one of the 22 v4.13 archetypes and checked its
+`keywords:` against its Leader's real identity (§6 table). 6 archetypes
+across 4 Leaders had at least one off-identity keyword — swapped each for
+the nearest thematically-appropriate in-identity keyword (label text left
+unchanged so `ARCH_WATCHLIST` and older findings docs that reference
+archetypes by name still resolve correctly):
+
+| Archetype | Old keywords | New keywords | Why |
+|---|---|---|---|
+| Abyss Sap-Echo Control | Echo, Toll | Anchor, Twin | Neither original keyword was in Verdant/Prism |
+| Abyss Pierce Aggro | Pierce, Frenzy | Rally, Scrap | Neither original keyword was in Verdant/Prism |
+| Sea Witch Ward-Steel Wall | Ward, Steel | Ward, Bulwark | Steel is Obsidian, not in Azure/Verdant |
+| Mer King Twin Heal | Guard, Twin | Guard, Steel | Twin is Prism, not in Azure/Obsidian |
+| Shinobi Tempo-Anchor | Anchor, Echo, Swift | Anchor, Echo, Steel | Swift is Crimson, not in Verdant/Obsidian |
+| Shinobi Avenge Grind | Avenge, Toll | Avenge, Excavate | Toll is Azure, not in Verdant/Obsidian |
+| Sovereign Steel Control | Steel, Toll | Steel, Frenzy | Toll is Azure, not in Obsidian/Crimson |
+
+Also added a genuine **second archetype** to the two single-archetype
+Leaders, directly answering §5/§6's open items about them:
+
+- **Ruin-Walker Solar Tempo** (`Snap`/`Foothold`, Azure/Solar) — Ruin-Walker
+  Overseer's original sole archetype was pure Azure (`Guard`/`Bulwark`),
+  so Solar — and by extension the Solar *color's* entire win-rate reading
+  — rested on a Leader/archetype pairing that never actually drafted a
+  Solar card on purpose.
+- **Sovereign Crimson Assault** (`Pierce`/`Avenge`, Obsidian/Crimson) —
+  same gap for Sovereign of the Dying Star's Crimson half.
+
+Full re-verification: `npm run sim:v4 -- 20`, 24 archetypes now (was 22),
+**no invariant violations**.
+
+| Leader | v4.14 (pre-retune) | v4.14b (retuned) |
+|---|---|---|
+| Mer-King | 63.8% | 64.8% |
+| Ethereal Sea Witch | 60.7% | 61.4% |
+| Avatar of the Abyss | 63.8% | 60.9% |
+| Sovereign of the Dying Star | 38.1% | **48.5%** |
+| Ruin-Walker Overseer | 40.0% | **46.9%** |
+| Crimson Vector Commander | 41.7% | 41.2% |
+| Legendary Diver | 39.8% | 39.8% (unchanged — needed no retune) |
+| Apex Nanite Shinobi | 39.2% | 36.8% |
+
+Color win rates also firmed up — **Solar went from 20.7% (n=2040, one
+archetype) to 44.8% (n=6600, two archetypes across two Leaders)**, a far
+more trustworthy reading and much closer to healthy than the original
+number suggested.
+
+### Answers to §5/§6's open questions
+
+1. *"Every archetype needs a color-aware re-tune"* — **done** for the 6
+   archetypes that were actually off-identity (see table above); the other
+   16 already matched their Leader's identity coming out of the v4.13
+   split/rename and needed no change (confirmed by Crimson Vector
+   Commander and Legendary Diver's win rates staying flat, since none of
+   their archetypes changed).
+2. *Crimson's card-count shortfall (34 cards)* — **accepted, not fixed**.
+   Reassigning which keywords carry Crimson would ripple through every
+   prior balance pass's keyword-prevalence data with no clear win; revisit
+   only if pack-opening/collection data later shows a real player-facing
+   scarcity problem, not from the sim numbers alone.
+3. *Sovereign of the Dying Star's identity* — **resolved**: with a real
+   second archetype, Sovereign reads as a coherent, moderate 48.5% Leader,
+   not the wild 27.8%→38.1%→48.5% swings across three straight passes on a
+   single archetype. Its two archetypes are NOT evenly matched, though
+   (Sovereign Steel Control 87.7% vs. Sovereign Crimson Assault 34.0% —
+   see the new open item below) — the Leader number is trustworthy, the
+   even split between its two colors is not yet.
+4. *The 28 tri-color orphan cards* — **accepted as intentional design**,
+   same as MTG genuinely printing off-color cards most decks can't play.
+   Not revisited this pass.
+5. *Retroactive enforcement on old decks* — already answered in §5 item 5
+   (confirmed not enforced, consistent with MTG-style legality checks);
+   nothing further to do.
+6. *Ruin-Walker Overseer needs a second archetype* — **done**, see above.
+
+### New items surfaced by this pass
+
+8. **Shinobi Avenge Grind dropped sharply** (73.2%→45.5%) from the
+   Toll→Excavate swap — Excavate turned out to be a much weaker
+   substitute than Toll was for this archetype's actual power level, even
+   though both are legal, in-identity choices. The archetype is legal now
+   but arguably needs a different in-identity keyword pairing (or a wider
+   card-selection retune, not just a keyword swap) to recover its former
+   strength within Verdant/Obsidian.
+9. **Sovereign's two archetypes are lopsided** (87.7% vs. 34.0%) — Sovereign
+   Crimson Assault (the brand-new archetype) is a first draft with no
+   tuning history, unlike every other archetype in the roster; needs at
+   least one more iteration before its numbers should be trusted the way
+   the rest of the roster's are.
+
+Both are flagged for the next dedicated color-balance pass rather than
+chased further in this same session — same "surgical, verified, don't
+oversweep" convention as every prior `BALANCE_SIM_FINDINGS_v4.*.md` pass.

@@ -7,6 +7,35 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.14b balance pass — color-aware archetype re-tune
+
+- **Retuned 7 archetypes across 4 Leaders** whose `keywords:` included at
+  least one color outside their Leader's identity (Abyss Sap-Echo Control,
+  Abyss Pierce Aggro, Sea Witch Ward-Steel Wall, Mer King Twin Heal,
+  Shinobi Tempo-Anchor, Shinobi Avenge Grind, Sovereign Steel Control) —
+  swapped each off-identity keyword for the nearest in-identity one;
+  labels kept stable. Added **Ruin-Walker Solar Tempo** and **Sovereign
+  Crimson Assault**, genuine second archetypes for the two Leaders that
+  previously had only one — both had a color in their identity (Solar,
+  Crimson respectively) that no archetype had ever actually drafted for.
+  Roster is now 24 archetypes (was 22).
+- **Resolves 3 of `docs/COLOR_IDENTITY.md`'s open items**: Sovereign of the
+  Dying Star's win rate (a 3-pass-running source of noise, 64.7%→27.8%→
+  38.1%) stabilizes to a trustworthy 48.5% with a real 2-archetype roster;
+  Solar's color win rate firms up from a 1-archetype 20.7% (n=2040) to a
+  2-archetype 44.8% (n=6600); Ruin-Walker Overseer similarly stabilizes to
+  46.9%. Full 55,000-game re-verification: no invariant violations.
+- **2 new items surfaced and documented rather than chased further**:
+  Shinobi Avenge Grind dropped sharply (73.2%→45.5%) from its keyword
+  swap — legal now, but weaker than before; Sovereign's two archetypes are
+  lopsided (87.7% vs. 34.0%), the new one being a first draft with no
+  tuning history. See `docs/COLOR_IDENTITY.md` §7.
+- **Also formally closes 2 items as accepted-design, no code change**:
+  Crimson's smaller card count (34 vs. 46-99 for other colors) and the 28
+  tri-color "orphan" cards legal under no Leader identity — both are
+  intentional tradeoffs, not bugs, same as MTG's own color pie having
+  uneven card counts and genuinely off-color prints.
+
 ### v4.14 feature pass — expand card colors from 5 to 7
 
 - **Card colors expanded 5→7.** Renamed `Umbral`→**Obsidian** and
