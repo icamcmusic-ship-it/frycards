@@ -1594,6 +1594,9 @@ export function completeTwin(g: Game, dieIndex: number, cardIid: string): boolea
   enterPlay(g, p, c, die.value);
   if (c.def.twinBonus) {
     applyEffect(g, p.id, c.def.twinBonus, autoTarget(g, p.id, c.def.twinBonus), c);
+    // enterPlay() above already ran its own cleanupDeaths before this bonus
+    // effect applied — a lethal twinBonus needs its own cleanup/checkWin.
+    cleanupDeaths(g);
   }
   return true;
 }
@@ -1770,6 +1773,12 @@ export function comboCheck(g: Game) {
       // mechanic flags.
       decide(g, p.id, 'comboFired');
       applyEffect(g, p.id, combo.effect, autoTarget(g, p.id, combo.effect), c);
+      // Without this, a lethal Combo effect (e.g. Sap damage) never sets
+      // g.winner (checkWin only runs inside cleanupDeaths), making the
+      // `if (g.winner) break;` guard above dead code, and a Combo holder
+      // that killed itself or another Unit would never leave p.board — the
+      // very "died mid-loop" case the `continue` above exists to handle.
+      cleanupDeaths(g);
     }
   }
   // §3.5 -> §3.6: Combo Check is the one-way turnstile into the Combat Phase

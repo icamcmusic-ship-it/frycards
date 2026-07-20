@@ -612,6 +612,15 @@ interface SuiteResult {
   comebackGames: number;
   aheadAtCheckpointWins: number;
   aheadAtCheckpointGames: number;
+  /** v4.16 harness upgrade (task §2): per-game "this keyword was actually
+   * CAST at least once" (via s.casts, not just present in the built deck) ->
+   * win rate. Distinct from keywordInDeck/keywordInWinDeck (deck-presence),
+   * this is the "cast-rate vs pool-prevalence" and "activation, not just
+   * ownership" signal — a keyword can be drafted into every deck of an
+   * archetype and still never get cast (dead in hand/gated out), which
+   * keywordInDeck alone can't see. */
+  keywordCastInGame: Record<string, number>;
+  keywordCastInWinGame: Record<string, number>;
   errors: string[];
 }
 
@@ -670,6 +679,8 @@ function newResult(): SuiteResult {
     comebackGames: 0,
     aheadAtCheckpointWins: 0,
     aheadAtCheckpointGames: 0,
+    keywordCastInGame: {},
+    keywordCastInWinGame: {},
     errors: [],
   };
 }
@@ -771,6 +782,22 @@ function runGame(
         }
       }
       const archKey = pid === 'A' ? a.key : b.key;
+      // v4.16 harness upgrade (task §2): per-player keyword cast-activation —
+      // `cardCast:<id>` decisions are recorded unconditionally in engine.ts
+      // for every player (the ARCH_WATCHLIST restriction below is a harness-
+      // side aggregation cost-saver, not a recording gate), so they're
+      // available here for every game regardless of archetype.
+      const castKws = new Set<string>();
+      for (const key of Object.keys(d)) {
+        if (key.startsWith('cardCast:') && (d[key] || 0) > 0) {
+          const id = key.slice('cardCast:'.length);
+          for (const kw of POOL_BY_ID[id]?.keywords || []) castKws.add(kw);
+        }
+      }
+      for (const kw of castKws) {
+        r.keywordCastInGame[kw] = (r.keywordCastInGame[kw] || 0) + 1;
+        if (won) r.keywordCastInWinGame[kw] = (r.keywordCastInWinGame[kw] || 0) + 1;
+      }
       for (const key of Object.keys(d)) {
         if (key.startsWith('echoCard:')) {
           const id = key.slice('echoCard:'.length);
@@ -1131,6 +1158,123 @@ console.log('\n--- Keyword health: win% + pool prevalence + measured cast activi
   );
 }
 
+// v4.16 harness upgrade (task §2): a second, more direct keyword-health cut —
+// the section above measures average casts/game of the CARDS carrying a
+// keyword; this instead measures, per GAME, whether the keyword was ever
+// actually cast at all (keywordCastInGame, from cardCast: decisions — see
+// runGame), and pairs that against how often the keyword was merely present
+// in a built deck (keywordInDeck). A keyword can be drafted into every
+// archetype deck that "themes" around it and still rarely get cast (gated
+// out, stuck behind higher-priority cards, etc.) — this activation ratio is
+// the direct "dead in decks" signal the task calls out, distinct from the
+// cast-rate-of-cards-that-saw-play metric above. The win-delta here is also
+// a genuinely different cut from keywordInWinDeck's raw win% — it isolates
+// win% WHEN THE KEYWORD FIRED this game from the deck's baseline win% (which
+// includes games where the keyword-carrying cards sat dead in hand), so a
+// "needs nerf" (fires often AND wins more when it fires) reads differently
+// from a "just rare" (rarely fires, and firing doesn't move the needle) or a
+// "needs buff" (fires plenty but wins less when it does).
+console.log(
+  '\n--- Keyword activation ratio (cast-in-game / present-in-deck) + win-delta vs deck baseline, min n=200 present ---',
+);
+const kwActivationRows = Object.keys(R.keywordInDeck)
+  .filter((kw) => R.keywordInDeck[kw] >= 200)
+  .map((kw) => {
+    const castIn = R.keywordCastInGame[kw] || 0;
+    const castWin = R.keywordCastInWinGame[kw] || 0;
+    const activationRatio = castIn / R.keywordInDeck[kw];
+    const castWinPct = castIn > 0 ? (100 * castWin) / castIn : NaN;
+    const baselineWinPct = (100 * (R.keywordInWinDeck[kw] || 0)) / R.keywordInDeck[kw];
+    return {
+      kw,
+      activationRatio,
+      castWinPct,
+      baselineWinPct,
+      delta: castWinPct - baselineWinPct,
+      castIn,
+    };
+  })
+  .sort((a, b) => a.activationRatio - b.activationRatio);
+for (const r of kwActivationRows)
+  console.log(
+    `${r.kw.padEnd(12)} activation=${r.activationRatio.toFixed(2).padStart(5)}  castWin%=${(isNaN(r.castWinPct) ? ' n/a' : r.castWinPct.toFixed(1)).padStart(5)}  deckBaseline%=${r.baselineWinPct.toFixed(1).padStart(5)}  delta=${isNaN(r.delta) ? ' n/a' : (r.delta >= 0 ? '+' : '') + r.delta.toFixed(1) + 'pt'}  (castN=${r.castIn})`,
+  );
+console.log(
+  '(Low activation ratio = keyword rarely fires even when drafted ("dead in decks" — removal/rework candidate). Among keywords that DO fire: positive delta = fires and wins more than its own deck baseline (nerf candidate); negative delta = fires but drags the deck down (buff candidate, not just rare).)',
+);
+
+// ---------------------------------------------------------------------------
+// v4.16 harness upgrade (task §1): cost-vs-ability efficiency — a normalized
+// "power per unit of cast-format difficulty" for every non-Leader card
+// (printed stats + a flat per-keyword bonus, divided by cardDifficulty()),
+// with outliers flagged by z-score against the mean of OTHER cards of the
+// same TYPE (Unit/Charm/Event/Location print very different "power" shapes,
+// so pooling them would just rediscover "Units have stats and spells don't").
+// Distinct from the existing win%-based cost-vs-value RESIDUAL table above:
+// that table measures ACTUAL performance (win%) per cost band; this one
+// measures DESIGNED power (printed stats/keywords) per cost, independent of
+// how any archetype happened to pilot the card — the two are meant to be
+// read together (a card can be an outlier on one and not the other).
+// ---------------------------------------------------------------------------
+const KEYWORD_POWER_WEIGHT = 3;
+interface CostEfficiencyRow {
+  id: string;
+  name: string;
+  type: string;
+  power: number;
+  difficulty: number;
+  ratio: number;
+  z: number;
+}
+function computeCostEfficiency(): CostEfficiencyRow[] {
+  const groups: Record<string, { id: string; name: string; power: number; difficulty: number; ratio: number }[]> =
+    {};
+  for (const id of Object.keys(POOL_BY_ID)) {
+    const def = POOL_BY_ID[id];
+    if (def.type === 'Leader') continue;
+    const power = (def.atk || 0) + (def.hp || 0) + (def.keywords?.length || 0) * KEYWORD_POWER_WEIGHT;
+    const difficulty = cardDifficulty(def);
+    if (!difficulty) continue;
+    (groups[def.type] ||= []).push({ id, name: def.name, power, difficulty, ratio: power / difficulty });
+  }
+  const rows: CostEfficiencyRow[] = [];
+  for (const arr of Object.values(groups)) {
+    const mean = arr.reduce((s, r) => s + r.ratio, 0) / arr.length;
+    const variance = arr.reduce((s, r) => s + (r.ratio - mean) ** 2, 0) / arr.length;
+    const sd = Math.sqrt(variance) || 1;
+    for (const r of arr) {
+      const def = POOL_BY_ID[r.id];
+      rows.push({
+        id: r.id,
+        name: r.name,
+        type: def.type,
+        power: r.power,
+        difficulty: r.difficulty,
+        ratio: r.ratio,
+        z: (r.ratio - mean) / sd,
+      });
+    }
+  }
+  return rows;
+}
+const costEfficiencyRows = computeCostEfficiency();
+console.log(
+  '\n--- Cost-vs-ability efficiency: power-per-cost z-score vs. same-TYPE mean (printed stats, not measured performance) ---',
+);
+console.log('Highest z (power-per-cost far ABOVE peers — likely under-costed):');
+for (const r of [...costEfficiencyRows].sort((a, b) => b.z - a.z).slice(0, 12))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} power=${r.power.toFixed(1)} difficulty=${r.difficulty.toFixed(1)} ratio=${r.ratio.toFixed(2)} z=${r.z >= 0 ? '+' : ''}${r.z.toFixed(2)}`,
+  );
+console.log('Lowest z (power-per-cost far BELOW peers — likely over-costed):');
+for (const r of [...costEfficiencyRows].sort((a, b) => a.z - b.z).slice(0, 12))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} power=${r.power.toFixed(1)} difficulty=${r.difficulty.toFixed(1)} ratio=${r.ratio.toFixed(2)} z=${r.z >= 0 ? '+' : ''}${r.z.toFixed(2)}`,
+  );
+console.log(
+  '(Flat per-keyword power bonus is a simplifying assumption — a rough "does this card carry more ability than its cost band typically does" screen, not a precise valuation.)',
+);
+
 console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
 const decRows = DECISION_KEYS.map((k) => {
   const d = R.decisionAgg[k] || { pw: 0, pn: 0, aw: 0, an: 0 };
@@ -1346,6 +1490,19 @@ for (const r of [...cvRows].sort((a, b) => a.valueRatio - b.valueRatio).slice(0,
 console.log(
   '\n--- Cost-vs-value RESIDUAL: win% vs. the mean win% of cards at the SAME difficulty band (min n=40) ---',
 );
+// v4.16: hoisted out of the block below (was block-scoped `const resRows`)
+// so the new summary section can reuse it for cardsToBuff/cardsToNerf
+// instead of recomputing the same band-mean logic a second time.
+let resRowsGlobal: Array<{
+  name: string;
+  type: string;
+  winPct: number;
+  difficulty: number;
+  valueRatio: number;
+  n: number;
+  bandMean: number;
+  residual: number;
+}> = [];
 {
   const band = (d: number) => Math.round(d * 2) / 2; // half-point buckets
   const bandStats: Record<number, { w: number; n: number }> = {};
@@ -1361,6 +1518,7 @@ console.log(
     bandMean: bandMean[band(r.difficulty)],
     residual: r.winPct - bandMean[band(r.difficulty)],
   }));
+  resRowsGlobal = resRows;
   console.log('Bands (difficulty -> mean win%, card count):');
   for (const b of Object.keys(bandStats).map(Number).sort((a, b) => a - b))
     console.log(`  d=${b.toFixed(1)}  mean win%=${bandMean[b].toFixed(1)}  (cards=${bandStats[b].n})`);
@@ -1429,6 +1587,151 @@ console.log(
 );
 
 // ---------------------------------------------------------------------------
+// v4.16 harness upgrade (task §5): a concise, bucketed summary of the
+// instrumentation added above (plus a few pre-existing tables), each bucket
+// holding its top ~10 offenders by the relevant metric. Purely a derived
+// re-presentation of data computed earlier in this file — no new stats
+// collection here, just assembly + console printing + inclusion in the JSON
+// dump so a balance pass can start here instead of re-deriving every bucket
+// from the raw tables by hand.
+// ---------------------------------------------------------------------------
+interface SummaryEntry {
+  name: string;
+  detail: string;
+}
+interface BalanceSummary {
+  keywordRemovals: SummaryEntry[];
+  newKeywordCandidates: SummaryEntry[];
+  keywordsToNerf: SummaryEntry[];
+  keywordsToBuff: SummaryEntry[];
+  mechanicsToRemoveChangeOrAdd: SummaryEntry[];
+  costVsAbilityMismatches: SummaryEntry[];
+  cardsToBuff: SummaryEntry[];
+  cardsToNerf: SummaryEntry[];
+}
+function buildBalanceSummary(): BalanceSummary {
+  // keywordRemovals: lowest activation ratio (dead in decks) — a keyword
+  // drafted into decks but rarely if ever actually cast.
+  const keywordRemovals: SummaryEntry[] = kwActivationRows
+    .filter((r) => r.activationRatio < 1) // some ratio >=1 is possible (multi-copy decks casting more than once per deck-presence game); only sub-1 reads as "often never fires"
+    .sort((a, b) => a.activationRatio - b.activationRatio)
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.kw,
+      detail: `activation=${r.activationRatio.toFixed(2)} (fires in only ~${(100 * r.activationRatio).toFixed(0)}% of games it's drafted into a deck), deckBaseline%=${r.baselineWinPct.toFixed(1)}`,
+    }));
+
+  // newKeywordCandidates: best-effort at inferring design-space gaps is not
+  // something this harness's data can directly support — it measures EXISTING
+  // keywords/cards/mechanics, not absence. Left as an explanatory stub per
+  // the task's own allowance, rather than fabricating entries.
+  const newKeywordCandidates: SummaryEntry[] = [
+    {
+      name: 'STUB — not inferable from simulation data',
+      detail:
+        'This harness only measures cards/keywords/mechanics that already exist in the pool; it has no signal for what SHOULD exist. A best-effort proxy worth a manual look: color identities or card-type slots with the thinnest keyword variety (see the "Card-TYPE win rate" and "Color win rate" sections above) may indicate under-designed design space, but that is a human judgment call, not a data-derived finding.',
+    },
+  ];
+
+  // keywordsToNerf: keyword actually fires (decent sample) AND wins
+  // meaningfully more than its own deck's baseline when it does.
+  const keywordsToNerf: SummaryEntry[] = kwActivationRows
+    .filter((r) => r.castIn >= 50 && !isNaN(r.delta))
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.kw,
+      detail: `castWin%=${r.castWinPct.toFixed(1)} vs deckBaseline%=${r.baselineWinPct.toFixed(1)} (delta=+${r.delta.toFixed(1)}pt when it fires), activation=${r.activationRatio.toFixed(2)}`,
+    }));
+
+  // keywordsToBuff: fires plenty but drags the deck DOWN relative to its own
+  // baseline when it does — a genuinely weak effect, not just a rare one.
+  const keywordsToBuff: SummaryEntry[] = kwActivationRows
+    .filter((r) => r.castIn >= 50 && !isNaN(r.delta))
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.kw,
+      detail: `castWin%=${r.castWinPct.toFixed(1)} vs deckBaseline%=${r.baselineWinPct.toFixed(1)} (delta=${r.delta.toFixed(1)}pt when it fires), activation=${r.activationRatio.toFixed(2)}`,
+    }));
+
+  // mechanicsToRemoveChangeOrAdd: the mechanic-level decision-correlation
+  // rows (dieRerolled/guardBlockOccurred/comboFired, plus the pre-existing
+  // locationCast/aftershockQueued/tributeTriggered/twinComplete family),
+  // ranked by |delta| — the mechanics whose win-rate correlation is furthest
+  // from neutral, in either direction.
+  const mechanicKeys = new Set([
+    'dieRerolled',
+    'guardBlockOccurred',
+    'comboFired',
+    'locationCast',
+    'aftershockQueued',
+    'aftershockResolved',
+    'tributeTriggered',
+    'twinComplete',
+    'twinStagedPassive',
+    'echoRecast',
+  ]);
+  const mechanicsToRemoveChangeOrAdd: SummaryEntry[] = decRows
+    .filter((r) => mechanicKeys.has(r.k) && !isNaN(r.delta))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.k,
+      detail: `did=${r.withP.toFixed(1)}% did-not=${r.without.toFixed(1)}% delta=${r.delta >= 0 ? '+' : ''}${r.delta.toFixed(1)}pt (did n=${r.pn})`,
+    }));
+
+  // costVsAbilityMismatches: largest |z-score| power-per-cost outliers (task
+  // §1), over- and under-costed combined.
+  const costVsAbilityMismatches: SummaryEntry[] = [...costEfficiencyRows]
+    .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.name,
+      detail: `${r.z >= 0 ? 'under-costed' : 'over-costed'} (z=${r.z >= 0 ? '+' : ''}${r.z.toFixed(2)}), ${r.type}, power=${r.power.toFixed(1)} difficulty=${r.difficulty.toFixed(1)}`,
+    }));
+
+  // cardsToBuff / cardsToNerf: from the win%-vs-cost-band RESIDUAL table
+  // (measured performance, not printed power) — the actual in-game
+  // over/under performers for their cost, complementing costVsAbilityMismatches.
+  const cardsToNerf: SummaryEntry[] = [...resRowsGlobal]
+    .sort((a, b) => b.residual - a.residual)
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.name,
+      detail: `win%=${r.winPct.toFixed(1)} vs cost-band mean=${r.bandMean.toFixed(1)} (resid=+${r.residual.toFixed(1)}pt), difficulty=${r.difficulty.toFixed(1)} (n=${r.n})`,
+    }));
+  const cardsToBuff: SummaryEntry[] = [...resRowsGlobal]
+    .sort((a, b) => a.residual - b.residual)
+    .slice(0, 10)
+    .map((r) => ({
+      name: r.name,
+      detail: `win%=${r.winPct.toFixed(1)} vs cost-band mean=${r.bandMean.toFixed(1)} (resid=${r.residual.toFixed(1)}pt), difficulty=${r.difficulty.toFixed(1)} (n=${r.n})`,
+    }));
+
+  return {
+    keywordRemovals,
+    newKeywordCandidates,
+    keywordsToNerf,
+    keywordsToBuff,
+    mechanicsToRemoveChangeOrAdd,
+    costVsAbilityMismatches,
+    cardsToBuff,
+    cardsToNerf,
+  };
+}
+const balanceSummary = buildBalanceSummary();
+console.log('\n\n=== Balance summary (top offenders per bucket) ===');
+for (const [bucket, entries] of Object.entries(balanceSummary)) {
+  console.log(`\n-- ${bucket} --`);
+  if (entries.length === 0) {
+    console.log('  (none — no qualifying data this pass)');
+    continue;
+  }
+  for (const e of entries) console.log(`  ${e.name.padEnd(28)} ${e.detail}`);
+}
+
+// ---------------------------------------------------------------------------
 // v4.12 harness upgrade: persist the full raw result (not just the console
 // transcript) as JSON so a balance pass can be re-analyzed programmatically
 // instead of re-parsing padded console text, and so results survive past the
@@ -1449,6 +1752,9 @@ try {
         archetypeCount: ARCHETYPES.length,
         deckRosterSize: roster.length,
         result: R,
+        costEfficiency: costEfficiencyRows,
+        keywordActivation: kwActivationRows,
+        balanceSummary,
       },
       null,
       2,
