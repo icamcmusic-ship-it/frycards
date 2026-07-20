@@ -2612,7 +2612,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Unit",
     "rarity": "Full-Art",
     "set": "Full Arts Collection 1",
-    "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/Worm%20Brain%20Host%3AThe%20thoughts%20in%20my%20head%20aren%27t%20mine%20anymore.%20They%27re%20pink%2C%20they%20squirm%2C%20and%20they%20are%20very%2C%20very%20hungry.png",
+    "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/Worm%20Brain%20Host%3AThe%20thoughts%20in%20my%20head%20aren%27t%20mine%20anymore.%20They%27re%20pink%2C%20they%20squirm%2C%20and%20they%20are%20very%2C%20very%2C%20hungry.png",
     "flavor": "The thoughts in my head aren't mine anymore. They're pink, they squirm, and they are very, very hungry."
   },
   {
