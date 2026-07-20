@@ -33,7 +33,10 @@ import {
   deckDurableBodyDensity,
 } from '../src/game/v3/cardpool';
 import { writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // v4.4: a widened, 20-archetype roster across all six real Leaders — sim-only
 // (the player-facing "prebuilt archetype" deck picker was removed from the
@@ -254,6 +257,37 @@ const ARCHETYPES: Archetype[] = [
     effects: ['mend', 'sap'],
     units: 19,
     spells: 7,
+    locations: 4,
+    comboFamily: 'none',
+  },
+
+  // v4.12: the full 292-card Supabase pool (up from the stale 193-card
+  // bundle) added two Leaders that had never appeared in the archetype
+  // roster before — Ruin-Walker Overseer and Sovereign of the Dying Star.
+  // Previously they only showed up incidentally in the 8 pure-random control
+  // decks (n=1880, far too small and not representative of a piloted deck),
+  // so their leader-level win rate in every prior full-pool report was
+  // essentially noise. One balanced, generic archetype each (both Leaders
+  // print a plain threshold-5 Sap ability with no distinctive kit rider) —
+  // same Guard/Bulwark defensive-midrange shape used elsewhere in the roster
+  // as a neutral baseline build.
+  {
+    label: 'Ruin-Walker Guard Grind',
+    leaderId: 'ruinwalker_overseer',
+    keywords: ['Guard', 'Bulwark'],
+    effects: ['sap', 'mend'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Sovereign Steel Control',
+    leaderId: 'sovereign_of_the_dying_star',
+    keywords: ['Steel', 'Toll'],
+    effects: ['sap', 'destroy'],
+    units: 16,
+    spells: 10,
     locations: 4,
     comboFamily: 'none',
   },

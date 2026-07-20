@@ -463,8 +463,38 @@ function mapUnit(c: CardTemplate): CardDef {
   if (SIM_TUNING.durableBodyTax > 0 && isCheapDurableBody(def)) {
     def.hp = Math.max(1, (def.hp || 0) - SIM_TUNING.durableBodyTax);
   }
+  // v4.12: the first full-pool run (292 vs. the prior 193 cards; see
+  // BALANCE_SIM_FINDINGS_v4.12.md §2) surfaced a batch of never-before-simmed
+  // cards as extreme cost-vs-value RESIDUAL outliers (win% far off the mean
+  // of every other card at the same cast-difficulty band). Same named-card
+  // identity-patch pattern as MANUAL_STEEL/MANUAL_VALUE_BUFF above — a flat
+  // stat trim/bump split across ATK and HP, sized to the measured residual
+  // (2pt of stats for the two most extreme, 1pt for the rest).
+  if (MANUAL_STAT_TRIM[c.id] !== undefined) {
+    const d = MANUAL_STAT_TRIM[c.id];
+    const half = Math.trunc(d / 2);
+    def.atk = Math.max(1, (def.atk || 0) + half);
+    def.hp = Math.max(1, (def.hp || 0) + (d - half));
+  }
   return def;
 }
+
+const MANUAL_STAT_TRIM: Record<string, number> = {
+  // nerfs (win% far ABOVE their cost band's mean)
+  vampire_squid: -2,
+  half_faded_shade: -2,
+  where_the_deep_meets_the_sky: -2,
+  the_wolf_of_wall_street: -1,
+  mesozoic_exchange_student: -1,
+  blind_colossus: -1,
+  fayes_true_face: -1,
+  vlad_from_accounting: -1,
+  swaying_garden: -1,
+  // buffs (win% far BELOW their cost band's mean)
+  void_mother: 1,
+  familiar_in_the_dark: 1,
+  butterflyfish_school: 1,
+};
 
 // ---------------------------------------------------------------------------
 // Charm / Event mapping (one-shots)
@@ -491,6 +521,18 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   consuming_ash_cloud: 1,
   towering_tsunami: 1,
   narwhal_staff: 1,
+  // v4.12: same first-full-pool-run cost-vs-value residual outliers as
+  // MANUAL_STAT_TRIM above, for the non-Unit (Charm/Event/Location) side —
+  // see BALANCE_SIM_FINDINGS_v4.12.md §2. One over-priced Charm nerfed
+  // alongside the under-priced batch buffed.
+  the_locksmiths_regret: 1,
+  the_abyssal_gate: 1,
+  wraithlight_lantern: 1,
+  magma_conduit_network: 1,
+  jawbone_span: 1,
+  black_smoker: 1,
+  kinetix_blacksite_cavern: 1,
+  glowing_glyph_tablet: -1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
