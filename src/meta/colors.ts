@@ -74,23 +74,42 @@ export const COLOR_LETTER: Record<Color, string> = {
 // ---------------------------------------------------------------------------
 
 const SLATE_BG =
-  'linear-gradient(160deg, color-mix(in srgb, #64748B 12%, var(--c-paper)) 0%, var(--c-paper) 60%)';
+  'linear-gradient(160deg, color-mix(in srgb, #64748B 26%, var(--c-paper)) 0%, color-mix(in srgb, #64748B 10%, var(--c-paper)) 60%, var(--c-paper) 100%)';
 
+/** v4.19: much stronger identity wash than the old ~18% tint — the color
+ * should read instantly at a glance. Every stop still mixes toward
+ * var(--c-paper) (never a raw hex fill) so ink-on-paper text contrast holds
+ * in both themes; the text box additionally paints its own near-paper panel
+ * on top (see CardFaceV4), so rules/flavor legibility is unaffected. */
 export function colorBg(colors: Color[]): string {
   const real = colors.filter((c) => c !== 'Slate');
   if (real.length === 0) return SLATE_BG;
   if (real.length === 1) {
     const hex = COLOR_HEX[real[0]];
-    return `linear-gradient(160deg, color-mix(in srgb, ${hex} 18%, var(--c-paper)) 0%, var(--c-paper) 60%)`;
+    return `linear-gradient(160deg, color-mix(in srgb, ${hex} 52%, var(--c-paper)) 0%, color-mix(in srgb, ${hex} 28%, var(--c-paper)) 45%, color-mix(in srgb, ${hex} 14%, var(--c-paper)) 100%)`;
   }
   const n = real.length;
   const stops = real.map((c, i) => {
     const hex = COLOR_HEX[c];
-    const pct = Math.round((i / (n - 1)) * 70); // spread bands across the first 70% of the diagonal
-    return `color-mix(in srgb, ${hex} 20%, var(--c-paper)) ${pct}%`;
+    const pct = Math.round((i / (n - 1)) * 80); // spread bands across the first 80% of the diagonal
+    return `color-mix(in srgb, ${hex} 42%, var(--c-paper)) ${pct}%`;
   });
-  return `linear-gradient(135deg, ${stops.join(', ')}, var(--c-paper) 100%)`;
+  return `linear-gradient(135deg, ${stops.join(', ')}, color-mix(in srgb, ${COLOR_HEX[real[n - 1]]} 16%, var(--c-paper)) 100%)`;
 }
+
+/** v4.19 pip palette — brighter, higher-chroma variants of COLOR_HEX used
+ * ONLY for the footer color pips, so a pip pops off the (now strongly
+ * tinted) card body instead of dissolving into it. `fg` is the letter color
+ * with proper contrast per swatch. */
+export const COLOR_PIP: Record<Color, { bg: string; fg: string }> = {
+  Crimson: { bg: '#F43F5E', fg: '#FFFFFF' },
+  Azure: { bg: '#38BDF8', fg: '#082F49' },
+  Verdant: { bg: '#4ADE80', fg: '#052E16' },
+  Obsidian: { bg: '#A78BFA', fg: '#2E1065' },
+  Prism: { bg: '#FACC15', fg: '#422006' },
+  Solar: { bg: '#FB923C', fg: '#431407' },
+  Slate: { bg: '#CBD5E1', fg: '#0F172A' },
+};
 
 /** Single representative hex for flat-fill UI (header tint, chips) — the
  * first color in `COLORS` order for multicolor cards, Slate's gray for

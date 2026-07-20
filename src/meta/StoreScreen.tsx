@@ -27,6 +27,11 @@ type Tab = 'packs' | 'my_packs' | 'card_back' | 'profile_banner' | 'profile_avat
 
 const DAILY_PACK_COOLDOWN_MS = 20 * 60 * 60 * 1000; // mirror of claim_daily_pack
 
+/** Max packs opened in one bulk call — mirror of the server-side cap in
+ * buy_and_open_packs / open_inventory_packs (see lib/supabase.ts). Was a
+ * bare `24` inline with no explanation of where the number came from. */
+const BULK_OPEN_CAP = 24;
+
 export function StoreScreen({ onBack }: { onBack: () => void }) {
   const {
     profile,
@@ -138,7 +143,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   const handleOpenAllFromInventory = async (pack: PackType, count: number) => {
     if (!profile || busyId) return;
-    const n = Math.min(count, 24);
+    const n = Math.min(count, BULK_OPEN_CAP);
     setError('');
     setNotice('');
     setBusyId('openall:' + pack.id);
@@ -548,11 +553,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       <PopButton
                         color="black"
                         disabled={!!busyId}
+                        title={
+                          entry.quantity > BULK_OPEN_CAP
+                            ? `Opens ${BULK_OPEN_CAP} at a time (server limit) — run it again for the rest`
+                            : undefined
+                        }
                         onClick={() => handleOpenAllFromInventory(pack, entry.quantity)}
                       >
                         {busyId === 'openall:' + pack.id
                           ? 'OPENING…'
-                          : `OPEN ALL ×${Math.min(entry.quantity, 24)}`}
+                          : `OPEN ALL ×${Math.min(entry.quantity, BULK_OPEN_CAP)}`}
                       </PopButton>
                     )}
                     {pack.acquisition !== 'starter_grant' && (

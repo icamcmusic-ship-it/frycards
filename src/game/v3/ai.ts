@@ -445,10 +445,38 @@ function chooseReroll(g: Game, p: Player): number[] {
   // need plus high dice (>=4, useful against `atLeast`/`sum` thresholds),
   // reroll the rest.
   if (straightWantCount === 0 && matchWantCount === 0) {
+    // v4.19: the flat "reroll everything <4" rule was destroying dice that
+    // were the only payment for LOW-threshold cards actually in hand — a 2
+    // showing against a hand full of thr<=2 cards got rerolled at real risk
+    // of coming back a 1 against a thr-4 remainder. Greedy-match dice to the
+    // hand's atLeast thresholds (cheapest sufficient die per card, biggest
+    // thresholds first) and keep every EMPLOYED die; only unemployed low
+    // dice reroll. Complements the Placement assignment solver: dice kept
+    // here are exactly the ones the solver can route to a card later.
+    const thrs = p.hand
+      .filter(
+        (c) =>
+          !c.def.comboGate &&
+          c.def.type !== 'Location' &&
+          (c.def.castCostKind ?? 'atLeast') === 'atLeast' &&
+          c.def.threshold !== undefined,
+      )
+      .map((c) => effThreshold(g, p.id, c.def))
+      .sort((a, b) => b - a);
+    const employed = new Set<number>(); // die indices
+    for (const thr of thrs) {
+      let pick = -1;
+      p.dice.forEach((d, i) => {
+        if (d.placed || employed.has(i) || d.value < thr) return;
+        if (pick < 0 || d.value < p.dice[pick].value) pick = i;
+      });
+      if (pick >= 0) employed.add(pick);
+    }
     p.dice.forEach((d, i) => {
       if (d.placed) return;
       if (stagedNeeds.has(d.value)) return;
       if (keepForExact(d.value)) return;
+      if (employed.has(i)) return;
       if (d.value >= 4) return;
       out.push(i);
     });
@@ -587,78 +615,50 @@ function playPlacement(g: Game, p: Player) {
       if (castFromHand(g, dieIdx, c.iid, target)) progress = true;
     }
 
-    // 2. Cast best numeric-threshold card that fits a die (Locations excluded —
-    //    they cast free above and never use a die in v4.1).
-    // Score each card's priority once, then sort the scores — a sort
-    // comparator that re-rolls castPriority's seeded jitter on every
-    // comparison (Array.prototype.sort calls it more than once per element)
-    // isn't a consistent total order, so the same card could rank
-    // differently against different opponents in the same pass.
-    const castable = p.hand
-      .filter((c) => !c.def.comboGate && c.def.type !== 'Location')
-      .map((c) => ({ c, s: castPriority(g, p, c) }))
-      .sort((a, b) => b.s - a.s)
-      .map(({ c }) => c);
-    for (const c of castable) {
-      if (g.winner) break;
-      const thr = effThreshold(g, p.id, c.def);
-      // Hold AoE removal for 2+ targets; don't waste single-target removal on
-      // an empty board or spare heals at full hp.
-      if (c.def.onCast?.target === 'allEnemyUnits' && opp.board.length < 2) continue;
-      if (
-        c.def.onCast?.action === 'sap' &&
-        c.def.onCast.target === 'enemyUnit' &&
-        opp.board.length === 0
-      )
-        continue;
-      if (
-        c.def.onCast?.action === 'destroy' &&
-        c.def.onCast.target !== 'allEnemyUnits' &&
-        opp.board.length === 0
-      )
-        continue;
-      if (c.def.onCast?.action === 'bind' && opp.board.length === 0) continue;
-      if (
-        c.def.onCast?.action === 'mend' &&
-        p.leader.damage === 0 &&
-        !p.board.some((u) => u.damage > 0)
-      )
-        continue;
-      // Twin (v4.0): only one die per Placement Phase, so we commit the first
-      // slot now and complete on a later turn. Stage a low-ish common value
-      // (2-4) so the matching second die is reachable, and only if we aren't
-      // already juggling a staged copy.
-      if (hasKw(c.def, 'Twin')) {
-        if (p.staging.some((s) => s.def.id === c.def.id)) continue;
-        const idxs = unplacedDice(p)
-          .filter((i) => p.dice[i].value >= thr)
-          .sort((a, b) => p.dice[a].value - p.dice[b].value);
-        if (idxs.length > 0 && p.hand.length >= 3) {
-          if (castFromHand(g, idxs[0], c.iid)) progress = true;
+    // 2. v4.19 (v4.15/v4.18 carried item): the die-to-card ASSIGNMENT problem
+    //    solved for real, replacing the old greedy per-card die pick. The old
+    //    loop walked cards in priority order and gave each its individually
+    //    cheapest sufficient die — which regularly stranded dice (spend the
+    //    only 4 on a thr-2 card, then the thr-4 card in hand can't be paid;
+    //    eat the exact-cost card's only matching die with a sum cast; spend
+    //    down the die the Leader Ability needed). Here we enumerate every
+    //    legal die->slot pairing (cast slots for hand cards passing the same
+    //    hold-gates as before, plus RESERVE slots for Leader/Location/Unit
+    //    abilities and the Ultimate so their dice needs compete in the same
+    //    optimization instead of getting leftovers) and solve for the max
+    //    total value via exhaustive search with memoization — 5 dice max
+    //    (2^5 masks) and <20 slots, so this is trivially cheap per call.
+    //    Only the single best planned CAST is executed per loop iteration
+    //    (state changes on cast — draws, destroys — invalidate the rest of
+    //    the plan, so we re-solve each iteration exactly like the old loop
+    //    re-sorted priorities). Reserve slots never execute here — steps 4/5
+    //    below still do the actual ability activations; their slots exist
+    //    purely to keep the solver from spending their dice on casts.
+    {
+      const slots = buildAssignmentSlots(g, p, opp);
+      const picks = solveDiceAssignment(slots);
+      for (let si = 0; si < slots.length && !g.winner; si++) {
+        const s = slots[si];
+        if (s.kind !== 'cast') continue;
+        const sel = picks.get(si);
+        if (!sel) continue;
+        const c = s.inst;
+        // Telemetry (never changes the pick): would the OLD greedy per-card
+        // die selection have paid this same cast with different dice? Direct
+        // measurement of how often the solver actually re-routes dice.
+        const greedy = greedyCastSelection(g, p, c.def);
+        if (
+          greedy &&
+          (greedy.length !== sel.length || greedy.some((i) => !sel.includes(i)))
+        ) {
+          lapse(g, p.id, 'lapseGreedyAssignmentFixed');
         }
-        continue;
-      }
-      // v4.3: Overflow only ever prints on 'atLeast'-cost cards (see
-      // cardpool.ts) — prefer a die that clears the Overflow amount when one's
-      // cheaply available. Every other numeric cost format (exact/sum) goes
-      // through the general bestSelectionFor picker below.
-      let sel: number[] | null;
-      if (c.def.overflow && (c.def.castCostKind ?? 'atLeast') === 'atLeast') {
-        const dieIdx = bestDieFor(p, thr);
-        if (dieIdx < 0) continue;
-        const oIdx = unplacedDice(p)
-          .filter((i) => p.dice[i].value - thr >= c.def.overflow!.amount)
-          .sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
-        sel = [oIdx !== undefined ? oIdx : dieIdx];
-      } else {
-        sel = bestSelectionFor(g, p, c.def);
-      }
-      if (!sel) continue;
-      if (
-        castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined)
-      ) {
-        progress = true;
-        break; // re-evaluate priorities with new state
+        const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
+        if (castFromHand(g, sel, c.iid, target)) {
+          progress = true;
+          break; // re-solve with new state
+        }
+        // castFromHand refused (stale plan) — try the next planned cast.
       }
     }
     if (progress) continue;
@@ -974,6 +974,268 @@ function unitAbilityValue(eff: Effect, oppBoardSize: number): number {
   }
 }
 
+// ---------------------------------------------------------------------------
+// v4.19: die->slot assignment solver (the "real assignment-problem solver"
+// flagged since v4.15; see playPlacement step 2). Dice counts are tiny (5/turn,
+// so 32 masks) and slot counts small (<~20), so exhaustive search with a
+// (slotIndex, diceMask) memo is exact and effectively free.
+// ---------------------------------------------------------------------------
+
+interface AssignSlot {
+  /** 'cast' slots execute (castFromHand); 'reserve' slots only claim dice for
+   * the ability/Ultimate steps that run after casting. */
+  kind: 'cast' | 'reserve';
+  inst: Inst;
+  value: number;
+  /** Legal dice-index combinations (into p.dice) that pay this slot. */
+  options: number[][];
+}
+
+/** Small per-die bonus so, at equal slot value, the solver prefers plans that
+ * spend MORE dice — dice never carry over (engine.ts startTurn rerolls all 5),
+ * so an unspent die is pure waste. Kept well below any real slot value so it
+ * only breaks ties, never overrides a genuinely better cast. */
+const DIE_SPEND_BONUS = 2;
+
+/** Mirrors playPlacement's deliberate hold-gates (AoE on thin board, removal
+ * with no target, mend at full HP). True = hold this card, don't cast. */
+function castHoldGate(p: Player, opp: Player, def: CardDef): boolean {
+  const eff = def.onCast;
+  if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return true;
+  if (eff?.action === 'sap' && eff.target === 'enemyUnit' && opp.board.length === 0) return true;
+  if (eff?.action === 'destroy' && eff.target !== 'allEnemyUnits' && opp.board.length === 0)
+    return true;
+  if (eff?.action === 'bind' && opp.board.length === 0) return true;
+  if (eff?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0))
+    return true;
+  return false;
+}
+
+/** One single-die option per DISTINCT value in [min..], cheapest-first — the
+ * solver decides which value to actually spend; duplicates of a value are
+ * interchangeable so only one option per value is needed. */
+function distinctAtLeastOptions(p: Player, freeIdx: number[], min: number): number[][] {
+  const seen = new Set<number>();
+  return freeIdx
+    .slice()
+    .sort((a, b) => p.dice[a].value - p.dice[b].value)
+    .filter((i) => {
+      const v = p.dice[i].value;
+      if (v < min || seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    })
+    .map((i) => [i]);
+}
+
+/** All legal dice selections for a card's numeric cast cost. */
+function castOptions(g: Game, p: Player, def: CardDef, freeIdx: number[]): number[][] {
+  const thr = effThreshold(g, p.id, def);
+  if (def.castCostKind === 'exact') {
+    const i = freeIdx.find((i) => p.dice[i].value === thr);
+    return i !== undefined ? [[i]] : [];
+  }
+  if (def.castCostKind === 'sum') {
+    // Enumerate subsets (<=31 for 5 dice); aim for the Overflow-clearing
+    // target when any subset reaches it (mirrors the v4.3 Overflow handling),
+    // else the bare threshold. Keep only irredundant subsets (every die
+    // needed to stay at/above the goal) so the option list stays tiny.
+    const n = freeIdx.length;
+    const all: { sel: number[]; sum: number }[] = [];
+    for (let m = 1; m < 1 << n; m++) {
+      let sum = 0;
+      const sel: number[] = [];
+      for (let b = 0; b < n; b++) {
+        if (m & (1 << b)) {
+          sel.push(freeIdx[b]);
+          sum += p.dice[freeIdx[b]].value;
+        }
+      }
+      if (sum >= thr) all.push({ sel, sum });
+    }
+    if (all.length === 0) return [];
+    const target = def.overflow ? thr + def.overflow.amount : thr;
+    const goal = all.some((s) => s.sum >= target) ? target : thr;
+    // When the Leader is undamaged, end-of-turn Pitch heals nothing (each
+    // leftover die is pure diceWasted) — so ANY superset that still pays the
+    // cost is a legal, free sink for otherwise-dead dice; expose every
+    // qualifying subset and let the solver's DIE_SPEND_BONUS dump dice that
+    // pay nothing else into the sum. With a damaged Leader, Pitch is worth a
+    // real Mend 1 per die, so only irredundant (minimal) subsets qualify.
+    const wasteful = p.leader.damage === 0;
+    return all
+      .filter(
+        (s) =>
+          s.sum >= goal &&
+          (wasteful || s.sel.every((i) => s.sum - p.dice[i].value < goal)), // irredundant unless pitch is dead anyway
+      )
+      .sort((a, b) => a.sel.length - b.sel.length || a.sum - b.sum)
+      .slice(0, 31)
+      .map((s) => s.sel);
+  }
+  // atLeast (+Overflow preference, mirroring the old greedy behavior: when a
+  // die clears the Overflow amount, spend that one).
+  const target = def.overflow ? thr + def.overflow.amount : thr;
+  const overflowOpts = def.overflow ? distinctAtLeastOptions(p, freeIdx, target) : [];
+  return overflowOpts.length > 0 ? overflowOpts : distinctAtLeastOptions(p, freeIdx, thr);
+}
+
+/** The OLD greedy per-card die selection (pre-v4.19), kept purely so the
+ * lapseGreedyAssignmentFixed counter can measure how often the solver
+ * actually re-routes dice relative to it. Never executed. */
+function greedyCastSelection(g: Game, p: Player, def: CardDef): number[] | null {
+  if (def.overflow && (def.castCostKind ?? 'atLeast') === 'atLeast') {
+    const thr = effThreshold(g, p.id, def);
+    const dieIdx = bestDieFor(p, thr);
+    if (dieIdx < 0) return null;
+    const oIdx = unplacedDice(p)
+      .filter((i) => p.dice[i].value - thr >= def.overflow!.amount)
+      .sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
+    return [oIdx !== undefined ? oIdx : dieIdx];
+  }
+  return bestSelectionFor(g, p, def);
+}
+
+/** True when this ability effect has nothing worthwhile to do right now —
+ * the same pointless-activation test the Leader/Location/Ultimate blocks in
+ * playPlacement apply. */
+function abilityPointless(p: Player, opp: Player, eff: Effect): boolean {
+  return (
+    (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+    ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+      opp.board.length === 0) ||
+    (eff.action === 'draw' && p.hand.length >= 8)
+  );
+}
+
+/** Build the full slot list for the current Placement state: every castable
+ * hand card (cast slots) plus every ability/Ultimate that could still fire
+ * this turn (reserve slots), sorted by value desc. */
+function buildAssignmentSlots(g: Game, p: Player, opp: Player): AssignSlot[] {
+  const freeIdx = unplacedDice(p);
+  if (freeIdx.length === 0) return [];
+  const slots: AssignSlot[] = [];
+
+  for (const c of p.hand) {
+    if (c.def.comboGate || c.def.type === 'Location') continue;
+    if (castHoldGate(p, opp, c.def)) continue;
+    if (hasKw(c.def, 'Twin')) {
+      // Same staging economy as the old loop: one staged copy at a time,
+      // only with hand depth to spare, cheapest sufficient die.
+      if (p.staging.some((s) => s.def.id === c.def.id)) continue;
+      if (p.hand.length < 3) continue;
+      const opts = distinctAtLeastOptions(p, freeIdx, effThreshold(g, p.id, c.def));
+      if (opts.length > 0)
+        slots.push({ kind: 'cast', inst: c, value: castPriority(g, p, c), options: opts });
+      continue;
+    }
+    const opts = castOptions(g, p, c.def, freeIdx);
+    if (opts.length > 0)
+      slots.push({ kind: 'cast', inst: c, value: castPriority(g, p, c), options: opts });
+  }
+
+  // Reserve slots — mirror the eligibility/pointless gates of steps 4-5 so a
+  // die is only ever held back for an ability that would genuinely fire.
+  const leaderAb = p.leader.def.ability;
+  if (leaderAb && !p.leader.abilityUsed && !abilityPointless(p, opp, leaderAb.effect)) {
+    const opts = distinctAtLeastOptions(p, freeIdx, effAbilityThreshold(g, p.leader));
+    if (opts.length > 0) slots.push({ kind: 'reserve', inst: p.leader, value: 18, options: opts });
+  }
+  if (
+    p.location?.def.ability &&
+    !p.location.abilityUsed &&
+    !abilityPointless(p, opp, p.location.def.ability.effect)
+  ) {
+    const opts = distinctAtLeastOptions(p, freeIdx, effAbilityThreshold(g, p.location));
+    if (opts.length > 0)
+      slots.push({ kind: 'reserve', inst: p.location, value: 14, options: opts });
+  }
+  for (const u of p.board) {
+    if (!u.def.ability || u.abilityUsed || u.hasAttacked) continue;
+    if (u.boundThisTurn || (u.enteredThisTurn && !hasKw(u.def, 'Swift'))) continue;
+    const eff = u.def.ability.effect;
+    if (abilityPointless(p, opp, eff)) continue;
+    if (eff.action === 'buff' && eff.target === 'allFriendlyUnits' && p.board.length < 2) continue;
+    // Units that would rather attack don't reserve a die (step 4's own rule).
+    const removalWorthIt = eff.action === 'destroy' && opp.board.length > 0;
+    if (canAttack(g, u) && effAtk(g, u) >= 3 && !removalWorthIt) continue;
+    const opts = distinctAtLeastOptions(p, freeIdx, effAbilityThreshold(g, u));
+    if (opts.length > 0)
+      slots.push({
+        kind: 'reserve',
+        inst: u,
+        value: 6 + unitAbilityValue(eff, opp.board.length) * 3,
+        options: opts,
+      });
+  }
+  const ult = p.leader.def.ultimate;
+  if (ult && !p.leader.ultimateUsed && p.turnsTaken >= ult.unlockTurn) {
+    const pointless =
+      abilityPointless(p, opp, ult.effect) ||
+      (ult.effect.target === 'allEnemyUnits' && opp.board.length < 2) ||
+      (ult.effect.action === 'buff' &&
+        ult.effect.target === 'allFriendlyUnits' &&
+        p.board.length < 2);
+    if (!pointless) {
+      const opts = distinctAtLeastOptions(p, freeIdx, ult.threshold);
+      if (opts.length > 0)
+        slots.push({ kind: 'reserve', inst: p.leader, value: 30, options: opts });
+    }
+  }
+
+  return slots.sort((a, b) => b.value - a.value);
+}
+
+/** Exact max-value assignment of dice to slots: exhaustive DFS over slots in
+ * value order with a (slotIndex, usedDiceMask) memo. Returns the chosen dice
+ * option per slot index (slots not in the map got no dice). */
+function solveDiceAssignment(slots: AssignSlot[]): Map<number, number[]> {
+  const n = slots.length;
+  const memo = new Map<number, { score: number; opt: number }>();
+  const key = (si: number, mask: number) => si * 1024 + mask; // 5 dice -> mask < 32
+  const rec = (si: number, mask: number): number => {
+    if (si >= n) return 0;
+    const k = key(si, mask);
+    const hit = memo.get(k);
+    if (hit) return hit.score;
+    let best = rec(si + 1, mask);
+    let bestOpt = -1;
+    const s = slots[si];
+    for (let oi = 0; oi < s.options.length; oi++) {
+      const opt = s.options[oi];
+      let m = 0;
+      let clash = false;
+      for (const di of opt) {
+        const b = 1 << di;
+        if (mask & b) {
+          clash = true;
+          break;
+        }
+        m |= b;
+      }
+      if (clash) continue;
+      const sc = s.value + DIE_SPEND_BONUS * opt.length + rec(si + 1, mask | m);
+      if (sc > best) {
+        best = sc;
+        bestOpt = oi;
+      }
+    }
+    memo.set(k, { score: best, opt: bestOpt });
+    return best;
+  };
+  rec(0, 0);
+  const picks = new Map<number, number[]>();
+  let mask = 0;
+  for (let si = 0; si < n; si++) {
+    const e = memo.get(key(si, mask));
+    if (!e || e.opt < 0) continue;
+    const opt = slots[si].options[e.opt];
+    picks.set(si, opt);
+    for (const di of opt) mask |= 1 << di;
+  }
+  return picks;
+}
+
 function playCombat(g: Game, p: Player) {
   const opp = opponentOf(g, p.id);
   let guard = 60; // safety valve
@@ -1187,9 +1449,9 @@ export function playTurn(g: Game) {
  *    (see unitAbilityValue). Now fixed to always pick the best; this counter
  *    fires whenever that changed which Unit got the die.
  */
-function lapse(g: Game, pid: string, key: string) {
+function lapse(g: Game, pid: string, key: string, by = 1) {
   const d = (g.stats.decisions[pid] ||= {});
-  d[key] = (d[key] || 0) + 1;
+  d[key] = (d[key] || 0) + by;
 }
 
 /** v4.16: true if consuming `sel` (the dice indices about to pay for an Echo
@@ -1251,21 +1513,112 @@ function recordRerollLapse(g: Game, p: Player) {
       .filter((c) => c.def.castCostKind === 'exact' && c.def.threshold !== undefined)
       .map((c) => effThreshold(g, p.id, c.def)),
   );
+  // v4.19: a low die that pays a real atLeast-cost card in hand is EMPLOYED,
+  // not dead — the reroll fix in chooseReroll now deliberately keeps such
+  // dice, so this detector must not count them (it previously only excused
+  // exact-cost and staged-Twin needs).
+  const atLeastThrs = p.hand
+    .filter(
+      (c) =>
+        !c.def.comboGate &&
+        c.def.type !== 'Location' &&
+        (c.def.castCostKind ?? 'atLeast') === 'atLeast' &&
+        c.def.threshold !== undefined,
+    )
+    .map((c) => effThreshold(g, p.id, c.def));
   const deadLowDie = p.dice.some(
-    (d) => !d.placed && d.value <= 2 && !stagedNeeds.has(d.value) && !exactNeeds.has(d.value),
+    (d) =>
+      !d.placed &&
+      d.value <= 2 &&
+      !stagedNeeds.has(d.value) &&
+      !exactNeeds.has(d.value) &&
+      !atLeastThrs.some((t) => t <= d.value),
   );
   if (deadLowDie) lapse(g, p.id, 'lapseRerollDeadLowDie');
 }
 
 /**
- * v4.16 harness upgrade: "wasted resources/mana-like resource left unused" —
- * a raw per-turn flag for "at least one die was never placed at all by the
- * time the turn ended," independent of `lapseWastedCastableDie` (which only
- * fires when a SPECIFIC card in hand could legally have used it). This is
- * the broader resource-utilization signal the task calls out separately.
+ * v4.16 harness upgrade: "wasted resources/mana-like resource left unused."
+ *
+ * v4.19.1 RE-POINT: the original per-turn binary ("any die unplaced at end
+ * of turn") pinned at ~15.5-16.6/game across four passes and was confirmed
+ * structural — 5 fresh dice a turn vs ~1 drawn card means auto-Pitch is the
+ * DESIGNED sink for the remainder, so the counter measured the rules, not
+ * the AI. Per the harness recommendation it now counts only turns where a
+ * stranded die had a LEGAL, non-deliberately-held use (a payable non-gated
+ * card in hand, or the unspent Leader Ability) — i.e. dice stranded WITH a
+ * legal use. The raw volume companion (`unusedDiceCount`) is unchanged.
  */
 function recordUnusedResourceLapse(g: Game, p: Player) {
-  if (p.dice.some((d) => !d.placed)) lapse(g, p.id, 'lapseUnusedDiceAtEndTurn');
+  const unused = p.dice.filter((d) => !d.placed).length;
+  if (unused === 0) return;
+  if (strandedDieHadLegalUse(g, p)) lapse(g, p.id, 'lapseUnusedDiceAtEndTurn');
+  // v4.19: die-count companion (not just the per-turn binary above) — the
+  // avg unused dice per game/turn, so harness runs can see whether the
+  // assignment solver moves the actual VOLUME of stranded dice even when the
+  // "at least one die unplaced this turn" binary is pinned at its structural
+  // ceiling (5 fresh dice a turn vs ~1 drawn card — Pitch is the designed
+  // sink for the remainder; see resolveEndPhasePreDiscard in engine.ts).
+  lapse(g, p.id, 'unusedDiceCount', unused);
+}
+
+/** v4.19.1: shared "a stranded die could still have paid for something real"
+ * check — a payable non-gated card in hand (mirroring playPlacement's
+ * deliberate holds, which aren't lapses) or the unspent, non-pointless
+ * Leader Ability. Used by recordPlacementLapses (per-cause counters) and by
+ * the re-pointed lapseUnusedDiceAtEndTurn (see recordUnusedResourceLapse). */
+function strandedDieHadLegalUse(g: Game, p: Player): boolean {
+  const opp = opponentOf(g, p.id);
+  const unplaced = p.dice.filter((d) => !d.placed).map((d) => d.value);
+  if (unplaced.length === 0) return false;
+  const maxDie = Math.max(...unplaced);
+  if (strandedCastableCard(g, p, opp, unplaced, maxDie)) return true;
+  const ab = p.leader.def.ability;
+  if (ab && !p.leader.abilityUsed) {
+    const eff = ab.effect;
+    const pointless =
+      (eff.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0)) ||
+      ((eff.action === 'bind' || (eff.action === 'sap' && eff.target === 'enemyUnit')) &&
+        opp.board.length === 0) ||
+      (eff.action === 'draw' && p.hand.length >= 8);
+    if (!pointless && maxDie >= effAbilityThreshold(g, p.leader)) return true;
+  }
+  return false;
+}
+
+function strandedCastableCard(
+  g: Game,
+  p: Player,
+  opp: Player,
+  unplaced: number[],
+  maxDie: number,
+): boolean {
+  return p.hand.some((c) => {
+    if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
+      return false;
+    const thr = effThreshold(g, p.id, c.def);
+    const payable =
+      c.def.castCostKind === 'exact'
+        ? unplaced.includes(thr)
+        : c.def.castCostKind === 'sum'
+          ? unplaced.reduce((a, b) => a + b, 0) >= thr
+          : maxDie >= thr;
+    if (!payable) return false;
+    // Mirror playPlacement's deliberate holds — those aren't lapses.
+    const eff = c.def.onCast;
+    if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return false;
+    if (
+      (eff?.action === 'sap' || eff?.action === 'destroy' || eff?.action === 'bind') &&
+      eff?.target !== 'enemyLeader' &&
+      eff?.target !== 'anyTarget' &&
+      opp.board.length === 0
+    )
+      return false;
+    if (eff?.action === 'mend' && p.leader.damage === 0 && !p.board.some((u) => u.damage > 0))
+      return false;
+    if (hasKw(c.def, 'Twin')) return false; // deliberate staging economy
+    return true;
+  });
 }
 
 function recordPlacementLapses(g: Game, p: Player) {
@@ -1273,36 +1626,7 @@ function recordPlacementLapses(g: Game, p: Player) {
   const unplaced = p.dice.filter((d) => !d.placed).map((d) => d.value);
   if (unplaced.length > 0) {
     const maxDie = Math.max(...unplaced);
-    const castable = p.hand.some((c) => {
-      if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
-        return false;
-      const thr = effThreshold(g, p.id, c.def);
-      const payable =
-        c.def.castCostKind === 'exact'
-          ? unplaced.includes(thr)
-          : c.def.castCostKind === 'sum'
-            ? unplaced.reduce((a, b) => a + b, 0) >= thr
-            : maxDie >= thr;
-      if (!payable) return false;
-      // Mirror playPlacement's deliberate holds — those aren't lapses.
-      const eff = c.def.onCast;
-      if (eff?.target === 'allEnemyUnits' && opp.board.length < 2) return false;
-      if (
-        (eff?.action === 'sap' || eff?.action === 'destroy' || eff?.action === 'bind') &&
-        eff?.target !== 'enemyLeader' &&
-        eff?.target !== 'anyTarget' &&
-        opp.board.length === 0
-      )
-        return false;
-      if (
-        eff?.action === 'mend' &&
-        p.leader.damage === 0 &&
-        !p.board.some((u) => u.damage > 0)
-      )
-        return false;
-      if (hasKw(c.def, 'Twin')) return false; // deliberate staging economy
-      return true;
-    });
+    const castable = strandedCastableCard(g, p, opp, unplaced, maxDie);
     if (castable) lapse(g, p.id, 'lapseWastedCastableDie');
     const ab = p.leader.def.ability;
     if (ab && !p.leader.abilityUsed) {

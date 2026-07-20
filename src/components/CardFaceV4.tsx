@@ -18,7 +18,15 @@ import {
   RARITY_HEX,
 } from '../meta/rarity';
 import { cardColors } from '../game/v3/colors';
-import { COLOR_HEX, COLOR_LETTER, colorBg, colorHexPrimary } from '../meta/colors';
+import {
+  cardKeywords,
+  mechanicLabels,
+  KEYWORD_TIERS,
+  keywordTier,
+  MechanicLabel,
+  CardKeyword,
+} from '../game/v3/keywords';
+import { COLOR_LETTER, COLOR_PIP, colorBg, colorHexPrimary } from '../meta/colors';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -81,6 +89,14 @@ const PREMIUM_CSS = `
 .ur-aurora {
   opacity: 0;
   transition: opacity 400ms ease;
+  /* v4.19: confined to the outer border ring (same xor-mask trick as
+     .my-void) — the aurora sweep used to wash across the whole face and
+     fight the card text for legibility. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  padding: 7px;
   background: linear-gradient(115deg,
     rgba(80, 255, 218, 0) 12%,
     rgba(80, 255, 218, 0.4) 30%,
@@ -264,6 +280,19 @@ function MythicCrest() {
     </svg>
   );
 }
+
+/** v4.19: inline xor-mask that confines a full-face animated layer to the
+ * card's outer border ring, so premium border animations never overlap the
+ * name/stats/chips/flavor content. Same technique as `.my-void`/`.ur-aurora`
+ * in PREMIUM_CSS, expressed as an inline style for layers whose base class
+ * lives in index.css (ultra-sparkle, rarity-sheen). */
+const EDGE_RING_MASK: React.CSSProperties = {
+  padding: 7,
+  WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+  WebkitMaskComposite: 'xor',
+  mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+  maskComposite: 'exclude',
+};
 
 /** Small per-type glyph shown next to the name — a quick visual "what is this" cue. */
 const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> = {
@@ -492,27 +521,6 @@ export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
 }
 
-/** Keywords whose numeric detail (e.g. "Bulwark 2", "Resolve 1") is already
- * printed as its own line by `cardRuleLines` above. These are still tagged
- * in `def.keywords` (for deck-building/filtering), but must be skipped in
- * the top-of-box keyword row — otherwise the same ability shows up twice on
- * the card: once as a bare name up top, once with its real number in the
- * rules text below. Plain keywords with no dedicated rules line of their
- * own (Guard, Swift, Ward, ...) still belong in the top row. */
-const RULES_LINE_KEYWORDS = new Set([
-  'Bulwark',
-  'Toll',
-  'Steel',
-  'Avenge',
-  'Crescendo',
-  'Aftershock',
-  'Tribute',
-  'Excavate',
-  'Contested',
-  'Resolve',
-  'Ultimate',
-]);
-
 /** Scales a font size down as text grows past a soft length target, so long
  * names/flavor text shrink to fit instead of getting clipped or truncated.
  * Never shrinks below `min`. */
@@ -632,14 +640,18 @@ let nextAutoIntroSlot = 0;
  * (kwList) and any inline keyword mention found inside a rules sentence both
  * drive the same click-to-open/auto-introduce popover through this hook, so
  * a keyword is equally clickable whichever form it's rendered in. */
-function useKeywordPopover(kw: string, autoIntroduce?: boolean) {
+function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: string) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   // Pending auto-close timer for the auto-introduced popover — cleared the
   // moment the player interacts with it manually, so a manual re-open isn't
   // cut short by a timeout scheduled for the earlier auto-open.
   const autoCloseRef = useRef<number | null>(null);
-  const text = KEYWORD_GLOSSARY[kw];
+  // v4.19: tier-aware — callers that know the card's exact tier pass its
+  // tier-specific description (tierDescription via cardKeywords); the
+  // generic KEYWORD_GLOSSARY stays as the fallback for tier-less mentions
+  // (inline rules words like Sap/Mend/Bind, HowToPlay links, log lines).
+  const text = textOverride ?? KEYWORD_GLOSSARY[kw];
 
   const clearAutoClose = () => {
     if (autoCloseRef.current !== null) {
@@ -740,15 +752,30 @@ function KeywordPopover({
  * readable straight off the card without needing to click anything. Replaces
  * the old opaque yellow "badge" pill, which hid the definition behind a tap
  * and read as a UI chip rather than card text. */
+/** v4.19: the card's ONLY mechanics surface — a compact clickable pill chip.
+ * Keyword chips show "Name + tier roman" (plus the bundled activation cost
+ * for activated keywords); tapping opens the shared glossary popover with the
+ * TIER-SPECIFIC description (tierDescription via cardKeywords). Mechanic
+ * chips (mechanicLabels) render identically with their structured label.
+ * Free-form rules text is gone from card faces entirely. */
 export function KeywordChip({
   kw,
+  label,
+  text,
+  cost,
   small,
   autoIntroduce,
-  explainer = true,
-  fontSize,
+  accent,
 }: {
   key?: React.Key;
+  /** Base keyword name — popover title + "seen keywords" localStorage key. */
   kw: string;
+  /** Chip label, e.g. "Bulwark II" (defaults to the bare keyword name). */
+  label?: string;
+  /** Tier-specific popover text; falls back to KEYWORD_GLOSSARY when omitted. */
+  text?: string;
+  /** Bundled activation cost (activated keywords) — printed on the chip. */
+  cost?: string;
   small?: boolean;
   /** Auto-opens this keyword's popover once per device the first time it's
    * ever seen (tracked in localStorage), so new players discover the
@@ -757,37 +784,87 @@ export function KeywordChip({
    * a screen that renders many cards at once (Collection, Deck Builder)
    * would fire a stack of popovers simultaneously. */
   autoIntroduce?: boolean;
-  /** Print the reminder text inline after the keyword name — only the
-   * `full` card tier has room for this; smaller tiers pass false and rely
-   * on the click-to-open popover instead, so the definition never runs the
-   * card's text box past its edges. */
-  explainer?: boolean;
-  /** Explicit px font size, overriding the small/normal default — used by
-   * the `full` tier to shrink long keyword+rules text as a unit so it fits
-   * the fixed-height card instead of clipping at the bottom edge. */
-  fontSize?: number;
+  /** Chip tint (defaults to the neutral ink-on-paper pill). */
+  accent?: string;
 }) {
-  const { pos, btnRef, text, open, close } = useKeywordPopover(kw, autoIntroduce);
+  const { pos, btnRef, text: popText, open, close } = useKeywordPopover(kw, autoIntroduce, text);
 
   return (
-    <span
-      className={cn('leading-snug', !fontSize && (small ? 'text-[6.5px]' : 'text-[9px]'))}
-      style={fontSize ? { fontSize } : undefined}
-    >
-      <span className="relative inline-block">
-        <button
-          ref={btnRef}
-          type="button"
-          onClick={open}
-          className="font-bold underline decoration-dotted underline-offset-2 cursor-help"
-        >
-          {kw}
-        </button>
-        {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
-      </span>
-      {explainer && text && <span className="italic opacity-80"> ({text})</span>}
+    <span className="relative inline-block max-w-full">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={open}
+        className={cn(
+          'inline-flex items-center gap-0.5 max-w-full rounded-full border font-bold leading-tight cursor-help text-left',
+          small ? 'text-[6.5px] px-1 py-[1px]' : 'text-[8.5px] px-1.5 py-[2px]',
+        )}
+        style={{
+          color: accent ?? 'var(--c-ink)',
+          borderColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 45%, transparent)`,
+          backgroundColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 10%, var(--c-paper))`,
+        }}
+      >
+        <span className="truncate">{label ?? kw}</span>
+        {cost && (
+          <span className="opacity-70 font-semibold normal-case truncate shrink-[2]">· {cost}</span>
+        )}
+      </button>
+      {pos && popText && <KeywordPopover kw={label ?? kw} text={popText} pos={pos} close={close} />}
     </span>
   );
+}
+
+/** Short kind label + longer plain-English explainer for each structured
+ * mechanic chip — the popover body backing mechanicLabels(def)'s chips. */
+function mechanicExplain(def: CardDef, m: MechanicLabel): string {
+  switch (m.kind) {
+    case 'onCast':
+      return def.comboGate
+        ? `${describeEffect(def.onCast!)} — triggers when this card is cast by rolling ${GATE_LABEL[def.comboGate] || def.comboGate}.`
+        : `${describeEffect(def.onCast!)} — triggers once, the moment this card is cast.`;
+    case 'ability':
+      return `Ability Slot: place a die showing ${def.ability!.threshold}+ on this card (once per turn) to trigger: ${describeEffect(def.ability!.effect)}.`;
+    case 'combo':
+      return `At Combo Check, if your final five-die roll contains ${GATE_LABEL[def.combo!.pattern] || def.combo!.pattern}: ${describeEffect(def.combo!.effect)}.`;
+    case 'overflow':
+      return `If the die placed to cast this beats its effective cost by ${def.overflow!.amount}+, also: ${describeEffect(def.overflow!.effect)}.`;
+    case 'twinBonus':
+      return `Once both Twin dice are placed: ${describeEffect(def.twinBonus!)}.`;
+    case 'stagedPassive':
+      return `While parked in your Staging Zone waiting for its Twin match: ${describeEffect(def.stagedPassive!)} each of your turns.`;
+    case 'aftershock':
+      return `Aftershock — at the very start of your next turn, a delayed repeat fires: ${describeEffect(def.aftershock!)}.`;
+    case 'tribute':
+      return `Tribute — at your End Phase, if you Pitched enough dice this turn: ${describeEffect(def.tribute!)}.`;
+    case 'locPassive':
+      return def.locPassive === 'ATK_ALL'
+        ? 'Passive while this Location is in play: all your Units get +2 ATK.'
+        : 'Passive while this Location is in play: all your Units get +2 max HP.';
+    case 'ultimate':
+      return `Ultimate — starting your turn ${def.ultimate!.unlockTurn}, once per game, place a die showing ${def.ultimate!.threshold}+: ${describeEffect(def.ultimate!.effect)}.`;
+  }
+}
+
+/** Per-mechanic-kind chip tint so mechanic chips scan by category. */
+const MECHANIC_ACCENT: Record<MechanicLabel['kind'], string> = {
+  onCast: '#B45309',
+  ability: '#0E7490',
+  combo: '#A855F7',
+  overflow: '#DC2626',
+  twinBonus: '#7C3AED',
+  stagedPassive: '#7C3AED',
+  aftershock: '#EA580C',
+  tribute: '#64748B',
+  locPassive: '#16A34A',
+  ultimate: '#B91C1C',
+};
+
+/** The tier's bundled activation cost, for activated keywords ('' otherwise). */
+function keywordActivation(def: CardDef, kw: string): string {
+  const kd = KEYWORD_TIERS[kw];
+  if (!kd?.activated) return '';
+  return kd.tiers[Math.min(kd.tiers.length, Math.max(1, keywordTier(def, kw))) - 1].activation ?? '';
 }
 
 /** v4.3.1: an inline, in-sentence keyword mention (e.g. "Twin bonus:" inside
@@ -1039,15 +1116,13 @@ const TIER: Record<
     typeLine: string;
     showSetSuffix: boolean;
     textBoxPad: string;
+    /** Max keyword+mechanic chips shown; overflow collapses into a "+N" chip
+     * (full preview/inspector always shows everything). */
     keywordMax: number;
     keywordSmall: boolean;
-    /** Only the `full` tier has room to print each keyword's reminder text
-     * inline (MTG-style); smaller tiers show just the clickable keyword name
-     * — tap/click still opens the same popover — to avoid running long
-     * definitions off the edge of a small card. */
-    keywordExplainer: boolean;
-    rules: string;
-    rulesMultiline: boolean;
+    /** Print each activated keyword's bundled cost on its chip — only tiers
+     * wide enough for it; smaller tiers keep the cost in the popover. */
+    chipCosts: boolean;
     showFlavor: boolean;
   }
 > = {
@@ -1072,11 +1147,9 @@ const TIER: Record<
     typeLine: 'mt-0 text-[5.5px]',
     showSetSuffix: false,
     textBoxPad: 'p-0.5',
-    keywordMax: 0,
+    keywordMax: 2,
     keywordSmall: true,
-    keywordExplainer: false,
-    rules: 'hidden',
-    rulesMultiline: false,
+    chipCosts: false,
     showFlavor: false,
   },
   compact: {
@@ -1100,11 +1173,9 @@ const TIER: Record<
     typeLine: 'mt-0.5 text-[7px]',
     showSetSuffix: false,
     textBoxPad: 'p-1',
-    keywordMax: 2,
+    keywordMax: 4,
     keywordSmall: true,
-    keywordExplainer: false,
-    rules: 'mt-0.5 text-[6.5px] line-clamp-1',
-    rulesMultiline: false,
+    chipCosts: false,
     showFlavor: false,
   },
   standard: {
@@ -1128,11 +1199,9 @@ const TIER: Record<
     typeLine: 'mt-0.5 text-[8px]',
     showSetSuffix: false,
     textBoxPad: 'p-1',
-    keywordMax: 4,
+    keywordMax: 6,
     keywordSmall: false,
-    keywordExplainer: false,
-    rules: 'mt-0.5 text-[7.5px] line-clamp-2',
-    rulesMultiline: false,
+    chipCosts: false,
     showFlavor: false,
   },
   full: {
@@ -1156,11 +1225,9 @@ const TIER: Record<
     typeLine: 'mt-1 text-[10px]',
     showSetSuffix: true,
     textBoxPad: 'p-1.5',
-    keywordMax: 8,
+    keywordMax: 99,
     keywordSmall: false,
-    keywordExplainer: true,
-    rules: 'mt-1 text-[9.5px] space-y-0.5',
-    rulesMultiline: true,
+    chipCosts: true,
     showFlavor: true,
   },
 };
@@ -1229,41 +1296,15 @@ export function CardFace({
 }) {
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
-  const rules = cardRuleLines(def);
-  // Skip keywords whose numeric detail is already printed as its own rules
-  // line (see RULES_LINE_KEYWORDS) so the top-of-box row never repeats what
-  // the rules text below it already says.
-  const topKeywords = kwList(def).filter((kw) => !RULES_LINE_KEYWORDS.has(kw));
-  // Cards printing full inline reminder text (the `full` tier) can easily
-  // out-grow the fixed-height card — a card with a long keyword like Echo
-  // plus several rules lines was clipping mid-sentence at the card's bottom
-  // edge. Shrink the keyword+rules text together, the same way the name
-  // already shrinks for a long title, instead of letting it silently
-  // overflow the (overflow-hidden) card box.
-  const textBoxCharsWithExplainer = cfg.keywordExplainer
-    ? topKeywords.reduce((sum, kw) => {
-        const explainer = KEYWORD_GLOSSARY[kw];
-        return sum + kw.length + (explainer ? explainer.length + 3 : 0);
-      }, 0) + rules.join(' ').length
-    : 0;
-  // v4.15: printing every keyword's reminder text inline (the `full` tier's
-  // MTG-style explainer) can run long enough that shrinking the shared font
-  // scale bottoms out at `min` and the rules/flavor text still clips at the
-  // card's bottom edge. When that happens, drop the inline reminder text
-  // first — falling back to just the bolded, still-clickable keyword name
-  // (KEYWORD_GLOSSARY stays reachable via its popover) — rather than ever
-  // truncating the actual ability/flavor sentences, which are the part a
-  // player actually needs to read every time.
-  const explainerWouldOverflow =
-    cfg.keywordExplainer &&
-    fitFontSize('x'.repeat(textBoxCharsWithExplainer), 1, 0.55, 160) <= 0.55;
-  const showKeywordExplainer = cfg.keywordExplainer && !explainerWouldOverflow;
-  const textBoxChars = showKeywordExplainer
-    ? textBoxCharsWithExplainer
-    : topKeywords.reduce((sum, kw) => sum + kw.length, 0) + rules.join(' ').length;
-  const textBoxScale = cfg.keywordExplainer
-    ? fitFontSize('x'.repeat(textBoxChars), 1, 0.55, 160)
-    : 1;
+  // v4.19: the card's mechanics render EXCLUSIVELY as clickable chips —
+  // keyword chips (name + tier roman + bundled activation cost) from
+  // cardKeywords(), mechanic chips from mechanicLabels(). No free-form
+  // rules text is printed on the face anymore; every chip's tier-specific
+  // description lives in its click-to-open glossary popover.
+  const keywordChips: CardKeyword[] = cardKeywords(def);
+  const mechChips: MechanicLabel[] = mechanicLabels(def);
+  const totalChips = keywordChips.length + mechChips.length;
+  const hiddenChips = Math.max(0, totalChips - cfg.keywordMax);
   const set = setStyle(def.set);
   // v4.13: Leaders don't carry a color themselves (LEADER_COLORS is their
   // deck-identity, a different concept from a printed card's own color).
@@ -1283,18 +1324,12 @@ export function CardFace({
   // grows to accommodate overflow; any residual overflow clips at the
   // (already overflow-hidden) outer edge instead of distorting the ratio.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
-  // v4.18: flavorFontPx used to be sized purely off the flavor string's own
-  // length, with no awareness of how much of the shared text-box height the
-  // keyword/rules block above it already consumed — a card with a short
-  // flavor line but a long rules block (which shrinks independently via
-  // textBoxScale) could still print flavor text at full size into a box
-  // that had no room left for it, reading as run-off/overlap. Fold
-  // textBoxScale in as a floor multiplier so flavor text shrinks in step
-  // with however compressed the block above it got, not just its own text.
-  const flavorFontPx = Math.max(
-    5.5,
-    fitFontSize(def.flavor || '', 9, 6.5, 85) * Math.min(1, textBoxScale || 1),
-  );
+  // v4.19: with rules text gone, flavor gets the whole remaining text box —
+  // autoscale off its own length, and the render below additionally hard
+  // line-clamps + hides overflow so flavor can NEVER run off the frame.
+  // Flavor only prints at the `full` tier at all (cfg.showFlavor): every
+  // smaller template (board micro, hand compact, grid standard) drops it.
+  const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 110);
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
   // animated sheen; Mythic additionally gets a pulsing frame and a distinct
   // gold-on-red name banner instead of the shared tinted-paper header.
@@ -1400,7 +1435,7 @@ export function CardFace({
         style={
           mythic || fullArt || ultra
             ? undefined
-            : { backgroundColor: `color-mix(in srgb, ${colorFillHex} 20%, var(--c-paper))` }
+            : { backgroundColor: `color-mix(in srgb, ${colorFillHex} 45%, var(--c-paper))` }
         }
       >
         <span
@@ -1712,46 +1747,48 @@ export function CardFace({
               : {
                   backgroundColor: mythic
                     ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-                    : 'color-mix(in srgb, var(--c-ink) 4%, var(--c-paper))',
+                    : // Near-paper panel with a whisper of the card's color —
+                      // keeps chip/flavor contrast solid over the (now much
+                      // stronger) color-identity body wash.
+                      `color-mix(in srgb, ${colorFillHex} 8%, var(--c-paper))`,
                 }
           }
         >
-          {topKeywords.length > 0 && cfg.keywordMax > 0 && (
-            <div
-              className={cn(
-                'shrink-0',
-                showKeywordExplainer
-                  ? 'flex flex-col'
-                  : 'flex flex-row flex-wrap gap-x-1.5 gap-y-0 min-h-[9px]',
-              )}
-            >
-              {topKeywords.slice(0, cfg.keywordMax).map((kw) => (
+          {totalChips > 0 && cfg.keywordMax > 0 && (
+            <div className="shrink-0 flex flex-row flex-wrap gap-1 min-h-[9px] overflow-hidden">
+              {keywordChips.slice(0, cfg.keywordMax).map((k) => (
                 <KeywordChip
-                  key={kw}
-                  kw={kw}
+                  key={k.kw}
+                  kw={k.kw}
+                  label={k.label}
+                  text={k.description}
+                  cost={cfg.chipCosts ? keywordActivation(def, k.kw) : undefined}
                   small={cfg.keywordSmall}
                   autoIntroduce={introduceKeywords}
-                  explainer={showKeywordExplainer}
-                  fontSize={
-                    cfg.keywordExplainer ? (cfg.keywordSmall ? 6.5 : 9) * textBoxScale : undefined
-                  }
+                  accent={k.atCap ? '#B45309' : undefined}
                 />
               ))}
-            </div>
-          )}
-
-          {rules.length > 0 && (
-            <div
-              className={cn('shrink-0 leading-snug', cfg.rules, topKeywords.length === 0 && 'mt-0')}
-              style={{
-                ...(fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined),
-                ...(cfg.keywordExplainer ? { fontSize: 9.5 * textBoxScale } : undefined),
-              }}
-            >
-              {cfg.rulesMultiline ? (
-                rules.map((r, i) => <div key={i}>{renderKeywordText(r)}</div>)
-              ) : (
-                <div>{renderKeywordText(rules.join(' · '), true)}</div>
+              {mechChips
+                .slice(0, Math.max(0, cfg.keywordMax - keywordChips.length))
+                .map((m, i) => (
+                  <KeywordChip
+                    key={`${m.kind}-${i}`}
+                    kw={m.label}
+                    text={mechanicExplain(def, m)}
+                    small={cfg.keywordSmall}
+                    accent={MECHANIC_ACCENT[m.kind]}
+                  />
+                ))}
+              {hiddenChips > 0 && (
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full border border-[var(--c-ink)]/30 font-bold opacity-70',
+                    cfg.keywordSmall ? 'text-[6.5px] px-1' : 'text-[8.5px] px-1.5',
+                  )}
+                  title="More abilities — expand the card to see everything"
+                >
+                  +{hiddenChips}
+                </span>
               )}
             </div>
           )}
@@ -1759,12 +1796,12 @@ export function CardFace({
           {cfg.showFlavor && def.flavor && (
             <div
               className={cn(
-                'mt-1 pt-1 border-t',
+                'mt-1 pt-1 border-t min-h-0 overflow-hidden',
                 fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
               )}
             >
               <p
-                className={cn('leading-snug break-words', set.className)}
+                className={cn('leading-snug break-words line-clamp-4', set.className)}
                 style={{
                   fontSize: flavorFontPx,
                   textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
@@ -1792,8 +1829,8 @@ export function CardFace({
           {cardColorsForFace.map((c) => (
             <span
               key={c}
-              className="w-2.5 h-2.5 rounded-full border border-[var(--c-ink)]/40 flex items-center justify-center text-[5px] font-black leading-none text-white"
-              style={{ backgroundColor: COLOR_HEX[c] }}
+              className="w-3 h-3 rounded-full border border-[var(--c-ink)]/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.5)] flex items-center justify-center text-[6px] font-black leading-none"
+              style={{ backgroundColor: COLOR_PIP[c].bg, color: COLOR_PIP[c].fg }}
             >
               {COLOR_LETTER[c]}
             </span>
@@ -1817,13 +1854,22 @@ export function CardFace({
             'rarity-sheen absolute inset-0 pointer-events-none',
             mythic ? 'opacity-80' : ultra ? 'opacity-70' : 'opacity-50',
           )}
+          // Ultra-Rare: the moving sheen stays on the border ring only, so
+          // the animation never sweeps across (and fights) the card text.
+          style={ultra ? EDGE_RING_MASK : undefined}
         />
       )}
       {/* v4.6 Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
           gold corner brackets, over the animated gold-leaf name banner. */}
       {ultra && !dimmed && (
         <>
-          <div aria-hidden className="ultra-sparkle absolute inset-0 pointer-events-none" />
+          <div
+            aria-hidden
+            className="ultra-sparkle absolute inset-0 pointer-events-none"
+            // Confined to the border ring — the gold-dust twinkle used to
+            // sit over the whole face, including the text box.
+            style={EDGE_RING_MASK}
+          />
           {/* v4.8 "Aurora Vault" (full tier only): chromatic cut-corner
               lattice with two counter-rotating light-traces, plus a hover/
               inspector-gated aurora ribbon sweep. Smaller tiers keep just

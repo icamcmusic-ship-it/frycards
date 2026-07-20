@@ -74,6 +74,15 @@ export interface CardDef {
   hp?: number;
   /** Simple keywords: Guard, Swift, Pierce, Ward, Frenzy, Anchor, Echo, Scrap, Rally, Twin. */
   keywords?: string[];
+  /**
+   * v4.19 keyword tier system: tier (1..5, rendered I..V) per keyword in
+   * `keywords`. A keyword+tier always means the same ability and cost
+   * contribution on every card — see src/game/v3/keywords.ts
+   * (KEYWORD_TIERS) and docs/KEYWORD_TIERS.md. Absent entries (and legacy /
+   * curated cards with no map at all) resolve via keywords.ts's
+   * `keywordTier()` defaults, which reproduce exact pre-tier behavior.
+   */
+  keywordTiers?: Record<string, number>;
   /** One Ability Slot (repeatable, once per turn, mutually exclusive with attacking). */
   ability?: { threshold: number; effect: Effect };
   /** Effect on cast (Charms/Events resolve this then discard; Units trigger it on entry). */

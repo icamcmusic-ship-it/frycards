@@ -131,6 +131,9 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
       }
       setListError('');
       refreshDecks();
+    } catch {
+      // A thrown rejection previously escaped unhandled — no message at all.
+      setListError('Could not delete — check your connection and try again.');
     } finally {
       setDeletingId(null);
     }
@@ -453,18 +456,25 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   }, [grouped]);
 
   const handleSave = async () => {
-    if (!session?.user || !leaderId) return;
+    if (!session?.user || !leaderId || saving) return;
     setSaving(true);
     setSaveError('');
-    const { error } = await saveDeck({
-      id: deck?.id,
-      name: name.trim() || 'New Deck',
-      leader_id: leaderId,
-      card_ids: cardIds,
-    });
-    setSaving(false);
-    if (error) setSaveError(error);
-    else onDone();
+    try {
+      const { error } = await saveDeck({
+        id: deck?.id,
+        name: name.trim() || 'New Deck',
+        leader_id: leaderId,
+        card_ids: cardIds,
+      });
+      if (error) setSaveError(error);
+      else onDone();
+    } catch {
+      // A thrown rejection (offline/timeout) previously skipped
+      // setSaving(false), leaving the button stuck on "SAVING…" forever.
+      setSaveError('Could not save — check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';

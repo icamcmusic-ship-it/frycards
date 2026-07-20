@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchCardTemplates, recordMatchResult, MatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
 import { HowToPlayScreen } from './components/HowToPlay';
-import { Archetype, buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
+import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
 import { preloadImages } from './lib/preload';
@@ -32,7 +32,7 @@ import { useTheme } from './meta/useTheme';
 // Play setup — a freshly-rolled random deck, or one of the player's own
 // saved decks
 // ---------------------------------------------------------------------------
-type MatchSetup = { kind: 'random'; archetype: Archetype } | { kind: 'custom'; deck: DeckRow };
+type MatchSetup = { kind: 'custom'; deck: DeckRow };
 
 function PlayScreen({
   onStart,
@@ -56,7 +56,12 @@ function PlayScreen({
         </span>
       </div>
       <div className="p-6 max-w-6xl mx-auto">
-        {!guest && (
+        {guest ? (
+          <p className="text-[11px] font-bold text-[var(--c-steel)]">
+            Guest mode can't bring a deck into battle — create an account and build one in the
+            Deck Builder (30 cards, max 3 copies each) to play.
+          </p>
+        ) : (
           <>
             <h2 className="heading-font text-base mb-3 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
               YOUR DECKS
@@ -102,44 +107,12 @@ function PlayScreen({
             )}
           </>
         )}
-
-        <h2 className="heading-font text-base mb-3 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-          RANDOM DECK
-        </h2>
-        {guest && (
-          <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
-            Guest mode: play with a freshly randomized deck. Create an account to forge your own.
-          </p>
-        )}
-        <button
-          onClick={() => onStart({ kind: 'random', archetype: randomArchetype() })}
-          className="btn-pop w-72 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
-        >
-          <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
-            <span className="text-[9px] heading-font text-[var(--c-yellow)]">
-              RANDOM LEADER &amp; DECK
-            </span>
-            <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] shrink-0">
-              {LEADER_HP} HP
-            </span>
-          </div>
-          <div className="p-3">
-            <div className="heading-font text-base leading-tight">Roll the dice ▸</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-              A fresh, legal 30-card deck built around a random Leader and keyword lean — a
-              different build every time you click.
-            </div>
-          </div>
-        </button>
       </div>
     </div>
   );
 }
 
 function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
-  if (setup.kind === 'random') {
-    return { deck: buildDeck(setup.archetype), label: setup.archetype.label };
-  }
   return {
     deck: deckDefFromCustom(setup.deck.leader_id, setup.deck.card_ids, setup.deck.name),
     label: setup.deck.name,
