@@ -7,6 +7,95 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.15 balance + CPU AI pass
+
+- **Balance backlog cleared** (details in `docs/BALANCE_SIM_FINDINGS_v4.15.md`):
+  Shinobi Avenge Grind's weak `Excavate` swap fixed (45.5%→73.8%, fully
+  recovered); a new Mer-King archetype that deliberately avoids Guard
+  confirms Mer-King's dominance is concentrated in Guard/Bulwark
+  specifically, not a broad Leader-kit strength (25.0% win rate on its
+  own); exact-cost wall bodies (Flickering Sea Pens/Cavernous Watcher)
+  confirmed already resolved by the color-identity work, no fix needed.
+  Sovereign Crimson Assault's retune (Avenge→Echo) did NOT help
+  (34.0%→29.0%) — an honest miss, flagged for a different lever next
+  pass. Formally closed 5 long-open items as accepted-design decisions
+  (Crescendo, cost-vs-value normalization, wall-list meta, comeback rate,
+  Crimson's card count) rather than re-flagging them every pass.
+- **CPU decision-making improvements** (`src/game/v3/ai.ts`): (1)
+  Placement now recognizes when a `destroy` card would clear a Guard and
+  open a lethal attack this turn, and prioritizes it accordingly; (2)
+  Combat avoids overkilling a Guard with its biggest attacker, sending the
+  smallest sufficient attacker instead and preserving bigger attackers
+  for face damage once the wall falls; (3) reroll strategy now has an
+  explicit branch for hands with zero combo-gate cards, instead of
+  silently falling into pair-keeping logic that doesn't apply; (4)
+  mulligan now recognizes a coherent multi-card gate-family hand as
+  keepable even with no individually-cheap card, and a stray
+  raw-threshold comparison in the mulligan bottom-card logic was fixed to
+  use the same `costWeight()` helper every other card-value comparison in
+  the file already uses.
+- **New instrumentation**: `guardClearLethalOpportunity`/
+  `guardClearLethalConverted` decision-correlation counters. Measured:
+  the opportunity arises in ~1 of 8 games and converts to a win 73.6% of
+  the time — confirms the Guard-clear fix is real and meaningfully sized,
+  not a paper win. Full re-verification (85,200 games across two runs):
+  no invariant violations, all previously-fixed lapse detectors stayed at
+  their expected zero/low baseline.
+
+### v4.14b balance pass — color-aware archetype re-tune
+
+- **Retuned 7 archetypes across 4 Leaders** whose `keywords:` included at
+  least one color outside their Leader's identity (Abyss Sap-Echo Control,
+  Abyss Pierce Aggro, Sea Witch Ward-Steel Wall, Mer King Twin Heal,
+  Shinobi Tempo-Anchor, Shinobi Avenge Grind, Sovereign Steel Control) —
+  swapped each off-identity keyword for the nearest in-identity one;
+  labels kept stable. Added **Ruin-Walker Solar Tempo** and **Sovereign
+  Crimson Assault**, genuine second archetypes for the two Leaders that
+  previously had only one — both had a color in their identity (Solar,
+  Crimson respectively) that no archetype had ever actually drafted for.
+  Roster is now 24 archetypes (was 22).
+- **Resolves 3 of `docs/COLOR_IDENTITY.md`'s open items**: Sovereign of the
+  Dying Star's win rate (a 3-pass-running source of noise, 64.7%→27.8%→
+  38.1%) stabilizes to a trustworthy 48.5% with a real 2-archetype roster;
+  Solar's color win rate firms up from a 1-archetype 20.7% (n=2040) to a
+  2-archetype 44.8% (n=6600); Ruin-Walker Overseer similarly stabilizes to
+  46.9%. Full 55,000-game re-verification: no invariant violations.
+- **2 new items surfaced and documented rather than chased further**:
+  Shinobi Avenge Grind dropped sharply (73.2%→45.5%) from its keyword
+  swap — legal now, but weaker than before; Sovereign's two archetypes are
+  lopsided (87.7% vs. 34.0%), the new one being a first draft with no
+  tuning history. See `docs/COLOR_IDENTITY.md` §7.
+- **Also formally closes 2 items as accepted-design, no code change**:
+  Crimson's smaller card count (34 vs. 46-99 for other colors) and the 28
+  tri-color "orphan" cards legal under no Leader identity — both are
+  intentional tradeoffs, not bugs, same as MTG's own color pie having
+  uneven card counts and genuinely off-color prints.
+
+### v4.14 feature pass — expand card colors from 5 to 7
+
+- **Card colors expanded 5→7.** Renamed `Umbral`→**Obsidian** and
+  `Radiant`→**Prism** (same keywords, new names — chosen so Prism wouldn't
+  read as a synonym of the new Solar). Split Crescendo/Foothold/Contested/
+  Snap off Prism into a new **Solar** color (situational/opportunistic
+  timing); Prism keeps Twin/Rally. Added **Slate**, a true colorless color
+  for cards with no color-mapped keyword, replacing the old guessed-color
+  fallback — a Slate card is legal in every Leader's deck by definition.
+  Re-derived all 8 Leader identities from their archetype keyword usage;
+  **fixes a real bug**: Avatar of the Abyss and Apex Nanite Shinobi
+  previously had an identical identity (both Umbral/Verdant) with zero
+  differentiation — now unique for all 8 Leaders. See
+  `docs/COLOR_IDENTITY.md` §6.
+- **Sim harness**: `scripts/color-audit.ts` updated for the 7-color scheme
+  plus a duplicate-identity-pair check. Full 53,040-game verification run:
+  no invariant violations, but another round of large Leader win-rate
+  swings (most notably Ruin-Walker Overseer 70.4%→40.0% from a pure
+  rename+recolor with zero archetype redesign) — hard evidence the
+  22-archetype roster still needs its color-aware re-tune (open item
+  carried from v4.13, not addressed this pass either).
+- No changes needed to DeckBuilder/Collection filters, the card-frame color
+  pip, or deck construction — all already iterate the `COLORS` list
+  generically.
+
 ### v4.13 feature pass — card colors
 
 - **New rule: card colors.** Every card now carries 1+ of 5 colors (Crimson

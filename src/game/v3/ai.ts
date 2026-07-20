@@ -54,12 +54,25 @@ import { CardDef, Effect, hasKw } from './cards';
 const EASY_GATE_PATTERNS = new Set(['AnyPair', 'ThreeOdds', 'ThreeEvens']);
 
 /** True if this hand is worth keeping by the CPU's opening-hand heuristic. */
+// v4.15: a hard-gate card in hand only counted as "cheap" via
+// EASY_GATE_PATTERNS — but a hand with 2+ cards sharing the SAME mid/hard
+// gate pattern is a coherent, focused-reroll combo hand realistically
+// playable within a turn or two, even though no single card in it is
+// individually cheap. Mirrors the count-not-boolean fix `chooseReroll`
+// already applies to gate-family detection (see straightWantCount/
+// matchWantCount below) — a hand's own composition, not a flat per-card
+// rule, is what should decide whether a gate counts as "on-plan."
 function handIsKeepable(p: Player): boolean {
-  const cheapPlays = p.hand.filter(
-    (c) =>
-      (c.def.threshold ?? 6) <= 3 ||
-      (c.def.comboGate !== undefined && EASY_GATE_PATTERNS.has(c.def.comboGate)),
-  ).length;
+  const gateCounts: Record<string, number> = {};
+  for (const c of p.hand) {
+    if (c.def.comboGate) gateCounts[c.def.comboGate] = (gateCounts[c.def.comboGate] || 0) + 1;
+  }
+  const cheapPlays = p.hand.filter((c) => {
+    if ((c.def.threshold ?? 6) <= 3) return true;
+    if (c.def.comboGate === undefined) return false;
+    if (EASY_GATE_PATTERNS.has(c.def.comboGate)) return true;
+    return (gateCounts[c.def.comboGate] || 0) >= 2;
+  }).length;
   const units = p.hand.filter((c) => c.def.type === 'Unit').length;
   return cheapPlays >= 2 && units >= 1;
 }
@@ -74,7 +87,13 @@ function mulliganOne(p: Player, rng: () => number) {
     [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
   }
   for (let i = 0; i < 7; i++) p.hand.push(p.deck.pop()!);
-  const worst = [...p.hand].sort((a, b) => (b.def.threshold ?? 3) - (a.def.threshold ?? 3))[0];
+  // v4.15: was `threshold ?? 3` — the same bug `RARITY_THRESHOLD_PROXY`/
+  // `costWeight()` fixed everywhere else in this file (see that helper's
+  // comment below): a Combo-gate-costed card has no threshold at all, so
+  // it silently compared as "3" here regardless of whether it was a cheap
+  // AnyPair Common or a Mythic gated behind a Full House — this is the one
+  // remaining raw-threshold comparison `costWeight()` was never applied to.
+  const worst = [...p.hand].sort((a, b) => costWeight(b.def) - costWeight(a.def))[0];
   const idx = p.hand.indexOf(worst);
   if (idx >= 0) p.deck.unshift(p.hand.splice(idx, 1)[0]);
 }
@@ -167,6 +186,23 @@ function costWeight(def: CardDef): number {
   return def.threshold ?? RARITY_THRESHOLD_PROXY[rarityTier(def.rarity)];
 }
 
+/** v4.15: true if the opponent has a Guard wall up AND this player's board
+ * already has enough attacking ATK that clearing ANY Guard would make
+ * lethal reachable this turn — Placement previously had no signal at all
+ * for "this removal card would open a lethal line," so a Guard-killing
+ * `destroy` sat in hand scored no differently than casting it for its own
+ * sake (see castPriority's `guardWallBlocksLethal` bonus below). Mirrors
+ * the lethal check `playCombat` already runs (its `lethal` const). */
+function guardWallBlocksLethal(g: Game, p: Player): boolean {
+  const opp = opponentOf(g, p.id);
+  if (!opp.board.some((u) => hasKw(u.def, 'Guard'))) return false;
+  const toll = tollReduction(g, opp.id);
+  const totalAtk = p.board
+    .filter((u) => canAttack(g, u))
+    .reduce((s, u) => s + Math.max(0, effAtk(g, u) - toll), 0);
+  return totalAtk >= remainingHp(g, opp.leader);
+}
+
 /** value of a card for cast-priority: bigger threshold first, units before spells.
  * Includes a small seeded jitter so priority ties (and near-ties) don't always
  * resolve the same way — without it, the AI's line of play is 100%
@@ -213,6 +249,17 @@ function castPriority(g: Game, p: Player, c: Inst): number {
   if (c.def.type === 'Unit' && p.board.length < opponentOf(g, p.id).board.length) {
     const isDefensive = !!(c.def.steel || c.def.bulwark || c.def.toll) || hasKw(c.def, 'Guard') || hasKw(c.def, 'Ward');
     if (isDefensive) v += 6;
+  }
+  // v4.15: a `destroy` that removes an enemy Unit outright is the only
+  // action guaranteed to actually clear a Guard THIS turn (unlike `sap`,
+  // which can fail to kill, or `bind`, which only takes effect next turn —
+  // and `destroy`'s only legal targets are enemyUnit/allEnemyUnits/
+  // anyTarget per catalog.test.ts's TARGETS_BY_ACTION, so no friendly-
+  // target guard is needed here) — when casting it would open a lethal
+  // attack this turn, it should outrank a generic comboGate card's flat
+  // +40 (this is a guaranteed win, not just "free value").
+  if (c.def.onCast?.action === 'destroy' && guardWallBlocksLethal(g, p)) {
+    v += 50;
   }
   return v + tieBreak(g);
 }
@@ -346,6 +393,25 @@ function chooseReroll(g: Game, p: Player): number[] {
   };
 
   const out: number[] = [];
+  // v4.15: a hand with ZERO comboGate/combo cards at all (pure numeric-cost
+  // hand) used to fall through to the "Default / matching" branch below by
+  // omission, not by design — `straightWantCount > 0` is false, so it never
+  // took the straight branch, and the matching branch's mode-cluster/pair
+  // logic then ran as if this were a deliberate match-family strategy. Dice
+  // *values* only matter here for hitting numeric thresholds, not shape —
+  // give this its own explicit branch: keep whatever pays an exact-cost
+  // need plus high dice (>=4, useful against `atLeast`/`sum` thresholds),
+  // reroll the rest.
+  if (straightWantCount === 0 && matchWantCount === 0) {
+    p.dice.forEach((d, i) => {
+      if (d.placed) return;
+      if (stagedNeeds.has(d.value)) return;
+      if (keepForExact(d.value)) return;
+      if (d.value >= 4) return;
+      out.push(i);
+    });
+    return out;
+  }
   if (straightWantCount > 0 && straightWantCount >= matchWantCount) {
     // Keep distinct values; reroll duplicates and isolated extremes.
     const seen = new Set<number>();
@@ -801,12 +867,35 @@ function playCombat(g: Game, p: Player) {
   while (!g.winner && guard-- > 0) {
     const attackers = p.board.filter((u) => canAttack(g, u));
     if (attackers.length === 0) break;
-    // Score once per attacker (a seeded jitter INSIDE a sort comparator makes
-    // the comparator inconsistent) — jittered so near-tied attacker choices
-    // vary game to game while staying reproducible under a fixed seed.
-    const att = attackers
-      .map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) }))
-      .sort((a, b) => b.s - a.s)[0].u;
+    // v4.15: legalTargets() blocks ALL attackers uniformly while any Guard
+    // lives (engine.ts:1796-1797, not per-attacker) — so as long as a Guard
+    // is up, every attacker here is Guard-only. The old code always sent
+    // the single highest-ATK attacker at it regardless, which can badly
+    // overkill a low-HP Guard (e.g. a 10 ATK attacker spent on a 3 HP
+    // Guard) and waste that ATK instead of saving it for face once the
+    // wall comes down. When a Guard is up, prefer the SMALLEST attacker
+    // that still kills one — same total board damage, no wasted ATK.
+    const guardUpNow = opp.board.some((u) => hasKw(u.def, 'Guard'));
+    let att: Inst;
+    if (guardUpNow) {
+      const guards = opp.board.filter((u) => hasKw(u.def, 'Guard'));
+      const sufficient = attackers
+        .filter((u) => guards.some((gd) => willKillInCombat(g, gd, effAtk(g, u))))
+        .map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) }))
+        .sort((a, b) => a.s - b.s);
+      att =
+        sufficient[0]?.u ??
+        attackers.map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) })).sort((a, b) => b.s - a.s)[0]
+          .u;
+    } else {
+      // Score once per attacker (a seeded jitter INSIDE a sort comparator
+      // makes the comparator inconsistent) — jittered so near-tied attacker
+      // choices vary game to game while staying reproducible under a fixed
+      // seed.
+      att = attackers
+        .map((u) => ({ u, s: effAtk(g, u) + tieBreak(g) }))
+        .sort((a, b) => b.s - a.s)[0].u;
+    }
     // v4.4: attacker-aware — excludes the enemy Leader on a Frenzy second
     // swing (see engine.ts legalTargets), so the AI never attempts an
     // illegal face attack with a bonus swing and wastes it.
@@ -923,6 +1012,17 @@ export function playTurn(g: Game) {
     reroll(g, picks);
     if (picks.length === 0) break;
   }
+  // v4.15: snapshot BEFORE Placement whether a Guard-clear-into-lethal line
+  // existed this turn (see castPriority's `guardWallBlocksLethal` bonus) —
+  // a decision-correlation companion to the fix, not a "would the old code
+  // have done differently" detector like lapseCombatTradeTargetFixed. Logs
+  // `guardClearLethalOpportunity` whenever the condition held, and
+  // `guardClearLethalConverted` if this player's turn actually ended in a
+  // win — gives the harness a real activation-rate read on how often this
+  // matters and whether the boosted priority is actually closing it out.
+  const guardLethalOpportunity = guardWallBlocksLethal(g, p);
+  if (guardLethalOpportunity) lapse(g, p.id, 'guardClearLethalOpportunity');
+
   playPlacement(g, p);
   if (g.winner) return;
   recordPlacementLapses(g, p);
@@ -930,6 +1030,9 @@ export function playTurn(g: Game) {
   comboCheck(g);
   if (g.winner) return;
   playCombat(g, p);
+  if (guardLethalOpportunity && g.winner === p.id) {
+    lapse(g, p.id, 'guardClearLethalConverted');
+  }
   if (g.winner) return;
   recordCombatLapses(g, p);
   endTurn(g, defaultDiscardChoice);
