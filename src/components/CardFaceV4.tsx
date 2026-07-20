@@ -18,6 +18,8 @@ import {
   isMythic,
   RARITY_HEX,
 } from '../meta/rarity';
+import { cardColors } from '../game/v3/colors';
+import { COLOR_HEX, COLOR_LETTER } from '../meta/colors';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -1249,6 +1251,9 @@ export function CardFace({
     ? fitFontSize('x'.repeat(textBoxChars), 1, 0.55, 160)
     : 1;
   const set = setStyle(def.set);
+  // v4.13: Leaders don't carry a color themselves (LEADER_COLORS is their
+  // deck-identity, a different concept from a printed card's own color).
+  const cardColorsForFace = def.type === 'Leader' ? [] : cardColors(def);
   const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
   const isFoil = foil && !serial;
@@ -1740,7 +1745,27 @@ export function CardFace({
         </div>
       </div>
 
-      {/* Footer: set/print bar + optional slot content (e.g. deck-count badge). */}
+      {/* Footer: set/print bar + color-identity pips + optional slot content
+          (e.g. deck-count badge). v4.13: color pips sit right above the set
+          bar — same footer row real estate, no header-layout risk (the
+          header's fitFontSize math is already tightly packed). Multicolor
+          cards show one pip per color, in COLORS order. */}
+      {cardColorsForFace.length > 0 && (
+        <div
+          className="relative z-10 flex justify-center gap-0.5 shrink-0 bg-[var(--c-paper)]/70 py-[1px]"
+          title={`Color: ${cardColorsForFace.join('/')}`}
+        >
+          {cardColorsForFace.map((c) => (
+            <span
+              key={c}
+              className="w-2.5 h-2.5 rounded-full border border-[var(--c-ink)]/40 flex items-center justify-center text-[5px] font-black leading-none text-white"
+              style={{ backgroundColor: COLOR_HEX[c] }}
+            >
+              {COLOR_LETTER[c]}
+            </span>
+          ))}
+        </div>
+      )}
       {def.set && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
       )}

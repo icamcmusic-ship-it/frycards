@@ -35,6 +35,7 @@ import {
 import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { cardColors, COLORS, LEADER_COLORS } from '../src/game/v3/colors';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -495,6 +496,10 @@ interface SuiteResult {
    * mix wins, for the "game mechanics to add/remove/change" ask. */
   typeInDeck: Record<string, number>;
   typeInWinDeck: Record<string, number>;
+  /** v4.13: color-identity (deck contains >=1 card of this color) -> win
+   * rate, same "once per deck" convention as keywordInDeck/typeInDeck. */
+  colorInDeck: Record<string, number>;
+  colorInWinDeck: Record<string, number>;
   /** v4.12: archetype-vs-archetype head-to-head win rate matrix — catches
    * hard counters / rock-paper-scissors matchup problems that aggregate
    * archetype win% (vs. the whole field) can't see. matchupW[a][b] = games
@@ -560,6 +565,8 @@ function newResult(): SuiteResult {
     archCardCastInWinGame: {},
     typeInDeck: {},
     typeInWinDeck: {},
+    colorInDeck: {},
+    colorInWinDeck: {},
     matchupW: {},
     matchupN: {},
     comebackWins: 0,
@@ -793,6 +800,13 @@ function runGame(
     for (const t of types) {
       r.typeInDeck[t] = (r.typeInDeck[t] || 0) + 1;
       if (won) r.typeInWinDeck[t] = (r.typeInWinDeck[t] || 0) + 1;
+    }
+    const colors = new Set<string>();
+    for (const id of Object.keys(entry.deck.cards))
+      for (const c of cardColors(POOL_BY_ID[id])) colors.add(c);
+    for (const c of colors) {
+      r.colorInDeck[c] = (r.colorInDeck[c] || 0) + 1;
+      if (won) r.colorInWinDeck[c] = (r.colorInWinDeck[c] || 0) + 1;
     }
   }
 }
@@ -1263,6 +1277,16 @@ for (const t of Object.keys(R.typeInDeck)
   .filter((t) => R.typeInDeck[t] >= 200)
   .sort((a, b) => (R.typeInWinDeck[b] || 0) / R.typeInDeck[b] - (R.typeInWinDeck[a] || 0) / R.typeInDeck[a]))
   console.log(`${t.padEnd(10)} win%=${pct(R.typeInWinDeck[t] || 0, R.typeInDeck[t])}  (n=${R.typeInDeck[t]})`);
+
+console.log('\n--- v4.13 Color win rate (deck contains >=1 card of this color), min n=200 ---');
+for (const c of COLORS.filter((c) => (R.colorInDeck[c] || 0) >= 200).sort(
+  (a, b) => (R.colorInWinDeck[b] || 0) / R.colorInDeck[b] - (R.colorInWinDeck[a] || 0) / R.colorInDeck[a],
+))
+  console.log(`${c.padEnd(10)} win%=${pct(R.colorInWinDeck[c] || 0, R.colorInDeck[c])}  (n=${R.colorInDeck[c]})`);
+
+console.log('\n--- v4.13 Leader color identity ---');
+for (const [leaderId, identity] of Object.entries(LEADER_COLORS))
+  console.log(`${(POOL_BY_ID[leaderId]?.name || leaderId).padEnd(28)} ${identity.join('/')}`);
 
 console.log(
   `\n--- Comeback rate: win% when BEHIND on Leader HP at round ${COMEBACK_CHECKPOINT_ROUND} checkpoint ---`,

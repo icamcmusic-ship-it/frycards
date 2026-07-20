@@ -10,6 +10,8 @@ import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { MAX_COPIES as ENGINE_MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
+import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
+import { COLOR_HEX, COLOR_LETTER } from './colors';
 import { cn } from '../lib/utils';
 
 // v4.2 Rulebook §2: 30-card deck, max 3 copies of any card, Leader kept separate.
@@ -71,6 +73,22 @@ export function validateDeckList(
       issues.push({
         text: `Too many copies of ${c?.name || id} (${c?.rarity || 'Common'}: max ${cap}).`,
       });
+    }
+  }
+
+  // v4.13: color identity — every card's color(s) must be a subset of the
+  // Leader's identity (LEADER_COLORS). Strict subset, no splash allowance —
+  // see docs/COLOR_IDENTITY.md for why this rule was chosen over a soft cap.
+  const identity = LEADER_COLORS[leader.id];
+  if (identity) {
+    for (const id of byId.keys()) {
+      const c = db.get(id);
+      if (!c) continue;
+      if (!isColorLegal(c, identity)) {
+        issues.push({
+          text: `${c.name} (${cardColors(c).join('/')}) is outside ${leader.name}'s color identity (${identity.join('/')}).`,
+        });
+      }
     }
   }
 
@@ -285,6 +303,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [leaderId, setLeaderId] = useState<string | null>(deck?.leader_id || null);
   const [cardIds, setCardIds] = useState<string[]>(deck?.card_ids || []);
   const [typeFilter, setTypeFilter] = useState('All');
+  const [colorFilter, setColorFilter] = useState('All');
   const [castFilter, setCastFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -343,9 +362,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       !window.confirm('Replace your current card selections with an auto-built deck?')
     )
       return;
+    const identity = leaderId ? LEADER_COLORS[leaderId] : undefined;
     const eligible = poolByType('Unit')
       .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
-      .filter((c) => (availableQty.get(c.id) || 0) > 0);
+      .filter((c) => (availableQty.get(c.id) || 0) > 0)
+      .filter((c) => !identity || isColorLegal(c, identity));
     const shuffled = shuffleArr(eligible);
 
     const picked: string[] = [];
@@ -374,13 +395,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   };
 
   // Pool: available (owned minus locked-in-other-decks), non-Leader cards
-  // from the v4.2 pool. Any mix is legal.
+  // from the v4.2 pool, restricted to the chosen Leader's color identity
+  // (v4.13) — showing an illegal card here just to have it rejected by
+  // validateDeckList later would be a confusing dead end, so the browsable
+  // pool itself is pre-filtered to what's actually legal for this deck.
+  const colorIdentity = leaderId ? LEADER_COLORS[leaderId] : undefined;
   const pool = poolByType('Unit')
     .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
       if ((availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
       if (castFilter !== 'All' && castBucket(c) !== castFilter) return false;
+      if (colorIdentity && !isColorLegal(c, colorIdentity)) return false;
+      if (colorFilter !== 'All' && !cardColors(c).includes(colorFilter as Color)) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     })
@@ -522,6 +549,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-48"
           />
           <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
+          {colorIdentity && (
+            <span className="flex items-center gap-1 shrink-0" title="Color identity — only cards in these colors are legal in this deck">
+              {colorIdentity.map((c) => (
+                <span
+                  key={c}
+                  className="w-3.5 h-3.5 rounded-full border border-white/40 flex items-center justify-center text-[7px] font-black leading-none text-white"
+                  style={{ backgroundColor: COLOR_HEX[c] }}
+                >
+                  {COLOR_LETTER[c]}
+                </span>
+              ))}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span
@@ -583,6 +623,17 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <option key={t}>{t}</option>
               ))}
             </select>
+            {colorIdentity && colorIdentity.length > 1 && (
+              <select
+                className={select}
+                value={colorFilter}
+                onChange={(e) => setColorFilter(e.target.value)}
+              >
+                {['All', ...colorIdentity].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            )}
             <select
               className={select}
               value={castFilter}

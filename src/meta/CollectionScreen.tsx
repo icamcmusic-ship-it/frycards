@@ -9,9 +9,11 @@ import { CardDef } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { fmtCredits, quicksellPrice } from './economy';
+import { cardColors, Color, COLORS } from '../game/v3/colors';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
+const COLOR_FILTERS = ['All', ...COLORS];
 const SORTS = ['Name', 'Rarity', 'Type'] as const;
 type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
@@ -40,6 +42,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   } = useMeta();
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
+  const [color, setColor] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('Name');
@@ -180,6 +183,8 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (ownedOnly && total === 0) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
+    if (color !== 'All' && c.type !== 'Leader' && !cardColors(c).includes(color as Color))
+      return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
@@ -376,6 +381,11 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           <select className={select} value={rarity} onChange={(e) => setRarity(e.target.value)}>
             {RARITY_FILTERS.map((r) => (
               <option key={r}>{r}</option>
+            ))}
+          </select>
+          <select className={select} value={color} onChange={(e) => setColor(e.target.value)}>
+            {COLOR_FILTERS.map((c) => (
+              <option key={c}>{c}</option>
             ))}
           </select>
           <select
