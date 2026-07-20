@@ -494,7 +494,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
   if (
     tier >= 2 &&
-    hash(c.id) % 9 === 4 &&
+    hash(c.id) % 12 === 4 &&
     wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
   ) {
     // v4.7: 2/2/3 by tier -> 1/1/2 — the ablation harness measured halved
@@ -511,6 +511,12 @@ function mapUnit(c: CardTemplate): CardDef {
     // dial without hitting the floor of 0 (which would delete the
     // keyword's identity outright) — a direct, proportionate trim to the
     // exact sub-case the prior halving didn't touch.
+    // v4.18: still the single most overtuned keyword after TWO power trims
+    // (+17.3pt delta, next-worst ~+12.8pt) — per-fire power is already at
+    // the floor (flat 1) short of deleting the keyword outright, so this
+    // pass trims PRINT RATE instead (hash bucket 1-in-9 -> 1-in-12 of
+    // eligible tier>=2 cards): fewer cards carry it, but the ones that do
+    // keep their full identity/power instead of getting diluted further.
     def.steel = { x: 1 };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }

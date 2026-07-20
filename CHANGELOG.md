@@ -7,6 +7,37 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.18 balance + bug-hunt pass
+
+- **Keyword nerf**: Steel's print rate cut (1-in-9 → 1-in-12 eligible cards)
+  after two prior power trims left it still the most overtuned keyword
+  (+17.3pt delta) — measured down to +7.8pt, no longer the outsized #1
+  offender.
+- **CPU fix**: Placement now Scraps a genuinely stuck die as a last resort
+  (positive EV since v4.16's advantage-reroll change) instead of leaving it
+  unplaced — a small, real improvement on the app's single largest CPU
+  inefficiency (15.52 → 15.47 wasted dice/game); the bulk of that lapse is
+  structural and needs a real assignment-problem solver, not another
+  heuristic layer.
+- **Balance**: reverted two v4.12 card patches (`the_wolf_of_wall_street`,
+  `butterflyfish_school`) that had overshot into the opposite extreme —
+  confirmed via a fresh sim that neither card's residual was actually about
+  its own stats, so a third patch was skipped pending an archetype-
+  normalized look.
+- **UI**: flavor text now shrinks in step with however compressed the
+  keyword/rules block above it got (previously sized off its own length
+  only) — a follow-up refinement on v4.16's flavor-overflow fix. Also
+  confirmed card colors already render by identity, not rarity (shipped in
+  v4.16) — no further action needed there.
+- **Bug hunt**: shop-open button now checks affordability before enabling;
+  mystery-pack rarity weights can no longer go negative; admin currency/card
+  grants now confirm before applying; game-over screen shows "Calculating
+  rewards…" instead of a blank gap while a match result is still being
+  recorded.
+- Verified the full 292-card pool is in sync with Supabase (no drift).
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.18.md`.
+
 ### v4.17 balance pass — AI die-utilization + cost-vs-ability tuning
 
 - **CPU fixes**: mulligan-keep bar tightened (marginal keeps measured
