@@ -7,6 +7,60 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.11 balance/feature/bug pass
+
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.11.md`)**: a
+  **diagnosis pass that ships no balance change** — both levers considered
+  were built, measured, and rejected after full-sim verification, the honest
+  outcome for a roster that has converged over v4.5–v4.10. Two long-open
+  priority items are **closed by proving what they are**: (1) Mer-King's
+  chronically weak Avenge Swarm (36–43%) is **not a card-balance bug** — the
+  deck-swap isolation the v4.10 doc asked for shows the *identical* Avenge
+  list winning 46.9% under Shinobi and **59.8% under Diver**, and stripping
+  the deck's own mend package (while keeping Mer-King) gains +12.9pt; it's a
+  Leader-kit-fit problem (Mer-King's sustain kit fights a sacrifice-swarm
+  plan), and buffing the Avenge cards would only push Shinobi Avenge Grind
+  (already 86%) further out of line. (2) The Unit-Ability-order CPU-lapse
+  detector that measured exactly zero in v4.10 is confirmed **genuinely
+  zero** — new situation-frequency counters show the situation (2+ eligible
+  Unit Abilities competing for one die) never once arises in 33,840 games, so
+  the detector isn't blind, the case simply doesn't exist. Crescendo's v4.10
+  redesign baseline **held** (41.3% again on a fresh run); a base-value step
+  measured null because Crescendo lives on exactly one pool card (a
+  representation problem, not a power one — flagged for next pass). The
+  wall-list meta stays open: the ready `guardHpBonus` cut now has **direct
+  evidence it re-sinks both weak Mer-King archetypes** (−10pt / −7.5pt), so
+  it's still correctly not shipped.
+- **Sim harness**: five upgrades. A **deck-level Avenge Swarm isolation**
+  (five new ablation subjects: the same list under Shinobi/Diver, plus
+  Guard- and mend-stripped Mer-King variants) — the tool that cracked
+  priority item 1. **Unit-Ability-order situation counters**
+  (`unitAbilityMultiCandidate` / `…Tiered`) that distinguish "detector broken"
+  from "situation never arises" — closing priority item 4. A **cost-vs-value
+  RESIDUAL table** that fixes the offset artifact in v4.10's win%÷difficulty
+  ratio (win% is centered on ~50%, not 0) by comparing each card only against
+  other cards *at the same cost band* — it cleanly re-confirms the exact-cost
+  wall bodies (Flickering Sea Pens / Cavernous Watcher at +30pt over their
+  band). A **keyword-health table** pairing each keyword's win% with pool
+  prevalence and measured cast activity — which immediately surfaced that
+  Crescendo, the bottom keyword every pass, exists on a *single* card. And an
+  **`avengeCap` buff-direction ablation arm** plus a `crescendoBase` tuning
+  dial so both open questions are ablatable instead of hardcoded.
+- **Feature-and-bug hunt / QoL**: a full review of the engine (`engine.ts`),
+  CPU AI (`ai.ts`), and the highest-risk `GameV4.tsx` UI paths (die-capture
+  on armed abilities/ultimates/echo, target-pending resolution, stage/turn
+  gating, the die tray) found **no correctness bug** — the code is mature and
+  the reviewed UI already carries the accessibility affordances prior passes
+  added — reported honestly rather than manufacturing a change. The engine
+  game-flow is exercised by 33,840 games per run with full per-turn invariant
+  checking (zero violations across both full runs). Browser automation for a
+  live click-through was **not available** in this environment (the sandbox
+  proxy makes `playwright install chromium` a no-op and there is no system
+  browser), so the UI was verified by code review only — stated plainly, not
+  claimed as a click-through. Added one regression test locking the new
+  `crescendoBase` dial's "default equals live behavior" invariant and its
+  rebuild-applies-change behavior (92 tests pass).
+
 ### v4.10 balance/feature/bug pass
 
 - **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.10.md`)**: Locations'

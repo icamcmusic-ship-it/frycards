@@ -12,6 +12,13 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Undertow Update',
+    items: [
+      'No gameplay changes this update — this was a deep testing-and-diagnosis pass. We finally pinned down WHY Mer-King\'s Avenge Swarm deck underperforms: it\'s not the cards (the same card list wins comfortably under a different Leader), it\'s that Mer-King\'s healing-focused kit works against a deck that wants to trade Units away. That means the real fix is a Leader-kit change, not a card buff — coming in a future update.',
+      'We also confirmed the Crescendo rework from last update is holding steady, and improved our balance-testing tools so future changes are backed by cleaner data. A couple of tempting tweaks were tried and deliberately NOT shipped because full testing showed they\'d quietly make other decks worse — we\'d rather ship nothing than ship a change that trades one problem for another.',
+    ],
+  },
+  {
     version: 'Rising Tide Update',
     items: [
       "Locations were quietly a slightly bad deal for over a year of updates — filling that deck slot with a cheap Unit instead usually won more. A dedicated round of testing found the real fix: their on-cast board buff, +3 instead of +2. Locations are now a genuinely good pick, and every Location keyword (Excavate, Foothold, Contested) got stronger right along with them.",

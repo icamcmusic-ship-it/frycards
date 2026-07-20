@@ -13,9 +13,11 @@ import {
   mulliganRedraw,
   MAX_COMBO_SELF_BUFF_STACKS,
   AVENGE_CAP,
+  SIM_TUNING,
 } from './engine';
 import { CardDef } from './cards';
 import { Archetype, buildDeck } from './decks';
+import { POOL_V4, rebuildPool } from './cardpool';
 
 // Fixed deck-building specs for test fixtures — deterministic, not affected
 // by the (now-removed) prebuilt archetype list.
@@ -1736,4 +1738,35 @@ test('v4.7 Fatigue: an empty mandatory draw deals escalating Leader damage inste
   p.leader.damage = effMaxHp(g, p.leader) - 1;
   startTurn(g);
   expect(g.winner).toBe('B');
+});
+
+// v4.11: the crescendoBase SIM_TUNING dial (findings v4.11 §2.2, harness
+// upgrade for v4.10 §4 item 3). Two invariants worth locking: the dial's
+// DEFAULT reproduces live behavior exactly (SIM_TUNING's "defaults MUST
+// equal live behavior" contract — a wrong default silently mis-tunes every
+// real match and every baseline sim), and a changed dial actually flows into
+// the built pool when rebuildPool() runs (the mechanism every pool-affecting
+// ablation arm relies on).
+test('v4.11 crescendoBase dial: default reproduces live behavior and rebuildPool applies a change', () => {
+  const DEFAULT = SIM_TUNING.crescendoBase;
+  expect(DEFAULT).toBe(4); // live value — must not drift
+  const cre = POOL_V4.filter((c) => c.crescendo);
+  expect(cre.length).toBeGreaterThan(0); // the pool actually carries Crescendo
+  // At the default, a tier<3 Crescendo card prints exactly the base; tier>=3
+  // gets +1 (cardpool.ts mapSpell). Every card's x is base or base+1.
+  for (const c of cre) expect([DEFAULT, DEFAULT + 1]).toContain(c.crescendo!.x);
+  const before = cre.map((c) => c.crescendo!.x);
+  try {
+    SIM_TUNING.crescendoBase = DEFAULT + 3;
+    rebuildPool();
+    const after = POOL_V4.filter((c) => c.crescendo).map((c) => c.crescendo!.x);
+    // Every Crescendo card's value moved by exactly the dial delta.
+    expect(after.length).toBe(before.length);
+    for (let i = 0; i < after.length; i++) expect(after[i]).toBe(before[i] + 3);
+  } finally {
+    SIM_TUNING.crescendoBase = DEFAULT;
+    rebuildPool(); // restore the shared pool for other tests
+  }
+  for (const c of POOL_V4.filter((c) => c.crescendo))
+    expect([DEFAULT, DEFAULT + 1]).toContain(c.crescendo!.x);
 });
