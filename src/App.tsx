@@ -158,6 +158,12 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   const [cpuArch] = useState(() => randomArchetype());
   const [reward, setReward] = useState<MatchResult | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
+  // While recordMatchResult() is in flight (including its retries), both
+  // reward and rewardError stay null — indistinguishable from the guest
+  // case (session-less players never get a reward at all), so the game-over
+  // screen showed nothing at all during a real fetch. This flag lets it
+  // show a "calculating…" placeholder instead of a blank gap.
+  const [rewardPending, setRewardPending] = useState(false);
 
   // recordMatchResult used to return bare `null` on both "no reward data"
   // and an outright RPC failure, so a transient network/server error meant
@@ -166,19 +172,24 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   // telling the player their reward didn't sync, instead of staying silent.
   const onResult = async (won: boolean) => {
     if (!session) return;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-      const { data, error } = await recordMatchResult(won);
-      if (data) {
-        setReward(data);
-        refreshProfile();
-        return;
+    setRewardPending(true);
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        const { data, error } = await recordMatchResult(won);
+        if (data) {
+          setReward(data);
+          refreshProfile();
+          return;
+        }
+        if (!error) return; // legitimately no reward to report (e.g. cooldown)
       }
-      if (!error) return; // legitimately no reward to report (e.g. cooldown)
+      setRewardError(
+        "Couldn't record this match's result — check your connection and try again from the menu.",
+      );
+    } finally {
+      setRewardPending(false);
     }
-    setRewardError(
-      "Couldn't record this match's result — check your connection and try again from the menu.",
-    );
   };
 
   return (
@@ -193,6 +204,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         onResult={onResult}
         reward={reward}
         rewardError={rewardError}
+        rewardPending={rewardPending}
       />
     </div>
   );

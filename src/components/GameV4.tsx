@@ -672,6 +672,7 @@ export function GameV4({
   onResult,
   reward,
   rewardError,
+  rewardPending,
 }: {
   /** A prebuilt archetype's DeckDef, or a player's own saved deck resolved against the pool. */
   humanDeck: DeckDef;
@@ -689,6 +690,11 @@ export function GameV4({
    * shown in place of the reward banner so a network/server error doesn't
    * just look like the reward never showed up. */
   rewardError?: string | null;
+  /** True while the parent's recordMatchResult() call (incl. retries) is
+   * still in flight — distinguishes "reward hasn't arrived yet" from the
+   * guest case (reward stays null forever), so the game-over screen can
+   * show a placeholder instead of a blank gap. */
+  rewardPending?: boolean;
 }) {
   // The engine Game object is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
@@ -2822,6 +2828,11 @@ export function GameV4({
             {reward == null && rewardError && (
               <div className="bg-[var(--c-red)] text-white heading-font text-[10px] px-3 py-1.5 ink-border-sm mb-4 max-w-[280px]">
                 {rewardError}
+              </div>
+            )}
+            {reward == null && !rewardError && rewardPending && (
+              <div className="text-[10px] font-bold text-[var(--c-steel)] mb-4 animate-pulse">
+                Calculating rewards…
               </div>
             )}
             <button

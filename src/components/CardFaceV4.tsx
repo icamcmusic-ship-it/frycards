@@ -1283,7 +1283,18 @@ export function CardFace({
   // grows to accommodate overflow; any residual overflow clips at the
   // (already overflow-hidden) outer edge instead of distorting the ratio.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
-  const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 85);
+  // v4.18: flavorFontPx used to be sized purely off the flavor string's own
+  // length, with no awareness of how much of the shared text-box height the
+  // keyword/rules block above it already consumed — a card with a short
+  // flavor line but a long rules block (which shrinks independently via
+  // textBoxScale) could still print flavor text at full size into a box
+  // that had no room left for it, reading as run-off/overlap. Fold
+  // textBoxScale in as a floor multiplier so flavor text shrinks in step
+  // with however compressed the block above it got, not just its own text.
+  const flavorFontPx = Math.max(
+    5.5,
+    fitFontSize(def.flavor || '', 9, 6.5, 85) * Math.min(1, textBoxScale || 1),
+  );
   // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
   // animated sheen; Mythic additionally gets a pulsing frame and a distinct
   // gold-on-red name banner instead of the shared tinted-paper header.

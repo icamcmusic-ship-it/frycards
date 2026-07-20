@@ -507,12 +507,18 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || (credits === 0 && vouchers === 0)}
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    !confirm(
+                      `Grant ${fmtCredits(credits)} credits / ${vouchers} vouchers to ${target.username}? This applies instantly.`,
+                    )
+                  )
+                    return;
                   run(
                     () => adminGrantCurrency(target.id, credits, vouchers),
                     `Granted ${fmtCredits(credits)} / ${vouchers} vouchers to ${target.username}.`,
-                  )
-                }
+                  );
+                }}
               >
                 GRANT ▸
               </PopButton>
@@ -559,12 +565,18 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || !cardId.trim()}
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    !confirm(
+                      `Grant ${cardQty}× ${cardId.trim()}${cardFoil ? ' (foil)' : ''} to ${target.username}? This applies instantly.`,
+                    )
+                  )
+                    return;
                   run(
                     () => adminGrantCard(target.id, cardId.trim(), cardQty, cardFoil),
                     `Granted ${cardQty}× ${cardId}${cardFoil ? ' (foil)' : ''} to ${target.username}.`,
-                  )
-                }
+                  );
+                }}
               >
                 GRANT ▸
               </PopButton>
