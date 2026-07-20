@@ -379,6 +379,13 @@ const DECISION_KEYS = [
   // v4.10 doc comment above lapse()).
   'lapseCombatTradeTargetFixed',
   'lapseUnitAbilityOrderFixed',
+  // v4.11 (v4.10 findings §4 item 4): situation-frequency companions to
+  // lapseUnitAbilityOrderFixed — how often 2+ eligible Unit Abilities even
+  // competed for the spare die (…MultiCandidate), and how often at least two
+  // of them had different action-values so a wrong order was even POSSIBLE
+  // (…Tiered). Distinguishes "detector broken" from "situation never arises."
+  'unitAbilityMultiCandidate',
+  'unitAbilityMultiCandidateTiered',
 ];
 
 interface SuiteResult {
@@ -664,6 +671,8 @@ function runGame(
       'lapseIdleLeaderAbility_diceSpentDown',
       'lapseCombatTradeTargetFixed',
       'lapseUnitAbilityOrderFixed',
+      'unitAbilityMultiCandidate',
+      'unitAbilityMultiCandidateTiered',
     ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }
@@ -862,6 +871,51 @@ const kwRows = Object.keys(R.keywordInDeck)
   .sort((a, b) => b.winPct - a.winPct);
 for (const r of kwRows)
   console.log(`${r.kw.padEnd(12)} win%=${r.winPct.toFixed(1).padStart(5)}  (n=${r.n})`);
+
+// v4.11 harness upgrade (keyword-level health, task §1): win% alone can't
+// tell a WEAK keyword from an UNDERPLAYED one — a keyword can post a low deck
+// win rate because the cards carrying it rarely get cast at all (a "dead"
+// keyword worth removing/reworking) vs. because they get cast constantly and
+// lose anyway (a genuinely weak effect worth buffing). Pair each keyword's
+// win% with how many distinct pool cards carry it and the average casts/game
+// of those cards, so keyword add/remove/nerf/buff calls have activation data
+// behind them, not just an outcome correlation.
+console.log('\n--- Keyword health: win% + pool prevalence + measured cast activity ---');
+{
+  const kwCards: Record<string, string[]> = {};
+  for (const id of Object.keys(POOL_BY_ID)) {
+    const def = POOL_BY_ID[id];
+    if (def.type === 'Leader') continue;
+    for (const kw of def.keywords || []) (kwCards[kw] ||= []).push(id);
+  }
+  const healthRows = Object.keys(R.keywordInDeck)
+    .filter((kw) => R.keywordInDeck[kw] >= 200)
+    .map((kw) => {
+      const ids = kwCards[kw] || [];
+      // Average casts/game across cards carrying this keyword that actually
+      // saw deck play (cardInDeck>0), so a keyword's activation isn't diluted
+      // by pool cards no archetype ever drafted.
+      const played = ids.filter((id) => (R.cardInDeck[id] || 0) > 0);
+      const castRate =
+        played.reduce((s, id) => s + (R.cardCast[id] || 0) / (R.cardInDeck[id] || 1), 0) /
+        (played.length || 1);
+      return {
+        kw,
+        winPct: (100 * (R.keywordInWinDeck[kw] || 0)) / R.keywordInDeck[kw],
+        poolCards: ids.length,
+        played: played.length,
+        castRate,
+      };
+    })
+    .sort((a, b) => a.castRate - b.castRate);
+  for (const r of healthRows)
+    console.log(
+      `${r.kw.padEnd(12)} win%=${r.winPct.toFixed(1).padStart(5)}  poolCards=${String(r.poolCards).padStart(3)}  casts/g(avg)=${r.castRate.toFixed(2)}`,
+    );
+  console.log(
+    '(Low win% + low casts/g = underplayed/dead keyword (rework/remove); low win% + high casts/g = genuinely weak effect (buff).)',
+  );
+}
 
 console.log('\n--- Decision -> win correlation (win% when the player DID vs DID NOT do it) ---');
 const decRows = DECISION_KEYS.map((k) => {
@@ -1065,6 +1119,48 @@ for (const r of [...cvRows].sort((a, b) => a.valueRatio - b.valueRatio).slice(0,
   console.log(
     `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} difficulty=${r.difficulty.toFixed(1)} ratio=${r.valueRatio.toFixed(1)} (n=${r.n})`,
   );
+
+// v4.11 harness upgrade (cost-vs-ability rigor, task §1): the win%/difficulty
+// RATIO above has an offset artifact — win% is centered on ~50%, not 0, so
+// dividing by difficulty makes every hard-cost card read "weak" and every
+// cheap card read "OP" purely from the divisor, regardless of whether the
+// card is actually mispriced FOR ITS COST. This banded-residual view fixes
+// that: group cards by difficulty band, take each band's own mean win%, and
+// report each card's deviation from ITS band's mean. A card only surfaces if
+// it out/under-performs OTHER CARDS AT THE SAME COST — the real definition of
+// a cost outlier. Bands are half-point-wide on the 1-6 difficulty scale.
+console.log(
+  '\n--- Cost-vs-value RESIDUAL: win% vs. the mean win% of cards at the SAME difficulty band (min n=40) ---',
+);
+{
+  const band = (d: number) => Math.round(d * 2) / 2; // half-point buckets
+  const bandStats: Record<number, { w: number; n: number }> = {};
+  for (const r of cvRows) {
+    const b = band(r.difficulty);
+    (bandStats[b] ||= { w: 0, n: 0 }).w += r.winPct;
+    bandStats[b].n += 1;
+  }
+  const bandMean: Record<number, number> = {};
+  for (const [b, s] of Object.entries(bandStats)) bandMean[Number(b)] = s.w / s.n;
+  const resRows = cvRows.map((r) => ({
+    ...r,
+    bandMean: bandMean[band(r.difficulty)],
+    residual: r.winPct - bandMean[band(r.difficulty)],
+  }));
+  console.log('Bands (difficulty -> mean win%, card count):');
+  for (const b of Object.keys(bandStats).map(Number).sort((a, b) => a - b))
+    console.log(`  d=${b.toFixed(1)}  mean win%=${bandMean[b].toFixed(1)}  (cards=${bandStats[b].n})`);
+  console.log('Most UNDER-priced (win% far ABOVE its cost band — nerf candidates):');
+  for (const r of [...resRows].sort((a, b) => b.residual - a.residual).slice(0, 10))
+    console.log(
+      `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} d=${r.difficulty.toFixed(1)} bandMean=${r.bandMean.toFixed(1)} resid=${r.residual >= 0 ? '+' : ''}${r.residual.toFixed(1)}pt (n=${r.n})`,
+    );
+  console.log('Most OVER-priced (win% far BELOW its cost band — buff candidates):');
+  for (const r of [...resRows].sort((a, b) => a.residual - b.residual).slice(0, 10))
+    console.log(
+      `${r.name.padEnd(26)} ${r.type.padEnd(9)} win%=${r.winPct.toFixed(1).padStart(5)} d=${r.difficulty.toFixed(1)} bandMean=${r.bandMean.toFixed(1)} resid=${r.residual >= 0 ? '+' : ''}${r.residual.toFixed(1)}pt (n=${r.n})`,
+    );
+}
 
 console.log(
   R.errors.length

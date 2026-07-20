@@ -681,6 +681,24 @@ function playPlacement(g: Game, p: Player) {
       abilityCandidates.push({ u, dieIdx, value: unitAbilityValue(eff, opp.board.length) });
     }
     if (abilityCandidates.length > 0) {
+      // v4.11 (v4.10 findings §4 item 4): lapseUnitAbilityOrderFixed measured
+      // EXACTLY zero across 33,840 games in v4.10 — a working detector with
+      // nothing to detect. The open question was whether that's genuinely
+      // true for this roster or whether the detector can't see real cases.
+      // This companion counter fires whenever the SITUATION even arises (2+
+      // eligible Unit Abilities competing for the spare die this step),
+      // regardless of whether the board-order pick was already optimal — so
+      // "situation never arises" (both counters ~zero) is now distinguishable
+      // from "situation arises but order was already right" (this nonzero,
+      // the lapse zero). The lapse's own value function has coarse integer
+      // tiers (destroy 5 > bind 4 > sap 3 > buff/mend 2 > draw 1), so genuine
+      // board-order mistakes only exist when two candidates land in DIFFERENT
+      // tiers; measuring the raw frequency tells us which regime we're in.
+      if (abilityCandidates.length >= 2) {
+        lapse(g, p.id, 'unitAbilityMultiCandidate');
+        const distinctValues = new Set(abilityCandidates.map((c) => c.value));
+        if (distinctValues.size >= 2) lapse(g, p.id, 'unitAbilityMultiCandidateTiered');
+      }
       const best = [...abilityCandidates].sort((a, b) => b.value - a.value)[0];
       if (abilityCandidates[0].u.iid !== best.u.iid) {
         lapse(g, p.id, 'lapseUnitAbilityOrderFixed');

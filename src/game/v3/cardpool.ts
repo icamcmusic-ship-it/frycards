@@ -659,7 +659,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     // redesign itself is the lever this pass, not another size bump —
     // watch-listed for a value tweak once the new trigger's own baseline is
     // measured.
-    base.crescendo = { x: 4 + (tier >= 3 ? 1 : 0) };
+    base.crescendo = { x: SIM_TUNING.crescendoBase + (tier >= 3 ? 1 : 0) };
     base.keywords = [...(base.keywords || []), 'Crescendo'];
   }
   // v4.2 Aftershock (Event only): a delayed half-value echo of the main
