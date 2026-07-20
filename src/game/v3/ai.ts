@@ -62,7 +62,11 @@ const EASY_GATE_PATTERNS = new Set(['AnyPair', 'ThreeOdds', 'ThreeEvens']);
 // already applies to gate-family detection (see straightWantCount/
 // matchWantCount below) — a hand's own composition, not a flat per-card
 // rule, is what should decide whether a gate counts as "on-plan."
-function handIsKeepable(p: Player): boolean {
+/** v4.16: split out of handIsKeepable() so the mulligan-quality lapse
+ * detector below (recordMulliganLapse) can read the same cheapPlays/units
+ * counts the keep decision was based on, instead of recomputing its own
+ * (possibly divergent) copy of this logic. */
+function handKeepStats(p: Player): { cheapPlays: number; units: number } {
   const gateCounts: Record<string, number> = {};
   for (const c of p.hand) {
     if (c.def.comboGate) gateCounts[c.def.comboGate] = (gateCounts[c.def.comboGate] || 0) + 1;
@@ -74,7 +78,20 @@ function handIsKeepable(p: Player): boolean {
     return (gateCounts[c.def.comboGate] || 0) >= 2;
   }).length;
   const units = p.hand.filter((c) => c.def.type === 'Unit').length;
-  return cheapPlays >= 2 && units >= 1;
+  return { cheapPlays, units };
+}
+
+function handIsKeepable(p: Player): boolean {
+  const { cheapPlays, units } = handKeepStats(p);
+  // v4.17: the bare `cheapPlays>=2 && units>=1` floor kept hands that clear
+  // it by the thinnest possible margin (exactly 2 cheap plays, exactly 1
+  // Unit) — the mulligan-lapse detector below flagged these as materially
+  // underperforming (-23.1pt delta) vs comfortable keeps. Require a small
+  // margin above the bare minimum: either enough cheap plays to survive a
+  // dead draw, or enough Units to keep board presence, while still keeping
+  // the original floor as an absolute (never keep below it).
+  if (cheapPlays < 2 || units < 1) return false;
+  return cheapPlays >= 3 || units >= 2;
 }
 
 /** Mulligan a single player's hand (shuffle back, redraw 7 — v4.3, was 5 —
@@ -106,7 +123,10 @@ function mulliganOne(p: Player, rng: () => number) {
  */
 export function maybeMulliganPlayer(g: Game, pid: string, rng: () => number): boolean {
   const p = g.players[pid];
-  if (handIsKeepable(p)) return false;
+  if (handIsKeepable(p)) {
+    recordMulliganLapse(g, p);
+    return false;
+  }
   mulliganOne(p, rng);
   return true;
 }
@@ -114,11 +134,33 @@ export function maybeMulliganPlayer(g: Game, pid: string, rng: () => number): bo
 export function maybeMulligan(g: Game, rng: () => number): Record<string, boolean> {
   const mulliganed: Record<string, boolean> = {};
   for (const p of Object.values(g.players)) {
-    if (handIsKeepable(p)) continue;
+    if (handIsKeepable(p)) {
+      recordMulliganLapse(g, p);
+      continue;
+    }
     mulliganed[p.id] = true;
     mulliganOne(p, rng);
   }
   return mulliganed;
+}
+
+/**
+ * v4.16 harness upgrade: audits a gap in `recordCpuLapses`'s original scope —
+ * every existing lapse detector fires DURING a turn (Placement/Combat); none
+ * ever looked at the one-shot mulligan decision at game start, even though
+ * the task's own docs call out "mulligan mistakes" as an uninstrumented
+ * decision category. `handIsKeepable`'s bar is a flat cheapPlays>=2 && units>=1
+ * threshold — a hand that clears it by the thinnest possible margin (exactly
+ * 2 cheap plays, exactly 1 Unit) is a materially weaker keep than one with
+ * real depth, but the binary keep/mulligan decision treats them identically.
+ * This doesn't say the CPU was WRONG to keep (a real replacement heuristic
+ * would need full deck knowledge this harness doesn't model) — it flags how
+ * often the keep decision was a bare pass, so the win-correlation table can
+ * show whether "marginal" keeps actually perform worse than comfortable ones.
+ */
+function recordMulliganLapse(g: Game, p: Player) {
+  const { cheapPlays, units } = handKeepStats(p);
+  if (cheapPlays === 2 && units === 1) lapse(g, p.id, 'lapseMulliganKeptMarginal');
 }
 
 /**
@@ -654,6 +696,16 @@ function playPlacement(g: Game, p: Player) {
         if (!waiveFodder && rarityTier(c.def.rarity) === 'low' && p.hand.length < 5) continue;
         const sel = bestSelectionFor(g, p, c.def);
         if (!sel) continue;
+        // v4.16 harness upgrade: keyword-ability sequencing gap in the task's
+        // "sub-optimal keyword-ability sequencing" ask — Echo recasts (step 3)
+        // always run before Unit Ability activation (step 4) with no
+        // awareness of what's waiting there. Flag whenever this recast is
+        // about to spend the LAST unplaced die that could have paid for a
+        // higher-value (destroy/bind) Unit Ability sitting on the board —
+        // diagnostic only, never changes the pick.
+        if (wouldStarveHighValueAbility(g, p, opp, sel)) {
+          lapse(g, p.id, 'lapseEchoOverAbilitySequencing');
+        }
         const fodder = waiveFodder ? undefined : defaultDiscardChoice(p.hand);
         const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
         if (echoRecast(g, sel, c.iid, fodder?.iid, target)) {
@@ -832,6 +884,49 @@ function playPlacement(g: Game, p: Player) {
           continue;
         }
       }
+    }
+    if (progress) continue;
+
+    // 6. Fallback: every step above only takes a "worth it" play (holds AoE
+    // for a real board, skips pointless mend/draw/sap, etc). Dice are fully
+    // re-rolled next turn (see engine.ts startTurn) — nothing carries over —
+    // so a die left unplaced here is pure waste, not a deliberate bank for
+    // next turn's Twin/Combo timing (that's handled explicitly above via
+    // staging/comboGate checks). Measured as the single largest AI
+    // inefficiency in the balance sim (17.7 wasted dice/game, -32pt delta
+    // when it happens): spend any still-affordable legal cast, favoring the
+    // cheapest/least-valuable card so we don't burn a real threat just to
+    // avoid banking a die that was going away regardless.
+    {
+      const fallbackCastable = p.hand
+        .filter((c) => !c.def.comboGate && c.def.type !== 'Location' && !hasKw(c.def, 'Twin'))
+        .sort((a, b) => costWeight(a.def) - costWeight(b.def));
+      let fallbackDone = false;
+      for (const c of fallbackCastable) {
+        if (g.winner) break;
+        const thr = effThreshold(g, p.id, c.def);
+        let sel: number[] | null;
+        if (c.def.overflow && (c.def.castCostKind ?? 'atLeast') === 'atLeast') {
+          const dieIdx = bestDieFor(p, thr);
+          sel = dieIdx >= 0 ? [dieIdx] : null;
+        } else {
+          sel = bestSelectionFor(g, p, c.def);
+        }
+        if (!sel) continue;
+        if (
+          castFromHand(
+            g,
+            sel,
+            c.iid,
+            c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined,
+          )
+        ) {
+          progress = true;
+          fallbackDone = true;
+          break;
+        }
+      }
+      if (fallbackDone) continue;
     }
   }
 }
@@ -1012,6 +1107,7 @@ export function playTurn(g: Game) {
     reroll(g, picks);
     if (picks.length === 0) break;
   }
+  recordRerollLapse(g, p);
   // v4.15: snapshot BEFORE Placement whether a Guard-clear-into-lethal line
   // existed this turn (see castPriority's `guardWallBlocksLethal` bonus) —
   // a decision-correlation companion to the fix, not a "would the old code
@@ -1035,6 +1131,7 @@ export function playTurn(g: Game) {
   }
   if (g.winner) return;
   recordCombatLapses(g, p);
+  recordUnusedResourceLapse(g, p);
   endTurn(g, defaultDiscardChoice);
 }
 
@@ -1075,6 +1172,82 @@ export function playTurn(g: Game) {
 function lapse(g: Game, pid: string, key: string) {
   const d = (g.stats.decisions[pid] ||= {});
   d[key] = (d[key] || 0) + 1;
+}
+
+/** v4.16: true if consuming `sel` (the dice indices about to pay for an Echo
+ * recast) would leave no unplaced die able to pay for a HIGHER-value Unit
+ * Ability (destroy with a live target, or bind) that's still eligible to
+ * activate this turn — see playPlacement step 3's call site. Mirrors the
+ * eligibility filters playPlacement's own ability-candidate collection (step
+ * 4) applies, without duplicating its scoring/selection logic. */
+function wouldStarveHighValueAbility(
+  g: Game,
+  p: Player,
+  opp: Player,
+  sel: number[],
+): boolean {
+  const selSet = new Set(sel);
+  const remaining = p.dice
+    .map((d, i) => ({ d, i }))
+    .filter(({ d, i }) => !d.placed && !selSet.has(i));
+  const maxRemaining = remaining.length > 0 ? Math.max(...remaining.map((r) => r.d.value)) : -1;
+  for (const u of p.board) {
+    if (!u.def.ability || u.abilityUsed || u.hasAttacked) continue;
+    if (u.boundThisTurn || (u.enteredThisTurn && !hasKw(u.def, 'Swift'))) continue;
+    const eff = u.def.ability.effect;
+    const highValue =
+      (eff.action === 'destroy' && opp.board.length > 0) || eff.action === 'bind';
+    if (!highValue) continue;
+    const thr = effAbilityThreshold(g, u);
+    // Would this same die selection have paid for the ability, and will
+    // nothing else be left unplaced that could pay for it instead?
+    const selCouldPay = sel.some((i) => p.dice[i].value >= thr);
+    if (selCouldPay && maxRemaining < thr) return true;
+  }
+  return false;
+}
+
+/**
+ * v4.16 harness upgrade: "bad reroll choices beyond what's covered" — none of
+ * the existing lapse detectors look at the Reroll Phase at all. This flags
+ * games where, once rerolls are fully exhausted (or voluntarily ended), a
+ * "dead" low die (<=2, matching no exact-cost need, no staged Twin need, and
+ * not part of the hand's combo-gate family) is still sitting unplaced —
+ * i.e., the reroll allowance ran out before the hand's actual dice needs
+ * were met. Diagnostic only; rerollsAllowed is a hard rule-level cap so this
+ * doesn't imply the CPU chose wrong, only how often the constraint bites.
+ */
+function recordRerollLapse(g: Game, p: Player) {
+  const gates = [...p.hand, ...p.staging].flatMap((c) => {
+    const out: string[] = [];
+    if (c.def.comboGate) out.push(c.def.comboGate);
+    if (c.def.combo) out.push(c.def.combo.pattern);
+    return out;
+  });
+  if (gates.length > 0) return; // combo-family hands have their own dice logic
+  const stagedNeeds = new Set(
+    p.staging.map((s) => s.stagedDie).filter((v): v is number => v !== undefined),
+  );
+  const exactNeeds = new Set(
+    p.hand
+      .filter((c) => c.def.castCostKind === 'exact' && c.def.threshold !== undefined)
+      .map((c) => effThreshold(g, p.id, c.def)),
+  );
+  const deadLowDie = p.dice.some(
+    (d) => !d.placed && d.value <= 2 && !stagedNeeds.has(d.value) && !exactNeeds.has(d.value),
+  );
+  if (deadLowDie) lapse(g, p.id, 'lapseRerollDeadLowDie');
+}
+
+/**
+ * v4.16 harness upgrade: "wasted resources/mana-like resource left unused" —
+ * a raw per-turn flag for "at least one die was never placed at all by the
+ * time the turn ended," independent of `lapseWastedCastableDie` (which only
+ * fires when a SPECIFIC card in hand could legally have used it). This is
+ * the broader resource-utilization signal the task calls out separately.
+ */
+function recordUnusedResourceLapse(g: Game, p: Player) {
+  if (p.dice.some((d) => !d.placed)) lapse(g, p.id, 'lapseUnusedDiceAtEndTurn');
 }
 
 function recordPlacementLapses(g: Game, p: Player) {

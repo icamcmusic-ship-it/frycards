@@ -13,13 +13,12 @@ import {
   rarityChip,
   rarityBorder,
   rarityGlow,
-  rarityBg,
   rarityAnimated,
   isMythic,
   RARITY_HEX,
 } from '../meta/rarity';
 import { cardColors } from '../game/v3/colors';
-import { COLOR_HEX, COLOR_LETTER } from '../meta/colors';
+import { COLOR_HEX, COLOR_LETTER, colorBg, colorHexPrimary } from '../meta/colors';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -1241,12 +1240,27 @@ export function CardFace({
   // edge. Shrink the keyword+rules text together, the same way the name
   // already shrinks for a long title, instead of letting it silently
   // overflow the (overflow-hidden) card box.
-  const textBoxChars = cfg.keywordExplainer
+  const textBoxCharsWithExplainer = cfg.keywordExplainer
     ? topKeywords.reduce((sum, kw) => {
         const explainer = KEYWORD_GLOSSARY[kw];
         return sum + kw.length + (explainer ? explainer.length + 3 : 0);
       }, 0) + rules.join(' ').length
     : 0;
+  // v4.15: printing every keyword's reminder text inline (the `full` tier's
+  // MTG-style explainer) can run long enough that shrinking the shared font
+  // scale bottoms out at `min` and the rules/flavor text still clips at the
+  // card's bottom edge. When that happens, drop the inline reminder text
+  // first — falling back to just the bolded, still-clickable keyword name
+  // (KEYWORD_GLOSSARY stays reachable via its popover) — rather than ever
+  // truncating the actual ability/flavor sentences, which are the part a
+  // player actually needs to read every time.
+  const explainerWouldOverflow =
+    cfg.keywordExplainer &&
+    fitFontSize('x'.repeat(textBoxCharsWithExplainer), 1, 0.55, 160) <= 0.55;
+  const showKeywordExplainer = cfg.keywordExplainer && !explainerWouldOverflow;
+  const textBoxChars = showKeywordExplainer
+    ? textBoxCharsWithExplainer
+    : topKeywords.reduce((sum, kw) => sum + kw.length, 0) + rules.join(' ').length;
   const textBoxScale = cfg.keywordExplainer
     ? fitFontSize('x'.repeat(textBoxChars), 1, 0.55, 160)
     : 1;
@@ -1259,6 +1273,11 @@ export function CardFace({
   const isFoil = foil && !serial;
   const label = `${def.name}, ${def.type}${atkHp}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
+  // v4.15: the card's visible fill/background now tracks its color identity
+  // (cardColorsForFace, computed above) instead of rarity — rarity keeps the
+  // border/glow/corner-gem treatment below (rarityBorder/rarityGlow/rarityHex)
+  // so it's still legible at a glance, just no longer via the body tint.
+  const colorFillHex = colorHexPrimary(cardColorsForFace);
   // Long names/flavor text shrink to fit via fitFontSize below. The card's
   // own footprint is a hard 2.5:3.5 (w:h) rectangle at every tier — it never
   // grows to accommodate overflow; any residual overflow clips at the
@@ -1270,7 +1289,11 @@ export function CardFace({
   // gold-on-red name banner instead of the shared tinted-paper header.
   const mythic = isMythic(def.rarity) && !serial;
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
-  const bg = rarityBg(def.rarity);
+  // v4.15: body background now comes from color identity, not rarity —
+  // Rare+ still gets the stronger animated-sheen/mythic/ultra *effect layers*
+  // below (those track rarityAnimated/isMythic, unchanged), just tinted by
+  // the card's color instead of its rarity.
+  const bg = colorBg(cardColorsForFace);
   const TypeIcon = TYPE_ICON[def.type];
   // Full-Art: the uploaded image fills the entire card footprint edge to
   // edge instead of sitting in a boxed 4:3 art window; every normal piece of
@@ -1366,7 +1389,7 @@ export function CardFace({
         style={
           mythic || fullArt || ultra
             ? undefined
-            : { backgroundColor: `color-mix(in srgb, ${rarityHex} 20%, var(--c-paper))` }
+            : { backgroundColor: `color-mix(in srgb, ${colorFillHex} 20%, var(--c-paper))` }
         }
       >
         <span
@@ -1686,7 +1709,7 @@ export function CardFace({
             <div
               className={cn(
                 'shrink-0',
-                cfg.keywordExplainer
+                showKeywordExplainer
                   ? 'flex flex-col'
                   : 'flex flex-row flex-wrap gap-x-1.5 gap-y-0 min-h-[9px]',
               )}
@@ -1697,7 +1720,7 @@ export function CardFace({
                   kw={kw}
                   small={cfg.keywordSmall}
                   autoIntroduce={introduceKeywords}
-                  explainer={cfg.keywordExplainer}
+                  explainer={showKeywordExplainer}
                   fontSize={
                     cfg.keywordExplainer ? (cfg.keywordSmall ? 6.5 : 9) * textBoxScale : undefined
                   }
