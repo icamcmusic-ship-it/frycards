@@ -1117,9 +1117,15 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // problem; the Leader was simply never given a real kit. Printed a
   // face-damage Ability matching its Crimson/Obsidian aggro-reach identity,
   // in line with crimson_vector_commander's face-sap Ability above.
+  // v4.16.1: a face-only Ability (sap 4 enemyLeader) measured WORSE than the
+  // old anonymous default (sap 2 anyTarget) it replaced -- Crimson Assault
+  // 29.0% -> 21.6%. The default's `anyTarget` flexibility (snipe a blocker OR
+  // push face) mattered more to an aggro deck's board race than the raw
+  // value bump did. Kept `anyTarget` and raised the value instead, so it's
+  // still a real upgrade over the default rather than a narrower Ability.
   sovereign_of_the_dying_star: {
     threshold: 4,
-    effect: { action: 'sap', value: 4, target: 'enemyLeader' },
+    effect: { action: 'sap', value: 3, target: 'anyTarget' },
   },
 };
 
