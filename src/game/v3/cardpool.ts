@@ -13,6 +13,36 @@ import { CardDef, ComboPattern, Effect, EffectTarget, LEADER_HP } from './cards'
 import { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import { SIM_TUNING } from './engine';
+import { COLOR_OF_KEYWORD, LEADER_COLORS, Color } from './colors';
+
+// v4.16 fix: keyword layering below (secondary keyword, Pierce, Overrun,
+// Rally, Bulwark, Toll, Avenge, Steel) each independently rolls on to a
+// card with NO check that the combined color identity (colors.ts's
+// `cardColors`, which unions COLOR_OF_KEYWORD across every keyword a card
+// carries) still fits within some real Leader's 2-color pair
+// (LEADER_COLORS). A card whose keywords span 3+ distinct colors, or 2
+// colors that no Leader pairs together, becomes illegal for every
+// Leader — i.e. undraftable, permanently dead weight in the pool (a full
+// audit found 28/284 non-Leader cards, 9.9%, in this state; every def.toll
+// card was among them, which is why Toll had literally never fired across
+// 66,120 sim games).
+//
+// Fix at the root: before layering any secondary keyword onto a card,
+// check whether the resulting keyword set would still be legal for at
+// least one Leader; if not, skip that layer (same pattern as the existing
+// probabilistic gates elsewhere in this file that skip additions) rather
+// than force an illegal combination onto the card. Purely a skip/no-op
+// gate — no new randomness, no change to keywords that already fit.
+function wouldBeLegalSomewhere(keywords: string[]): boolean {
+  const colors = new Set<Color>();
+  for (const kw of keywords) {
+    const c = COLOR_OF_KEYWORD[kw];
+    if (c) colors.add(c);
+  }
+  const arr = Array.from(colors);
+  if (arr.length === 0) return true; // colorless (Slate) is always legal
+  return Object.values(LEADER_COLORS).some((pair) => arr.every((c) => pair.includes(c)));
+}
 
 // Deterministic small hash so mechanical assignment is stable per card id.
 function hash(s: string): number {
@@ -226,9 +256,17 @@ function mapUnit(c: CardTemplate): CardDef {
   // Higher rarity grants a second keyword sometimes.
   if (tier >= 2 && hash(c.id) % 3 !== 0) {
     const secondary = pick(c.id, 13, UNIT_KEYWORDS);
-    if (secondary !== primaryKw) keywords.push(secondary);
+    if (secondary !== primaryKw && wouldBeLegalSomewhere([...keywords, secondary])) {
+      keywords.push(secondary);
+    }
   }
-  if (tier >= 3 && !keywords.includes('Pierce') && hash(c.id) % 3 === 0) keywords.push('Pierce');
+  if (
+    tier >= 3 &&
+    !keywords.includes('Pierce') &&
+    hash(c.id) % 3 === 0 &&
+    wouldBeLegalSomewhere([...keywords, 'Pierce'])
+  )
+    keywords.push('Pierce');
   // v4.4 Overrun: a direct, targeted counter to the durability-stack meta
   // (Ward/Steel/Bulwark fully zeroing a hit) — layered independently, same
   // pattern as the Pierce secondary roll above.
@@ -237,7 +275,13 @@ function mapUnit(c: CardTemplate): CardDef {
   // Guard-Bulwark Turtle 78.0%, Toll-Bulwark Fortress 77.3%) stayed
   // dominant with Overrun too rare to matter as the printed answer. Purely
   // additive: every card that had Overrun still has it.
-  if (tier >= 2 && !keywords.includes('Overrun') && hash(c.id) % 4 === 2) keywords.push('Overrun');
+  if (
+    tier >= 2 &&
+    !keywords.includes('Overrun') &&
+    hash(c.id) % 4 === 2 &&
+    wouldBeLegalSomewhere([...keywords, 'Overrun'])
+  )
+    keywords.push('Overrun');
 
   // v4.6 stat budget: the balance sim's "most likely OP" list was dominated
   // by exact-cost Units whose stats were budgeted off the pre-format
@@ -388,7 +432,8 @@ function mapUnit(c: CardTemplate): CardDef {
       { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
       { threshold: 3, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
     ]);
-    if (hash(c.id) % 3 === 0) def.keywords = [...(def.keywords || []), 'Rally'];
+    if (hash(c.id) % 3 === 0 && wouldBeLegalSomewhere([...(def.keywords || []), 'Rally']))
+      def.keywords = [...(def.keywords || []), 'Rally'];
   }
 
   // A Combo passive on a slice of units (points toward archetypes).
@@ -419,28 +464,53 @@ function mapUnit(c: CardTemplate): CardDef {
 
   // v4.2 Unit keywords: Bulwark, Toll, Avenge — layered independently of the
   // primary keyword so reactive shells have scaling defense beyond raw HP.
-  if (tier >= 1 && hash(c.id) % 7 === 2) {
+  if (
+    tier >= 1 &&
+    hash(c.id) % 7 === 2 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Bulwark'])
+  ) {
     def.bulwark = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
     def.keywords = [...(def.keywords || []), 'Bulwark'];
   }
-  if (tier >= 2 && hash(c.id) % 7 === 5) {
+  if (
+    tier >= 2 &&
+    hash(c.id) % 7 === 5 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Toll'])
+  ) {
     def.toll = { x: 1 };
     def.keywords = [...(def.keywords || []), 'Toll'];
   }
-  if (tier >= 1 && hash(c.id) % 11 === 3) {
+  if (
+    tier >= 1 &&
+    hash(c.id) % 11 === 3 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Avenge'])
+  ) {
     def.avenge = true;
     def.keywords = [...(def.keywords || []), 'Avenge'];
   }
   // v4.4 Steel X: a per-turn damage-absorption pool from ANY source (attacks,
   // Sap, Pierce overflow) — the balance-sim answer to an aggression-dominant
   // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
-  if (tier >= 2 && hash(c.id) % 9 === 4) {
+  if (
+    tier >= 2 &&
+    hash(c.id) % 9 === 4 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
+  ) {
     // v4.7: 2/2/3 by tier -> 1/1/2 — the ablation harness measured halved
     // Steel as the ONLY keyword dial that moved the two Steel-labeled
     // durability decks (Steel-Scrap 82->71, Ward-Steel 79->71) after Toll,
     // Avenge and Mend dials all measured ~zero. Steel refreshes every turn,
     // so each point is worth far more than a point of HP.
-    def.steel = { x: 1 + (tier >= 4 ? 1 : 0) };
+    // v4.16: 1/1/2 by tier -> flat 1 — Steel was STILL the single most
+    // overtuned keyword after the v4.7 halving (measured castWin% vs.
+    // deckBaseline% delta +22.0pt, the largest of any keyword this pass,
+    // vs. the next-worst keyword's ~+11pt). Dropping the tier>=4 bonus
+    // point (the only cards still printing 2, since every lower tier
+    // already prints 1) is the smallest further cut available on this
+    // dial without hitting the floor of 0 (which would delete the
+    // keyword's identity outright) — a direct, proportionate trim to the
+    // exact sub-case the prior halving didn't touch.
+    def.steel = { x: 1 };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }
   // v4.4: two named cards manually granted Steel as a discrete identity
@@ -453,7 +523,11 @@ function mapUnit(c: CardTemplate): CardDef {
     tang_s_refuge: 2,
     nanite_division_marshal: 3,
   };
-  if (MANUAL_STEEL[c.id] !== undefined && !def.steel) {
+  if (
+    MANUAL_STEEL[c.id] !== undefined &&
+    !def.steel &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
+  ) {
     def.steel = { x: MANUAL_STEEL[c.id] };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }
@@ -466,7 +540,10 @@ function mapUnit(c: CardTemplate): CardDef {
   if (c.id === 'chrono_phalanx') {
     def.atk = (def.atk || 0) + 2;
     def.hp = (def.hp || 0) + 2;
-    if (!def.keywords?.includes('Overrun'))
+    if (
+      !def.keywords?.includes('Overrun') &&
+      wouldBeLegalSomewhere([...(def.keywords || []), 'Overrun'])
+    )
       def.keywords = [...(def.keywords || []), 'Overrun'];
   }
   // v4.9 ablation dial (live default 0, i.e. off): a flat HP surcharge on
@@ -707,7 +784,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // cards going forward — scales with a hot roll (dice of value 6 placed this
   // turn) without ever being a dead card, sidestepping the trophy-gate problem
   // structurally instead of needing rarity guidance to manage it.
-  if (!asCharm && hash(c.id) % 5 === 3) {
+  if (!asCharm && hash(c.id) % 5 === 3 && wouldBeLegalSomewhere([...(base.keywords || []), 'Crescendo'])) {
     // v4.5: baseline x 1 -> 2 — Crescendo measured as the third-weakest
     // keyword (28.6% win rate). A die of value 6 is only a ~1-in-6 shot per
     // die placed, so the old +1-per-six rarely moved the needle on its own
@@ -738,7 +815,8 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     tier >= 2 &&
     hash(c.id) % 6 === 4 &&
     base.onCast &&
-    (base.onCast.value ?? 0) >= 1
+    (base.onCast.value ?? 0) >= 1 &&
+    wouldBeLegalSomewhere([...(base.keywords || []), 'Aftershock'])
   ) {
     const halfValue = Math.max(1, Math.floor((base.onCast.value || 2) / 2));
     base.aftershock = { action: base.onCast.action, value: halfValue, target: base.onCast.target };
@@ -748,7 +826,12 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   // Mutually exclusive with Scrap — Scrap's whole identity is "discard this
   // instead of casting it"; if a card also auto-casts via Snap before the
   // AI's Scrap pass ever sees it in hand, Scrap never fires.
-  if (asCharm && !base.keywords?.includes('Scrap') && hash(c.id) % 4 === 2) {
+  if (
+    asCharm &&
+    !base.keywords?.includes('Scrap') &&
+    hash(c.id) % 4 === 2 &&
+    wouldBeLegalSomewhere([...(base.keywords || []), 'Snap'])
+  ) {
     base.snap = true;
     base.keywords = [...(base.keywords || []), 'Snap'];
   }
@@ -801,9 +884,9 @@ function mapLocation(c: CardTemplate): CardDef {
   // v4.4 Foothold: a slice of Locations also cheapen the first Unit cast
   // each turn — gives ramp identities (Excavate/Anchor especially) an actual
   // floor instead of doing nothing on the turns they're setting up.
-  if (hash(c.id) % 6 === 3) {
+  if (hash(c.id) % 6 === 3 && wouldBeLegalSomewhere([...(def.keywords || []), 'Foothold'])) {
     def.foothold = true;
-    def.keywords = ['Foothold'];
+    def.keywords = [...(def.keywords || []), 'Foothold'];
   }
   if (tier >= 1) {
     def.ability = pick(c.id, 6, [
@@ -815,20 +898,32 @@ function mapLocation(c: CardTemplate): CardDef {
   }
   // v4.2 Location keywords: Tribute (synergy with Pitch), Excavate (ramp
   // identity), Contested (arms-race decision) — each on its own slice.
-  if (def.ability && hash(c.id) % 5 === 0) {
+  if (
+    def.ability &&
+    hash(c.id) % 5 === 0 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Tribute'])
+  ) {
     def.tribute = pick(c.id, 7, [
       { action: 'draw', value: 1, target: 'none' } as Effect,
       { action: 'mend', value: 2, target: 'friendlyAny' } as Effect,
     ]);
     def.keywords = [...(def.keywords || []), 'Tribute'];
-  } else if (def.ability && hash(c.id) % 5 === 1) {
+  } else if (
+    def.ability &&
+    hash(c.id) % 5 === 1 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Excavate'])
+  ) {
     // v4.5: x 1 -> 2 — Excavate measured as the second-weakest keyword in
     // the game (32.3% win rate), and it's a slow ramp by design (needs
     // several of the controller's own turns in play to matter); doubling
     // the per-turn rate lets it actually pay off before the game ends.
     def.excavate = { x: SIM_TUNING.excavateRate };
     def.keywords = [...(def.keywords || []), 'Excavate'];
-  } else if (tier >= 1 && hash(c.id) % 5 === 2) {
+  } else if (
+    tier >= 1 &&
+    hash(c.id) % 5 === 2 &&
+    wouldBeLegalSomewhere([...(def.keywords || []), 'Contested'])
+  ) {
     def.contested = true;
     def.keywords = [...(def.keywords || []), 'Contested'];
   }
@@ -871,7 +966,20 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
   // shell) far more than Avenge Swarm (barely moved, 39.5% -> 40.9%).
   // Reverted; see the Ultimate entry below for the once-per-game version of
   // this same compensation instead.
-  mer_king: { threshold: 5, effect: { action: 'mend', value: 2, target: 'friendlyAny' } },
+  // v4.16: value 2 -> 1 — Mer King Guard-Bulwark Turtle is STILL the most
+  // extreme archetype outlier in the whole roster (95.9% win rate, n=2280),
+  // re-confirmed for at least two straight passes, and the prior findings
+  // doc already isolated it to Mer-King's own kit (not Guard/Bulwark
+  // pool-wide — those keywords are fine on every other Leader). The v4.9
+  // note directly above explains WHY a bump here overshoots specifically
+  // toward Turtle: an every-turn repeatable mend rewards whichever
+  // archetype best compounds repetition over a long game, and a
+  // durability-stack wall deck that never has to spend its Ability Slot on
+  // anything but sustain is exactly that shape. Applying the same logic in
+  // reverse — cutting the per-turn value — should trim Turtle's
+  // infinite-sustain loop disproportionately without touching the Leader's
+  // other, much weaker archetypes (Twin Heal, Avenge Swarm) nearly as hard.
+  mer_king: { threshold: 5, effect: { action: 'mend', value: 1, target: 'friendlyAny' } },
   // v4.4.2: threshold 5 -> 3 — the first tempo-grant version (unlocked at 5,
   // same as everyone else) barely moved Diver's win rate (33.7% -> 34.2%).
   // Firing 2-3 turns earlier on average is a much bigger lever than the
@@ -901,6 +1009,21 @@ const LEADER_ABILITIES: Record<string, CardDef['ability']> = {
     threshold: 6,
     effect: { action: 'buff', value: 1, target: 'friendlyUnit' },
   },
+  // v4.16: ROOT CAUSE found for Sovereign Crimson Assault sitting at 29.0%
+  // (n=2280), the weakest archetype in the roster — sovereign_of_the_dying_star
+  // had NO entry in this table at all (nor in LEADER_RESOLVE/LEADER_ULTIMATE
+  // below), so it was silently falling back to mapLeader()'s generic default
+  // Ability (`sap 2 anyTarget` @ threshold 5) with no Resolve and no
+  // Ultimate whatsoever — every other one of the 8 Leaders has a hand-tuned
+  // kit including both. This isn't a Pierce problem (the keyword itself
+  // measures a positive delta when it fires this pass) or a card-composition
+  // problem; the Leader was simply never given a real kit. Printed a
+  // face-damage Ability matching its Crimson/Obsidian aggro-reach identity,
+  // in line with crimson_vector_commander's face-sap Ability above.
+  sovereign_of_the_dying_star: {
+    threshold: 4,
+    effect: { action: 'sap', value: 4, target: 'enemyLeader' },
+  },
 };
 
 // v4.2 Resolve X: while at/below half HP, Ability Slot threshold -X. Given to
@@ -928,6 +1051,12 @@ const LEADER_RESOLVE: Record<string, number> = {
   // touching its rate when ahead.
   legendary_diver: 2,
   crimson_vector_commander: 2,
+  // v4.16: see the Ability-table note above — Sovereign had no Resolve at
+  // all, unlike every other Leader. Given the same value as its closest
+  // aggro-identity sibling, crimson_vector_commander, so falling behind
+  // cheapens its face-damage Ability the same way it does for the rest of
+  // the roster.
+  sovereign_of_the_dying_star: 2,
 };
 
 // v4.2 Ultimate(N): a second, once-per-game Ability Slot from the controller's
@@ -996,6 +1125,17 @@ const LEADER_ULTIMATE: Record<string, CardDef['ultimate']> = {
     unlockTurn: 4,
     threshold: 5,
     effect: { action: 'buff', value: 2, target: 'allFriendlyUnits' },
+  },
+  // v4.16: see the Ability-table note above — Sovereign had no Ultimate at
+  // all, i.e. no once-per-game comeback swing while every other Leader has
+  // one. A reach finisher fits its face-damage identity, sized between
+  // crimson_vector_commander's (12, the roster's other pure-reach Leader)
+  // and the weaker legendary_diver's — same unlock turn as the other
+  // aggro-leaning Leaders above.
+  sovereign_of_the_dying_star: {
+    unlockTurn: 4,
+    threshold: 5,
+    effect: { action: 'sap', value: 10, target: 'enemyLeader' },
   },
 };
 

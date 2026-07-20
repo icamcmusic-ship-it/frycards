@@ -750,9 +750,16 @@ function wardCheck(g: Game, target: Inst, hostile: boolean): boolean {
  * per-die multiplier entirely — "did I roll a six" instead of "how many
  * sixes did I manage to spend."
  */
+// v4.16: trigger loosened from "rolled a 6" to "rolled a 5 or 6" — Crescendo
+// had the lowest draft-activation of any keyword (0.25-0.51 across recent
+// passes) despite a clearly positive delta whenever it actually fired, i.e.
+// it's a timing/usability problem, not a power problem (raising its value
+// further would just make the rare firings even more swingy without fixing
+// the real issue: it almost never gets to trigger at all). Roughly doubles
+// the per-die hit chance (1/6 -> 1/3) without touching the payoff value.
 function withCrescendo(p: Player, c: Inst, eff: Effect): Effect {
   if (!c.def.crescendo) return eff;
-  if (!rollValues(p).some((v) => v === 6)) return eff;
+  if (!rollValues(p).some((v) => v >= 5)) return eff;
   return { ...eff, value: (eff.value || 0) + c.def.crescendo.x };
 }
 
@@ -1709,7 +1716,15 @@ export function echoRecast(
   return true;
 }
 
-/** Scrap: discard a Scrap card from hand to reroll one unplaced die. */
+/** Scrap: discard a Scrap card from hand to reroll one unplaced die.
+ * v4.16: reroll with advantage (roll twice, keep the higher) instead of a
+ * single flat d6 — the sim measured Scrap as actively net-negative to use
+ * (castWin% 49.6 vs. deckBaseline% 55.5, a -5.9pt delta): a flat reroll has
+ * no directed upside (average unchanged at 3.5, same as the die it
+ * replaced) and burns a real hand card just to gamble, so using it was
+ * correctly a losing proposition on average. Advantage reroll gives the
+ * card an actual positive expected value (avg of max(2d6) ≈ 4.47 vs. 3.5)
+ * so spending a hand card on it is a real, if modest, upgrade. */
 export function scrap(g: Game, handIid: string, dieIndex: number): boolean {
   const p = g.players[g.active];
   if (g.stage !== 'PLACEMENT') return false;
@@ -1718,7 +1733,7 @@ export function scrap(g: Game, handIid: string, dieIndex: number): boolean {
   if (!die || idx < 0) return false;
   const c = p.hand.splice(idx, 1)[0];
   discardCard(g, p, c);
-  die.value = d6(g.rng);
+  die.value = Math.max(d6(g.rng), d6(g.rng));
   g.stats.scraps++;
   return true;
 }
