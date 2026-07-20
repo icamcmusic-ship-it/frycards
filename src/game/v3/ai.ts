@@ -83,7 +83,15 @@ function handKeepStats(p: Player): { cheapPlays: number; units: number } {
 
 function handIsKeepable(p: Player): boolean {
   const { cheapPlays, units } = handKeepStats(p);
-  return cheapPlays >= 2 && units >= 1;
+  // v4.17: the bare `cheapPlays>=2 && units>=1` floor kept hands that clear
+  // it by the thinnest possible margin (exactly 2 cheap plays, exactly 1
+  // Unit) — the mulligan-lapse detector below flagged these as materially
+  // underperforming (-23.1pt delta) vs comfortable keeps. Require a small
+  // margin above the bare minimum: either enough cheap plays to survive a
+  // dead draw, or enough Units to keep board presence, while still keeping
+  // the original floor as an absolute (never keep below it).
+  if (cheapPlays < 2 || units < 1) return false;
+  return cheapPlays >= 3 || units >= 2;
 }
 
 /** Mulligan a single player's hand (shuffle back, redraw 7 — v4.3, was 5 —
@@ -876,6 +884,49 @@ function playPlacement(g: Game, p: Player) {
           continue;
         }
       }
+    }
+    if (progress) continue;
+
+    // 6. Fallback: every step above only takes a "worth it" play (holds AoE
+    // for a real board, skips pointless mend/draw/sap, etc). Dice are fully
+    // re-rolled next turn (see engine.ts startTurn) — nothing carries over —
+    // so a die left unplaced here is pure waste, not a deliberate bank for
+    // next turn's Twin/Combo timing (that's handled explicitly above via
+    // staging/comboGate checks). Measured as the single largest AI
+    // inefficiency in the balance sim (17.7 wasted dice/game, -32pt delta
+    // when it happens): spend any still-affordable legal cast, favoring the
+    // cheapest/least-valuable card so we don't burn a real threat just to
+    // avoid banking a die that was going away regardless.
+    {
+      const fallbackCastable = p.hand
+        .filter((c) => !c.def.comboGate && c.def.type !== 'Location' && !hasKw(c.def, 'Twin'))
+        .sort((a, b) => costWeight(a.def) - costWeight(b.def));
+      let fallbackDone = false;
+      for (const c of fallbackCastable) {
+        if (g.winner) break;
+        const thr = effThreshold(g, p.id, c.def);
+        let sel: number[] | null;
+        if (c.def.overflow && (c.def.castCostKind ?? 'atLeast') === 'atLeast') {
+          const dieIdx = bestDieFor(p, thr);
+          sel = dieIdx >= 0 ? [dieIdx] : null;
+        } else {
+          sel = bestSelectionFor(g, p, c.def);
+        }
+        if (!sel) continue;
+        if (
+          castFromHand(
+            g,
+            sel,
+            c.iid,
+            c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined,
+          )
+        ) {
+          progress = true;
+          fallbackDone = true;
+          break;
+        }
+      }
+      if (fallbackDone) continue;
     }
   }
 }

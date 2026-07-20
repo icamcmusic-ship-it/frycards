@@ -394,6 +394,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // which is a distinct mechanic from the new 'exact' cost format.
   if (!keywords.includes('Twin')) {
     applyCostFormat(def, pickCostFormat(c.id, tier));
+    applyManualCostAdj(def, c.id);
     // v4.6: same straight-gate compensation mapSpell applies to payoffs —
     // a straight gate is far harder to hit than its match-family tier
     // sibling (see GATE_DIFFICULTY), so the few straight-gated Units get a
@@ -590,6 +591,20 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   void_mother: 2,
   familiar_in_the_dark: 2,
   butterflyfish_school: 1,
+  // v4.17 Item B: residual cost-band outliers whose lever is raw stats (no
+  // onCast to adjust via MANUAL_VALUE_BUFF). Stack sizes proportionate to
+  // how far off the measured residual was — the two identical-statline
+  // Frenzy Commons (Wasteland Aberration/Kinetix Enforcer) and the two
+  // Guard-durability Uncommons get the standard -1; Astral Shoal is a
+  // Full-Art trophy body with FOUR keywords stacked (Guard/Echo/Bulwark/
+  // Steel) behind a FullHouse gate, so it gets the bigger -2 given to other
+  // multi-keyword durability trophies above.
+  smokeveil_striketeam: 1,
+  wasteland_aberration: -1,
+  kinetix_enforcer: -1,
+  boneplate_sentinel: -1,
+  amethyst_starfish: -1,
+  astral_shoal: -2,
 };
 
 // ---------------------------------------------------------------------------
@@ -610,6 +625,56 @@ const SAP_TARGETS: EffectTarget[] = ['anyTarget', 'enemyUnit', 'enemyLeader'];
  * named-card identity-patch pattern as MANUAL_STEEL below — a modest +1 to
  * each card's on-cast payoff, applied post-hoc in mapSpell/mapLocation.
  */
+/**
+ * v4.17: per-card cost-vs-ability outliers from the 66,120-game costVsAbility
+ * Mismatches table — same named-card identity-patch pattern as MANUAL_STEEL/
+ * MANUAL_VALUE_BUFF, but nudging the CAST cost side instead of the payoff
+ * side. Numeric-cost cards (exact/sum) get a small threshold bump (harder to
+ * hit); gate-cost cards get remapped one difficulty step up within
+ * GATE_DIFFICULTY (see below), applied post-hoc after applyCostFormat in
+ * both mapUnit and mapSpell (Locations never carry a Cast Slot cost at all,
+ * so under-costed Locations are compensated via MANUAL_VALUE_BUFF instead —
+ * see mapLocation). Two flagged cards (ash_shaper_mystic, rune_etched_tablet)
+ * were part of the 28 "illegal everywhere" cards the wouldBeLegalSomewhere()
+ * fix this pass made legal for the first time — their z-scores were measured
+ * on a near-zero prior sample, so they're deliberately left out here pending
+ * a fresh read with real sample size, rather than risk double-nerfing a card
+ * that may not actually be an outlier once it's actually being drafted.
+ */
+const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
+  // Item A: under-costed, nudge the numeric cost up by the smallest unit
+  // (+1 threshold on exact-cost Charms).
+  driftwood_harp: 1,
+  ribbone_longbow: 1,
+  // Item B buffs: value-less bind/destroy effects can't take a value bump,
+  // so the buff lever is the cost side instead — ease the numeric cost down
+  // by the smallest unit.
+  bubble_harvest: -1,
+  bone_splinter_quill: -1,
+};
+const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
+  // Item A: under-costed gate-cost Units, bumped one difficulty step up.
+  // (ash_shaper_mystic intentionally omitted — see comment above.)
+  deceptive_angler: 'ThreeEvens', // was AnyPair
+  blind_colossus: 'ThreeKind', // was ThreeOdds
+  // Item B buffs: value-less destroy Events, eased one difficulty step down
+  // so the payoff (already strong at full value) is reachable more often.
+  shark_gathering: 'ThreeKind', // was FullHouse
+  locust_veil: 'ThreeKind', // was FullHouse
+};
+/** Apply MANUAL_THRESHOLD_ADJ/MANUAL_GATE_OVERRIDE post-hoc to an already
+ * cost-formatted CardDef (called after applyCostFormat in mapUnit/mapSpell). */
+function applyManualCostAdj(def: CardDef, id: string) {
+  const gateOverride = MANUAL_GATE_OVERRIDE[id];
+  if (gateOverride !== undefined && def.comboGate !== undefined) {
+    def.comboGate = gateOverride;
+  }
+  const adj = MANUAL_THRESHOLD_ADJ[id];
+  if (adj !== undefined && def.threshold !== undefined) {
+    def.threshold = Math.max(1, def.threshold + adj);
+  }
+}
+
 const MANUAL_VALUE_BUFF: Record<string, number> = {
   kinetic_piercer: 1,
   isle_of_the_ancients: 1,
@@ -633,6 +698,24 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   black_smoker: 1,
   kinetix_blacksite_cavern: 1,
   glowing_glyph_tablet: -1,
+  // v4.17: cardsToBuff/cardsToNerf residual outliers (Item B) whose lever is
+  // an onCast VALUE, not raw stats — Charms/Events/Locations. mist_ghost_ship/
+  // ribvault_cathedral are also Item A cost-vs-ability outliers, but Locations
+  // never carry a Cast Slot cost (see MANUAL_THRESHOLD_ADJ comment above), so
+  // their nudge lands here instead, trimming the onCast buff value they get
+  // for free every turn. nanite_culture_lab/the_descent were part of the 28
+  // "illegal everywhere" fix this pass (near-zero prior sample) and are
+  // deliberately left unchanged pending a fresh read.
+  mist_ghost_ship: -1,
+  ribvault_cathedral: -1,
+  jagged_dragonfang_blade: 1,
+  jarred_sunspark: 1,
+  shimmering_statue: 1,
+  diamond_anchor: 1,
+  abyssal_pathway: -1,
+  sunken_meadow: -1,
+  obsidian_altar: -1,
+  sovereign_spires_of_arrak_zul: -1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
@@ -716,6 +799,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
         : gate === 'FullHouse'
           ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
           : { action: 'sap', value: 5, target: 'anyTarget' };
+    applyManualCostAdj(base, c.id);
     return base;
   }
 
@@ -749,6 +833,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
 
   // v4.3: assign the real Cast Slot cost format.
   applyCostFormat(base, pickCostFormat(c.id, costTier));
+  applyManualCostAdj(base, c.id);
 
   // v4.6: straight-family gates are measurably HARDER than the match-family
   // gates they share a cost tier with (directed 2-reroll hit rates:
