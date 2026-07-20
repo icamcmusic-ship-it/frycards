@@ -1000,6 +1000,7 @@ function MyShopTab() {
       <OpenShopPanel
         busy={busy}
         error={error}
+        credits={profile?.credits ?? 0}
         onOpen={(name, banner) => run(() => openShop(name, banner))}
       />
     );
@@ -1288,14 +1289,17 @@ function MyShopTab() {
 function OpenShopPanel({
   busy,
   error,
+  credits,
   onOpen,
 }: {
   busy: boolean;
   error: string;
+  credits: number;
   onOpen: (name: string, banner: string | null) => void;
 }) {
   const [name, setName] = useState('');
   const [banner, setBanner] = useState('');
+  const short = Math.max(0, SHOP_SETUP_FEE - credits);
   return (
     <div className="max-w-md">
       {error && (
@@ -1310,6 +1314,11 @@ function OpenShopPanel({
           {SHOP_BASE_SLOTS} free listing slots — up to {SHOP_MAX_SLOTS} total can be purchased
           later, each backed by its own collateral.
         </div>
+        {short > 0 && (
+          <div className="text-[11px] font-bold text-[var(--c-red)] mb-3">
+            You need <Credits amount={short} /> more to open a shop.
+          </div>
+        )}
         <label className="block text-xs font-bold mb-1">Shop name</label>
         <input
           className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
@@ -1325,7 +1334,7 @@ function OpenShopPanel({
         />
         <PopButton
           color="red"
-          disabled={busy || !name.trim()}
+          disabled={busy || !name.trim() || short > 0}
           onClick={() => onOpen(name.trim(), banner.trim() || null)}
         >
           OPEN SHOP ▸
@@ -1547,7 +1556,9 @@ function MysteryBuilderPanel({
                     min={0}
                     step="0.05"
                     value={weights[r] ?? 0}
-                    onChange={(e) => setWeights({ ...weights, [r]: Number(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setWeights({ ...weights, [r]: Math.max(0, Number(e.target.value) || 0) })
+                    }
                     className="w-14 px-1 py-0.5 ink-border-sm"
                   />
                 </label>

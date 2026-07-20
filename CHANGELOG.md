@@ -7,6 +7,83 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.18 balance + bug-hunt pass
+
+- **Keyword nerf**: Steel's print rate cut (1-in-9 → 1-in-12 eligible cards)
+  after two prior power trims left it still the most overtuned keyword
+  (+17.3pt delta) — measured down to +7.8pt, no longer the outsized #1
+  offender.
+- **CPU fix**: Placement now Scraps a genuinely stuck die as a last resort
+  (positive EV since v4.16's advantage-reroll change) instead of leaving it
+  unplaced — a small, real improvement on the app's single largest CPU
+  inefficiency (15.52 → 15.47 wasted dice/game); the bulk of that lapse is
+  structural and needs a real assignment-problem solver, not another
+  heuristic layer.
+- **Balance**: reverted two v4.12 card patches (`the_wolf_of_wall_street`,
+  `butterflyfish_school`) that had overshot into the opposite extreme —
+  confirmed via a fresh sim that neither card's residual was actually about
+  its own stats, so a third patch was skipped pending an archetype-
+  normalized look.
+- **UI**: flavor text now shrinks in step with however compressed the
+  keyword/rules block above it got (previously sized off its own length
+  only) — a follow-up refinement on v4.16's flavor-overflow fix. Also
+  confirmed card colors already render by identity, not rarity (shipped in
+  v4.16) — no further action needed there.
+- **Bug hunt**: shop-open button now checks affordability before enabling;
+  mystery-pack rarity weights can no longer go negative; admin currency/card
+  grants now confirm before applying; game-over screen shows "Calculating
+  rewards…" instead of a blank gap while a match result is still being
+  recorded.
+- Verified the full 292-card pool is in sync with Supabase (no drift).
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.18.md`.
+
+### v4.17 balance pass — AI die-utilization + cost-vs-ability tuning
+
+- **CPU fixes**: mulligan-keep bar tightened (marginal keeps measured
+  -23.1pt vs. comfortable ones); Placement now spends any still-affordable
+  card after Rally instead of ending the turn with playable dice unused
+  (was 17.7 wasted dice/game, -32.0pt when it happened).
+- **Card cost/stat tuning**: buffed 9 underperforming cards, nerfed 9
+  overperforming cards, and adjusted the cost format on 6 cost-band
+  outliers — all from cost-vs-ability z-scores in the 66,120-game baseline.
+  Full list in `docs/BALANCE_SIM_FINDINGS_v4.17.md`.
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.17.md`.
+
+### v4.16 balance pass — color-legality bug fix + harness expansion
+
+- **Root-cause fix: 28/284 cards (9.9% of the pool) were undraftable by any
+  Leader.** Secondary-keyword layering in `cardpool.ts` could stack 3+
+  colors onto a card with no check that the result still fit a real
+  Leader's 2-color identity — every Toll-keyword card was affected, so Toll
+  had never fired once across a 66,120-game baseline. Fixed at the source
+  with `wouldBeLegalSomewhere()`; dead-card count now 0/284.
+- **Keyword balance**: Steel's overtuned tier-4 bonus point removed (was
+  +22pt, the largest single keyword delta measured); Scrap's reroll changed
+  from flat (measured -5.9pt EV, net negative to use) to advantage-of-two;
+  Crescendo's trigger loosened to 5-or-6 (was 6-only), targeting its
+  chronically low activation rate.
+- **Leader kits**: Mer-King's mend Ability trimmed 2→1 (targets its 95.9%
+  win-rate Guard-Bulwark Turtle outlier without a global nerf); Sovereign of
+  the Dying Star, which had silently been running the generic default kit,
+  got a real hand-tuned Ability/Resolve/Ultimate kit.
+- **Bug fix**: Leader/Unit/Location Ability activation, Rally, Ultimates,
+  Twin bonuses, and Combo triggers could all deal lethal damage without
+  calling `cleanupDeaths()`, so a win could go unregistered until an
+  unrelated later action happened to trigger cleanup. Fixed at all 5 sites
+  in `engine.ts`.
+- **UI**: card body color now renders from color identity instead of
+  rarity (rarity keeps border/glow only); full-size cards drop a keyword's
+  inline reminder text down to just its clickable name before ever
+  truncating the card's actual ability or flavor text, fixing flavor text
+  running off/overlapping the card on some prints.
+- **Harness**: new cost/ability-efficiency, keyword-balance, and
+  mechanic-impact instrumentation in `scripts/simulate-v4.ts`, plus a
+  bucketed balance-summary section at the end of the report.
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
+
 ### v4.15 balance + CPU AI pass
 
 - **Balance backlog cleared** (details in `docs/BALANCE_SIM_FINDINGS_v4.15.md`):

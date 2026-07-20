@@ -928,6 +928,24 @@ function playPlacement(g: Game, p: Player) {
       }
       if (fallbackDone) continue;
     }
+
+    // 7. Last-resort Scrap: the opening Scrap pass above only fires once,
+    // before any of this turn's casts/abilities have changed the hand or
+    // die values — a die that becomes stranded only *after* other cards
+    // already spent their matches never gets a second look. `lapse`
+    // instrumentation shows unplaced-die-at-end-of-turn as the single
+    // biggest AI inefficiency even after step 6's fallback, and v4.16 gave
+    // Scrap positive EV (advantage-of-two reroll, was a flat reroll with
+    // measured -5.9pt EV) — so re-rolling a genuinely stuck die via Scrap
+    // is now strictly better than banking it dead, not just a wash.
+    {
+      const scrapCard = p.hand.find((c) => hasKw(c.def, 'Scrap'));
+      const stuckIdx = unplacedDice(p)[0];
+      if (scrapCard && stuckIdx !== undefined && scrap(g, scrapCard.iid, stuckIdx)) {
+        progress = true;
+        continue;
+      }
+    }
   }
 }
 

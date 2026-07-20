@@ -494,7 +494,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
   if (
     tier >= 2 &&
-    hash(c.id) % 9 === 4 &&
+    hash(c.id) % 12 === 4 &&
     wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
   ) {
     // v4.7: 2/2/3 by tier -> 1/1/2 — the ablation harness measured halved
@@ -511,6 +511,12 @@ function mapUnit(c: CardTemplate): CardDef {
     // dial without hitting the floor of 0 (which would delete the
     // keyword's identity outright) — a direct, proportionate trim to the
     // exact sub-case the prior halving didn't touch.
+    // v4.18: still the single most overtuned keyword after TWO power trims
+    // (+17.3pt delta, next-worst ~+12.8pt) — per-fire power is already at
+    // the floor (flat 1) short of deleting the keyword outright, so this
+    // pass trims PRINT RATE instead (hash bucket 1-in-9 -> 1-in-12 of
+    // eligible tier>=2 cards): fewer cards carry it, but the ones that do
+    // keep their full identity/power instead of getting diluted further.
     def.steel = { x: 1 };
     def.keywords = [...(def.keywords || []), 'Steel'];
   }
@@ -581,7 +587,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   vampire_squid: -4,
   half_faded_shade: -4,
   where_the_deep_meets_the_sky: -4,
-  the_wolf_of_wall_street: -1,
+  // v4.18: the_wolf_of_wall_street's -1 (v4.12) overshot — the v4.18
+  // baseline shows it now at the OPPOSITE extreme (win%=7.8 vs a 45.9
+  // cost-band mean, resid=-38.1pt, cardsToBuff top 5) instead of the
+  // over-performer it was patched for. Reverted rather than re-nerfed.
   mesozoic_exchange_student: -1,
   blind_colossus: -2,
   fayes_true_face: -2,
@@ -590,7 +599,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // buffs (win% far BELOW their cost band's mean)
   void_mother: 2,
   familiar_in_the_dark: 2,
-  butterflyfish_school: 1,
+  // v4.18: butterflyfish_school's +1 (v4.12) overshot — the v4.18 baseline
+  // shows it now at the OPPOSITE extreme (win%=76.5 vs a 42.1 cost-band
+  // mean, resid=+34.4pt, cardsToNerf top 3) instead of the under-performer
+  // it was patched for. Reverted rather than re-buffed further.
   // v4.17 Item B: residual cost-band outliers whose lever is raw stats (no
   // onCast to adjust via MANUAL_VALUE_BUFF). Stack sizes proportionate to
   // how far off the measured residual was — the two identical-statline
