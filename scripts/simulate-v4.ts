@@ -520,6 +520,10 @@ const DECISION_KEYS = [
   'lapseRerollDeadLowDie',
   'lapseUnusedDiceAtEndTurn',
   'lapseEchoOverAbilitySequencing',
+  // v4.19: the Placement die->slot assignment solver (ai.ts playPlacement
+  // step 2) — fires when the solver's dice pairing for a cast differs from
+  // what the old greedy per-card pick would have spent.
+  'lapseGreedyAssignmentFixed',
 ];
 
 interface SuiteResult {
@@ -621,6 +625,16 @@ interface SuiteResult {
    * keywordInDeck alone can't see. */
   keywordCastInGame: Record<string, number>;
   keywordCastInWinGame: Record<string, number>;
+  /** v4.19 harness upgrade: per-card total dice pips paid across all hand
+   * casts + matching cast count (engine.ts castFromHand's cardPips/cardPipsN
+   * decisions) — the "avg cost paid" half of cost-vs-value, measured from
+   * dice actually spent rather than the printed cost format. */
+  cardPips: Record<string, number>;
+  cardPipsN: Record<string, number>;
+  /** v4.19: game-length/tempo curves — per round (half-turn) index, summed
+   * combined Leader HP and combined board size across both players, plus the
+   * number of games still running at that round. Averages = hp/n, board/n. */
+  tempoCurve: Record<number, { n: number; hp: number; board: number }>;
   errors: string[];
 }
 
@@ -681,6 +695,9 @@ function newResult(): SuiteResult {
     aheadAtCheckpointGames: 0,
     keywordCastInGame: {},
     keywordCastInWinGame: {},
+    cardPips: {},
+    cardPipsN: {},
+    tempoCurve: {},
     errors: [],
   };
 }
@@ -748,6 +765,14 @@ function runGame(
     playTurn(g);
     invariants(g, sizeA, sizeB, r.errors);
     rounds++;
+    // v4.19: tempo curve sampling — combined Leader HP + board size by round,
+    // capped at 40 rounds so late outliers don't bloat the record.
+    if (rounds <= 40 && !g.winner) {
+      const t = (r.tempoCurve[rounds] ||= { n: 0, hp: 0, board: 0 });
+      t.n++;
+      t.hp += remainingHp(g, g.players.A.leader) + remainingHp(g, g.players.B.leader);
+      t.board += g.players.A.board.length + g.players.B.board.length;
+    }
     if (rounds === COMEBACK_CHECKPOINT_ROUND) {
       const hpA = remainingHp(g, g.players.A.leader);
       const hpB = remainingHp(g, g.players.B.leader);
@@ -809,7 +834,10 @@ function runGame(
             (r.echoCardArchInWinGame[id] ||= {})[archKey] =
               (r.echoCardArchInWinGame[id][archKey] || 0) + 1;
           }
-        } else if (key.startsWith('cardCast:') && ARCH_WATCHLIST.includes(archKey)) {
+        } else if (key.startsWith('cardCast:')) {
+          // v4.19 (v4.18 carried item 3): tracked for ALL archetypes now, not
+          // just ARCH_WATCHLIST — the archetype-normalized per-card residual
+          // table below needs every archetype's per-card cast->win counts.
           const id = key.slice('cardCast:'.length);
           (r.archCardCastInGame[archKey] ||= {})[id] =
             (r.archCardCastInGame[archKey][id] || 0) + 1;
@@ -817,6 +845,12 @@ function runGame(
             (r.archCardCastInWinGame[archKey] ||= {})[id] =
               (r.archCardCastInWinGame[archKey][id] || 0) + 1;
           }
+        } else if (key.startsWith('cardPips:')) {
+          const id = key.slice('cardPips:'.length);
+          r.cardPips[id] = (r.cardPips[id] || 0) + (d[key] || 0);
+        } else if (key.startsWith('cardPipsN:')) {
+          const id = key.slice('cardPipsN:'.length);
+          r.cardPipsN[id] = (r.cardPipsN[id] || 0) + (d[key] || 0);
         }
       }
     }
@@ -901,6 +935,10 @@ function runGame(
       'lapseRerollDeadLowDie',
       'lapseUnusedDiceAtEndTurn',
       'lapseEchoOverAbilitySequencing',
+      'lapseGreedyAssignmentFixed',
+      // v4.19: raw stranded-die VOLUME (dice, not turns) — companion to the
+      // per-turn binary lapseUnusedDiceAtEndTurn.
+      'unusedDiceCount',
     ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }
@@ -1580,6 +1618,224 @@ const matchupLabels = ARCHETYPES.map((a) => a.label).filter((l) => (R.archN[l] |
   );
 }
 
+// ---------------------------------------------------------------------------
+// v4.19 harness upgrade (task §1): archetype-normalized per-card residuals —
+// the v4.18 priority item 3. For EVERY card (not just Echo/watchlist), its
+// "cast >=1x this game -> win%" is normalized against a weighted average of
+// the archetype baselines it was actually cast in, so a card that only ever
+// rides in a strong (or weak) deck stops inheriting that deck's win rate.
+// This is exactly the normalization v4.18 said the_wolf_of_wall_street /
+// butterflyfish_school need before being patched again.
+// ---------------------------------------------------------------------------
+interface ArchNormRow {
+  id: string;
+  name: string;
+  type: string;
+  actualPct: number;
+  baselinePct: number;
+  delta: number;
+  n: number;
+  archSpread: number; // # of distinct archetypes that cast it
+}
+const cardArchNormRows: ArchNormRow[] = (() => {
+  const perCard: Record<string, { n: number; w: number; base: number; archs: number }> = {};
+  for (const [archKey, cards] of Object.entries(R.archCardCastInGame)) {
+    const archBaseline = (R.archW[archKey] || 0) / (R.archN[archKey] || 1);
+    for (const [id, cnt] of Object.entries(cards)) {
+      const e = (perCard[id] ||= { n: 0, w: 0, base: 0, archs: 0 });
+      e.n += cnt;
+      e.w += R.archCardCastInWinGame[archKey]?.[id] || 0;
+      e.base += archBaseline * cnt;
+      e.archs++;
+    }
+  }
+  return Object.entries(perCard)
+    .filter(([id, e]) => POOL_BY_ID[id]?.type !== 'Leader' && e.n >= 40)
+    .map(([id, e]) => ({
+      id,
+      name: POOL_BY_ID[id]?.name || id,
+      type: POOL_BY_ID[id]?.type || '?',
+      actualPct: (100 * e.w) / e.n,
+      baselinePct: (100 * e.base) / e.n,
+      delta: (100 * e.w) / e.n - (100 * e.base) / e.n,
+      n: e.n,
+      archSpread: e.archs,
+    }))
+    .sort((a, b) => a.delta - b.delta);
+})();
+console.log(
+  '\n--- Archetype-NORMALIZED per-card residual (cast-win% minus weighted archetype baseline, all cards, min n=40) ---',
+);
+const printArchNorm = (r: ArchNormRow) =>
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} castWin%=${r.actualPct.toFixed(1).padStart(5)} archBase%=${r.baselinePct.toFixed(1).padStart(5)} delta=${r.delta >= 0 ? '+' : ''}${r.delta.toFixed(1)}pt archs=${r.archSpread} (n=${r.n})`,
+  );
+console.log('Worst normalized residuals (underperform even for their own decks — buff candidates):');
+for (const r of cardArchNormRows.slice(0, 12)) printArchNorm(r);
+console.log('Best normalized residuals (overperform their own decks — nerf candidates):');
+for (const r of cardArchNormRows.slice(-12).reverse()) printArchNorm(r);
+for (const watchId of ['the_wolf_of_wall_street', 'butterflyfish_school']) {
+  const row = cardArchNormRows.find((r) => r.id === watchId);
+  if (row) {
+    console.log(`v4.18 watch item:`);
+    printArchNorm(row);
+  } else {
+    console.log(`v4.18 watch item ${watchId}: below min n this run`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// v4.19 harness upgrade (task §1): per-card cost-paid vs value delivered —
+// avg dice pips ACTUALLY spent per cast (engine-measured, not printed cost)
+// against casts/game and the normalized residual above. "pipsPerWinPt" is a
+// rough efficiency read: pips paid per point of normalized win contribution.
+// ---------------------------------------------------------------------------
+interface CardEconomyRow {
+  id: string;
+  name: string;
+  type: string;
+  casts: number;
+  avgPips: number;
+  castsPerDeckGame: number;
+  normDelta: number | null;
+}
+const cardEconomyRows: CardEconomyRow[] = Object.keys(R.cardPipsN)
+  .filter((id) => POOL_BY_ID[id]?.type !== 'Leader' && (R.cardPipsN[id] || 0) >= 40)
+  .map((id) => ({
+    id,
+    name: POOL_BY_ID[id]?.name || id,
+    type: POOL_BY_ID[id]?.type || '?',
+    casts: R.cardPipsN[id],
+    avgPips: (R.cardPips[id] || 0) / R.cardPipsN[id],
+    castsPerDeckGame: (R.cardCast[id] || 0) / (R.cardInDeck[id] || 1),
+    normDelta: cardArchNormRows.find((r) => r.id === id)?.delta ?? null,
+  }))
+  .sort((a, b) => b.avgPips - a.avgPips);
+console.log(
+  '\n--- Card economy: avg dice pips paid per cast vs normalized win contribution (min 40 casts) ---',
+);
+console.log('Most expensive casts that DON\'T pay off (high pips, negative normalized delta):');
+for (const r of cardEconomyRows
+  .filter((r) => r.normDelta !== null && r.normDelta < 0)
+  .slice(0, 10))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} avgPips=${r.avgPips.toFixed(2)} casts/g=${r.castsPerDeckGame.toFixed(2)} normDelta=${r.normDelta!.toFixed(1)}pt`,
+  );
+console.log('Cheapest casts that overdeliver (low pips, positive normalized delta):');
+for (const r of [...cardEconomyRows]
+  .reverse()
+  .filter((r) => r.normDelta !== null && r.normDelta > 0)
+  .slice(0, 10))
+  console.log(
+    `${r.name.padEnd(26)} ${r.type.padEnd(9)} avgPips=${r.avgPips.toFixed(2)} casts/g=${r.castsPerDeckGame.toFixed(2)} normDelta=+${r.normDelta!.toFixed(1)}pt`,
+  );
+
+// ---------------------------------------------------------------------------
+// v4.19 harness upgrade (task §1): keyword cost-paid vs value delivered —
+// per keyword, the avg pips paid across all casts of cards carrying it,
+// joined with its activation ratio and fired-vs-baseline win delta (from the
+// v4.16 activation table above). One row = full keyword health at a glance.
+// ---------------------------------------------------------------------------
+interface KeywordCostValueRow {
+  kw: string;
+  avgPips: number;
+  casts: number;
+  activationRatio: number;
+  castWinDelta: number;
+  deckBaselinePct: number;
+}
+const keywordCostValueRows: KeywordCostValueRow[] = kwActivationRows.map((a) => {
+  let pips = 0,
+    casts = 0;
+  for (const id of Object.keys(R.cardPipsN)) {
+    if (!(POOL_BY_ID[id]?.keywords || []).includes(a.kw)) continue;
+    pips += R.cardPips[id] || 0;
+    casts += R.cardPipsN[id] || 0;
+  }
+  return {
+    kw: a.kw,
+    avgPips: casts > 0 ? pips / casts : NaN,
+    casts,
+    activationRatio: a.activationRatio,
+    castWinDelta: a.delta,
+    deckBaselinePct: a.baselineWinPct,
+  };
+});
+console.log('\n--- Keyword cost-paid vs value delivered ---');
+for (const r of [...keywordCostValueRows].sort((a, b) => (b.castWinDelta || 0) - (a.castWinDelta || 0)))
+  console.log(
+    `${r.kw.padEnd(12)} avgPips/cast=${isNaN(r.avgPips) ? ' n/a' : r.avgPips.toFixed(2)} casts=${String(r.casts).padStart(6)} activation=${r.activationRatio.toFixed(2)} firedWinDelta=${isNaN(r.castWinDelta) ? 'n/a' : (r.castWinDelta >= 0 ? '+' : '') + r.castWinDelta.toFixed(1) + 'pt'}`,
+  );
+console.log(
+  '(High avgPips + negative firedWinDelta = keyword whose cards cost real dice and still drag the deck — the direct cost-vs-value-delivered read.)',
+);
+
+// ---------------------------------------------------------------------------
+// v4.19 harness upgrade (task §1): per-mechanic engagement rates — for each
+// mechanic-level decision flag, the share of player-games where it fired at
+// least once (engagement) plus the fired-vs-not win delta. "A zone/action/
+// phase mechanic that never engages" reads directly off this table.
+// ---------------------------------------------------------------------------
+const MECHANIC_ENGAGEMENT_KEYS = [
+  'locationCast',
+  'dieRerolled',
+  'guardBlockOccurred',
+  'comboFired',
+  'echoRecast',
+  'twinComplete',
+  'aftershockQueued',
+  'aftershockResolved',
+  'tributeTriggered',
+  'leaderAbility',
+  'ultimateUsed',
+  'faceAttack',
+  'unitAttack',
+  'boardWipe',
+  'fatigued',
+  'mulliganed',
+];
+interface MechanicEngagementRow {
+  mechanic: string;
+  engagementRate: number;
+  firedWinPct: number;
+  notFiredWinPct: number;
+  delta: number;
+  n: number;
+}
+const mechanicEngagementRows: MechanicEngagementRow[] = MECHANIC_ENGAGEMENT_KEYS.map((k) => {
+  const d = R.decisionAgg[k] || { pw: 0, pn: 0, aw: 0, an: 0 };
+  const total = d.pn + d.an;
+  const firedWinPct = d.pn ? (100 * d.pw) / d.pn : NaN;
+  const notFiredWinPct = d.an ? (100 * d.aw) / d.an : NaN;
+  return {
+    mechanic: k,
+    engagementRate: total ? d.pn / total : 0,
+    firedWinPct,
+    notFiredWinPct,
+    delta: firedWinPct - notFiredWinPct,
+    n: total,
+  };
+}).sort((a, b) => a.engagementRate - b.engagementRate);
+console.log('\n--- Mechanic engagement rates (share of player-games where the mechanic fired >=1x) ---');
+for (const r of mechanicEngagementRows)
+  console.log(
+    `${r.mechanic.padEnd(20)} engagement=${(100 * r.engagementRate).toFixed(1).padStart(5)}%  firedWin%=${(isNaN(r.firedWinPct) ? ' n/a' : r.firedWinPct.toFixed(1)).padStart(5)}  delta=${isNaN(r.delta) ? ' n/a' : (r.delta >= 0 ? '+' : '') + r.delta.toFixed(1) + 'pt'}`,
+  );
+
+// ---------------------------------------------------------------------------
+// v4.19 harness upgrade (task §1): game-length / tempo curves — avg combined
+// Leader HP and board size by round, i.e. how fast games actually develop.
+// ---------------------------------------------------------------------------
+console.log('\n--- Tempo curve (avg combined Leader HP / board size by round; n = games still live) ---');
+for (const roundStr of Object.keys(R.tempoCurve).sort((a, b) => Number(a) - Number(b))) {
+  const round = Number(roundStr);
+  if (round % 2 !== 0 && round > 12) continue; // thin out the late tail
+  const t = R.tempoCurve[round];
+  console.log(
+    `round ${String(round).padStart(2)}  live=${String(t.n).padStart(6)}  avgHP=${(t.hp / t.n).toFixed(1).padStart(6)}  avgBoard=${(t.board / t.n).toFixed(2).padStart(5)}`,
+  );
+}
+
 console.log(
   R.errors.length
     ? `\n!!! ${[...new Set(R.errors)].length} invariant violation types:\n  ${[...new Set(R.errors)].slice(0, 10).join('\n  ')}`
@@ -1754,6 +2010,14 @@ try {
         result: R,
         costEfficiency: costEfficiencyRows,
         keywordActivation: kwActivationRows,
+        // v4.19 harness upgrade: derived telemetry sections (task §1).
+        cardArchNormalized: cardArchNormRows,
+        cardEconomy: cardEconomyRows,
+        keywordCostValue: keywordCostValueRows,
+        mechanicEngagement: mechanicEngagementRows,
+        lapsePerGame: Object.fromEntries(
+          Object.entries(R.lapseCounts).map(([k, n]) => [k, n / (R.games || 1)]),
+        ),
         balanceSummary,
       },
       null,
