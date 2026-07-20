@@ -25,6 +25,8 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyTier, setBusyTier] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   const userId = session?.user?.id;
 
@@ -34,12 +36,19 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       try {
         const { season, tiers } = await fetchActiveSeason();
         if (cancelled) return;
+        setLoadError('');
         setSeason(season);
         setTiers(tiers);
         if (season && userId) {
           const p = await fetchBattlePassProgress(userId, season.id);
           if (!cancelled) setProgress(p);
         }
+      } catch {
+        // Without this, a network failure fell through to the "No season is
+        // live right now" empty state — a misleading message with no retry
+        // (and an unhandled promise rejection).
+        if (!cancelled)
+          setLoadError("Couldn't load the Battle Pass. Check your connection and try again.");
       } finally {
         // Runs even if a fetch throws — otherwise a network hiccup leaves
         // the screen stuck on "LOADING SEASON…" forever.
@@ -49,7 +58,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, attempt]);
 
   const xp = progress?.xp ?? 0;
   const claimed = useMemo(() => new Set(progress?.claimed_tiers ?? []), [progress]);
@@ -153,6 +162,20 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
         {loading ? (
           <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
             LOADING SEASON…
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-16">
+            <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
+            <PopButton
+              color="red"
+              onClick={() => {
+                setLoadError('');
+                setLoading(true);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              RETRY
+            </PopButton>
           </div>
         ) : !season ? (
           <div className="text-center font-bold text-[var(--c-steel)] py-16">

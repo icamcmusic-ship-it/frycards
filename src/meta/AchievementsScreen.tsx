@@ -35,6 +35,8 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   const userId = session?.user?.id;
   const packById = useMemo(() => new Map(packTypes.map((p) => [p.id, p])), [packTypes]);
@@ -53,6 +55,13 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       setAchievements(all);
       setMine(new Map(mine.map((m) => [m.achievement_id, m])));
       setMissions(ms);
+      setLoadError('');
+    } catch {
+      // A network failure previously escaped as an unhandled rejection and
+      // fell through to the "No missions available" / "No achievements"
+      // empty states — misleading, and with no way to retry.
+      if (!isCancelled?.())
+        setLoadError("Couldn't load missions & achievements. Check your connection and try again.");
     } finally {
       // Runs even if either fetch throws — otherwise a network hiccup would
       // leave the screen stuck on "LOADING…" forever.
@@ -70,7 +79,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, attempt]);
 
   const handleClaimAchievement = async (a: Achievement) => {
     if (busyId) return;
@@ -199,6 +208,19 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
         {loading ? (
           <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
             LOADING…
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-16">
+            <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
+            <PopButton
+              color="red"
+              onClick={() => {
+                setLoading(true);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              RETRY
+            </PopButton>
           </div>
         ) : tab === 'missions' ? (
           <>

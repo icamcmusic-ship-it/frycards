@@ -37,6 +37,14 @@ function timeLeft(endsAt: string | null | undefined): string {
   return `${m}m left`;
 }
 
+/** Minimum next bid for an auction: starting price if no bids yet, otherwise
+ * current bid + a 5% raise (at least 1 credit). Single source of truth —
+ * this formula was previously duplicated inline at the BID button and the
+ * bid modal, which could silently drift apart. Mirrors place_bid's check. */
+export function minBidFor(l: Pick<MarketListing, 'current_bid' | 'price'>): number {
+  return l.current_bid != null ? l.current_bid + Math.max(1, Math.ceil(l.current_bid * 0.05)) : l.price;
+}
+
 function defFor(cardId: string): CardDef {
   return (
     POOL_BY_ID[cardId] || {
@@ -239,11 +247,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     color="red"
                     disabled={busy || !profile}
                     onClick={() => {
-                      const min =
-                        l.current_bid != null
-                          ? l.current_bid + Math.max(1, Math.ceil(l.current_bid * 0.05))
-                          : l.price;
-                      setBidAmount(min);
+                      setBidAmount(minBidFor(l));
                       setBidFor(l);
                     }}
                   >
@@ -284,11 +288,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     );
   };
 
-  const minBid = bidFor
-    ? bidFor.current_bid != null
-      ? bidFor.current_bid + Math.max(1, Math.ceil(bidFor.current_bid * 0.05))
-      : bidFor.price
-    : 0;
+  const minBid = bidFor ? minBidFor(bidFor) : 0;
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">

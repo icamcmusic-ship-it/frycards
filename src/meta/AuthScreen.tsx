@@ -43,6 +43,10 @@ export function AuthScreen() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) setError(error.message);
       }
+    } catch {
+      // A thrown rejection (offline/timeout) previously produced no message
+      // at all — the form just silently un-busied.
+      setError('Could not reach the server — check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -104,6 +108,7 @@ export function AuthScreen() {
               onClick={() => {
                 setMode('signin');
                 setError('');
+                setInfo('');
               }}
               className="flex-1"
             >
@@ -114,6 +119,7 @@ export function AuthScreen() {
               onClick={() => {
                 setMode('signup');
                 setError('');
+                setInfo('');
               }}
               className="flex-1"
             >

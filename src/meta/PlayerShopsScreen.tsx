@@ -542,11 +542,24 @@ function MysteryListingCard({
       return;
     }
     let cancelled = false;
-    fetchMysteryLiveStats(listing.id).then((s) => {
-      if (!cancelled) setLive(s);
-    });
+    const refetch = () => {
+      fetchMysteryLiveStats(listing.id)
+        .then((s) => {
+          if (!cancelled) setLive(s);
+        })
+        .catch(() => {
+          // Keep whatever stats we last had — the listing row's own
+          // remaining_packs is still shown via the ?? fallback below.
+        });
+    };
+    refetch();
+    // Live stock changes under other buyers' feet — poll every 30s while the
+    // listing is active so "N packs left" / live EV don't freeze at whatever
+    // they were when this card mounted.
+    const id = window.setInterval(refetch, 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(id);
     };
     // remaining_packs in the deps: after a purchase the parent reloads the
     // listing row — refetch the live stats then too, or the "N packs left"

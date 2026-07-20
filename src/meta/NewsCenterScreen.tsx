@@ -43,7 +43,12 @@ export function NewsCenterScreen({
   const [composing, setComposing] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [err, setErr] = useState<string | null>(null);
+  // Load and publish errors are separate slots — they used to share one
+  // `err` state, so a fetch failure leaked into the composer as a bogus
+  // publish error, and a stale publish error resurfaced as a load-failure
+  // banner (with a useless RETRY button) after closing the composer.
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
 
   // A rejected fetch (network failure) here used to leave `loading` stuck
@@ -56,13 +61,13 @@ export function NewsCenterScreen({
       .then(([p, f]) => {
         setPosts(p);
         setFeed(f);
-        setErr(null);
+        setLoadErr(null);
       })
       .catch(() => {
         // Leave posts/feed as whatever they were — the empty-state copy
         // below at least still renders something instead of a silent blank
         // section with no explanation and no way to retry.
-        setErr("Couldn't load the news feed. Check your connection.");
+        setLoadErr("Couldn't load the news feed. Check your connection.");
       })
       .finally(() => setLoading(false));
   };
@@ -78,12 +83,11 @@ export function NewsCenterScreen({
       <MetaHeader title="NEWS CENTER" onBack={onBack} />
 
       <div className="p-6 max-w-3xl mx-auto flex flex-col gap-6">
-        {/* Load failure — `err` also doubles as the publish-error slot inside
-            the composer below, but a fetch failure needs to be visible to
-            every player, not just a creator with the composer open. */}
-        {err && !composing && (
+        {/* Load failure — its own dedicated slot, visible to every player
+            whether or not a creator has the composer open. */}
+        {loadErr && (
           <div className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] px-4 py-3 flex items-center justify-between gap-3">
-            <span className="text-[12px] font-bold text-[var(--c-red)]">{err}</span>
+            <span className="text-[12px] font-bold text-[var(--c-red)]">{loadErr}</span>
             <button
               onClick={load}
               className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
@@ -116,7 +120,12 @@ export function NewsCenterScreen({
             </h2>
             {isCreator && (
               <button
-                onClick={() => setComposing((c) => !c)}
+                onClick={() => {
+                  // Don't carry a stale publish error into the next
+                  // open/close of the composer.
+                  setPublishErr(null);
+                  setComposing((c) => !c);
+                }}
                 className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
               >
                 {composing ? 'CANCEL' : '+ NEW POST'}
@@ -139,22 +148,28 @@ export function NewsCenterScreen({
                 rows={4}
                 className="border-2 border-[var(--c-ink)] px-2 py-1.5 text-sm"
               />
-              {err && <div className="text-[11px] font-bold text-[var(--c-red)]">{err}</div>}
+              {publishErr && (
+                <div className="text-[11px] font-bold text-[var(--c-red)]">{publishErr}</div>
+              )}
               <button
                 onClick={async () => {
                   if (publishing) return;
-                  setErr(null);
+                  setPublishErr(null);
                   setPublishing(true);
                   try {
                     const e = await createNewsPost(title.trim(), body.trim());
                     if (e) {
-                      setErr(e);
+                      setPublishErr(e);
                       return;
                     }
                     setTitle('');
                     setBody('');
                     setComposing(false);
                     load();
+                  } catch {
+                    // A thrown rejection (offline/timeout) previously escaped
+                    // this handler entirely — no message, just a silent no-op.
+                    setPublishErr("Couldn't publish — check your connection and try again.");
                   } finally {
                     setPublishing(false);
                   }

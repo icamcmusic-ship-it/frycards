@@ -72,15 +72,22 @@ function DailyLoginPanel() {
     if (busy) return;
     setBusy(true);
     setError('');
-    const { data, error } = await claimDailyLogin();
-    setBusy(false);
-    if (error || !data) {
-      setError(error || 'Claim failed.');
-      return;
+    try {
+      const { data, error } = await claimDailyLogin();
+      if (error || !data) {
+        setError(error || 'Claim failed.');
+        return;
+      }
+      setClaimed(data);
+      refreshProfile();
+      if (data.pack_awarded) refreshInventory();
+    } catch {
+      // A thrown rejection (offline/timeout) previously skipped setBusy(false)
+      // entirely, leaving the CLAIM button locked on "CLAIMING…" forever.
+      setError('Something went wrong — check your connection and try again.');
+    } finally {
+      setBusy(false);
     }
-    setClaimed(data);
-    refreshProfile();
-    if (data.pack_awarded) refreshInventory();
   };
 
   return (

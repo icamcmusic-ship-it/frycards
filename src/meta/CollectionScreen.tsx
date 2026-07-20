@@ -470,6 +470,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                 onClick={() => {
                   setType('All');
                   setRarity('All');
+                  // Color was missing from this reset — a color-filtered
+                  // empty grid stayed empty after "clearing" filters.
+                  setColor('All');
                   setSearch('');
                   setOwnedOnly(true);
                 }}
