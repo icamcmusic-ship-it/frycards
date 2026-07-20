@@ -296,9 +296,30 @@ export const SIM_TUNING = {
   deckout: 'fatigue' as 'loss' | 'fatigue',
   /** v4.7 candidate: Anchor's one-time full-ramp bonus also draws a card. */
   anchorCapBonusDraw: false,
-  /** v4.7 candidate: flat bonus HP on Anchor-keyword Units (they must
-   * survive on board for the ramp to exist at all). */
+  /** flat bonus HP on Anchor-keyword Units. v4.7 introduced it as an ablation
+   * candidate; v4.11 measured 0 -> 1 and DELIBERATELY DID NOT SHIP it. In
+   * isolation (scripts/simulate-ablation.ts, fixed opponent roster) it read
+   * as a clean roster-floor lift — the bottom ramp decks rose (Sea Witch
+   * Anchor-Scrap 21.0% -> 30.8%, Abyss Excavate Ramp 50.0% -> 56.3%) with top
+   * decks flat. But the FULL 33,840-game round-robin exposed collateral the
+   * fixed-opponent ablation could not: it WIDENED the Leader win-rate spread
+   * 14.1pt -> 16.8pt by sinking Mer-King further (43.7% -> 41.5%, Guard-
+   * Bulwark Turtle 74.5% -> 69.6%) — Mer-King is the only Leader with no ramp
+   * archetype, so its walls simply get ground down by the now-stronger ramp
+   * decks. Widening the spread by sinking the already-lowest Leader is the
+   * opposite of the goal; kept off. See docs/BALANCE_SIM_FINDINGS_v4.11.md
+   * §2.1 (a clean ablation-vs-full-sim divergence). Live value 0. */
   anchorHpBonus: 0,
+  /** v4.11: base value of a Crescendo Event's flat "rolled any 6 this turn"
+   * bonus (cardpool.ts mapSpell, tier>=3 gets +1 on top). A dedicated dial so
+   * v4.10's flagged open question (§4 item 3 — "does the base value itself
+   * need a step now the trigger is reliable?") is ablatable instead of
+   * hardcoded. Measured 4 -> 5: Crescendo's keyword win% stayed 41.3% ->
+   * 41.3% (null) because exactly one pool card carries Crescendo (harness
+   * keyword-health table), so the aggregate is insensitive to a +1 on that
+   * one card — the same null the four pre-redesign base bumps hit, for a
+   * different reason. Not shipped; live value 4. */
+  crescendoBase: 4,
   /** v4.8 A/B arm: waive the Echo extra-discard fodder cost at EVERY rarity
    * (live behavior only waives mid-rarity) — the dedicated look at Echo's
    * fodder economics the v4.7 findings called for (§4.3). Live: false. */

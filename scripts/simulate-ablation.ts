@@ -140,6 +140,70 @@ SUBJECTS.push(
   },
 );
 
+// v4.11 deck-level ablation of Mer King Avenge Swarm (v4.10 findings §4 item
+// 1): the v4.10 per-card look found its weakness "diffuse, not concentrated"
+// — no single printed card was the problem, and a +1 on-cast buff to its
+// three weakest cards moved it +0.2pt (noise). This mirrors the v4.7/v4.8
+// AvengeGrind isolation above to answer the actual open question: is the
+// weakness the MER-KING KIT (same list soars under a stronger Avenge Leader),
+// the GUARD-wall dependence (Mer-King's Guard-primary body, hit hard by the
+// v4.9 guardHpBonus 3->2 cut), or the LIST itself (weak under every Leader)?
+// AvengeSwarm-ShinobiLdr is the direct comparison: Shinobi is the roster's
+// dominant Avenge Leader (Avenge Grind ~86%) — the same Avenge list under it
+// isolates exactly how much of Avenge Swarm's floor is Mer-King's kit.
+SUBJECTS.push(
+  {
+    label: 'Mer King Avenge Swarm',
+    leaderId: 'mer_king',
+    keywords: ['Avenge', 'Guard'],
+    effects: ['buff', 'mend'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeSwarm-ShinobiLdr',
+    leaderId: 'apex_nanite_shinobi',
+    keywords: ['Avenge', 'Guard'],
+    effects: ['buff', 'mend'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeSwarm-DiverLdr',
+    leaderId: 'legendary_diver',
+    keywords: ['Avenge', 'Guard'],
+    effects: ['buff', 'mend'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeSwarm-noGuard',
+    leaderId: 'mer_king',
+    keywords: ['Avenge', 'Swift'],
+    effects: ['buff', 'mend'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+  {
+    label: 'AvengeSwarm-noMend',
+    leaderId: 'mer_king',
+    keywords: ['Avenge', 'Guard'],
+    effects: ['buff'],
+    units: 19,
+    spells: 8,
+    locations: 3,
+    comboFamily: 'none',
+  },
+);
+
 // A fixed, varied opponent roster (mid-tier decks from the main sim — not
 // the other subjects, so subject-vs-subject mirror noise doesn't pollute
 // the read):
@@ -215,6 +279,12 @@ const ARMS: Arm[] = [
   { name: 'baseline', apply: () => {} },
   { name: 'tollCap 3->1', apply: () => (SIM_TUNING.tollCap = 1) },
   { name: 'avengeCap 2->0', apply: () => (SIM_TUNING.avengeCap = 0) },
+  // v4.11 (v4.10 findings §4 item 1): the BUFF direction on Avenge's ramp cap
+  // — does loosening the lifetime +1/+1 ceiling lift Mer King Avenge Swarm's
+  // floor, or does it (as every prior Avenge lever has) mostly re-inflate
+  // Shinobi Avenge Grind at the top? Avenge is a shared keyword, so a global
+  // cap change can't fix one Avenge deck without touching the other.
+  { name: 'avengeCap 2->4', apply: () => (SIM_TUNING.avengeCap = 4) },
   { name: 'steelMult 1->0.5', apply: () => (SIM_TUNING.steelMult = 0.5) },
   { name: 'mendMult 1->0.5', apply: () => (SIM_TUNING.mendMult = 0.5) },
   // Round 2 (v4.7): the round-1 read was that NO labeled keyword powers the
