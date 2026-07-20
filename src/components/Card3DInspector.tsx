@@ -16,6 +16,14 @@ import { cn } from '../lib/utils';
 
 const MAX_TILT_DEG = 14;
 
+/** v4.19: the ONE canonical expanded-card scale, shared by every enlarged
+ * presentation — this inspector (collection click-expand, board click-expand
+ * in GameV4) and the in-match hand hover preview (GameV4's
+ * HOVER_PREVIEW_SCALE re-exports this) — so an expanded card is the same
+ * size no matter where it was opened from. Viewport-clamped below so it
+ * still fits small screens. */
+export const INSPECT_SCALE = 1.55;
+
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
@@ -89,7 +97,7 @@ export function Card3DInspector({
   }, []);
   const scale = useMemo(() => {
     const { w, h } = CARD_SIZES.full;
-    return Math.max(1.1, Math.min(2, (viewport.h * 0.72) / h, (viewport.w * 0.92) / w));
+    return Math.max(1, Math.min(INSPECT_SCALE, (viewport.h * 0.72) / h, (viewport.w * 0.92) / w));
   }, [viewport]);
   const { w, h } = CARD_SIZES.full;
 

@@ -118,9 +118,16 @@ const SECTIONS = [
   {
     title: '5 · Keywords — Units',
     body: [
+      [
+        'Keyword tiers',
+        'Keywords come in numbered tiers (I–V) — a higher tier is a stronger version of the same ability. Tap any keyword chip on a card to read exactly what ITS tier does.',
+      ],
       ['Guard', 'Enemies must attack your Guard Units first.'],
       ['Swift', 'May attack or use an ability the turn it is played.'],
-      ['Pierce', 'Excess damage from killing a Unit hits the enemy Leader (capped at half ATK, min 1).'],
+      [
+        'Pierce',
+        'Excess damage from killing a Unit hits the enemy Leader — capped at a third of ATK (I), half ATK (II), or uncapped (III).',
+      ],
       ['Ward', 'Blocks the first hit or hostile effect each turn; a blocked attack spikes 1 damage back at the attacker.'],
       ['Frenzy', 'Second attack if it survives; doubled retaliation on that second swing only.'],
       ['Bulwark X', 'Takes X less damage from every attack (after Ward and Steel, before Frenzy).'],
@@ -146,7 +153,7 @@ const SECTIONS = [
       ],
       [
         'Echo',
-        'After it hits your Discard: recast it with a die + discarding one card (Rare and higher rarities skip the extra discard — only Commons/Uncommons still pay it). Once per copy — the next discard banishes it.',
+        'After it hits your Discard: recast it once by paying its cost — Echo I also discards one extra card from hand, Echo II skips the extra discard. Once per copy — the next discard banishes it.',
       ],
       [
         'Rally',

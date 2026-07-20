@@ -52,12 +52,12 @@ import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
 import {
   CardFace,
-  CardInspectorModal,
   CARD_SIZES,
   GATE_LABEL,
   describeEffect,
   renderKeywordText,
 } from './CardFaceV4';
+import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
@@ -231,7 +231,7 @@ function AbilityPill({
  * on top of already being the largest fixed tier, purely as a visual
  * transform (layout box is unaffected, which is fine: this preview is a
  * pointer-events-none portal overlay, never part of document flow). */
-export const HOVER_PREVIEW_SCALE = 1.55;
+export const HOVER_PREVIEW_SCALE = INSPECT_SCALE;
 
 function useHoverPreview<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -851,7 +851,29 @@ export function GameV4({
     }, 1150);
   };
 
+  // v4.19 hover intent: the hand preview only switches after the cursor has
+  // rested ~80ms on a card — sweeping the mouse across the fan no longer
+  // strobes the big preview through every card it crosses, and the lifted
+  // card animating out from under the cursor can't cause enter/leave
+  // oscillation (the hit area lives on a stationary wrapper, see the fan).
+  const hoverIntentRef = useRef<number | null>(null);
+  const clearHoverIntent = () => {
+    if (hoverIntentRef.current !== null) {
+      window.clearTimeout(hoverIntentRef.current);
+      hoverIntentRef.current = null;
+    }
+  };
+  const previewIntent = (iid: string) => {
+    clearHoverIntent();
+    hoverIntentRef.current = window.setTimeout(() => {
+      hoverIntentRef.current = null;
+      setPreview(iid);
+    }, 80);
+  };
+  useEffect(() => clearHoverIntent, []);
+
   const closePreview = () => {
+    clearHoverIntent();
     setPreview(null);
     setPreviewPinned(false);
   };
@@ -2360,6 +2382,7 @@ export function GameV4({
       <div
         className="relative shrink-0 z-30 bg-[var(--c-ink)]/85 border-t-2 border-[var(--c-yellow)]/50"
         onMouseLeave={() => {
+          clearHoverIntent();
           if (!previewPinned) setPreview(null);
         }}
       >
@@ -2497,40 +2520,67 @@ export function GameV4({
               const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));
               const arcDrop = Math.abs(off) * 3;
               const isFocused = preview === c.iid;
+              const activate = echoPick
+                ? () => tryEchoFodder(c)
+                : () => {
+                    clearHoverIntent();
+                    setPreview(c.iid);
+                    setPreviewPinned(true);
+                  };
               return (
+                // v4.19: the pointer hit area is this STATIONARY wrapper —
+                // the card visual inside animates (lift/rotate) with
+                // pointer-events disabled, so the hover target never moves
+                // out from under the cursor mid-transition. That was the
+                // root of the finicky hand hover: the lifted card vacated
+                // its own hover area, handing the cursor to a neighbor,
+                // which lifted in turn — an enter/leave oscillation.
                 <div
                   key={c.iid}
-                  className="shrink-0 transition-transform duration-150 ease-out"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${c.def.name} — preview and cast`}
+                  className="relative shrink-0 outline-none"
                   style={{
+                    width: CARD_SIZES.compact.w,
+                    height: CARD_SIZES.compact.h,
                     marginLeft: i === 0 ? 0 : -46,
                     zIndex: isFocused ? 50 : i,
-                    transformOrigin: 'bottom center',
-                    transform: isFocused
-                      ? `translateY(-72px) rotate(0deg) scale(1.04)`
-                      : `translateY(${84 + arcDrop}px) rotate(${angle}deg)`,
                   }}
                   onMouseEnter={() => {
+                    if (!echoPick) previewIntent(c.iid);
+                  }}
+                  onFocus={() => {
                     if (!echoPick) setPreview(c.iid);
                   }}
+                  onClick={activate}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      activate();
+                    }
+                  }}
                 >
-                  <CardFace
-                    def={c.def}
-                    size="compact"
-                    dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
-                    highlight={!!echoPick || preview === c.iid}
-                    introduceKeywords
-                    effectiveThreshold={
-                      c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
-                    }
-                    onClick={
-                      echoPick
-                        ? () => tryEchoFodder(c)
-                        : () => {
-                            setPreview(c.iid);
-                            setPreviewPinned(true);
-                          }
-                    }
-                  />
+                  <div
+                    className="pointer-events-none transition-transform duration-150 ease-out"
+                    style={{
+                      transformOrigin: 'bottom center',
+                      transform: isFocused
+                        ? `translateY(-72px) rotate(0deg) scale(1.04)`
+                        : `translateY(${84 + arcDrop}px) rotate(${angle}deg)`,
+                    }}
+                  >
+                    <CardFace
+                      def={c.def}
+                      size="compact"
+                      dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
+                      highlight={!!echoPick || preview === c.iid}
+                      introduceKeywords
+                      effectiveThreshold={
+                        c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
+                      }
+                    />
+                  </div>
                 </div>
               );
             })}
@@ -2653,7 +2703,7 @@ export function GameV4({
       {/* Card inspector — the same universal template used everywhere else
           (deck builder, collection, pack reveals), so a card reads
           identically no matter where it's inspected from. */}
-      {inspect && <CardInspectorModal def={inspect} onClose={() => setInspect(null)} />}
+      {inspect && <Card3DInspector def={inspect} onClose={() => setInspect(null)} />}
 
       {/* In-game confirm dialog — styled replacement for window.confirm (see
           the `confirmDialog` state above). */}
