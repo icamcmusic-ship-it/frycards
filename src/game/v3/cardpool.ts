@@ -14,6 +14,86 @@ import { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import { SIM_TUNING } from './engine';
 import { COLOR_OF_KEYWORD, LEADER_COLORS, Color } from './colors';
+import { tierCostWeight, tierMagnitude, maxTier } from './keywords';
+
+// ---------------------------------------------------------------------------
+// v4.19 keyword tier assignment (see keywords.ts / docs/KEYWORD_TIERS.md).
+// Deterministic and rarity-skewed: higher rarity lands higher tiers, the
+// same shape as the old per-card magnitude rolls this replaces. Tier
+// choices are pinned so every current magnitude maps to the tier printing
+// that exact magnitude (Bulwark x -> tier x, Steel 1 -> I, Echo's rarity
+// fodder-waiver -> II at Rare+, Pierce's half-ATK cap -> II, ...), so the
+// tier system is a re-representation of live balance, not a power shuffle —
+// only the new tier-cap printings at the very top of the rarity ladder
+// (Guard/Frenzy/Pierce/Anchor III, Ward/Avenge/Aftershock II, ...) are new.
+// ---------------------------------------------------------------------------
+function tierFor(kw: string, rt: number, primary: boolean): number {
+  switch (kw) {
+    case 'Guard':
+      return primary ? (rt >= 4 ? 3 : 2) : 1;
+    case 'Swift':
+      return primary ? 2 : 1;
+    case 'Frenzy':
+      return primary ? (rt >= 4 ? 3 : 2) : 1;
+    case 'Ward':
+      return rt >= 4 ? 2 : 1;
+    case 'Pierce':
+      return rt >= 4 ? 3 : 2;
+    case 'Anchor':
+      return rt >= 4 ? 3 : 2;
+    case 'Echo':
+      return rt >= 2 ? 2 : 1; // matches the legacy rarity fodder-waiver split
+    case 'Twin':
+      return Math.min(3, 1 + Math.floor(rt / 2));
+    case 'Bulwark':
+      return 1 + Math.min(2, Math.floor(rt / 2)); // == the legacy x
+    case 'Toll':
+    case 'Steel':
+      return 1; // legacy flat 1 (manual Steel identities override below)
+    case 'Avenge':
+      return rt >= 4 ? 2 : 1;
+    case 'Aftershock':
+      // rt>=3, not >=4: tier>=4 Events route to the bomb branch and never
+      // roll Aftershock, so Super-Rare is this keyword's reachable top.
+      return rt >= 3 ? 2 : 1;
+    case 'Overrun':
+      return rt >= 5 ? 2 : 1;
+    case 'Rally':
+    case 'Tribute':
+    case 'Foothold':
+      return rt >= 3 ? 2 : 1;
+    case 'Scrap':
+      return rt >= 2 ? 2 : 1;
+    case 'Crescendo':
+      return rt >= 3 ? 2 : 1; // magnitudes 4/5 == the legacy x split
+    case 'Excavate':
+      return 2; // magnitude 2 == the live SIM_TUNING.excavateRate
+    default:
+      return 1; // Snap, Contested, single-tier keywords
+  }
+}
+
+function assignTiers(keywords: string[], rt: number, primaryKw?: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const kw of keywords) out[kw] = tierFor(kw, rt, kw === primaryKw);
+  return out;
+}
+
+/** Summed tier costWeight + the tier-cap premium discount — the keyword term
+ * of the v4.19 casting-cost recalculation:
+ *   costTier = clamp(rarityTier + round(sum(costWeight)/2) - premium, 0, 5)
+ * where premium is 1 if the card carries the HIGHEST tier of any keyword
+ * with a 3+-tier ladder (the "much cheaper effective cast" half of the
+ * tier-cap premium rule; the other half is the tier's own cap rider). */
+export function keywordCostTier(rt: number, tiers: Record<string, number>): number {
+  let w = 0;
+  let premium = 0;
+  for (const [kw, t] of Object.entries(tiers)) {
+    w += tierCostWeight(kw, t);
+    if (maxTier(kw) >= 3 && t === maxTier(kw)) premium = 1;
+  }
+  return Math.max(0, Math.min(5, rt + Math.round(w / 2) - premium));
+}
 
 // v4.16 fix: keyword layering below (secondary keyword, Pierce, Overrun,
 // Rally, Bulwark, Toll, Avenge, Steel) each independently rolls on to a
@@ -229,10 +309,6 @@ function mapUnit(c: CardTemplate): CardDef {
   // Legacy threshold, still the cost basis for Twin cards only (their
   // two-slot exact-face mechanic never went through the v4.3 cost formats).
   const threshold = Math.min(6, 1 + Math.min(4, tier) + (hash(c.id) % 2 === 0 ? 1 : 0));
-  // v4.6: pick the REAL cost first (deterministic, so this is the same cost
-  // applyCostFormat gets below) — the stat budget must price off what the
-  // card actually costs to cast, not the pre-format threshold.
-  const cost = pickCostFormat(c.id, tier);
 
   // Keyword selection first, so Twin-ness is known before budgeting.
   // IMPORTANT: every pick() salt and hash(...) condition here is unchanged
@@ -283,6 +359,42 @@ function mapUnit(c: CardTemplate): CardDef {
   )
     keywords.push('Overrun');
 
+  // v4.19: the layered keyword ROLLS (ability-Rally, Bulwark, Toll, Avenge,
+  // Steel, the manual Steel identities, Chrono-Phalanx's Overrun) moved up
+  // from the post-stat section, in their original relative order, so the
+  // keyword set at each wouldBeLegalSomewhere() check — and therefore every
+  // outcome — is byte-identical to v4.18. They must be known BEFORE cost
+  // and stats now, because the v4.19 cost recalculation prices the summed
+  // keyword-tier costWeight into the cast cost.
+  const hasAbility = tier >= 2 && hash(c.id) % 4 === 1;
+  if (hasAbility && hash(c.id) % 3 === 0 && wouldBeLegalSomewhere([...keywords, 'Rally']))
+    keywords.push('Rally');
+  if (tier >= 1 && hash(c.id) % 7 === 2 && wouldBeLegalSomewhere([...keywords, 'Bulwark']))
+    keywords.push('Bulwark');
+  if (tier >= 2 && hash(c.id) % 7 === 5 && wouldBeLegalSomewhere([...keywords, 'Toll']))
+    keywords.push('Toll');
+  if (tier >= 1 && hash(c.id) % 11 === 3 && wouldBeLegalSomewhere([...keywords, 'Avenge']))
+    keywords.push('Avenge');
+  if (tier >= 2 && hash(c.id) % 12 === 4 && wouldBeLegalSomewhere([...keywords, 'Steel']))
+    keywords.push('Steel');
+  const manualSteelX =
+    MANUAL_STEEL[c.id] !== undefined && !keywords.includes('Steel') && wouldBeLegalSomewhere([...keywords, 'Steel'])
+      ? MANUAL_STEEL[c.id]
+      : undefined;
+  if (manualSteelX !== undefined) keywords.push('Steel');
+  if (c.id === 'chrono_phalanx' && !keywords.includes('Overrun') && wouldBeLegalSomewhere([...keywords, 'Overrun']))
+    keywords.push('Overrun');
+
+  // ---- v4.19 keyword tiers + casting-cost recalculation ----
+  const keywordTiers = assignTiers(keywords, tier, primaryKw);
+  // The two manual Steel identity cards keep their old magnitudes as tiers
+  // (x2 -> Steel II, x3 -> Steel III).
+  if (manualSteelX !== undefined) keywordTiers.Steel = Math.min(3, Math.max(1, manualSteelX));
+  // Cost recalculation: rarity base + summed keyword-tier costWeight, with
+  // the tier-cap premium discount — see keywordCostTier()'s formula.
+  const costTier = keywordCostTier(tier, keywordTiers);
+  const cost = pickCostFormat(c.id, costTier);
+
   // v4.6 stat budget: the balance sim's "most likely OP" list was dominated
   // by exact-cost Units whose stats were budgeted off the pre-format
   // threshold even though an exact-face cost is near-flat easy regardless
@@ -331,7 +443,9 @@ function mapUnit(c: CardTemplate): CardDef {
   // Guard wants more HP to actually wall aggro; Frenzy wants a nudged ATK
   // now that its downside is softer (only the 2nd swing doubles retaliation).
   if (primaryKw === 'Guard') {
-    hp += SIM_TUNING.guardHpBonus;
+    // v4.19: Guard II prints the classic bonus; Guard III (tier-cap premium,
+    // top rarities) prints +2 more — magnitudes 2/4 in KEYWORD_TIERS.
+    hp += SIM_TUNING.guardHpBonus + ((keywordTiers.Guard ?? 1) >= 3 ? 2 : 0);
   }
   // Ward refreshing every End Phase already soaks ~one attack per round for
   // free — no stat bonus on top (Ward-stacked shells dominated with one).
@@ -381,19 +495,31 @@ function mapUnit(c: CardTemplate): CardDef {
     atk,
     hp,
     keywords,
+    keywordTiers,
     rarity: c.rarity,
     set: c.set,
     image: c.image,
     flavor: c.flavor,
   };
+  // v4.19: legacy per-card magnitude fields are compat MIRRORS of the tier
+  // table now (the AI/UI key off their presence); the engine reads
+  // magnitudes from KEYWORD_TIERS via keywordTier().
+  if (keywords.includes('Bulwark'))
+    def.bulwark = { x: tierMagnitude('Bulwark', keywordTiers.Bulwark) };
+  if (keywords.includes('Toll')) def.toll = { x: tierMagnitude('Toll', keywordTiers.Toll) };
+  if (keywords.includes('Steel')) def.steel = { x: tierMagnitude('Steel', keywordTiers.Steel) };
+  if (keywords.includes('Avenge')) def.avenge = true;
 
   // v4.3: assign this Unit's real Cast Slot cost format — every non-Twin
   // Unit prices in exact/sum/a dice-pattern gate instead of the old plain
   // "die >= threshold". Twin cards keep the legacy at-least cost (below):
   // their two Cast Slots already require matching an exact rolled face,
   // which is a distinct mechanic from the new 'exact' cost format.
+  // v4.19: the applied cost is the recalculated one (stats/rarity basis +
+  // keyword-tier costWeight - tier-cap premium), the same `cost` the stat
+  // budget above already priced against.
   if (!keywords.includes('Twin')) {
-    applyCostFormat(def, pickCostFormat(c.id, tier));
+    applyCostFormat(def, cost);
     applyManualCostAdj(def, c.id);
     // v4.6: same straight-gate compensation mapSpell applies to payoffs —
     // a straight gate is far harder to hit than its match-family tier
@@ -410,12 +536,13 @@ function mapUnit(c: CardTemplate): CardDef {
 
   // Twin units carry a printed Twin bonus (required by §7).
   if (keywords.includes('Twin')) {
+    // v4.19: the rider's size is the Twin tier (I/II/III -> small/medium/
+    // large — see KEYWORD_TIERS), replacing the old raw-rarity scaling with
+    // nearly identical values (top-end sap trimmed 5 -> 4).
+    const tt = keywordTiers.Twin ?? 1;
     def.twinBonus = pick(c.id, 1, [
-      // Balance: capped at Sap 5 (was 2+tier, up to 8) — top-tier Twin bodies
-      // already keep their full stat budget at a discounted threshold, so the
-      // face-sap rider can't also scale unbounded with rarity.
-      { action: 'sap', value: 2 + Math.min(3, tier), target: 'enemyLeader' } as Effect,
-      { action: 'buff', value: 1 + Math.floor(tier / 2), target: 'allFriendlyUnits' } as Effect,
+      { action: 'sap', value: 1 + tt, target: 'enemyLeader' } as Effect,
+      { action: 'buff', value: tt, target: 'allFriendlyUnits' } as Effect,
       { action: 'draw', value: 1, target: 'none' } as Effect,
     ]);
     // Twin cards use a modest even threshold so pairs are reachable.
@@ -426,15 +553,15 @@ function mapUnit(c: CardTemplate): CardDef {
   }
 
   // Some higher-rarity units carry an Ability Slot (utility, not just a body).
-  if (tier >= 2 && hash(c.id) % 4 === 1) {
+  // (v4.19: the Rally roll that used to live here moved into the keyword
+  // phase above — `hasAbility` preserves this block's original condition.)
+  if (hasAbility) {
     def.ability = pick(c.id, 2, [
       { threshold: 4, effect: { action: 'mend', value: 2, target: 'friendlyAny' } },
       { threshold: 4, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
       { threshold: 5, effect: { action: 'draw', value: 1, target: 'none' } },
       { threshold: 3, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
     ]);
-    if (hash(c.id) % 3 === 0 && wouldBeLegalSomewhere([...(def.keywords || []), 'Rally']))
-      def.keywords = [...(def.keywords || []), 'Rally'];
   }
 
   // A Combo passive on a slice of units (points toward archetypes).
@@ -463,95 +590,15 @@ function mapUnit(c: CardTemplate): CardDef {
     def.overflow = { amount: 2, effect: { action: 'buff', value: 1, target: 'self' } };
   }
 
-  // v4.2 Unit keywords: Bulwark, Toll, Avenge — layered independently of the
-  // primary keyword so reactive shells have scaling defense beyond raw HP.
-  if (
-    tier >= 1 &&
-    hash(c.id) % 7 === 2 &&
-    wouldBeLegalSomewhere([...(def.keywords || []), 'Bulwark'])
-  ) {
-    def.bulwark = { x: 1 + Math.min(2, Math.floor(tier / 2)) };
-    def.keywords = [...(def.keywords || []), 'Bulwark'];
-  }
-  if (
-    tier >= 2 &&
-    hash(c.id) % 7 === 5 &&
-    wouldBeLegalSomewhere([...(def.keywords || []), 'Toll'])
-  ) {
-    def.toll = { x: 1 };
-    def.keywords = [...(def.keywords || []), 'Toll'];
-  }
-  if (
-    tier >= 1 &&
-    hash(c.id) % 11 === 3 &&
-    wouldBeLegalSomewhere([...(def.keywords || []), 'Avenge'])
-  ) {
-    def.avenge = true;
-    def.keywords = [...(def.keywords || []), 'Avenge'];
-  }
-  // v4.4 Steel X: a per-turn damage-absorption pool from ANY source (attacks,
-  // Sap, Pierce overflow) — the balance-sim answer to an aggression-dominant
-  // meta, distinct from Bulwark (attacks only) and Toll (Leader-only).
-  if (
-    tier >= 2 &&
-    hash(c.id) % 12 === 4 &&
-    wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
-  ) {
-    // v4.7: 2/2/3 by tier -> 1/1/2 — the ablation harness measured halved
-    // Steel as the ONLY keyword dial that moved the two Steel-labeled
-    // durability decks (Steel-Scrap 82->71, Ward-Steel 79->71) after Toll,
-    // Avenge and Mend dials all measured ~zero. Steel refreshes every turn,
-    // so each point is worth far more than a point of HP.
-    // v4.16: 1/1/2 by tier -> flat 1 — Steel was STILL the single most
-    // overtuned keyword after the v4.7 halving (measured castWin% vs.
-    // deckBaseline% delta +22.0pt, the largest of any keyword this pass,
-    // vs. the next-worst keyword's ~+11pt). Dropping the tier>=4 bonus
-    // point (the only cards still printing 2, since every lower tier
-    // already prints 1) is the smallest further cut available on this
-    // dial without hitting the floor of 0 (which would delete the
-    // keyword's identity outright) — a direct, proportionate trim to the
-    // exact sub-case the prior halving didn't touch.
-    // v4.18: still the single most overtuned keyword after TWO power trims
-    // (+17.3pt delta, next-worst ~+12.8pt) — per-fire power is already at
-    // the floor (flat 1) short of deleting the keyword outright, so this
-    // pass trims PRINT RATE instead (hash bucket 1-in-9 -> 1-in-12 of
-    // eligible tier>=2 cards): fewer cards carry it, but the ones that do
-    // keep their full identity/power instead of getting diluted further.
-    def.steel = { x: 1 };
-    def.keywords = [...(def.keywords || []), 'Steel'];
-  }
-  // v4.4: two named cards manually granted Steel as a discrete identity
-  // buff, independent of the procedural roll above — both were flagged as
-  // underperforming in the balance sim (Tang's Refuge was the weakest
-  // Common in the whole pool; Nanite Division Marshal one of the
-  // least-cast Ultra-Rares). A defensive identity gives them a reason to
-  // see play instead of just scaling their raw stats up.
-  const MANUAL_STEEL: Record<string, number> = {
-    tang_s_refuge: 2,
-    nanite_division_marshal: 3,
-  };
-  if (
-    MANUAL_STEEL[c.id] !== undefined &&
-    !def.steel &&
-    wouldBeLegalSomewhere([...(def.keywords || []), 'Steel'])
-  ) {
-    def.steel = { x: MANUAL_STEEL[c.id] };
-    def.keywords = [...(def.keywords || []), 'Steel'];
-  }
-  // v4.8: Chrono-Phalanx has sat at the very bottom of the pool for FOUR
-  // straight passes (26.4% win-in-deck, 0.36 casts/game) regardless of meta
-  // — the v4.7 findings explicitly flagged it as "a redesign, not a stat
-  // bump". It's a hard-gate trophy body; give it a trophy identity: +2/+2
-  // over budget and Overrun, so the rare turn it lands it actually punches
-  // through the durability boards that define the meta.
+  // v4.2 Unit keywords: Bulwark, Toll, Avenge, Steel — their rolls moved to
+  // the v4.19 keyword phase near the top of this function (unchanged hash
+  // conditions); their magnitudes now print from the keyword tier table.
+  // v4.8: Chrono-Phalanx trophy identity — +2/+2 over budget (its Overrun
+  // grant moved to the v4.19 keyword phase above; the Steel roll history
+  // lives at MANUAL_STEEL's module-scope declaration).
   if (c.id === 'chrono_phalanx') {
     def.atk = (def.atk || 0) + 2;
     def.hp = (def.hp || 0) + 2;
-    if (
-      !def.keywords?.includes('Overrun') &&
-      wouldBeLegalSomewhere([...(def.keywords || []), 'Overrun'])
-    )
-      def.keywords = [...(def.keywords || []), 'Overrun'];
   }
   // v4.9 ablation dial (live default 0, i.e. off): a flat HP surcharge on
   // any Unit that ends up matching isCheapDurableBody() below — a direct
@@ -575,6 +622,17 @@ function mapUnit(c: CardTemplate): CardDef {
   }
   return def;
 }
+
+// v4.4: two named cards manually granted Steel as a discrete identity buff,
+// independent of the procedural 1-in-12 roll (both were flagged as
+// underperformers: Tang's Refuge the weakest Common in the pool, Nanite
+// Division Marshal one of the least-cast Ultra-Rares). v4.19: their old x
+// values are now Steel tiers II/III — the pool's only Steel above tier I
+// (procedural Steel prints tier I, the v4.16/v4.18-trimmed flat 1).
+const MANUAL_STEEL: Record<string, number> = {
+  tang_s_refuge: 2,
+  nanite_division_marshal: 3,
+};
 
 const MANUAL_STAT_TRIM: Record<string, number> = {
   // nerfs (win% far ABOVE their cost band's mean)
@@ -684,6 +742,9 @@ function applyManualCostAdj(def: CardDef, id: string) {
   const adj = MANUAL_THRESHOLD_ADJ[id];
   if (adj !== undefined && def.threshold !== undefined) {
     def.threshold = Math.max(1, def.threshold + adj);
+    // An exact cost must stay payable by a single d6 (v4.19: cost-tier
+    // recalculation can shift the exact face up before this adj applies).
+    if (def.castCostKind === 'exact') def.threshold = Math.min(6, def.threshold);
   }
 }
 
@@ -789,6 +850,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
       };
     }
     base.keywords = ['Echo'];
+    base.keywordTiers = assignTiers(base.keywords, tier); // Echo II at rt>=4
     return base;
   }
   // Practical Combo-gated Events cap at Full House / Large Straight.
@@ -843,8 +905,20 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.onCast = { action: 'sap', value: power, target: pick(c.id, 5, SAP_TARGETS) };
   }
 
-  // v4.3: assign the real Cast Slot cost format.
-  applyCostFormat(base, pickCostFormat(c.id, costTier));
+  // v4.19: keyword riders (Echo/Scrap/Crescendo/Aftershock/Snap) are rolled
+  // BEFORE the cost format now (their hash conditions unchanged — all pure
+  // functions of the id, so reordering changes no outcomes), because the
+  // recalculated cost prices in the summed keyword-tier costWeight.
+  assignSpellKeywords(c, base, asCharm, tier, wasCheap);
+  const kwTiers = assignTiers(base.keywords || [], tier);
+  base.keywordTiers = (base.keywords || []).length > 0 ? kwTiers : undefined;
+  // v4.19 Aftershock II (rt>=4): the delayed repeat is FULL value, not half.
+  if (base.aftershock && (kwTiers.Aftershock ?? 1) >= 2 && base.onCast)
+    base.aftershock = { ...base.aftershock, value: base.onCast.value };
+
+  // v4.3: assign the real Cast Slot cost format — v4.19: recalculated from
+  // the power/cost tier plus keyword-tier costWeight (see keywordCostTier).
+  applyCostFormat(base, pickCostFormat(c.id, keywordCostTier(costTier, kwTiers)));
   applyManualCostAdj(base, c.id);
 
   // v4.6: straight-family gates are measurably HARDER than the match-family
@@ -869,6 +943,21 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   if (base.threshold !== undefined && base.castCostKind !== 'exact' && hash(c.id) % 4 === 0) {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
+  if (MANUAL_VALUE_BUFF[c.id] !== undefined && base.onCast) {
+    base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
+  }
+  return base;
+}
+
+/** v4.19: the spell keyword riders, verbatim from mapSpell's old tail (same
+ * hash rolls), extracted so they can run before the cost recalculation. */
+function assignSpellKeywords(
+  c: CardTemplate,
+  base: CardDef,
+  asCharm: boolean,
+  tier: number,
+  wasCheap: boolean,
+) {
   // Echo on a slice of utility so recursion exists outside bombs.
   if (hash(c.id) % 5 === 1 && !base.keywords) {
     base.keywords = ['Echo'];
@@ -932,10 +1021,6 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.snap = true;
     base.keywords = [...(base.keywords || []), 'Snap'];
   }
-  if (MANUAL_VALUE_BUFF[c.id] !== undefined && base.onCast) {
-    base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
-  }
-  return base;
 }
 
 // ---------------------------------------------------------------------------
@@ -1027,6 +1112,11 @@ function mapLocation(c: CardTemplate): CardDef {
   if (MANUAL_VALUE_BUFF[c.id] !== undefined && def.onCast) {
     def.onCast = { ...def.onCast, value: (def.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
   }
+  // v4.19: Location keyword tiers (Foothold/Tribute/Excavate/Contested).
+  // Locations cast free, so tiers carry no cost consequence here — but
+  // Foothold II / Tribute II are real upgrades at Super-Rare+.
+  if (def.keywords && def.keywords.length > 0)
+    def.keywordTiers = assignTiers(def.keywords, tier);
   return def;
 }
 
@@ -1270,6 +1360,12 @@ function mapLeader(c: CardTemplate): CardDef {
     resolve: resolveX ? { x: resolveX } : undefined,
     ultimate: LEADER_ULTIMATE[c.id],
     keywords: [...(resolveX ? ['Resolve'] : []), ...(LEADER_ULTIMATE[c.id] ? ['Ultimate'] : [])],
+    // v4.19: Leader keyword tiers — Resolve's tier IS its X; Ultimate is
+    // single-tier. Leaders pay no Cast Slot cost, so these weigh 0.
+    keywordTiers: {
+      ...(resolveX ? { Resolve: resolveX } : {}),
+      ...(LEADER_ULTIMATE[c.id] ? { Ultimate: 1 } : {}),
+    },
     rarity: c.rarity,
     set: c.set,
     image: c.image,

@@ -7,6 +7,7 @@
  * recast from Discard). Sequential targeted combat with Guard walls.
  */
 import { CardDef, CARD_DB, ComboPattern, DECKLISTS_V3, Effect, EffectTarget, hasKw } from './cards';
+import { keywordTier, tierMagnitude } from './keywords';
 
 /**
  * v4.2 Twin A/B test modes (errata B): the two isolated fixes for Twin's
@@ -373,8 +374,24 @@ export const SIM_TUNING = {
   footholdDiscount: 1,
 };
 
+/** v4.19: a defensive keyword's magnitude, read from the KEYWORD_TIERS
+ * table (keywords.ts) via the card's assigned tier — the per-card `x`
+ * fields (def.steel/bulwark/toll) are only presence markers / AI-compat
+ * mirrors now. `keywordTier()` falls back to those legacy x fields for
+ * hand-built defs, so table reads reproduce pre-tier behavior exactly. */
+function defenseMag(def: CardDef, kw: 'Steel' | 'Bulwark' | 'Toll'): number {
+  const t = def.keywordTiers?.[kw];
+  if (t !== undefined) return tierMagnitude(kw, t);
+  // Legacy/hand-built defs with no tier map: honor the raw printed x
+  // verbatim (even off-ladder values like a test's Steel 5) — exact
+  // pre-tier behavior.
+  const x = kw === 'Steel' ? def.steel?.x : kw === 'Bulwark' ? def.bulwark?.x : def.toll?.x;
+  return x ?? tierMagnitude(kw, 1);
+}
+
 export function steelRemaining(target: Inst): number {
-  const x = Math.floor((target.def.steel?.x || 0) * SIM_TUNING.steelMult);
+  const base = target.def.steel ? defenseMag(target.def, 'Steel') : 0;
+  const x = Math.floor(base * SIM_TUNING.steelMult);
   return Math.max(0, x - target.steelUsed);
 }
 
@@ -398,7 +415,7 @@ export function willKillInCombat(g: Game, target: Inst, rawAtk: number): boolean
   if (hasUnspentWard(target)) return false;
   const prevention = Math.min(
     STEEL_BULWARK_CAP,
-    steelRemaining(target) + (target.def.bulwark?.x || 0),
+    steelRemaining(target) + (target.def.bulwark ? defenseMag(target.def, 'Bulwark') : 0),
   );
   const dmg = Math.max(0, rawAtk - prevention);
   return dmg >= remainingHp(g, target);
@@ -453,11 +470,18 @@ export function effThreshold(g: Game, pid: string, def: CardDef): number {
     ).length;
     // v4.0: cap the reduction so Anchor is ramp, not a threshold collapse
     // that lets a wide Anchor board dump its whole hand at threshold 1.
-    reduction += Math.min(ANCHOR_CAP, inPlay);
+    // v4.19: the cap is this card's Anchor tier magnitude (I: 2, II/III: 3
+    // = the legacy ANCHOR_CAP) — read from the keyword tier table.
+    reduction += Math.min(tierMagnitude('Anchor', keywordTier(def, 'Anchor')), inPlay);
   }
   // v4.4 Foothold: stacks with Anchor — a ramp deck built around both gets
   // to actually feel it on the turn that matters most (the first Unit).
-  if (def.type === 'Unit' && footholdActive(g, pid)) reduction += SIM_TUNING.footholdDiscount;
+  // v4.19: Foothold II (tier magnitude 2) discounts 1 more than the base dial.
+  if (def.type === 'Unit' && footholdActive(g, pid)) {
+    const loc = g.players[pid].location!;
+    reduction +=
+      SIM_TUNING.footholdDiscount + (tierMagnitude('Foothold', keywordTier(loc.def, 'Foothold')) - 1);
+  }
   return Math.max(1, t - reduction);
 }
 
@@ -473,7 +497,12 @@ function applyAnchorCapBonus(g: Game, p: Player, c: Inst) {
   const others = [...p.board, p.location].filter(
     (x): x is Inst => !!x && x.iid !== c.iid && hasKw(x.def, 'Anchor'),
   ).length;
-  if (others >= ANCHOR_CAP) {
+  // v4.19: the ramp cap and the one-time bonus size both come from the
+  // card's Anchor tier (I: cap 2 / +2/+2; II: cap 3 / +2/+2; III: cap 3 /
+  // +3/+3 — the tier-cap premium rider).
+  const cap = tierMagnitude('Anchor', keywordTier(c.def, 'Anchor'));
+  const bonus = keywordTier(c.def, 'Anchor') >= 3 ? 3 : 2;
+  if (others >= cap) {
     c.anchorCapBonused = true;
     // v4.5: +1/+1 -> +2/+2 — Anchor-ramp archetypes measured as the weakest
     // decks in the whole roster (Abyss Excavate Ramp 12.8%, Sea Witch
@@ -482,10 +511,10 @@ function applyAnchorCapBonus(g: Game, p: Player, c: Inst) {
     // rate) even after the v4.4 cap-to-3 change. A bigger one-time payoff
     // gives the archetype an actual swing moment instead of just a smaller
     // discount ceiling.
-    c.permAtk += 2;
-    c.permHp += 2;
+    c.permAtk += bonus;
+    c.permHp += bonus;
     g.stats.anchorCapBonuses++;
-    g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +2/+2.`);
+    g.log.push(`${c.def.name}'s Anchor reached full ramp — permanent +${bonus}/+${bonus}.`);
     if (SIM_TUNING.anchorCapBonusDraw) drawCards(g, p, 1);
   }
 }
@@ -498,6 +527,8 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
   let t = u.def.ability?.threshold ?? 1;
   if (u.def.resolve && u.def.type === 'Leader') {
     const max = effMaxHp(g, u);
+    // (v4.19: Resolve's keyword tier IS this x — Leader kits are hand-tuned
+    // in cardpool.ts, so the printed x stays the runtime source of truth.)
     if (max > 0 && remainingHp(g, u) * 2 <= max) t -= u.def.resolve.x;
   }
   if (u.def.excavate && u.def.type === 'Location') {
@@ -508,7 +539,10 @@ export function effAbilityThreshold(g: Game, u: Inst): number {
 
 /** v4.2 Toll X: sum of Toll on a player's board, reducing all incoming Leader damage. */
 export function tollReduction(g: Game, ownerId: string): number {
-  const total = g.players[ownerId].board.reduce((s, u) => s + (u.def.toll?.x || 0), 0);
+  const total = g.players[ownerId].board.reduce(
+    (s, u) => s + (u.def.toll ? defenseMag(u.def, 'Toll') : 0),
+    0,
+  );
   // Same "ramp, not a collapse" cap Anchor uses: uncapped, a wide Toll board
   // could zero out an entire class of face damage (Sap, Pierce overflow,
   // Crescendo burn) at once rather than just blunting it.
@@ -688,7 +722,10 @@ export function cleanupDeaths(g: Game) {
     for (const u of survivors) {
       if (u.def.avenge) {
         u.avengeStacks = u.avengeStacks || 0;
-        const gain = Math.min(dead.length, Math.max(0, SIM_TUNING.avengeCap - u.avengeStacks));
+        // v4.19: Avenge II raises the lifetime cap by 1 (tier magnitude is
+        // the cap; the dial keeps its ablation role as the tier-I base).
+        const cap = SIM_TUNING.avengeCap + (keywordTier(u.def, 'Avenge') - 1);
+        const gain = Math.min(dead.length, Math.max(0, cap - u.avengeStacks));
         if (gain > 0) {
           u.permAtk += gain;
           u.permHp += gain;
@@ -760,7 +797,15 @@ function wardCheck(g: Game, target: Inst, hostile: boolean): boolean {
 function withCrescendo(p: Player, c: Inst, eff: Effect): Effect {
   if (!c.def.crescendo) return eff;
   if (!rollValues(p).some((v) => v >= 5)) return eff;
-  return { ...eff, value: (eff.value || 0) + c.def.crescendo.x };
+  // v4.19: pool cards read the bonus from the keyword tier table (tier I..V
+  // -> +4..+8), shifted by the crescendoBase ablation dial's delta from its
+  // live default of 4 so the dial keeps working. Legacy/hand-built defs
+  // (no keywordTiers entry) keep reading their printed x directly.
+  const bonus =
+    c.def.keywordTiers?.Crescendo !== undefined
+      ? tierMagnitude('Crescendo', keywordTier(c.def, 'Crescendo')) + (SIM_TUNING.crescendoBase - 4)
+      : c.def.crescendo.x;
+  return { ...eff, value: (eff.value || 0) + bonus };
 }
 
 /** v4.2 Aftershock: queue the delayed half-value repeat for the caster's next startTurn. */
@@ -1366,6 +1411,12 @@ export function castFromHand(
   }
 
   for (const die of dice) die.placed = true;
+  // v4.19 telemetry (harness cost-vs-value): total dice pips actually paid to
+  // cast this card, and a matching cast counter so avg-cost-per-cast can be
+  // derived. Recorded here (hand casts only — Echo recasts / Twin completions
+  // spend their dice elsewhere) via the same decisions pipeline as cardCast.
+  decide(g, p.id, `cardPips:${c.def.id}`, dice.reduce((s, d) => s + d.value, 0));
+  decide(g, p.id, `cardPipsN:${c.def.id}`);
   // The die whose value drives Twin staging / Overflow math: for 'sum'-cost
   // cards this is the total of every die spent (Twin never uses 'sum' — see
   // cardpool.ts), otherwise the one die placed.
@@ -1522,7 +1573,9 @@ export function activateViaRally(
   if (c.hasAttacked || c.boundThisTurn) return false;
   if (c.enteredThisTurn && !hasKw(c.def, 'Swift')) return false;
   if (src.iid === c.iid || !src.abilityUsed || src.abilityDie === undefined) return false;
-  if (src.abilityDie < effAbilityThreshold(g, c)) return false;
+  // v4.19: Rally II counts the borrowed die as +1 higher (tier magnitude).
+  const rallyBonus = tierMagnitude('Rally', keywordTier(c.def, 'Rally'));
+  if (src.abilityDie + rallyBonus < effAbilityThreshold(g, c)) return false;
   c.abilityUsed = true;
   c.abilityDie = src.abilityDie;
   src.abilityDie = undefined; // die moves; source stays exhausted
@@ -1638,7 +1691,10 @@ export function echoRecast(
   // Echo family (+5.8pt) yet still taxed a real card, while the round-4
   // echoNoFodder ablation arm lifted the Echo-themed floor decks (Shinobi
   // Tempo-Anchor 11.5 -> 19.0). Low rarity keeps the full fodder cost.
-  const waiveFodder = SIM_TUNING.echoWaiveAllFodder || rarityTier(c.def.rarity) !== 'low';
+  // v4.19: the fodder waiver is now Echo's tier (I: pay fodder, II: waived);
+  // pool assignment keeps the legacy rarity split, and keywordTier()'s
+  // fallback reproduces it for legacy defs.
+  const waiveFodder = SIM_TUNING.echoWaiveAllFodder || keywordTier(c.def, 'Echo') >= 2;
   let dIdx = -1;
   if (!waiveFodder) {
     dIdx = p.hand.findIndex((h) => h.iid === discardIid);
@@ -1733,7 +1789,12 @@ export function scrap(g: Game, handIid: string, dieIndex: number): boolean {
   if (!die || idx < 0) return false;
   const c = p.hand.splice(idx, 1)[0];
   discardCard(g, p, c);
-  die.value = Math.max(d6(g.rng), d6(g.rng));
+  // v4.19: Scrap's tier magnitude is the number of d6 rolled, keep-highest
+  // (I: 2 — the v4.16 advantage reroll; II: 3).
+  const rolls = tierMagnitude('Scrap', keywordTier(c.def, 'Scrap'));
+  let v = d6(g.rng);
+  for (let i = 1; i < rolls; i++) v = Math.max(v, d6(g.rng));
+  die.value = v;
   g.stats.scraps++;
   return true;
 }
@@ -1910,14 +1971,16 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     tgt.wardUsed = true;
     g.stats.wardBlocks++;
     dmgToTarget = 0;
+    // v4.19: Ward's spike-back is its tier magnitude (I: 1, II: 2).
+    const spike = tierMagnitude('Ward', keywordTier(tgt.def, 'Ward'));
     // v4.4: a prevented hit spikes 1 damage back at the attacker — gives Ward
     // decks a way to punish the attacker that's beating them instead of just
     // delaying it by one turn (see docs/RULEBOOK.md's Ward entry). Scoped to
     // combat only — Ward blocking a non-combat effect (wardCheck) has no
     // concrete "attacker" Unit to punish.
-    att.damage += 1;
-    g.stats.wardPunishDamage += 1;
-    g.log.push(`${tgt.def.name}'s Ward spiked 1 damage back at ${att.def.name}.`);
+    att.damage += spike;
+    g.stats.wardPunishDamage += spike;
+    g.log.push(`${tgt.def.name}'s Ward spiked ${spike} damage back at ${att.def.name}.`);
   } else {
     // v4.4 Steel X: absorbs up to X damage from ANY source each turn, checked
     // Ward (full prevention) -> Steel (per-turn pool) -> Bulwark (flat
@@ -1941,7 +2004,11 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     if (tgt.def.bulwark) {
       // v4.2 Bulwark X: flat reduction to damage taken from attacks, checked
       // Ward (full prevention) -> Bulwark (flat reduction) -> Frenzy (multiplier).
-      const reduced = Math.min(dmgToTarget, tgt.def.bulwark.x, STEEL_BULWARK_CAP - prevented);
+      const reduced = Math.min(
+        dmgToTarget,
+        defenseMag(tgt.def, 'Bulwark'),
+        STEEL_BULWARK_CAP - prevented,
+      );
       if (reduced > 0) {
         g.stats.bulwarkReduced += reduced;
         dmgToTarget -= reduced;
@@ -1952,6 +2019,7 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   // (Ward/Steel/Bulwark all fully zeroing this hit) without touching the
   // numbers that made those keywords good answers to Pierce/Frenzy. Doesn't
   // apply to retaliation, and never fires off a 0-ATK attacker.
+  // v4.19: Overrun II punches +1 on top (tier magnitude is the flat bonus).
   if (hasKw(att.def, 'Overrun') && dmgToTarget === 0 && atk > 0) {
     // v4.6: 1 -> half the attacker's ATK (rounded down, min 1). A flat 1
     // measured as no answer at all: the four durability-stack archetypes
@@ -1960,7 +2028,8 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
     // roster through both a prevalence doubling and every adjacent nerf.
     // Mirrors Pierce's existing floor(atk/2) overflow cap, so "half ATK"
     // is already the established magnitude for punch-through effects.
-    dmgToTarget = Math.max(1, Math.floor(atk / 2));
+    dmgToTarget =
+      Math.max(1, Math.floor(atk / 2)) + tierMagnitude('Overrun', keywordTier(att.def, 'Overrun'));
     g.stats.overrunTriggers++;
     g.log.push(`${att.def.name}'s Overrun punched ${dmgToTarget} damage through.`);
   }
@@ -1996,14 +2065,21 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   // v4.2 Bulwark X: also reduces retaliation damage the attacker itself takes,
   // before Frenzy's multiplier — same Ward -> Bulwark -> Frenzy sequence.
   if (att.def.bulwark) {
-    const reduced = Math.min(retaliation, att.def.bulwark.x, STEEL_BULWARK_CAP - retPrevented);
+    const reduced = Math.min(
+      retaliation,
+      defenseMag(att.def, 'Bulwark'),
+      STEEL_BULWARK_CAP - retPrevented,
+    );
     if (reduced > 0) {
       g.stats.bulwarkReduced += reduced;
       retaliation -= reduced;
     }
   }
   // v4.0 Frenzy: only the SECOND (bonus) swing takes doubled retaliation.
-  if (hasKw(att.def, 'Frenzy') && attackNumber === 2) retaliation *= 2;
+  // v4.19: Frenzy III (tier-cap premium) drops the doubled retaliation on
+  // the bonus swing entirely; tiers I/II keep the classic double.
+  if (hasKw(att.def, 'Frenzy') && attackNumber === 2 && keywordTier(att.def, 'Frenzy') < 3)
+    retaliation *= 2;
   // v4.4: capped at half the attacker's effective ATK (rounded down, min 1).
   // The naive "leftover damage" formula (dmgToTarget - tgtHp) is ALREADY
   // bounded by (atk - 1) any time tgtHp >= 1 — a "cap at atk - 1" would be a
@@ -2011,9 +2087,13 @@ export function attack(g: Game, attackerIid: string, targetIid: string): boolean
   // a real reduction: a big Pierce attacker blowing through a 1-HP chip
   // block now sends at most half its ATK to the Leader, not nearly all of
   // it (see docs/RULEBOOK.md's Pierce entry).
+  // v4.19: the overflow cap divisor comes from the Pierce tier (I: third of
+  // ATK, II: half of ATK — the legacy rule, III: uncapped, magnitude 0).
+  const pierceDiv = tierMagnitude('Pierce', keywordTier(att.def, 'Pierce'));
+  const pierceCap = pierceDiv === 0 ? Infinity : Math.max(1, Math.floor(atk / pierceDiv));
   const pierceOverflow =
     hasKw(att.def, 'Pierce') && dmgToTarget >= tgtHp && tgtHp > 0
-      ? Math.min(dmgToTarget - tgtHp, Math.max(1, Math.floor(atk / 2)))
+      ? Math.min(dmgToTarget - tgtHp, pierceCap)
       : 0;
 
   tgt.damage += dmgToTarget;
@@ -2071,8 +2151,12 @@ export function resolveEndPhasePreDiscard(g: Game) {
       g.stats.diceWasted++;
     }
   }
-  // v4.2 Tribute: Location bonus if you Pitched 2+ dice this turn.
-  if (p.location?.def.tribute && pitchedThisTurn >= 2) {
+  // v4.2 Tribute: Location bonus if you Pitched enough dice this turn —
+  // v4.19: the minimum is the Tribute tier magnitude (I: 2, II: any 1+).
+  if (
+    p.location?.def.tribute &&
+    pitchedThisTurn >= tierMagnitude('Tribute', keywordTier(p.location.def, 'Tribute'))
+  ) {
     applyEffect(
       g,
       p.id,
