@@ -29,6 +29,7 @@ import {
   shopMinPoolSize,
 } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
+import { spareSplit } from './CollectionScreen';
 import {
   PlayerShop,
   ShopSlot,
@@ -161,15 +162,15 @@ function CardStackPicker({
   );
 
   const selected = sellable.find((c) => c.card_id === cardId);
-  // Spare (unlocked) copies across both variants, then capped by however many
-  // of the chosen variant (foil/normal) actually exist — mirrors the
-  // lock-aware max used by the Marketplace's sell form.
-  const spareTotal = selected
-    ? Math.max(0, selected.quantity + selected.foil_quantity - (locked.get(cardId) || 0))
-    : 0;
-  const maxQty = selected
-    ? Math.min(foil ? selected.foil_quantity : selected.quantity, spareTotal)
-    : 0;
+  // Uses the same normal-copies-consumed-first, foil-as-spillover model as
+  // CollectionScreen's spareSplit (also used by Marketplace's sell form) —
+  // a locally-reinvented split here previously diverged from that model
+  // whenever a deck-lock spilled from normal copies into foil, and could
+  // let the player submit a quantity the server-side RPC would reject.
+  const spare = selected
+    ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
+    : { normal: 0, foil: 0 };
+  const maxQty = foil ? spare.foil : spare.normal;
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const add = () => {

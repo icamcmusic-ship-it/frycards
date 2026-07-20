@@ -56,6 +56,7 @@ export function NewsCenterScreen({
       .then(([p, f]) => {
         setPosts(p);
         setFeed(f);
+        setErr(null);
       })
       .catch(() => {
         // Leave posts/feed as whatever they were — the empty-state copy
@@ -77,6 +78,21 @@ export function NewsCenterScreen({
       <MetaHeader title="NEWS CENTER" onBack={onBack} />
 
       <div className="p-6 max-w-3xl mx-auto flex flex-col gap-6">
+        {/* Load failure — `err` also doubles as the publish-error slot inside
+            the composer below, but a fetch failure needs to be visible to
+            every player, not just a creator with the composer open. */}
+        {err && !composing && (
+          <div className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] px-4 py-3 flex items-center justify-between gap-3">
+            <span className="text-[12px] font-bold text-[var(--c-red)]">{err}</span>
+            <button
+              onClick={load}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
+            >
+              RETRY
+            </button>
+          </div>
+        )}
+
         {/* Changelog pointer */}
         <button
           onClick={onOpenChangelog}

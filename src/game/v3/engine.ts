@@ -1225,26 +1225,32 @@ export function autoTarget(
       // chipping the biggest body — otherwise removal wastes value chipping
       // a tough unit while a nearly-dead one survives untouched.
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
+      const pool = opp.board.filter((u) => u.iid !== excludeIid);
+      const killable = pool.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
       if (killable) return killable.iid;
       // `destroy` ignores `v` (wouldSapKill(_,_,0) never matches a living
       // unit) and `sap` fully fizzles against Ward (applyEffect's `destroy`/
       // `sap` branches both check hasUnspentWard) — an uncapped fallback
       // that only sorts by ATK can burn removal on a Warded target while an
       // unwarded, actually-killable one sits right there. Prefer unwarded.
-      const unwarded = opp.board.filter((u) => !hasUnspentWard(u)).sort(byAtk)[0];
+      const unwarded = pool.filter((u) => !hasUnspentWard(u)).sort(byAtk)[0];
       if (unwarded) return unwarded.iid;
-      const t = [...opp.board].sort(byAtk)[0];
+      const t = [...pool].sort(byAtk)[0];
       return t?.iid;
     }
     case 'anyTarget': {
       const v = eff.value || 0;
-      const killable = opp.board.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
+      const pool = opp.board.filter((u) => u.iid !== excludeIid);
+      const killable = pool.filter((u) => wouldSapKill(g, u, v)).sort(byAtk)[0];
       if (killable) return killable.iid;
-      const big = [...opp.board].sort(byAtk)[0];
+      const big = [...pool].sort(byAtk)[0];
       // Prefer face damage if no good unit target.
       if (big && effAtk(g, big) >= 3) return big.iid;
-      return opp.leader.iid;
+      // The Leader itself can never be `excludeIid` here in practice (Leader
+      // Abilities target enemy Units/board, not the enemy Leader, when this
+      // exclusion matters), but guard anyway rather than assume.
+      if (opp.leader.iid !== excludeIid) return opp.leader.iid;
+      return big?.iid;
     }
     case 'friendlyUnit': {
       // v4.5: was `.sort(byAtk)[0]` — always the biggest-ATK Unit, which is
@@ -1262,8 +1268,10 @@ export function autoTarget(
       // sitting at near-lethal damage gets ignored in favor of topping off
       // a Leader with only a point or two of damage.
       const v = eff.value || 0;
-      const hurtPool = [p.leader, ...p.board].filter((u) => u.damage > 0);
-      if (hurtPool.length === 0) return p.leader.iid;
+      const hurtPool = [p.leader, ...p.board].filter(
+        (u) => u.damage > 0 && u.iid !== excludeIid,
+      );
+      if (hurtPool.length === 0) return p.leader.iid !== excludeIid ? p.leader.iid : undefined;
       const noWaste = hurtPool.filter((u) => u.damage >= v).sort((a, b) => b.damage - a.damage)[0];
       if (noWaste) return noWaste.iid;
       return [...hurtPool].sort((a, b) => b.damage - a.damage)[0].iid;

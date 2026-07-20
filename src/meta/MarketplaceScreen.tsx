@@ -21,6 +21,7 @@ import { CardFace } from '../components/CardFaceV4';
 import { RARITY_CHIP } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
+import { spareSplit } from './CollectionScreen';
 
 type Tab = 'browse' | 'mine' | 'sell';
 
@@ -504,16 +505,15 @@ function SellForm({
     selectedEntry && POOL_BY_ID[cardId]
       ? { ...selectedEntry, def: POOL_BY_ID[cardId]! }
       : undefined;
-  const maxQty = selected
-    ? Math.max(
-        0,
-        (foil ? selected.foil_quantity : selected.quantity) -
-          Math.max(
-            0,
-            (locked.get(cardId) || 0) - (foil ? selected.quantity : selected.foil_quantity),
-          ),
-      )
-    : 0;
+  // Uses the same normal-copies-consumed-first, foil-as-spillover model as
+  // CollectionScreen's spareSplit — a card whose deck-locked count exceeds
+  // its normal copies spills the lock into foil, not the other way around.
+  // A locally-reinvented formula here previously diverged from that model
+  // and could offer a "spare" quantity the create_listing RPC would reject.
+  const spare = selected
+    ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
+    : { normal: 0, foil: 0 };
+  const maxQty = foil ? spare.foil : spare.normal;
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
   // Buyout only applies to auctions — a stale buyout value left over from
