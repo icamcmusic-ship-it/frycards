@@ -7,6 +7,41 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.15 balance + CPU AI pass
+
+- **Balance backlog cleared** (details in `docs/BALANCE_SIM_FINDINGS_v4.15.md`):
+  Shinobi Avenge Grind's weak `Excavate` swap fixed (45.5%→73.8%, fully
+  recovered); a new Mer-King archetype that deliberately avoids Guard
+  confirms Mer-King's dominance is concentrated in Guard/Bulwark
+  specifically, not a broad Leader-kit strength (25.0% win rate on its
+  own); exact-cost wall bodies (Flickering Sea Pens/Cavernous Watcher)
+  confirmed already resolved by the color-identity work, no fix needed.
+  Sovereign Crimson Assault's retune (Avenge→Echo) did NOT help
+  (34.0%→29.0%) — an honest miss, flagged for a different lever next
+  pass. Formally closed 5 long-open items as accepted-design decisions
+  (Crescendo, cost-vs-value normalization, wall-list meta, comeback rate,
+  Crimson's card count) rather than re-flagging them every pass.
+- **CPU decision-making improvements** (`src/game/v3/ai.ts`): (1)
+  Placement now recognizes when a `destroy` card would clear a Guard and
+  open a lethal attack this turn, and prioritizes it accordingly; (2)
+  Combat avoids overkilling a Guard with its biggest attacker, sending the
+  smallest sufficient attacker instead and preserving bigger attackers
+  for face damage once the wall falls; (3) reroll strategy now has an
+  explicit branch for hands with zero combo-gate cards, instead of
+  silently falling into pair-keeping logic that doesn't apply; (4)
+  mulligan now recognizes a coherent multi-card gate-family hand as
+  keepable even with no individually-cheap card, and a stray
+  raw-threshold comparison in the mulligan bottom-card logic was fixed to
+  use the same `costWeight()` helper every other card-value comparison in
+  the file already uses.
+- **New instrumentation**: `guardClearLethalOpportunity`/
+  `guardClearLethalConverted` decision-correlation counters. Measured:
+  the opportunity arises in ~1 of 8 games and converts to a win 73.6% of
+  the time — confirms the Guard-clear fix is real and meaningfully sized,
+  not a paper win. Full re-verification (85,200 games across two runs):
+  no invariant violations, all previously-fixed lapse detectors stayed at
+  their expected zero/low baseline.
+
 ### v4.14b balance pass — color-aware archetype re-tune
 
 - **Retuned 7 archetypes across 4 Leaders** whose `keywords:` included at

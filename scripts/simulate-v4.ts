@@ -167,6 +167,24 @@ const ARCHETYPES: Archetype[] = [
     locations: 3,
     comboFamily: 'none',
   },
+  // v4.15: Mer-King has been the roster's strongest or near-strongest
+  // Leader across every pass since v4.9, but all 3 archetypes above lean
+  // Guard heavily (its single best-performing keyword) — docs/
+  // COLOR_IDENTITY.md §7 item asks whether that's a real Leader-kit
+  // strength or an archetype-selection artifact (every archetype just
+  // happens to draft the best keyword available). This archetype
+  // deliberately avoids Guard, using the OTHER half of Mer-King's
+  // Azure/Obsidian identity (Toll+Echo) as a control test.
+  {
+    label: 'Mer King Toll-Echo Control',
+    leaderId: 'mer_king',
+    keywords: ['Toll', 'Echo'],
+    effects: ['sap', 'draw'],
+    units: 15,
+    spells: 11,
+    locations: 4,
+    comboFamily: 'none',
+  },
 
   // --- Legendary Diver (3) ---
   {
@@ -265,10 +283,15 @@ const ARCHETYPES: Archetype[] = [
     locations: 4,
     comboFamily: 'none',
   },
+  // v4.15: Excavate (v4.14's swap for the off-identity Toll) turned out to
+  // be a much weaker substitute — this archetype dropped 73.2%->45.5% from
+  // that single swap (docs/COLOR_IDENTITY.md §7 item 8). Retuned again to
+  // Steel, still Verdant/Obsidian-legal and already a proven keyword
+  // elsewhere in this Leader's own roster (Steel-Scrap Control 56.7%).
   {
     label: 'Shinobi Avenge Grind',
     leaderId: 'apex_nanite_shinobi',
-    keywords: ['Avenge', 'Excavate'],
+    keywords: ['Avenge', 'Steel'],
     effects: ['mend', 'sap'],
     units: 19,
     spells: 7,
@@ -329,13 +352,20 @@ const ARCHETYPES: Archetype[] = [
     locations: 4,
     comboFamily: 'none',
   },
+  // v4.15: this archetype was a first draft with no tuning history and
+  // landed far below its sibling (34.0% vs. Sovereign Steel Control's
+  // 87.7%, docs/COLOR_IDENTITY.md §7 item 9). Swapped Avenge -> Echo
+  // (still Obsidian-legal) and softened the all-in aggro build with a
+  // card-advantage plan (added `draw`) rather than betting everything on
+  // Pierce, one of the pool's historically weaker keywords, with no
+  // fallback plan.
   {
     label: 'Sovereign Crimson Assault',
     leaderId: 'sovereign_of_the_dying_star',
-    keywords: ['Pierce', 'Avenge'],
-    effects: ['sap'],
-    units: 19,
-    spells: 8,
+    keywords: ['Pierce', 'Echo'],
+    effects: ['sap', 'draw'],
+    units: 16,
+    spells: 11,
     locations: 3,
     comboFamily: 'none',
   },
@@ -470,6 +500,13 @@ const DECISION_KEYS = [
   // (…Tiered). Distinguishes "detector broken" from "situation never arises."
   'unitAbilityMultiCandidate',
   'unitAbilityMultiCandidateTiered',
+  // v4.15: activation-rate companions for the new Guard-clears-lethal
+  // Placement/Combat fixes (ai.ts's guardWallBlocksLethal) — how often the
+  // opportunity existed this turn, and whether the turn actually converted
+  // to a win. Decision-correlation style, not a "would the old code have
+  // done differently" detector.
+  'guardClearLethalOpportunity',
+  'guardClearLethalConverted',
 ];
 
 interface SuiteResult {
@@ -817,6 +854,8 @@ function runGame(
       'lapseUnitAbilityOrderFixed',
       'unitAbilityMultiCandidate',
       'unitAbilityMultiCandidateTiered',
+      'guardClearLethalOpportunity',
+      'guardClearLethalConverted',
     ])
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
   }
