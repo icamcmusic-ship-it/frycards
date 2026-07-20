@@ -302,6 +302,19 @@ function mapUnit(c: CardTemplate): CardDef {
   if (primaryKw === 'Frenzy') {
     atk += 2;
   }
+  // v4.12: Swift has been the pool's single weakest keyword for at least two
+  // consecutive full-pool passes (34.7-36.8% deck win%, dead last every time,
+  // 15-20pt behind the next-weakest keyword) and it's Legendary Diver's
+  // identity keyword — the Leader has posted the worst win rate in the
+  // roster (22-24%) every pass this keyword has been measured. Unlike Guard/
+  // Frenzy/Anchor, Swift got no compensating stat bonus when those three
+  // did. Haste alone (no summoning-sickness turn) isn't pulling its weight
+  // against keywords that add durability or damage on top of a body's base
+  // stats — give it a modest +1 ATK, the same shape of fix already proven
+  // for Frenzy.
+  if (primaryKw === 'Swift') {
+    atk += 1;
+  }
   // v4.7: Anchor bodies must SURVIVE on board for the ramp to exist at all,
   // and the pool's cheap Anchor units were glass (4/2 exact-4 walls that die
   // to everything). The v4.7 ablation measured +2 HP on Anchor Units as the
@@ -463,8 +476,44 @@ function mapUnit(c: CardTemplate): CardDef {
   if (SIM_TUNING.durableBodyTax > 0 && isCheapDurableBody(def)) {
     def.hp = Math.max(1, (def.hp || 0) - SIM_TUNING.durableBodyTax);
   }
+  // v4.12: the first full-pool run (292 vs. the prior 193 cards; see
+  // BALANCE_SIM_FINDINGS_v4.12.md §2) surfaced a batch of never-before-simmed
+  // cards as extreme cost-vs-value RESIDUAL outliers (win% far off the mean
+  // of every other card at the same cast-difficulty band). Same named-card
+  // identity-patch pattern as MANUAL_STEEL/MANUAL_VALUE_BUFF above — a flat
+  // stat trim/bump split across ATK and HP, sized to the measured residual
+  // (2pt of stats for the two most extreme, 1pt for the rest).
+  if (MANUAL_STAT_TRIM[c.id] !== undefined) {
+    const d = MANUAL_STAT_TRIM[c.id];
+    const half = Math.trunc(d / 2);
+    def.atk = Math.max(1, (def.atk || 0) + half);
+    def.hp = Math.max(1, (def.hp || 0) + (d - half));
+  }
   return def;
 }
+
+const MANUAL_STAT_TRIM: Record<string, number> = {
+  // nerfs (win% far ABOVE their cost band's mean)
+  // v4.12 verification pass: -1/-1 (from -2) barely moved Vampire Squid/
+  // Half-Faded Shade's residual (+44.8 -> +42.7, +35.9 -> +33.9 — noise-level)
+  // -- both stack Guard+Bulwark (durability-stack shape, see the recurring
+  // "wall-list meta" findings) on top of already-generous ATK, so a bigger
+  // cut is warranted. Where the Deep Meets the Sky similarly barely moved
+  // (+38.2 -> +34.7).
+  vampire_squid: -4,
+  half_faded_shade: -4,
+  where_the_deep_meets_the_sky: -4,
+  the_wolf_of_wall_street: -1,
+  mesozoic_exchange_student: -1,
+  blind_colossus: -2,
+  fayes_true_face: -2,
+  vlad_from_accounting: -1,
+  swaying_garden: -1,
+  // buffs (win% far BELOW their cost band's mean)
+  void_mother: 2,
+  familiar_in_the_dark: 2,
+  butterflyfish_school: 1,
+};
 
 // ---------------------------------------------------------------------------
 // Charm / Event mapping (one-shots)
@@ -491,6 +540,22 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   consuming_ash_cloud: 1,
   towering_tsunami: 1,
   narwhal_staff: 1,
+  // v4.12: same first-full-pool-run cost-vs-value residual outliers as
+  // MANUAL_STAT_TRIM above, for the non-Unit (Charm/Event/Location) side —
+  // see BALANCE_SIM_FINDINGS_v4.12.md §2. One over-priced Charm nerfed
+  // alongside the under-priced batch buffed.
+  // v4.12 verification pass: +1 barely moved the two worst-residual charms/
+  // events (Locksmith's Regret -27.8 -> -25.5, Abyssal Gate -22.4 -> -21.8);
+  // doubled to +2 for those and Wraithlight Lantern/Familiar in the Dark's
+  // sibling non-Unit cards.
+  the_locksmiths_regret: 2,
+  the_abyssal_gate: 2,
+  wraithlight_lantern: 2,
+  magma_conduit_network: 1,
+  jawbone_span: 1,
+  black_smoker: 1,
+  kinetix_blacksite_cavern: 1,
+  glowing_glyph_tablet: -1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {

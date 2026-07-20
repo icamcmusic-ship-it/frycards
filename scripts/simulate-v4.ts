@@ -32,6 +32,11 @@ import {
   cardDifficulty,
   deckDurableBodyDensity,
 } from '../src/game/v3/cardpool';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // v4.4: a widened, 20-archetype roster across all six real Leaders — sim-only
 // (the player-facing "prebuilt archetype" deck picker was removed from the
@@ -255,6 +260,37 @@ const ARCHETYPES: Archetype[] = [
     locations: 4,
     comboFamily: 'none',
   },
+
+  // v4.12: the full 292-card Supabase pool (up from the stale 193-card
+  // bundle) added two Leaders that had never appeared in the archetype
+  // roster before — Ruin-Walker Overseer and Sovereign of the Dying Star.
+  // Previously they only showed up incidentally in the 8 pure-random control
+  // decks (n=1880, far too small and not representative of a piloted deck),
+  // so their leader-level win rate in every prior full-pool report was
+  // essentially noise. One balanced, generic archetype each (both Leaders
+  // print a plain threshold-5 Sap ability with no distinctive kit rider) —
+  // same Guard/Bulwark defensive-midrange shape used elsewhere in the roster
+  // as a neutral baseline build.
+  {
+    label: 'Ruin-Walker Guard Grind',
+    leaderId: 'ruinwalker_overseer',
+    keywords: ['Guard', 'Bulwark'],
+    effects: ['sap', 'mend'],
+    units: 17,
+    spells: 9,
+    locations: 4,
+    comboFamily: 'none',
+  },
+  {
+    label: 'Sovereign Steel Control',
+    leaderId: 'sovereign_of_the_dying_star',
+    keywords: ['Steel', 'Toll'],
+    effects: ['sap', 'destroy'],
+    units: 16,
+    spells: 10,
+    locations: 4,
+    comboFamily: 'none',
+  },
 ];
 
 const PER_PAIR = parseInt(process.argv[2] || '20', 10);
@@ -453,6 +489,27 @@ interface SuiteResult {
    * specific game is what varies and correlates with the outcome. */
   archCardCastInGame: Record<string, Record<string, number>>;
   archCardCastInWinGame: Record<string, Record<string, number>>;
+  /** v4.12 harness upgrade: card-type (Unit/Charm/Event/Location) deck
+   * presence -> win rate, same "once per deck, not per copy" convention as
+   * keywordInDeck — a direct, keyword-independent read on which card TYPE
+   * mix wins, for the "game mechanics to add/remove/change" ask. */
+  typeInDeck: Record<string, number>;
+  typeInWinDeck: Record<string, number>;
+  /** v4.12: archetype-vs-archetype head-to-head win rate matrix — catches
+   * hard counters / rock-paper-scissors matchup problems that aggregate
+   * archetype win% (vs. the whole field) can't see. matchupW[a][b] = games
+   * a beat b; matchupN[a][b] = decisive games a played vs b. */
+  matchupW: Record<string, Record<string, number>>;
+  matchupN: Record<string, Record<string, number>>;
+  /** v4.12: "comeback" tracking — snapshot each player's Leader HP at the
+   * ROUND_CHECKPOINT mark (turn 8, i.e. 4 full turns each) and record
+   * whether the player who was BEHIND on Leader HP at that point went on to
+   * win. Answers "how punishing is an early deficit" — a mechanics-health
+   * question (snowball vs. comeback game design) called out by the task. */
+  comebackWins: number;
+  comebackGames: number;
+  aheadAtCheckpointWins: number;
+  aheadAtCheckpointGames: number;
   errors: string[];
 }
 
@@ -501,9 +558,23 @@ function newResult(): SuiteResult {
     echoCardArchInWinGame: {},
     archCardCastInGame: {},
     archCardCastInWinGame: {},
+    typeInDeck: {},
+    typeInWinDeck: {},
+    matchupW: {},
+    matchupN: {},
+    comebackWins: 0,
+    comebackGames: 0,
+    aheadAtCheckpointWins: 0,
+    aheadAtCheckpointGames: 0,
     errors: [],
   };
 }
+
+/** v4.12: round (half-turn) count at which we snapshot Leader HP for the
+ * comeback-rate metric — 8 rounds = 4 full turns each, past mulligan/opening
+ * curve but well before most games resolve (avg length is usually 12-20
+ * rounds; see roundBuckets). */
+const COMEBACK_CHECKPOINT_ROUND = 8;
 
 function deckSize(d: DeckDef): number {
   return Object.values(d.cards).reduce((a, b) => a + b, 0);
@@ -557,10 +628,16 @@ function runGame(
     sizeB = deckSize(b.deck);
   const firstPlayer = g.active;
   let rounds = 0;
+  let checkpointBehind: 'A' | 'B' | null = null;
   while (!g.winner && rounds < MAX_TURNS) {
     playTurn(g);
     invariants(g, sizeA, sizeB, r.errors);
     rounds++;
+    if (rounds === COMEBACK_CHECKPOINT_ROUND) {
+      const hpA = remainingHp(g, g.players.A.leader);
+      const hpB = remainingHp(g, g.players.B.leader);
+      if (hpA !== hpB) checkpointBehind = hpA < hpB ? 'A' : 'B';
+    }
   }
   r.games++;
   r.totalRounds += rounds / 2;
@@ -624,6 +701,19 @@ function runGame(
     r.leaderN[winEntry.leaderId] = (r.leaderN[winEntry.leaderId] || 0) + 1;
     r.leaderN[loseEntry.leaderId] = (r.leaderN[loseEntry.leaderId] || 0) + 1;
     r.archW[winEntry.key] = (r.archW[winEntry.key] || 0) + 1;
+    (r.matchupN[winEntry.key] ||= {})[loseEntry.key] =
+      (r.matchupN[winEntry.key][loseEntry.key] || 0) + 1;
+    (r.matchupN[loseEntry.key] ||= {})[winEntry.key] =
+      (r.matchupN[loseEntry.key][winEntry.key] || 0) + 1;
+    (r.matchupW[winEntry.key] ||= {})[loseEntry.key] =
+      (r.matchupW[winEntry.key][loseEntry.key] || 0) + 1;
+    if (checkpointBehind) {
+      const behindWon = checkpointBehind === winSide;
+      r.comebackGames++;
+      if (behindWon) r.comebackWins++;
+      r.aheadAtCheckpointGames++;
+      if (!behindWon) r.aheadAtCheckpointWins++;
+    }
   }
   r.archN[a.key] = (r.archN[a.key] || 0) + 1;
   r.archN[b.key] = (r.archN[b.key] || 0) + 1;
@@ -697,6 +787,12 @@ function runGame(
     for (const kw of kws) {
       r.keywordInDeck[kw] = (r.keywordInDeck[kw] || 0) + 1;
       if (won) r.keywordInWinDeck[kw] = (r.keywordInWinDeck[kw] || 0) + 1;
+    }
+    const types = new Set<string>();
+    for (const id of Object.keys(entry.deck.cards)) types.add(POOL_BY_ID[id].type);
+    for (const t of types) {
+      r.typeInDeck[t] = (r.typeInDeck[t] || 0) + 1;
+      if (won) r.typeInWinDeck[t] = (r.typeInWinDeck[t] || 0) + 1;
     }
   }
 }
@@ -1162,8 +1258,75 @@ console.log(
     );
 }
 
+console.log('\n--- Card-TYPE win rate (deck contains >=1 card of this type), min n=200 ---');
+for (const t of Object.keys(R.typeInDeck)
+  .filter((t) => R.typeInDeck[t] >= 200)
+  .sort((a, b) => (R.typeInWinDeck[b] || 0) / R.typeInDeck[b] - (R.typeInWinDeck[a] || 0) / R.typeInDeck[a]))
+  console.log(`${t.padEnd(10)} win%=${pct(R.typeInWinDeck[t] || 0, R.typeInDeck[t])}  (n=${R.typeInDeck[t]})`);
+
+console.log(
+  `\n--- Comeback rate: win% when BEHIND on Leader HP at round ${COMEBACK_CHECKPOINT_ROUND} checkpoint ---`,
+);
+console.log(
+  `Behind at checkpoint -> still won: ${pct(R.comebackWins, R.comebackGames)}%  (n=${R.comebackGames})`,
+);
+console.log(
+  `Ahead at checkpoint  -> won:       ${pct(R.aheadAtCheckpointWins, R.aheadAtCheckpointGames)}%  (n=${R.aheadAtCheckpointGames})`,
+);
+
+console.log('\n--- Archetype head-to-head matchup matrix (win% row vs column, min n=6 per cell) ---');
+const matchupLabels = ARCHETYPES.map((a) => a.label).filter((l) => (R.archN[l] || 0) > 0);
+{
+  const short = (l: string) => l.slice(0, 14).padEnd(15);
+  console.log(''.padEnd(15) + matchupLabels.map((l) => l.slice(0, 6).padStart(7)).join(''));
+  for (const rowL of matchupLabels) {
+    const cells = matchupLabels.map((colL) => {
+      if (rowL === colL) return ''.padStart(7);
+      const n = R.matchupN[rowL]?.[colL] || 0;
+      if (n < 6) return '  n/a  ';
+      const w = R.matchupW[rowL]?.[colL] || 0;
+      return `${((100 * w) / n).toFixed(0)}%`.padStart(7);
+    });
+    console.log(short(rowL) + cells.join(''));
+  }
+  console.log(
+    '(Look for cells far from 50% in both directions on the same pairing — a hard counter/RPS problem, not just a power gap.)',
+  );
+}
+
 console.log(
   R.errors.length
     ? `\n!!! ${[...new Set(R.errors)].length} invariant violation types:\n  ${[...new Set(R.errors)].slice(0, 10).join('\n  ')}`
     : '\nNo invariant violations.',
 );
+
+// ---------------------------------------------------------------------------
+// v4.12 harness upgrade: persist the full raw result (not just the console
+// transcript) as JSON so a balance pass can be re-analyzed programmatically
+// instead of re-parsing padded console text, and so results survive past the
+// terminal scrollback. Written next to the historical BALANCE_SIM_FINDINGS
+// markdown reports.
+// ---------------------------------------------------------------------------
+try {
+  const outDir = join(__dirname, '..', 'docs', 'sim-runs');
+  mkdirSync(outDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const outFile = join(outDir, `v4-${stamp}.json`);
+  writeFileSync(
+    outFile,
+    JSON.stringify(
+      {
+        gamesPerPairing: PER_PAIR,
+        twinModeSelected: winningMode,
+        archetypeCount: ARCHETYPES.length,
+        deckRosterSize: roster.length,
+        result: R,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`\n(Full raw result JSON written to ${outFile})`);
+} catch (e) {
+  console.log(`\n(Could not persist JSON result: ${(e as Error).message})`);
+}

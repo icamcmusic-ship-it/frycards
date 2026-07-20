@@ -21,7 +21,7 @@ const MAX_SHOWCASE = 6;
  * exhausted. Shared by bulk quicksell and the per-card inspector panel so
  * both agree on what's actually sellable — they used to diverge, letting the
  * inspector's normal/foil buttons enable off an undifferentiated total. */
-function spareSplit(o: { q: number; f: number } | undefined, locked: number) {
+export function spareSplit(o: { q: number; f: number } | undefined, locked: number) {
   if (!o) return { normal: 0, foil: 0 };
   const spareTotal = Math.max(0, o.q + o.f - locked);
   const spareFoil = Math.max(0, o.f - Math.max(0, locked - o.q));
