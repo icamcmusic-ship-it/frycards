@@ -2,10 +2,18 @@ import { test, expect } from 'vitest';
 import { validateDeckList, DECK_SIZE, MAX_COPIES } from './DeckBuilderScreen';
 import { maxCopiesForRarity } from '../game/v3/decks';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
+import { isColorLegal, LEADER_COLORS } from '../game/v3/colors';
 
 const db = new Map(POOL_V4.map((c) => [c.id, c]));
 const leader = POOL_BY_ID['avatar_of_the_abyss'];
-const units = POOL_V4.filter((c) => c.type !== 'Leader');
+// v4.13: color-identity-legal-for-this-leader subset — every test below that
+// expects a clean/legal deck must build from cards actually legal under
+// `leader`'s identity now that validateDeckList enforces it.
+const identity = LEADER_COLORS[leader.id];
+const units = POOL_V4.filter((c) => c.type !== 'Leader' && isColorLegal(c, identity));
+const offColorUnits = POOL_V4.filter(
+  (c) => c.type !== 'Leader' && !isColorLegal(c, identity),
+);
 
 function fillDeck(n: number, maxPerCard = MAX_COPIES): string[] {
   const ids: string[] = [];
@@ -50,13 +58,21 @@ test('rejects a Leader card sitting inside the 30-card list', () => {
   expect(issues.some((i) => i.text.includes('Leaders cannot be in the 30-card deck'))).toBe(true);
 });
 
-test('does NOT enforce any color-identity restriction — decks may mix any cards', () => {
-  // Deliberately mix cards that would have failed a legacy color check.
-  const mixed = [...units].sort((a, b) => a.id.localeCompare(b.id));
+test('v4.13 enforces color identity — an off-identity card is rejected', () => {
+  if (offColorUnits.length === 0) throw new Error('leader has no off-color cards to test against');
+  const offCard = offColorUnits[0];
+  const ids = [offCard.id, ...fillDeck(DECK_SIZE - 1).filter((id) => id !== offCard.id)].slice(
+    0,
+    DECK_SIZE,
+  );
+  const issues = validateDeckList(leader, ids, db);
+  expect(issues.some((i) => i.text.includes('color identity'))).toBe(true);
+});
+
+test('v4.13 a deck built only from in-identity cards raises no color-identity issue', () => {
   const ids = fillDeck(DECK_SIZE);
   const issues = validateDeckList(leader, ids, db);
   expect(issues.every((i) => !i.text.includes('color identity'))).toBe(true);
-  void mixed;
 });
 
 test('enforces collection ownership limits when a collection is supplied', () => {

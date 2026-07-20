@@ -6,6 +6,20 @@
 import { CardDef } from './cards';
 import { DeckDef } from './engine';
 import { POOL_BY_ID, POOL_LEADERS, POOL_V4, poolByType } from './cardpool';
+import { isColorLegal, LEADER_COLORS } from './colors';
+
+/** v4.13: color-identity-filtered pool for a given Leader — every archetype
+ * deck (`buildDeck`) and every pure-random deck (`buildPureRandomDeck`) must
+ * draw only from cards legal under that Leader's color identity, or the sim
+ * harness's own decks would be illegal by the rule DeckBuilderScreen now
+ * enforces for players. A Leader with no listed identity (shouldn't happen
+ * for the 8 real Leaders, but keeps this safe for engine-only test Leaders)
+ * falls back to the unfiltered pool. */
+function legalPoolByType(type: CardDef['type'], leaderId: string): CardDef[] {
+  const identity = LEADER_COLORS[leaderId];
+  const all = poolByType(type);
+  return identity ? all.filter((c) => isColorLegal(c, identity)) : all;
+}
 
 const DECK_SIZE = 30; // v4.0
 export const MAX_COPIES = 3;
@@ -92,13 +106,19 @@ export function buildDeck(arch: Archetype): DeckDef {
   const add = (entries: [string, number][]) => {
     for (const [id, n] of entries) cards[id] = (cards[id] || 0) + n;
   };
-  add(take(poolByType('Unit'), arch, arch.units, used));
-  add(take([...poolByType('Charm'), ...poolByType('Event')], arch, arch.spells, used));
-  add(take(poolByType('Location'), arch, arch.locations, used));
+  const units = legalPoolByType('Unit', arch.leaderId);
+  const spells = [
+    ...legalPoolByType('Charm', arch.leaderId),
+    ...legalPoolByType('Event', arch.leaderId),
+  ];
+  const locations = legalPoolByType('Location', arch.leaderId);
+  add(take(units, arch, arch.units, used));
+  add(take(spells, arch, arch.spells, used));
+  add(take(locations, arch, arch.locations, used));
   // Fill any shortfall (if a category ran dry) with best remaining units.
   let total = Object.values(cards).reduce((a, b) => a + b, 0);
   if (total < DECK_SIZE) {
-    add(take(poolByType('Unit'), arch, DECK_SIZE - total, used));
+    add(take(units, arch, DECK_SIZE - total, used));
     total = Object.values(cards).reduce((a, b) => a + b, 0);
   }
   // Trim overflow deterministically.
@@ -198,8 +218,11 @@ export function randomArchetype(rng: () => number = Math.random): Archetype {
 export function buildPureRandomDeck(rng: () => number = Math.random, label?: string): DeckDef {
   const leaderId =
     POOL_LEADERS[Math.floor(rng() * POOL_LEADERS.length)]?.id || 'avatar_of_the_abyss';
-  const pool = poolByType('Unit')
-    .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'));
+  const pool = legalPoolByType('Unit', leaderId).concat(
+    legalPoolByType('Charm', leaderId),
+    legalPoolByType('Event', leaderId),
+    legalPoolByType('Location', leaderId),
+  );
   const shuffled = shuffle(pool, rng);
   const cards: Record<string, number> = {};
   let total = 0;

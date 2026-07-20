@@ -7,6 +7,29 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.13 feature pass — card colors
+
+- **New rule: card colors.** Every card now carries 1+ of 5 colors (Crimson
+  aggro, Azure control, Verdant ramp, Umbral attrition, Radiant
+  synergy/combo — derived from existing keywords, see
+  `docs/COLOR_IDENTITY.md`), and every Leader has a fixed 2-color identity.
+  Deck legality (`validateDeckList`) now rejects any card outside a deck's
+  Leader's identity — a genuine deckbuilding constraint, not a cosmetic
+  tag. DeckBuilder's card pool is pre-filtered to legal cards, with a color
+  filter and an identity-pip indicator; Collection gets a matching color
+  filter. Card frames show a color pip. **Note: not retroactively enforced
+  on decks saved before this pass** — see findings §5 item 5.
+- **Sim harness**: `buildDeck`/`buildPureRandomDeck` (`decks.ts`) now draw
+  only from a Leader's color-legal pool, so simulated decks stay legal
+  under the new rule; added color win-rate and Leader-identity reporting to
+  `simulate-v4.ts`. A full 53,040-game verification run shows no invariant
+  violations, but large Leader/archetype win-rate swings (documented in
+  `docs/COLOR_IDENTITY.md` §4) — the existing 22-archetype roster was
+  tuned pre-color and needs its own color-aware re-tune pass next, not
+  chased further this pass.
+- **New**: `scripts/color-audit.ts` — one-off pool-wide color-distribution
+  and Leader-identity-legality check.
+
 ### v4.12 balance/feature/bug pass
 
 - **Data integrity (headline finding)**: the bundled offline card-pool
