@@ -7,6 +7,42 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.12 balance/feature/bug pass
+
+- **Data integrity (headline finding)**: the bundled offline card-pool
+  fallback (`src/game/generated-cards.ts`), which the sim harness imports
+  directly and the live app falls back to, had drifted to **193 of the 292
+  cards** now in the Supabase `cards` table — every balance pass since it
+  was last regenerated (including all of v4.5-v4.11) ran on roughly
+  two-thirds of the real pool, missing ~99 cards and 2 whole Leaders
+  (Ruin-Walker Overseer, Sovereign of the Dying Star). Regenerated from the
+  live table; full details and the fallout in
+  `docs/BALANCE_SIM_FINDINGS_v4.12.md` §2.
+- **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.12.md`)**: the newly-
+  complete pool surfaced a batch of never-before-simmed cards as extreme
+  cost-vs-value residual outliers. Patched the worst of them (Vampire Squid,
+  Half-Faded Shade, Where the Deep Meets the Sky and 6 more Units trimmed;
+  Void Mother, Familiar in the Dark and 6 more Charms/Events/Locations
+  buffed), iterated twice with full-sim verification between rounds. Gave
+  Swift a +1 ATK on-cast bonus (matching the existing Frenzy/Anchor
+  compensation pattern) — it's measured as the pool's weakest keyword for
+  2+ passes and is Legendary Diver's identity keyword. Diver's Leader win
+  rate (22-24%) did not meaningfully move from this alone; flagged for a
+  Leader-kit-level isolation pass next (see findings §5 item 2).
+- **Sim harness**: four upgrades. **JSON result persistence**
+  (`docs/sim-runs/*.json`) so a full pass's raw counters survive past
+  console scrollback. **Card-type (Unit/Charm/Event/Location) win-rate
+  table**, independent of any one keyword. **Comeback-rate tracking** —
+  Leader HP checkpoint at round 8 correlated with final win — surfaced a
+  strongly snowball-favoring game (26-27% win rate when behind vs. 73-74%
+  when ahead), flagged as an open design question. **Archetype head-to-head
+  matchup matrix** (all pairs, not just aggregate win% vs. the whole field)
+  — catches hard-counter/RPS problems aggregate win% hides.
+- **Roster coverage**: added archetypes for the 2 new-pool Leaders
+  (Ruin-Walker Overseer, Sovereign of the Dying Star) so they're piloted by
+  a real decklist instead of only sampled incidentally via random-deck
+  control games.
+
 ### v4.11 balance/feature/bug pass
 
 - **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.11.md`)**: a
