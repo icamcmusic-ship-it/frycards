@@ -97,9 +97,12 @@ export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: 
   useEffect(() => {
     let cancelled = false;
     setValue(null);
-    fetchCardMarketValue(cardId, !!foil).then((v) => {
-      if (!cancelled) setValue(v);
-    });
+    fetchCardMarketValue(cardId, !!foil).then(
+      (v) => {
+        if (!cancelled) setValue(v);
+      },
+      () => undefined,
+    );
     return () => {
       cancelled = true;
     };

@@ -105,9 +105,15 @@ export function validateDeckList(
     }
     // A player_cards row can persist at quantity 0 (e.g. a Leader quicksold
     // down to zero) — .has() alone would miss that and falsely clear this
-    // check, so the summed quantity must be checked instead.
-    if ((owned.get(leader.id) || 0) <= 0)
-      issues.push({ text: `You do not own the Leader ${leader.name}.` });
+    // check, so the summed quantity must be checked instead. Also subtract
+    // any reservation from lockedByOtherDecks — a Leader already claimed by
+    // another deck can't be claimed again by this one, same as any other
+    // card, even though Leaders never appear in card_ids.
+    const leaderHave = (owned.get(leader.id) || 0) - (lockedByOtherDecks?.get(leader.id) || 0);
+    if (leaderHave <= 0)
+      issues.push({
+        text: `You do not own a free copy of the Leader ${leader.name} (it may be locked in another deck).`,
+      });
   }
   // dedupe messages
   return [...new Map(issues.map((i) => [i.text, i])).values()];

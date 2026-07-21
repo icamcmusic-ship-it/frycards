@@ -7,6 +7,64 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.23 sim-harness upgrade, balance pass, bounty/full-art fixes, bug hunt
+
+- **Sim harness**: added per-archetype first-player win-rate tracking
+  (`archFirstN`/`archFirstW` in `simulate-v4.ts`) — no archetype shows
+  unusual play/draw sensitivity this pass (all within ~4pt of their own
+  baseline win rate).
+- **Balance** (full-scale run, 26,448 games, zero invariant violations —
+  see `docs/BALANCE_SIM_FINDINGS_v4.23.md`): CPU-lapse detector floor holds
+  for a 14th straight pass (every genuine-mistake detector still reads
+  zero); no keyword or mechanic changes warranted this pass (Steel, Swift,
+  Avenge, and Aftershock rulings from prior passes all held). Escalated 7
+  repeat-offender nerfs (Astral Shoal, Kinetix Enforcer, Swaying Garden,
+  Clockwork Nautilus, Gulper Eel, Playful Otters, Cavernous Watcher,
+  Petrified Ribs Citadel) and 6 repeat-offender buffs (Pulsing Heartstone,
+  Locust Veil, Thornfang Vine, Amber Sphere, Resonant Shuriken, Coral
+  Collapse) whose prior patch held flat across another pass; reverted 2
+  patches that overshot into the opposite outlier bucket (The Wolf of Wall
+  Street, Jawbone Span); added first-pass buffs for 3 new outliers (Nebula
+  Snail, Blackspire Obelisk, Ossuary Vault). Card pool re-verified in sync
+  with Supabase (292/292, byte-for-byte).
+- **Bounty Shop card display**: now renders cards with the real shared
+  `CardFace` template (matching Collection/Marketplace/Deck Builder/Pack
+  Opening) instead of a bespoke image-plus-chip mockup that was missing
+  the actual per-rarity card frame.
+- **Full-Art pack odds**: Full-Art was landing at roughly 1/6th of
+  Super-Rare's chance in every slot that carries it; rebalanced so
+  Full-Art is now only ~15% rarer than Super-Rare everywhere (Blue
+  Coral/Crimson Circuit/Dragonbone Wastes Booster Packs & Boxes, Standard
+  Box, Season Pass Reward Pack), with the odds shift taken from/returned
+  to that slot's Rare weight.
+- **Bug hunt**: a player-profile modal that could get stuck on "Loading
+  profile…" forever on a network error, with no retry; a missing
+  broken-image fallback on profile avatars; a leaked `setTimeout` in the
+  Discord sign-in fallback; the News Center's post-toggle button staying
+  clickable mid-publish (silently discarding the form); keyword/cost-info
+  popovers that could open partly off-screen at the bottom of the
+  viewport, and one that didn't dismiss on touch-scroll; a silent no-op
+  when Scrap failed (every sibling action shows an "Illegal ..." banner
+  except this one); bulk quicksell paths in Collection that didn't
+  exclude serialized-reserved copies the way the per-card sell flow
+  already did; the deck builder's Leader-ownership check never accounting
+  for a Leader already locked into another deck, so a Leader in use
+  elsewhere could show as fully legal to reuse; nine Store screen handlers
+  (pack open/buy/claim, bounty sell/buy) that had `try/finally` but no
+  `catch`, so a thrown network error left no error message on screen;
+  a missing `.catch` on the Player Shops listing-price lookup; a
+  disabled-state gap on Player Shops' card-quantity stepper; the in-app
+  How To Play rulebook still describing the "Pity" mechanic v4.22 removed
+  entirely, plus a stale version footer.
+- **QOL**: creating a Mystery Pack template in Player Shops no longer
+  collapses the panel immediately, hiding the "submit a pool" step that
+  only becomes available afterward.
+- **Docs**: `docs/ROADMAP.md` had three items that already shipped (the
+  guided first-match coach, confirm dialogs on destructive actions, daily
+  quests/login rewards) — removed rather than left stale.
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.23.md`.
+
 ### v4.22 sim-harness upgrade, balance pass, shop overhaul, card-face fixes
 
 - **Sim harness**: added set-level win-rate tracking (deck contains a card

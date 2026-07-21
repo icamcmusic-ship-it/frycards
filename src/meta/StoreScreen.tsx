@@ -158,6 +158,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
       refreshProfile();
       refreshCollection();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -186,6 +188,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       });
       refreshProfile();
       refreshCollection();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -211,6 +215,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       refreshProfile();
       refreshCollection();
       refreshInventory();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -230,6 +236,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       setNotice(`${pack.name} stashed in MY PACKS — open it any time.`);
       refreshProfile();
       refreshInventory();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -250,6 +258,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       refreshProfile();
       refreshCollection();
       refreshInventory();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -273,6 +283,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       refreshCollection();
       refreshInventory();
       refreshDecks();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setClaimingStarter(false);
     }
@@ -296,6 +308,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       });
       refreshProfile();
       refreshCollection();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -315,6 +329,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         refreshCosmetics();
         refreshCollection();
       }
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -1030,6 +1046,8 @@ function BountiesTab({
       await load();
       refreshProfile();
       refreshCollection();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -1050,6 +1068,8 @@ function BountiesTab({
       await load();
       refreshProfile();
       refreshCollection();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }

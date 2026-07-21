@@ -625,6 +625,7 @@ function StatChip({
 }
 
 const POPOVER_WIDTH = 180;
+const POPOVER_EST_HEIGHT = 90;
 
 /**
  * v4.3: a keyword pill that opens a small popover with its rules text on
@@ -697,7 +698,11 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
       Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
       window.innerWidth - POPOVER_WIDTH - 8,
     );
-    return { top: rect.bottom + 4, left };
+    const top =
+      rect.bottom + 4 + POPOVER_EST_HEIGHT > window.innerHeight
+        ? Math.max(8, rect.top - POPOVER_EST_HEIGHT - 4)
+        : rect.bottom + 4;
+    return { top, left };
   };
 
   const open = (e: React.MouseEvent) => {
@@ -762,6 +767,7 @@ function KeywordPopover({
           close();
         }}
         onWheel={close}
+        onTouchMove={close}
       />
       <div
         style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
@@ -956,7 +962,11 @@ function CostInfoButton({
       Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
       window.innerWidth - POPOVER_WIDTH - 8,
     );
-    setPos({ top: rect.bottom + 4, left });
+    const top =
+      rect.bottom + 4 + POPOVER_EST_HEIGHT > window.innerHeight
+        ? Math.max(8, rect.top - POPOVER_EST_HEIGHT - 4)
+        : rect.bottom + 4;
+    setPos({ top, left });
   };
   return (
     <>

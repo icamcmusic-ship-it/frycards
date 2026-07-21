@@ -131,13 +131,14 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       if (c.type === 'Leader') continue;
       const o = owned.get(c.id);
       if (!o) continue;
-      const spare = Math.max(0, o.q + o.f - (lockedByDecks.get(c.id) || 0));
+      const reserved = serializedByCard.get(c.id)?.length || 0;
+      const spare = Math.max(0, o.q + o.f - (lockedByDecks.get(c.id) || 0) - reserved);
       if (spare <= 0) continue;
       const r = c.rarity || 'Common';
       m.set(r, (m.get(r) || 0) + spare);
     }
     return m;
-  }, [owned, lockedByDecks]);
+  }, [owned, lockedByDecks, serializedByCard]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkNotice, setBulkNotice] = useState('');
   const [bulkError, setBulkError] = useState('');
@@ -155,7 +156,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
         const o = owned.get(c.id);
         if (!o) continue;
         const locked = lockedByDecks.get(c.id) || 0;
-        const { normal: spareNormal, foil: spareFoil } = spareSplit(o, locked);
+        const { normal: spareNormalRaw, foil: spareFoil } = spareSplit(o, locked);
+        const reserved = serializedByCard.get(c.id)?.length || 0;
+        const spareNormal = Math.max(0, spareNormalRaw - reserved);
         if (spareNormal + spareFoil <= 0) continue;
         for (const [foil, qty] of [
           [false, spareNormal],

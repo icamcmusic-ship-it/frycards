@@ -1535,7 +1535,7 @@ export function GameV4({
     if (scrap(g, c.iid, selDie)) {
       bump();
       say(`Scrapped ${c.def.name}: die is now ${me.dice[selDie].value}.`);
-    }
+    } else say('Illegal Scrap.');
   };
 
   const tryCompleteTwin = (s: Inst) => {
