@@ -1,12 +1,40 @@
-# FryCards — Definitive Rulebook v4.10
+# FryCards — Definitive Rulebook v4.21
 
-Supersedes v4.9, v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.10-v4.20 (documentation catch-up — see the v4.21 entry below
+for exactly what was stale), v4.9, v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1,
+v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.21 documentation catch-up + balance pass (this rulebook had drifted six
+versions behind the shipped engine — this pass reconciles it, it does not
+introduce a new sim baseline of its own):** §10's Keyword Glossary was
+rewritten wholesale to match the live **Tier I-V ladder** every keyword has
+carried since v4.19 (`KEYWORD_TIERS` in `src/game/v3/keywords.ts`, source of
+truth `docs/KEYWORD_TIERS.md`) — the old glossary still documented flat,
+single-magnitude keywords from the pre-tier era and hadn't been touched since
+v4.10. A new pointer to `docs/COLOR_IDENTITY.md` was added (§1) for the
+7-color deck-identity system (Crimson/Azure/Verdant/Obsidian/Prism/Solar/
+Slate), shipped in v4.13/v4.14 and never previously mentioned here at all.
+Alongside the doc fixes, this pass also shipped four small live balance
+changes, carried into the glossary text below: **Steel's print rate cut
+again, 1-in-12 → 1-in-15** (`cardpool.ts`) — Steel remained the roster's
+worst cost-vs-winrate offender for two straight passes with its per-tier
+magnitude already floored, so the only lever left was how often it's printed
+at all; **Avenge's lifetime stacking cap cut 2 → 1** (`SIM_TUNING.avengeCap`,
+`engine.ts`) — mirrors the same v4.6 "ramp, not a collapse" logic that
+originally took the cap from 3 to 2 (the tier ladder's printed "+2/+2" /
+"+3/+3" lifetime text in §10 is now cosmetic, not the enforced cap — see the
+note under Avenge); a second, sized patch to the repeat-offender
+`costVsAbilityMismatches` items **Abyssal Dragonfish** and **Ember
+Whisperer** (`cardpool.ts`), both stuck at the same z-score across v4.19 and
+v4.20; and the `the_wolf_of_wall_street`/`familiar_in_the_dark` card-level
+fixes that actually shipped back in v4.20 are only now reflected here, since
+this rulebook never had a v4.20 entry at all.
 
 **v4.10 balance-sim pass (33,840-game baseline + 33,840-game verification +
 a 21-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.10.md`):**
@@ -379,6 +407,13 @@ Two players duel using a deck of Locations, Units, Charms, and Events, each led 
 
 **Card rarities** (collection/economy only — rarity carries no rules weight):
 Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
+
+**Deck-building color identity:** every card and Leader also has a color
+identity (Crimson, Azure, Verdant, Obsidian, Prism, Solar, Slate) that gates
+which cards a given Leader may legally play — this is a deckbuilder-legality
+system, not a combat or casting-cost rule, so it isn't covered further here.
+See `docs/COLOR_IDENTITY.md` for the full taxonomy, Leader identities, and
+design history.
 
 ---
 

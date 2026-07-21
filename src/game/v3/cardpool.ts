@@ -375,7 +375,10 @@ function mapUnit(c: CardTemplate): CardDef {
     keywords.push('Toll');
   if (tier >= 1 && hash(c.id) % 11 === 3 && wouldBeLegalSomewhere([...keywords, 'Avenge']))
     keywords.push('Avenge');
-  if (tier >= 2 && hash(c.id) % 12 === 4 && wouldBeLegalSomewhere([...keywords, 'Steel']))
+  // v4.21: item 5 — cost-side nudges measured flat at +18.0pt for two
+  // passes running and the tier ladder is already floored (see keywords.ts).
+  // The only lever left is print rate; cut again (1-in-12 -> 1-in-15).
+  if (tier >= 2 && hash(c.id) % 15 === 4 && wouldBeLegalSomewhere([...keywords, 'Steel']))
     keywords.push('Steel');
   const manualSteelX =
     MANUAL_STEEL[c.id] !== undefined && !keywords.includes('Steel') && wouldBeLegalSomewhere([...keywords, 'Steel'])
@@ -743,6 +746,12 @@ const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
   // are left for a fresh read next pass rather than compounding blind).
   driftwood_harp: 2,
   ribbone_longbow: 2,
+  // v4.21: item 4 — costVsAbilityMismatches repeat-10, first patch for the
+  // pool's two remaining highest-z numeric-cost offenders not yet touched
+  // (Abyssal Dragonfish +3.07, Ember Whisperer +3.07). No-op if either
+  // procedurally lands on a gate cost instead of numeric.
+  abyssal_dragonfish: 1,
+  ember_whisperer: 1,
   // Item B buffs: value-less bind/destroy effects can't take a value bump,
   // so the buff lever is the cost side instead — ease the numeric cost down
   // by the smallest unit.
