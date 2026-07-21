@@ -650,6 +650,12 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   vampire_squid: -4,
   half_faded_shade: -4,
   where_the_deep_meets_the_sky: -4,
+  // v4.20: three straight passes (v4.18 revert, v4.19, v4.20) now show
+  // the_wolf_of_wall_street back at a stable, modest positive
+  // archetype-normalized residual (+13 to +16pt, n=481, archSpread=1) with
+  // zero code changes in between — no longer read as v4.18's overshoot
+  // noise, a real (if small) nerf candidate. Re-applying the original -1.
+  the_wolf_of_wall_street: -1,
   // v4.18: the_wolf_of_wall_street's -1 (v4.12) overshot — the v4.18
   // baseline shows it now at the OPPOSITE extreme (win%=7.8 vs a 45.9
   // cost-band mean, resid=-38.1pt, cardsToBuff top 5) instead of the
@@ -661,10 +667,9 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   swaying_garden: -1,
   // buffs (win% far BELOW their cost band's mean)
   void_mother: 2,
-  // v4.19.1: familiar_in_the_dark's +2 (v4.12) overshot under the new
-  // archetype-normalized lens (+19.3pt residual, n=2214, spread 4 — a top-3
-  // pool-wide overperformer). Halved rather than removed outright.
-  familiar_in_the_dark: 1,
+  // v4.20: familiar_in_the_dark's halved +1 (v4.19.1) still barely moved
+  // the residual (+19.3 -> +19.6pt, flat across two passes) — the buff
+  // itself, not its size, was the problem. Removed entirely.
   // v4.19.1: first archetype-normalized outlier pass (cardArchNormalized,
   // n>=400, archSpread>=2 — the lens v4.18 flagged as missing). Uniform
   // small trims for the residual top of the table; sized -2 for the two
@@ -729,8 +734,15 @@ const SAP_TARGETS: EffectTarget[] = ['anyTarget', 'enemyUnit', 'enemyLeader'];
 const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
   // Item A: under-costed, nudge the numeric cost up by the smallest unit
   // (+1 threshold on exact-cost Charms).
-  driftwood_harp: 1,
-  ribbone_longbow: 1,
+  // v4.20: driftwood_harp/ribbone_longbow's +1 (v4.17) held stable at a
+  // repeat top-10 z-score across two more passes without regressing —
+  // taking a second +1 step (Deceptive Angler/Abyssal Dragonfish/Ember
+  // Whisperer/Boneplate Sentinel/Iron-Scaled Snail also z >= +2.0 but this
+  // pass only re-sizes the two already-numeric-cost repeat offenders;
+  // Deceptive Angler gets its own gate bump below, and the remaining Units
+  // are left for a fresh read next pass rather than compounding blind).
+  driftwood_harp: 2,
+  ribbone_longbow: 2,
   // Item B buffs: value-less bind/destroy effects can't take a value bump,
   // so the buff lever is the cost side instead — ease the numeric cost down
   // by the smallest unit.
@@ -740,7 +752,10 @@ const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
 const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
   // Item A: under-costed gate-cost Units, bumped one difficulty step up.
   // (ash_shaper_mystic intentionally omitted — see comment above.)
-  deceptive_angler: 'ThreeEvens', // was AnyPair
+  // v4.20: deceptive_angler's ThreeEvens (v4.17) held the pool's single
+  // worst costVsAbilityMismatches z-score flat across two more passes
+  // (z=+3.33) — taking a second difficulty step.
+  deceptive_angler: 'ThreeKind', // was AnyPair -> ThreeEvens (v4.17) -> ThreeKind
   blind_colossus: 'ThreeKind', // was ThreeOdds
   // Item B buffs: value-less destroy Events, eased one difficulty step down
   // so the payoff (already strong at full value) is reachable more often.

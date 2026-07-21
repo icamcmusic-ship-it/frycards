@@ -345,6 +345,14 @@ function bestSelectionFor(g: Game, p: Player, def: CardDef): number[] | null {
     let sum = 0;
     for (const i of idxs) {
       if (sum >= target) break;
+      // Once the base threshold is already met, only keep reaching for the
+      // Overflow target if it's actually still achievable with the dice
+      // left unplaced — otherwise this loop used to burn every remaining
+      // die on a hopeless chase, starving every other action that turn.
+      if (sum >= thr) {
+        const remaining = idxs.slice(idxs.indexOf(i)).reduce((a, j) => a + p.dice[j].value, 0);
+        if (sum + remaining < target) break;
+      }
       chosen.push(i);
       sum += p.dice[i].value;
     }

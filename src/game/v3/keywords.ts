@@ -182,6 +182,17 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
   // already at the floor). The cost recalculation rounds sum(w)/2, so a
   // +0.5 step is a no-op for most cards; +1 reliably prices multi-keyword
   // Steel bodies one full cost tier up while leaving solo Steel I intact.
+  // v4.20: BALANCE_SIM_FINDINGS_v4.20.md item 5 asked for a direct per-tier
+  // magnitude cut on Steel (cost-side nudges have measured flat at +18.0pt
+  // for two passes running). Deliberately NOT done this pass: tier I is
+  // already floored at magnitude 1 (v4.16/v4.18), and the tier ladder's own
+  // design contract (see this file's header) requires each tier to be a
+  // "strictly better variant" than the last — with only 3 integer tiers
+  // there's no room left to compress II/III without either breaking that
+  // ordering or dropping a tier entirely (a bigger structural change than a
+  // single-pass patch). If Steel still needs to come down, the next real
+  // lever is reducing keyword PRINT RATE (as v4.18 did, 1-in-9 -> 1-in-12)
+  // rather than another magnitude/cost step on an already-floored ladder.
   Steel: KW([
     T('The first 1 damage this Unit would take each turn, from any source, is prevented.', 2.5, 1),
     T('The first 2 damage this Unit would take each turn, from any source, is prevented.', 3, 2),
@@ -189,6 +200,18 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
   ]),
   // v4.19.1: costWeight 1/1.5 -> 2/2.5. Avenge measured +15.0pt delta
   // (second-worst keyword this run) — same +1 pricing step as Steel above.
+  //
+  // v4.20: the same item-5 magnitude-cut ask does NOT apply to Avenge the
+  // way it does to Steel — the tier `magnitude` values below (2/3) are
+  // COSMETIC ONLY for this keyword. The actual in-game cap is the engine's
+  // hardcoded `AVENGE_CAP = 2` constant (engine.ts), which every Avenge
+  // card obeys regardless of which tier it's printed at; only costWeight
+  // (already bumped in v4.19.1) has any real effect on this keyword today.
+  // Cutting the magnitude numbers here would only change the printed rules
+  // text, not gameplay — a real Avenge nerf requires either lowering
+  // AVENGE_CAP itself (a global change affecting every Avenge card at once,
+  // not a per-tier dial) or wiring tier magnitude through to a real
+  // per-card cap, neither of which is a safe single-pass change.
   Avenge: KW([
     T('Permanently +1/+1 whenever another friendly Unit dies, up to +2/+2 lifetime.', 2, 2),
     T('Permanently +1/+1 whenever another friendly Unit dies, up to +3/+3 lifetime.', 2.5, 3),
