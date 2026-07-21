@@ -141,40 +141,42 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     setBulkNotice('');
     let totalCredits = 0;
     let totalCards = 0;
-    for (const c of POOL_V4) {
-      if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
-      const o = owned.get(c.id);
-      if (!o) continue;
-      const locked = lockedByDecks.get(c.id) || 0;
-      const { normal: spareNormal, foil: spareFoil } = spareSplit(o, locked);
-      if (spareNormal + spareFoil <= 0) continue;
-      for (const [foil, qty] of [
-        [false, spareNormal],
-        [true, spareFoil],
-      ] as const) {
-        if (qty <= 0) continue;
-        const { data, error } = await quicksellCards(c.id, qty, foil);
-        if (error) {
-          setBulkError(error);
-          setBulkBusy(false);
-          refreshCollection();
-          refreshProfile();
-          return;
-        }
-        if (data) {
-          totalCredits += data.total;
-          totalCards += data.sold;
+    try {
+      for (const c of POOL_V4) {
+        if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
+        const o = owned.get(c.id);
+        if (!o) continue;
+        const locked = lockedByDecks.get(c.id) || 0;
+        const { normal: spareNormal, foil: spareFoil } = spareSplit(o, locked);
+        if (spareNormal + spareFoil <= 0) continue;
+        for (const [foil, qty] of [
+          [false, spareNormal],
+          [true, spareFoil],
+        ] as const) {
+          if (qty <= 0) continue;
+          const { data, error } = await quicksellCards(c.id, qty, foil);
+          if (error) {
+            setBulkError(error);
+            return;
+          }
+          if (data) {
+            totalCredits += data.total;
+            totalCards += data.sold;
+          }
         }
       }
+      setBulkNotice(
+        totalCards === 0
+          ? `No spare ${targetRarity} cards to sell.`
+          : `Quicksold ${totalCards} ${targetRarity} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
+      );
+    } catch {
+      setBulkError('Something went wrong — check your connection and try again.');
+    } finally {
+      setBulkBusy(false);
+      refreshCollection();
+      refreshProfile();
     }
-    setBulkBusy(false);
-    setBulkNotice(
-      totalCards === 0
-        ? `No spare ${targetRarity} cards to sell.`
-        : `Quicksold ${totalCards} ${targetRarity} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
-    );
-    refreshCollection();
-    refreshProfile();
   };
 
   const filtered = POOL_V4.filter((c) => {
