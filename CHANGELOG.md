@@ -7,6 +7,38 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.20 sim-harness upgrade + balance + bug-hunt pass
+
+- **Sim harness**: `scripts/fetch-cards.ts` automates pulling the live
+  Supabase card pool into `scripts/live-cards.json` (replaces the old
+  manual SQL-editor copy/paste step); `simulate-v4.ts` now tracks
+  per-archetype CPU reasoning-lapse rates (`lapsePerGameByArch`), not just a
+  pool-wide average; `scripts/diff-sim-runs.ts` diffs the two most recent
+  sim runs and flags cards/keywords/archetypes that moved beyond a
+  threshold.
+- **Balance** (see `docs/BALANCE_SIM_FINDINGS_v4.20.md`): `the_wolf_of_wall_street`
+  nerfed -1/-1 (three stable passes at a positive residual); the manual
+  buff on `familiar_in_the_dark` removed entirely (halving it last pass
+  didn't move its residual); a second cost/gate step applied to
+  `driftwood_harp`, `ribbone_longbow`, and `deceptive_angler` (repeat
+  cost-vs-ability outliers, unchanged across two passes).
+- **CPU/engine bug fix**: Fatigue damage bypassed Toll reduction entirely —
+  every other Leader-damage source (combat, Pierce overflow, Sap) already
+  routed through it, only Fatigue didn't.
+- **CPU/AI bug fix**: the placement solver's `'sum'`+Overflow die-selection
+  branch could burn every unplaced die chasing an unreachable Overflow
+  target instead of stopping once the base cost was affordable, starving
+  every other action that turn.
+- **Bug fixes**: pack-opening summary screen could crash on a zero-card
+  pull response; Discord sign-in could leave the button permanently stuck
+  disabled if the OAuth redirect was silently blocked; a couple of
+  Supabase read failures (profile fetch, marketplace listing settlement)
+  were silently swallowed instead of logged.
+- **Docs**: stopped committing raw per-run sim JSON dumps (regeneratable,
+  were bloating the repo); reconciled `COLOR_IDENTITY.md`'s stale top
+  section against the current 7-color system; updated the roadmap now that
+  Set 3 (Dragonbone Wastes) has shipped to the live 292-card pool.
+
 ### v4.18 balance + bug-hunt pass
 
 - **Keyword nerf**: Steel's print rate cut (1-in-9 → 1-in-12 eligible cards)
