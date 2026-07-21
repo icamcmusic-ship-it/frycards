@@ -468,7 +468,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           if (
                             confirm(`Remove ${other?.username || 'this player'} from your friends?`)
                           )
-                            run(() => removeFriend(friendship.id));
+                            run(() => removeFriend(friendship.id), 'Friend removed.');
                         }}
                       >
                         <X className="w-3.5 h-3.5" />
@@ -513,7 +513,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           disabled={busy}
                           onClick={() => {
                             if (!confirm('Cancel this friend request?')) return;
-                            run(() => removeFriend(f.id));
+                            run(() => removeFriend(f.id), 'Friend request cancelled.');
                           }}
                         >
                           CANCEL
@@ -611,7 +611,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             disabled={busy}
                             onClick={() => {
                               if (!confirm('Cancel this trade offer?')) return;
-                              run(() => cancelTrade(t.id));
+                              run(() => cancelTrade(t.id), 'Trade offer cancelled.');
                             }}
                           >
                             CANCEL OFFER

@@ -117,10 +117,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decks]);
-  // Leaders aren't consumed per-copy like deck card_ids — a deck just
-  // references one leader_id, so a Leader in use by any deck needs exactly
-  // 1 copy reserved, not a count of appearances. Mirrors the RPC.
-  const leadersInUse = useMemo(() => new Set(decks.map((d) => d.leader_id)), [decks]);
+  // Leaders aren't consumed per-copy like deck card_ids, but if the player
+  // owns 2+ copies of the same Leader, two different saved decks can each
+  // reference it — each such deck reserves its own copy. A plain Set here
+  // would dedupe those decks down to "1 copy reserved" and let the player
+  // quicksell a copy that a second deck still needs.
+  const leadersInUse = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of decks) m.set(d.leader_id, (m.get(d.leader_id) || 0) + 1);
+    return m;
+  }, [decks]);
 
   // Spare (unlocked) copy count per rarity, across the whole collection —
   // Leaders excluded (they're never bulk-fodder). Backs the "QUICKSELL ALL
@@ -273,9 +279,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const inspectOwned = inspect ? owned.get(inspect.def.id) : undefined;
   const inspectLocked = inspect
     ? inspect.def.type === 'Leader'
-      ? leadersInUse.has(inspect.def.id)
-        ? 1
-        : 0
+      ? leadersInUse.get(inspect.def.id) || 0
       : lockedByDecks.get(inspect.def.id) || 0
     : 0;
   const inspectTotal = (inspectOwned?.q || 0) + (inspectOwned?.f || 0);
@@ -563,7 +567,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     {inspectLocked > 0 && (
                       <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
                         {inspect.def.type === 'Leader'
-                          ? 'In use by a saved deck — 1 copy reserved'
+                          ? `In use by ${inspectLocked} saved deck${inspectLocked === 1 ? '' : 's'} — ${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} reserved`
                           : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
                       </div>
                     )}

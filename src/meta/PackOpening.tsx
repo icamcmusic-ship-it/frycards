@@ -180,9 +180,35 @@ export function PackOpening({
   // An empty pull list (bad server response) would strand the player on a
   // reveal stage that renders nothing — go straight to the summary instead.
   const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // The pack/collection grant already happened server-side before this modal
+  // ever mounts (see StoreScreen's openPack callers) — this whole component
+  // is just a replayable presentation layer, so it's safe to let Escape
+  // dismiss it outright like every other overlay in the app, and to move
+  // focus in on open / restore it on close.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDone();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onDone]);
+  useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => prevFocused?.focus?.();
+  }, []);
 
   return (
-    <div className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto">
+    <div
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Opening ${packName}`}
+      className="fixed inset-0 bg-[var(--c-ink)]/95 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto outline-none"
+    >
       <style>{PACK_OPENING_CSS}</style>
       <div className="absolute inset-0 starburst-ray opacity-20 pointer-events-none" />
       {stage === 'pack' && (

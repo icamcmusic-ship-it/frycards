@@ -305,8 +305,30 @@ function Tip({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  // Every other popover in the app (KeywordPopover et al) dismisses itself
+  // on an outside click or Escape — this one only toggled off by re-tapping
+  // the same badge, so it could linger over the board indefinitely once
+  // opened on a touch device (no hover to naturally clear it).
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
   return (
     <span
+      ref={ref}
       title={text}
       role="button"
       tabIndex={0}

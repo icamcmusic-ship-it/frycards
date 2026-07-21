@@ -231,8 +231,10 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setNotice(`${pack.name} stashed in MY PACKS — open it any time.`);
-      refreshProfile();
-      refreshInventory();
+      // Awaited — unlike the open-and-reveal handlers above, this path has no
+      // full-screen overlay to block a second click, so a stale (pre-spend)
+      // credits balance must not stay on screen for busyId to gate against.
+      await Promise.all([refreshProfile(), refreshInventory()]);
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {
@@ -322,9 +324,9 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       if (err) setError(err);
       else {
         setNotice(`${item.name} added to your collection.`);
-        refreshProfile();
-        refreshCosmetics();
-        refreshCollection();
+        // Awaited — no overlay covers this purchase path, so `owned`/credits
+        // must reflect the spend before busyId re-enables the buy button.
+        await Promise.all([refreshProfile(), refreshCosmetics(), refreshCollection()]);
       }
     } catch {
       setError('Something went wrong — check your connection and try again.');

@@ -7,6 +7,79 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.25 sim-harness upgrade, balance pass (dead-code fix + lever revert), full-app bug hunt
+
+- **Sim harness**: added per-card attribution for the `lapseWastedCastableDie`
+  CPU-lapse counter (a legally-payable die going unplaced while a castable
+  card sits in hand) — same `<prefix>:<cardId>` convention v4.24 used for
+  hand-limit discards, plus a new report table. The table is empty this
+  pass: the underlying detector still reads 0/26,448 games, consistent with
+  the 16-pass CPU-lapse floor (see below) — the instrumentation is correct
+  and ready for whenever that floor breaks.
+- **Balance** (full-scale runs, 26,448 games each, zero invariant
+  violations across all three runs this pass — see
+  `docs/BALANCE_SIM_FINDINGS_v4.25.md`): CPU-lapse detector floor holds for
+  a 16th straight pass. Confirmed Avenge's post-v4.24 delta (+5.6pt) is
+  real and stable across a genuinely independent baseline, but both its
+  levers are already at their established ceiling — carried forward as a
+  design-tension case. **Found and fixed a real dead-code bug**: Abyssal
+  Dragonfish and Ember Whisperer's v4.21 cost-threshold nudges had silently
+  no-op'd since the day they were written (both cards resolve to a gate
+  cost, not the numeric one the fix assumed) — explains why Abyssal
+  Dragonfish sat at the pool's single highest cost-vs-ability z-score for
+  five straight passes with an apparent "fix" already applied. Replaced
+  with a real `MANUAL_GATE_OVERRIDE` step. **Tried and reverted a keyword
+  lever**: raised Pierce's cost weight to mirror the v4.19.1 fix that
+  worked for Avenge; a full verification run showed zero measurable effect,
+  traced to Pierce's pool being pinned at the cost-tier ceiling already —
+  reverted rather than ship a no-op, with a documentation note so a future
+  pass doesn't repeat the attempt. Actioned v4.24's carried-forward
+  hand-limit-discard watch item via a per-card fix (eased Silver Chimera's
+  combo gate, cutting its forced-discard rate from the pool's worst-ever
+  0.490 to 0.258) rather than touching the global hand-limit constant.
+  Escalated 2 repeat-offender nerfs (Cavernous Watcher, and Wasteland
+  Aberration — flat since v4.17, 8 passes never revisited), gave Kinetix
+  Enforcer a new cost-based lever after its stat-trim ceiling stopped
+  working (closed +33.1pt → +26.0pt, the pass's biggest single-card move),
+  added first-pass nerfs (Blue-Ringed Octopus, Porcelain Lobster,
+  Butterflyfish School, Levitating Coven, Obsidian Bore Site) and reverted
+  Isle of the Ancients' stale buff that had flipped into nerf territory;
+  escalated 5 repeat-offender buffs (Pulsing Heartstone, Amber Sphere,
+  Resonant Shuriken, Coral Collapse, Kinetic Siphon Swarm, Phantom
+  Squadron) and added first-pass buffs (Chalice of Quicksilver, Perpetual
+  Dynamo, Shattered Horizon Protagonist, Skyborne Skeleton Dragon).
+  Documented Submerged Starfall (the pool's Mythic Yahtzee trophy) as a
+  deliberate design exception rather than a nerf candidate. Card pool
+  re-verified in sync with Supabase (292/292, hashed field-for-field).
+- **Bug hunt** (4 independent sweeps across every screen in
+  `src/components/` and `src/meta/`, plus `src/lib/supabase.ts`): a
+  deck-code import validator that permanently checked against the
+  pre-boot placeholder card catalog instead of the live one (a
+  module-level `Map` snapshotted before the async catalog fetch resolved);
+  a `Set`-based Leader-lock check in Collection that silently dropped a
+  second saved deck's reservation when a player owned 2+ copies of the
+  same Leader; ended Marketplace auctions/listings still showing live,
+  clickable BID/BUY buttons between refetches; four fire-and-forget
+  post-action reloads across Achievements/Store/Marketplace that opened a
+  double-claim/double-buy race window; ten more `supabase.ts` read
+  functions that silently swallowed fetch errors with no logging at all
+  (Missions, Player Profile Card, Player Search, Friend Collection, Card
+  Market Value/Blended Reference, Shop Public/Browse, Mystery Live Stats,
+  Serialized Feed) — continuing the ~15-function fix from a prior pass.
+  QoL/accessibility: focus management and Escape-to-close on the Card
+  Inspector, Leader Picker, and Pack Opening modals; outside-click/Escape
+  dismissal on in-game status-badge popovers that could otherwise linger
+  indefinitely on a touch device; missing `aria-label`s on the Player
+  Shops report form; post-action success toasts on three Social actions
+  (remove friend, cancel friend request, cancel trade offer) that
+  previously gave no feedback at all.
+- **Docs**: reviewed the full `docs/` tree — nothing stale enough to
+  remove or update (the Pierce weight change was reverted mid-pass, so no
+  net doc edit was needed there either); `docs/sim-runs/` raw JSON is
+  gitignored and was never tracked, so there was nothing to prune.
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.25.md`.
+
 ### v4.24 sim-harness upgrade, balance pass (incl. keyword removals), full-app bug hunt
 
 - **Sim harness**: added End Phase hand-limit (`HAND_LIMIT`=8) forced-discard

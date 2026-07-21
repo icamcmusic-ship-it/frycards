@@ -727,7 +727,8 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // Steel) behind a FullHouse gate, so it gets the bigger -2 given to other
   // multi-keyword durability trophies above.
   smokeveil_striketeam: 1,
-  wasteland_aberration: -1,
+  // wasteland_aberration's -1 escalated to -2 in v4.25 — see that entry
+  // further down (kept with the other v4.25 escalations instead of here).
   // v4.22: repeat-offender escalation — three of these (astral_shoal,
   // kinetix_enforcer, boneplate_sentinel) held their v4.17 trim size flat
   // across two more full-scale passes (26,448 games, zero invariant
@@ -754,17 +755,45 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // (same pattern as v4.22/v4.23's own escalations above). astral_shoal is
   // NOT re-escalated here — it hit the -4 ceiling in v4.23 already and is
   // handled via MANUAL_KEYWORD_REMOVE above instead of a 5th stat cut.
-  kinetix_enforcer: -4, // was -3, still #2 cardsToNerf, +32.1pt resid
+  kinetix_enforcer: -4, // was -3, still #2 cardsToNerf, +32.1pt resid (v4.24)
   clockwork_nautilus: -3, // was -2, still top-8 cardsToNerf, +28.9pt resid
   gulper_eel: -3, // was -2, still top-9 cardsToNerf, +28.9pt resid
   playful_otters: -3, // was -2, still top-10 cardsToNerf, +28.9pt resid
-  cavernous_watcher: -3, // was -2, still #3 cardsToNerf, +31.0pt resid
+  // v4.25: cavernous_watcher's v4.24 -3 held flat (still #3 cardsToNerf,
+  // resid moved +31.0 -> +32.0, i.e. got WORSE, not just flat) — one more
+  // step, same repeat-offender escalation pattern.
+  cavernous_watcher: -4, // was -3, still #3 cardsToNerf, +32.0pt resid
   // v4.24: first-pass nerf — new top-10 cardsToNerf entry (n=912,
   // resid=+29.1pt), also independently flagged "under-costed" on the
   // printed-power costVsAbilityMismatches table (z=+3.22, tied for the
   // pool's single highest z-score) — a rare case where both the measured
   // win-rate residual and the printed-stats screen agree.
+  // v4.25: dropped off the top-10 cardsToNerf list in the v4.25 baseline
+  // (measured signal resolved) — held flat, not escalated further.
   ember_whisperer: -1,
+  // v4.25: wasteland_aberration's v4.17 -1 has now sat completely flat for
+  // eight full-scale passes (v4.17 -> v4.25) without the residual closing —
+  // still top-10 cardsToNerf every single pass at this size (+33.1pt this
+  // pass) despite six-plus verification runs in between. Same "barely
+  // moved, take a bigger step" escalation this file uses everywhere else;
+  // this one was simply never revisited until now.
+  wasteland_aberration: -2, // was -1 (flat since v4.17), still top-3 cardsToNerf, +33.1pt resid
+  // v4.25: first-pass nerfs — new top-10 cardsToNerf entries, no prior
+  // manual patch. Both Common Guard bodies, n=912, identical measured
+  // win%/resid (coincidental — see the archetype-normalized table; both
+  // are single-copy-pattern inclusions in the same deck shape).
+  blue_ringed_octopus: -1, // #1 cardsToNerf, +34.1pt resid
+  porcelain_lobster: -1, // #1 (tied) cardsToNerf, +34.1pt resid
+  // v4.25: first-pass nerf, cautious size given this card's overshoot
+  // history — buffed +1 in v4.12, reverted in v4.18 after flipping to the
+  // opposite extreme (cardsToNerf top-3, resid=+34.4pt at the time). Back on
+  // cardsToNerf now from a clean (unadjusted) baseline (resid=+29.0pt,
+  // n=1824), so a real first step is warranted, but sized small (-1, not
+  // the -2 a fresh first-pass entry at this resid would otherwise get)
+  // given the card's history of swinging hard off a single-step change.
+  butterflyfish_school: -1, // top-10 cardsToNerf, +29.0pt resid
+  // v4.25: first-pass nerf, new top-10 cardsToNerf entry.
+  levitating_coven: -1, // top-10 cardsToNerf, +27.6pt resid
   // v4.22: cardsToBuff bottom-12 (win% far below cost-band mean) whose
   // lever is raw Unit stats. phantom_squadron and glowing_manta also
   // register as "under-costed" on the printed-power costVsAbilityMismatches
@@ -776,8 +805,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // v4.24: repeat-offender buff escalation — held flat across 2+ passes
   // without the residual closing (same pattern as the nerf escalations
   // above).
-  phantom_squadron: 2, // was 1 (v4.22), still top-10 cardsToBuff, -30.9pt resid
-  nebula_snail: 2, // was 1 (v4.23), still top-10 cardsToBuff, -30.9pt resid
+  // v4.25: still top-10 cardsToBuff (resid=-28.4pt) after v4.24's step to
+  // +2 — one more step (same repeat-offender escalation pattern).
+  phantom_squadron: 3, // was 2 (v4.24), still top-10 cardsToBuff, -28.4pt resid
+  nebula_snail: 2, // was 1 (v4.23), dropped off top-10 this pass — held flat
   // v4.24: first-pass buff — the_wolf_of_wall_street's v4.20 -1 nerf
   // overshot and was reverted in v4.23 (entry removed); it's still
   // underperforming post-revert (resid=-31.6pt, n=912) rather than settling
@@ -787,6 +818,14 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // overshooting in both directions (v4.12 buff -> v4.18 revert -> v4.20
   // nerf -> v4.23 revert).
   the_wolf_of_wall_street: 1,
+  // v4.25: first-pass buffs, new top-10 cardsToBuff entries — both Full-
+  // Art/Rare multi-keyword Units (Echo/Guard/Steel and Echo/Guard
+  // respectively) whose big printed stats/keyword stack apparently isn't
+  // converting to wins, likely a FullHouse-gate castability problem more
+  // than a raw power problem; a stat nudge is the available lever, sized
+  // modest (+1) since the underlying issue may be castability, not power.
+  shattered_horizon_protagonist: 1, // top-10 cardsToBuff, -29.1pt resid
+  skyborne_skeleton_dragon: 1, // top-10 cardsToBuff, -29.1pt resid
 };
 
 // ---------------------------------------------------------------------------
@@ -835,17 +874,50 @@ const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
   // are left for a fresh read next pass rather than compounding blind).
   driftwood_harp: 2,
   ribbone_longbow: 2,
-  // v4.21: item 4 — costVsAbilityMismatches repeat-10, first patch for the
-  // pool's two remaining highest-z numeric-cost offenders not yet touched
-  // (Abyssal Dragonfish +3.07, Ember Whisperer +3.07). No-op if either
-  // procedurally lands on a gate cost instead of numeric.
-  abyssal_dragonfish: 1,
-  ember_whisperer: 1,
+  // v4.21 originally added abyssal_dragonfish/ember_whisperer here at +1,
+  // explicitly flagged at the time as "no-op if either procedurally lands
+  // on a gate cost instead of numeric." v4.25 confirmed both DID land on a
+  // gate cost (AnyPair each) — both entries have been dead code since the
+  // day they were written, which is exactly why Abyssal Dragonfish never
+  // moved off the costVsAbilityMismatches top of the list across five
+  // passes (z=+3.07 in v4.21, still +3.18 in v4.25). Removed here;
+  // abyssal_dragonfish gets a real fix via MANUAL_GATE_OVERRIDE below.
+  // ember_whisperer's measured win-rate residual already resolved via its
+  // v4.24 MANUAL_STAT_TRIM (-1, dropped off cardsToNerf) — no replacement
+  // gate action needed, the dead entry is just removed.
+  //
+  // Also worth recording so a future pass doesn't repeat the mistake:
+  // driftwood_harp/ribbone_longbow's own +1/+2 "buff the exact-cost number
+  // up" adjustments (v4.17/v4.20 above) have been similarly unable to move
+  // their costVsAbilityMismatches z-score (still +2.69 each, unchanged in
+  // shape since v4.17) — but for a different reason than the gate-cost
+  // no-op. costDifficulty() prices every 'exact' cost kind at a flat
+  // difficulty of 2 regardless of the target face (see cardpool.ts's
+  // costDifficulty), which is actually CORRECT: each die face 1-6 is
+  // equally likely per roll, so "needs exactly a 6" is no harder to hit
+  // than "needs exactly a 2" — only the exact/sum/gate cost KIND changes
+  // real difficulty, not the printed number within it. Their measured
+  // win-rate residual is clean (both off the cardsToNerf top-10 since
+  // v4.22), so this is left as a documentation note, not a further
+  // escalation — bumping the printed exact-cost number further would be
+  // another no-op, this time for a structural reason rather than a typo.
+  //
   // Item B buffs: value-less bind/destroy effects can't take a value bump,
   // so the buff lever is the cost side instead — ease the numeric cost down
   // by the smallest unit.
   bubble_harvest: -1,
   bone_splinter_quill: -1,
+  // v4.25: kinetix_enforcer hit MANUAL_STAT_TRIM's established -4 ceiling in
+  // v4.24 (already a 50%+ cut off its original 4/6 statline) and is STILL
+  // #2-4 cardsToNerf a full pass later (+33.1pt resid, actually slightly
+  // worse than v4.24's +32.1pt) — same "stat lever exhausted, needs a
+  // different one" shape as Astral Shoal/Where the Deep Meets the Sky in
+  // v4.24, but this card only carries one keyword (Frenzy), so stripping it
+  // would be a bigger identity change than those multi-keyword trophies got.
+  // Cost is the untried lever instead: it's already a sum-cost body
+  // (threshold 8), so a real threshold bump directly raises how many dice
+  // it eats to cast rather than cutting its stats further.
+  kinetix_enforcer: 2,
 };
 const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
   // Item A: under-costed gate-cost Units, bumped one difficulty step up.
@@ -855,10 +927,25 @@ const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
   // (z=+3.33) — taking a second difficulty step.
   deceptive_angler: 'ThreeKind', // was AnyPair -> ThreeEvens (v4.17) -> ThreeKind
   blind_colossus: 'ThreeKind', // was ThreeOdds
+  // v4.25: abyssal_dragonfish's real first fix (see MANUAL_THRESHOLD_ADJ's
+  // v4.25 note above — its old "+1 threshold" entry never applied, since
+  // this card lands on a gate cost). Pool's single highest costVsAbility
+  // z-score (+3.18) across every pass since v4.19 with zero real action
+  // taken until now — one difficulty step up (AnyPair 1.5 -> ThreeOdds 2).
+  abyssal_dragonfish: 'ThreeOdds',
   // Item B buffs: value-less destroy Events, eased one difficulty step down
   // so the payoff (already strong at full value) is reachable more often.
   shark_gathering: 'ThreeKind', // was FullHouse
   locust_veil: 'ThreeKind', // was FullHouse
+  // v4.25: silver_chimera topped the v4.24-introduced hand-limit-discard
+  // per-card table (0.49 forced-discard rate per deck-inclusion, the
+  // highest yet recorded — see simulate-v4.ts's handLimitDiscardCount) —
+  // a ThreeKind gate is a real barrier for a card that's otherwise just a
+  // 6/4 Frenzy body. Eased one step (ThreeKind 3.5 -> AnyPair 1.5) so it
+  // stops clogging hands unplayed; chosen over raising the global
+  // HAND_LIMIT constant, which would blunt the mechanic for every card
+  // instead of fixing the one card actually driving the signal.
+  silver_chimera: 'AnyPair',
 };
 /** Apply MANUAL_THRESHOLD_ADJ/MANUAL_GATE_OVERRIDE post-hoc to an already
  * cost-formatted CardDef (called after applyCostFormat in mapUnit/mapSpell). */
@@ -878,7 +965,6 @@ function applyManualCostAdj(def: CardDef, id: string) {
 
 const MANUAL_VALUE_BUFF: Record<string, number> = {
   kinetic_piercer: 1,
-  isle_of_the_ancients: 1,
   hive_power_cell: 1,
   consuming_ash_cloud: 1,
   towering_tsunami: 1,
@@ -895,6 +981,11 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   the_abyssal_gate: 2,
   wraithlight_lantern: 2,
   magma_conduit_network: 1,
+  // v4.25: isle_of_the_ancients's +1 (v4.12 era) has flipped — it's now
+  // #9 cardsToNerf (resid=+27.6pt, n=1824) instead of an underperformer.
+  // Same "revert, don't compound a nerf on top of a stale buff" pattern as
+  // jawbone_span/the_wolf_of_wall_street elsewhere in this file. Reverted
+  // (entry removed) rather than turned into a fresh nerf on the same lever.
   // v4.23: jawbone_span's +1 (v4.12) has flipped — it's now #10 cardsToNerf
   // (resid=+29.3pt, n=912) instead of an underperformer. Reverted (entry
   // removed) rather than compounding into a fresh nerf on the same lever.
@@ -956,16 +1047,20 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // kinetic_siphon_swarm is back in the top-10 this pass (was off it in
   // v4.23), so it escalates too; diver_s_lantern is still off the list and
   // stays flat at +1.
-  pulsing_heartstone: 3, // was 2, still #1 cardsToBuff, -41.0pt resid
-  thornfang_vine: 3, // was 2, still #3 cardsToBuff, -35.7pt resid
-  locust_veil: 3, // was 2, still #2 cardsToBuff, -36.0pt resid
-  amber_sphere: 3, // was 2, still top-5 cardsToBuff, -32.5pt resid
-  resonant_shuriken: 3, // was 2, still top-5 cardsToBuff, -32.5pt resid
-  coral_collapse: 3, // was 2, still top-6 cardsToBuff, -32.3pt resid, n=3648
-  kinetic_siphon_swarm: 2, // was 1, back in top-10 cardsToBuff, -30.9pt resid
+  // v4.25: thornfang_vine/locust_veil dropped off the top-10 cardsToBuff
+  // list this pass (measured signal resolved) — held flat, not escalated.
+  // The rest are still top-10, each held flat across the v4.24 patch
+  // without the residual closing — one more step each (same pattern).
+  pulsing_heartstone: 4, // was 3, still #1 cardsToBuff, -32.7pt resid
+  thornfang_vine: 3,
+  locust_veil: 3,
+  amber_sphere: 4, // was 3, still top-3 cardsToBuff, -31.3pt resid
+  resonant_shuriken: 4, // was 3, still top-3 cardsToBuff, -31.3pt resid
+  coral_collapse: 4, // was 3, still top-5 cardsToBuff, -30.9pt resid, n=3648
+  kinetic_siphon_swarm: 3, // was 2, still top-10 cardsToBuff, -28.4pt resid
   diver_s_lantern: 1,
   // v4.23: new cardsToBuff first-pass entries, both Rare Locations, n=912.
-  // v4.24: both dropped off the top-10 list this pass — left flat, not
+  // v4.24/v4.25: both stayed off the top-10 list — left flat, not
   // escalated blind (same "dropped off, leave it" pattern as
   // kinetic_siphon_swarm got in v4.23).
   blackspire_obelisk: 1,
@@ -977,8 +1072,21 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // deck that leans into it down to the pool's second-worst deck baseline,
   // 19.8% this pass). coral_collapse (also Aftershock) is already covered
   // by its own escalation above; first-pass value buffs for the other two.
+  // v4.25: both bioluminescent_tide and flash_freeze are OFF the top-10
+  // cardsToBuff list this pass (measured signal resolved at the per-card
+  // level) even though Aftershock's deck baseline is still the pool's
+  // second-worst (20.5%, essentially flat vs v4.24's post-patch 20.5%) —
+  // the per-card lever has done what it can; the remaining weakness reads
+  // as an archetype-construction problem (how the Aftershock decks are
+  // built), not a card-level one, so it isn't re-escalated blind here.
   bioluminescent_tide: 1,
   flash_freeze: 1,
+  // v4.25: first-pass buffs, new top-10 cardsToBuff entries.
+  chalice_of_quicksilver: 1, // top-3 cardsToBuff, -31.3pt resid
+  perpetual_dynamo: 1, // top-10 cardsToBuff, -28.4pt resid
+  // v4.25: first-pass nerf, new top-10 cardsToNerf entry (Location, no Cast
+  // Slot cost to raise, so the value lever is the only one available).
+  obsidian_bore_site: -1, // top-10 cardsToNerf, +28.9pt resid
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {

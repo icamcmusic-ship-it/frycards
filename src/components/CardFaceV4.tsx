@@ -2097,16 +2097,30 @@ export function CardInspectorModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // v4.25: also missing the focus management Card3DInspector already has —
+  // a keyboard user opening this via Enter/Space landed with focus still on
+  // whatever triggered it, sitting behind the (only visually) fixed overlay.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => prevFocused?.focus?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="flex flex-col items-center gap-3"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="flex flex-col items-center gap-3 outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label={`Inspecting ${def.name}`}
       >
         <CardFace def={def} size="full" foil={foil} />
         {actions}
