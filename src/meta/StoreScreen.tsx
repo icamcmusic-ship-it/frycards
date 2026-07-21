@@ -27,6 +27,21 @@ import { fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
 import { packOdds, expectedRarities, sortedWeights } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
+import { CardFace } from '../components/CardFaceV4';
+import { POOL_BY_ID } from '../game/v3/cardpool';
+import { CardDef } from '../game/v3/cards';
+
+function bountyDefFor(card: BountyCard): CardDef {
+  return (
+    POOL_BY_ID[card.card_id] || {
+      id: card.card_id,
+      name: card.name,
+      type: (card.card_type || 'Unit') as CardDef['type'],
+      rarity: (card.rarity || 'Common') as CardDef['rarity'],
+      image: card.image_url || undefined,
+    }
+  );
+}
 
 type Tab = 'packs' | 'my_packs' | 'bounties' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
@@ -1070,21 +1085,8 @@ function BountiesTab({
               key={card.card_id}
               className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm flex flex-col overflow-hidden"
             >
-              <div className="aspect-[3/4] overflow-hidden ink-border-sm m-2 relative">
-                <SafeImage
-                  src={card.image_url}
-                  alt={card.name}
-                  className="w-full h-full object-cover"
-                  fallbackText={card.name}
-                />
-                <span
-                  className={cn(
-                    'absolute bottom-1 left-1 heading-font text-[9px] px-1.5 ink-border-sm',
-                    RARITY_CHIP[card.rarity] || RARITY_CHIP.Common,
-                  )}
-                >
-                  {card.rarity.toUpperCase()}
-                </span>
+              <div className="flex justify-center p-2">
+                <CardFace def={bountyDefFor(card)} size="compact" />
               </div>
               <div className="px-3">
                 <div className="heading-font text-xs truncate">{card.name}</div>

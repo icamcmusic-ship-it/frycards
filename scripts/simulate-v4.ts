@@ -543,6 +543,14 @@ interface SuiteResult {
    * v4.20-era audit (only a pool-wide 4-bucket roundBuckets histogram
    * existed before this). */
   archTotalRounds: Record<string, number>;
+  /** v4.23 harness upgrade: per-archetype first-player win rate (games
+   * where this archetype went first, and wins among those) — the existing
+   * `firstWins` counter is pool-wide only, so it can't tell whether
+   * play/draw sensitivity is even across archetypes (an aggro deck vs a
+   * control deck plausibly cares about the coin flip by very different
+   * amounts, which is invisible in an aggregate number). */
+  archFirstN: Record<string, number>;
+  archFirstW: Record<string, number>;
   locW: { loc: number; locN: number; noloc: number; nolocN: number };
   cardCast: Record<string, number>;
   cardInWinDeck: Record<string, number>;
@@ -670,6 +678,8 @@ function newResult(): SuiteResult {
     archW: {},
     archN: {},
     archTotalRounds: {},
+    archFirstN: {},
+    archFirstW: {},
     locW: { loc: 0, locN: 0, noloc: 0, nolocN: 0 },
     cardCast: {},
     cardInWinDeck: {},
@@ -877,10 +887,15 @@ function runGame(
       }
     }
   }
+  const firstEntry = firstPlayer === 'A' ? a : b;
+  r.archFirstN[firstEntry.key] = (r.archFirstN[firstEntry.key] || 0) + 1;
   if (g.winner === 'draw') {
     r.draws++;
   } else {
-    if (g.winner === firstPlayer) r.firstWins++;
+    if (g.winner === firstPlayer) {
+      r.firstWins++;
+      r.archFirstW[firstEntry.key] = (r.archFirstW[firstEntry.key] || 0) + 1;
+    }
     const winSide = g.winner as 'A' | 'B';
     const winEntry = winSide === 'A' ? a : b;
     const loseEntry = winSide === 'A' ? b : a;
@@ -1131,6 +1146,20 @@ for (const a of ARCHETYPES) {
   const avgLen = n > 0 ? (R.archTotalRounds[a.label] || 0) / n : 0;
   console.log(
     `${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, n)}%  (n=${n})  avgLen=${avgLen.toFixed(1)}r`,
+  );
+}
+
+console.log(
+  '\n--- v4.23 Per-archetype first-player win rate (play/draw sensitivity, min n=20 going first) ---',
+);
+for (const a of ARCHETYPES) {
+  const fn = R.archFirstN[a.label] || 0;
+  if (fn < 20) continue;
+  const fw = R.archFirstW[a.label] || 0;
+  const overallPct = R.archN[a.label] ? (100 * (R.archW[a.label] || 0)) / R.archN[a.label] : 0;
+  const firstPct = (100 * fw) / fn;
+  console.log(
+    `${a.label.padEnd(28)} wentFirstWin%=${firstPct.toFixed(1)} (n=${fn})  deckWin%=${overallPct.toFixed(1)}  delta=${(firstPct - overallPct >= 0 ? '+' : '') + (firstPct - overallPct).toFixed(1)}pt`,
   );
 }
 
