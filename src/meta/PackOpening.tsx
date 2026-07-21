@@ -723,6 +723,21 @@ function SummaryStage({
     }
   };
 
+  // Defensive: a purchase response with zero cards should never reach this
+  // stage, but pulls[bestIndex]/pullToDef below aren't optional-chained and
+  // would throw on an empty array — fail soft instead of white-screening
+  // the pack-opening modal.
+  if (pulls.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-6 text-center">
+        <p className="text-sm opacity-70">No cards were opened.</p>
+        <PopButton color="yellow" onClick={onDone}>
+          Done
+        </PopButton>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex flex-col items-center max-h-full w-full">
       <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center">

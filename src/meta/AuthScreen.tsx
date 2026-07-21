@@ -65,9 +65,15 @@ export function AuthScreen() {
     if (error) {
       setError(error.message);
       setBusy(false);
+    } else {
+      // On success the browser normally redirects to Discord immediately;
+      // onAuthStateChange picks the session up when we land back on the
+      // app. But if the redirect is blocked (popup blocker, browser
+      // extension) the call resolves with no error and nothing else ever
+      // fires — without this fallback the button stays stuck disabled
+      // forever. Give the real redirect a window, then release the button.
+      setTimeout(() => setBusy(false), 4000);
     }
-    // On success the browser redirects to Discord; onAuthStateChange picks the
-    // session up when we land back on the app.
   };
 
   const input =

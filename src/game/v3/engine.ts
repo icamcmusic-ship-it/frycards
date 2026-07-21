@@ -1039,9 +1039,20 @@ export function startTurn(g: Game) {
       // the instant-loss rule made every card-draw effect a liability in
       // long games while unit-heavy grinders won attrition by default.
       p.fatigue += 1;
-      g.log.push(`${p.id} is out of cards — fatigue ${p.fatigue} damage.`);
-      p.leader.damage += p.fatigue;
-      g.stats.fatigueDamage += p.fatigue;
+      // Toll reduces all incoming Leader damage regardless of source (see
+      // tollReduction()'s doc comment) — every other Leader-damage path
+      // (combat, Pierce overflow, Sap) already routes through it; Fatigue
+      // was the one gap.
+      const toll = Math.min(p.fatigue, tollReduction(g, p.id));
+      const fatigueDamage = p.fatigue - toll;
+      g.log.push(
+        `${p.id} is out of cards — fatigue ${p.fatigue} damage` +
+          (toll > 0 ? ` (${toll} reduced by Toll)` : '') +
+          '.',
+      );
+      p.leader.damage += fatigueDamage;
+      g.stats.fatigueDamage += fatigueDamage;
+      g.stats.tollReduced += toll;
       decide(g, p.id, 'fatigued');
       checkWin(g);
       if (g.winner) return;

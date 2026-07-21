@@ -187,7 +187,18 @@ export async function fetchCardTemplates(): Promise<CardTemplate[] | null> {
 // Meta-game reads
 // ---------------------------------------------------------------------------
 export async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle();
+  // A transient query failure must not read the same as "no profile" — the
+  // caller (MetaContext.refreshProfile, called after every purchase) would
+  // otherwise show credits/vouchers/xp as wiped even though nothing changed
+  // server-side. Logging at minimum makes a real outage diagnosable; callers
+  // that care about distinguishing "failed" from "genuinely empty" can be
+  // extended to check this too.
+  if (error) console.error('fetchProfile failed:', error.message);
   return (data as Profile) || null;
 }
 
@@ -769,7 +780,11 @@ export const MARKET_FEE = 0.05;
 
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // settle anything past its end time first so browsers see fresh state
-  await supabase.rpc('settle_expired_listings');
+  const { error: settleError } = await supabase.rpc('settle_expired_listings');
+  // If settlement fails, listings below may still include already-expired
+  // ones — log it rather than silently letting a player bid/buy on a dead
+  // listing with no signal anything went wrong.
+  if (settleError) console.error('settle_expired_listings failed:', settleError.message);
   const { data } = await supabase
     .from('market_listings')
     .select('*')

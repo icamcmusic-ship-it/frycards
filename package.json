@@ -16,8 +16,12 @@
     "sim:v3": "tsx scripts/simulate-v3.ts",
     "sim:v4": "tsx scripts/simulate-v4.ts",
     "sim:live": "tsx scripts/simulate-live.ts",
+    "fetch:cards": "tsx scripts/fetch-cards.ts",
     "analyze:costs": "tsx scripts/analyze-costs.ts",
-    "pattern-hitrate": "tsx scripts/pattern-hitrate.ts"
+    "pattern-hitrate": "tsx scripts/pattern-hitrate.ts",
+    "sim:ablation": "tsx scripts/simulate-ablation.ts",
+    "color-audit": "tsx scripts/color-audit.ts",
+    "sim:diff": "tsx scripts/diff-sim-runs.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

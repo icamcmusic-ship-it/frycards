@@ -567,6 +567,12 @@ interface SuiteResult {
   pierceOverflowDamage: number;
   anchorCapBonuses: number;
   lapseCounts: Record<string, number>;
+  /** v4.20 harness upgrade (task: "lapses in CPU reasoning" needs a
+   * per-archetype lens, not just a pool-wide total — a lapse rate that's
+   * unremarkable in aggregate can still be concentrated in one or two weak
+   * archetypes, which is exactly the diagnostic signal the roster-floor
+   * archetypes (e.g. Apex Nanite Shinobi) need. archKey -> lapseKey -> count. */
+  lapseCountsByArch: Record<string, Record<string, number>>;
   decisionAgg: Record<string, { pw: number; pn: number; aw: number; an: number }>;
   /** v4.9: per-card "recast via Echo at least once this game" -> win rate
    * (v4.8 findings §4 item 2 — the fodder waiver wasn't the Echo-deck
@@ -676,6 +682,7 @@ function newResult(): SuiteResult {
     pierceOverflowDamage: 0,
     anchorCapBonuses: 0,
     lapseCounts: {},
+    lapseCountsByArch: {},
     decisionAgg: {},
     echoCardInGame: {},
     echoCardInWinGame: {},
@@ -916,31 +923,38 @@ function runGame(
   r.overrunTriggers += s.overrunTriggers;
   r.pierceOverflowDamage += s.pierceOverflowDamage;
   r.anchorCapBonuses += s.anchorCapBonuses;
-  for (const pid of ['A', 'B'] as const) {
+  const LAPSE_KEYS = [
+    'lapseMissedLethal',
+    'lapseWastedCastableDie',
+    'lapseIdleLeaderAbility_genuine',
+    'lapseIdleLeaderAbility_refusalNoTarget',
+    'lapseIdleLeaderAbility_diceSpentDown',
+    'lapseCombatTradeTargetFixed',
+    'lapseUnitAbilityOrderFixed',
+    'unitAbilityMultiCandidate',
+    'unitAbilityMultiCandidateTiered',
+    'guardClearLethalOpportunity',
+    'guardClearLethalConverted',
+    // v4.16: expanded lapse capture (task §4).
+    'lapseMulliganKeptMarginal',
+    'lapseRerollDeadLowDie',
+    'lapseUnusedDiceAtEndTurn',
+    'lapseEchoOverAbilitySequencing',
+    'lapseGreedyAssignmentFixed',
+    // v4.19: raw stranded-die VOLUME (dice, not turns) — companion to the
+    // per-turn binary lapseUnusedDiceAtEndTurn.
+    'unusedDiceCount',
+  ] as const;
+  for (const [pid, entry] of [
+    ['A', a],
+    ['B', b],
+  ] as const) {
     const d = s.decisions[pid] || {};
-    for (const key of [
-      'lapseMissedLethal',
-      'lapseWastedCastableDie',
-      'lapseIdleLeaderAbility_genuine',
-      'lapseIdleLeaderAbility_refusalNoTarget',
-      'lapseIdleLeaderAbility_diceSpentDown',
-      'lapseCombatTradeTargetFixed',
-      'lapseUnitAbilityOrderFixed',
-      'unitAbilityMultiCandidate',
-      'unitAbilityMultiCandidateTiered',
-      'guardClearLethalOpportunity',
-      'guardClearLethalConverted',
-      // v4.16: expanded lapse capture (task §4).
-      'lapseMulliganKeptMarginal',
-      'lapseRerollDeadLowDie',
-      'lapseUnusedDiceAtEndTurn',
-      'lapseEchoOverAbilitySequencing',
-      'lapseGreedyAssignmentFixed',
-      // v4.19: raw stranded-die VOLUME (dice, not turns) — companion to the
-      // per-turn binary lapseUnusedDiceAtEndTurn.
-      'unusedDiceCount',
-    ])
+    const archBucket = (r.lapseCountsByArch[entry.key] ||= {});
+    for (const key of LAPSE_KEYS) {
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
+      archBucket[key] = (archBucket[key] || 0) + (d[key] || 0);
+    }
   }
   for (const [id, n] of Object.entries(s.comboTriggers))
     r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
@@ -1138,6 +1152,31 @@ console.log(
 console.log(
   `avg dice pitched+wasted per player-turn: ${((R.dicePitched + R.diceWasted) / (R.totalRounds * 2)).toFixed(2)}`,
 );
+
+// v4.20 harness upgrade: total lapse rate per archetype, so "CPU reasoning
+// lapses" surfaces WHICH decks the AI plays worst, not just a pool-wide
+// average that can hide concentration in a handful of weak archetypes.
+interface ArchLapseRow {
+  arch: string;
+  perGame: number;
+  totalLapses: number;
+  games: number;
+  topLapse: string;
+}
+const archLapseRows: ArchLapseRow[] = Object.entries(R.lapseCountsByArch)
+  .map(([arch, counts]) => {
+    const games = R.archN[arch] || 0;
+    const totalLapses = Object.values(counts).reduce((a, b) => a + b, 0);
+    const [topLapse] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || ['none', 0];
+    return { arch, perGame: games ? totalLapses / games : 0, totalLapses, games, topLapse };
+  })
+  .filter((r) => r.games >= 100);
+console.log('\n--- CPU reasoning lapses per archetype (worst-first, min n=100 games) ---');
+for (const r of [...archLapseRows].sort((a, b) => b.perGame - a.perGame).slice(0, 15)) {
+  console.log(
+    `${r.arch.padEnd(28)} lapses/game=${r.perGame.toFixed(2)}  total=${r.totalLapses}  n=${r.games}  top=${r.topLapse}`,
+  );
+}
 
 console.log('\n--- Keyword win rate (deck contains >=1 card with this keyword), min n=200 ---');
 const kwRows = Object.keys(R.keywordInDeck)
@@ -2018,6 +2057,7 @@ try {
         lapsePerGame: Object.fromEntries(
           Object.entries(R.lapseCounts).map(([k, n]) => [k, n / (R.games || 1)]),
         ),
+        lapsePerGameByArch: archLapseRows,
         balanceSummary,
       },
       null,

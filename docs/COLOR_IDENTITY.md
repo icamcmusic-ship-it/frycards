@@ -1,5 +1,14 @@
 # Card Colors (v4.13-v4.14) — Design, Assignment, and Results
 
+> **Current state:** 7 colors — Crimson, Azure, Verdant, **Obsidian**,
+> **Prism**, **Solar**, **Slate**. Sections 1-5 below describe the
+> *original* 5-color pentagon (Umbral/Radiant) as first shipped in v4.13;
+> §6 documents the v4.14 rename (Umbral→Obsidian, Radiant→Prism) and
+> expansion (new Solar + Slate colors) that is what the code actually
+> implements today (`src/game/v3/colors.ts`). Skip to §6 if you just want
+> the current taxonomy — the earlier sections are kept for design-rationale
+> history, not as a current reference.
+
 ## 1. What shipped
 
 A genuine deckbuilding-legality rule, not a cosmetic tag: every card now
