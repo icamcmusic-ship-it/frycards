@@ -538,6 +538,11 @@ interface SuiteResult {
   leaderN: Record<string, number>;
   archW: Record<string, number>;
   archN: Record<string, number>;
+  /** v4.21 harness upgrade: per-archetype average game length (rounds),
+   * summed here and divided by archN at report time — a gap flagged by the
+   * v4.20-era audit (only a pool-wide 4-bucket roundBuckets histogram
+   * existed before this). */
+  archTotalRounds: Record<string, number>;
   locW: { loc: number; locN: number; noloc: number; nolocN: number };
   cardCast: Record<string, number>;
   cardInWinDeck: Record<string, number>;
@@ -657,6 +662,7 @@ function newResult(): SuiteResult {
     leaderN: {},
     archW: {},
     archN: {},
+    archTotalRounds: {},
     locW: { loc: 0, locN: 0, noloc: 0, nolocN: 0 },
     cardCast: {},
     cardInWinDeck: {},
@@ -889,6 +895,8 @@ function runGame(
   }
   r.archN[a.key] = (r.archN[a.key] || 0) + 1;
   r.archN[b.key] = (r.archN[b.key] || 0) + 1;
+  r.archTotalRounds[a.key] = (r.archTotalRounds[a.key] || 0) + rounds / 2;
+  r.archTotalRounds[b.key] = (r.archTotalRounds[b.key] || 0) + rounds / 2;
   if (g.log.some((l) => l.includes('decked out'))) r.deckouts++;
 
   for (const [entry, side] of [
@@ -925,6 +933,10 @@ function runGame(
   r.anchorCapBonuses += s.anchorCapBonuses;
   const LAPSE_KEYS = [
     'lapseMissedLethal',
+    // v4.21: severity companion to the boolean above — summed HP left on the
+    // table across every missed-lethal turn, not just how many turns it
+    // happened on.
+    'lapseMissedLethalDamage',
     'lapseWastedCastableDie',
     'lapseIdleLeaderAbility_genuine',
     'lapseIdleLeaderAbility_refusalNoTarget',
@@ -1097,8 +1109,10 @@ for (const l of Object.keys(R.leaderN).sort(
 
 console.log('\n--- Archetype win rates (Location decks only) ---');
 for (const a of ARCHETYPES) {
+  const n = R.archN[a.label] || 0;
+  const avgLen = n > 0 ? (R.archTotalRounds[a.label] || 0) / n : 0;
   console.log(
-    `${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, R.archN[a.label] || 0)}%  (n=${R.archN[a.label] || 0})`,
+    `${a.label.padEnd(28)} ${pct(R.archW[a.label] || 0, n)}%  (n=${n})  avgLen=${avgLen.toFixed(1)}r`,
   );
 }
 

@@ -1,12 +1,40 @@
-# FryCards — Definitive Rulebook v4.10
+# FryCards — Definitive Rulebook v4.21
 
-Supersedes v4.9, v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1, v3.0 and v2.0. The executable version of this document
+Supersedes v4.10-v4.20 (documentation catch-up — see the v4.21 entry below
+for exactly what was stale), v4.9, v4.8, v4.7, v4.6, v4.4, v4.3, v4.2, v4.1,
+v3.0 and v2.0. The executable version of this document
 is the dice-placement engine in `src/game/v3/engine.ts`; the playable card pool
 is remapped from the real backend data in `src/game/v3/cardpool.ts`, decks are
 built by `src/game/v3/decks.ts`, and `npm run sim:v4` runs the headless
 playtest harness against it (`npm run sim:v3` runs the older fixed-decklist
 harness; `npm run tsx scripts/pattern-hitrate.ts` measures Combo pattern hit
 rate under directed rerolling).
+
+**v4.21 documentation catch-up + balance pass (this rulebook had drifted six
+versions behind the shipped engine — this pass reconciles it, it does not
+introduce a new sim baseline of its own):** §10's Keyword Glossary was
+rewritten wholesale to match the live **Tier I-V ladder** every keyword has
+carried since v4.19 (`KEYWORD_TIERS` in `src/game/v3/keywords.ts`, source of
+truth `docs/KEYWORD_TIERS.md`) — the old glossary still documented flat,
+single-magnitude keywords from the pre-tier era and hadn't been touched since
+v4.10. A new pointer to `docs/COLOR_IDENTITY.md` was added (§1) for the
+7-color deck-identity system (Crimson/Azure/Verdant/Obsidian/Prism/Solar/
+Slate), shipped in v4.13/v4.14 and never previously mentioned here at all.
+Alongside the doc fixes, this pass also shipped four small live balance
+changes, carried into the glossary text below: **Steel's print rate cut
+again, 1-in-12 → 1-in-15** (`cardpool.ts`) — Steel remained the roster's
+worst cost-vs-winrate offender for two straight passes with its per-tier
+magnitude already floored, so the only lever left was how often it's printed
+at all; **Avenge's lifetime stacking cap cut 2 → 1** (`SIM_TUNING.avengeCap`,
+`engine.ts`) — mirrors the same v4.6 "ramp, not a collapse" logic that
+originally took the cap from 3 to 2 (the tier ladder's printed "+2/+2" /
+"+3/+3" lifetime text in §10 is now cosmetic, not the enforced cap — see the
+note under Avenge); a second, sized patch to the repeat-offender
+`costVsAbilityMismatches` items **Abyssal Dragonfish** and **Ember
+Whisperer** (`cardpool.ts`), both stuck at the same z-score across v4.19 and
+v4.20; and the `the_wolf_of_wall_street`/`familiar_in_the_dark` card-level
+fixes that actually shipped back in v4.20 are only now reflected here, since
+this rulebook never had a v4.20 entry at all.
 
 **v4.10 balance-sim pass (33,840-game baseline + 33,840-game verification +
 a 21-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.10.md`):**
@@ -380,6 +408,13 @@ Two players duel using a deck of Locations, Units, Charms, and Events, each led 
 **Card rarities** (collection/economy only — rarity carries no rules weight):
 Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Mythic.
 
+**Deck-building color identity:** every card and Leader also has a color
+identity (Crimson, Azure, Verdant, Obsidian, Prism, Solar, Slate) that gates
+which cards a given Leader may legally play — this is a deckbuilder-legality
+system, not a combat or casting-cost rule, so it isn't covered further here.
+See `docs/COLOR_IDENTITY.md` for the full taxonomy, Leader identities, and
+design history.
+
 ---
 
 ## 2. Game Materials & Setup
@@ -631,75 +666,127 @@ nothing if your deck is empty.
 
 ## 10. Keyword Glossary
 
+*(v4.21 rewrite)* Every keyword below now comes in **numbered tiers**
+(Tier **I** up to Tier **III**, **IV**, or **V** depending on the keyword),
+not a single flat magnitude — a given keyword+tier always means the same
+ability and the same cast-cost contribution on every card that carries it.
+A card prints exactly one tier of each keyword it has. Full mechanical
+detail (cost-weight math, the tier-cap premium rule, engine wiring) lives in
+`docs/KEYWORD_TIERS.md`; the single source of truth for the rules text below
+is `KEYWORD_TIERS` in `src/game/v3/keywords.ts`. Where a keyword's ladder is
+**3 or more tiers deep**, the top tier is always a qualitatively better
+variant, not just a bigger number, and cards printed at it also cast
+noticeably cheaper (the "tier-cap premium").
+
 ### Dice-interaction keywords
 
-**Overflow X** — If the die placed on this card's slot exceeds its **effective threshold** (after reductions like Anchor, not necessarily the printed number) by X or more, trigger the listed bonus immediately.
+**Overflow X** — If the die placed on this card's slot exceeds its **effective threshold** (after reductions like Anchor, not necessarily the printed number) by X or more, trigger the listed bonus immediately. Not part of the tier ladder — X is set per-card.
 
-**Combo: [Pattern]** — Triggers if your final five-die roll contains the exact named pattern as a genuine subset. See §6.
+**Combo: [Pattern]** — Triggers if your final five-die roll contains the exact named pattern as a genuine subset. See §6. Not part of the tier ladder.
 
-**Twin X** — Two Cast Slots requiring identical face values; see §7 for Staging Zone rules, matching rules, and the voluntary-abandon option.
+**Twin** — Two Cast Slots requiring identical face values; see §7 for Staging Zone rules, matching rules, and the voluntary-abandon option. Every Twin card also prints a completion rider, sized by tier:
+- **I** — small completion rider.
+- **II** — medium completion rider.
+- **III** — large completion rider.
 
-**Rally** — Once per turn, when you would place a die on this card's Ability Slot, you may instead activate it using a die already resting on another exhausted friendly Ability Slot — this costs you nothing from your rolling pool; the source card remains exhausted regardless of the die moving away.
+**Rally** ⚙ — Once per turn, when you would place a die on this card's Ability Slot, you may instead activate it using a die already resting on another exhausted friendly Ability Slot — this costs you nothing from your rolling pool; the source card remains exhausted regardless of the die moving away.
+- **I** — the borrowed die pays at its own rolled face value.
+- **II** — the borrowed die also counts as **+1** higher for the threshold.
 
-**Scrap** — Discard this card from hand to reroll one **unplaced** die of your choice, at any point during Placement Phase.
+**Scrap** ⚙ — Discard this card from hand to reroll one **unplaced** die of your choice, at any point during Placement Phase.
+- **I** — reroll 2d6 and keep the higher.
+- **II** — reroll 3d6 and keep the highest.
 
-**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor, **to a maximum total reduction of 3** *(v4.4, was 2 in v4.1)*, minimum threshold 1. *(v4.4)* The first time a card's own discount hits that cap, it permanently gains +1/+1, once per card life. See §7 for the printed-vs-effective interaction with Overflow and full detail on the cap bonus.
+**Anchor** — This card's effective Cast Slot threshold is reduced by 1 for each other card you control in play with Anchor. See §7 for the printed-vs-effective interaction with Overflow and full detail on the full-ramp bonus.
+- **I** — capped at **−2** total reduction.
+- **II** — capped at **−3**; the first time a card's own discount hits that cap, it permanently gains **+2/+2**, once per card life.
+- **III** — same −3 cap, but the one-time full-ramp bonus is **+3/+3**.
 
-**Crescendo X** *(v4.2, Event; redesigned v4.10)* — +X to this Event's numeric effect if **any** die shows a **6** this turn (rolled, not just placed/spent — a six that got rerolled away or had nothing else worth spending it on still counts). A flat bonus, not per-six scaling: four straight passes of raising the per-six multiplier (v4.4 → v4.9) barely moved the keyword because rolling 2+ sixes in one 5-die turn is rare, so the multiplier almost never applied — the real fix was reliability, not size. Still never a dead card on a bad roll, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
+**Crescendo** *(Event; redesigned v4.10)* — +X to this Event's numeric effect if **any** die shows a **5 or 6** this turn (rolled, not just placed/spent — a six that got rerolled away or had nothing else worth spending it on still counts). A flat bonus, not per-six scaling — rolling 2+ qualifying dice in one 5-die turn is rare enough that a per-die multiplier almost never applied, so reliability was the fix, not size. Never a dead card on a bad roll, sidestepping the trophy-gate failure mode (a Yahtzee-gated card measured at 0.02 casts/game in v4.0 — see §6) structurally instead of needing rarity guidance to manage it.
+- **I** — +4. **II** — +5. **III** — +6. **IV** — +7. **V** — +8.
 
-**Snap** *(v4.2, Charm)* — May be cast during your **Reroll Phase**, before the reroll window closes, instead of waiting for Placement Phase. Still spends a die from your five exactly as an ordinary cast — only the timing changes. Doesn't reopen the no-stack/no-response rule: it's still only ever available on your own turn, before your own reroll decision.
+**Snap** *(Charm)* — May be cast during your **Reroll Phase**, before the reroll window closes, instead of waiting for Placement Phase. Still spends a die from your five exactly as an ordinary cast — only the timing changes. Doesn't reopen the no-stack/no-response rule: it's still only ever available on your own turn, before your own reroll decision. Single tier (**I**) only.
 
 ### Combat keywords
 
 **Guard** — See §8. While you control any Guard Unit, your opponent's attacks must target your Guard Units, resolved one at a time, until all are destroyed.
+- **I** — taunt only, no stat rider.
+- **II** — taunt, and this body is printed with **+2 max HP**.
+- **III** — taunt, and this body is printed with **+4 max HP**.
 
 **Swift** — This Unit may attack **or** use an Ability Slot the turn it's cast (subject to the same mutual-exclusivity as any other turn — see §7). Without Swift, it can do neither until your next turn.
+- **I** — no summoning sickness only.
+- **II** — no summoning sickness, and this body is printed with **+1 ATK**.
 
-**Pierce** — See §8 for full interaction with Guard and simultaneous-death timing. *(v4.4)* Overflow is capped at half the attacker's effective ATK (rounded down, minimum 1).
+**Pierce** — See §8 for full interaction with Guard and simultaneous-death timing.
+- **I** — leftover damage past a destroyed blocker carries to the enemy Leader, capped at **⌊ATK/3⌋** (min 1).
+- **II** — capped at **⌊ATK/2⌋** (min 1).
+- **III** — **uncapped**: all leftover damage carries through.
 
-**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before Steel/Bulwark/multipliers (§8). *(v4.0)* Refreshes at the end of the **next End Phase to occur, whether it's yours or your opponent's** — see §3.7. *(v4.4)* When it prevents a combat hit, it also spikes 1 damage back at the attacker.
+**Ward** — Prevents the first instance of damage or Removal against this card each turn, from being the one attacked or targeted — not from retaliation this Unit takes on its own attack. Applied before Steel/Bulwark/multipliers (§8). Refreshes at the end of the **next End Phase to occur, whether it's yours or your opponent's** — see §3.7.
+- **I** — blocks the first hit each turn; a blocked combat hit spikes **1** damage back at the attacker.
+- **II** — same block, but spikes **2** damage back at the attacker.
 
-**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. *(v4.0)* Its first attack is normal; **only its second attack** takes doubled retaliation. *(v4.4)* That second attack also can't target the enemy Leader directly, unless no other legal target remains.
+**Frenzy** — May attack a second time in the same Combat Phase if it survives its first attack. Its first attack is always normal.
+- **I** — the second (bonus) swing takes **doubled** retaliation and can't target the enemy Leader directly unless no other legal target remains (only while its controller is even or ahead on board Units — see §8).
+- **II** — Frenzy I, and this body is printed with **+2 ATK**.
+- **III** — attacks twice with **no doubled retaliation** on the second swing at all; also printed with +2 ATK.
 
-**Bulwark X** *(v4.2, Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** *(v4.4)* (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier), consistent with the existing Ward-before-Frenzy rule (§8). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
+**Bulwark** *(Unit)* — Flat reduction to damage this Unit takes **from attacks** (not from Sap or other non-attack sources — see Toll below for that). Checked in this order on every attack instance: **Ward** (full prevention) → **Steel** (per-turn absorption) → **Bulwark** (flat reduction) → **Frenzy** (multiplier). Applies both when this Unit is the one being attacked, and to retaliation damage it takes while attacking.
+- **I** — attacks against it (and its own retaliation taken) deal **1 less** damage.
+- **II** — **2 less**. **III** — **3 less**.
 
-**Steel X** *(v4.4, Unit; printed values reduced in v4.7)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. *(v4.6)* On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is capped at **4** — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use, aimed at dual Steel+Bulwark bodies.
+**Steel** *(Unit; print rate cut again in v4.21, 1-in-12 → 1-in-15)* — The first X damage this Unit would take **each turn, from any source** (attacks, Sap, Pierce overflow), is prevented instead of reduced. A per-turn absorption pool, refreshing every End Phase like Ward — but unlike Ward's single full prevention, Steel can blunt several smaller hits across the same turn before running dry. Checked Ward → Steel → Bulwark → Frenzy. Distinct from Bulwark (flat, attacks only, no per-turn cap) and Toll (Leader-only): Steel protects the *Unit itself*, from *anything*, up to a *pool*. On any single combat hit, the **combined** prevention from a Unit's own Steel and Bulwark together is still capped at **4** (§6/§8) — the same "ramp, not a collapse" ceiling Toll/Anchor/Avenge use. Steel remains the most expensive keyword to cast per tier (its per-tier magnitude is already floored — see `keywords.ts`'s Steel comment — so this pass's fix was print rate, not magnitude).
+- **I** — prevents the first **1** damage/turn. **II** — first **2**. **III** — first **3**.
 
-**Toll X** *(v4.2, Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
+**Toll** *(Unit)* — While this Unit is in play, **all incoming damage to your Leader, from any source** (attacks, Sap, Pierce overflow — anything), is reduced by X. Broader than Bulwark on purpose: Bulwark answers attacks specifically, Toll is the answer to the direct/Sap damage a Guard wall alone can't stop. **The total reduction from every Toll source you control is capped at 3**, the same "ramp, not a collapse" ceiling Anchor uses (§7) — stacking a fourth point of Toll is possible but does nothing beyond the cap.
+- **I** — reduces incoming Leader damage by **1**. **II** — by **2**. **III** — by **3**.
 
-**Avenge** *(v4.2, Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own. *(v4.5)* Capped at **3** total +1/+1 over a card's lifetime; *(v4.6)* tightened to **2** — the cap-at-3 measurably never bit (Avenge was still the strongest keyword and its archetypes were unmoved), the same "ramp, not a collapse" ceiling every other repeating stat mechanic already has.
+**Avenge** *(Unit)* — Whenever another friendly Unit dies, this Unit permanently gains +1/+1. This is a **state-based trigger**, not a targeted response — it resolves automatically and immediately, the same way a Unit at 0 HP is destroyed automatically (§8), with no priority window. It can trigger on your opponent's turn (e.g. if their attack kills one of your other Units) exactly the same as on your own.
+- **I** — printed lifetime cap **+2/+2**. **II** — printed lifetime cap **+3/+3**.
+- **Live cap note (v4.21):** the tier text above is the printed rules text, but the actually-enforced lifetime cap is a single shared engine constant (`SIM_TUNING.avengeCap`, not per-tier), and this pass cut it again, **2 → 1** — the same "ramp, not a collapse" trim the cap has taken every pass since v4.5 (3→2→1). Avenge remained the strongest keyword by a wide margin for two straight balance passes even after the v4.19.1 cost-weight increase; this is the direct magnitude fix. The printed "+2/+2"/"+3/+3" tier text is cosmetic until tier magnitude is wired to a real per-card cap.
 
-**Overrun** *(v4.4.1, Unit)* — If this Unit's combat damage to its target would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals **half its effective ATK (rounded down, minimum 1) anyway** *(v4.6, was a flat 1 — the flat version measured as no answer at all to the durability-stack decks it was printed against; half-ATK mirrors Pierce's established overflow magnitude)*. Never fires off a 0-ATK attacker, and never applies to retaliation damage. A direct, targeted counter to the durability-stack meta (Ward/Steel/Bulwark all fully zeroing a hit) without touching the numbers that make those keywords good answers to Pierce/Frenzy.
+**Overrun** — If this Unit's combat damage to its target would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals **⌊ATK/2⌋ (rounded down, minimum 1)** anyway. Never fires off a 0-ATK attacker, and never applies to retaliation damage. A direct, targeted counter to the durability-stack meta (Ward/Steel/Bulwark all fully zeroing a hit) without touching the numbers that make those keywords good answers to Pierce/Frenzy.
+- **I** — punches ⌊ATK/2⌋ (min 1) through. **II** — punches ⌊ATK/2⌋+1 through.
 
 ### Utility keywords
 
-**Surge** — Draw a card. See §9 for the empty-deck interaction.
+**Surge** — Draw a card. See §9 for the empty-deck interaction. Not part of the tier ladder.
 
-**Mend X** — Heal X HP to your Leader or a target friendly Unit, never past its maximum.
+**Mend X** — Heal X HP to your Leader or a target friendly Unit, never past its maximum. Not part of the tier ladder.
 
-**Sap X** — Deal X damage directly to a target Unit or Leader.
+**Sap X** — Deal X damage directly to a target Unit or Leader. Not part of the tier ladder.
 
-**Bind** — Target Unit cannot attack, use an Ability Slot, **or deal retaliation damage** *(v4.0)*, during its controller's **next** turn. The retaliation clause turns Bind from "skip a turn" (measured at a weak 41.3% in v3.0) into a genuine tempo tool: it converts a threatening blocker or attacker into a completely safe target for one turn — a real answer to a Guard wall, not a minor speed bump. (By design, self-targeting Bind does nothing on your current turn — it's disruption aimed at an opponent's upcoming turn, so self-targeting is simply useless rather than exploitable.)
+**Bind** — Target Unit cannot attack, use an Ability Slot, **or deal retaliation damage**, during its controller's **next** turn. The retaliation clause turns Bind from "skip a turn" into a genuine tempo tool: it converts a threatening blocker or attacker into a completely safe target for one turn — a real answer to a Guard wall, not a minor speed bump. (By design, self-targeting Bind does nothing on your current turn — it's disruption aimed at an opponent's upcoming turn, so self-targeting is simply useless rather than exploitable.) Not part of the tier ladder.
 
-**Echo** — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand. *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die) plus the same additional-card discard — and is subject to the same **one Combo-gated card per turn** cap as an ordinary cast (§6). *(v4.0: the additional card discarded to pay Echo's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally.)* *(v4.4)* **The extra-discard cost is waived entirely for Rare/Super-Rare ("mid" tier) cards** — place the die (and satisfy any pattern/target requirement) with no hand cost at all. The balance sim measured recasting a mid-rarity card via Echo as correlated with *losing* (a losing player reaching for a comeback that wasn't one), while low- and high-rarity Echo recasts both correlated with winning; this fixes the cost curve for the one tier where it was miscalibrated rather than touching the mechanic everywhere. Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+**Echo** ⚙ — After this card is discarded, for any reason (dying in combat, resolving as a Charm/Event, being replaced, or discarded for hand size — all of these count identically), it becomes eligible to be recast later from Discard.
+- **I** — recast once from Discard: place a die meeting its normal Cast Slot threshold **and** discard one additional card from hand.
+- **II** — recast once from Discard by paying **only** its cast cost — **no** extra discard.
 
-**Aftershock** *(v4.2, Event)* — After this Event resolves, it leaves behind a delayed, lower-value repeat of its own effect. That delayed effect resolves at the **very start of your next turn, before Draw Phase** — the same timing hook Twin's voluntary-abandon already uses (§7). Turns a big Event into something that feels like a genuine two-turn commitment (and is telegraphed for the opponent to see coming), rather than a single burst.
+  *If the card is a Combo-gated Event with no numeric threshold*, its Echo cost instead mirrors the original casting requirement (your live roll must satisfy the named pattern; place any one die), plus the tier's extra-discard clause if Tier I — and is subject to the same **one Combo-gated card per turn** cap as an ordinary cast (§6). The additional card discarded to pay Tier I's cost is an ordinary discard in every respect — if that card also has Echo or a pending Banish-on-redischarge state, it triggers/applies normally. Recasting can only happen during a Placement Phase — if a card is discarded during your End Phase (e.g. for hand size), the earliest you can pay to recast it is a future turn's Placement Phase, never the same turn. This can be done once per physical card. The next time an Echoed card **would be discarded again**, it goes to the Banished Zone instead — this specifically replaces a discard event, not other zone changes; if a spent-Echo card is instead bounced to hand, it just goes to hand normally, and only banishes on its *next* discard after that.
+
+**Aftershock** *(Event)* — After this Event resolves, it leaves behind a delayed repeat of its own effect. That delayed effect resolves at the **very start of your next turn, before Draw Phase** — the same timing hook Twin's voluntary-abandon already uses (§7). Turns a big Event into something that feels like a genuine two-turn commitment (and is telegraphed for the opponent to see coming), rather than a single burst.
+- **I** — repeats at **half value**. **II** — repeats at **full value**.
 
 ### Leader keywords
 
-**Resolve X** *(v4.2)* — While your Leader is at or below half its maximum HP, its Ability Slot threshold is reduced by X (reusing the same threshold-reduction language Anchor already established). A comeback mechanic: it directly counters the measured **+19–22pt early-face-attack win-correlation** without touching combat math at all — the worse a Resolve Leader is losing, the cheaper its own answer gets.
+**Resolve** — While your Leader is at or below half its maximum HP, its Ability Slot threshold is reduced by X (reusing the same threshold-reduction language Anchor already established). A comeback mechanic that directly counters the measured early-face-attack win-correlation without touching combat math at all — the worse a Resolve Leader is losing, the cheaper its own answer gets. Leader keywords weigh 0 — Leaders never pay a Cast Slot cost.
+- **I** — Ability threshold **−1**. **II** — Ability threshold **−2**.
 
-**Ultimate(N)** *(v4.2)* — Your Leader gains a **second Ability Slot**, entirely independent of its normal one (its own die, its own threshold, its own exhaustion), but it can only be activated **once per game**, and only starting on your **Nth own turn**. Directly answers the "reactive leaders lack inevitability" gap: a late-game payoff that doesn't require redesigning the Leader's whole early-game plan.
+**Ultimate(N)** — Your Leader gains a **second Ability Slot**, entirely independent of its normal one (its own die, its own threshold, its own exhaustion), but it can only be activated **once per game**, and only starting on your **Nth own turn**. Directly answers the "reactive leaders lack inevitability" gap: a late-game payoff that doesn't require redesigning the Leader's whole early-game plan. Single tier (**I**) only.
 
 ### Location keywords
 
-**Tribute** *(v4.2)* — Triggers at your End Phase if you Pitched 2 or more dice this turn (§3.4). Direct synergy with Pitch: a Location built around your dice going unused instead of a Location built around spending them.
+**Tribute** — Triggers at your End Phase based on how many dice you Pitched this turn (§3.4). Direct synergy with Pitch: a Location built around your dice going unused instead of a Location built around spending them.
+- **I** — triggers if you Pitched **2 or more** dice this turn. **II** — triggers if you Pitched **any** die this turn.
 
-**Excavate X** *(v4.2)* — This Location's Ability Slot threshold drops by X for every one of your turns it has remained continuously in play (minimum 1). A ramp identity: holding a Location long-term instead of replacing it becomes a deliberate payoff, not just inertia.
+**Excavate** — This Location's Ability Slot threshold drops by X for every one of your turns it has remained continuously in play (minimum 1). A ramp identity: holding a Location long-term instead of replacing it becomes a deliberate payoff, not just inertia.
+- **I** — drops **1**/turn. **II** — drops **2**/turn. **III** — drops **3**/turn.
 
-**Contested** *(v4.2)* — This Location's passive is **doubled** while your opponent controls no Location of their own. Creates a genuine arms-race decision around whether to commit to your own Location or race to deny theirs.
+**Contested** — This Location's passive is **doubled** while your opponent controls no Location of their own. Creates a genuine arms-race decision around whether to commit to your own Location or race to deny theirs. Single tier (**I**) only.
 
-**Foothold** *(v4.4.1)* — The first Unit you cast each turn while this Location is in play costs **1 less** (stacks with Anchor). Gives ramp identities (Excavate/Anchor especially) a real floor on the turns they're otherwise doing nothing.
+**Foothold** — The first Unit you cast each turn while this Location is in play costs less (stacks with Anchor). Gives ramp identities (Excavate/Anchor especially) a real floor on the turns they're otherwise doing nothing.
+- **I** — costs **1 less**. **II** — costs **2 less**.
 
 ---
 

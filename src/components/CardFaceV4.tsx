@@ -1366,6 +1366,11 @@ export function CardFace({
       onClick={onClick}
       onKeyDown={(e) => {
         if (!onClick) return;
+        // Guard against nested interactive chips (KeywordChip/CostInfoButton
+        // buttons inside this card): their own Enter/Space keydown bubbles up
+        // to this div, which would otherwise ALSO fire the card's onClick
+        // (e.g. popping open the inspector) on top of the chip's own action.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();

@@ -203,15 +203,14 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
   //
   // v4.20: the same item-5 magnitude-cut ask does NOT apply to Avenge the
   // way it does to Steel — the tier `magnitude` values below (2/3) are
-  // COSMETIC ONLY for this keyword. The actual in-game cap is the engine's
-  // hardcoded `AVENGE_CAP = 2` constant (engine.ts), which every Avenge
-  // card obeys regardless of which tier it's printed at; only costWeight
-  // (already bumped in v4.19.1) has any real effect on this keyword today.
-  // Cutting the magnitude numbers here would only change the printed rules
-  // text, not gameplay — a real Avenge nerf requires either lowering
-  // AVENGE_CAP itself (a global change affecting every Avenge card at once,
-  // not a per-tier dial) or wiring tier magnitude through to a real
-  // per-card cap, neither of which is a safe single-pass change.
+  // COSMETIC ONLY for this keyword. The actual in-game cap is
+  // SIM_TUNING.avengeCap (engine.ts), which every Avenge card obeys
+  // regardless of which tier it's printed at; only costWeight and this cap
+  // have any real effect on this keyword.
+  // v4.21: applied the cap cut — SIM_TUNING.avengeCap 2 -> 1 (see
+  // cleanupDeaths in engine.ts). Left the tier magnitude numbers below
+  // as-is; they remain cosmetic until tier magnitude is wired to a real
+  // per-card cap.
   Avenge: KW([
     T('Permanently +1/+1 whenever another friendly Unit dies, up to +2/+2 lifetime.', 2, 2),
     T('Permanently +1/+1 whenever another friendly Unit dies, up to +3/+3 lifetime.', 2.5, 3),

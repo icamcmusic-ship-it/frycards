@@ -12,7 +12,6 @@ import {
   abandonTwin,
   mulliganRedraw,
   MAX_COMBO_SELF_BUFF_STACKS,
-  AVENGE_CAP,
   SIM_TUNING,
 } from './engine';
 import { CardDef } from './cards';
@@ -607,7 +606,7 @@ test('Mend never over-heals: damage floors at 0 (never past max HP, §8)', () =>
   expect(g.players.A.leader.damage).toBe(0);
 });
 
-test('Avenge: +1/+1 per friendly death, capped at AVENGE_CAP lifetime; a dying Avenge unit gains nothing', () => {
+test('Avenge: +1/+1 per friendly death, capped at SIM_TUNING.avengeCap lifetime; a dying Avenge unit gains nothing', () => {
   const g = freshGame();
   const p = g.players.A;
   const av = makeInst(mkU('av', { hp: 9, avenge: true }), 'A');
@@ -620,11 +619,10 @@ test('Avenge: +1/+1 per friendly death, capped at AVENGE_CAP lifetime; a dying A
   d1.damage = 9;
   d2.damage = 9;
   cleanupDeaths(g);
-  // v4.6: 1 from dyingAv, then the simultaneous pair only grants 1 more —
-  // AVENGE_CAP (2) is a lifetime ceiling per card, so the second death of
-  // the pair is absorbed by the cap.
-  expect(av.permAtk).toBe(AVENGE_CAP);
-  expect(av.permHp).toBe(AVENGE_CAP);
+  // v4.21: 1 from dyingAv already hits the cap (avengeCap 2 -> 1) — the
+  // simultaneous d1/d2 pair grants nothing further.
+  expect(av.permAtk).toBe(SIM_TUNING.avengeCap);
+  expect(av.permHp).toBe(SIM_TUNING.avengeCap);
   expect(p.board.some((u) => u.iid === dyingAv.iid)).toBe(false);
 });
 
@@ -737,8 +735,10 @@ test('VERIFIED CORRECT: Avenge cannot save its own would-be-dead recipient in th
   cleanupDeaths(g);
   expect(p.board.some((u) => u.iid === borderline.iid)).toBe(false); // still dead
   expect(p.board.some((u) => u.iid === other.iid)).toBe(false);
-  expect(av.permAtk).toBe(2); // credited for both simultaneous deaths
-  expect(av.permHp).toBe(2);
+  // v4.21: avengeCap 2 -> 1, so both simultaneous deaths are still credited
+  // (min(dead.length, cap)) but the result is now clamped at the new cap.
+  expect(av.permAtk).toBe(SIM_TUNING.avengeCap);
+  expect(av.permHp).toBe(SIM_TUNING.avengeCap);
 });
 
 test('VERIFIED CORRECT: activateUltimate never occupies abilityDie, so Rally cannot pull a die from a just-used Ultimate', () => {

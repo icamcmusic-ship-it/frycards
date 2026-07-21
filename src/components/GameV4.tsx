@@ -278,6 +278,13 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
       onTap?.();
     }
   };
+  // A card can leave the board (die, get bounced, etc.) mid-press — clear
+  // the pending timer on unmount so it doesn't fire onLongPress afterward.
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
   return {
     onTouchStart: start,
     onTouchEnd: (e: React.TouchEvent) => clear(e, true),
@@ -2196,8 +2203,12 @@ export function GameV4({
               {logExpanded ? '▾ LESS' : '▴ MORE'}
             </button>
           </div>
-          {g.log.slice(logExpanded ? -160 : -40).map((l, i) => (
-            <div key={i}>· {renderKeywordText(l, true)}</div>
+          {g.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
+            // Keyed by absolute position in g.log (not the relative slice
+            // index) — the log only ever grows, so as it does the window
+            // this slice shows shifts and a relative index would silently
+            // relabel every earlier line each render.
+            <div key={g.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">

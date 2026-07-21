@@ -286,8 +286,8 @@ export function hasUnspentWard(target: Inst): boolean {
 export const SIM_TUNING = {
   /** cap in tollReduction() — live value 3. */
   tollCap: 3,
-  /** lifetime Avenge +1/+1 cap — live value AVENGE_CAP. */
-  avengeCap: 2,
+  /** lifetime Avenge +1/+1 cap. v4.21: 2 -> 1, see cleanupDeaths comment. */
+  avengeCap: 1,
   /** multiplier on Steel X absorption — live value 1. */
   steelMult: 1,
   /** multiplier on all Mend values — live value 1. */
@@ -442,7 +442,13 @@ export const MAX_COMBO_SELF_BUFF_STACKS = 3;
 // 22,560-game passes), exactly the "needs a tighter cap (2?)" follow-up the
 // v4.5 findings doc predicted. Mer King Avenge Swarm (72.4%) is the second
 // data point that the keyword itself, not one Leader kit, is the outlier.
-export const AVENGE_CAP = 2;
+// v4.21: item 5 — Avenge measured +15.0pt cast-win delta flat across two
+// passes with the cost-side lever (costWeight) already exhausted. The tier
+// `magnitude` field is cosmetic (see keywords.ts); the only real per-card
+// lever is SIM_TUNING.avengeCap below. Cut 2 -> 1, mirroring the v4.6
+// Steel-style direct-magnitude nerf rather than a fourth cost-side attempt.
+// (This exported constant was dead — cleanupDeaths reads SIM_TUNING.avengeCap,
+// not this — removed to stop it silently drifting from live behavior again.)
 
 /** v4.4: raised from 2 to 3 — the sim showed Anchor decks underperforming
  * (see docs/RULEBOOK.md's Anchor entry) with a flat diminishing-returns
