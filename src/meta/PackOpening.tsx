@@ -695,24 +695,29 @@ function SummaryStage({
     let totalCards = 0;
     let shortfall = false;
     const newlySold = new Set<number>();
-    for (const g of groups.values()) {
-      const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
-      if (error) {
-        setSellError(error);
-        break;
+    try {
+      for (const g of groups.values()) {
+        const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
+        if (error) {
+          setSellError(error);
+          break;
+        }
+        if (data) {
+          totalCredits += data.total;
+          totalCards += data.sold;
+          // The server can sell fewer than requested (e.g. another tab already
+          // sold/locked some copies) — only mark that many pulls as sold, not
+          // the whole group, or the UI shows cards as gone that the player
+          // still owns.
+          if (data.sold < g.qty) shortfall = true;
+          g.indices.slice(0, data.sold).forEach((i) => newlySold.add(i));
+        }
       }
-      if (data) {
-        totalCredits += data.total;
-        totalCards += data.sold;
-        // The server can sell fewer than requested (e.g. another tab already
-        // sold/locked some copies) — only mark that many pulls as sold, not
-        // the whole group, or the UI shows cards as gone that the player
-        // still owns.
-        if (data.sold < g.qty) shortfall = true;
-        g.indices.slice(0, data.sold).forEach((i) => newlySold.add(i));
-      }
+    } catch {
+      setSellError('Something went wrong — check your connection and try again.');
+    } finally {
+      setSellBusy(false);
     }
-    setSellBusy(false);
     if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
     if (totalCards > 0) {
       setSellNotice(

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MetaHeader } from '../meta/ui';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
 
-// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.6), plus a
+// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.21), plus a
 // standalone rarity-system explainer and an app feature guide — this used to
 // be a popup shown only on first launch; it's now its own page reachable
 // any time from the Main Menu's HOW TO PLAY button.
@@ -141,7 +141,7 @@ const SECTIONS = [
       ],
       [
         'Avenge',
-        'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic; caps at +2/+2 total per card.',
+        'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic; caps at +1/+1 total per card.',
       ],
       [
         'Twin',
