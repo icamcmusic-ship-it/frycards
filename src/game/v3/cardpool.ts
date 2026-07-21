@@ -667,7 +667,6 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   blind_colossus: -2,
   fayes_true_face: -2,
   vlad_from_accounting: -1,
-  swaying_garden: -1,
   // buffs (win% far BELOW their cost band's mean)
   void_mother: 2,
   // v4.20: familiar_in_the_dark's halved +1 (v4.19.1) still barely moved
@@ -694,10 +693,39 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // multi-keyword durability trophies above.
   smokeveil_striketeam: 1,
   wasteland_aberration: -1,
-  kinetix_enforcer: -1,
-  boneplate_sentinel: -1,
+  // v4.22: repeat-offender escalation — three of these (astral_shoal,
+  // kinetix_enforcer, boneplate_sentinel) held their v4.17 trim size flat
+  // across two more full-scale passes (26,448 games, zero invariant
+  // violations) without the residual meaningfully closing, the same
+  // "barely moved, take a bigger step" pattern this file's other repeat
+  // offenders (vampire_squid/half_faded_shade, the_locksmiths_regret/
+  // the_abyssal_gate) already went through. swaying_garden is a v4.19.1
+  // -1 that likewise hasn't moved (still #4 cardsToNerf this pass,
+  // n=912). where_the_deep_meets_the_sky is NOT re-escalated here despite
+  // still showing +32.7pt resid — it's already at -4 (this file's largest
+  // stat trim, and already the pool's max cast-difficulty band at 6.0);
+  // carried forward as a design-tension case (see BALANCE_SIM_FINDINGS_
+  // v4.22.md) rather than blindly stacking a 5th stat cut.
+  kinetix_enforcer: -2,
+  boneplate_sentinel: -2,
+  swaying_garden: -2,
   amethyst_starfish: -1,
-  astral_shoal: -2,
+  astral_shoal: -3,
+  // v4.22: first-pass entries, all n=912-1824, all top-12 cardsToNerf this
+  // run (win% far above their cost-band mean) with no prior manual patch.
+  clockwork_nautilus: -1,
+  gulper_eel: -1,
+  playful_otters: -1,
+  cavernous_watcher: -1,
+  // v4.22: cardsToBuff bottom-12 (win% far below cost-band mean) whose
+  // lever is raw Unit stats. phantom_squadron and glowing_manta also
+  // register as "under-costed" on the printed-power costVsAbilityMismatches
+  // table (a different, stats-only metric) — that's the expected shape for
+  // a card whose kit doesn't deliver on its paper efficiency; the buff here
+  // follows the MEASURED win-rate residual, not the printed-power read (see
+  // findings doc for the reasoning).
+  phantom_squadron: 1,
+  glowing_manta: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -818,8 +846,6 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // for free every turn. nanite_culture_lab/the_descent were part of the 28
   // "illegal everywhere" fix this pass (near-zero prior sample) and are
   // deliberately left unchanged pending a fresh read.
-  mist_ghost_ship: -1,
-  ribvault_cathedral: -1,
   jagged_dragonfang_blade: 1,
   jarred_sunspark: 1,
   shimmering_statue: 1,
@@ -828,6 +854,32 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   sunken_meadow: -1,
   obsidian_altar: -1,
   sovereign_spires_of_arrak_zul: -1,
+  // v4.22: mist_ghost_ship/ribvault_cathedral's v4.17 -1 held flat across
+  // three more passes without the costVsAbilityMismatches z-score closing
+  // (still top-10 this pass at +2.65 each) — same repeat-offender
+  // escalation pattern as the_locksmiths_regret/the_abyssal_gate above.
+  mist_ghost_ship: -2,
+  ribvault_cathedral: -2,
+  // v4.22: first-pass Location nerfs — cardsToNerf top offenders whose
+  // lever is onCast value, not a Cast Slot cost (Locations never carry
+  // one). petrified_ribs_citadel is this run's single worst residual
+  // (+36.7pt, n=912); heart_of_the_thermal_grid is #10 (+29.7pt, n=1824).
+  petrified_ribs_citadel: -1,
+  heart_of_the_thermal_grid: -1,
+  // v4.22: cardsToBuff bottom-12 whose lever is onCast value (Charm/Event,
+  // no Cast Slot cost to ease further where already at floor). All n=912+,
+  // all first-pass entries with no prior manual patch. locust_veil already
+  // has a MANUAL_GATE_OVERRIDE easing its combo gate (v4.17); still the
+  // pool's #3 worst residual this pass, so it also gets a value buff here
+  // rather than a third gate step.
+  pulsing_heartstone: 1,
+  thornfang_vine: 1,
+  locust_veil: 1,
+  amber_sphere: 1,
+  resonant_shuriken: 1,
+  coral_collapse: 1, // n=3648 this pass — the largest-sample entry on the buff list
+  kinetic_siphon_swarm: 1,
+  diver_s_lantern: 1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {

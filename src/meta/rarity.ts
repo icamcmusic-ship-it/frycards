@@ -1,3 +1,12 @@
+/** The 4 sets in the live card pool — single source of truth for "Includes:
+ * ..." lines on packs whose `allowed_sets` is null (i.e. draws from everything). */
+export const ALL_SET_NAMES: string[] = [
+  'Blue Coral',
+  'Crimson Circuit',
+  'Dragonbone Wastes',
+  'Full Arts Collection 1',
+];
+
 /**
  * Global rarity color code — fixed across every theme, since rarity is a
  * collection/economy signal players learn to recognize, not app chrome.

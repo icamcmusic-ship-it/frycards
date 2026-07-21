@@ -26,7 +26,7 @@ import {
   MechanicLabel,
   CardKeyword,
 } from '../game/v3/keywords';
-import { COLOR_LETTER, COLOR_PIP, colorBg, colorHexPrimary } from '../meta/colors';
+import { COLOR_PIP, colorBg, colorHexPrimary } from '../meta/colors';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -212,11 +212,17 @@ ensurePremiumStyles();
  * light-traces (cyan clockwise, violet counter-clockwise), and faceted gem
  * ornaments at the side midpoints. Non-uniform viewBox scaling is fine —
  * everything drawn is decorative line-work meant to hug the card edges. */
-function UltraFiligree() {
+function UltraFiligree({ size }: { size: CardSize }) {
+  // v4.22: was a plain `absolute inset-0` — flush with the card's padding
+  // edge (inside the outer border), not its true outer edge, so the whole
+  // hand-drawn frame sat visibly inset from the real border. Negative-inset
+  // by the tier's border width so the line-work actually hugs the edge.
+  const b = OUTER_BORDER_PX[size];
   return (
     <svg
       aria-hidden
-      className="ur-filigree absolute inset-0 w-full h-full z-20"
+      className="ur-filigree absolute w-auto h-auto z-20"
+      style={{ top: -b, right: -b, bottom: -b, left: -b }}
       viewBox="0 0 100 140"
       preserveAspectRatio="none"
     >
@@ -281,18 +287,42 @@ function MythicCrest() {
   );
 }
 
+/** Border width (px) of each tier's outer card frame — see `TIER[size].
+ * outerBorder` (border / border-2 / border-[3px] / border-4). An absolutely-
+ * positioned child with `inset: 0` sits flush with its containing block's
+ * *padding* edge (i.e. already inside the parent's border), not the true
+ * outer edge — so any full-face overlay meant to hug the card's real border
+ * needs to negative-inset outward by exactly this much to actually reach it. */
+const OUTER_BORDER_PX: Record<CardSize, number> = { micro: 1, compact: 2, standard: 3, full: 4 };
+
 /** v4.19: inline xor-mask that confines a full-face animated layer to the
  * card's outer border ring, so premium border animations never overlap the
  * name/stats/chips/flavor content. Same technique as `.my-void`/`.ur-aurora`
  * in PREMIUM_CSS, expressed as an inline style for layers whose base class
- * lives in index.css (ultra-sparkle, rarity-sheen). */
-const EDGE_RING_MASK: React.CSSProperties = {
-  padding: 7,
-  WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-  WebkitMaskComposite: 'xor',
-  mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-  maskComposite: 'exclude',
-};
+ * lives in index.css (ultra-sparkle, rarity-sheen).
+ *
+ * v4.22: previously a static `inset-0` object — that positioned the ring
+ * flush with the card's padding edge, i.e. `outerBorder`-width pixels
+ * *inside* the actual card border, so the Ultra-Rare ring effect visibly
+ * floated inset from the real edge instead of hugging it. Now takes `size`
+ * and negative-insets by `OUTER_BORDER_PX[size]` to land exactly on the true
+ * outer edge (the card wrapper's own `overflow-hidden` still clips it to the
+ * frame, so this can't bleed past the card). */
+function edgeRingMaskStyle(size: CardSize): React.CSSProperties {
+  const b = OUTER_BORDER_PX[size];
+  return {
+    position: 'absolute',
+    top: -b,
+    right: -b,
+    bottom: -b,
+    left: -b,
+    padding: 7,
+    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+    WebkitMaskComposite: 'xor',
+    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+    maskComposite: 'exclude',
+  };
+}
 
 /** Small per-type glyph shown next to the name — a quick visual "what is this" cue. */
 const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> = {
@@ -1225,7 +1255,14 @@ const TIER: Record<
     typeLine: 'mt-1 text-[10px]',
     showSetSuffix: true,
     textBoxPad: 'p-1.5',
-    keywordMax: 99,
+    // v4.22: used to be 99 ("full preview always shows everything") — but a
+    // procedurally-loaded card can carry a long tail of keyword+mechanic
+    // chips, and with no cap the chip row just kept wrapping until it ran
+    // past the text box and off the bottom of the card. Capped like every
+    // other tier now; the "+N" overflow chip (below) covers the rest, and
+    // the inspector/expanded view is where a player goes to see everything
+    // in full via each chip's own popover anyway.
+    keywordMax: 8,
     keywordSmall: false,
     chipCosts: true,
     showFlavor: true,
@@ -1760,7 +1797,24 @@ export function CardFace({
           }
         >
           {totalChips > 0 && cfg.keywordMax > 0 && (
-            <div className="shrink-0 flex flex-row flex-wrap gap-1 min-h-[9px] overflow-hidden">
+            <div
+              className={cn(
+                'shrink-0 flex flex-row flex-wrap gap-1 min-h-[9px] overflow-hidden',
+                // Belt-and-suspenders alongside the keywordMax chip cap above:
+                // even a capped chip count can wrap into more rows than a
+                // small card face has room for (long labels, narrow tiers) —
+                // a hard max-height + clip is a graceful cutoff instead of
+                // the row pushing flavor text/the footer down and off the
+                // card, which is what happened before this cap existed.
+                size === 'full'
+                  ? 'max-h-[42px]'
+                  : size === 'standard'
+                    ? 'max-h-[30px]'
+                    : size === 'compact'
+                      ? 'max-h-[20px]'
+                      : 'max-h-[11px]',
+              )}
+            >
               {keywordChips.slice(0, cfg.keywordMax).map((k) => (
                 <KeywordChip
                   key={k.kw}
@@ -1826,24 +1880,57 @@ export function CardFace({
           bar — same footer row real estate, no header-layout risk (the
           header's fitFontSize math is already tightly packed). Multicolor
           cards show one pip per color, in COLORS order. */}
-      {cardColorsForFace.length > 0 && (
+      {/* v4.22: was a solid pip circle stamped with an MTG-style shorthand
+          letter (R/U/G/K/P/S/C) that read as a "random unrelated letter" —
+          the abbreviation scheme doesn't map to the color names players
+          actually see (COLOR_HEX/COLOR_LETTER), so a card's color pip and
+          its printed color could look disconnected at a glance. Swapped for
+          a plain swatch dot (no glyph) — the pip's own fill IS the color, no
+          decoding required — with a slightly heavier ink ring so it reads
+          clearly against the "Monochrome & Pop" ink-border language used
+          everywhere else on the face. The full color name(s) are still one
+          hover/long-press away via `title`. */}
+      {cardColorsForFace.length > 0 && !fullArt && (
         <div
-          className="relative z-10 flex justify-center gap-0.5 shrink-0 bg-[var(--c-paper)]/70 py-[1px]"
+          className="relative z-10 flex justify-center gap-1 shrink-0 bg-[var(--c-paper)]/70 py-[2px]"
           title={`Color: ${cardColorsForFace.join('/')}`}
         >
           {cardColorsForFace.map((c) => (
             <span
               key={c}
-              className="w-3 h-3 rounded-full border border-[var(--c-ink)]/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.5)] flex items-center justify-center text-[6px] font-black leading-none"
-              style={{ backgroundColor: COLOR_PIP[c].bg, color: COLOR_PIP[c].fg }}
-            >
-              {COLOR_LETTER[c]}
-            </span>
+              aria-hidden
+              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-[var(--c-ink)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)]"
+              style={{ backgroundColor: COLOR_PIP[c].bg }}
+            />
           ))}
         </div>
       )}
-      {def.set && (
+      {def.set && !fullArt && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
+      )}
+      {/* Full-Art: the footer's color pips + set bar used to render in the
+          normal flex flow like every other rarity — an opaque bg-paper strip
+          that cut across the bottom of the art instead of letting it run
+          edge-to-edge. Rendered as a floating overlay instead: no background
+          band, just the swatch dots with a drop-shadow for legibility over
+          whatever the art looks like underneath. */}
+      {fullArt && cardColorsForFace.length > 0 && (
+        <div
+          className="absolute z-20 bottom-1.5 right-1.5 flex gap-1"
+          title={`Color: ${cardColorsForFace.join('/')}`}
+        >
+          {cardColorsForFace.map((c) => (
+            <span
+              key={c}
+              aria-hidden
+              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-white/80"
+              style={{
+                backgroundColor: COLOR_PIP[c].bg,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,0,0,0.35)',
+              }}
+            />
+          ))}
+        </div>
       )}
       {footer}
 
@@ -1861,7 +1948,7 @@ export function CardFace({
           )}
           // Ultra-Rare: the moving sheen stays on the border ring only, so
           // the animation never sweeps across (and fights) the card text.
-          style={ultra ? EDGE_RING_MASK : undefined}
+          style={ultra ? edgeRingMaskStyle(size) : undefined}
         />
       )}
       {/* v4.6 Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
@@ -1870,10 +1957,12 @@ export function CardFace({
         <>
           <div
             aria-hidden
-            className="ultra-sparkle absolute inset-0 pointer-events-none"
+            className="ultra-sparkle pointer-events-none"
             // Confined to the border ring — the gold-dust twinkle used to
-            // sit over the whole face, including the text box.
-            style={EDGE_RING_MASK}
+            // sit over the whole face, including the text box. Also hugs the
+            // card's true outer edge now (see edgeRingMaskStyle) instead of
+            // sitting inset by the frame's own border width.
+            style={edgeRingMaskStyle(size)}
           />
           {/* v4.8 "Aurora Vault" (full tier only): chromatic cut-corner
               lattice with two counter-rotating light-traces, plus a hover/
@@ -1883,11 +1972,19 @@ export function CardFace({
               the extra layers. */}
           {size === 'full' ? (
             <>
-              <UltraFiligree />
-              <div aria-hidden className="ur-aurora absolute inset-0 z-10" />
+              <UltraFiligree size={size} />
+              <div
+                aria-hidden
+                className="ur-aurora absolute z-10"
+                style={{ top: -OUTER_BORDER_PX[size], right: -OUTER_BORDER_PX[size], bottom: -OUTER_BORDER_PX[size], left: -OUTER_BORDER_PX[size] }}
+              />
             </>
           ) : (
-            <div aria-hidden className="absolute inset-0 pointer-events-none z-20">
+            <div
+              aria-hidden
+              className="absolute pointer-events-none z-20"
+              style={{ top: -OUTER_BORDER_PX[size], right: -OUTER_BORDER_PX[size], bottom: -OUTER_BORDER_PX[size], left: -OUTER_BORDER_PX[size] }}
+            >
               <span className="absolute top-0.5 left-0.5 w-3 h-3 border-t-2 border-l-2 border-[#d4af37] rounded-tl-[3px]" />
               <span className="absolute top-0.5 right-0.5 w-3 h-3 border-t-2 border-r-2 border-[#d4af37] rounded-tr-[3px]" />
               <span className="absolute bottom-0.5 left-0.5 w-3 h-3 border-b-2 border-l-2 border-[#d4af37] rounded-bl-[3px]" />
