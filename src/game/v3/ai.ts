@@ -1700,6 +1700,12 @@ function recordCombatLapses(g: Game, p: Player) {
     const avail = p.board
       .filter((u) => canAttack(g, u))
       .reduce((s, u) => s + Math.max(0, effAtk(g, u) - toll), 0);
-    if (avail >= remainingHp(g, opp.leader)) lapse(g, p.id, 'lapseMissedLethal');
+    if (avail >= remainingHp(g, opp.leader)) {
+      lapse(g, p.id, 'lapseMissedLethal');
+      // v4.21 harness upgrade: severity, not just a boolean occurrence — how
+      // much lethal damage was left on the table this turn (a lapse that
+      // misses lethal by 1 is a different problem than missing it by 20).
+      lapse(g, p.id, 'lapseMissedLethalDamage', avail - remainingHp(g, opp.leader));
+    }
   }
 }
