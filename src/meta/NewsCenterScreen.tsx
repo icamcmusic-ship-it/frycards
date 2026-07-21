@@ -121,9 +121,14 @@ export function NewsCenterScreen({
             {isCreator && (
               <button
                 onClick={() => {
-                  // Don't carry a stale publish error into the next
-                  // open/close of the composer.
+                  // Don't carry a stale publish error — or an abandoned
+                  // draft's title/body — into the next open/close of the
+                  // composer.
                   setPublishErr(null);
+                  if (composing) {
+                    setTitle('');
+                    setBody('');
+                  }
                   setComposing((c) => !c);
                 }}
                 disabled={publishing}

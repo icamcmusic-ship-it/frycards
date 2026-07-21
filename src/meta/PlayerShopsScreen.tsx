@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Store,
   Star,
@@ -170,7 +170,15 @@ function CardStackPicker({
   const spare = selected
     ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
     : { normal: 0, foil: 0 };
-  const maxQty = foil ? spare.foil : spare.normal;
+  const totalSpare = foil ? spare.foil : spare.normal;
+  // Copies of this exact card/foil combo already staged in `items` don't
+  // stop being "spare" — but they're no longer available to add again, so
+  // the input's max (and the "of X spare" label) must be reduced by however
+  // much of this card/foil is already in the pool.
+  const alreadyInPool = items
+    .filter((i) => i.card_id === cardId && i.foil === foil)
+    .reduce((sum, i) => sum + i.quantity, 0);
+  const maxQty = Math.max(0, totalSpare - alreadyInPool);
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
   const add = () => {
@@ -181,12 +189,11 @@ function CardStackPicker({
       const idx = items.findIndex((i) => i.card_id === cardId && i.foil === foil);
       if (idx >= 0) {
         const next = [...items];
-        // Re-clamp to maxQty — the guard above only checks the new `qty`
-        // against maxQty, but a second add for the same card/foil stacks
-        // onto whatever's already in the pool, which can exceed the
-        // player's actual spare copies even though each individual add
-        // passed the guard.
-        next[idx] = { ...next[idx], quantity: Math.min(maxQty, next[idx].quantity + qty) };
+        // Re-clamp to totalSpare (not maxQty, which is already net of what's
+        // in the pool) — a second add for the same card/foil stacks onto
+        // whatever's already there, and this is the safety net against
+        // exceeding the player's actual spare copies.
+        next[idx] = { ...next[idx], quantity: Math.min(totalSpare, next[idx].quantity + qty) };
         onChange(next);
       } else {
         onChange([...items, { card_id: cardId, foil, quantity: qty }]);
@@ -519,6 +526,7 @@ function ReportModal({
 function MysteryListingCard({
   listing,
   isOwn,
+  shopActive,
   onBuy,
   onReport,
   busy,
@@ -527,6 +535,7 @@ function MysteryListingCard({
   key?: React.Key;
   listing: ShopListing;
   isOwn: boolean;
+  shopActive: boolean;
   onBuy: () => void;
   onReport: () => void;
   busy: boolean;
@@ -604,7 +613,7 @@ function MysteryListingCard({
             </span>
           )}
         </div>
-        {!isOwn && !soldOut && (
+        {!isOwn && !soldOut && shopActive && (
           <div className="flex gap-2 mt-2">
             <PopButton color="red" disabled={busy || credits < listing.price} onClick={onBuy}>
               BUY PACK ▸
@@ -706,6 +715,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           key={l.id}
           listing={l}
           isOwn={isOwn}
+          shopActive={shop?.status === 'active'}
           busy={busy}
           credits={profile?.credits || 0}
           onBuy={() => {
@@ -756,7 +766,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
               </span>
             )}
           </div>
-          {!isOwn && l.status === 'active' && (
+          {!isOwn && l.status === 'active' && shop?.status === 'active' && (
             <div className="flex gap-2 mt-2">
               <PopButton
                 color="red"
@@ -951,7 +961,12 @@ function MyShopTab() {
     };
   }, [reload]);
 
-  const run = async (fn: () => Promise<string | null>, success?: string, keepAddMode?: boolean) => {
+  const run = async (
+    fn: () => Promise<string | null>,
+    success?: string,
+    keepAddMode?: boolean,
+    onSuccess?: () => void,
+  ) => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -964,6 +979,7 @@ function MyShopTab() {
         refreshProfile();
         refreshCollection();
         if (!keepAddMode) setAddMode('none');
+        onSuccess?.();
         // Awaited so `busy` stays true (and every gated button disabled)
         // until this reload actually lands — see the matching comment in
         // StorefrontView's run() for why a fire-and-forget reload here let
@@ -1179,11 +1195,12 @@ function MyShopTab() {
           templates={templates}
           emptySlots={emptySlots}
           busy={busy}
-          onCreateTemplate={(name, size, mode, config) =>
+          onCreateTemplate={(name, size, mode, config, onSuccess) =>
             run(
               () => createMysteryTemplate(name, size, mode, config).then((r) => r.error),
               'Pack type created! Now submit a pool for it below.',
               true,
+              onSuccess,
             )
           }
           onSubmitPool={(templateId, slotId, pool, price) => {
@@ -1470,7 +1487,13 @@ function MysteryBuilderPanel({
   templates: MysteryTemplate[];
   emptySlots: ShopSlot[];
   busy: boolean;
-  onCreateTemplate: (name: string, size: number, mode: MysteryMode, config: any) => void;
+  onCreateTemplate: (
+    name: string,
+    size: number,
+    mode: MysteryMode,
+    config: any,
+    onSuccess: () => void,
+  ) => void;
   onSubmitPool: (
     templateId: string,
     slotId: string,
@@ -1505,20 +1528,48 @@ function MysteryBuilderPanel({
     });
   }, [tSize]);
 
+  // This panel stays mounted across template creation — if the current
+  // selection is empty or no longer present in a freshly reloaded list
+  // (e.g. right after CREATE PACK TYPE), fall back to a valid default
+  // instead of leaving the dropdown pointed at nothing.
+  useEffect(() => {
+    if (!templateId || !templates.some((t) => t.id === templateId)) {
+      setTemplateId(templates[0]?.id || '');
+    }
+  }, [templates, templateId]);
+
+  useEffect(() => {
+    if (!slotId || !emptySlots.some((s) => s.id === slotId)) {
+      setSlotId(emptySlots[0]?.id || '');
+    }
+  }, [emptySlots, slotId]);
+
   const template = templates.find((t) => t.id === templateId);
+
+  // Request-token guard: if the pool or template selection changes while a
+  // PREVIEW POOL request is in flight, a stale response must not overwrite
+  // validation state for content no longer on screen — that would let
+  // SUBMIT POOL & LIST fire on a pool that was never actually validated.
+  const checkRequestId = useRef(0);
+  useEffect(() => {
+    checkRequestId.current++;
+  }, [pool, templateId]);
 
   const checkPool = async () => {
     if (!templateId) return;
+    const requestId = ++checkRequestId.current;
     setChecking(true);
     setCheckError('');
     try {
       const { data, error } = await previewMysteryPool(templateId, pool);
+      if (checkRequestId.current !== requestId) return;
       setValidation(data);
       if (!data && error) setCheckError(error);
     } catch {
+      if (checkRequestId.current !== requestId) return;
       setCheckError('Could not check this pool — check your connection and try again.');
     } finally {
-      setChecking(false);
+      if (checkRequestId.current === requestId) setChecking(false);
     }
   };
 
@@ -1645,6 +1696,15 @@ function MysteryBuilderPanel({
                 tSize,
                 tMode,
                 tMode === 'simple' ? { rarity_weights: weights } : { slots: slotSpecs },
+                // Clear the form on success — otherwise a double-click (or
+                // re-click before the reload lands) creates a duplicate
+                // template with identical config.
+                () => {
+                  setTName('');
+                  setTSize(3);
+                  setWeights({ Common: 0.6, Uncommon: 0.3, Rare: 0.1 });
+                  setSlotSpecs(Array.from({ length: 3 }, () => ({ mode: 'open' as const })));
+                },
               )
             }
           >

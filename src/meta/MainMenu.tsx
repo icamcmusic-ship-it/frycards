@@ -23,6 +23,7 @@ import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
 import { RoleBadge } from './RoleBadge';
 import { claimDailyLogin, DailyLoginResult } from '../lib/supabase';
 import { fmtCredits } from './economy';
+import { SafeImage } from './SafeImage';
 
 export type MetaScreen =
   | 'menu'
@@ -266,10 +267,11 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             }
           >
             {avatar?.image_url ? (
-              <img
+              <SafeImage
                 src={avatar.image_url}
                 alt="Profile avatar"
                 className="w-full h-full object-cover"
+                fallbackText={avatar.name}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-xl">

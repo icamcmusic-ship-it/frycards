@@ -47,7 +47,7 @@ export function SafeImage({
   return (
     <img
       src={src}
-      alt={alt}
+      alt={alt ?? ''}
       className={className}
       draggable={false}
       loading="lazy"

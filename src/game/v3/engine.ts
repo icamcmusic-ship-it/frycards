@@ -190,6 +190,11 @@ export interface GameStats {
   overrunTriggers: number;
   pierceOverflowDamage: number;
   anchorCapBonuses: number;
+  /** v4.24 instrumentation: total End Phase hand-cap (HAND_LIMIT) forced
+   * discards across the game — see finishEndPhase. Previously untracked;
+   * the per-turn "discard down to 8" mechanic had zero visibility into how
+   * often it bites or which cards it hits. */
+  handLimitDiscards: number;
 }
 
 /** Increment a per-player decision counter (v4.1 tracking). */
@@ -680,6 +685,7 @@ export function newGame(
       overrunTriggers: 0,
       pierceOverflowDamage: 0,
       anchorCapBonuses: 0,
+      handLimitDiscards: 0,
     },
     rules: { ...DEFAULT_RULES, ...rules },
     stage: 'PRE_REROLL',
@@ -2199,6 +2205,9 @@ export function finishEndPhase(g: Game, discardChooser?: (hand: Inst[]) => Inst)
     const c = p.hand.splice(idx >= 0 ? idx : p.hand.length - 1, 1)[0];
     discardCard(g, p, c);
     g.log.push(`${p.id} discarded ${c.def.name} (hand size).`);
+    g.stats.handLimitDiscards++;
+    decide(g, p.id, 'handLimitDiscardOccurred');
+    decide(g, p.id, `handLimitDiscard:${c.def.id}`);
   }
   // Exhaustion clears at start of next own turn; Ward and Steel both refresh
   // each turn for everyone (leader is never a Unit, so steelUsed is a no-op

@@ -1450,12 +1450,19 @@ export function GameV4({
       say('No exhausted permanent has a high-enough resting die.');
       return;
     }
-    if (
-      needsTarget(u.def.ability.effect) &&
-      targetsFor(g, HUMAN, u.def.ability.effect).length === 0
-    ) {
-      say('No legal target.');
-      return;
+    if (needsTarget(u.def.ability.effect)) {
+      // Mirror the engine's abilityNoRepeatTarget rule (same filter tryAbility
+      // and the pendingTargets render-time computation already apply) so a
+      // Rally-able card whose only remaining legal target is last turn's
+      // target doesn't open a donor-pick UI that dead-ends into a target
+      // picker with nothing selectable.
+      let ts = targetsFor(g, HUMAN, u.def.ability.effect);
+      if (u.def.abilityNoRepeatTarget && u.lastAbilityTargetIid)
+        ts = ts.filter((t) => t.iid !== u.lastAbilityTargetIid);
+      if (ts.length === 0) {
+        say('No legal target.');
+        return;
+      }
     }
     setRallyPick(u.iid);
     setPending(null);
@@ -2257,6 +2264,7 @@ export function GameV4({
                 ? () => resolveRallySource(me.leader.iid)
                 : undefined
           }
+          onInspect={() => setInspect(me.leader.def)}
         />
         {me.location ? (
           <LocationPanel
@@ -2580,7 +2588,15 @@ export function GameV4({
                     if (!echoPick) previewIntent(c.iid);
                   }}
                   onFocus={() => {
-                    if (!echoPick) setPreview(c.iid);
+                    // Clear any pending debounced hover-intent timer first —
+                    // otherwise a mouse hover that started on a different
+                    // card just before this one got keyboard-focused can
+                    // still fire afterward and silently snap the preview
+                    // back away from the just-focused card.
+                    if (!echoPick) {
+                      clearHoverIntent();
+                      setPreview(c.iid);
+                    }
                   }}
                   onClick={activate}
                   onKeyDown={(e) => {
@@ -2738,7 +2754,12 @@ export function GameV4({
           the `confirmDialog` state above). */}
       {confirmDialog && (
         <div className="absolute inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center"
+          >
             <div className="text-[12px] font-bold mb-3">{confirmDialog.text}</div>
             <div className="flex gap-2 justify-center">
               <button
@@ -2765,7 +2786,12 @@ export function GameV4({
       {/* Forced discard (hand size &gt; 8 at End Phase) — player picks which cards */}
       {forcedDiscard && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl my-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Discard down to ${HAND_LIMIT}`}
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl my-auto"
+          >
             <div className="heading-font text-xl mb-1">Discard Down to {HAND_LIMIT}</div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
               Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
@@ -2831,7 +2857,12 @@ export function GameV4({
           actually does. */}
       {stage === 'mulligan' && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mulligan"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto"
+          >
             <div className="heading-font text-3xl mb-1">
               {mulliganUsed ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
             </div>
@@ -2880,7 +2911,12 @@ export function GameV4({
       {/* Game over */}
       {stage === 'over' && g.winner && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center">
-          <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Match result"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center"
+          >
             <div className="heading-font text-3xl mb-2">
               {g.winner === 'draw' ? 'DRAW' : g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
             </div>

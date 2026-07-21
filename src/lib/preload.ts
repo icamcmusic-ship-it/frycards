@@ -21,7 +21,7 @@ function loadOne(url: string): Promise<void> {
       // for bandwidth with whatever loads next.
       img.onload = null;
       img.onerror = null;
-      img.src = '';
+      img.removeAttribute('src');
       resolve();
     };
     const timer = window.setTimeout(settle, PER_IMAGE_TIMEOUT_MS);

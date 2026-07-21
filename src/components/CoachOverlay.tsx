@@ -66,6 +66,20 @@ export function CoachOverlay({ stage }: { stage: string }) {
     if (next) {
       shown.current.add(next.stage);
       setStep(next);
+    } else if (shown.current.size >= SCRIPT.length) {
+      // v4.24 bug fix: every step has now been shown at least once, but the
+      // player never clicked the final step's own "GOT IT — I'M READY"
+      // button before the game moved on — the 'cpu' stage in particular
+      // advances itself on timers with no player input required
+      // (GameV4.tsx's tickCpuNarration -> beginHumanTurn), so it's easy to
+      // miss. Previously this fell through to the branch below, which just
+      // hides the callout WITHOUT marking the tutorial done — the whole
+      // 5-step walkthrough would then silently replay from step 1 on the
+      // player's next match, indefinitely. Treat "shown every step" as a
+      // real completion.
+      markCoachDone();
+      setDismissed(true);
+      setStep(null);
     } else {
       // The game has moved on to a stage this step doesn't cover — hide it
       // rather than leaving it stuck on screen indefinitely (e.g. a player

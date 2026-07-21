@@ -210,27 +210,39 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setDataLoading(true);
-      const [prof, coll, serial, cosm, dks, inv] = await Promise.all([
-        fetchProfile(userId),
-        fetchCollection(userId),
-        fetchMySerializedCards(userId),
-        fetchCosmetics(userId),
-        fetchDecks(userId),
-        fetchInventory(userId),
-      ]);
-      if (cancelled) return;
-      setProfile(prof);
-      setCollection(coll);
-      setSerializedCards(serial);
-      setCosmetics(cosm);
-      setDecks(dks);
-      setInventory(inv);
-      setDataLoading(false);
+      try {
+        const [prof, coll, serial, cosm, dks, inv] = await Promise.all([
+          fetchProfile(userId),
+          fetchCollection(userId),
+          fetchMySerializedCards(userId),
+          fetchCosmetics(userId),
+          fetchDecks(userId),
+          fetchInventory(userId),
+        ]);
+        if (cancelled) return;
+        setProfile(prof);
+        setCollection(coll);
+        setSerializedCards(serial);
+        setCosmetics(cosm);
+        setDecks(dks);
+        setInventory(inv);
+      } catch {
+        // A thrown rejection here (offline/timeout) previously skipped
+        // setDataLoading(false) entirely, leaving every screen that gates on
+        // it (DeckBuilderScreen, CollectionScreen, …) stuck on its loading
+        // state forever with no error and no way out. Reuses the same
+        // bootError + retryBoot recovery path as the session/store bootstrap
+        // effects above.
+        if (cancelled) return;
+        setBootError("Couldn't reach the server. Check your connection and try again.");
+      } finally {
+        if (!cancelled) setDataLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, bootAttempt]);
 
   const signOut = useCallback(async () => {
     try {

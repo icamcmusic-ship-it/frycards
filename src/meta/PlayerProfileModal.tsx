@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
 import { RoleBadge } from './RoleBadge';
@@ -50,6 +50,19 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
   const [card, setCard] = useState<PlayerProfileCard | null | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
   const isSelf = session?.user?.id === userId;
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the dialog on open (it previously stayed wherever it was
+  // on the trigger button behind the overlay, so keyboard/screen-reader users
+  // landed nowhere near the modal that just appeared) and restore it to
+  // whatever triggered the modal once it closes.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,10 +99,12 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
       onClick={onClose}
     >
       <div
-        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        ref={dialogRef}
+        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-lg w-full max-h-[90vh] overflow-y-auto outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
       >
         {card === undefined ? (
           <div className="p-8 text-center text-[11px] font-bold text-[var(--c-steel)] animate-pulse">
@@ -149,7 +164,12 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                   </div>
                 </div>
               </div>
-              <PopButton color="yellow" onClick={onClose} className="absolute top-2 right-2">
+              <PopButton
+                color="yellow"
+                onClick={onClose}
+                className="absolute top-2 right-2"
+                title="Close profile"
+              >
                 ✕
               </PopButton>
             </div>
