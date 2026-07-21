@@ -81,6 +81,14 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       // the busy guard only once the refetched profile actually reflects
       // this write, or a second quick click can overwrite this one's change.
       else await refreshProfile();
+    } catch {
+      // setShowcaseCards/refreshProfile rejecting outright (network error,
+      // Supabase client throwing instead of returning {error}) used to leave
+      // the click looking like it did nothing at all — no error, no updated
+      // showcase, just a silently reset busy flag. Every other RPC-backed
+      // action in this app (handleEquip, handleRename, bulkQuicksell, …)
+      // surfaces this case with a visible Notice; this one didn't.
+      setShowcaseError('Something went wrong — check your connection and try again.');
     } finally {
       setShowcaseBusy(false);
     }

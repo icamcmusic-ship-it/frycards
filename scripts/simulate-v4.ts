@@ -612,6 +612,13 @@ interface SuiteResult {
    * rate, same "once per deck" convention as keywordInDeck/typeInDeck. */
   colorInDeck: Record<string, number>;
   colorInWinDeck: Record<string, number>;
+  /** v4.22 harness upgrade: set-level (deck contains >=1 card from this
+   * set) -> win rate, same "once per deck" convention — a direct read on
+   * whether a given content drop (Set 1/2/3/Full-Art Collection) is over-
+   * or under-powered relative to the rest of the live pool, which no prior
+   * table isolated (color/type/keyword all cut across sets). */
+  setInDeck: Record<string, number>;
+  setInWinDeck: Record<string, number>;
   /** v4.12: archetype-vs-archetype head-to-head win rate matrix — catches
    * hard counters / rock-paper-scissors matchup problems that aggregate
    * archetype win% (vs. the whole field) can't see. matchupW[a][b] = games
@@ -700,6 +707,8 @@ function newResult(): SuiteResult {
     typeInWinDeck: {},
     colorInDeck: {},
     colorInWinDeck: {},
+    setInDeck: {},
+    setInWinDeck: {},
     matchupW: {},
     matchupN: {},
     comebackWins: 0,
@@ -1002,6 +1011,15 @@ function runGame(
     for (const c of colors) {
       r.colorInDeck[c] = (r.colorInDeck[c] || 0) + 1;
       if (won) r.colorInWinDeck[c] = (r.colorInWinDeck[c] || 0) + 1;
+    }
+    const sets = new Set<string>();
+    for (const id of Object.keys(entry.deck.cards)) {
+      const s = POOL_BY_ID[id]?.set;
+      if (s) sets.add(s);
+    }
+    for (const s of sets) {
+      r.setInDeck[s] = (r.setInDeck[s] || 0) + 1;
+      if (won) r.setInWinDeck[s] = (r.setInWinDeck[s] || 0) + 1;
     }
   }
 }
@@ -1637,6 +1655,38 @@ for (const c of COLORS.filter((c) => (R.colorInDeck[c] || 0) >= 200).sort(
 ))
   console.log(`${c.padEnd(10)} win%=${pct(R.colorInWinDeck[c] || 0, R.colorInDeck[c])}  (n=${R.colorInDeck[c]})`);
 
+console.log('\n--- v4.22 Set win rate (deck contains >=1 card from this set), min n=100 ---');
+for (const s of Object.keys(R.setInDeck)
+  .filter((s) => (R.setInDeck[s] || 0) >= 100)
+  .sort(
+    (a, b) => (R.setInWinDeck[b] || 0) / R.setInDeck[b] - (R.setInWinDeck[a] || 0) / R.setInDeck[a],
+  ))
+  console.log(`${s.padEnd(24)} win%=${pct(R.setInWinDeck[s] || 0, R.setInDeck[s])}  (n=${R.setInDeck[s]})`);
+
+// v4.22 harness upgrade: keyword-COUNT-per-card distribution — a pure static
+// pool-shape metric (not win-rate), added directly for the "keyword/flavor
+// text overflow on the card face" bug report — surfaces exactly how many
+// live cards carry enough simultaneous keywords to be a rendering risk, so
+// the UI fix (display cap) and any pool-side keyword-density trim can be
+// sized against real numbers instead of a guess.
+console.log('\n--- Keyword count per card (pool-shape, not win-rate) ---');
+{
+  const counts: Record<number, number> = {};
+  const heavy: { name: string; n: number; kws: string[] }[] = [];
+  for (const id of Object.keys(POOL_BY_ID)) {
+    const def = POOL_BY_ID[id];
+    if (def.type === 'Leader') continue;
+    const n = def.keywords?.length || 0;
+    counts[n] = (counts[n] || 0) + 1;
+    if (n >= 3) heavy.push({ name: def.name, n, kws: def.keywords || [] });
+  }
+  for (const n of Object.keys(counts).map(Number).sort((a, b) => a - b))
+    console.log(`  ${n} keyword(s): ${counts[n]} cards`);
+  console.log(`  Cards with 3+ simultaneous keywords (overflow risk): ${heavy.length}`);
+  for (const h of heavy.sort((a, b) => b.n - a.n).slice(0, 20))
+    console.log(`    ${h.name.padEnd(28)} [${h.kws.join(', ')}]`);
+}
+
 console.log('\n--- v4.13 Leader color identity ---');
 for (const [leaderId, identity] of Object.entries(LEADER_COLORS))
   console.log(`${(POOL_BY_ID[leaderId]?.name || leaderId).padEnd(28)} ${identity.join('/')}`);
@@ -2073,6 +2123,11 @@ try {
         ),
         lapsePerGameByArch: archLapseRows,
         balanceSummary,
+        setWinRate: Object.fromEntries(
+          Object.keys(R.setInDeck)
+            .filter((s) => (R.setInDeck[s] || 0) >= 100)
+            .map((s) => [s, { winPct: (100 * (R.setInWinDeck[s] || 0)) / R.setInDeck[s], n: R.setInDeck[s] }]),
+        ),
       },
       null,
       2,

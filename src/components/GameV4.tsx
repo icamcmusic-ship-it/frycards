@@ -2050,9 +2050,18 @@ export function GameV4({
             </span>
             {foe.location && (
               <span
+                role="button"
+                tabIndex={0}
                 className="bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer"
                 onClick={() => setInspect(foe.location!.def)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setInspect(foe.location!.def);
+                  }
+                }}
                 title="Click to inspect the enemy Location"
+                aria-label={`Inspect enemy Location: ${foe.location.def.name}`}
               >
                 📍 {foe.location.def.name}
               </span>
@@ -2280,8 +2289,17 @@ export function GameV4({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Inspect ${s.def.name}`}
                     className="text-[8px] font-bold text-[var(--c-paper)] truncate cursor-pointer"
                     onClick={() => setInspect(s.def)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setInspect(s.def);
+                      }
+                    }}
                   >
                     {s.def.name}
                   </div>

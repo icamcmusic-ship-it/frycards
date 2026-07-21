@@ -64,8 +64,8 @@ function TradeSide({
     <div className="flex-1 min-w-[180px]">
       <div className="text-[9px] font-black text-[var(--c-steel)] mb-1">{label}</div>
       <div className="flex flex-wrap gap-1">
-        {cards.map((c, i) => (
-          <CardChip key={i} item={c} />
+        {cards.map((c) => (
+          <CardChip key={`${c.card_id}-${c.foil ? 'foil' : 'normal'}`} item={c} />
         ))}
         {credits > 0 && (
           <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-yellow)] ink-border-sm">
@@ -192,7 +192,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       if (err) setError(err);
       else {
         if (success) setNotice(success);
-        reload();
+        // Awaited (not fire-and-forget) so a network failure here is caught
+        // by this same try/catch instead of escaping as an unhandled
+        // rejection — the action itself already succeeded, but the player
+        // still deserves to know the screen may now be showing stale data.
+        await reload();
       }
     } catch {
       setError('Something went wrong — check your connection and try again.');
@@ -204,8 +208,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const handleSearch = async () => {
     if (!query.trim() || searching) return;
     setSearching(true);
+    setError('');
     try {
       setResults(await searchPlayers(query));
+    } catch {
+      setError('Search failed — check your connection and try again.');
     } finally {
       setSearching(false);
     }
@@ -479,7 +486,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         <PopButton
                           color="steel"
                           disabled={busy}
-                          onClick={() => run(() => removeFriend(f.id))}
+                          onClick={() => {
+                            if (!confirm('Cancel this friend request?')) return;
+                            run(() => removeFriend(f.id));
+                          }}
                         >
                           CANCEL
                         </PopButton>
@@ -574,7 +584,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() => run(() => cancelTrade(t.id))}
+                            onClick={() => {
+                              if (!confirm('Cancel this trade offer?')) return;
+                              run(() => cancelTrade(t.id));
+                            }}
                           >
                             CANCEL OFFER
                           </PopButton>

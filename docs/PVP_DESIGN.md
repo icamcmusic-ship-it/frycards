@@ -4,9 +4,11 @@ Status: proposal — no implementation yet.
 
 ## Problem
 
-The game today runs entirely client-side: `gameReducer` (src/game/engine.ts)
-holds all state in a `useReducer`, the opponent is a local CPU, and only the
-final result is reported to Supabase (`record_match_result`). For PvP this is
+The game today runs entirely client-side: `GameV4.tsx` holds the `Game`
+state object (`src/game/v3/engine.ts`) in a plain `useState`, mutates it
+in place via the engine's helper functions, and forces a re-render with a
+`setVersion` counter; the opponent is a local CPU, and only the final
+result is reported to Supabase (`record_match_result`). For PvP this is
 untenable — a client that owns the whole game state can see the opponent's
 hand/deck and fabricate any action or outcome.
 
@@ -14,9 +16,14 @@ hand/deck and fabricate any action or outcome.
 
 - Server-authoritative state: clients never hold hidden information
   (opponent hand, both libraries, face-down locations).
-- Deterministic engine reuse: `gameReducer` is already a pure
-  `(state, action) → state` function — the single most valuable asset for
-  PvP. The server runs the same reducer; clients submit actions only.
+- Deterministic engine reuse: `src/game/v3/engine.ts`'s core functions are
+  already pure/deterministic given a `Game` state and a seeded RNG — the
+  most valuable asset for PvP — but they currently mutate the `Game` object
+  in place rather than returning new state through a single `(state,
+  action) → state` reducer entry point. That reducer-shaped wrapper doesn't
+  exist yet and would need to be introduced as part of this work (it's a
+  smaller lift than writing a server-side rules engine from scratch, since
+  all the actual rules logic is reusable as-is).
 - Reconnect support and per-action timeouts (the rules have no interactive
   priority, which greatly simplifies turn handling: only the active player —
   plus the defender during the block step — ever acts).
@@ -51,8 +58,10 @@ future spectator/replay mode.
 
 ## Phases
 
-1. **Engine extraction** — make `src/game/engine.ts` importable server-side
-   with an injectable RNG seed (verify with the existing simulator).
+1. **Engine extraction** — make `src/game/v3/engine.ts` importable
+   server-side with an injectable RNG seed (verify with the existing
+   simulator), and wrap its mutation-based helpers in the `(state, action)
+   → state` reducer entry point described above.
 2. **Redaction + view model** — `redactStateFor` with unit tests proving no
    hidden info leaks (serialize and grep for opponent card ids).
 3. **Hot-seat-over-network MVP** — two clients, one Edge Function, private

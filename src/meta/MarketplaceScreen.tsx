@@ -395,6 +395,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
         <div
           className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
           onClick={() => setBidFor(null)}
+          role="dialog"
+          aria-modal="true"
         >
           <div
             className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"

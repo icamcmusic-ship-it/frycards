@@ -45,10 +45,6 @@ export interface Profile {
   equipped_avatar: string | null;
   last_free_pack_at: string | null;
   showcase_cards: string[];
-  /** Packs opened since the last Super-Rare+ pull — a Super-Rare (or better)
-   * is guaranteed within 10 (grant_pack_contents' one and only pity rule).
-   * Reset to 0 whenever a pack's best pull is Super-Rare or above. */
-  packs_since_super_rare: number;
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
@@ -107,9 +103,20 @@ export interface PackType {
   is_active: boolean;
   acquisition: string;
   time_limited: boolean;
-  /** Legacy column — per-pack pity was removed (the only pity left is the
-   * global Super-Rare-within-10-packs counter on profiles). Always null. */
+  /** Legacy column — pity was removed entirely (no per-pack or global pity
+   * remains). Always null; unused by the client. */
   pity_note: string | null;
+  /** Set names this pack draws from. NULL = draws from the full card pool
+   * (all sets). Non-null = restricted to exactly these `cards.set_name`
+   * values. */
+  allowed_sets: string[] | null;
+  /** NULL = this row is a standalone store slot. `'set_booster'` or
+   * `'set_box'` = one of a trio of rows (one per set) meant to render as a
+   * single swipeable store tile — see `set_name` and StoreScreen's grouped
+   * pack tile. */
+  pack_group: string | null;
+  /** Which single set this row represents — only set when `pack_group` is set. */
+  set_name: string | null;
 }
 
 export interface PlayerCard {
@@ -838,6 +845,69 @@ export async function buyListing(listingId: string): Promise<string | null> {
 export async function placeBid(listingId: string, amount: number): Promise<string | null> {
   const { error } = await supabase.rpc('place_bid', { p_listing_id: listingId, p_amount: amount });
   return rpcError(error);
+}
+
+// ---------------------------------------------------------------------------
+// Daily Bounties — 5 server-picked cards that rotate once per UTC day, same
+// for every player. Separate from quicksell/shop: capped sells/buys per day.
+// ---------------------------------------------------------------------------
+export interface BountyCard {
+  card_id: string;
+  name: string;
+  rarity: string;
+  card_type: string;
+  image_url: string | null;
+  /** 5x quicksell value, precomputed server-side. */
+  sell_price: number;
+  /** 3x quicksell value, precomputed server-side. */
+  buy_price: number;
+  /** This player already sold this card back today (max 1 sell per card). */
+  already_sold: boolean;
+  /** This player already bought this card from the bounty shop today (blocks selling it back). */
+  already_bought: boolean;
+  /** How many copies of this card the player currently owns. */
+  owned: number;
+}
+
+/** Today's 5 bounty cards (2 Uncommon, 1 Rare, 1 Super-Rare, 1 Full-Art-or-better). */
+export async function getDailyBounties(): Promise<{
+  data: BountyCard[] | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('get_daily_bounties');
+  return { data: (data as BountyCard[]) || null, error: rpcError(error) };
+}
+
+export interface SellBountyResult {
+  ok: boolean;
+  credits: number;
+  card_id: string;
+  sold_for: number;
+}
+
+/** Sell one owned copy of a today's bounty card at 5x quicksell — max 1/card, 3/day total. */
+export async function sellBountyCard(cardId: string): Promise<{
+  data: SellBountyResult | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('sell_bounty_card', { p_card_id: cardId });
+  return { data: (data as SellBountyResult) || null, error: rpcError(error) };
+}
+
+export interface BuyBountyResult {
+  ok: boolean;
+  credits: number;
+  card_id: string;
+  bought_for: number;
+}
+
+/** Buy one copy of a today's bounty card at 3x quicksell. */
+export async function buyBountyCard(cardId: string): Promise<{
+  data: BuyBountyResult | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('buy_bounty_card', { p_card_id: cardId });
+  return { data: (data as BuyBountyResult) || null, error: rpcError(error) };
 }
 
 /** Sell owned copies of a card for a fixed rarity-based credits price (foils pay 2.5x). */

@@ -51,7 +51,8 @@ function usePrefersReducedMotion(): boolean {
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
   );
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!mq) return;
     const onChange = () => setReduced(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
@@ -366,7 +367,14 @@ function TearStage({
       </div>
 
       {/* progress meter + accessible fallback */}
-      <div className="mt-6 w-56 h-2.5 ink-border-sm bg-[var(--c-paper)]/20 overflow-hidden relative">
+      <div
+        className="mt-6 w-56 h-2.5 ink-border-sm bg-[var(--c-paper)]/20 overflow-hidden relative"
+        role="progressbar"
+        aria-label="Tearing pack open"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+      >
         <div className="h-full bg-[var(--c-yellow)]" style={{ width: `${progress * 100}%` }} />
       </div>
       <button

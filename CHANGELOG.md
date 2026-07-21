@@ -7,6 +7,96 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.22 sim-harness upgrade, balance pass, shop overhaul, card-face fixes
+
+- **Sim harness**: added set-level win-rate tracking (deck contains a card
+  from a given set → win%) and a static keyword-count-per-card distribution
+  report (sizes the card-face overflow fix below against real numbers — only
+  12/292 cards carry 3+ simultaneous keywords).
+- **Balance** (full-scale run, 26,448 games, zero invariant violations — see
+  `docs/BALANCE_SIM_FINDINGS_v4.22.md`): Steel held at its current print rate
+  rather than cut a 4th time (activation is now the pool's lowest at 0.27
+  with the single biggest per-fire win swing, +22.6pt — reads as a thin,
+  noisy cohort rather than an OP keyword); Avenge's v4.21 cap cut confirmed
+  stable; escalated six repeat-offender cards whose existing manual
+  stat/value trim held flat across 2+ more passes (Astral Shoal, Kinetix
+  Enforcer, Boneplate Sentinel, Swaying Garden, Mist Ghost Ship, Ribvault
+  Cathedral); first-pass nerfs for Clockwork Nautilus, Gulper Eel, Playful
+  Otters, Cavernous Watcher, Petrified Ribs Citadel, Heart of the Thermal
+  Grid; first-pass buffs for Phantom Squadron, Glowing Manta, Pulsing
+  Heartstone, Thornfang Vine, Locust Veil, Amber Sphere, Resonant Shuriken,
+  Coral Collapse, Kinetic Siphon Swarm, Diver's Lantern. CPU-lapse detector
+  floor confirmed again (every "genuine mistake" detector at 0/26,448 games).
+  Card pool re-verified byte-for-byte in sync with Supabase.
+- **Shop overhaul**: pity removed entirely (`profiles.packs_since_super_rare`
+  dropped, `grant_pack_contents`'s pity slot deleted, UI banner removed —
+  no pity system remains anywhere); the pack shelf pruned to exactly Daily
+  Free Pack / Starter Pack / Standard Box (every other purchasable pack/box
+  deleted, with achievement/battle-pass rewards that referenced a deleted
+  pack redirected to an equivalent credits amount); added one swipeable
+  per-set booster-pack store slot and one per-set booster-box slot (Blue
+  Coral / Crimson Circuit / Dragonbone Wastes, each also able to pull a
+  Full Arts Collection 1 card, same odds as the old Standard Booster
+  Pack/Box); every pack/box now lists which sets it draws from; added a
+  daily rotating 5-card Bounty Shop (2 Uncommon/1 Rare/1 Super-Rare/1
+  Full-Art-or-better) — sell a matching owned card for 5x quicksell price
+  (max 1 sale per card, 3 sales/day), buy a bounty card for 3x price
+  (bounty purchases can't be sold back).
+- **Card-face fixes**: the "add to showcase" button (a thrown network error
+  used to silently reset to idle with no feedback); keyword/flavor-text
+  overflow on heavily-keyworded cards (capped display + graceful clipping);
+  the color pip (dropped an MTG-style letter that didn't match the card's
+  actual color for a plain color swatch); the Ultra-Rare border ring (now
+  hugs the card's true outer edge instead of sitting inset); the Full-Art
+  bottom color band (removed so full-art images run edge-to-edge).
+- **Bug hunt / accessibility**: keyboard activation (Enter/Space) + ARIA
+  labels added to the enemy-Location and staging-card inspect targets in
+  the game board and the pack-tear progress bar; two dead RETRY buttons in
+  Player Shops (passed the wrong function signature to `onClick`, so
+  clicking them threw and never actually retried); missing `catch`/`await`
+  on several network calls (Social screen's search and friend/trade reload,
+  Creator Tools' search) that could leave a spinner stuck with silent
+  failure; confirmation dialogs added to three destructive actions that
+  had none while their sibling actions in the same screens did (cancel
+  friend request, cancel trade offer, buy an individual/bundle shop
+  listing); a missing `role="dialog"` on the Marketplace bid modal; an
+  unguarded `matchMedia` call that could throw; and an index-as-key React
+  anti-pattern in the trade-card list.
+- **Docs**: `docs/ROADMAP.md`'s Set 4 item reworded (was awkwardly phrasing
+  an already-shipped Set 3 as upcoming); `docs/PVP_DESIGN.md`'s stale
+  architecture description corrected to match the real `useState`-based
+  engine (no `gameReducer`/`useReducer` ever existed).
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.22.md`.
+
+### v4.21 rulebook catch-up + balance pass
+
+- **Docs**: `docs/RULEBOOK.md` had drifted six versions behind the shipped
+  engine — §10's Keyword Glossary was rewritten wholesale to match the live
+  Tier I-V ladder every keyword has carried since v4.19 (source of truth
+  `docs/KEYWORD_TIERS.md`), and a pointer to `docs/COLOR_IDENTITY.md`'s
+  7-color system (shipped v4.13/v4.14) was added; the rulebook is now
+  versioned v4.21 to match.
+- **Balance** (see `docs/BALANCE_SIM_FINDINGS_v4.21.md`, run on
+  CPU-constrained sandbox hardware — directional, not tuning-grade):
+  Steel's print rate cut again (1-in-12 → 1-in-15, still the roster's worst
+  cost-vs-winrate offender with its per-tier magnitude already floored);
+  Avenge's lifetime stacking cap cut 2 → 1 (`SIM_TUNING.avengeCap`) after
+  remaining the strongest keyword for two straight passes; a second
+  `MANUAL_THRESHOLD_ADJ` step for repeat cost-vs-ability outliers
+  `abyssal_dragonfish` and `ember_whisperer`; Swift's activation/delta
+  tension closed as an intentionally high-variance keyword, not a bug.
+- **Bug fix**: a dead, unused `AVENGE_CAP` export in `engine.ts` (the real
+  enforced cap was always `SIM_TUNING.avengeCap`) was deleted rather than
+  fixed, so it can't silently drift from live behavior again; two tests
+  that hardcoded the old cap value now reference `SIM_TUNING.avengeCap`.
+- **Bug hunt**: keyboard-accessibility double-fire on nested card chips, a
+  leaked long-press timer, unstable React keys on the Battle Log, and two
+  quicksell flows that could get stuck `busy` forever on a network error.
+- Verified the full 292-card pool still matches Supabase (no drift).
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.21.md`.
+
 ### v4.20 sim-harness upgrade + balance + bug-hunt pass
 
 - **Sim harness**: `scripts/fetch-cards.ts` automates pulling the live

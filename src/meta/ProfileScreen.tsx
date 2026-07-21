@@ -374,6 +374,8 @@ function CreatorTools() {
     setError('');
     try {
       setResults(await searchPlayers(query));
+    } catch {
+      setError('Search failed — check your connection and try again.');
     } finally {
       setSearching(false);
     }
