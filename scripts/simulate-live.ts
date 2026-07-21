@@ -6,10 +6,12 @@
  * else, without needing a full generated-cards.ts regen/commit.
  *
  * Usage:
- *   1. Export the live `cards.template` column to scripts/live-cards.json
- *      (a JSON array of CardTemplate), e.g. via the Supabase SQL editor:
- *        select jsonb_agg(template) from public.cards;
+ *   1. npm run fetch:cards        (pulls scripts/live-cards.json from Supabase)
  *   2. npx tsx scripts/simulate-live.ts [gamesPerPairing]
+ *
+ * (scripts/live-cards.json can also be refreshed manually via the Supabase
+ * SQL editor: select jsonb_agg(template) from public.cards; — fetch:cards
+ * just automates that.)
  */
 import fs from 'node:fs';
 import path from 'node:path';
