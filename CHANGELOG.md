@@ -51,8 +51,17 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   bottom color band (removed so full-art images run edge-to-edge).
 - **Bug hunt / accessibility**: keyboard activation (Enter/Space) + ARIA
   labels added to the enemy-Location and staging-card inspect targets in
-  the game board, matching the keyboard-accessibility pattern already
-  applied to other card chips.
+  the game board and the pack-tear progress bar; two dead RETRY buttons in
+  Player Shops (passed the wrong function signature to `onClick`, so
+  clicking them threw and never actually retried); missing `catch`/`await`
+  on several network calls (Social screen's search and friend/trade reload,
+  Creator Tools' search) that could leave a spinner stuck with silent
+  failure; confirmation dialogs added to three destructive actions that
+  had none while their sibling actions in the same screens did (cancel
+  friend request, cancel trade offer, buy an individual/bundle shop
+  listing); a missing `role="dialog"` on the Marketplace bid modal; an
+  unguarded `matchMedia` call that could throw; and an index-as-key React
+  anti-pattern in the trade-card list.
 - **Docs**: `docs/ROADMAP.md`'s Set 4 item reworded (was awkwardly phrasing
   an already-shipped Set 3 as upcoming); `docs/PVP_DESIGN.md`'s stale
   architecture description corrected to match the real `useState`-based

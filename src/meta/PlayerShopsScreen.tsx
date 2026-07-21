@@ -762,6 +762,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                 color="red"
                 disabled={busy || (profile?.credits || 0) < l.price}
                 onClick={() => {
+                  if (!confirm(`Buy this listing for ${fmtCredits(l.price)} credits?`)) return;
                   run(async () => {
                     const e = await buyShopListing(l.id);
                     return e;
@@ -797,7 +798,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           <p className="font-bold text-[var(--c-steel)] mb-3">
             {loadError || "This shop couldn't be found."}
           </p>
-          <PopButton color="red" onClick={reload}>
+          <PopButton color="red" onClick={() => reload()}>
             RETRY
           </PopButton>
         </div>
@@ -988,7 +989,7 @@ function MyShopTab() {
     return (
       <div className="text-center py-16">
         <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
-        <PopButton color="red" onClick={reload}>
+        <PopButton color="red" onClick={() => reload()}>
           RETRY
         </PopButton>
       </div>
