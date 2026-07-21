@@ -19,8 +19,9 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   stepping stone to real matchmaking.
 - **Daily quests / login rewards** — deepen the gold/gems economy beyond match
   payouts (requires new Supabase tables + RPCs).
-- **Set 3** — the card pipeline (`live_cards.csv` → generated TS/JSON →
-  Supabase) supports iterative content drops.
+- **Set 4** — Set 3 (Dragonbone Wastes, 75 cards) has shipped to the live
+  Supabase pool (292 cards total); the pipeline supports further iterative
+  content drops.
 - **Persistent match history / replays** — store per-match logs and let players
   review past games.
 
