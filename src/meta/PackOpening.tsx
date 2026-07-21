@@ -667,6 +667,17 @@ function SummaryStage({
   const [sellBusy, setSellBusy] = useState(false);
   const [sellError, setSellError] = useState('');
   const [sellNotice, setSellNotice] = useState('');
+  // quicksellClutter's RPC loop can easily outlive this component (the user
+  // can hit DONE — or the parent can unmount this stage — before all groups
+  // have settled) — guard every setState after an await so a late response
+  // doesn't fire into an unmounted component.
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   const clutterIndices = pulls
     .map((_, i) => i)
@@ -706,6 +717,7 @@ function SummaryStage({
     try {
       for (const g of groups.values()) {
         const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
+        if (!mountedRef.current) return;
         if (error) {
           setSellError(error);
           break;
@@ -722,10 +734,12 @@ function SummaryStage({
         }
       }
     } catch {
-      setSellError('Something went wrong — check your connection and try again.');
+      if (mountedRef.current)
+        setSellError('Something went wrong — check your connection and try again.');
     } finally {
-      setSellBusy(false);
+      if (mountedRef.current) setSellBusy(false);
     }
+    if (!mountedRef.current) return;
     if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
     if (totalCards > 0) {
       setSellNotice(
@@ -931,7 +945,7 @@ function SummaryStage({
             </span>
           </PopButton>
         )}
-        <PopButton color="red" onClick={onDone}>
+        <PopButton color="red" disabled={sellBusy} onClick={onDone}>
           DONE ✓
         </PopButton>
       </div>

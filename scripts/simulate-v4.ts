@@ -524,6 +524,15 @@ const DECISION_KEYS = [
   // step 2) — fires when the solver's dice pairing for a cast differs from
   // what the old greedy per-card pick would have spent.
   'lapseGreedyAssignmentFixed',
+  // v4.24: End Phase hand-cap (HAND_LIMIT=8) forced discard occurred at
+  // least once this game — see engine.ts's finishEndPhase. Previously
+  // untracked entirely; a direct "hitting the hand cap" mechanic-health
+  // signal (decisionAgg win-correlation below) plus a per-card breakdown
+  // (handLimitDiscardCount) of which specific cards most often get stuck in
+  // hand and forced out unplayed — a cost-vs-ability signal complementary
+  // to the existing win-delta residual model (a card can look fine on win%
+  // while still being disproportionately hand-clogging dead weight).
+  'handLimitDiscardOccurred',
 ];
 
 interface SuiteResult {
@@ -661,6 +670,13 @@ interface SuiteResult {
    * combined Leader HP and combined board size across both players, plus the
    * number of games still running at that round. Averages = hp/n, board/n. */
   tempoCurve: Record<number, { n: number; hp: number; board: number }>;
+  /** v4.24 harness upgrade: total End Phase hand-cap forced discards across
+   * every game (g.stats.handLimitDiscards), plus a per-card breakdown of
+   * which cards got forced out of hand unplayed most often — see the
+   * `handLimitDiscardOccurred` DECISION_KEYS entry for the win-correlation
+   * half of this signal. */
+  handLimitDiscardsTotal: number;
+  handLimitDiscardCount: Record<string, number>;
   errors: string[];
 }
 
@@ -730,6 +746,8 @@ function newResult(): SuiteResult {
     cardPips: {},
     cardPipsN: {},
     tempoCurve: {},
+    handLimitDiscardsTotal: 0,
+    handLimitDiscardCount: {},
     errors: [],
   };
 }
@@ -883,6 +901,9 @@ function runGame(
         } else if (key.startsWith('cardPipsN:')) {
           const id = key.slice('cardPipsN:'.length);
           r.cardPipsN[id] = (r.cardPipsN[id] || 0) + (d[key] || 0);
+        } else if (key.startsWith('handLimitDiscard:')) {
+          const id = key.slice('handLimitDiscard:'.length);
+          r.handLimitDiscardCount[id] = (r.handLimitDiscardCount[id] || 0) + (d[key] || 0);
         }
       }
     }
@@ -955,6 +976,7 @@ function runGame(
   r.overrunTriggers += s.overrunTriggers;
   r.pierceOverflowDamage += s.pierceOverflowDamage;
   r.anchorCapBonuses += s.anchorCapBonuses;
+  r.handLimitDiscardsTotal += s.handLimitDiscards;
   const LAPSE_KEYS = [
     'lapseMissedLethal',
     // v4.21: severity companion to the boolean above — summed HP left on the
@@ -1202,7 +1224,35 @@ console.log({
   overrunTriggers: R.overrunTriggers,
   pierceOverflowDamage: R.pierceOverflowDamage,
   anchorCapBonuses: R.anchorCapBonuses,
+  handLimitDiscardsTotal: R.handLimitDiscardsTotal,
 });
+console.log(
+  `avg hand-limit (HAND_LIMIT=8) forced discards per player-turn: ${(R.handLimitDiscardsTotal / (R.totalRounds * 2)).toFixed(3)}`,
+);
+// v4.24 harness upgrade: which specific cards get forced out of hand unplayed
+// (End Phase discard-to-8) most often — a direct "clogs hand, too hard to
+// cast for its slot" signal distinct from the win-delta residual model
+// (a card can look fine on win% while still being disproportionately
+// hand-limit fodder). Normalized by cardInDeck so a widely-played card isn't
+// unfairly flagged just for being drafted more.
+console.log(
+  '\n--- v4.24 Cards most often forced out by the hand-limit discard (min n=100 deck-inclusions) ---',
+);
+const handLimitRows = Object.entries(R.handLimitDiscardCount)
+  .map(([id, n]) => ({
+    id,
+    name: POOL_BY_ID[id]?.name || id,
+    n,
+    perDeckIncl: (R.cardInDeck[id] || 0) > 0 ? n / R.cardInDeck[id] : NaN,
+    deckIncl: R.cardInDeck[id] || 0,
+  }))
+  .filter((r) => r.deckIncl >= 100)
+  .sort((a, b) => b.perDeckIncl - a.perDeckIncl);
+for (const r of handLimitRows.slice(0, 15)) {
+  console.log(
+    `${r.name.padEnd(28)} discards=${r.n}  per-deck-inclusion=${r.perDeckIncl.toFixed(3)}  (deckIncl n=${r.deckIncl})`,
+  );
+}
 console.log('\n--- CPU reasoning lapses (raw per-game rates; see ai.ts recordCpuLapses) ---');
 for (const [key, n] of Object.entries(R.lapseCounts).sort((a, b) => b[1] - a[1])) {
   console.log(`${key.padEnd(26)} total=${n}  per game=${(n / R.games).toFixed(3)}`);

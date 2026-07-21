@@ -49,9 +49,9 @@ type Tab = 'packs' | 'my_packs' | 'bounties' | 'card_back' | 'profile_banner' | 
  * from the row's actual `allowed_sets`, falling back to all 4 live sets when
  * it's null (draws from the full pool). */
 function packSetsLine(pack: PackType): string {
-  return (pack.allowed_sets && pack.allowed_sets.length > 0 ? pack.allowed_sets : ALL_SET_NAMES).join(
-    ', ',
-  );
+  return (
+    pack.allowed_sets && pack.allowed_sets.length > 0 ? pack.allowed_sets : ALL_SET_NAMES
+  ).join(', ');
 }
 
 const DAILY_PACK_COOLDOWN_MS = 20 * 60 * 60 * 1000; // mirror of claim_daily_pack
@@ -106,10 +106,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   // Standalone tiles (Starter Pack, Standard Box, ...) render one-to-one.
   // Grouped tiles (the 3 set-booster / 3 set-box rows) collapse to a single
   // swipeable shelf tile per pack_group value.
-  const standalonePacks = useMemo(
-    () => buyablePacks.filter((p) => !p.pack_group),
-    [buyablePacks],
-  );
+  const standalonePacks = useMemo(() => buyablePacks.filter((p) => !p.pack_group), [buyablePacks]);
   const groupedPackTiles = useMemo(() => {
     const groups = new Map<string, PackType[]>();
     for (const p of buyablePacks) {
@@ -916,7 +913,9 @@ function PackTile({
               className="w-full"
               disabled={!profile || profile.vouchers < pack.price_vouchers || !!busyId}
               title={
-                profile && profile.vouchers < pack.price_vouchers ? 'Not enough vouchers' : undefined
+                profile && profile.vouchers < pack.price_vouchers
+                  ? 'Not enough vouchers'
+                  : undefined
               }
               onClick={() => onBuy(pack, 'vouchers')}
             >
@@ -1097,6 +1096,7 @@ function BountiesTab({
             !!busyId ||
             card.owned < 1 ||
             card.already_sold ||
+            card.already_bought ||
             (soldToday >= 3 && !card.already_sold);
           const buyDisabled =
             !profile || !!busyId || card.already_bought || profile.credits < card.buy_price;
@@ -1114,9 +1114,7 @@ function BountiesTab({
                   Owned: {card.owned}
                 </div>
                 {card.already_sold && (
-                  <div className="mt-1 text-[9px] font-black text-[var(--c-steel)]">
-                    SOLD TODAY
-                  </div>
+                  <div className="mt-1 text-[9px] font-black text-[var(--c-steel)]">SOLD TODAY</div>
                 )}
                 {card.already_bought && (
                   <div className="mt-1 text-[9px] font-black text-[var(--c-steel)]">

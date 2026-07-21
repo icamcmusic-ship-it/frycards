@@ -623,6 +623,23 @@ function mapUnit(c: CardTemplate): CardDef {
     def.atk = Math.max(1, (def.atk || 0) + half);
     def.hp = Math.max(1, (def.hp || 0) + (d - half));
   }
+  // v4.24: keyword-level nerf lever for the two repeat-offender trophy Units
+  // that hit MANUAL_STAT_TRIM's established -4 ceiling (same cap already
+  // used by vampire_squid/half_faded_shade) while STILL topping cardsToNerf
+  // by a wide margin — a stat trim can't cut any further, so the residual
+  // has to come off the keyword stack instead (see MANUAL_KEYWORD_REMOVE's
+  // declaration for the reasoning per card). Cost is intentionally left
+  // as-is (still priced for the removed keyword's costWeight) — that IS the
+  // nerf, same "pay the old price, get less" shape a stat trim already has.
+  const removeKw = MANUAL_KEYWORD_REMOVE[c.id];
+  if (removeKw && def.keywords?.includes(removeKw)) {
+    def.keywords = def.keywords.filter((k) => k !== removeKw);
+    if (removeKw === 'Avenge') def.avenge = undefined;
+    if (removeKw === 'Bulwark') def.bulwark = undefined;
+    if (removeKw === 'Toll') def.toll = undefined;
+    if (removeKw === 'Steel') def.steel = undefined;
+    if (def.keywordTiers) delete def.keywordTiers[removeKw];
+  }
   return def;
 }
 
@@ -640,6 +657,24 @@ const MANUAL_STEEL: Record<string, number> = {
   // at +21.0pt, the single worst residual in the pool. Tier II keeps the
   // identity buff without the cap discount.
   nanite_division_marshal: 2,
+};
+
+// v4.24: strip one stacked keyword from a specific card, applied post-hoc at
+// the end of mapUnit (after cost/stats are already priced for the full
+// keyword set — see the call site for why that's the intended nerf shape).
+// Both entries are repeat offenders that hit MANUAL_STAT_TRIM's -4 ceiling
+// (docs/BALANCE_SIM_FINDINGS_v4.22.md/v4.23.md already flagged both as
+// "design-tension, may need a keyword swap, not another stat cut") while
+// STILL topping cardsToNerf a full pass later with the trim already applied:
+//  - astral_shoal: Guard/Echo/Bulwark behind a FullHouse gate — a wall that
+//    also recurs itself from discard is the compounding piece; Echo is the
+//    one of the three that turns "survives" into "doesn't even need to."
+//  - where_the_deep_meets_the_sky: Frenzy/Overrun/Avenge — an aggressive
+//    punch-through stack that ALSO pays out on death is the compounding
+//    piece; Avenge is what makes trading it away still a win.
+const MANUAL_KEYWORD_REMOVE: Record<string, string> = {
+  astral_shoal: 'Echo',
+  where_the_deep_meets_the_sky: 'Avenge',
 };
 
 const MANUAL_STAT_TRIM: Record<string, number> = {
@@ -712,13 +747,24 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // size flat across another full-scale pass (26,448 games, zero invariant
   // violations) without the residual closing, so each takes one more step
   // (same pattern as v4.22's own escalations above).
-  kinetix_enforcer: -3, // was -2, still #3 cardsToNerf, +32.6pt resid
-  swaying_garden: -3, // was -2, still #8 cardsToNerf, +31.2pt resid
-  astral_shoal: -4, // was -3, still #1 cardsToNerf, +35.5pt resid
-  clockwork_nautilus: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
-  gulper_eel: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
-  playful_otters: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
-  cavernous_watcher: -2, // was -1, still top-12 cardsToNerf, +31.3pt resid
+  swaying_garden: -3, // v4.23 -3 held (dropped off top-10 this pass — left flat, not escalated blind)
+  // v4.24: repeat-offender escalation — these four held their v4.23 trim
+  // size flat across another full-scale pass (26,448 games, zero invariant
+  // violations) without the residual closing, so each takes one more step
+  // (same pattern as v4.22/v4.23's own escalations above). astral_shoal is
+  // NOT re-escalated here — it hit the -4 ceiling in v4.23 already and is
+  // handled via MANUAL_KEYWORD_REMOVE above instead of a 5th stat cut.
+  kinetix_enforcer: -4, // was -3, still #2 cardsToNerf, +32.1pt resid
+  clockwork_nautilus: -3, // was -2, still top-8 cardsToNerf, +28.9pt resid
+  gulper_eel: -3, // was -2, still top-9 cardsToNerf, +28.9pt resid
+  playful_otters: -3, // was -2, still top-10 cardsToNerf, +28.9pt resid
+  cavernous_watcher: -3, // was -2, still #3 cardsToNerf, +31.0pt resid
+  // v4.24: first-pass nerf — new top-10 cardsToNerf entry (n=912,
+  // resid=+29.1pt), also independently flagged "under-costed" on the
+  // printed-power costVsAbilityMismatches table (z=+3.22, tied for the
+  // pool's single highest z-score) — a rare case where both the measured
+  // win-rate residual and the printed-stats screen agree.
+  ember_whisperer: -1,
   // v4.22: cardsToBuff bottom-12 (win% far below cost-band mean) whose
   // lever is raw Unit stats. phantom_squadron and glowing_manta also
   // register as "under-costed" on the printed-power costVsAbilityMismatches
@@ -726,10 +772,21 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // a card whose kit doesn't deliver on its paper efficiency; the buff here
   // follows the MEASURED win-rate residual, not the printed-power read (see
   // findings doc for the reasoning).
-  phantom_squadron: 1,
   glowing_manta: 1,
-  // v4.23: new cardsToBuff first-pass entry (n=912, resid=-32.3pt).
-  nebula_snail: 1,
+  // v4.24: repeat-offender buff escalation — held flat across 2+ passes
+  // without the residual closing (same pattern as the nerf escalations
+  // above).
+  phantom_squadron: 2, // was 1 (v4.22), still top-10 cardsToBuff, -30.9pt resid
+  nebula_snail: 2, // was 1 (v4.23), still top-10 cardsToBuff, -30.9pt resid
+  // v4.24: first-pass buff — the_wolf_of_wall_street's v4.20 -1 nerf
+  // overshot and was reverted in v4.23 (entry removed); it's still
+  // underperforming post-revert (resid=-31.6pt, n=912) rather than settling
+  // back to neutral, so it gets a small first buff step this pass rather
+  // than sitting un-actioned a second time — same small-first-step caution
+  // as nebula_snail's own v4.23 debut, given this card's history of
+  // overshooting in both directions (v4.12 buff -> v4.18 revert -> v4.20
+  // nerf -> v4.23 revert).
+  the_wolf_of_wall_street: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -841,6 +898,11 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // v4.23: jawbone_span's +1 (v4.12) has flipped — it's now #10 cardsToNerf
   // (resid=+29.3pt, n=912) instead of an underperformer. Reverted (entry
   // removed) rather than compounding into a fresh nerf on the same lever.
+  // v4.24: back to #6 cardsToNerf post-revert (resid=+29.3pt, n=912,
+  // unchanged from the v4.23 read) — reverting to neutral wasn't enough on
+  // its own, so it gets a first-pass nerf this time rather than sitting
+  // un-actioned a second time.
+  jawbone_span: -1,
   black_smoker: 1,
   kinetix_blacksite_cavern: 1,
   glowing_glyph_tablet: -1,
@@ -869,6 +931,13 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // v4.23: petrified_ribs_citadel's v4.22 -1 held flat (still #2 cardsToNerf,
   // +33.2pt resid) — same repeat-offender escalation as mist_ghost_ship/
   // ribvault_cathedral above.
+  // v4.24: held flat again (still #4 cardsToNerf, +30.8pt resid) — but -2
+  // already clamps its onCast value to the floor of 1 (verified: -3 here
+  // would clamp to the identical floored value, i.e. a no-op escalation,
+  // not a real cut). Same "lever exhausted" shape as astral_shoal/where_the_
+  // deep_meets_the_sky hitting their own ceilings — carried forward as a
+  // design-tension case (needs a threshold/keyword lever, not another value
+  // trim) rather than a cosmetic dict change with zero actual effect.
   petrified_ribs_citadel: -2,
   heart_of_the_thermal_grid: -1,
   // v4.22: cardsToBuff bottom-12 whose lever is onCast value (Charm/Event,
@@ -882,17 +951,34 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // the other repeat-offender escalations this pass). kinetic_siphon_swarm/
   // diver_s_lantern dropped off the top-10 cardsToBuff list this run, so
   // they're left at +1 rather than escalated blind.
-  pulsing_heartstone: 2, // was 1, still #1 cardsToBuff, -41.8pt resid
-  thornfang_vine: 2, // was 1, still #3 cardsToBuff, -37.0pt resid
-  locust_veil: 2, // was 1, still #2 cardsToBuff, -37.6pt resid
-  amber_sphere: 2, // was 1, still top-5 cardsToBuff, -34.1pt resid
-  resonant_shuriken: 2, // was 1, still top-5 cardsToBuff, -34.1pt resid
-  coral_collapse: 2, // was 1, still top-6 cardsToBuff, -32.8pt resid, n=3648
-  kinetic_siphon_swarm: 1,
+  // v4.24: all six held their v4.23 +2 flat across another full-scale pass
+  // without the residual closing — one more step each (same pattern).
+  // kinetic_siphon_swarm is back in the top-10 this pass (was off it in
+  // v4.23), so it escalates too; diver_s_lantern is still off the list and
+  // stays flat at +1.
+  pulsing_heartstone: 3, // was 2, still #1 cardsToBuff, -41.0pt resid
+  thornfang_vine: 3, // was 2, still #3 cardsToBuff, -35.7pt resid
+  locust_veil: 3, // was 2, still #2 cardsToBuff, -36.0pt resid
+  amber_sphere: 3, // was 2, still top-5 cardsToBuff, -32.5pt resid
+  resonant_shuriken: 3, // was 2, still top-5 cardsToBuff, -32.5pt resid
+  coral_collapse: 3, // was 2, still top-6 cardsToBuff, -32.3pt resid, n=3648
+  kinetic_siphon_swarm: 2, // was 1, back in top-10 cardsToBuff, -30.9pt resid
   diver_s_lantern: 1,
   // v4.23: new cardsToBuff first-pass entries, both Rare Locations, n=912.
+  // v4.24: both dropped off the top-10 list this pass — left flat, not
+  // escalated blind (same "dropped off, leave it" pattern as
+  // kinetic_siphon_swarm got in v4.23).
   blackspire_obelisk: 1,
   ossuary_vault: 1,
+  // v4.24: Aftershock's per-card lever (docs/BALANCE_SIM_FINDINGS_v4.22.md/
+  // v4.23.md both carried this forward as "the cards are weak, not the
+  // keyword" without budget to action it — activation is healthy (0.56) and
+  // the fired-delta is positive, but the keyword's 3-card pool drags any
+  // deck that leans into it down to the pool's second-worst deck baseline,
+  // 19.8% this pass). coral_collapse (also Aftershock) is already covered
+  // by its own escalation above; first-pass value buffs for the other two.
+  bioluminescent_tide: 1,
+  flash_freeze: 1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
@@ -1048,7 +1134,14 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
   if (MANUAL_VALUE_BUFF[c.id] !== undefined && base.onCast) {
-    base.onCast = { ...base.onCast, value: (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
+    // v4.24: floor at 1 — a repeat-offender nerf escalation on a card
+    // already at (or near) its onCast value floor would otherwise print an
+    // illegal <1 value (caught by catalog.test.ts) instead of just no-op'ing
+    // at the floor, same clamp MANUAL_STAT_TRIM already applies to atk/hp.
+    base.onCast = {
+      ...base.onCast,
+      value: Math.max(1, (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id]),
+    };
   }
   return base;
 }
@@ -1221,7 +1314,11 @@ function mapLocation(c: CardTemplate): CardDef {
     def.keywords = [...(def.keywords || []), 'Contested'];
   }
   if (MANUAL_VALUE_BUFF[c.id] !== undefined && def.onCast) {
-    def.onCast = { ...def.onCast, value: (def.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id] };
+    // v4.24: same value floor as mapSpell's identical block above.
+    def.onCast = {
+      ...def.onCast,
+      value: Math.max(1, (def.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id]),
+    };
   }
   // v4.19: Location keyword tiers (Foothold/Tribute/Excavate/Contested).
   // Locations cast free, so tiers carry no cost consequence here — but

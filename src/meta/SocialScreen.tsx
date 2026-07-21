@@ -94,26 +94,31 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const [results, setResults] = useState<PublicProfile[] | null>(null);
   const [tradePartner, setTradePartner] = useState<PublicProfile | null>(null);
   const [leaderboard, setLeaderboard] = useState<CardsLeaderboardEntry[] | null>(null);
+  // Distinct from `leaderboard === null` ("still loading") — a failed fetch
+  // must not render identically to a genuinely empty board (which would
+  // otherwise show a permanent, wrong "No players yet.").
+  const [leaderboardError, setLeaderboardError] = useState(false);
+  const [leaderboardAttempt, setLeaderboardAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (tab !== 'leaderboard' || leaderboard !== null) return;
     let cancelled = false;
+    setLeaderboardError(false);
     fetchCardsLeaderboard(50)
       .then((lb) => {
         if (!cancelled) setLeaderboard(lb);
       })
       .catch(() => {
-        // Leave leaderboard null on failure — the "still loading" state below
-        // would otherwise spin forever; fall back to an empty board so the
-        // tab at least renders something instead of hanging indefinitely.
-        if (!cancelled) setLeaderboard([]);
+        // Leave leaderboard null on failure so the UI can show a retry
+        // affordance instead of a false "No players yet."
+        if (!cancelled) setLeaderboardError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [tab, leaderboard]);
+  }, [tab, leaderboard, leaderboardAttempt]);
 
   // Generation counter so every reload() call site — not just the mount
   // effect's own isCancelled hook — is protected against an older in-flight
@@ -182,7 +187,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const pendingTrades = trades.filter((t) => t.status === 'pending');
   const doneTrades = trades.filter((t) => t.status !== 'pending').slice(0, 10);
 
-  const run = async (fn: () => Promise<string | null>, success?: string) => {
+  const run = async (
+    fn: () => Promise<string | null>,
+    success?: string,
+    onSuccess?: () => void,
+  ) => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -192,6 +201,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       if (err) setError(err);
       else {
         if (success) setNotice(success);
+        onSuccess?.();
         // Awaited (not fire-and-forget) so a network failure here is caught
         // by this same try/catch instead of escaping as an unhandled
         // rejection — the action itself already succeeded, but the player
@@ -264,7 +274,18 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
               <Trophy className="w-4 h-4" /> MOST CARDS OWNED
             </div>
             {leaderboard === null ? (
-              <p className="text-[11px] font-bold text-[var(--c-steel)]">Loading…</p>
+              leaderboardError ? (
+                <div className="py-4">
+                  <p className="text-[11px] font-bold text-[var(--c-steel)] mb-2">
+                    Couldn't load the leaderboard. Check your connection and try again.
+                  </p>
+                  <PopButton color="red" onClick={() => setLeaderboardAttempt((n) => n + 1)}>
+                    RETRY
+                  </PopButton>
+                </div>
+              ) : (
+                <p className="text-[11px] font-bold text-[var(--c-steel)]">Loading…</p>
+              )
             ) : leaderboard.length === 0 ? (
               <p className="text-[11px] font-bold text-[var(--c-steel)]">No players yet.</p>
             ) : (
@@ -343,6 +364,9 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             run(
                               () => sendFriendRequest(r.username),
                               `Friend request sent to ${r.username}!`,
+                              // Drop this entry from the results so a second
+                              // click can't re-send a duplicate request.
+                              () => setResults((prev) => prev && prev.filter((p) => p.id !== r.id)),
                             )
                           }
                         >
@@ -391,9 +415,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() =>
-                              run(() => respondFriendRequest(f.id, false), 'Request declined.')
-                            }
+                            onClick={() => {
+                              if (!confirm('Decline this friend request?')) return;
+                              run(() => respondFriendRequest(f.id, false), 'Request declined.');
+                            }}
                           >
                             DECLINE
                           </PopButton>
@@ -816,6 +841,9 @@ function TradeComposerModal({
     <div
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Trade with ${partner.username || 'player'}`}
     >
       <div
         className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto"

@@ -167,7 +167,14 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           if (qty <= 0) continue;
           const { data, error } = await quicksellCards(c.id, qty, foil);
           if (error) {
-            setBulkError(error);
+            // Cards from earlier iterations may already have sold (and the
+            // credits already paid out) before this one failed — say so
+            // instead of reporting a bare error that implies nothing happened.
+            setBulkError(
+              totalCards > 0
+                ? `Sold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)} before an error occurred: ${error}`
+                : error,
+            );
             return;
           }
           if (data) {
@@ -301,6 +308,11 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       }
       refreshCollection();
       refreshProfile();
+    } catch {
+      // quicksellCards rejecting outright (network error) instead of
+      // returning {error} previously left the button silently stop
+      // spinning with no message at all.
+      setSellError('Something went wrong — check your connection and try again.');
     } finally {
       setSelling(false);
     }

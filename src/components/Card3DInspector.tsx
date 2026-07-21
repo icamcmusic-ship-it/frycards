@@ -69,6 +69,7 @@ export function Card3DInspector({
   // the card, used to place the glare/holo highlight.
   const [tilt, setTilt] = useState<{ rx: number; ry: number; px: number; py: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -77,6 +78,17 @@ export function Card3DInspector({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // v4.24: move focus into the dialog on open and restore it to whatever
+  // triggered the inspector on close — previously a keyboard user opening
+  // this via Enter/Space could Tab straight through to background page
+  // elements still sitting behind the (only visually) fixed overlay.
+  useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => prevFocused?.focus?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Enlarged size: ~2x the normal full card, clamped so the whole card (plus
   // some room for the side panels) always fits on screen. Recomputed on
@@ -137,7 +149,9 @@ export function Card3DInspector({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4 overflow-y-auto"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4 overflow-y-auto outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -162,6 +176,11 @@ export function Card3DInspector({
               style={{
                 width: w * scale,
                 height: h * scale,
+                // v4.24: without this, dragging a finger across the card to
+                // tilt it on a phone also triggers the dialog's native
+                // overflow-y-auto scroll under the same gesture — the card
+                // visibly tilts AND the whole modal scrolls/jumps at once.
+                touchAction: 'none',
                 transformStyle: 'preserve-3d',
                 transform: reducedMotion
                   ? undefined

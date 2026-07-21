@@ -7,6 +7,82 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.24 sim-harness upgrade, balance pass (incl. keyword removals), full-app bug hunt
+
+- **Sim harness**: added End Phase hand-limit (`HAND_LIMIT`=8) forced-discard
+  tracking — a mechanic that had zero instrumentation of any kind since it
+  shipped in v4.3. New win-correlation decision key
+  (`handLimitDiscardOccurred`, -9.2 to -9.6pt delta both runs) and a
+  per-card table of which specific cards get forced out of hand unplayed
+  most often (Violet Haze Kunoichi, Void Mother, Familiar in the Dark, The
+  Abyssal Gate topped it). Surfaced too late in the pass to size a fix
+  against; carried forward as a concrete "game mechanics" watch item.
+- **Balance** (full-scale run, 26,448 games, zero invariant violations —
+  see `docs/BALANCE_SIM_FINDINGS_v4.24.md`): CPU-lapse detector floor holds
+  for a 15th straight pass; Steel/Swift keyword rulings held again.
+  **New this pass — keyword ability removals**: two repeat-offender trophy
+  Units (Astral Shoal, Where the Deep Meets the Sky) had already hit the
+  established -4 stat-trim ceiling while still topping `cardsToNerf` a full
+  pass later; stripped one stacked keyword from each instead of a 5th blind
+  stat cut (Astral Shoal loses Echo, Where the Deep Meets the Sky loses
+  Avenge — cost left unchanged, so "pay the old price, get less" is the
+  nerf). Both dropped completely off the top-10 `cardsToNerf` list in the
+  post-patch verification run. Also escalated 5 repeat-offender nerfs
+  (Kinetix Enforcer, Cavernous Watcher, Clockwork Nautilus, Gulper Eel,
+  Playful Otters) and 7 repeat-offender buffs (Pulsing Heartstone, Locust
+  Veil, Thornfang Vine, Amber Sphere, Resonant Shuriken, Coral Collapse,
+  Kinetic Siphon Swarm) whose prior patch held flat; added first-pass
+  nerfs (Ember Whisperer, Jawbone Span) and first-pass buffs (The Wolf of
+  Wall Street) for cards that were flagged but never actioned; finally
+  actioned Aftershock's long-carried-forward "cards are weak, not the
+  keyword" finding with first-pass buffs to its two untouched cards
+  (Bioluminescent Tide, Flash Freeze). A Petrified Ribs Citadel escalation
+  attempt surfaced a real bug — the value lever was already at its floor,
+  so a further cut would have silently no-op'd (or, worse, printed an
+  illegal sub-1 value, caught by `catalog.test.ts`); reverted and added a
+  floor clamp to the underlying mechanism so this can't happen for any
+  card. Card pool re-verified in sync with Supabase (292/292, hashed
+  field-for-field).
+- **Bug hunt** (a systematic sweep across every screen in `src/components/`
+  and `src/meta/`, 7 independent passes): a per-user data bootstrap with no
+  error handling that could leave the entire app stuck on a loading screen
+  forever after a network hiccup right after sign-in, with no retry; a Deck
+  Builder leader-lock check that only ever scanned `card_ids` (Leaders
+  never appear there) so it could never actually catch a single-copy
+  Leader claimed by two decks at once; a first-match tutorial that only
+  marked itself complete from its own final button, but the CPU-turn stage
+  advances on its own timers with no player input required, so missing
+  that one click made the whole 5-step tutorial silently replay from step
+  1 on every future match; every keyword/cost-info popover in the game
+  dismissing itself via a full-viewport invisible backdrop that ate the
+  *next* click too, so tapping a different keyword chip while one popover
+  was open just closed it instead of opening the one you meant to; a
+  bounty card's SELL button staying clickable after you'd bought it back
+  (the "OWNED — CAN'T SELL BACK" text right next to it was correct, the
+  button wasn't); ended marketplace auctions you'd bid on still showing
+  live, clickable BID/BUY buttons; a stale-response race in Player Shops'
+  pool preview that could let a seller submit a pool that was never
+  actually validated; ~15 `supabase.ts` read functions that silently
+  swallowed fetch errors, making a real failure indistinguishable from
+  "genuinely empty" (Collection, Inventory, My Shop, Leaderboard, and
+  more); a shared error-message helper whose regex could eat legitimate
+  text out of any server error that happened to contain its own colon;
+  several missing confirm dialogs (decline friend request) and `role=
+  "dialog"` labels (Trade Composer, four in-game overlays); a card-art
+  broken-image state that could latch permanently onto the wrong card in
+  a reused component slot; and 15+ more (full list in the codebase — see
+  the individual file diffs). Accessibility: focus-on-open/restore-on-close
+  for the card inspector and profile modal, Escape-to-close on keyword
+  popovers, a touch-drag gesture on the card inspector that no longer
+  fights the dialog's native scroll, and a default empty `alt` instead of
+  a missing one on every image using the shared `SafeImage` component.
+- **Docs**: reviewed the full `docs/` tree — nothing stale enough to
+  remove; the durable balance-findings history and design docs are all
+  current and self-documenting about their own supersession where
+  relevant.
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.24.md`.
+
 ### v4.23 sim-harness upgrade, balance pass, bounty/full-art fixes, bug hunt
 
 - **Sim harness**: added per-archetype first-player win-rate tracking

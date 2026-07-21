@@ -12,6 +12,13 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Slack Tide Update',
+    items: [
+      "Two long-standing 'trophy' cards (Astral Shoal, Where the Deep Meets the Sky) had one of their stacked abilities removed — they'd already gotten every stat cut we were willing to give them and were still clearly too strong, so this time an ability came off instead. Several other repeat over- and under-performers got another round of tuning, and Aftershock's two weakest cards finally got the buff we'd been meaning to give them.",
+      "Big bug-hunt and quality-of-life pass: fixed a rare bug where a network hiccup right after signing in could leave the app stuck on a loading screen forever, a Deck Builder check that could let you claim a single-copy Leader in two decks at once, a first-match tutorial that could loop forever instead of finishing, and keyword/cost tooltips that could swallow your next tap instead of opening what you actually meant to open. Plus over 20 smaller fixes across the Store, Player Shops, Social, Marketplace and Collection screens, and better keyboard/screen-reader support on several dialogs.",
+    ],
+  },
+  {
     version: 'True Colors Update',
     items: [
       'The Bounty Shop now shows the real card — full rarity frame, border, and background treatment — instead of a plain image thumbnail.',

@@ -42,7 +42,9 @@ function timeLeft(endsAt: string | null | undefined): string {
  * this formula was previously duplicated inline at the BID button and the
  * bid modal, which could silently drift apart. Mirrors place_bid's check. */
 export function minBidFor(l: Pick<MarketListing, 'current_bid' | 'price'>): number {
-  return l.current_bid != null ? l.current_bid + Math.max(1, Math.ceil(l.current_bid * 0.05)) : l.price;
+  return l.current_bid != null
+    ? l.current_bid + Math.max(1, Math.ceil(l.current_bid * 0.05))
+    : l.price;
 }
 
 function defFor(cardId: string): CardDef {
@@ -240,7 +242,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               >
                 CANCEL LISTING
               </PopButton>
-            ) : !mine ? (
+            ) : !mine && l.status === 'active' ? (
               <>
                 {isAuction && (
                   <PopButton
@@ -545,8 +547,16 @@ function SellForm({
           <button
             key={c.card_id}
             onClick={() => {
+              // Default to whichever variant actually has spare quantity —
+              // always resetting to normal left the qty input at max=0 with
+              // no explanation whenever every normal copy was deck-locked
+              // and only foils were free.
+              const s = spareSplit(
+                { q: c.quantity, f: c.foil_quantity },
+                locked.get(c.card_id) || 0,
+              );
               setCardId(c.card_id);
-              setFoil(false);
+              setFoil(s.normal <= 0 && s.foil > 0);
               setQuantity(1);
             }}
             className={cn(

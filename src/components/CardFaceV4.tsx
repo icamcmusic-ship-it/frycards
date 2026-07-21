@@ -746,38 +746,64 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
 }
 
 /** Renders the popover itself (via portal) — shared by the pill chip and the
- * inline keyword link so both look/behave identically once opened. */
+ * inline keyword link so both look/behave identically once opened.
+ *
+ * v4.24 bug fix: this used to render a `fixed inset-0` backdrop div to catch
+ * outside clicks. Because it sat at a very high z-index over the ENTIRE
+ * viewport, it intercepted the first click on literally anything else on
+ * screen (a different keyword chip, a different card's cost badge, a nav
+ * button) — that click just closed the current popover instead of reaching
+ * whatever the user actually meant to click, forcing a second click. Now
+ * dismissal is driven by document-level listeners instead of an intercepting
+ * overlay, so a click on another trigger closes this popover AND still
+ * reaches that trigger's own handler in the same gesture. Also now closes on
+ * Escape, matching every real modal in the app. */
 function KeywordPopover({
   kw,
   text,
   pos,
   close,
+  triggerRef,
 }: {
   kw: string;
   text: string;
   pos: { top: number; left: number };
   close: () => void;
+  triggerRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (triggerRef?.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      close();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('wheel', close, { passive: true });
+    document.addEventListener('touchmove', close, { passive: true });
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('wheel', close);
+      document.removeEventListener('touchmove', close);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return createPortal(
-    <>
-      <div
-        className="fixed inset-0 z-[9998]"
-        onClick={(e) => {
-          e.stopPropagation();
-          close();
-        }}
-        onWheel={close}
-        onTouchMove={close}
-      />
-      <div
-        style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
-        className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
-        {text}
-      </div>
-    </>,
+    <div
+      ref={popoverRef}
+      style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
+      className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+      {text}
+    </div>,
     document.body,
   );
 }
@@ -846,7 +872,9 @@ export function KeywordChip({
           <span className="opacity-70 font-semibold normal-case truncate shrink-[2]">· {cost}</span>
         )}
       </button>
-      {pos && popText && <KeywordPopover kw={label ?? kw} text={popText} pos={pos} close={close} />}
+      {pos && popText && (
+        <KeywordPopover kw={label ?? kw} text={popText} pos={pos} close={close} triggerRef={btnRef} />
+      )}
     </span>
   );
 }
@@ -927,7 +955,7 @@ function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boole
       >
         {kw}
       </button>
-      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} />}
+      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} triggerRef={btnRef} />}
     </span>
   );
 }
@@ -979,7 +1007,15 @@ function CostInfoButton({
       >
         {children}
       </button>
-      {pos && <KeywordPopover kw="CAST COST" text={text} pos={pos} close={() => setPos(null)} />}
+      {pos && (
+        <KeywordPopover
+          kw="CAST COST"
+          text={text}
+          pos={pos}
+          close={() => setPos(null)}
+          triggerRef={btnRef}
+        />
+      )}
     </>
   );
 }
@@ -1071,6 +1107,12 @@ function CardArt({
   cover?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
+  // v4.24 bug fix: a caller that keeps one CardFace mounted at a fixed spot
+  // while swapping which card it shows (no remount, no `key`) used to latch
+  // `broken` forever once any image 404'd — every later card shown in that
+  // same slot rendered "NO IMAGE" even though its art was fine. Reset
+  // whenever the image URL actually changes.
+  useEffect(() => setBroken(false), [def.image]);
   if (!def.image || broken) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)]">

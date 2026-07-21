@@ -135,10 +135,11 @@ export function ProfileScreen({
           <div className="absolute bottom-3 left-4 flex items-end gap-3">
             <div className="w-20 h-20 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
               {avatar?.image_url ? (
-                <img
+                <SafeImage
                   src={avatar.image_url}
                   alt="Profile avatar"
                   className="w-full h-full object-cover"
+                  fallbackText={avatar.name}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center heading-font text-[var(--c-yellow)] text-3xl">

@@ -210,16 +210,18 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
 }
 
 export async function fetchShopItems(): Promise<ShopItem[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('shop_items')
     .select('*')
     .order('item_type')
     .order('cost_credits');
+  if (error) console.error('fetchShopItems failed:', error.message);
   return (data as ShopItem[]) || [];
 }
 
 export async function fetchPackTypes(): Promise<PackType[]> {
-  const { data } = await supabase.from('pack_types').select('*');
+  const { data, error } = await supabase.from('pack_types').select('*');
+  if (error) console.error('fetchPackTypes failed:', error.message);
   const packs = (data as PackType[]) || [];
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
@@ -230,27 +232,30 @@ export async function fetchPackTypes(): Promise<PackType[]> {
 }
 
 export async function fetchCollection(userId: string): Promise<PlayerCard[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('player_cards')
     .select('card_id, quantity, foil_quantity')
     .eq('user_id', userId);
+  if (error) console.error('fetchCollection failed:', error.message);
   return (data as PlayerCard[]) || [];
 }
 
 export async function fetchCosmetics(userId: string): Promise<PlayerCosmetic[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('player_cosmetics')
     .select('shop_item_id, is_foil')
     .eq('user_id', userId);
+  if (error) console.error('fetchCosmetics failed:', error.message);
   return (data as PlayerCosmetic[]) || [];
 }
 
 export async function fetchDecks(userId: string): Promise<DeckRow[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('decks')
     .select('*')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false });
+  if (error) console.error('fetchDecks failed:', error.message);
   return (data as DeckRow[]) || [];
 }
 
@@ -259,8 +264,11 @@ export async function fetchDecks(userId: string): Promise<DeckRow[]> {
 // ---------------------------------------------------------------------------
 function rpcError(error: { message: string } | null): string | null {
   if (!error) return null;
-  // strip the postgres error prefix for user display
-  return error.message.replace(/^.*?: /, '');
+  // strip a leading postgres error-code prefix (e.g. "P0001: ") for user
+  // display — anchored to a short all-caps/digit code so a colon inside the
+  // actual message text (e.g. "Not enough credits: need 500, have 200") is
+  // never eaten.
+  return error.message.replace(/^[A-Z0-9]{2,10}:\s*/, '');
 }
 
 export async function openPack(
@@ -399,17 +407,19 @@ export async function fetchActiveSeason(): Promise<{
   season: Season | null;
   tiers: BattlePassTier[];
 }> {
-  const { data: season } = await supabase
+  const { data: season, error: seasonError } = await supabase
     .from('seasons')
     .select('*')
     .eq('is_active', true)
     .maybeSingle();
+  if (seasonError) console.error('fetchActiveSeason (season) failed:', seasonError.message);
   if (!season) return { season: null, tiers: [] };
-  const { data: tiers } = await supabase
+  const { data: tiers, error: tiersError } = await supabase
     .from('battle_pass_tiers')
     .select('*')
     .eq('season_id', (season as Season).id)
     .order('tier');
+  if (tiersError) console.error('fetchActiveSeason (tiers) failed:', tiersError.message);
   return { season: season as Season, tiers: (tiers as BattlePassTier[]) || [] };
 }
 
@@ -417,12 +427,13 @@ export async function fetchBattlePassProgress(
   userId: string,
   seasonId: string,
 ): Promise<PlayerBattlePass> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('player_battle_pass')
     .select('season_id, xp, claimed_tiers')
     .eq('user_id', userId)
     .eq('season_id', seasonId)
     .maybeSingle();
+  if (error) console.error('fetchBattlePassProgress failed:', error.message);
   return (data as PlayerBattlePass) || { season_id: seasonId, xp: 0, claimed_tiers: [] };
 }
 
@@ -499,11 +510,12 @@ export interface InventoryEntry {
 }
 
 export async function fetchInventory(userId: string): Promise<InventoryEntry[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('player_inventory')
     .select('pack_type_id, quantity')
     .eq('user_id', userId)
     .gt('quantity', 0);
+  if (error) console.error('fetchInventory failed:', error.message);
   return (data as InventoryEntry[]) || [];
 }
 
@@ -629,13 +641,15 @@ export interface Friendship {
 }
 
 export async function fetchFriendships(): Promise<Friendship[]> {
-  const { data } = await supabase.from('friendships').select('*').order('created_at');
+  const { data, error } = await supabase.from('friendships').select('*').order('created_at');
+  if (error) console.error('fetchFriendships failed:', error.message);
   return (data as Friendship[]) || [];
 }
 
 export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[]> {
   if (ids.length === 0) return [];
-  const { data } = await supabase.rpc('get_public_profiles', { p_ids: ids });
+  const { data, error } = await supabase.rpc('get_public_profiles', { p_ids: ids });
+  if (error) console.error('fetchPublicProfiles failed:', error.message);
   return (data as PublicProfile[]) || [];
 }
 
@@ -673,7 +687,8 @@ export interface CardsLeaderboardEntry {
 
 /** Top players by total owned cards (quantity + foil_quantity, summed across every card). */
 export async function fetchCardsLeaderboard(limit = 50): Promise<CardsLeaderboardEntry[]> {
-  const { data } = await supabase.rpc('get_cards_leaderboard', { p_limit: limit });
+  const { data, error } = await supabase.rpc('get_cards_leaderboard', { p_limit: limit });
+  if (error) console.error('fetchCardsLeaderboard failed:', error.message);
   return (data as CardsLeaderboardEntry[]) || [];
 }
 
@@ -717,11 +732,12 @@ export interface Trade {
 }
 
 export async function fetchTrades(): Promise<Trade[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('trades')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(50);
+  if (error) console.error('fetchTrades failed:', error.message);
   return (data as Trade[]) || [];
 }
 
@@ -792,22 +808,24 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
   // ones — log it rather than silently letting a player bid/buy on a dead
   // listing with no signal anything went wrong.
   if (settleError) console.error('settle_expired_listings failed:', settleError.message);
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('market_listings')
     .select('*')
     .eq('status', 'active')
     .order('ends_at')
     .limit(200);
+  if (error) console.error('fetchMarketListings failed:', error.message);
   return (data as MarketListing[]) || [];
 }
 
 export async function fetchMyMarketActivity(userId: string): Promise<MarketListing[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('market_listings')
     .select('*')
     .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
     .order('created_at', { ascending: false })
     .limit(50);
+  if (error) console.error('fetchMyMarketActivity failed:', error.message);
   return (data as MarketListing[]) || [];
 }
 
@@ -1129,38 +1147,42 @@ export interface ShopReport {
 
 // -- reads --------------------------------------------------------------
 export async function fetchMyShop(ownerId: string): Promise<PlayerShop | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('player_shops')
     .select('*')
     .eq('owner', ownerId)
     .maybeSingle();
+  if (error) console.error('fetchMyShop failed:', error.message);
   return (data as PlayerShop) || null;
 }
 
 export async function fetchShopSlots(ownerId: string): Promise<ShopSlot[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('shop_slots')
     .select('*')
     .eq('owner', ownerId)
     .order('slot_index');
+  if (error) console.error('fetchShopSlots failed:', error.message);
   return (data as ShopSlot[]) || [];
 }
 
 export async function fetchShopListings(ownerId: string): Promise<ShopListing[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('shop_listings')
     .select('*')
     .eq('owner', ownerId)
     .order('created_at', { ascending: false });
+  if (error) console.error('fetchShopListings failed:', error.message);
   return (data as ShopListing[]) || [];
 }
 
 export async function fetchMysteryTemplates(ownerId: string): Promise<MysteryTemplate[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('mystery_pack_templates')
     .select('*')
     .eq('owner', ownerId)
     .order('created_at', { ascending: false });
+  if (error) console.error('fetchMysteryTemplates failed:', error.message);
   return (data as MysteryTemplate[]) || [];
 }
 
@@ -1187,12 +1209,13 @@ export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryL
 
 /** Purchases where the caller is either the buyer or the selling shop's owner. */
 export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('shop_purchases')
     .select('*')
     .or(`buyer.eq.${userId},owner.eq.${userId}`)
     .order('created_at', { ascending: false })
     .limit(100);
+  if (error) console.error('fetchMyShopPurchases failed:', error.message);
   return (data as ShopPurchase[]) || [];
 }
 
@@ -1320,7 +1343,8 @@ export interface ShopBuyerRating {
 
 /** Ratings the caller has already left, keyed for quick per-purchase lookup. */
 export async function fetchMyBuyerRatings(userId: string): Promise<ShopBuyerRating[]> {
-  const { data } = await supabase.from('shop_buyer_ratings').select('*').eq('buyer', userId);
+  const { data, error } = await supabase.from('shop_buyer_ratings').select('*').eq('buyer', userId);
+  if (error) console.error('fetchMyBuyerRatings failed:', error.message);
   return (data as ShopBuyerRating[]) || [];
 }
 
@@ -1360,11 +1384,12 @@ export interface NewsPost {
 }
 
 export async function fetchNewsPosts(limit = 30): Promise<NewsPost[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('news_posts')
     .select('*')
     .order('published_at', { ascending: false })
     .limit(limit);
+  if (error) console.error('fetchNewsPosts failed:', error.message);
   return (data as NewsPost[]) || [];
 }
 
@@ -1412,13 +1437,15 @@ export interface OwnedSerializedCard {
 }
 
 export async function fetchMySerializedCards(userId: string): Promise<OwnedSerializedCard[]> {
-  const [{ data }, { data: supply }] = await Promise.all([
+  const [{ data, error }, { data: supply, error: supplyError }] = await Promise.all([
     supabase
       .from('player_serialized_cards')
       .select('card_id, rarity, serial_number, acquired_at')
       .eq('user_id', userId),
     supabase.from('serialized_supply').select('rarity, cap'),
   ]);
+  if (error) console.error('fetchMySerializedCards (cards) failed:', error.message);
+  if (supplyError) console.error('fetchMySerializedCards (supply) failed:', supplyError.message);
   const capByRarity = new Map((supply || []).map((s) => [s.rarity, s.cap as number]));
   return ((data as Omit<OwnedSerializedCard, 'cap'>[]) || []).map((r) => ({
     ...r,

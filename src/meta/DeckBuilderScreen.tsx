@@ -234,7 +234,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                   </PopButton>
                   <PopButton
                     color="black"
-                    disabled={deletingId === d.id}
+                    disabled={deletingId !== null}
                     onClick={() => handleDelete(d)}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -296,6 +296,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     for (const d of decks) {
       if (deck && d.id === deck.id) continue;
       for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);
+      // A Leader never appears in card_ids (it's stored separately as
+      // leader_id), so without this the leader-ownership-conflict check in
+      // validateDeckList could never actually fire from this call site.
+      m.set(d.leader_id, (m.get(d.leader_id) || 0) + 1);
     }
     return m;
   }, [decks, deck]);
@@ -509,37 +513,54 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR LEADER</h1>
         </div>
         <div className="p-6 flex flex-wrap gap-5 justify-center">
-          {ownedLeaders.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => setLeaderId(l.id)}
-              className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
-            >
-              <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
-                <span className="text-[9px] heading-font text-[var(--c-yellow)]">
-                  {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
-                </span>
-                <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
-                  {l.hp} HP
-                </span>
-              </div>
-              <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
-                <SafeImage
-                  src={l.image}
-                  alt={l.name || 'Leader'}
-                  className="w-full h-full object-cover"
-                  fallbackText={l.name}
-                />
-              </div>
-              <div className="p-3 pt-1">
-                <div className="heading-font text-base leading-tight">{l.name}</div>
-                <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-                  {l.ability ? `Ability ${l.ability.threshold}+` : ''}
-                  {l.ultimate ? ` · Ultimate turn ${l.ultimate.unlockTurn}+` : ''}
+          {ownedLeaders.map((l) => {
+            // Raw ownership just gates whether the tile shows up at all —
+            // whether it's actually pickable depends on availableQty (owned
+            // minus already committed to another saved deck), same as every
+            // card in the pool grid below.
+            const avail = availableQty.get(l.id) || 0;
+            return (
+              <button
+                key={l.id}
+                onClick={() => avail > 0 && setLeaderId(l.id)}
+                disabled={avail <= 0}
+                title={avail <= 0 ? 'Already committed to another saved deck' : undefined}
+                className={cn(
+                  'btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black transition-all text-left',
+                  avail <= 0 ? 'opacity-40 cursor-not-allowed' : 'hover:-translate-y-1',
+                )}
+              >
+                <div className="flex justify-between items-center px-2 py-1 bg-[var(--c-ink)]">
+                  <span className="text-[9px] heading-font text-[var(--c-yellow)]">
+                    {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
+                  </span>
+                  <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
+                    {l.hp} HP
+                  </span>
                 </div>
-              </div>
-            </button>
-          ))}
+                <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
+                  <SafeImage
+                    src={l.image}
+                    alt={l.name || 'Leader'}
+                    className="w-full h-full object-cover"
+                    fallbackText={l.name}
+                  />
+                </div>
+                <div className="p-3 pt-1">
+                  <div className="heading-font text-base leading-tight">{l.name}</div>
+                  <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
+                    {l.ability ? `Ability ${l.ability.threshold}+` : ''}
+                    {l.ultimate ? ` · Ultimate turn ${l.ultimate.unlockTurn}+` : ''}
+                  </div>
+                  {avail <= 0 && (
+                    <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">
+                      Locked in another deck
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
           {ownedLeaders.length === 0 && (
             <div className="text-center font-bold text-[var(--c-steel)] py-14">
               You don't own any Leaders yet. Open packs to find one!
