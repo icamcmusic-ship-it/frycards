@@ -126,7 +126,8 @@ export function NewsCenterScreen({
                   setPublishErr(null);
                   setComposing((c) => !c);
                 }}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs"
+                disabled={publishing}
+                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs disabled:opacity-40"
               >
                 {composing ? 'CANCEL' : '+ NEW POST'}
               </button>

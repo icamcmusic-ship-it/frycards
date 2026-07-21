@@ -252,7 +252,7 @@ function CardStackPicker({
             className="w-16 px-2 py-1 ink-border-sm text-xs"
           />
           <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
-          <PopButton color="steel" onClick={add}>
+          <PopButton color="steel" onClick={add} disabled={qty < 1 || qty > maxQty}>
             + ADD
           </PopButton>
         </div>
@@ -951,7 +951,7 @@ function MyShopTab() {
     };
   }, [reload]);
 
-  const run = async (fn: () => Promise<string | null>, success?: string) => {
+  const run = async (fn: () => Promise<string | null>, success?: string, keepAddMode?: boolean) => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -963,7 +963,7 @@ function MyShopTab() {
         if (success) setNotice(success);
         refreshProfile();
         refreshCollection();
-        setAddMode('none');
+        if (!keepAddMode) setAddMode('none');
         // Awaited so `busy` stays true (and every gated button disabled)
         // until this reload actually lands — see the matching comment in
         // StorefrontView's run() for why a fire-and-forget reload here let
@@ -1182,7 +1182,8 @@ function MyShopTab() {
           onCreateTemplate={(name, size, mode, config) =>
             run(
               () => createMysteryTemplate(name, size, mode, config).then((r) => r.error),
-              'Pack type created!',
+              'Pack type created! Now submit a pool for it below.',
+              true,
             )
           }
           onSubmitPool={(templateId, slotId, pool, price) => {
@@ -1382,9 +1383,13 @@ function NewCardListingForm({
     let cancelled = false;
     Promise.all(
       items.map((i) => fetchCardBlendedReference(i.card_id, i.foil).then((v) => v * i.quantity)),
-    ).then((vals) => {
-      if (!cancelled) setReference(vals.reduce((a, b) => a + b, 0));
-    });
+    )
+      .then((vals) => {
+        if (!cancelled) setReference(vals.reduce((a, b) => a + b, 0));
+      })
+      .catch(() => {
+        if (!cancelled) setReference(0);
+      });
     return () => {
       cancelled = true;
     };

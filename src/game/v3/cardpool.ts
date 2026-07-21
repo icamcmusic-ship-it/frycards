@@ -653,12 +653,12 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   vampire_squid: -4,
   half_faded_shade: -4,
   where_the_deep_meets_the_sky: -4,
-  // v4.20: three straight passes (v4.18 revert, v4.19, v4.20) now show
-  // the_wolf_of_wall_street back at a stable, modest positive
-  // archetype-normalized residual (+13 to +16pt, n=481, archSpread=1) with
-  // zero code changes in between — no longer read as v4.18's overshoot
-  // noise, a real (if small) nerf candidate. Re-applying the original -1.
-  the_wolf_of_wall_street: -1,
+  // v4.23: the_wolf_of_wall_street's -1 (v4.20) overshot the other way —
+  // this pass it's back on the cardsToBuff list (resid=-32.2pt, n=912),
+  // the same "re-applied nerf overshot, revert instead of compounding"
+  // shape mesozoic_exchange_student already went through below. Reverted
+  // (entry removed) rather than buffed on top of a nerf that's clearly
+  // too big now.
   // v4.18: the_wolf_of_wall_street's -1 (v4.12) overshot — the v4.18
   // baseline shows it now at the OPPOSITE extreme (win%=7.8 vs a 45.9
   // cost-band mean, resid=-38.1pt, cardsToBuff top 5) instead of the
@@ -706,17 +706,19 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // stat trim, and already the pool's max cast-difficulty band at 6.0);
   // carried forward as a design-tension case (see BALANCE_SIM_FINDINGS_
   // v4.22.md) rather than blindly stacking a 5th stat cut.
-  kinetix_enforcer: -2,
   boneplate_sentinel: -2,
-  swaying_garden: -2,
   amethyst_starfish: -1,
-  astral_shoal: -3,
-  // v4.22: first-pass entries, all n=912-1824, all top-12 cardsToNerf this
-  // run (win% far above their cost-band mean) with no prior manual patch.
-  clockwork_nautilus: -1,
-  gulper_eel: -1,
-  playful_otters: -1,
-  cavernous_watcher: -1,
+  // v4.23: repeat-offender escalation — these five held their v4.22 trim
+  // size flat across another full-scale pass (26,448 games, zero invariant
+  // violations) without the residual closing, so each takes one more step
+  // (same pattern as v4.22's own escalations above).
+  kinetix_enforcer: -3, // was -2, still #3 cardsToNerf, +32.6pt resid
+  swaying_garden: -3, // was -2, still #8 cardsToNerf, +31.2pt resid
+  astral_shoal: -4, // was -3, still #1 cardsToNerf, +35.5pt resid
+  clockwork_nautilus: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
+  gulper_eel: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
+  playful_otters: -2, // was -1, still top-12 cardsToNerf, +31.2pt resid
+  cavernous_watcher: -2, // was -1, still top-12 cardsToNerf, +31.3pt resid
   // v4.22: cardsToBuff bottom-12 (win% far below cost-band mean) whose
   // lever is raw Unit stats. phantom_squadron and glowing_manta also
   // register as "under-costed" on the printed-power costVsAbilityMismatches
@@ -726,6 +728,8 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // findings doc for the reasoning).
   phantom_squadron: 1,
   glowing_manta: 1,
+  // v4.23: new cardsToBuff first-pass entry (n=912, resid=-32.3pt).
+  nebula_snail: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -834,7 +838,9 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   the_abyssal_gate: 2,
   wraithlight_lantern: 2,
   magma_conduit_network: 1,
-  jawbone_span: 1,
+  // v4.23: jawbone_span's +1 (v4.12) has flipped — it's now #10 cardsToNerf
+  // (resid=+29.3pt, n=912) instead of an underperformer. Reverted (entry
+  // removed) rather than compounding into a fresh nerf on the same lever.
   black_smoker: 1,
   kinetix_blacksite_cavern: 1,
   glowing_glyph_tablet: -1,
@@ -860,11 +866,10 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // escalation pattern as the_locksmiths_regret/the_abyssal_gate above.
   mist_ghost_ship: -2,
   ribvault_cathedral: -2,
-  // v4.22: first-pass Location nerfs — cardsToNerf top offenders whose
-  // lever is onCast value, not a Cast Slot cost (Locations never carry
-  // one). petrified_ribs_citadel is this run's single worst residual
-  // (+36.7pt, n=912); heart_of_the_thermal_grid is #10 (+29.7pt, n=1824).
-  petrified_ribs_citadel: -1,
+  // v4.23: petrified_ribs_citadel's v4.22 -1 held flat (still #2 cardsToNerf,
+  // +33.2pt resid) — same repeat-offender escalation as mist_ghost_ship/
+  // ribvault_cathedral above.
+  petrified_ribs_citadel: -2,
   heart_of_the_thermal_grid: -1,
   // v4.22: cardsToBuff bottom-12 whose lever is onCast value (Charm/Event,
   // no Cast Slot cost to ease further where already at floor). All n=912+,
@@ -872,14 +877,22 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // has a MANUAL_GATE_OVERRIDE easing its combo gate (v4.17); still the
   // pool's #3 worst residual this pass, so it also gets a value buff here
   // rather than a third gate step.
-  pulsing_heartstone: 1,
-  thornfang_vine: 1,
-  locust_veil: 1,
-  amber_sphere: 1,
-  resonant_shuriken: 1,
-  coral_collapse: 1, // n=3648 this pass — the largest-sample entry on the buff list
+  // v4.23: six of these held their v4.22 +1 flat across another full-scale
+  // pass without the residual closing — escalated to +2 (same pattern as
+  // the other repeat-offender escalations this pass). kinetic_siphon_swarm/
+  // diver_s_lantern dropped off the top-10 cardsToBuff list this run, so
+  // they're left at +1 rather than escalated blind.
+  pulsing_heartstone: 2, // was 1, still #1 cardsToBuff, -41.8pt resid
+  thornfang_vine: 2, // was 1, still #3 cardsToBuff, -37.0pt resid
+  locust_veil: 2, // was 1, still #2 cardsToBuff, -37.6pt resid
+  amber_sphere: 2, // was 1, still top-5 cardsToBuff, -34.1pt resid
+  resonant_shuriken: 2, // was 1, still top-5 cardsToBuff, -34.1pt resid
+  coral_collapse: 2, // was 1, still top-6 cardsToBuff, -32.8pt resid, n=3648
   kinetic_siphon_swarm: 1,
   diver_s_lantern: 1,
+  // v4.23: new cardsToBuff first-pass entries, both Rare Locations, n=912.
+  blackspire_obelisk: 1,
+  ossuary_vault: 1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {

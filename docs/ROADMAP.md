@@ -4,21 +4,16 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Guided tutorial match** — an interactive first game that introduces the turn
-  structure and core keywords step by step (the static How-to-Play panel is a
-  lot to absorb with 35+ keywords).
-- **Confirm dialogs on irreversible actions** — attack submission, targeting.
 - **Mobile/responsive polish** — touch targets and small-screen layout for the
   board and card views.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
-  actions, contrast audit of the monochrome theme.
+  actions, contrast audit of the monochrome theme (partially underway — see
+  the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
 
 ## Medium term
 
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
-- **Daily quests / login rewards** — deepen the gold/gems economy beyond match
-  payouts (requires new Supabase tables + RPCs).
 - **Set 4** — the content pipeline supports further iterative drops on top of
   the live 292-card pool (Set 3, Dragonbone Wastes, already shipped — see
   `CHANGELOG.md`).

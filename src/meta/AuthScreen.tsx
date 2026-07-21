@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useMeta } from './MetaContext';
@@ -18,6 +18,14 @@ export function AuthScreen() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const oauthTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (oauthTimeoutRef.current) clearTimeout(oauthTimeoutRef.current);
+    },
+    [],
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +80,7 @@ export function AuthScreen() {
       // extension) the call resolves with no error and nothing else ever
       // fires — without this fallback the button stays stuck disabled
       // forever. Give the real redirect a window, then release the button.
-      setTimeout(() => setBusy(false), 4000);
+      oauthTimeoutRef.current = setTimeout(() => setBusy(false), 4000);
     }
   };
 

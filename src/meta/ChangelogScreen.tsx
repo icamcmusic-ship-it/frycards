@@ -12,6 +12,15 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'True Colors Update',
+    items: [
+      'The Bounty Shop now shows the real card — full rarity frame, border, and background treatment — instead of a plain image thumbnail.',
+      'Full-Art cards are easier to pull: their odds went from about 1/6th of Super-Rare\'s chance up to roughly 85% of it (only ~15% rarer than Super-Rare now) in every pack and box that carries them.',
+      'Another balance pass: several long-standing over- and under-performers (Astral Shoal, Kinetix Enforcer, Swaying Garden, and others) got another round of tuning, two earlier tweaks that had overshot were dialed back, and a few newly-flagged cards were adjusted for the first time.',
+      'Bug-hunt pass: a profile card that could get stuck loading forever after a network hiccup, a Scrap action that silently failed instead of telling you why, a Store screen that could go quiet on a failed purchase instead of showing an error, bulk-quicksell in the Collection that could try to sell serialized cards it shouldn\'t, and a Deck Builder check that could let you pick a Leader already locked into another deck. Plus some smaller fixes to popovers opening off-screen and a stale "Pity" mention in How To Play (removed a while back).',
+    ],
+  },
+  {
     version: 'Undertow Update',
     items: [
       'No gameplay changes this update — this was a deep testing-and-diagnosis pass. We finally pinned down WHY Mer-King\'s Avenge Swarm deck underperforms: it\'s not the cards (the same card list wins comfortably under a different Leader), it\'s that Mer-King\'s healing-focused kit works against a deck that wants to trade Units away. That means the real fix is a Leader-kit change, not a card buff — coming in a future update.',

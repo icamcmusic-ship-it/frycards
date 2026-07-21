@@ -320,12 +320,8 @@ const SECTIONS = [
         "The rarest possible pull: a numbered 1-of-however-many-are-left print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed, server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. Numbering starts at #1 for each tier and counts up until that tier's supply runs out for good. About a 1-in-100 chance on every pack you open. Serialized copies can never be foil and can never be quick sold — they're yours to keep or show off. Every Serialized pull posts to the News Center (with an opt-out for your username in Settings).",
       ],
       [
-        'Pity',
-        'There is exactly ONE pity rule in the game: a Super-Rare (or better) is guaranteed at least once every 10 packs — tracked per-account across all pack types and shown as a progress readout in the Store. Nothing else is ever guaranteed.',
-      ],
-      [
-        'No guaranteed top end',
-        'No product guarantees a Full-Art, Ultra-Rare or Mythic. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
+        'No pity, no guarantees',
+        'There is no pity system of any kind — no product guarantees a Super-Rare, Full-Art, Ultra-Rare or Mythic. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
       ],
     ],
   },
@@ -483,7 +479,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          DEFINITIVE RULEBOOK V4.6 · docs/RULEBOOK.md
+          DEFINITIVE RULEBOOK V4.21 · docs/RULEBOOK.md
         </div>
       </div>
     </div>

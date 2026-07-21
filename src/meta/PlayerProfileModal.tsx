@@ -54,9 +54,14 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
   useEffect(() => {
     let cancelled = false;
     setCard(undefined);
-    fetchPlayerProfileCard(userId).then((c) => {
-      if (!cancelled) setCard(c);
-    });
+    fetchPlayerProfileCard(userId).then(
+      (c) => {
+        if (!cancelled) setCard(c);
+      },
+      () => {
+        if (!cancelled) setCard(null);
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -118,7 +123,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
               <div className="absolute bottom-3 left-4 flex items-end gap-3">
                 <div className="w-16 h-16 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
                   {avatar?.image_url ? (
-                    <img
+                    <SafeImage
                       src={avatar.image_url}
                       alt={`${card.username}'s avatar`}
                       className="w-full h-full object-cover"
