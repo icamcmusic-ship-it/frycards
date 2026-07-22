@@ -399,26 +399,43 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           <input
             className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
             placeholder="Search cards…"
+            aria-label="Search cards"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <select className={select} value={type} onChange={(e) => setType(e.target.value)}>
+          <select
+            className={select}
+            aria-label="Filter by card type"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          >
             {TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </select>
-          <select className={select} value={rarity} onChange={(e) => setRarity(e.target.value)}>
+          <select
+            className={select}
+            aria-label="Filter by rarity"
+            value={rarity}
+            onChange={(e) => setRarity(e.target.value)}
+          >
             {RARITY_FILTERS.map((r) => (
               <option key={r}>{r}</option>
             ))}
           </select>
-          <select className={select} value={color} onChange={(e) => setColor(e.target.value)}>
+          <select
+            className={select}
+            aria-label="Filter by color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+          >
             {COLOR_FILTERS.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
           <select
             className={select}
+            aria-label="Sort cards"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
           >

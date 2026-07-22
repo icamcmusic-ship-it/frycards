@@ -242,7 +242,12 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                     {cadence === 'daily' ? 'DAILY MISSIONS' : 'WEEKLY MISSIONS'}
                   </h2>
                   <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
-                    {cadence === 'daily' ? 'Reset every day at midnight.' : 'Reset every Monday.'}
+                    {/* The server tracks mission periods in UTC — saying a
+                        bare "midnight" here promised local-time resets the
+                        server doesn't deliver. */}
+                    {cadence === 'daily'
+                      ? 'Reset every day at midnight UTC.'
+                      : 'Reset every Monday (UTC).'}
                   </div>
                   <div className="flex flex-col gap-3">
                     {list.map((m) => {

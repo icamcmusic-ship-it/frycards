@@ -15,7 +15,7 @@ import { SafeImage } from './SafeImage';
 /** Mirrors ChangelogScreen's newest entry headline — kept as a short pointer
  * here rather than duplicating the full log (see ChangelogScreen.tsx). */
 const LATEST_UPDATE_HEADLINE =
-  'Ballast Update — balance-tooling bug fixed, another card-tuning pass & app-wide bug hunt';
+  'Convergence Update — Volume #1 set, store rework, watchable CPU turns, card readability overhaul & app-wide bug hunt';
 
 function timeAgo(iso: string | null | undefined): string {
   const ms = iso ? Date.now() - new Date(iso).getTime() : NaN;

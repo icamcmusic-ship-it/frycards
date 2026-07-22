@@ -32,7 +32,7 @@ import { useTheme } from './meta/useTheme';
 // Play setup — a freshly-rolled random deck, or one of the player's own
 // saved decks
 // ---------------------------------------------------------------------------
-type MatchSetup = { kind: 'custom'; deck: DeckRow };
+type MatchSetup = { kind: 'custom'; deck: DeckRow } | { kind: 'random' };
 
 function PlayScreen({
   onStart,
@@ -56,10 +56,31 @@ function PlayScreen({
         </span>
       </div>
       <div className="p-6 max-w-6xl mx-auto">
+        {/* Random-deck quick match — the only way to play as a guest, and a
+            no-setup fallback for account holders without a legal deck yet.
+            This path existed per the changelog ("playing without a saved deck
+            or as a guest rolls a freshly randomized legal deck") but the
+            screen had regressed into a dead end: guests got a "can't play"
+            message despite the enabled PLAY tile, and a new account with no
+            legal decks had no way to start a match at all. */}
+        <h2 className="heading-font text-base mb-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+          QUICK MATCH
+        </h2>
+        <div className="mb-8">
+          <button
+            onClick={() => onStart({ kind: 'random' })}
+            className="btn-pop px-5 py-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-sm ink-border-md shadow-hard-black hover:-translate-y-1 transition-all"
+          >
+            RANDOM DECK ▸
+          </button>
+          <p className="text-[10px] font-bold text-[var(--c-steel)] mt-2">
+            Rolls a freshly randomized legal deck — no collection needed. The CPU does the same.
+          </p>
+        </div>
         {guest ? (
           <p className="text-[11px] font-bold text-[var(--c-steel)]">
-            Guest mode can't bring a deck into battle — create an account and build one in the
-            Deck Builder (30 cards, max 3 copies each) to play.
+            Create an account to build and save your own decks in the Deck Builder (30 cards, max
+            3 copies each).
           </p>
         ) : (
           <>
@@ -113,6 +134,10 @@ function PlayScreen({
 }
 
 function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
+  if (setup.kind === 'random') {
+    const arch = randomArchetype();
+    return { deck: buildDeck(arch), label: arch.label };
+  }
   return {
     deck: deckDefFromCustom(setup.deck.leader_id, setup.deck.card_ids, setup.deck.name),
     label: setup.deck.name,
@@ -124,7 +149,11 @@ function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
 // ---------------------------------------------------------------------------
 function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   const { session, profile, refreshProfile } = useMeta();
-  const human = setupToDeck(setup);
+  // useState initializer, not a plain call: for a random setup, calling
+  // setupToDeck on every render would silently re-roll the human's deck
+  // whenever this component re-renders (e.g. the reward state updating at
+  // game end). One roll per mount — the gameKey remount rolls a fresh one.
+  const [human] = useState(() => setupToDeck(setup));
   // CPU plays a freshly randomized deck every match rather than one of the
   // fixed archetype presets — keeps every match legal even when the human's
   // own custom deck is still a work in progress.

@@ -91,7 +91,24 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   could only fail; the Store's daily-pack countdown says "READY TOMORROW"
   when the time is next-day; the News Center's LATEST UPDATE banner
   points at the actual newest entry; player-profile dialogs are announced
-  to screen readers. (Second sweep's items appended below.)
+  to screen readers. Second sweep: **Quick Match restored** — guests and
+  deckless accounts had no way to start a match at all (the documented
+  random-deck path had regressed out of `MatchSetup`; restored with a
+  memoized roll so game-end re-renders can't re-roll the deck mid-match);
+  the daily-login panel no longer advertises rewards in the retired Shards
+  currency (days 3/6 corrected to their real credit prizes, verified
+  against the live `claim_daily_login` SQL) and no longer highlights the
+  wrong day after a lapsed streak (the projection now mirrors the server's
+  yesterday-UTC rule); a failed Discord sign-in could lock the whole auth
+  form forever (only auth call with no try/catch); backing out of a
+  just-imported deck code silently discarded it (id-less drafts now always
+  count as dirty); How To Play rewritten for the live product lineup (the
+  retired Standard Box / Leader Pack sections replaced with Volume #1
+  Booster Box and Starter Box, a phantom Collection "set" filter corrected
+  to "color"); mission reset times stated honestly as UTC; stale "BLUE
+  CORAL SET" banners on menu/auth now read VOLUME #1; hardcoded "Season 1"
+  Battle Pass tile copy future-proofed; `aria-label`s added to Collection/
+  Deck Builder search, filter and name inputs.
 - **Docs**: retired the per-pass `BALANCE_SIM_FINDINGS_v4.5-v4.25` series
   (the new v4.26 file is the sole survivor and says so); dangling
   references in `RULEBOOK.md` / `COLOR_IDENTITY.md` rewritten; `ROADMAP.md`
