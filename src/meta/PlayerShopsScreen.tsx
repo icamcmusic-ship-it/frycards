@@ -161,7 +161,15 @@ function CardStackPicker({
     [collection, locked, search],
   );
 
-  const selected = sellable.find((c) => c.card_id === cardId);
+  // Look the selected card up in the full collection, not the search-filtered
+  // `sellable` list — otherwise typing in the search box mid-flow (e.g. to
+  // find the next card for a bundle/pool) silently deselected the current
+  // card and collapsed the qty/ADD row. Same fix as Marketplace's SellForm.
+  const selectedEntry = collection.find((c) => c.card_id === cardId);
+  const selected =
+    selectedEntry && POOL_BY_ID[cardId] && POOL_BY_ID[cardId].type !== 'Leader'
+      ? selectedEntry
+      : undefined;
   // Uses the same normal-copies-consumed-first, foil-as-spillover model as
   // CollectionScreen's spareSplit (also used by Marketplace's sell form) —
   // a locally-reinvented split here previously diverged from that model
@@ -723,10 +731,22 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           onBuy={() => {
             if (!confirm(`Buy this mystery pack for ${fmtCredits(l.price)}? Contents are random.`))
               return;
+            // The RPC returns the actual draw — surface it instead of the
+            // old generic "check your Collection" (the pulled cards were
+            // fetched and then thrown away, so buyers had to diff their
+            // collection by hand to learn what they got).
             run(async () => {
-              const { error: e } = await buyMysteryPack(l.id);
+              const { data, error: e } = await buyMysteryPack(l.id);
+              if (!e) {
+                const names = (data?.cards ?? [])
+                  .map((c) => `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}`)
+                  .join(', ');
+                setNotice(
+                  names ? `Pack opened! You pulled: ${names}` : 'Pack opened! Check your Collection.',
+                );
+              }
               return e;
-            }, 'Pack opened! Check your Collection.');
+            });
           }}
           onReport={() => setReportTarget(l.id)}
         />
@@ -746,7 +766,15 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="heading-font text-xs">
-            {l.listing_type === 'bundle' ? 'BUNDLE' : defFor(cards[0]?.card_id || '').name}
+            {/* Individual listings must surface foil + quantity too — a
+                "Card ×3 (foil)" listing previously showed just the bare card
+                name, so buyers couldn't tell what they were actually buying
+                without cross-checking the tiny card art. */}
+            {l.listing_type === 'bundle'
+              ? 'BUNDLE'
+              : `${defFor(cards[0]?.card_id || '').name}${cards[0]?.foil ? ' ✦' : ''}${
+                  (cards[0]?.quantity ?? 1) > 1 ? ` ×${cards[0].quantity}` : ''
+                }`}
           </div>
           {l.listing_type === 'bundle' && (
             <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1 flex flex-col gap-0.5">
@@ -1232,7 +1260,14 @@ function MyShopTab() {
               </span>
               {l.listing_type === 'mystery'
                 ? `${l.remaining_packs ?? 0}/${l.total_packs ?? 0} packs left`
-                : (l.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
+                : (l.cards ?? [])
+                    .map(
+                      (c) =>
+                        `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}${
+                          c.quantity > 1 ? ` ×${c.quantity}` : ''
+                        }`,
+                    )
+                    .join(', ')}
               {' · '}
               <Credits amount={l.price} /> · {(l.status || 'UNKNOWN').toUpperCase()}
             </div>
@@ -1271,7 +1306,14 @@ function MyShopTab() {
               <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
                 {p.listing_type === 'mystery'
                   ? 'Mystery pack'
-                  : (p.cards ?? []).map((c) => defFor(c.card_id).name).join(', ')}
+                  : (p.cards ?? [])
+                      .map(
+                        (c) =>
+                          `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}${
+                            c.quantity > 1 ? ` ×${c.quantity}` : ''
+                          }`,
+                      )
+                      .join(', ')}
                 {' · '}
                 <Credits amount={p.price} />
               </div>

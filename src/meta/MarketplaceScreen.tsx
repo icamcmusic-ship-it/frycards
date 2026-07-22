@@ -239,7 +239,14 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             )}
           </div>
           <div className="flex gap-2 mt-2">
-            {mine && l.status === 'active' ? (
+            {/* Timed-out-but-unsettled listings show the SETTLING badge for
+                the owner too — the CANCEL button previously stayed live here
+                and could only error once server-side settlement ran. */}
+            {l.status === 'active' && timedOut ? (
+              <span className="text-[9px] font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
+                ENDED — SETTLING…
+              </span>
+            ) : mine && l.status === 'active' ? (
               <PopButton
                 color="steel"
                 disabled={busy || l.bid_count > 0}
@@ -251,7 +258,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               >
                 CANCEL LISTING
               </PopButton>
-            ) : !mine && l.status === 'active' && !timedOut ? (
+            ) : !mine && l.status === 'active' ? (
               <>
                 {isAuction && (
                   <PopButton
@@ -281,10 +288,6 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   </PopButton>
                 )}
               </>
-            ) : !mine && l.status === 'active' && timedOut ? (
-              <span className="text-[9px] font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
-                ENDED — SETTLING…
-              </span>
             ) : (
               <span
                 className={cn(

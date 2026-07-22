@@ -104,6 +104,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label={card ? `${card.username}'s profile` : 'Player profile'}
         tabIndex={-1}
       >
         {card === undefined ? (

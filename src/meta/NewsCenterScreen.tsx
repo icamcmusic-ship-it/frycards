@@ -15,7 +15,7 @@ import { SafeImage } from './SafeImage';
 /** Mirrors ChangelogScreen's newest entry headline — kept as a short pointer
  * here rather than duplicating the full log (see ChangelogScreen.tsx). */
 const LATEST_UPDATE_HEADLINE =
-  'Collector Update — Serialized cards, daily login rewards, reworked packs, new boxes & Leader Pack';
+  'Ballast Update — balance-tooling bug fixed, another card-tuning pass & app-wide bug hunt';
 
 function timeAgo(iso: string | null | undefined): string {
   const ms = iso ? Date.now() - new Date(iso).getTime() : NaN;

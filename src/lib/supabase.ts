@@ -110,10 +110,12 @@ export interface PackType {
    * (all sets). Non-null = restricted to exactly these `cards.set_name`
    * values. */
   allowed_sets: string[] | null;
-  /** NULL = this row is a standalone store slot. `'set_booster'` or
-   * `'set_box'` = one of a trio of rows (one per set) meant to render as a
-   * single swipeable store tile — see `set_name` and StoreScreen's grouped
-   * pack tile. */
+  /** NULL = this row is a standalone store slot (true of every live pack
+   * since the catalog consolidated into the single "Volume #1" set).
+   * Non-null (e.g. `'set_booster'` / `'set_box'`) = one of several same-slot
+   * set variants meant to render as a single swipeable store tile — see
+   * `set_name` and StoreScreen's grouped pack tile, kept for future
+   * multi-set drops. */
   pack_group: string | null;
   /** Which single set this row represents — only set when `pack_group` is set. */
   set_name: string | null;
