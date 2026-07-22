@@ -7,6 +7,115 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.26 Volume #1 consolidation, shop rework, CPU turn replay, "Bind X", balance pass, full-app bug hunt
+
+- **Volume #1**: all 292 live cards consolidated into a single set,
+  "Volume #1" (Supabase `cards.set_name` + `template.set`; the old Blue
+  Coral / Crimson Circuit / Dragonbone Wastes / Full Arts Collection 1
+  split is gone). Set names never feed the deterministic mechanic hash, so
+  zero card mechanics changed — confirmed by a byte-identical sim baseline.
+  Client mirrors updated (`generated-cards.ts`, `ALL_SET_NAMES`, card-face
+  set styling, store copy).
+- **Store rework**: the shelf now carries exactly one **Volume #1 Booster
+  Pack**, one **Volume #1 Booster Box**, plus the Daily Free Pack. The
+  three per-set packs/boxes and the Standard Box were deleted; the Starter
+  Pack was retired from sale (still openable from MY PACKS). **Full-Art
+  pull odds cut 25%** in every slot that can roll them (booster chase, box
+  chase + topper, Season Pass pack), with the removed probability folded
+  into Rare — backed by the new rarity power curve table, which measured
+  Full-Art as the most systematically overperforming rarity band
+  (+5.2-5.6pt normalized residual, n≈46k).
+- **Pack opening**: boxes/bulk opens no longer auto-skip to the summary
+  (was a `pulls.length > 12` shortcut) — every opening now goes through
+  the click-through card-by-card reveal, ending on the box topper; REVEAL
+  ALL remains the deliberate skip.
+- **Card readability overhaul** (`CardFaceV4`): measurement-driven layout
+  so text can never overflow the frame — keyword chips shed into a "+N"
+  overflow chip, flavor text is explicitly lowest-priority and steps aside
+  line-by-line, names hard-clamp; full-art cards gained a frosted
+  scrim/blur panel behind text regions plus solid-backed stat chips; board
+  minis rebuilt as art-forward tokens (full-bleed art, name/cost strip,
+  compact keyword chips + live stat chips) instead of shrunken full cards.
+- **CPU turn replay** (`GameV4` + an observational hook in `ai.ts`): the
+  CPU now plays at a watchable pace (~0.85-1.6s per action, constants in
+  one `CPU_PACE` block) and every action — roll, reroll, Snap, Scrap,
+  Location, cast, Echo, Ability, Ultimate, Rally, each attack, end turn —
+  replays step by step with a narrated banner, pulsing actor/target
+  rings, the opponent's own dice tray, floating damage numbers, and new
+  green heal floats (humans get the same damage/heal float grammar).
+  NEXT ▸ advances a beat; SKIP ▸▸ fast-forwards the turn. AI decisions
+  are byte-identical (observer fires post-action; the sim harness never
+  passes one).
+- **Sim harness**: two new capture types — a per-card
+  **dead-in-hand-at-game-end** table (third leg of the hand-clog triptych;
+  immediately redirected two planned stat buffs into a castability fix)
+  and a **rarity power curve** (avg archetype-normalized residual by
+  printed rarity; the data behind the Full-Art odds cut).
+- **New mechanic — "Bind X"** (engine): a bind Effect carrying a numeric
+  value now also saps the bound Unit by that value ("Bind + Sap X" on the
+  card face). Root cause: the engine ignored `value` on bind entirely, so
+  every value buff ever applied to a bind-effect Charm (up to +4 across
+  four passes of escalations) was dead code — the same dead-code class as
+  v4.25's gate-cost threshold no-ops. Value-less binds (Leader kits etc.)
+  are unchanged; the four flagged bind Charms got fresh deliberate Bind 2
+  values and the stale dead entries elsewhere were removed.
+- **Balance** (full-scale runs, 26,448 games each, zero invariant
+  violations; full writeup `docs/BALANCE_SIM_FINDINGS_v4.26.md`):
+  CPU-lapse detector floor holds for a 17th straight pass. **Avenge
+  resolved via the per-card look v4.25 asked for** — its stable +5.6pt
+  delta was almost entirely Faye's True Face (trimmed -3; keyword now
+  +4.6pt). **Pierce actioned via per-card outlier trims** (Void Mother's
+  stale v4.12 buff reverted; Dr. Aries, Worm Brain Host, Nanite Division
+  Marshal trimmed). **Steel moved for the first time in 17 holds**
+  (activation 0.28 → 0.61, delta +21.4 → +14.8pt) as a side effect of
+  fixing its only drafted carriers' castability: Shattered Horizon
+  Protagonist / Skyborne Skeleton Dragon eased FullHouse → TwoPair after
+  the new dead-in-hand table showed they were stranded, not weak (a first
+  attempt at SmallStraight ejected both from every deck via the
+  combo-family drafting rule — caught by verification, root-caused, and
+  documented). Cavernous Watcher finally closed via a cost lever (sum
+  12 → 14, off the nerf list) after its stat trim hit the -4 ceiling.
+  Repeat-offender escalations: Wasteland Aberration -4, Blue-Ringed
+  Octopus / Porcelain Lobster -2, Butterflyfish School -2, Obsidian Bore
+  Site -2; Isle of the Ancients first-pass -1; buffs: Chalice of
+  Quicksilver +2, Perpetual Dynamo +2, Coral Collapse +5, Wolf of Wall
+  Street +2. Two new deck-presence nerf entries (Mer-Warrior, Stormcaller
+  Adept) deliberately NOT actioned — their archetype-normalized deltas
+  are ≈0, an archetype artifact, not a card problem.
+- **Bug hunt** (two independent sweeps across every screen plus
+  `src/lib/supabase.ts`): Player Shops' bundle/mystery builder no longer
+  deselects your card when you search mid-setup; individual listings, own
+  listings and purchase history now show foil status and copy counts;
+  mystery-pack buys list the exact cards pulled; an ended-but-unsettled
+  Marketplace auction no longer shows the seller a CANCEL button that
+  could only fail; the Store's daily-pack countdown says "READY TOMORROW"
+  when the time is next-day; the News Center's LATEST UPDATE banner
+  points at the actual newest entry; player-profile dialogs are announced
+  to screen readers. Second sweep: **Quick Match restored** — guests and
+  deckless accounts had no way to start a match at all (the documented
+  random-deck path had regressed out of `MatchSetup`; restored with a
+  memoized roll so game-end re-renders can't re-roll the deck mid-match);
+  the daily-login panel no longer advertises rewards in the retired Shards
+  currency (days 3/6 corrected to their real credit prizes, verified
+  against the live `claim_daily_login` SQL) and no longer highlights the
+  wrong day after a lapsed streak (the projection now mirrors the server's
+  yesterday-UTC rule); a failed Discord sign-in could lock the whole auth
+  form forever (only auth call with no try/catch); backing out of a
+  just-imported deck code silently discarded it (id-less drafts now always
+  count as dirty); How To Play rewritten for the live product lineup (the
+  retired Standard Box / Leader Pack sections replaced with Volume #1
+  Booster Box and Starter Box, a phantom Collection "set" filter corrected
+  to "color"); mission reset times stated honestly as UTC; stale "BLUE
+  CORAL SET" banners on menu/auth now read VOLUME #1; hardcoded "Season 1"
+  Battle Pass tile copy future-proofed; `aria-label`s added to Collection/
+  Deck Builder search, filter and name inputs.
+- **Docs**: retired the per-pass `BALANCE_SIM_FINDINGS_v4.5-v4.25` series
+  (the new v4.26 file is the sole survivor and says so); dangling
+  references in `RULEBOOK.md` / `COLOR_IDENTITY.md` rewritten; `ROADMAP.md`
+  updated for the Volume #1 consolidation (next drop is "Volume #2").
+
+Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.26.md`.
+
 ### v4.25 sim-harness upgrade, balance pass (dead-code fix + lever revert), full-app bug hunt
 
 - **Sim harness**: added per-card attribution for the `lapseWastedCastableDie`

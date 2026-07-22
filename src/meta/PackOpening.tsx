@@ -174,9 +174,6 @@ export function PackOpening({
   onDone: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
-  // Big hauls (bulk opens, boxes) skip the one-at-a-time reveal — clicking
-  // through 30+ flips is a chore, and the grouped summary is the payoff.
-  const bigHaul = pulls.length > 12;
   // An empty pull list (bad server response) would strand the player on a
   // reveal stage that renders nothing — go straight to the summary instead.
   const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
@@ -216,7 +213,10 @@ export function PackOpening({
           packName={packName}
           packImageUrl={packImageUrl}
           reducedMotion={reducedMotion}
-          onTorn={() => setStage(bigHaul ? 'summary' : 'reveal')}
+          // Every haul — including boxes and bulk opens — goes through the
+          // interactive click-to-flip reveal; the REVEAL ALL button in that
+          // stage is the deliberate skip for players who don't want 36 flips.
+          onTorn={() => setStage('reveal')}
         />
       )}
       {stage === 'reveal' && (

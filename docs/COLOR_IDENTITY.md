@@ -112,7 +112,7 @@ Leader once restricted to Crimson/Radiant, suggesting its weak archetypes
 were previously diluted by off-identity filler rather than helped by it.
 Sovereign of the Dying Star swung the other way, from the roster's
 *strongest* Leader (v4.12, on an admittedly noisy 2-archetype sample — see
-`BALANCE_SIM_FINDINGS_v4.12.md` §5 item 1) to its weakest — its Umbral/
+the v4.12 balance findings (doc retired; history in CHANGELOG.md) §5 item 1) to its weakest — its Umbral/
 Crimson identity may be too narrow for the single generic archetype it has.
 
 Color-level win rates (min n=200): Azure 52.7%, Verdant 51.1%, Umbral
@@ -137,7 +137,7 @@ clean color-only signal yet.
 3. **Sovereign of the Dying Star's identity** — the biggest single swing
    (64.7% → 27.8%) needs a dedicated look before trusting either number;
    both are built on a single generic archetype (see
-   `BALANCE_SIM_FINDINGS_v4.12.md` §5 item 1, not yet resolved) rather than
+   the v4.12 balance findings (doc retired; history in CHANGELOG.md) §5 item 1, not yet resolved) rather than
    the 2-4 archetypes most other Leaders have, so neither reading is
    trustworthy yet.
 4. **The 28 tri-color orphan cards** — confirm whether "legal nowhere"
@@ -361,4 +361,5 @@ number suggested.
 
 Both are flagged for the next dedicated color-balance pass rather than
 chased further in this same session — same "surgical, verified, don't
-oversweep" convention as every prior `BALANCE_SIM_FINDINGS_v4.*.md` pass.
+oversweep" convention as every prior balance-findings pass (the per-pass
+findings docs were retired; history lives in CHANGELOG.md).

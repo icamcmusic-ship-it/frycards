@@ -71,7 +71,7 @@ export function CoachOverlay({ stage }: { stage: string }) {
       // player never clicked the final step's own "GOT IT — I'M READY"
       // button before the game moved on — the 'cpu' stage in particular
       // advances itself on timers with no player input required
-      // (GameV4.tsx's tickCpuNarration -> beginHumanTurn), so it's easy to
+      // (GameV4.tsx's tickCpuStep -> beginHumanTurn), so it's easy to
       // miss. Previously this fell through to the branch below, which just
       // hides the callout WITHOUT marking the tutorial done — the whole
       // 5-step walkthrough would then silently replay from step 1 on the

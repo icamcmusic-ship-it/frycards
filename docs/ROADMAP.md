@@ -14,9 +14,10 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
-- **Set 4** — the content pipeline supports further iterative drops on top of
-  the live 292-card pool (Set 3, Dragonbone Wastes, already shipped — see
-  `CHANGELOG.md`).
+- **Volume #2** — the content pipeline supports further drops on top of the
+  live 292-card pool. (The old per-set split — Blue Coral / Crimson Circuit /
+  Dragonbone Wastes / Full Arts Collection 1 — was consolidated into the
+  single "Volume #1" set; see `CHANGELOG.md`.)
 - **Persistent match history / replays** — store per-match logs and let players
   review past games.
 

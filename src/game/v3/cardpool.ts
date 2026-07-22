@@ -700,10 +700,21 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // over-performer it was patched for. Reverted rather than re-nerfed.
   mesozoic_exchange_student: -1,
   blind_colossus: -2,
-  fayes_true_face: -2,
+  // v4.26: fayes_true_face -2 -> -3. Two independent signals agree this
+  // pass: it's #8 cardsToNerf (+27.1pt resid), AND the v4.25-requested
+  // per-card look at Avenge's 5-card pool shows the keyword's stable +5.6pt
+  // fired-delta is almost entirely THIS card (+10.9pt normalized vs
+  // +1.8-4.0 for the other four Avenge carriers) — so the per-card trim IS
+  // the Avenge fix, with no keyword-wide lever touched.
+  fayes_true_face: -3,
   vlad_from_accounting: -1,
   // buffs (win% far BELOW their cost band's mean)
-  void_mother: 2,
+  // v4.26: void_mother's +2 (v4.12 era) REMOVED — the per-card Pierce-pool
+  // breakdown (the non-clamped lever v4.25's Pierce investigation called
+  // for) shows it at +13.6pt normalized delta (n=1253), one of the five
+  // outliers driving Pierce's stable +10pt keyword delta, while still
+  // wearing a stale buff from twelve passes ago. Same "revert, don't
+  // compound" pattern as jawbone_span/isle_of_the_ancients.
   // v4.20: familiar_in_the_dark's halved +1 (v4.19.1) still barely moved
   // the residual (+19.3 -> +19.6pt, flat across two passes) — the buff
   // itself, not its size, was the problem. Removed entirely.
@@ -712,8 +723,15 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // small trims for the residual top of the table; sized -2 for the two
   // biggest multi-archetype offenders, -1 for the smaller-sample one.
   cervine_channeler: -2, // +20.9pt, n=1343, spread 4
-  dr_aries_chief_biogeneticist: -2, // +19.0pt, n=1043, ~1.5 pips/cast
-  worm_brain_host: -1, // +19.0pt, n=475, spread 2
+  // v4.26: dr_aries -2 -> -3, worm_brain_host -1 -> -2, and a first-pass
+  // nanite_division_marshal -1 — all three are in the five-card outlier
+  // cohort the per-card Pierce-pool breakdown surfaced (+15.5 / +15.9 /
+  // +19.4pt normalized respectively), the "target the specific low-rarity
+  // Pierce outliers directly" lever v4.25's Pierce investigation
+  // recommended instead of the clamped keyword-wide cost weight.
+  dr_aries_chief_biogeneticist: -3, // was -2 (v4.19.1), +15.5pt normalized
+  worm_brain_host: -2, // was -1 (v4.19.1), +15.9pt normalized
+  nanite_division_marshal: -1, // first-pass, +19.4pt normalized (n=441)
   // v4.18: butterflyfish_school's +1 (v4.12) overshot — the v4.18 baseline
   // shows it now at the OPPOSITE extreme (win%=76.5 vs a 42.1 cost-band
   // mean, resid=+34.4pt, cardsToNerf top 3) instead of the under-performer
@@ -777,13 +795,20 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // pass) despite six-plus verification runs in between. Same "barely
   // moved, take a bigger step" escalation this file uses everywhere else;
   // this one was simply never revisited until now.
-  wasteland_aberration: -2, // was -1 (flat since v4.17), still top-3 cardsToNerf, +33.1pt resid
+  // v4.26: the v4.25 -2 barely moved it (+33.1 -> +32.8pt, now the #1
+  // cardsToNerf entry) — v4.25's own closing note flagged it for a bigger
+  // step than another matching -1, so it takes a 2-step this pass, landing
+  // at the same -4 ceiling its fellow repeat offenders reached.
+  wasteland_aberration: -4, // was -2 (v4.25), #1 cardsToNerf, +32.8pt resid
   // v4.25: first-pass nerfs — new top-10 cardsToNerf entries, no prior
   // manual patch. Both Common Guard bodies, n=912, identical measured
   // win%/resid (coincidental — see the archetype-normalized table; both
   // are single-copy-pattern inclusions in the same deck shape).
-  blue_ringed_octopus: -1, // #1 cardsToNerf, +34.1pt resid
-  porcelain_lobster: -1, // #1 (tied) cardsToNerf, +34.1pt resid
+  // v4.26: both held their v4.25 -1 essentially flat (+34.1 -> +32.4pt,
+  // still #2-3 cardsToNerf) — one more step each, standard repeat-offender
+  // escalation.
+  blue_ringed_octopus: -2, // was -1 (v4.25), +32.4pt resid
+  porcelain_lobster: -2, // was -1 (v4.25), +32.4pt resid
   // v4.25: first-pass nerf, cautious size given this card's overshoot
   // history — buffed +1 in v4.12, reverted in v4.18 after flipping to the
   // opposite extreme (cardsToNerf top-3, resid=+34.4pt at the time). Back on
@@ -791,7 +816,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // n=1824), so a real first step is warranted, but sized small (-1, not
   // the -2 a fresh first-pass entry at this resid would otherwise get)
   // given the card's history of swinging hard off a single-step change.
-  butterflyfish_school: -1, // top-10 cardsToNerf, +29.0pt resid
+  // v4.26: the cautious v4.25 -1 didn't move it (+29.0 -> +29.3pt) — one
+  // more single step, still sized conservatively given the overshoot
+  // history documented above.
+  butterflyfish_school: -2, // was -1 (v4.25), +29.3pt resid
   // v4.25: first-pass nerf, new top-10 cardsToNerf entry.
   levitating_coven: -1, // top-10 cardsToNerf, +27.6pt resid
   // v4.22: cardsToBuff bottom-12 (win% far below cost-band mean) whose
@@ -817,7 +845,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // as nebula_snail's own v4.23 debut, given this card's history of
   // overshooting in both directions (v4.12 buff -> v4.18 revert -> v4.20
   // nerf -> v4.23 revert).
-  the_wolf_of_wall_street: 1,
+  // v4.26: still top-10 cardsToBuff after the v4.24 +1 (-28.0pt resid this
+  // pass) — one more small step, keeping the caution its overshoot history
+  // warrants.
+  the_wolf_of_wall_street: 2,
   // v4.25: first-pass buffs, new top-10 cardsToBuff entries — both Full-
   // Art/Rare multi-keyword Units (Echo/Guard/Steel and Echo/Guard
   // respectively) whose big printed stats/keyword stack apparently isn't
@@ -918,6 +949,12 @@ const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
   // (threshold 8), so a real threshold bump directly raises how many dice
   // it eats to cast rather than cutting its stats further.
   kinetix_enforcer: 2,
+  // v4.26: cavernous_watcher hit MANUAL_STAT_TRIM's -4 ceiling in v4.25 and
+  // is STILL #4 cardsToNerf a pass later (+29.6pt resid) — same "stat lever
+  // exhausted, cost is the untried lever" shape as kinetix_enforcer above.
+  // It's a sum-cost body (threshold 12), so +2 directly raises the dice it
+  // eats to cast (12 -> 14).
+  cavernous_watcher: 2,
 };
 const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
   // Item A: under-costed gate-cost Units, bumped one difficulty step up.
@@ -946,6 +983,22 @@ const MANUAL_GATE_OVERRIDE: Record<string, ComboPattern> = {
   // HAND_LIMIT constant, which would blunt the mechanic for every card
   // instead of fixing the one card actually driving the signal.
   silver_chimera: 'AnyPair',
+  // v4.26: castability ease for the two v4.25 first-pass buffs that didn't
+  // move (+29.1 -> -28.2pt resid, still top-5 cardsToBuff). The new
+  // dead-in-hand-at-game-end table confirms v4.25's suspicion directly:
+  // both are top-4 on it (1.36/1.34 copies stranded per deck-inclusion) —
+  // their problem is the FullHouse gate, not raw power. Eased to TwoPair
+  // (GATE_DIFFICULTY 5 -> 3.5) instead of a third stat bump.
+  // NOTE: a first attempt used SmallStraight (the nominal one-step ease,
+  // 4.5) and a full-scale verification run showed BOTH cards ejected from
+  // every deck that drafts them — decks.ts's combo-family coherence rule
+  // (score(): match-family archetypes weigh a straight gate at -6 vs +5)
+  // flipped an 11-point scoring swing, and since these two are the pool's
+  // only DRAFTED Steel carriers, Steel's entire measured cohort collapsed
+  // to zero deck-presence as a side effect. TwoPair stays in the match
+  // family, so deck composition is preserved.
+  shattered_horizon_protagonist: 'TwoPair',
+  skyborne_skeleton_dragon: 'TwoPair',
 };
 /** Apply MANUAL_THRESHOLD_ADJ/MANUAL_GATE_OVERRIDE post-hoc to an already
  * cost-formatted CardDef (called after applyCostFormat in mapUnit/mapSpell). */
@@ -977,7 +1030,19 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // events (Locksmith's Regret -27.8 -> -25.5, Abyssal Gate -22.4 -> -21.8);
   // doubled to +2 for those and Wraithlight Lantern/Familiar in the Dark's
   // sibling non-Unit cards.
-  the_locksmiths_regret: 2,
+  // v4.26 DEAD-CODE FIND (same class as v4.25's MANUAL_THRESHOLD_ADJ
+  // gate-cost no-ops): the engine's 'bind' effect ignored Effect.value
+  // entirely until this pass, so every MANUAL_VALUE_BUFF entry on a
+  // bind-effect card has been a no-op since the day it was written —
+  // including the_locksmiths_regret's +2 (v4.12), kinetic_siphon_swarm's +3
+  // and locust_veil's +3 (destroy ignores value too, and still does).
+  // engine.ts now implements "Bind X" (bind + sap X), which makes bind
+  // values REAL going forward. Entries on bind cards whose measured signal
+  // is currently clean (the_locksmiths_regret, kinetic_siphon_swarm) are
+  // REMOVED rather than left to silently become live buffs on cards that
+  // don't need them; the four bind Charms still topping cardsToBuff get
+  // fresh, deliberately-sized Bind 2 values below instead of their stale
+  // accumulated (+3/+4) dead sizes.
   the_abyssal_gate: 2,
   wraithlight_lantern: 2,
   magma_conduit_network: 1,
@@ -1051,13 +1116,22 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // list this pass (measured signal resolved) — held flat, not escalated.
   // The rest are still top-10, each held flat across the v4.24 patch
   // without the residual closing — one more step each (same pattern).
-  pulsing_heartstone: 4, // was 3, still #1 cardsToBuff, -32.7pt resid
-  thornfang_vine: 3,
-  locust_veil: 3,
-  amber_sphere: 4, // was 3, still top-3 cardsToBuff, -31.3pt resid
-  resonant_shuriken: 4, // was 3, still top-3 cardsToBuff, -31.3pt resid
-  coral_collapse: 4, // was 3, still top-5 cardsToBuff, -30.9pt resid, n=3648
-  kinetic_siphon_swarm: 3, // was 2, still top-10 cardsToBuff, -28.4pt resid
+  // v4.26: every prior escalation on these four bind Charms (up to +4) was
+  // dead code — see the "Bind X" note at the top of this table. Now that
+  // engine.ts makes bind values real (bind + sap X), each gets a fresh,
+  // deliberately-sized Bind 2 instead of inheriting its stale accumulated
+  // dead size. thornfang_vine is back on the top-10 cardsToBuff list this
+  // pass (-28.0pt) — its v4.25 "resolved" read was noise, since its +3 was
+  // never live. locust_veil's +3 (a destroy Event — destroy still ignores
+  // value) and kinetic_siphon_swarm's +3 (off the flagged list) are removed
+  // outright.
+  pulsing_heartstone: 2, // Bind 2 — #1-4 cardsToBuff every pass since v4.22, -32.3pt resid
+  thornfang_vine: 2, // Bind 2 — back on the list, -28.0pt resid
+  amber_sphere: 2, // Bind 2 — top-3 cardsToBuff, -31.6pt resid
+  resonant_shuriken: 2, // Bind 2 — top-3 cardsToBuff, -31.6pt resid
+  // v4.26: coral_collapse 4 -> 5 (mend Event — this value was always real);
+  // still top-7 cardsToBuff (-28.1pt, n=3648), standard escalation.
+  coral_collapse: 5,
   diver_s_lantern: 1,
   // v4.23: new cardsToBuff first-pass entries, both Rare Locations, n=912.
   // v4.24/v4.25: both stayed off the top-10 list — left flat, not
@@ -1082,11 +1156,20 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   bioluminescent_tide: 1,
   flash_freeze: 1,
   // v4.25: first-pass buffs, new top-10 cardsToBuff entries.
-  chalice_of_quicksilver: 1, // top-3 cardsToBuff, -31.3pt resid
-  perpetual_dynamo: 1, // top-10 cardsToBuff, -28.4pt resid
+  // v4.26: both held their v4.25 +1 flat (still top-10, -31.6/-28.0pt) —
+  // one more step each. These are sap/mend effects, so the values were
+  // always real (unlike the bind cohort above).
+  chalice_of_quicksilver: 2, // was 1 (v4.25), -31.6pt resid
+  perpetual_dynamo: 2, // was 1 (v4.25), -28.0pt resid
   // v4.25: first-pass nerf, new top-10 cardsToNerf entry (Location, no Cast
   // Slot cost to raise, so the value lever is the only one available).
-  obsidian_bore_site: -1, // top-10 cardsToNerf, +28.9pt resid
+  // v4.26: held flat (+27.8pt, still top-7 cardsToNerf) — one more step.
+  obsidian_bore_site: -2, // was -1 (v4.25), +27.8pt resid
+  // v4.26: isle_of_the_ancients — v4.25 reverted its stale v4.12 +1 and
+  // flagged it as a first-pass-nerf candidate if the clean baseline still
+  // read hot. It does (+27.0pt, #9 cardsToNerf) — first-pass -1 (Location,
+  // value is the only lever).
+  isle_of_the_ancients: -1,
 };
 
 function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {

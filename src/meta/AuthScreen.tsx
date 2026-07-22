@@ -63,13 +63,21 @@ export function AuthScreen() {
   const signInWithDiscord = async () => {
     setError('');
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'discord',
-      // window.location.origin alone drops the GitHub Pages project subpath
-      // (e.g. /frycards/) — BASE_URL restores it, so the redirect lands back
-      // on the app itself instead of the bare domain root.
-      options: { redirectTo: window.location.origin + (import.meta as any).env.BASE_URL },
-    });
+    let error: { message: string } | null;
+    try {
+      ({ error } = await supabase.auth.signInWithOAuth({
+        provider: 'discord',
+        // window.location.origin alone drops the GitHub Pages project subpath
+        // (e.g. /frycards/) — BASE_URL restores it, so the redirect lands back
+        // on the app itself instead of the bare domain root.
+        options: { redirectTo: window.location.origin + (import.meta as any).env.BASE_URL },
+      }));
+    } catch {
+      // A thrown rejection (offline/timeout) previously escaped this handler
+      // entirely — no message, and `busy` stayed true forever, locking every
+      // button on the form (the email submit path already caught this case).
+      error = { message: 'Could not reach the server — check your connection and try again.' };
+    }
     if (error) {
       setError(error.message);
       setBusy(false);
@@ -101,7 +109,7 @@ export function AuthScreen() {
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-6">
           <div className="bg-[var(--c-red)] text-[var(--c-paper)] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs inline-block mb-3">
-            BLUE CORAL SET · OPERATIVE TERMINAL
+            VOLUME #1 · OPERATIVE TERMINAL
           </div>
           <h1 className="text-4xl heading-font leading-none">
             FRY

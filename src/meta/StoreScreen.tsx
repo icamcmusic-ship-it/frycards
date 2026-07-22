@@ -45,9 +45,9 @@ function bountyDefFor(card: BountyCard): CardDef {
 
 type Tab = 'packs' | 'my_packs' | 'bounties' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
-/** "Includes: A, B, C" line shown on every pack tile / odds modal — derived
- * from the row's actual `allowed_sets`, falling back to all 4 live sets when
- * it's null (draws from the full pool). */
+/** "Includes: …" line shown on every pack tile / odds modal — derived from
+ * the row's actual `allowed_sets`, falling back to the full live catalog
+ * (currently just "Volume #1") when it's null (draws from the full pool). */
 function packSetsLine(pack: PackType): string {
   return (
     pack.allowed_sets && pack.allowed_sets.length > 0 ? pack.allowed_sets : ALL_SET_NAMES
@@ -103,9 +103,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     [packTypes],
   );
 
-  // Standalone tiles (Starter Pack, Standard Box, ...) render one-to-one.
-  // Grouped tiles (the 3 set-booster / 3 set-box rows) collapse to a single
-  // swipeable shelf tile per pack_group value.
+  // Standalone tiles render one-to-one. Grouped tiles (rows sharing a
+  // pack_group — used when multiple set variants of a pack were live)
+  // collapse to a single swipeable shelf tile per pack_group value. With the
+  // catalog consolidated into the single "Volume #1" set the shelf is all
+  // standalone tiles (Volume #1 Booster Pack + Booster Box) and no pack_group
+  // rows exist, so the grouped path is currently dormant but kept for future
+  // multi-set drops.
   const standalonePacks = useMemo(() => buyablePacks.filter((p) => !p.pack_group), [buyablePacks]);
   const groupedPackTiles = useMemo(() => {
     const groups = new Map<string, PackType[]>();
@@ -408,7 +412,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                 ? 'CLAIMING…'
                 : dailyReady
                   ? 'CLAIM FREE PACK ▸'
-                  : `READY ${new Date(dailyReadyAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                  : // With a 20h cooldown the ready time usually falls on the
+                    // next calendar day — a bare "READY 6:00 PM" read as today.
+                    `READY ${
+                      new Date(dailyReadyAt).toDateString() === new Date(nowTs).toDateString()
+                        ? ''
+                        : 'TOMORROW '
+                    }${new Date(dailyReadyAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
             </PopButton>
           </div>
         )}

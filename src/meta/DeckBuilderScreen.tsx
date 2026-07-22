@@ -500,7 +500,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   // Unsaved-work guard: only prompt if the draft actually diverges from what
   // was loaded, so re-opening and immediately leaving an unchanged deck never
   // nags the player.
+  // An imported draft (a deck object with no id yet — see handleImport) is
+  // always "dirty": it only exists in this editor, so backing out silently
+  // would throw the whole import away without a word.
   const isDirty =
+    (deck != null && deck.id == null) ||
     name !== initialName ||
     (deck?.leader_id ?? null) !== leaderId ||
     cardIds.length !== initialCardIds.length ||
@@ -591,6 +595,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={40}
+            aria-label="Deck name"
             className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-48"
           />
           <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
@@ -656,11 +661,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             <input
               className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
               placeholder="Search…"
+              aria-label="Search owned cards"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <select
               className={select}
+              aria-label="Filter by card type"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
             >
@@ -671,6 +678,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             {colorIdentity && colorIdentity.length > 1 && (
               <select
                 className={select}
+                aria-label="Filter by color"
                 value={colorFilter}
                 onChange={(e) => setColorFilter(e.target.value)}
               >
@@ -681,6 +689,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             )}
             <select
               className={select}
+              aria-label="Filter by cast slot"
               value={castFilter}
               onChange={(e) => setCastFilter(e.target.value)}
             >

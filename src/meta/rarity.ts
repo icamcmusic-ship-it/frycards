@@ -1,11 +1,9 @@
-/** The 4 sets in the live card pool — single source of truth for "Includes:
- * ..." lines on packs whose `allowed_sets` is null (i.e. draws from everything). */
-export const ALL_SET_NAMES: string[] = [
-  'Blue Coral',
-  'Crimson Circuit',
-  'Dragonbone Wastes',
-  'Full Arts Collection 1',
-];
+/** The live card pool's sets — single source of truth for "Includes: ..."
+ * lines on packs whose `allowed_sets` is null (i.e. draws from everything).
+ * Every card was consolidated into the single "Volume #1" set (the old
+ * Blue Coral / Crimson Circuit / Dragonbone Wastes / Full Arts Collection 1
+ * split is gone from the live catalog). */
+export const ALL_SET_NAMES: string[] = ['Volume #1'];
 
 /**
  * Global rarity color code — fixed across every theme, since rarity is a

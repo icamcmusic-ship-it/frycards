@@ -684,6 +684,15 @@ interface SuiteResult {
    * lapse happens (a live die going idle with a payable card sitting in
    * hand), not after the card eventually gets forced out at End Phase. */
   lapseWastedCastableDieCount: Record<string, number>;
+  /** v4.26 harness upgrade: per-card "still sitting in hand when the game
+   * ended" count (plus games-with-hand-observed denominator via cardInDeck).
+   * Completes the hand-clog triptych: handLimitDiscardCount only fires once
+   * a hand actually overflows HAND_LIMIT, and lapseWastedCastableDieCount
+   * only fires when a payable die went unspent — a card that simply never
+   * becomes castable (hard gate, wrong dice all game) and quietly rides to
+   * the end of the game is invisible to both. Measured directly from
+   * p.hand at game end, no engine change needed. */
+  deadInHandAtEndCount: Record<string, number>;
   errors: string[];
 }
 
@@ -756,6 +765,7 @@ function newResult(): SuiteResult {
     handLimitDiscardsTotal: 0,
     handLimitDiscardCount: {},
     lapseWastedCastableDieCount: {},
+    deadInHandAtEndCount: {},
     errors: [],
   };
 }
@@ -967,6 +977,14 @@ function runGame(
     } else {
       r.locW.nolocN++;
       if (won) r.locW.noloc++;
+    }
+  }
+
+  // v4.26: per-card dead-in-hand-at-game-end capture (see SuiteResult docs).
+  for (const p of Object.values(g.players)) {
+    for (const cardInst of p.hand) {
+      const id = cardInst.def.id;
+      r.deadInHandAtEndCount[id] = (r.deadInHandAtEndCount[id] || 0) + 1;
     }
   }
 
@@ -1290,6 +1308,30 @@ for (const r of wastedDieRows.slice(0, 15)) {
     `${r.name.padEnd(28)} skips=${r.n}  per-deck-inclusion=${r.perDeckIncl.toFixed(3)}  (deckIncl n=${r.deckIncl})`,
   );
 }
+// v4.26 harness upgrade: which cards most often just RIDE OUT the whole game
+// stuck in hand (never castable / never prioritized), normalized per
+// deck-inclusion like the two tables above. The third leg of the hand-clog
+// triptych — see SuiteResult.deadInHandAtEndCount for how it differs from
+// the hand-limit and wasted-die tables.
+console.log(
+  '\n--- v4.26 Cards most often still dead in hand at GAME END (min n=100 deck-inclusions) ---',
+);
+const deadInHandRows = Object.entries(R.deadInHandAtEndCount)
+  .map(([id, n]) => ({
+    id,
+    name: POOL_BY_ID[id]?.name || id,
+    n,
+    perDeckIncl: (R.cardInDeck[id] || 0) > 0 ? n / R.cardInDeck[id] : NaN,
+    deckIncl: R.cardInDeck[id] || 0,
+  }))
+  .filter((r) => r.deckIncl >= 100)
+  .sort((a, b) => b.perDeckIncl - a.perDeckIncl);
+for (const r of deadInHandRows.slice(0, 15)) {
+  console.log(
+    `${r.name.padEnd(28)} deadInHand=${r.n}  per-deck-inclusion=${r.perDeckIncl.toFixed(3)}  (deckIncl n=${r.deckIncl})`,
+  );
+}
+
 console.log('\n--- CPU reasoning lapses (raw per-game rates; see ai.ts recordCpuLapses) ---');
 for (const [key, n] of Object.entries(R.lapseCounts).sort((a, b) => b[1] - a[1])) {
   console.log(`${key.padEnd(26)} total=${n}  per game=${(n / R.games).toFixed(3)}`);
@@ -1779,6 +1821,34 @@ for (const s of Object.keys(R.setInDeck)
   ))
   console.log(`${s.padEnd(24)} win%=${pct(R.setInWinDeck[s] || 0, R.setInDeck[s])}  (n=${R.setInDeck[s]})`);
 
+// v4.26 harness upgrade: rarity power curve — average archetype-NORMALIZED
+// per-card residual (cardArchNormRows, computed below but hoisted here at
+// print time via a thunk) grouped by printed rarity. Answers "is a rarity
+// tier systematically over/under-powered for its cost band" — the direct
+// data input for pack-odds / chase-rarity decisions (e.g. the Full-Art
+// drop-rate change this pass) that no prior table isolated: set/color/type
+// all cut across rarity.
+const printRarityPowerCurve = (rowsIn: { id: string; delta: number; n: number }[]) => {
+  const byRarity: Record<string, { w: number; n: number; cards: number }> = {};
+  for (const r of rowsIn) {
+    const rar = POOL_BY_ID[r.id]?.rarity || '?';
+    const b = (byRarity[rar] ||= { w: 0, n: 0, cards: 0 });
+    b.w += r.delta * r.n;
+    b.n += r.n;
+    b.cards++;
+  }
+  console.log(
+    '\n--- v4.26 Rarity power curve (avg archetype-normalized cast-win residual by printed rarity) ---',
+  );
+  for (const [rar, b] of Object.entries(byRarity).sort((x, y) => y[1].w / y[1].n - x[1].w / x[1].n))
+    console.log(
+      `${rar.padEnd(12)} avgNormDelta=${(b.w / b.n >= 0 ? '+' : '') + (b.w / b.n).toFixed(2)}pt  cards=${String(b.cards).padStart(3)}  (n=${b.n})`,
+    );
+  console.log(
+    '(Positive = cards of this rarity overperform their own decks when cast; a chase rarity sitting far above 0 is systematically under-costed for its band.)',
+  );
+};
+
 // v4.22 harness upgrade: keyword-COUNT-per-card distribution — a pure static
 // pool-shape metric (not win-rate), added directly for the "keyword/flavor
 // text overflow on the card face" bug report — surfaces exactly how many
@@ -1902,6 +1972,7 @@ for (const watchId of ['the_wolf_of_wall_street', 'butterflyfish_school']) {
     console.log(`v4.18 watch item ${watchId}: below min n this run`);
   }
 }
+printRarityPowerCurve(cardArchNormRows);
 
 // ---------------------------------------------------------------------------
 // v4.19 harness upgrade (task §1): per-card cost-paid vs value delivered —
@@ -2239,6 +2310,25 @@ try {
         ),
         lapsePerGameByArch: archLapseRows,
         balanceSummary,
+        // v4.26 harness upgrade: raw dead-in-hand counts + rarity power curve
+        // inputs (per-card normalized deltas grouped by rarity at read time).
+        deadInHandAtEnd: R.deadInHandAtEndCount,
+        rarityPowerCurve: (() => {
+          const byRarity: Record<string, { sumDeltaN: number; n: number; cards: number }> = {};
+          for (const r of cardArchNormRows) {
+            const rar = POOL_BY_ID[r.id]?.rarity || '?';
+            const b = (byRarity[rar] ||= { sumDeltaN: 0, n: 0, cards: 0 });
+            b.sumDeltaN += r.delta * r.n;
+            b.n += r.n;
+            b.cards++;
+          }
+          return Object.fromEntries(
+            Object.entries(byRarity).map(([rar, b]) => [
+              rar,
+              { avgNormDelta: b.sumDeltaN / b.n, cards: b.cards, n: b.n },
+            ]),
+          );
+        })(),
         setWinRate: Object.fromEntries(
           Object.keys(R.setInDeck)
             .filter((s) => (R.setInDeck[s] || 0) >= 100)

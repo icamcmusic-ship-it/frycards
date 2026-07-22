@@ -40,6 +40,43 @@ import {
 import { CardDef, Effect, hasKw } from './cards';
 
 /**
+ * v4.26: presentational observer for the interactive frontend (GameV4).
+ * `playTurn` optionally reports every distinct action it takes — AFTER the
+ * engine call succeeded — so the UI can pace, narrate and animate the CPU's
+ * turn step by step instead of the board snapping to the post-turn state.
+ * Purely observational: emitting events never touches g.rng, never mutates
+ * state, and is skipped entirely when no observer is passed (the headless
+ * playtest harness), so decisions and sim results are byte-identical.
+ */
+export interface CpuTurnEvent {
+  kind:
+    | 'turnStart' // Draw Phase done, dice rolled (dice = the fresh roll)
+    | 'snapCast' // Snap Charm cast during the Reroll window
+    | 'reroll' // one reroll spent (dice = the new values of rerolled dice)
+    | 'location' // free Location cast
+    | 'scrap' // Scrap card burned to reroll a die (dice = new value)
+    | 'twinComplete' // staged Twin matched and entered play
+    | 'twinAbandon' // stale staged Twin returned to hand
+    | 'cast' // hand card cast (dice = values spent)
+    | 'echo' // Echo recast from discard
+    | 'ability' // Leader/Location/Unit Ability Slot activation
+    | 'ultimate' // Leader Ultimate
+    | 'rally' // free re-activation via Rally
+    | 'comboCheck' // Combo Check ran (may have triggered nothing)
+    | 'attack' // one attack resolved
+    | 'endTurn'; // End Phase (pitch/discards) resolved
+  /** Acting card's name/iid, when the action has a single acting card. */
+  name?: string;
+  iid?: string;
+  /** Explicit target of the action, when it took one. */
+  targetIid?: string;
+  targetName?: string;
+  /** Die values involved (spent on a cast/ability, or freshly rolled). */
+  dice?: number[];
+}
+export type CpuTurnObserver = (ev: CpuTurnEvent) => void;
+
+/**
  * Simple one-shot mulligan the CPU runs at game start: redraw a hand that is
  * flooded with expensive cards (no cheap early plays) or has no Units, then
  * bottom one card (London-style). Called by the harness before turn 1.
@@ -363,7 +400,7 @@ function bestSelectionFor(g: Game, p: Player, def: CardDef): number[] | null {
 }
 
 /** v4.2 Snap: cast any Snap-marked Charm during the Reroll Phase, before the window closes. */
-function playSnaps(g: Game, p: Player) {
+function playSnaps(g: Game, p: Player, observe?: CpuTurnObserver) {
   for (const c of [...p.hand]) {
     if (!c.def.snap || c.def.type !== 'Charm') continue;
     const sel = bestSelectionFor(g, p, c.def);
@@ -383,7 +420,16 @@ function playSnaps(g: Game, p: Player) {
       !p.board.some((u) => u.damage > 0)
     )
       continue;
-    castFromHand(g, sel, c.iid, c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined);
+    const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
+    if (castFromHand(g, sel, c.iid, target)) {
+      observe?.({
+        kind: 'snapCast',
+        name: c.def.name,
+        iid: c.iid,
+        targetIid: target,
+        dice: sel.map((i) => p.dice[i].value),
+      });
+    }
   }
 }
 
@@ -567,7 +613,7 @@ function locScore(
   return s;
 }
 
-function playPlacement(g: Game, p: Player) {
+function playPlacement(g: Game, p: Player, observe?: CpuTurnObserver) {
   const opp = opponentOf(g, p.id);
 
   // v4.1: Locations cast free once per turn — always take it. Prefer the
@@ -582,7 +628,9 @@ function playPlacement(g: Game, p: Player) {
         (a, b) =>
           locScore(b, goingWide, oppHasLocation) - locScore(a, goingWide, oppHasLocation),
       )[0];
-      castLocationFree(g, best.iid);
+      if (castLocationFree(g, best.iid)) {
+        observe?.({ kind: 'location', name: best.def.name, iid: best.iid });
+      }
     }
   }
 
@@ -592,14 +640,19 @@ function playPlacement(g: Game, p: Player) {
     const idxs = unplacedDice(p).filter((i) => p.dice[i].value <= 2);
     // Only burn a Scrap card if hand is healthy or the card is weak.
     if (idxs.length > 0 && (p.hand.length >= 4 || (c.def.threshold ?? 6) <= 1)) {
-      scrap(g, c.iid, idxs[0]);
+      const dieIdx = idxs[0];
+      if (scrap(g, c.iid, dieIdx)) {
+        observe?.({ kind: 'scrap', name: c.def.name, iid: c.iid, dice: [p.dice[dieIdx].value] });
+      }
     }
   }
 
   // Complete staged Twin cards when a matching die exists.
   for (const s of [...p.staging]) {
     const idx = unplacedDice(p).find((i) => p.dice[i].value === s.stagedDie);
-    if (idx !== undefined) completeTwin(g, idx, s.iid);
+    if (idx !== undefined && completeTwin(g, idx, s.iid)) {
+      observe?.({ kind: 'twinComplete', name: s.def.name, iid: s.iid });
+    }
   }
 
   let progress = true;
@@ -620,7 +673,16 @@ function playPlacement(g: Game, p: Player) {
       const dieIdx = unplacedDice(p).sort((a, b) => p.dice[a].value - p.dice[b].value)[0];
       if (dieIdx === undefined) break;
       const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
-      if (castFromHand(g, dieIdx, c.iid, target)) progress = true;
+      if (castFromHand(g, dieIdx, c.iid, target)) {
+        progress = true;
+        observe?.({
+          kind: 'cast',
+          name: c.def.name,
+          iid: c.iid,
+          targetIid: target,
+          dice: [p.dice[dieIdx].value],
+        });
+      }
     }
 
     // 2. v4.19 (v4.15/v4.18 carried item): the die-to-card ASSIGNMENT problem
@@ -664,6 +726,13 @@ function playPlacement(g: Game, p: Player) {
         const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
         if (castFromHand(g, sel, c.iid, target)) {
           progress = true;
+          observe?.({
+            kind: 'cast',
+            name: c.def.name,
+            iid: c.iid,
+            targetIid: target,
+            dice: sel.map((i) => p.dice[i].value),
+          });
           break; // re-solve with new state
         }
         // castFromHand refused (stale plan) — try the next planned cast.
@@ -718,6 +787,13 @@ function playPlacement(g: Game, p: Player) {
         const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
         if (echoRecast(g, sel, c.iid, fodder?.iid, target)) {
           progress = true;
+          observe?.({
+            kind: 'echo',
+            name: c.def.name,
+            iid: c.iid,
+            targetIid: target,
+            dice: sel.map((i) => p.dice[i].value),
+          });
           break;
         }
       }
@@ -738,6 +814,12 @@ function playPlacement(g: Game, p: Player) {
         const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.leader));
         if (dieIdx >= 0 && activateAbility(g, dieIdx, p.leader.iid)) {
           progress = true;
+          observe?.({
+            kind: 'ability',
+            name: p.leader.def.name,
+            iid: p.leader.iid,
+            dice: [p.dice[dieIdx].value],
+          });
           continue;
         }
       }
@@ -757,6 +839,12 @@ function playPlacement(g: Game, p: Player) {
         const dieIdx = bestDieFor(p, effAbilityThreshold(g, p.location));
         if (dieIdx >= 0 && activateAbility(g, dieIdx, p.location.iid)) {
           progress = true;
+          observe?.({
+            kind: 'ability',
+            name: p.location.def.name,
+            iid: p.location.iid,
+            dice: [p.dice[dieIdx].value],
+          });
           continue;
         }
       }
@@ -831,6 +919,12 @@ function playPlacement(g: Game, p: Player) {
       }
       if (activateAbility(g, best.dieIdx, best.u.iid)) {
         progress = true;
+        observe?.({
+          kind: 'ability',
+          name: best.u.def.name,
+          iid: best.u.iid,
+          dice: [p.dice[best.dieIdx].value],
+        });
         continue;
       }
     }
@@ -861,6 +955,12 @@ function playPlacement(g: Game, p: Player) {
         const dieIdx = bestDieFor(p, ult.threshold);
         if (dieIdx >= 0 && activateUltimate(g, dieIdx)) {
           progress = true;
+          observe?.({
+            kind: 'ultimate',
+            name: p.leader.def.name,
+            iid: p.leader.iid,
+            dice: [p.dice[dieIdx].value],
+          });
           continue;
         }
       }
@@ -889,6 +989,7 @@ function playPlacement(g: Game, p: Player) {
         );
         if (src && activateViaRally(g, rallyUnit.iid, src.iid)) {
           progress = true;
+          observe?.({ kind: 'rally', name: rallyUnit.def.name, iid: rallyUnit.iid });
           continue;
         }
       }
@@ -921,16 +1022,17 @@ function playPlacement(g: Game, p: Player) {
           sel = bestSelectionFor(g, p, c.def);
         }
         if (!sel) continue;
-        if (
-          castFromHand(
-            g,
-            sel,
-            c.iid,
-            c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined,
-          )
-        ) {
+        const target = c.def.onCast ? autoTarget(g, p.id, c.def.onCast) : undefined;
+        if (castFromHand(g, sel, c.iid, target)) {
           progress = true;
           fallbackDone = true;
+          observe?.({
+            kind: 'cast',
+            name: c.def.name,
+            iid: c.iid,
+            targetIid: target,
+            dice: sel.map((i) => p.dice[i].value),
+          });
           break;
         }
       }
@@ -951,6 +1053,12 @@ function playPlacement(g: Game, p: Player) {
       const stuckIdx = unplacedDice(p)[0];
       if (scrapCard && stuckIdx !== undefined && scrap(g, scrapCard.iid, stuckIdx)) {
         progress = true;
+        observe?.({
+          kind: 'scrap',
+          name: scrapCard.def.name,
+          iid: scrapCard.iid,
+          dice: [p.dice[stuckIdx].value],
+        });
         continue;
       }
     }
@@ -1244,7 +1352,7 @@ function solveDiceAssignment(slots: AssignSlot[]): Map<number, number[]> {
   return picks;
 }
 
-function playCombat(g: Game, p: Player) {
+function playCombat(g: Game, p: Player, observe?: CpuTurnObserver) {
   const opp = opponentOf(g, p.id);
   let guard = 60; // safety valve
   while (!g.winner && guard-- > 0) {
@@ -1370,23 +1478,35 @@ function playCombat(g: Game, p: Player) {
     if (!target || !attack(g, att.iid, target.iid)) {
       att.hasAttacked = true; // avoid infinite loop on illegal/no picks
       att.attacksMade = 99;
+    } else {
+      observe?.({
+        kind: 'attack',
+        name: att.def.name,
+        iid: att.iid,
+        targetIid: target.iid,
+        targetName: target.def.type === 'Leader' ? 'Leader' : target.def.name,
+      });
     }
   }
 }
 
-/** Play one full turn for the active player. */
-export function playTurn(g: Game) {
+/** Play one full turn for the active player.
+ * `observe` (v4.26) is a purely presentational hook — see CpuTurnObserver. */
+export function playTurn(g: Game, observe?: CpuTurnObserver) {
   const p = g.players[g.active];
 
   // Pre-draw: abandon stale Twin cards (staged 2+ turns without completing).
   for (const s of [...p.staging]) {
-    if (s.stagedTurns >= 2) abandonTwin(g, s.iid);
+    if (s.stagedTurns >= 2 && abandonTwin(g, s.iid)) {
+      observe?.({ kind: 'twinAbandon', name: s.def.name, iid: s.iid });
+    }
   }
 
   startTurn(g);
+  observe?.({ kind: 'turnStart', dice: p.dice.map((d) => d.value) });
   if (g.winner) return;
 
-  playSnaps(g, p); // v4.2: Snap Charms may be cast before the Reroll window closes.
+  playSnaps(g, p, observe); // v4.2: Snap Charms may be cast before the Reroll window closes.
   // v4.3: up to rerollsAllowed rerolls — keep re-evaluating and rerolling
   // toward the hand's wants until nothing's left worth touching or the
   // allowance runs out.
@@ -1394,6 +1514,7 @@ export function playTurn(g: Game) {
     const picks = chooseReroll(g, p);
     reroll(g, picks);
     if (picks.length === 0) break;
+    observe?.({ kind: 'reroll', dice: picks.map((i) => p.dice[i].value) });
   }
   recordRerollLapse(g, p);
   // v4.15: snapshot BEFORE Placement whether a Guard-clear-into-lethal line
@@ -1407,13 +1528,14 @@ export function playTurn(g: Game) {
   const guardLethalOpportunity = guardWallBlocksLethal(g, p);
   if (guardLethalOpportunity) lapse(g, p.id, 'guardClearLethalOpportunity');
 
-  playPlacement(g, p);
+  playPlacement(g, p, observe);
   if (g.winner) return;
   recordPlacementLapses(g, p);
   recordDiceSpentDownLapse(g, p);
   comboCheck(g);
+  observe?.({ kind: 'comboCheck' });
   if (g.winner) return;
-  playCombat(g, p);
+  playCombat(g, p, observe);
   if (guardLethalOpportunity && g.winner === p.id) {
     lapse(g, p.id, 'guardClearLethalConverted');
   }
@@ -1421,6 +1543,7 @@ export function playTurn(g: Game) {
   recordCombatLapses(g, p);
   recordUnusedResourceLapse(g, p);
   endTurn(g, defaultDiscardChoice);
+  observe?.({ kind: 'endTurn' });
 }
 
 /**

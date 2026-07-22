@@ -330,15 +330,15 @@ const SECTIONS = [
     body: [
       [
         'Pack anatomy',
-        'Every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The smallest pack is 5 cards.',
+        'Every card in the game is part of the "Volume #1" set, and every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The smallest pack is 5 cards.',
       ],
       [
-        'Boxes',
-        "Boxes are big multi-booster rips at a bulk discount — the Standard Box is six boosters' worth (36 cards) in one opening, ending in a guaranteed-foil box topper (Rare floor).",
+        'Booster Box',
+        "The Volume #1 Booster Box is six boosters' worth (36 cards) in one big rip at a bulk discount, ending in a guaranteed-foil box topper (Rare floor).",
       ],
       [
-        'Leader Pack',
-        'The one single-card product: it always pulls a Leader (mostly Rare Leaders, a small chance of a Mythic one). Never foil.',
+        'Starter Box',
+        'Every new account claims one free Starter Box from the Store: pick any Rare-or-below Leader and it opens into that Leader, a ready-to-play legal 30-card deck built around it, and some bonus cards.',
       ],
       [
         'Mass opening',
@@ -388,7 +388,7 @@ const SECTIONS = [
     body: [
       [
         'Collection',
-        'Browse every card you own, filter by rarity/type/set, inspect full card art, and quicksell spares for credits.',
+        'Browse every card you own, filter by rarity/type/color, inspect full card art, and quicksell spares for credits.',
       ],
       [
         'Deck Builder',

@@ -43,14 +43,17 @@ export type MetaScreen =
   | 'howtoplay';
 
 /** The 7-day login reward cycle — mirrors claim_daily_login's CASE table.
- * Day 5's pack is whichever active credits pack is cheapest at claim time. */
+ * Day 5's pack is whichever active credits pack is cheapest at claim time.
+ * Days 3 and 6 previously showed "+100✦"/"+150✦" shard bonuses — Shards were
+ * removed from the game entirely, and the server now pays plain credits
+ * (450/950) on those days instead. */
 const LOGIN_CYCLE: { label: string }[] = [
   { label: '250cr' },
   { label: '400cr' },
-  { label: '300cr + 100✦' },
+  { label: '450cr' },
   { label: '600cr' },
   { label: '250cr + PACK' },
-  { label: '800cr + 150✦' },
+  { label: '950cr' },
   { label: '1,000cr + 5 VOUCHERS' },
 ];
 
@@ -66,8 +69,21 @@ function DailyLoginPanel() {
     : null;
   const today = new Date().toISOString().slice(0, 10);
   const claimable = lastClaim !== today && !claimed;
-  const streak = claimed?.streak ?? profile.login_streak;
-  const cycleDay = ((Math.max(1, claimable ? streak + 1 : streak) - 1) % 7) + 1;
+  // Projected streak for the "next claim" preview — the server only continues
+  // a streak when the last claim was exactly yesterday (UTC); a lapsed streak
+  // restarts at day 1. Without the yesterday check this panel highlighted
+  // day N+1 (and its reward) after a missed day, then paid out day 1's
+  // smaller prize instead.
+  const yesterday = new Date(new Date(`${today}T00:00:00Z`).getTime() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const streakContinues = lastClaim === yesterday;
+  // A lapsed streak also shows as 0 (not the stale pre-lapse count) until
+  // the next claim starts a new one.
+  const streak =
+    claimed?.streak ?? (claimable && !streakContinues ? 0 : profile.login_streak);
+  const projectedStreak = claimable ? (streakContinues ? streak + 1 : 1) : streak;
+  const cycleDay = ((Math.max(1, projectedStreak) - 1) % 7) + 1;
 
   const claim = async () => {
     if (busy) return;
@@ -198,7 +214,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     {
       key: 'battlepass',
       label: 'BATTLE PASS',
-      desc: guest ? 'Requires an account' : 'Season 1 — 25 free rewards',
+      desc: guest ? 'Requires an account' : 'Free seasonal reward track',
       icon: <Crown className="w-8 h-8" />,
       color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
       disabled: guest,
@@ -344,7 +360,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       {/* Title */}
       <div className="relative z-10 text-center mt-6 mb-10">
         <div className="bg-[var(--c-red)] text-[var(--c-paper)] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs inline-block mb-3">
-          STARK COMIC STANDARD · BLUE CORAL SET
+          STARK COMIC STANDARD · VOLUME #1
         </div>
         <h1 className="text-5xl sm:text-7xl heading-font leading-none">
           FRY

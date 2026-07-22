@@ -4,7 +4,7 @@
  * and reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Dices, Swords, Heart, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect } from '../game/v3/cards';
@@ -570,6 +570,7 @@ function StatChip({
   tier,
   tint,
   emboss,
+  onArt,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value?: number;
@@ -584,6 +585,10 @@ function StatChip({
   /** v4.7 Mythic-exclusive: render the chip as an embossed faceted "stat
    * gem" (gold bevel + inner shadow) instead of the flat tinted pill. */
   emboss?: boolean;
+  /** v4.26: chip sits directly over artwork (Full-Art bottom panel, micro
+   * board cards) — swaps the translucent paper-tint fill for a solid dark
+   * backing + text shadow so the numbers read over ANY art. */
+  onArt?: boolean;
 }) {
   const textClass =
     tier === 'full'
@@ -608,11 +613,20 @@ function StatChip({
         emboss && 'my-gem',
         textClass,
       )}
-      style={{
-        color: tint,
-        borderColor: `color-mix(in srgb, ${tint} 45%, transparent)`,
-        backgroundColor: `color-mix(in srgb, ${tint} 12%, transparent)`,
-      }}
+      style={
+        onArt
+          ? {
+              color: `color-mix(in srgb, ${tint} 72%, white)`,
+              borderColor: `color-mix(in srgb, ${tint} 65%, transparent)`,
+              backgroundColor: 'rgba(8, 10, 16, 0.68)',
+              textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+            }
+          : {
+              color: tint,
+              borderColor: `color-mix(in srgb, ${tint} 45%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${tint} 12%, transparent)`,
+            }
+      }
     >
       <Icon className={iconClass} />
       {printed !== undefined && printed !== value && (
@@ -1051,9 +1065,18 @@ export function renderKeywordText(text: string, small?: boolean): React.ReactNod
   );
 }
 
-/** Per-set flavor-text styling — a distinct "print run" identity per set. */
+/** Per-set flavor-text styling — a distinct "print run" identity per set.
+ * The live catalog is one consolidated set now ("Volume #1"); the legacy
+ * per-set cases are kept for cached/offline data that may still carry the
+ * old set names. */
 function setStyle(set?: string): { label: string; className: string; bar: string } {
   switch (set) {
+    case 'Volume #1':
+      return {
+        label: 'VOLUME #1',
+        className: 'text-[#B45309] italic',
+        bar: 'bg-[#B45309]',
+      };
     case 'Blue Coral':
       return {
         label: 'BLUE CORAL',
@@ -1321,6 +1344,443 @@ const TIER: Record<
   },
 };
 
+/** v4.26 overflow-proof chip row: renders keyword + mechanic chips into a
+ * height-bounded, clipped container and then MEASURES it — if the rendered
+ * rows don't fit the tier's height budget, it drops one chip at a time (each
+ * drop grows the "+N" overflow chip) until everything genuinely fits. The
+ * static per-tier `keywordMax` is only the starting upper bound; the real cap
+ * is whatever the actual labels/wrapping allow, so a wall of long keyword
+ * names can never push later content (flavor, footer) off the card. */
+function FittedChips({
+  def,
+  size,
+  keywordChips,
+  mechChips,
+  introduceKeywords,
+}: {
+  def: CardDef;
+  size: CardSize;
+  keywordChips: CardKeyword[];
+  mechChips: MechanicLabel[];
+  introduceKeywords?: boolean;
+}) {
+  const cfg = TIER[size];
+  const total = keywordChips.length + mechChips.length;
+  const [cap, setCap] = useState(cfg.keywordMax);
+  const ref = useRef<HTMLDivElement>(null);
+  // Reset the budget whenever the card (or tier) this slot shows changes —
+  // a caller that swaps `def` without remounting must re-measure from scratch.
+  // Render-time state adjustment (the React-sanctioned "derived state" form,
+  // not an effect) so the stale cap never paints.
+  const resetKey = `${def.id}|${size}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
+    setCap(cfg.keywordMax);
+  }
+  // Runs after every commit: while the clipped container still overflows its
+  // height budget, shed one more chip (min 1 so the "+N" always has an
+  // anchor). Cap only ever decreases between resets, so the cascade is
+  // bounded (≤ keywordMax pre-paint passes) — this is deliberate DOM
+  // measurement, the one job useLayoutEffect exists for.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && el.scrollHeight > el.clientHeight + 1) {
+      setCap((c) => (c > 1 ? c - 1 : c));
+    }
+  });
+  if (total === 0 || cfg.keywordMax === 0) return null;
+  const shown = Math.min(cap, total);
+  const hidden = total - shown;
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px] overflow-hidden',
+        // Hard per-tier row budget — the measurement above shrinks the chip
+        // count until the rows genuinely fit inside this clip box.
+        size === 'full'
+          ? 'max-h-[42px]'
+          : size === 'standard'
+            ? 'max-h-[30px]'
+            : size === 'compact'
+              ? 'max-h-[20px]'
+              : 'max-h-[11px]',
+      )}
+    >
+      {keywordChips.slice(0, shown).map((k) => (
+        <KeywordChip
+          key={k.kw}
+          kw={k.kw}
+          label={k.label}
+          text={k.description}
+          cost={cfg.chipCosts ? keywordActivation(def, k.kw) : undefined}
+          small={cfg.keywordSmall}
+          autoIntroduce={introduceKeywords}
+          accent={k.atCap ? '#B45309' : undefined}
+        />
+      ))}
+      {mechChips.slice(0, Math.max(0, shown - keywordChips.length)).map((m, i) => (
+        <KeywordChip
+          key={`${m.kind}-${i}`}
+          kw={m.label}
+          text={mechanicExplain(def, m)}
+          small={cfg.keywordSmall}
+          accent={MECHANIC_ACCENT[m.kind]}
+        />
+      ))}
+      {hidden > 0 && (
+        <span
+          className={cn(
+            'inline-flex items-center rounded-full border border-[var(--c-ink)]/30 font-bold opacity-70',
+            cfg.keywordSmall ? 'text-[6.5px] px-1' : 'text-[8.5px] px-1.5',
+          )}
+          title="More abilities — expand the card to see everything"
+        >
+          +{hidden}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** v4.26 lowest-priority element on the card: flavor text renders at up to
+ * `maxLines` clamped lines, then MEASURES its (height-constrained) wrapper —
+ * whenever the clamped paragraph still doesn't fit the leftover space, it
+ * sheds one line at a time and finally unmounts entirely at zero. Keywords,
+ * stats and cost always win the space fight; flavor gracefully yields, never
+ * clips mid-glyph, and never pushes anything off the card. */
+function FittedFlavor({
+  text,
+  fontPx,
+  fullArt,
+  setClassName,
+}: {
+  text: string;
+  fontPx: number;
+  fullArt: boolean;
+  setClassName: string;
+}) {
+  const MAX_LINES = 4;
+  const [lines, setLines] = useState(MAX_LINES);
+  const ref = useRef<HTMLDivElement>(null);
+  // Same render-time reset + bounded measure-and-shed loop as FittedChips —
+  // see that component for the pattern rationale.
+  const resetKey = `${text}|${fontPx}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
+    setLines(MAX_LINES);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && el.scrollHeight > el.clientHeight + 1) {
+      setLines((l) => (l > 0 ? l - 1 : l));
+    }
+  });
+  if (lines === 0) return null;
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        'mt-1 pt-1 border-t min-h-0 overflow-hidden',
+        fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
+      )}
+    >
+      <p
+        className={cn('leading-snug break-words', setClassName)}
+        style={{
+          fontSize: fontPx,
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: lines,
+          overflow: 'hidden',
+          textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+        }}
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/** v4.26: the `micro` tier is no longer a shrunken copy of the full template
+ * — it's a purpose-built board token. The art fills the whole footprint
+ * (object-cover) with top/bottom gradient scrims; the top strip carries the
+ * type glyph + auto-shrinking name and the cast-cost badge; the bottom strip
+ * carries up to two keyword chips (with a "+N" spillover) and solid-backed
+ * ATK/HP chips, so a battlefield card reads name/cost/stats/keywords at a
+ * glance instead of squeezing six rows of 5px template furniture. */
+function MicroCard({
+  def,
+  dimmed,
+  highlight,
+  foil,
+  foilEffect = true,
+  onClick,
+  footer,
+  badge,
+  count,
+  foilCount,
+  maxHp,
+  live,
+  effectiveThreshold,
+  introduceKeywords,
+  serial,
+}: Omit<CardFaceProps, 'size' | 'key'>) {
+  const { w, h } = SIZES.micro;
+  const keywordChips = cardKeywords(def);
+  const mechChips = mechanicLabels(def);
+  const totalChips = keywordChips.length + mechChips.length;
+  const MAX_KW = 2;
+  const shownKw = keywordChips.slice(0, MAX_KW);
+  const hiddenChips = totalChips - shownKw.length;
+  const isFoil = foil && !serial;
+  const mythic = isMythic(def.rarity) && !serial;
+  const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
+  const label = `${def.name}, ${def.type}${atkHp}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const TypeIcon = TYPE_ICON[def.type];
+  const nameFontPx = fitFontSize(def.name, 7.5, 5.5, 12);
+  const cardColorsForFace = def.type === 'Leader' ? [] : cardColors(def);
+  return (
+    <div
+      role="button"
+      tabIndex={onClick ? 0 : -1}
+      aria-disabled={!onClick}
+      aria-label={label}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{ width: w, height: h }}
+      className={cn(
+        'relative flex flex-col bg-[var(--c-ink)] text-left shrink-0 transition-transform overflow-hidden border rounded-[3px] shadow-hard-black-xs',
+        rarityBorder(def.rarity),
+        onClick && 'btn-pop cursor-pointer',
+        dimmed && 'opacity-45 saturate-50',
+        highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
+        serial && !dimmed && 'serialized-frame',
+        isFoil && !dimmed && !mythic && 'foil-glow',
+      )}
+    >
+      {/* Full-bleed art layer */}
+      <div className="absolute inset-0">
+        <CardArt def={def} cover />
+      </div>
+      {/* Top + bottom legibility scrims — one continuous gradient so text
+          always reads over any art, with a clear window in the middle. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0) 36%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 72%, rgba(0,0,0,0.92) 100%)',
+        }}
+      />
+      {/* Name + cost strip */}
+      <div className="relative z-10 flex items-start justify-between gap-0.5 px-1 pt-0.5 shrink-0">
+        <span
+          className="flex items-center gap-0.5 min-w-0 heading-font leading-tight text-white"
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.6)' }}
+          title={def.name}
+        >
+          <TypeIcon className="w-2 h-2 shrink-0 opacity-90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]" />
+          <span className="line-clamp-2 break-words" style={{ fontSize: nameFontPx }}>
+            {def.name}
+          </span>
+        </span>
+        {def.comboGate ? (
+          <CostInfoButton
+            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.`}
+            className="heading-font shrink-0 rounded-full border border-[var(--c-ink)] bg-[#A855F7] text-white text-[5px] px-0.5 py-[1px] leading-tight"
+            title={costSummary(def) || undefined}
+          >
+            {GATE_LABEL[def.comboGate] || def.comboGate}
+          </CostInfoButton>
+        ) : def.type === 'Location' ? (
+          <CostInfoButton
+            text="Locations cast free: once per turn, as a bonus action alongside your five die placements — no die, no Cast Slot. Max one Location in play."
+            className="heading-font shrink-0 rounded-full border border-[var(--c-ink)] bg-[var(--c-steel)] text-white text-[5px] px-0.5 py-[1px]"
+            title="Cast: free"
+          >
+            FREE
+          </CostInfoButton>
+        ) : def.type !== 'Leader' && def.threshold !== undefined ? (
+          <CostInfoButton
+            text={
+              effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
+                ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn.`
+                : `${costSummary(def)}.`
+            }
+            className={cn(
+              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border border-[var(--c-ink)] text-[6.5px] h-3.5 min-w-3.5 px-0.5',
+              def.castCostKind === 'exact'
+                ? 'bg-[#0E7490] text-white'
+                : def.castCostKind === 'sum'
+                  ? 'bg-[#B45309] text-white'
+                  : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
+            )}
+            title={costSummary(def) || undefined}
+          >
+            {costBadge(def, effectiveThreshold ?? def.threshold)}
+          </CostInfoButton>
+        ) : null}
+      </div>
+      {/* Corner status badges (count / foil / serial / caller badge) */}
+      {(badge || serial || isFoil || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
+        <div className="absolute z-20 top-[26px] left-0.5 flex flex-col items-start gap-0.5">
+          {badge && (
+            <span className="bg-[var(--c-red)] text-white text-[5.5px] font-black px-1 rounded-full">
+              {badge}
+            </span>
+          )}
+          {serial && (
+            <span
+              className="serial-plate text-[5px] font-black px-0.5 rounded-full tracking-wide"
+              title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+            >
+              #{serial.number}/{serial.cap}
+            </span>
+          )}
+          {isFoil && (
+            <span className="bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] text-[5px] font-black px-0.5 rounded-full">
+              ✦
+            </span>
+          )}
+          {count !== undefined && count > 0 && (
+            <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] text-[5.5px] font-black px-0.5 rounded-full">
+              ×{count}
+            </span>
+          )}
+          {(foilCount || 0) > 0 && (
+            <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] text-[5.5px] font-black px-0.5 rounded-full">
+              ✦ {foilCount}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="flex-1 min-h-0" />
+      {/* Bottom strip: keyword chips + solid-backed stats */}
+      <div className="relative z-10 flex flex-col gap-[2px] px-1 pb-1 shrink-0">
+        {(shownKw.length > 0 || hiddenChips > 0) && (
+          <div className="flex flex-row flex-wrap content-start gap-0.5 max-h-[11px] overflow-hidden">
+            {shownKw.map((k) => (
+              <KeywordChip
+                key={k.kw}
+                kw={k.kw}
+                label={k.label}
+                text={k.description}
+                small
+                autoIntroduce={introduceKeywords}
+                accent={k.atCap ? '#B45309' : undefined}
+              />
+            ))}
+            {hiddenChips > 0 && (
+              <span
+                className="inline-flex items-center rounded-full border border-white/40 bg-black/50 text-white text-[6px] font-bold px-1"
+                title="More abilities — long-press or hover to see the full card"
+              >
+                +{hiddenChips}
+              </span>
+            )}
+          </div>
+        )}
+        <div className="flex items-end justify-between gap-0.5">
+          <span className="flex items-center gap-0.5 min-w-0">
+            {cardColorsForFace.map((c) => (
+              <span
+                key={c}
+                aria-hidden
+                className="w-1.5 h-1.5 rounded-full border border-white/80 shrink-0"
+                style={{
+                  backgroundColor: COLOR_PIP[c].bg,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                }}
+                title={`Color: ${c}`}
+              />
+            ))}
+          </span>
+          {def.type === 'Unit' &&
+            (live ? (
+              <span className="flex items-center gap-0.5 shrink-0" title={`Printed ${def.atk}/${def.hp}`}>
+                <StatChip
+                  icon={Swords}
+                  value={live.atk}
+                  printed={def.atk}
+                  tier="micro"
+                  tint={live.atk > (def.atk ?? 0) ? '#4ADE80' : '#F87171'}
+                  onArt
+                />
+                <StatChip
+                  icon={Heart}
+                  value={live.hp}
+                  maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
+                  printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                  tier="micro"
+                  tint={live.hp < live.maxHp ? '#F87171' : '#4ADE80'}
+                  onArt
+                />
+              </span>
+            ) : (
+              <span className="flex items-center gap-0.5 shrink-0">
+                <StatChip icon={Swords} value={def.atk} tier="micro" tint="#F87171" onArt />
+                <StatChip icon={Heart} value={def.hp} tier="micro" tint="#4ADE80" onArt />
+              </span>
+            ))}
+          {def.type === 'Leader' && (
+            <span className="shrink-0">
+              <StatChip
+                icon={Heart}
+                value={def.hp}
+                maxValue={maxHp}
+                tier="micro"
+                tint={
+                  maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
+                    ? '#F87171'
+                    : '#4ADE80'
+                }
+                onArt
+              />
+            </span>
+          )}
+        </div>
+      </div>
+      {footer}
+      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
+      {isFoil && foilEffect && (
+        <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
+      )}
+    </div>
+  );
+}
+
+interface CardFaceProps {
+  key?: React.Key;
+  def: CardDef;
+  size?: CardSize;
+  dimmed?: boolean;
+  highlight?: boolean;
+  foil?: boolean;
+  foilEffect?: boolean;
+  onClick?: () => void;
+  footer?: React.ReactNode;
+  badge?: string;
+  count?: number;
+  foilCount?: number;
+  maxHp?: number;
+  live?: { atk: number; hp: number; maxHp: number };
+  effectiveThreshold?: number;
+  introduceKeywords?: boolean;
+  serial?: { number: number; cap: number };
+}
+
 export function CardFace({
   def,
   size = 'standard',
@@ -1383,6 +1843,31 @@ export function CardFace({
    * engraved number plate instead of the normal rarity treatment. */
   serial?: { number: number; cap: number };
 }) {
+  // v4.26: the board/list `micro` tier renders through its own purpose-built
+  // art-forward template (see MicroCard) instead of a shrunken full card.
+  // Safe to branch here: CardFace itself calls no hooks (they all live in
+  // child components), so the early return can't reorder any hook calls.
+  if (size === 'micro') {
+    return (
+      <MicroCard
+        def={def}
+        dimmed={dimmed}
+        highlight={highlight}
+        foil={foil}
+        foilEffect={foilEffect}
+        onClick={onClick}
+        footer={footer}
+        badge={badge}
+        count={count}
+        foilCount={foilCount}
+        maxHp={maxHp}
+        live={live}
+        effectiveThreshold={effectiveThreshold}
+        introduceKeywords={introduceKeywords}
+        serial={serial}
+      />
+    );
+  }
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
   // v4.19: the card's mechanics render EXCLUSIVELY as clickable chips —
@@ -1393,7 +1878,6 @@ export function CardFace({
   const keywordChips: CardKeyword[] = cardKeywords(def);
   const mechChips: MechanicLabel[] = mechanicLabels(def);
   const totalChips = keywordChips.length + mechChips.length;
-  const hiddenChips = Math.max(0, totalChips - cfg.keywordMax);
   const set = setStyle(def.set);
   // v4.13: Leaders don't carry a color themselves (LEADER_COLORS is their
   // deck-identity, a different concept from a printed card's own color).
@@ -1524,7 +2008,12 @@ export function CardFace({
             ? 'mythic-bg border-[#7A1420]'
             : ultra
               ? 'ultra-banner border-[#8a6d1f]'
-              : !fullArt && 'border-[var(--c-ink)]/15',
+              : fullArt
+                ? // v4.26 full-art legibility: the header row carries its own
+                  // top-down gradient scrim (on top of the art's vignette) so
+                  // the name/cost never rely on the art being dark up top.
+                  'bg-gradient-to-b from-black/60 via-black/25 to-transparent'
+                : 'border-[var(--c-ink)]/15',
         )}
         style={
           mythic || fullArt || ultra
@@ -1554,7 +2043,10 @@ export function CardFace({
               fullArt && 'opacity-95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]',
             )}
           />
-          <span className="break-words" style={{ fontSize: nameFontPx }}>
+          {/* v4.26: hard two-line clamp on top of the auto-shrink — a
+              pathologically long name can no longer grow the header row and
+              squeeze the rest of the card's vertical budget. */}
+          <span className="break-words line-clamp-2" style={{ fontSize: nameFontPx }}>
             {def.name}
           </span>
         </span>
@@ -1734,7 +2226,25 @@ export function CardFace({
           only ever peeking through above/below two stacked text panels.
           `display: contents` makes the wrapper invisible to layout for
           every other rarity, so their structure/behavior is unchanged. */}
-      <div className={fullArt ? 'flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
+      <div className={fullArt ? 'relative flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
+        {/* v4.26 full-art legibility: a backdrop-blur "frosted" panel behind
+            the whole bottom text region (type line + keywords + flavor),
+            fading in from transparent so it reads as part of the art's
+            vignette rather than a hard-edged box. Combined with the scrim
+            gradient behind it, name/stats/keywords stay readable over ANY
+            art, including near-white or high-detail images the plain scrim
+            alone couldn't tame. */}
+        {fullArt && (
+          <div
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-[56%] pointer-events-none backdrop-blur-[3px] bg-black/25"
+            style={{
+              WebkitMaskImage:
+                'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,1) 40%)',
+              maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,1) 40%)',
+            }}
+          />
+        )}
         {/* Type / rarity / stat line — sits on the same continuous bottom
           scrim as the text box below it now (no boxed pill of its own),
           reading as one unbroken panel over the art instead of a stack of
@@ -1772,6 +2282,7 @@ export function CardFace({
                   tier={size}
                   tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
                   emboss={mythic}
+                  onArt={fullArt}
                 />
                 <StatChip
                   icon={Heart}
@@ -1787,12 +2298,27 @@ export function CardFace({
                         : '#22C55E'
                   }
                   emboss={mythic}
+                  onArt={fullArt}
                 />
               </span>
             ) : (
               <span className="flex items-center gap-1 shrink-0">
-                <StatChip icon={Swords} value={def.atk} tier={size} tint="var(--c-red)" emboss={mythic} />
-                <StatChip icon={Heart} value={def.hp} tier={size} tint="#22C55E" emboss={mythic} />
+                <StatChip
+                  icon={Swords}
+                  value={def.atk}
+                  tier={size}
+                  tint="var(--c-red)"
+                  emboss={mythic}
+                  onArt={fullArt}
+                />
+                <StatChip
+                  icon={Heart}
+                  value={def.hp}
+                  tier={size}
+                  tint="#22C55E"
+                  emboss={mythic}
+                  onArt={fullArt}
+                />
               </span>
             ))}
           {def.type === 'Leader' && (
@@ -1808,6 +2334,7 @@ export function CardFace({
                     : '#22C55E'
                 }
                 emboss={mythic}
+                onArt={fullArt}
               />
             </span>
           )}
@@ -1825,8 +2352,12 @@ export function CardFace({
           for whatever the art itself looks like underneath. */}
         <div
           className={cn(
-            'relative z-10 flex flex-col',
-            fullArt ? 'shrink-0' : 'flex-1 min-h-0',
+            // v4.26: overflow-hidden at the text-box level is the final
+            // backstop — combined with the measured chip cap (FittedChips)
+            // and the line-shedding flavor block (FittedFlavor), nothing in
+            // this box can ever paint past the card frame.
+            'relative z-10 flex flex-col overflow-hidden',
+            fullArt ? 'shrink min-h-0' : 'flex-1 min-h-0',
             cfg.textBoxPad,
             fullArt
               ? 'text-white'
@@ -1848,82 +2379,26 @@ export function CardFace({
                 }
           }
         >
-          {totalChips > 0 && cfg.keywordMax > 0 && (
-            <div
-              className={cn(
-                'shrink-0 flex flex-row flex-wrap gap-1 min-h-[9px] overflow-hidden',
-                // Belt-and-suspenders alongside the keywordMax chip cap above:
-                // even a capped chip count can wrap into more rows than a
-                // small card face has room for (long labels, narrow tiers) —
-                // a hard max-height + clip is a graceful cutoff instead of
-                // the row pushing flavor text/the footer down and off the
-                // card, which is what happened before this cap existed.
-                size === 'full'
-                  ? 'max-h-[42px]'
-                  : size === 'standard'
-                    ? 'max-h-[30px]'
-                    : size === 'compact'
-                      ? 'max-h-[20px]'
-                      : 'max-h-[11px]',
-              )}
-            >
-              {keywordChips.slice(0, cfg.keywordMax).map((k) => (
-                <KeywordChip
-                  key={k.kw}
-                  kw={k.kw}
-                  label={k.label}
-                  text={k.description}
-                  cost={cfg.chipCosts ? keywordActivation(def, k.kw) : undefined}
-                  small={cfg.keywordSmall}
-                  autoIntroduce={introduceKeywords}
-                  accent={k.atCap ? '#B45309' : undefined}
-                />
-              ))}
-              {mechChips
-                .slice(0, Math.max(0, cfg.keywordMax - keywordChips.length))
-                .map((m, i) => (
-                  <KeywordChip
-                    key={`${m.kind}-${i}`}
-                    kw={m.label}
-                    text={mechanicExplain(def, m)}
-                    small={cfg.keywordSmall}
-                    accent={MECHANIC_ACCENT[m.kind]}
-                  />
-                ))}
-              {hiddenChips > 0 && (
-                <span
-                  className={cn(
-                    'inline-flex items-center rounded-full border border-[var(--c-ink)]/30 font-bold opacity-70',
-                    cfg.keywordSmall ? 'text-[6.5px] px-1' : 'text-[8.5px] px-1.5',
-                  )}
-                  title="More abilities — expand the card to see everything"
-                >
-                  +{hiddenChips}
-                </span>
-              )}
-            </div>
+          {totalChips > 0 && (
+            <FittedChips
+              def={def}
+              size={size}
+              keywordChips={keywordChips}
+              mechChips={mechChips}
+              introduceKeywords={introduceKeywords}
+            />
           )}
 
           {cfg.showFlavor && def.flavor && (
-            <div
-              className={cn(
-                'mt-1 pt-1 border-t min-h-0 overflow-hidden',
-                fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
-              )}
-            >
-              <p
-                className={cn('leading-snug break-words line-clamp-4', set.className)}
-                style={{
-                  fontSize: flavorFontPx,
-                  textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
-                }}
-              >
-                {def.flavor}
-              </p>
-            </div>
+            <FittedFlavor
+              text={def.flavor}
+              fontPx={flavorFontPx}
+              fullArt={fullArt}
+              setClassName={set.className}
+            />
           )}
 
-          {!fullArt && <div className="flex-1" />}
+          {!fullArt && <div className="flex-1 shrink-[2]" />}
         </div>
       </div>
 
