@@ -425,7 +425,8 @@ export function effectLabel(eff: { action: string; value?: number; target: strin
     case 'draw':
       return `Surge${(eff.value ?? 1) > 1 ? ` ${eff.value}` : ''}`;
     case 'bind':
-      return `Bind${suffix}`;
+      // v4.26 "Bind X": a valued bind also saps the bound Unit (engine.ts).
+      return (eff.value ?? 0) > 0 ? `Bind + Sap ${eff.value}${suffix}` : `Bind${suffix}`;
     case 'destroy':
       return `Destroy${suffix}`;
     case 'buff':

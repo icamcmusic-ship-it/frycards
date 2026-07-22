@@ -37,7 +37,7 @@ fixes that actually shipped back in v4.20 are only now reflected here, since
 this rulebook never had a v4.20 entry at all.
 
 **v4.10 balance-sim pass (33,840-game baseline + 33,840-game verification +
-a 21-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.10.md`):**
+a 21-arm ablation battery; full writeup the v4.10 balance findings (doc retired; history in CHANGELOG.md)):**
 
 - **Locations fixed — first positive isolated contribution ever measured.**
   A dedicated ablation battery (never run before this pass — v4.9 findings
@@ -85,7 +85,7 @@ a 21-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.10.md`):**
   forward again.
 
 **v4.9 balance-sim pass (33,840-game baseline + 33,840-game verification +
-a 17-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.9.md`):**
+a 17-arm ablation battery; full writeup the v4.9 balance findings (doc retired; history in CHANGELOG.md)):**
 
 - **Guard print HP +3 → +2** — a dedicated ablation battery finally named a
   real lever for the "wall-list meta" three passes have flagged (v4.7/v4.8):
@@ -115,7 +115,7 @@ a 17-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.9.md`):**
   the Guard lever above.
 
 **v4.8 balance-sim pass (22,560-game baseline + 22,560-game verification +
-a 13-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.8.md`):**
+a 13-arm ablation battery; full writeup the v4.8 balance findings (doc retired; history in CHANGELOG.md)):**
 
 - **RULE REMOVED — Momentum (§3.2).** The dedicated on/off A/B measured no
   systemic benefit: Leader spread slightly better without it, games a full
@@ -146,7 +146,7 @@ a 13-arm ablation battery; full writeup `docs/BALANCE_SIM_FINDINGS_v4.8.md`):**
   subjects.
 
 **v4.7 balance-sim pass (45,120-game baseline + a new single-dial ablation
-harness + full verification re-sim; writeup `docs/BALANCE_SIM_FINDINGS_v4.7.md`):**
+harness + full verification re-sim; writeup the v4.7 balance findings (doc retired; history in CHANGELOG.md)):**
 
 - **RULE CHANGE — Fatigue replaces the instant deck-out loss (§9).** The
   new ablation harness (`scripts/simulate-ablation.ts`) proved no labeled
@@ -177,7 +177,7 @@ harness + full verification re-sim; writeup `docs/BALANCE_SIM_FINDINGS_v4.7.md`)
   measured as no-ops.
 
 **v4.6 balance-sim pass (fresh 22,560-game baseline + three verification
-re-runs; full writeup `docs/BALANCE_SIM_FINDINGS_v4.6.md`):**
+re-runs; full writeup the v4.6 balance findings (doc retired; history in CHANGELOG.md)):**
 
 - **BUG FIX (long-standing): the v4.4 Leader-Ability flags were never wired
   up.** `mapLeader()` never assigned `abilityGrantsTempo` (Legendary Diver's
@@ -273,7 +273,7 @@ change — was reverted and re-measured with no effect, ruling it out; the
 likely explanation is relative redistribution from the other buffs landing
 elsewhere in the same round-robin win-rate metric, but this needs its own
 isolate-and-measure pass before further tuning). Full writeup:
-`docs/BALANCE_SIM_FINDINGS_v4.5.md`.
+the v4.5 balance findings (doc retired; history in CHANGELOG.md).
 
 **v4.5.1 (root-cause follow-up):** the flagged Straight-family regression
 was traced with a dedicated isolate-and-measure sim (a `git worktree`
@@ -294,7 +294,7 @@ always chose attacking over an ability once a Unit's ATK hit 3 regardless
 of what the ability did (now unconditional removal against a live target
 overrides that default). Re-verified: Diver Straight-Combo 14.6%→24.0%,
 Rally Tempo 17.9%→26.3% — real recovery, not full; see
-`docs/BALANCE_SIM_FINDINGS_v4.5.md` §0.1 for the residual-gap analysis and
+the v4.5 balance findings (doc retired; history in CHANGELOG.md) §0.1 for the residual-gap analysis and
 a new finding that the overall Leader spread widened this round (18.2pt →
 21.2pt), with Diver and Ethereal Sea Witch now the clearest outliers.
 

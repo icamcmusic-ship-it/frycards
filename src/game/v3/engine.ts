@@ -950,6 +950,16 @@ export function applyEffect(
       if (t && t.def.type === 'Unit') {
         t.boundNextTurn = true;
         g.log.push(`${t.def.name} was Bound.`);
+        // v4.26 "Bind X": a bind Effect carrying a numeric value ALSO saps
+        // the bound Unit by that value (damage path — Ward applies to this
+        // half like any sap). Before this, Effect.value on a bind was
+        // silently ignored, which made every MANUAL_VALUE_BUFF "buff" on a
+        // bind-effect Charm dead code — the structural reason Pulsing
+        // Heartstone/Amber Sphere/Resonant Shuriken sat at the top of
+        // cardsToBuff for four straight passes while their buffs did
+        // nothing. Value-less binds (Leader abilities, Bubble Harvest,
+        // Bone Splinter Quill) are byte-identical to before.
+        if ((eff.value ?? 0) > 0) dmg(t, eff.value!, t.owner !== ownerId);
       }
       break;
     }
