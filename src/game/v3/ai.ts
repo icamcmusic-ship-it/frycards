@@ -1600,8 +1600,8 @@ function strandedCastableCard(
   opp: Player,
   unplaced: number[],
   maxDie: number,
-): boolean {
-  return p.hand.some((c) => {
+): Inst | undefined {
+  return p.hand.find((c) => {
     if (c.def.type === 'Location' || c.def.comboGate || c.def.threshold === undefined)
       return false;
     const thr = effThreshold(g, p.id, c.def);
@@ -1635,7 +1635,15 @@ function recordPlacementLapses(g: Game, p: Player) {
   if (unplaced.length > 0) {
     const maxDie = Math.max(...unplaced);
     const castable = strandedCastableCard(g, p, opp, unplaced, maxDie);
-    if (castable) lapse(g, p.id, 'lapseWastedCastableDie');
+    if (castable) {
+      lapse(g, p.id, 'lapseWastedCastableDie');
+      // v4.25 harness upgrade: per-card attribution of the wasted-die lapse
+      // (which specific card was legally payable but never got the die),
+      // same `<prefix>:<cardId>` convention as handLimitDiscard — a distinct
+      // "die available, card not cast" signal from hand-limit's "card never
+      // got a die at all before being forced out."
+      lapse(g, p.id, `lapseWastedCastableDie:${castable.def.id}`);
+    }
     const ab = p.leader.def.ability;
     if (ab && !p.leader.abilityUsed) {
       const eff = ab.effect;

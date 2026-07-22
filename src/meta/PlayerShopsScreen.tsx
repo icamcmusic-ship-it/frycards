@@ -477,6 +477,7 @@ function ReportModal({
           </div>
         )}
         <select
+          aria-label="Report reason"
           className="w-full px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs mb-2"
           value={reason}
           onChange={(e) => setReason(e.target.value as typeof reason)}
@@ -486,6 +487,7 @@ function ReportModal({
           <option value="other">Other</option>
         </select>
         <textarea
+          aria-label="Additional details"
           className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
           rows={3}
           placeholder="Optional details…"

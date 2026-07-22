@@ -464,13 +464,18 @@ export interface PlayerAchievement {
 export async function fetchAchievements(
   userId: string,
 ): Promise<{ all: Achievement[]; mine: PlayerAchievement[] }> {
-  const [{ data: all }, { data: mine }] = await Promise.all([
+  const [
+    { data: all, error: allError },
+    { data: mine, error: mineError },
+  ] = await Promise.all([
     supabase.from('achievements').select('*').order('sort'),
     supabase
       .from('player_achievements')
       .select('achievement_id, progress, claimed')
       .eq('user_id', userId),
   ]);
+  if (allError) console.error('fetchAchievements (all) failed:', allError.message);
+  if (mineError) console.error('fetchAchievements (mine) failed:', mineError.message);
   return { all: (all as Achievement[]) || [], mine: (mine as PlayerAchievement[]) || [] };
 }
 
@@ -495,6 +500,7 @@ export interface Mission {
 
 export async function fetchMissions(): Promise<Mission[]> {
   const { data, error } = await supabase.rpc('get_missions');
+  if (error) console.error('fetchMissions failed:', error.message);
   if (error || !data) return [];
   return data as Mission[];
 }
@@ -671,6 +677,7 @@ export interface PlayerProfileCard {
 
 export async function fetchPlayerProfileCard(id: string): Promise<PlayerProfileCard | null> {
   const { data, error } = await supabase.rpc('get_player_profile_card', { p_id: id });
+  if (error) console.error('fetchPlayerProfileCard failed:', error.message);
   if (error || !data || data.length === 0) return null;
   return (data as PlayerProfileCard[])[0];
 }
@@ -694,6 +701,7 @@ export async function fetchCardsLeaderboard(limit = 50): Promise<CardsLeaderboar
 
 export async function searchPlayers(query: string): Promise<PublicProfile[]> {
   const { data, error } = await supabase.rpc('search_players', { p_query: query });
+  if (error) console.error('searchPlayers failed:', error.message);
   if (error || !data) return [];
   return data as PublicProfile[];
 }
@@ -743,6 +751,7 @@ export async function fetchTrades(): Promise<Trade[]> {
 
 export async function fetchFriendCollection(friendId: string): Promise<PlayerCard[]> {
   const { data, error } = await supabase.rpc('get_friend_collection', { p_friend: friendId });
+  if (error) console.error('fetchFriendCollection failed:', error.message);
   if (error || !data) return [];
   return (data as { card_id: string; quantity: number; foil_quantity: number }[]).map((r) => ({
     card_id: r.card_id,
@@ -998,6 +1007,7 @@ export async function fetchCardMarketValue(cardId: string, foil = false): Promis
     p_card_id: cardId,
     p_foil: foil,
   });
+  if (error) console.error('fetchCardMarketValue failed:', error.message);
   if (error || !data) return { sales: 0, avg_price: null };
   return data as CardMarketValue;
 }
@@ -1008,6 +1018,7 @@ export async function fetchCardBlendedReference(cardId: string, foil = false): P
     p_card_id: cardId,
     p_foil: foil,
   });
+  if (error) console.error('fetchCardBlendedReference failed:', error.message);
   if (error || data == null) return 0;
   return data as number;
 }
@@ -1188,6 +1199,7 @@ export async function fetchMysteryTemplates(ownerId: string): Promise<MysteryTem
 
 export async function fetchShopPublic(ownerId: string): Promise<ShopPublic | null> {
   const { data, error } = await supabase.rpc('get_shop_public', { p_owner: ownerId });
+  if (error) console.error('fetchShopPublic failed:', error.message);
   if (error || !data) return null;
   return data as ShopPublic;
 }
@@ -1197,12 +1209,14 @@ export async function browseShops(
   limit = 30,
 ): Promise<BrowseShopEntry[]> {
   const { data, error } = await supabase.rpc('browse_shops', { p_sort: sort, p_limit: limit });
+  if (error) console.error('browseShops failed:', error.message);
   if (error || !data) return [];
   return data as BrowseShopEntry[];
 }
 
 export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryLiveStats> {
   const { data, error } = await supabase.rpc('get_mystery_live_stats', { p_listing_id: listingId });
+  if (error) console.error('fetchMysteryLiveStats failed:', error.message);
   if (error || !data) return { remaining_packs: 0, live_ev_per_pack: null };
   return data as MysteryLiveStats;
 }
@@ -1416,6 +1430,7 @@ export interface SerializedFeedEntry {
 
 export async function fetchSerializedFeed(limit = 30): Promise<SerializedFeedEntry[]> {
   const { data, error } = await supabase.rpc('get_serialized_feed', { p_limit: limit });
+  if (error) console.error('fetchSerializedFeed failed:', error.message);
   if (error || !data) return [];
   return data as SerializedFeedEntry[];
 }

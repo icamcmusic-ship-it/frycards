@@ -677,6 +677,13 @@ interface SuiteResult {
    * half of this signal. */
   handLimitDiscardsTotal: number;
   handLimitDiscardCount: Record<string, number>;
+  /** v4.25 harness upgrade: per-card breakdown of the existing
+   * `lapseWastedCastableDie` counter (ai.ts's recordPlacementLapses) — which
+   * specific card was legally payable by an unplaced die but never got cast.
+   * Distinct signal from handLimitDiscardCount: this fires the moment the
+   * lapse happens (a live die going idle with a payable card sitting in
+   * hand), not after the card eventually gets forced out at End Phase. */
+  lapseWastedCastableDieCount: Record<string, number>;
   errors: string[];
 }
 
@@ -748,6 +755,7 @@ function newResult(): SuiteResult {
     tempoCurve: {},
     handLimitDiscardsTotal: 0,
     handLimitDiscardCount: {},
+    lapseWastedCastableDieCount: {},
     errors: [],
   };
 }
@@ -904,6 +912,10 @@ function runGame(
         } else if (key.startsWith('handLimitDiscard:')) {
           const id = key.slice('handLimitDiscard:'.length);
           r.handLimitDiscardCount[id] = (r.handLimitDiscardCount[id] || 0) + (d[key] || 0);
+        } else if (key.startsWith('lapseWastedCastableDie:')) {
+          const id = key.slice('lapseWastedCastableDie:'.length);
+          r.lapseWastedCastableDieCount[id] =
+            (r.lapseWastedCastableDieCount[id] || 0) + (d[key] || 0);
         }
       }
     }
@@ -1251,6 +1263,31 @@ const handLimitRows = Object.entries(R.handLimitDiscardCount)
 for (const r of handLimitRows.slice(0, 15)) {
   console.log(
     `${r.name.padEnd(28)} discards=${r.n}  per-deck-inclusion=${r.perDeckIncl.toFixed(3)}  (deckIncl n=${r.deckIncl})`,
+  );
+}
+// v4.25 harness upgrade: which specific cards most often sit in hand with a
+// legal, payable die going unspent instead (ai.ts's lapseWastedCastableDie,
+// now per-card via the same `<prefix>:<cardId>` convention as the v4.24
+// hand-limit-discard table above). A distinct "AI reasoning quality" signal
+// from the hand-limit table: this fires at the moment of the missed cast,
+// not after the card is eventually forced out unplayed at End Phase — a card
+// can top this list while never even reaching HAND_LIMIT.
+console.log(
+  '\n--- v4.25 Cards most often left un-cast despite a payable die going unspent (min n=100 deck-inclusions) ---',
+);
+const wastedDieRows = Object.entries(R.lapseWastedCastableDieCount)
+  .map(([id, n]) => ({
+    id,
+    name: POOL_BY_ID[id]?.name || id,
+    n,
+    perDeckIncl: (R.cardInDeck[id] || 0) > 0 ? n / R.cardInDeck[id] : NaN,
+    deckIncl: R.cardInDeck[id] || 0,
+  }))
+  .filter((r) => r.deckIncl >= 100)
+  .sort((a, b) => b.perDeckIncl - a.perDeckIncl);
+for (const r of wastedDieRows.slice(0, 15)) {
+  console.log(
+    `${r.name.padEnd(28)} skips=${r.n}  per-deck-inclusion=${r.perDeckIncl.toFixed(3)}  (deckIncl n=${r.deckIncl})`,
   );
 }
 console.log('\n--- CPU reasoning lapses (raw per-game rates; see ai.ts recordCpuLapses) ---');

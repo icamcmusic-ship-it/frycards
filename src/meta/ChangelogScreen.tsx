@@ -12,6 +12,14 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Ballast Update',
+    items: [
+      "Found and fixed a real bug in our own balance tooling: two cards (Abyssal Dragonfish, Ember Whisperer) had a cost tweak applied years ago that turned out to silently do nothing — it explains why Abyssal Dragonfish kept showing up as under-costed no matter what we tried. It now has a real fix (a harder combo requirement). We also tried raising the cost of every Pierce card at once, measured that it didn't actually change anything in practice, and rolled it back rather than ship a change that only looked like a fix.",
+      "Silver Chimera was getting stuck in players' hands more than any other card in the game — eased its combo requirement so it's actually castable. Several repeat over- and under-performers got another round of tuning (including Kinetix Enforcer, which finally moved after being stuck at the same power level for two updates), a stale buff on Isle of the Ancients that had overshot was rolled back, and a few newly-flagged cards were adjusted for the first time.",
+      "Bug-hunt pass: a Deck Builder import that was silently validating against outdated card data instead of the live catalog, a Collection screen that could under-count how many copies of a Leader you had locked into decks, ended Marketplace auctions that kept showing live bid/buy buttons for a moment after they closed, and a handful of buttons that could be double-tapped to double-claim a reward or double-spend on a purchase. Plus more error logging under the hood, keyboard/focus fixes on a few more dialogs, and confirmation toasts on some Social actions that previously gave no feedback at all.",
+    ],
+  },
+  {
     version: 'Slack Tide Update',
     items: [
       "Two long-standing 'trophy' cards (Astral Shoal, Where the Deep Meets the Sky) had one of their stacked abilities removed — they'd already gotten every stat cut we were willing to give them and were still clearly too strong, so this time an ability came off instead. Several other repeat over- and under-performers got another round of tuning, and Aftershock's two weakest cards finally got the buff we'd been meaning to give them.",

@@ -138,7 +138,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       if (success) setNotice(success);
       refreshProfile();
       refreshCollection();
-      reload();
+      // Awaited (not fire-and-forget) so `busy` — and every button gated on
+      // it — stays disabled until the refetch actually lands; releasing it
+      // immediately let a second action fire against stale listings/bid
+      // state (e.g. buying a listing a beat after it had already sold).
+      await reload();
       return true;
     } catch {
       setError('Something went wrong — check your connection and try again.');
@@ -162,6 +166,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     const isAuction = l.listing_type === 'auction';
     const sellerName = l.seller === userId ? 'You' : sellers.get(l.seller)?.username || '…';
     const highBidder = l.current_bidder === userId;
+    // `status` only flips off 'active' when the listing is re-fetched (which
+    // calls settle_expired_listings server-side first) — between fetches, a
+    // listing whose countdown has already ticked to "ended" would otherwise
+    // still show live, clickable BID/BUY buttons until the next reload.
+    const timedOut = timeLeft(l.ends_at) === 'ended';
     return (
       <div
         key={l.id}
@@ -242,7 +251,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               >
                 CANCEL LISTING
               </PopButton>
-            ) : !mine && l.status === 'active' ? (
+            ) : !mine && l.status === 'active' && !timedOut ? (
               <>
                 {isAuction && (
                   <PopButton
@@ -272,6 +281,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   </PopButton>
                 )}
               </>
+            ) : !mine && l.status === 'active' && timedOut ? (
+              <span className="text-[9px] font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
+                ENDED — SETTLING…
+              </span>
             ) : (
               <span
                 className={cn(

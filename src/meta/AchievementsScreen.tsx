@@ -95,7 +95,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       setNotice(`"${a.name}" reward claimed!`);
       refreshProfile();
       if (a.reward_pack_id) refreshInventory();
-      reload();
+      // Awaited — otherwise busyId clears (re-enabling this CLAIM button)
+      // before `mine` reflects the claim, opening a window for a double
+      // claim attempt on the same achievement.
+      await reload();
     } catch {
       setError("Something went wrong — check your connection and try again.");
     } finally {
@@ -116,7 +119,8 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       }
       setNotice(`"${m.name}" complete — rewards collected!`);
       refreshProfile();
-      reload();
+      // Awaited — same double-claim race as handleClaimAchievement above.
+      await reload();
     } catch {
       setError("Something went wrong — check your connection and try again.");
     } finally {

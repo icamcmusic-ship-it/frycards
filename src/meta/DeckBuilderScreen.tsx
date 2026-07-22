@@ -22,9 +22,17 @@ export const DECK_SIZE = 30;
 export const MAX_COPIES = ENGINE_MAX_COPIES;
 
 // decodeDeckCode wants a Map (its `.get`/`.has` lookups) — POOL_BY_ID is a
-// plain Record, so build the Map once rather than casting the Record and
-// crashing at runtime the moment decodeDeckCode calls db.get(...).
-const POOL_MAP = new Map(Object.entries(POOL_BY_ID));
+// plain Record, so wrap it rather than casting the Record and crashing at
+// runtime the moment decodeDeckCode calls db.get(...). Built fresh on every
+// call (not cached at module load): POOL_BY_ID's *contents* are replaced
+// in-place by App.tsx's post-boot applyCardPool(templates) call once the
+// live server catalog loads, well after this module (statically imported by
+// App.tsx) has already been evaluated — a Map snapshotted once at import
+// time would freeze on the pre-boot placeholder catalog forever, silently
+// rejecting/mis-validating any card added or changed server-side since.
+function poolMap(): Map<string, CardDef> {
+  return new Map(Object.entries(POOL_BY_ID));
+}
 
 export interface DeckIssue {
   text: string;
@@ -148,7 +156,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const handleImport = () => {
     const code = window.prompt('Paste a deck code (FRY1:…):');
     if (!code) return;
-    const res = decodeDeckCode(code, POOL_MAP);
+    const res = decodeDeckCode(code, poolMap());
     if ('error' in res) {
       setListError(res.error);
       return;

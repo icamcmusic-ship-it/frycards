@@ -97,6 +97,26 @@ export const KEYWORD_TIERS: Record<string, KeywordDef> = {
     T("May attack or use its Ability Slot the turn it's cast.", 0.5, 0),
     T("May attack or use its Ability Slot the turn it's cast. Printed with +1 ATK.", 1, 1),
   ]),
+  // v4.25 tried raising these weights 1/1.5/2 -> 1.5/2/2.5, mirroring the
+  // v4.19.1 fix that took Avenge from a similarly-shaped +15.0pt delta down
+  // to today's +5.6pt. A full-scale verification run showed ZERO movement
+  // (delta identical before/after, +10.0pt both runs) — investigated and
+  // reverted; see the pool-shape note below for why, and
+  // BALANCE_SIM_FINDINGS_v4.25.md for the full writeup. Left at the
+  // original weights rather than ship a no-op change.
+  //
+  // Why the lever doesn't work here (unlike Avenge): keywordCostTier()
+  // clamps the computed cost tier to [0,5] (cardpool.ts). Pierce's 8-card
+  // pool is disproportionately Super-Rare+/Full-Art multi-keyword bodies
+  // (Frenzy+Pierce+Overrun, Guard+Pierce, Twin+Pierce+Rally, …) whose
+  // combined keyword weight already pins them at the tier-5 ceiling before
+  // any Pierce-specific change — raising Pierce's own weight has nothing
+  // left to push against. Avenge's pool skewed toward lower-rarity/fewer-
+  // keyword cards with real tier headroom, which is why the identical lever
+  // worked there. A real Pierce fix needs either a lever that isn't clamped
+  // (e.g. trimming the overflow-damage magnitude itself) or targeting the
+  // specific low-rarity Pierce outliers directly rather than the keyword's
+  // shared cost weight — carried forward as a design-tension watch item.
   Pierce: KW([
     T(
       'Leftover damage past a destroyed blocker carries to the enemy Leader, capped at a third of ATK (min 1).',

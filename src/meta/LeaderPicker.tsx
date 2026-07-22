@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { POOL_LEADERS } from '../game/v3/cardpool';
 import { SafeImage } from './SafeImage';
 import { PopButton } from './ui';
@@ -30,6 +30,7 @@ export function LeaderPicker({
   const starterLeaders = POOL_LEADERS.filter(
     (l) => RARITIES.indexOf(l.rarity || 'Common') <= STARTER_MAX_RARITY_IDX,
   );
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -39,9 +40,20 @@ export function LeaderPicker({
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, onClose]);
 
+  // Move focus into the dialog on open and restore it to whatever triggered
+  // the Starter Box on close — otherwise a keyboard user opening this stays
+  // focused on the (now hidden-behind-overlay) trigger button.
+  useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => prevFocused?.focus?.();
+  }, []);
+
   return (
     <div
-      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       role="dialog"
       aria-modal="true"
     >
