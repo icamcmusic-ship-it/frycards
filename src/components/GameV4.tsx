@@ -46,7 +46,7 @@ import {
   HAND_LIMIT,
   rarityTier,
 } from '../game/v3/engine';
-import { playTurn, maybeMulliganPlayer } from '../game/v3/ai';
+import { playTurn, maybeMulliganPlayer, CpuTurnEvent } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
 import { cn } from '../lib/utils';
@@ -107,13 +107,66 @@ const GAME_CSS = `
   60% { filter: brightness(0.75); }
 }
 .gv4-attack-flash { animation: gv4-attack-flash 0.65s ease-in-out; }
+.gv4-heal-float {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 45;
+  pointer-events: none;
+  animation: gv4-dmg-float 1.15s ease-out forwards;
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+  background: #2E7D32;
+  border: 2px solid var(--c-ink);
+  border-radius: 9999px;
+  padding: 0 7px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+}
+/* v4.26 CPU playback: pulsing outlines on the card the opponent is acting
+ * with (yellow) and whatever it's acting on (red) — same color grammar as
+ * the human's own attacker/target rings, just animated since the player
+ * isn't the one driving. */
+@keyframes gv4-act-ring {
+  0%, 100% { outline-offset: 1px; outline-width: 3px; }
+  50% { outline-offset: 5px; outline-width: 4px; }
+}
+.gv4-cpu-actor {
+  outline: 3px solid var(--c-yellow);
+  outline-offset: 2px;
+  border-radius: 4px;
+  animation: gv4-act-ring 0.8s ease-in-out infinite;
+}
+.gv4-cpu-target {
+  outline: 3px solid var(--c-red);
+  outline-offset: 2px;
+  border-radius: 4px;
+  animation: gv4-act-ring 0.8s ease-in-out infinite;
+}
 `;
 
-/** One floating "-N" damage number, keyed so simultaneous hits stack cleanly. */
+/** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
+ * hits stack cleanly. */
 interface DmgFloat {
   id: number;
   iid: string;
   amount: number;
+  kind: 'dmg' | 'heal';
+}
+
+/** Renders a card's currently-animating damage/heal floats. */
+function FloatLayer({ floats }: { floats?: DmgFloat[] }) {
+  if (!floats || floats.length === 0) return null;
+  return (
+    <>
+      {floats.map((f) => (
+        <span key={f.id} className={f.kind === 'heal' ? 'gv4-heal-float' : 'gv4-dmg-float'}>
+          {f.kind === 'heal' ? '+' : '−'}
+          {f.amount}
+        </span>
+      ))}
+    </>
+  );
 }
 
 /** Which in-play cards may a hand-cast / ability effect legally target? */
@@ -393,6 +446,8 @@ function BoardUnit({
   dimmed,
   isAttacker,
   flash,
+  acting,
+  acted,
   floats,
 }: {
   g: Game;
@@ -403,6 +458,10 @@ function BoardUnit({
   isAttacker?: boolean;
   /** Attack feedback: briefly true on the attacker/target of a resolved attack. */
   flash?: boolean;
+  /** CPU playback: this card is the one the opponent is acting WITH. */
+  acting?: boolean;
+  /** CPU playback: this card is what the opponent's action is aimed AT. */
+  acted?: boolean;
   /** Floating "-N" damage numbers currently animating over this card. */
   floats?: DmgFloat[];
 }) {
@@ -430,6 +489,8 @@ function BoardUnit({
         flash && 'gv4-attack-flash',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1 rounded-[4px]',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1 rounded-[4px]',
+        acting && 'gv4-cpu-actor -translate-y-1',
+        acted && 'gv4-cpu-target',
         (exhausted || sick) && 'saturate-50',
       )}
     >
@@ -486,11 +547,7 @@ function BoardUnit({
           </Tip>
         )}
       </div>
-      {floats?.map((f) => (
-        <span key={f.id} className="gv4-dmg-float">
-          −{f.amount}
-        </span>
-      ))}
+      <FloatLayer floats={floats} />
     </div>
   );
 }
@@ -511,6 +568,8 @@ function LeaderPanel({
   ultimateWhy,
   highlight,
   flash,
+  acting,
+  acted,
   onClickTarget,
   onInspect,
   floats,
@@ -525,6 +584,9 @@ function LeaderPanel({
   ultimateWhy?: string;
   highlight?: boolean;
   flash?: boolean;
+  /** CPU playback: this Leader is acting / being acted on (pulsing ring). */
+  acting?: boolean;
+  acted?: boolean;
   onClickTarget?: () => void;
   onInspect?: () => void;
   floats?: DmgFloat[];
@@ -547,6 +609,8 @@ function LeaderPanel({
         'shrink-0 relative w-[140px] flex flex-col gap-0.5',
         flash && 'gv4-attack-flash',
         highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]',
+        acting && 'gv4-cpu-actor',
+        acted && 'gv4-cpu-target',
       )}
     >
       <CardFace
@@ -583,11 +647,7 @@ function LeaderPanel({
           accent="red"
         />
       )}
-      {floats?.map((f) => (
-        <span key={f.id} className="gv4-dmg-float">
-          −{f.amount}
-        </span>
-      ))}
+      <FloatLayer floats={floats} />
     </div>
   );
 }
@@ -644,11 +704,7 @@ function LocationPanel({
           onClick={onAbility}
         />
       )}
-      {floats?.map((f) => (
-        <span key={f.id} className="gv4-dmg-float">
-          −{f.amount}
-        </span>
-      ))}
+      <FloatLayer floats={floats} />
     </div>
   );
 }
@@ -660,12 +716,96 @@ type Stage =
   'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
 
 const ROLL_ANIM_MS = 650;
-// v4.3: much slower, narrated CPU turns — a "thinking" beat before it acts,
-// then every log line the AI produced streams in one at a time instead of
-// the whole turn resolving silently in one snapshot. SKIP ▸▸ still escapes
-// both stages instantly for an impatient player.
-const CPU_THINK_MS = 900;
-const CPU_LINE_MS = 950;
+
+// ---------------------------------------------------------------------------
+// v4.26: slow, step-by-step CPU turn playback. The AI is synchronous (the
+// whole turn is computed in one call), but playTurn's presentational
+// observer (ai.ts CpuTurnObserver) reports every distinct action it takes,
+// and a lightweight board snapshot is captured after each one. The UI then
+// REPLAYS those snapshots one action at a time: the board visibly changes
+// with each step, the acting card and its target pulse, damage/heal
+// numbers float, and a banner narrates ("casts Silver Chimera", "attacks
+// your Leader with …"). All pacing tunables live here.
+// ---------------------------------------------------------------------------
+const CPU_PACE = {
+  /** "Opponent is thinking…" beat before its first action appears. */
+  THINK_MS: 1000,
+  /** Default dwell per narrated action (casts, abilities, echoes, twins…). */
+  STEP_MS: 1250,
+  /** Attacks linger longer so the damage visibly lands before moving on. */
+  ATTACK_MS: 1600,
+  /** Low-salience housekeeping (roll, reroll, scrap, end-of-turn). */
+  MINOR_MS: 850,
+} as const;
+
+type CpuStepKind = CpuTurnEvent['kind'];
+
+const CPU_STEP_ICON: Record<CpuStepKind, string> = {
+  turnStart: '🎲',
+  reroll: '🎲',
+  snapCast: '⚡',
+  location: '📍',
+  scrap: '♻',
+  twinComplete: '👯',
+  twinAbandon: '↩',
+  cast: '✨',
+  echo: '🔁',
+  ability: '🔶',
+  ultimate: '💥',
+  rally: '⚡',
+  comboCheck: '🔗',
+  attack: '⚔',
+  endTurn: '🏁',
+};
+
+/** One replayable beat of the CPU's turn. */
+interface CpuStep {
+  kind: CpuStepKind;
+  /** Narration line, without the "<cpuLabel> " prefix. */
+  text: string;
+  /** Board state AFTER this action resolved (a render-only snapshot). */
+  snap: Game;
+  /** Cards the opponent acted WITH (pulse yellow). */
+  actorIids: string[];
+  /** Cards the action landed ON (pulse red, incl. anything damaged/healed). */
+  targetIids: string[];
+  /** Damage/heal numbers to float when this step appears. */
+  floats: DmgFloat[];
+  /** How long this step stays on screen before auto-advancing. */
+  ms: number;
+}
+
+/** Render-only structural copy of the Game — every Inst/array the UI reads
+ * is copied (defs stay shared; they're immutable), so later engine mutations
+ * don't retroactively change an already-captured step. rng/stats are shared
+ * by reference: the render path never touches them. */
+function cloneInstView(x: Inst): Inst {
+  return { ...x };
+}
+function clonePlayerView(p: Player): Player {
+  return {
+    ...p,
+    leader: cloneInstView(p.leader),
+    deck: [...p.deck],
+    hand: p.hand.map(cloneInstView),
+    discard: p.discard.map(cloneInstView),
+    banished: [...p.banished],
+    staging: p.staging.map(cloneInstView),
+    board: p.board.map(cloneInstView),
+    location: p.location ? cloneInstView(p.location) : null,
+    dice: p.dice.map((d) => ({ ...d })),
+  };
+}
+function cloneGameView(g: Game): Game {
+  const players: Record<string, Player> = {};
+  for (const pid of g.order) players[pid] = clonePlayerView(g.players[pid]);
+  return { ...g, players, log: [...g.log], pendingAftershocks: [...g.pendingAftershocks] };
+}
+
+/** Everything in play for one player (board + leader + location). */
+function inPlay(p: Player): Inst[] {
+  return [...p.board, p.leader, ...(p.location ? [p.location] : [])];
+}
 
 interface Pending {
   kind: 'cast' | 'ability' | 'ultimate' | 'echo';
@@ -739,8 +879,19 @@ export function GameV4({
   });
   const HUMAN = 'A';
   const CPU = 'B';
-  const me = g.players[HUMAN];
-  const foe = g.players[CPU];
+
+  // v4.26 CPU playback: while the opponent's turn replays, the UI renders
+  // from the current step's SNAPSHOT (so the board advances one action at a
+  // time) instead of the live, already-finished engine state.
+  const [cpuStep, setCpuStep] = useState<{ step: CpuStep; idx: number; total: number } | null>(
+    null,
+  );
+  const view = cpuStep ? cpuStep.step.snap : g;
+  const me = view.players[HUMAN];
+  const foe = view.players[CPU];
+  const cpuActors = new Set(cpuStep ? cpuStep.step.actorIids : []);
+  const cpuTargets = new Set(cpuStep ? cpuStep.step.targetIids : []);
+  const cpuAttackStep = cpuStep?.step.kind === 'attack';
 
   const [, setVersion] = useState(0);
   const bump = () => {
@@ -805,14 +956,14 @@ export function GameV4({
   // here so they can all be cancelled on unmount (e.g. conceding mid-combat),
   // instead of firing later and calling setFloats on an unmounted component.
   const floatTimeoutsRef = useRef<Set<number>>(new Set());
-  // v4.3: CPU turn narration — the AI's whole turn is computed up front (the
-  // engine has no resumable/step mode), but its log lines are revealed one
-  // at a time on a delay so the player can actually follow what happened,
-  // instead of the board snapping straight to the post-turn result.
-  const cpuLogRef = useRef<string[]>([]);
-  const cpuLogIdxRef = useRef(0);
+  // v4.26: CPU turn playback — the AI's whole turn is computed up front (it
+  // has no resumable/step mode), but the observer hook captures a CpuStep
+  // (snapshot + narration + highlights) per action, and these refs drive the
+  // timed replay. cpuStep (declared above, it feeds `view`) is the currently
+  // visible step.
+  const cpuStepsRef = useRef<CpuStep[]>([]);
+  const cpuStepIdxRef = useRef(0);
   const cpuTurnPlayedRef = useRef(false);
-  const [cpuNarration, setCpuNarration] = useState<string | null>(null);
   // Which die indices are mid-animation (spinning through random faces)
   // right now — driven by a rolling stage or a reroll, cleared once the
   // settle timeout fires.
@@ -840,33 +991,49 @@ export function GameV4({
     [],
   );
 
+  /** Show a batch of damage/heal floats and schedule their removal (guarded
+   * against unmount via floatTimeoutsRef). Hoisted so bump() can call it. */
+  function spawnFloats(fresh: DmgFloat[]) {
+    if (fresh.length === 0) return;
+    setFloats((f) => [...f, ...fresh]);
+    const ids = new Set(fresh.map((f) => f.id));
+    const timeoutId = window.setTimeout(() => {
+      floatTimeoutsRef.current.delete(timeoutId);
+      setFloats((f) => f.filter((x) => !ids.has(x.id)));
+    }, 1250);
+    floatTimeoutsRef.current.add(timeoutId);
+  }
+
   /** Diff every in-play card's accumulated damage against the last bump and
-   * spawn a floating "-N" over anything that just took a hit. Hoisted
-   * function declaration so bump() (defined above) can call it safely. */
+   * spawn a floating "-N" over anything that just took a hit — and (v4.26)
+   * a green "+N" over anything that just got healed (Pitch, Mend), so heals
+   * read with the same visual grammar as damage. Hoisted function
+   * declaration so bump() (defined above) can call it safely. */
   function recordDamageFloats() {
     const seen = new Map<string, number>();
     const fresh: DmgFloat[] = [];
     for (const pid of g.order) {
-      const pl = g.players[pid];
-      const all: Inst[] = [...pl.board, pl.leader, ...(pl.location ? [pl.location] : [])];
-      for (const u of all) {
+      for (const u of inPlay(g.players[pid])) {
         seen.set(u.iid, u.damage);
         const prev = damageMemoRef.current.get(u.iid);
         if (prev !== undefined && u.damage > prev) {
-          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - prev });
+          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - prev, kind: 'dmg' });
+        } else if (prev !== undefined && u.damage < prev) {
+          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: prev - u.damage, kind: 'heal' });
         }
       }
     }
     damageMemoRef.current = seen;
-    if (fresh.length > 0) {
-      setFloats((f) => [...f, ...fresh]);
-      const ids = new Set(fresh.map((f) => f.id));
-      const timeoutId = window.setTimeout(() => {
-        floatTimeoutsRef.current.delete(timeoutId);
-        setFloats((f) => f.filter((x) => !ids.has(x.id)));
-      }, 1250);
-      floatTimeoutsRef.current.add(timeoutId);
-    }
+    spawnFloats(fresh);
+  }
+
+  /** Reset the damage memo to the CURRENT live state without spawning floats
+   * — used after CPU playback (whose steps already floated their own
+   * numbers) so the wrap-up bump() doesn't re-float the whole turn. */
+  function syncDamageMemo() {
+    const seen = new Map<string, number>();
+    for (const pid of g.order) for (const u of inPlay(g.players[pid])) seen.set(u.iid, u.damage);
+    damageMemoRef.current = seen;
   }
   const floatsFor = (iid: string) => floats.filter((f) => f.iid === iid);
 
@@ -913,7 +1080,10 @@ export function GameV4({
   // that click is what triggers the reveal animation, so it reads as the
   // player's own roll rather than numbers just appearing.
   const beginHumanTurn = () => {
-    const fatigueBefore = me.fatigue;
+    // Read from the LIVE player, not the render-scope `me` (which can still
+    // be a CPU-playback snapshot in the closure that calls this).
+    const human = g.players[HUMAN];
+    const fatigueBefore = human.fatigue;
     startTurn(g);
     bump();
     if (g.winner) {
@@ -922,8 +1092,8 @@ export function GameV4({
     }
     // v4.8 QoL: Fatigue used to be a Battle Log whisper — surface the
     // escalating self-damage with the same banner treatment big plays get.
-    if (me.fatigue > fatigueBefore) {
-      say(`OUT OF CARDS — Fatigue deals ${me.fatigue} damage (and it keeps climbing)`);
+    if (human.fatigue > fatigueBefore) {
+      say(`OUT OF CARDS — Fatigue deals ${human.fatigue} damage (and it keeps climbing)`);
     }
     setRerollSel(new Set());
     setSelDie(null);
@@ -954,51 +1124,170 @@ export function GameV4({
     }, ROLL_ANIM_MS);
   };
 
-  // Reveal the next queued CPU log line (or wrap up once they're exhausted).
-  const tickCpuNarration = () => {
-    cpuTimeoutRef.current = null;
-    const lines = cpuLogRef.current;
-    const i = cpuLogIdxRef.current;
-    if (i >= lines.length) {
-      setCpuNarration(null);
-      bump();
-      if (g.winner) {
-        setStage('over');
-        return;
-      }
-      beginHumanTurn();
-      return;
+  // ---- v4.26 CPU turn playback ------------------------------------------
+  /** Possessive, side-aware name for an action's explicit target — read from
+   * the LIVE game mid-playTurn, right after the action resolved (so a target
+   * that just died is still found in its discard pile). */
+  const cpuTargetName = (targetIid: string): string | undefined => {
+    if (targetIid === g.players[HUMAN].leader.iid) return 'your Leader';
+    if (targetIid === g.players[CPU].leader.iid) return 'its own Leader';
+    for (const pid of g.order) {
+      const pl = g.players[pid];
+      const hit = [...inPlay(pl), ...pl.hand, ...pl.discard].find((x) => x.iid === targetIid);
+      if (hit) return pid === HUMAN ? `your ${hit.def.name}` : `its ${hit.def.name}`;
     }
-    setCpuNarration(lines[i]);
-    cpuLogIdxRef.current = i + 1;
-    cpuTimeoutRef.current = window.setTimeout(tickCpuNarration, CPU_LINE_MS);
+    return undefined;
   };
 
-  // Plays the CPU's entire turn (the AI has no resumable/step mode), then
-  // narrates what it did one log line at a time instead of snapping the
-  // board straight to the result.
+  const diceFaces = (dice?: number[]) =>
+    dice && dice.length > 0 ? dice.map((v) => DIE_FACES[v - 1] ?? `${v}`).join(' ') : '';
+
+  /** Narration line for one CPU action (rendered as "<cpuLabel> <text>"). */
+  const cpuStepText = (ev: CpuTurnEvent): string => {
+    const tgt = ev.targetIid ? cpuTargetName(ev.targetIid) : undefined;
+    const withDice = ev.dice && ev.dice.length > 0 ? ` with ${diceFaces(ev.dice)}` : '';
+    switch (ev.kind) {
+      case 'turnStart':
+        return `draws, then rolls ${diceFaces(ev.dice)}`;
+      case 'reroll':
+        return `rerolls ${ev.dice?.length === 1 ? 'a die' : `${ev.dice?.length ?? 0} dice`} → ${diceFaces(ev.dice)}`;
+      case 'snapCast':
+        return `Snap-casts ${ev.name}${withDice}${tgt ? ` on ${tgt}` : ''}`;
+      case 'location':
+        return `plays its Location ${ev.name} (free)`;
+      case 'scrap':
+        return `Scraps ${ev.name} to reroll a die → ${diceFaces(ev.dice)}`;
+      case 'twinComplete':
+        return `completes Twin ${ev.name} — it enters play`;
+      case 'twinAbandon':
+        return `abandons staged ${ev.name}`;
+      case 'cast':
+        return `casts ${ev.name}${withDice}${tgt ? ` targeting ${tgt}` : ''}`;
+      case 'echo':
+        return `Echoes ${ev.name} back from its discard pile${tgt ? ` targeting ${tgt}` : ''}`;
+      case 'ability':
+        return `uses ${ev.name}'s Ability${withDice}`;
+      case 'ultimate':
+        return `unleashes ${ev.name}'s ULTIMATE${withDice}`;
+      case 'rally':
+        return `Rallies ${ev.name}'s Ability (free)`;
+      case 'comboCheck':
+        return 'checks for Combos…';
+      case 'attack':
+        return `attacks ${tgt ?? ev.targetName ?? 'a target'} with ${ev.name}`;
+      case 'endTurn':
+        return 'ends its turn';
+    }
+  };
+
+  const cpuStepMs = (kind: CpuStepKind): number => {
+    if (kind === 'attack') return CPU_PACE.ATTACK_MS;
+    if (
+      kind === 'turnStart' ||
+      kind === 'reroll' ||
+      kind === 'scrap' ||
+      kind === 'twinAbandon' ||
+      kind === 'comboCheck' ||
+      kind === 'endTurn'
+    )
+      return CPU_PACE.MINOR_MS;
+    return CPU_PACE.STEP_MS;
+  };
+
+  /** Damage/heal deltas between two snapshots — this step's floating numbers. */
+  const diffSnapshots = (prev: Game, next: Game): DmgFloat[] => {
+    const out: DmgFloat[] = [];
+    for (const pid of next.order) {
+      const before = new Map<string, number>();
+      for (const u of inPlay(prev.players[pid])) before.set(u.iid, u.damage);
+      for (const u of inPlay(next.players[pid])) {
+        const b = before.get(u.iid);
+        if (b === undefined) continue;
+        if (u.damage > b)
+          out.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - b, kind: 'dmg' });
+        else if (u.damage < b)
+          out.push({ id: ++floatIdRef.current, iid: u.iid, amount: b - u.damage, kind: 'heal' });
+      }
+    }
+    return out;
+  };
+
+  // Wrap up playback: back to live state, memo synced (each step already
+  // floated its own numbers), and the human's turn begins.
+  const finishCpuPlayback = () => {
+    setCpuStep(null);
+    syncDamageMemo();
+    bump();
+    if (g.winner) {
+      setStage('over');
+      return;
+    }
+    beginHumanTurn();
+  };
+
+  // Show the next captured CPU step (or wrap up once they're exhausted).
+  const tickCpuStep = () => {
+    cpuTimeoutRef.current = null;
+    const steps = cpuStepsRef.current;
+    const i = cpuStepIdxRef.current;
+    if (i >= steps.length) {
+      finishCpuPlayback();
+      return;
+    }
+    const step = steps[i];
+    cpuStepIdxRef.current = i + 1;
+    setCpuStep({ step, idx: i, total: steps.length });
+    spawnFloats(step.floats);
+    cpuTimeoutRef.current = window.setTimeout(tickCpuStep, step.ms);
+  };
+
+  // Plays the CPU's entire turn (the AI has no resumable/step mode), while
+  // the observer captures a snapshot + narration per distinct action; the
+  // steps then replay on a timer so the board advances one action at a time
+  // instead of snapping straight to the post-turn result.
   const resolveCpuTurn = () => {
     cpuTimeoutRef.current = null;
-    const before = g.log.length;
-    playTurn(g);
+    let prev = cloneGameView(g);
+    const steps: CpuStep[] = [];
+    playTurn(g, (ev) => {
+      const snap = cloneGameView(g);
+      const floats = diffSnapshots(prev, snap);
+      // A Combo Check that visibly did nothing isn't worth a beat on screen.
+      if (ev.kind === 'comboCheck' && floats.length === 0 && snap.log.length === prev.log.length) {
+        prev = snap;
+        return;
+      }
+      steps.push({
+        kind: ev.kind,
+        text: cpuStepText(ev),
+        snap,
+        actorIids: ev.iid ? [ev.iid] : [],
+        targetIids: [
+          ...new Set([...(ev.targetIid ? [ev.targetIid] : []), ...floats.map((f) => f.iid)]),
+        ].filter((iid) => iid !== ev.iid),
+        floats,
+        ms: cpuStepMs(ev.kind),
+      });
+      prev = snap;
+    });
     cpuTurnPlayedRef.current = true;
-    const newLines = g.log.slice(before);
-    cpuLogRef.current = newLines.length > 0 ? newLines : [`${cpuLabel} passes.`];
-    cpuLogIdxRef.current = 0;
-    tickCpuNarration();
+    cpuStepsRef.current = steps;
+    cpuStepIdxRef.current = 0;
+    tickCpuStep();
   };
 
   const runCpuTurn = () => {
     setStage('cpu');
-    setCpuNarration(null);
+    setCpuStep(null);
     cpuTurnPlayedRef.current = false;
-    cpuLogRef.current = [];
-    cpuLogIdxRef.current = 0;
-    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_THINK_MS);
+    cpuStepsRef.current = [];
+    cpuStepIdxRef.current = 0;
+    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_PACE.THINK_MS);
   };
 
   // Lets an impatient player skip straight to the end of the CPU's turn,
-  // whether it's still "thinking" or partway through narrating its log.
+  // whether it's still "thinking" or partway through the replay. Clears all
+  // timers first so an interrupted animation can never soft-lock the turn.
   const skipCpuDelay = () => {
     if (cpuTimeoutRef.current !== null) {
       window.clearTimeout(cpuTimeoutRef.current);
@@ -1008,14 +1297,23 @@ export function GameV4({
       playTurn(g);
       cpuTurnPlayedRef.current = true;
     }
-    cpuLogIdxRef.current = cpuLogRef.current.length;
-    setCpuNarration(null);
-    bump();
-    if (g.winner) {
-      setStage('over');
+    cpuStepIdxRef.current = cpuStepsRef.current.length;
+    finishCpuPlayback();
+  };
+
+  // Click-to-fast-forward one step: jump to the next action immediately
+  // instead of waiting out the current step's dwell (a click while the CPU
+  // is still "thinking" starts the replay right away).
+  const advanceCpuStep = () => {
+    if (cpuTimeoutRef.current !== null) {
+      window.clearTimeout(cpuTimeoutRef.current);
+      cpuTimeoutRef.current = null;
+    }
+    if (!cpuTurnPlayedRef.current) {
+      resolveCpuTurn();
       return;
     }
-    beginHumanTurn();
+    tickCpuStep();
   };
 
   // Conceding is a resignation, not a free way to dodge a loss on the
@@ -1848,7 +2146,7 @@ export function GameV4({
           ? 'Now click a highlighted enemy to attack it (Guards must fall first).'
           : 'Click one of your ready Units, then an enemy target. END TURN when done.';
       case 'cpu':
-        return `${cpuLabel} is playing its turn — each action is narrated (SKIP ▸▸ to fast-forward).`;
+        return `${cpuLabel} is playing its turn — watch each action land (click the banner for the next action, SKIP ▸▸ to fast-forward).`;
       default:
         return null;
     }
@@ -1894,7 +2192,7 @@ export function GameV4({
           ✕ CONCEDE
         </button>
         <span className="heading-font text-[11px] text-[var(--c-yellow)]">
-          TURN {Math.ceil(g.turn / 2) || 1} ·{' '}
+          TURN {Math.ceil(view.turn / 2) || 1} ·{' '}
           {stage === 'cpu'
             ? "CPU'S TURN"
             : stage === 'awaitRoll'
@@ -1974,9 +2272,31 @@ export function GameV4({
           {banner}
         </div>
       )}
-      {stage === 'cpu' && cpuNarration && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[80vw] text-center">
-          {cpuLabel}: {renderKeywordText(cpuNarration)}
+      {stage === 'cpu' && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={advanceCpuStep}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              advanceCpuStep();
+            }
+          }}
+          title="Click to show the opponent's next action immediately"
+          className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none"
+        >
+          {cpuStep ? (
+            <>
+              <span className="mr-1">{CPU_STEP_ICON[cpuStep.step.kind]}</span>
+              {cpuLabel} {renderKeywordText(cpuStep.step.text)}
+              <span className="ml-2 text-[8px] font-mono opacity-80">
+                {cpuStep.idx + 1}/{cpuStep.total} · click ▸
+              </span>
+            </>
+          ) : (
+            <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
+          )}
         </div>
       )}
       {pending && (
@@ -2053,7 +2373,7 @@ export function GameV4({
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
       <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25 min-h-0 overflow-y-auto">
         <LeaderPanel
-          g={g}
+          g={view}
           p={foe}
           isHuman={false}
           highlight={
@@ -2061,6 +2381,8 @@ export function GameV4({
             (!!attacker && combatTargets.some((t) => t.iid === foe.leader.iid))
           }
           flash={attackFx?.target === foe.leader.iid}
+          acting={cpuActors.has(foe.leader.iid)}
+          acted={cpuTargets.has(foe.leader.iid)}
           floats={floatsFor(foe.leader.iid)}
           onClickTarget={
             pending && isPendingTarget(foe.leader.iid)
@@ -2072,16 +2394,36 @@ export function GameV4({
           onInspect={() => setInspect(foe.leader.def)}
         />
         <div className="flex-1 min-w-0">
-          <div className="flex gap-1 text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
+          <div className="flex gap-1 items-center text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
             <span>
               CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}
               {foe.banished.length > 0 && <> · banished {foe.banished.length}</>}
             </span>
+            {/* v4.26: the opponent's dice tray, visible while its turn plays
+                back — spent dice dim as each action places them. */}
+            {stage === 'cpu' && foe.dice.length > 0 && (
+              <span className="flex gap-0.5 items-center ml-1" title="Opponent's dice this turn">
+                {foe.dice.map((d, i) => (
+                  <span
+                    key={i}
+                    className={cn(
+                      'text-[15px] leading-none px-0.5 ink-border-sm bg-[var(--c-paper)] text-[var(--c-ink)] rounded-[3px]',
+                      d.placed && 'opacity-25',
+                    )}
+                  >
+                    {DIE_FACES[d.value - 1]}
+                  </span>
+                ))}
+              </span>
+            )}
             {foe.location && (
               <span
                 role="button"
                 tabIndex={0}
-                className="bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer"
+                className={cn(
+                  'bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer',
+                  cpuActors.has(foe.location.iid) && 'gv4-cpu-actor',
+                )}
                 onClick={() => setInspect(foe.location!.def)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -2112,10 +2454,12 @@ export function GameV4({
               return (
                 <React.Fragment key={u.iid}>
                   <BoardUnit
-                    g={g}
+                    g={view}
                     u={u}
                     highlight={targetable}
                     flash={attackFx?.target === u.iid}
+                    acting={cpuActors.has(u.iid)}
+                    acted={cpuTargets.has(u.iid)}
                     floats={floatsFor(u.iid)}
                     onClick={
                       pending && isPendingTarget(u.iid)
@@ -2208,12 +2552,24 @@ export function GameV4({
           )}
           {stage === 'cpu' && (
             <>
-              <span className="text-[10px] font-bold text-[var(--c-yellow)] animate-pulse ml-1 max-w-[260px] leading-tight">
-                {cpuNarration ? `${cpuLabel}: ${cpuNarration}` : `${cpuLabel} is thinking…`}
+              <span className="text-[10px] font-bold text-[var(--c-yellow)] ml-1 max-w-[260px] leading-tight">
+                {cpuStep ? (
+                  `${CPU_STEP_ICON[cpuStep.step.kind]} ${cpuLabel} ${cpuStep.step.text}`
+                ) : (
+                  <span className="animate-pulse">{cpuLabel} is thinking…</span>
+                )}
               </span>
               <button
-                onClick={skipCpuDelay}
+                onClick={advanceCpuStep}
+                title="Show the opponent's next action now"
                 className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm ml-1"
+              >
+                NEXT ▸
+              </button>
+              <button
+                onClick={skipCpuDelay}
+                title="Fast-forward to the end of the opponent's turn"
+                className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
               >
                 SKIP ▸▸
               </button>
@@ -2241,12 +2597,14 @@ export function GameV4({
               {logExpanded ? '▾ LESS' : '▴ MORE'}
             </button>
           </div>
-          {g.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
-            // Keyed by absolute position in g.log (not the relative slice
+          {/* Rendered from `view` so the log streams in sync with the CPU
+              playback instead of showing the whole turn's lines up front. */}
+          {view.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
+            // Keyed by absolute position in the log (not the relative slice
             // index) — the log only ever grows, so as it does the window
             // this slice shows shifts and a relative index would silently
             // relabel every earlier line each render.
-            <div key={g.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
+            <div key={view.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">
@@ -2267,7 +2625,7 @@ export function GameV4({
       <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
       <div className="flex gap-2 px-2 pt-1.5 pb-1 items-start flex-1 min-h-0 overflow-y-auto bg-[var(--c-ink)]/25">
         <LeaderPanel
-          g={g}
+          g={view}
           p={me}
           isHuman
           abilityWhy={leaderAbilityWhy}
@@ -2278,6 +2636,8 @@ export function GameV4({
             (!!pending && isPendingTarget(me.leader.iid)) ||
             (!!rallyPick && isRallySource(me.leader.iid))
           }
+          acted={cpuTargets.has(me.leader.iid)}
+          flash={cpuAttackStep && cpuTargets.has(me.leader.iid)}
           floats={floatsFor(me.leader.iid)}
           onClickTarget={
             pending && isPendingTarget(me.leader.iid)
@@ -2290,7 +2650,7 @@ export function GameV4({
         />
         {me.location ? (
           <LocationPanel
-            g={g}
+            g={view}
             loc={me.location}
             onAbility={() => tryAbility(me.location!)}
             abilityWhy={locationAbilityWhy}
@@ -2390,11 +2750,16 @@ export function GameV4({
               return (
                 <div key={u.iid} className="flex flex-col items-center gap-0.5 shrink-0 w-[78px]">
                   <BoardUnit
-                    g={g}
+                    g={view}
                     u={u}
                     isAttacker={attacker === u.iid}
                     highlight={targetable || isSource || (canAtt && attacker !== u.iid)}
-                    flash={attackFx?.attacker === u.iid || attackFx?.target === u.iid}
+                    flash={
+                      attackFx?.attacker === u.iid ||
+                      attackFx?.target === u.iid ||
+                      (cpuAttackStep && cpuTargets.has(u.iid))
+                    }
+                    acted={cpuTargets.has(u.iid)}
                     floats={floatsFor(u.iid)}
                     onClick={
                       targetable
