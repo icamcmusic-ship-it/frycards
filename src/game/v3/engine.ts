@@ -195,6 +195,14 @@ export interface GameStats {
    * the per-turn "discard down to 8" mechanic had zero visibility into how
    * often it bites or which cards it hits. */
   handLimitDiscards: number;
+  /** v4.28 instrumentation: every ai.ts `lapse()` call also buckets here by
+   * game phase (early: turn<=6 i.e. round<=3, mid: turn 7-16/round 4-8, late:
+   * turn>16/round 9+ — see `phaseOf()` in ai.ts). Every existing lapse
+   * detector reads flat per-game/per-archetype; none show WHETHER mistakes
+   * concentrate as the board fills up and choices multiply, or stay flat
+   * throughout. Purely additive telemetry — never read by the AI itself, so
+   * it cannot change any decision or RNG draw. */
+  lapsesByPhase: Record<'early' | 'mid' | 'late', Record<string, number>>;
 }
 
 /** Increment a per-player decision counter (v4.1 tracking). */
@@ -686,6 +694,7 @@ export function newGame(
       pierceOverflowDamage: 0,
       anchorCapBonuses: 0,
       handLimitDiscards: 0,
+      lapsesByPhase: { early: {}, mid: {}, late: {} },
     },
     rules: { ...DEFAULT_RULES, ...rules },
     stage: 'PRE_REROLL',

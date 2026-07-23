@@ -1583,6 +1583,22 @@ export function playTurn(g: Game, observe?: CpuTurnObserver) {
 function lapse(g: Game, pid: string, key: string, by = 1) {
   const d = (g.stats.decisions[pid] ||= {});
   d[key] = (d[key] || 0) + by;
+  const phase = phaseOf(g);
+  const bucket = g.stats.lapsesByPhase[phase];
+  bucket[key] = (bucket[key] || 0) + by;
+}
+
+/** v4.28 harness upgrade: which third of the game a lapse fired in, by round
+ * (round = ceil(turn/2), turn increments once per player-turn — see
+ * engine.ts's startTurn). Boundaries chosen off the ~11-12 round average game
+ * length (BALANCE_SIM_FINDINGS_v4.27): early = opening third, late = the
+ * "grindy end-game with a full board" third where a placement/combat mistake
+ * would be most expensive. */
+function phaseOf(g: Game): 'early' | 'mid' | 'late' {
+  const round = Math.ceil(g.turn / 2);
+  if (round <= 3) return 'early';
+  if (round <= 8) return 'mid';
+  return 'late';
 }
 
 /** v4.16: true if consuming `sel` (the dice indices about to pay for an Echo

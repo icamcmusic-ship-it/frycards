@@ -702,6 +702,12 @@ interface SuiteResult {
    * the end of the game is invisible to both. Measured directly from
    * p.hand at game end, no engine change needed. */
   deadInHandAtEndCount: Record<string, number>;
+  /** v4.28 harness upgrade: aggregated `GameStats.lapsesByPhase` (engine.ts) —
+   * every existing lapse counter read flat per-game; this splits them by
+   * which third of the game (by round) they fired in, so a mistake class
+   * that's rare overall but concentrated in the late/full-board game (where
+   * it costs the most) doesn't just wash out in the flat average. */
+  lapsesByPhase: Record<'early' | 'mid' | 'late', Record<string, number>>;
   errors: string[];
 }
 
@@ -776,6 +782,7 @@ function newResult(): SuiteResult {
     handLimitDiscardCount: {},
     lapseWastedCastableDieCount: {},
     deadInHandAtEndCount: {},
+    lapsesByPhase: { early: {}, mid: {}, late: {} },
     errors: [],
   };
 }
@@ -1055,6 +1062,11 @@ function runGame(
       r.lapseCounts[key] = (r.lapseCounts[key] || 0) + (d[key] || 0);
       archBucket[key] = (archBucket[key] || 0) + (d[key] || 0);
     }
+  }
+  for (const phase of ['early', 'mid', 'late'] as const) {
+    const src = s.lapsesByPhase[phase];
+    const dst = r.lapsesByPhase[phase];
+    for (const key of LAPSE_KEYS) dst[key] = (dst[key] || 0) + (src[key] || 0);
   }
   for (const [id, n] of Object.entries(s.comboTriggers))
     r.comboTriggers[id] = (r.comboTriggers[id] || 0) + n;
@@ -1377,6 +1389,24 @@ console.log('\n--- CPU reasoning lapses per archetype (worst-first, min n=100 ga
 for (const r of [...archLapseRows].sort((a, b) => b.perGame - a.perGame).slice(0, 15)) {
   console.log(
     `${r.arch.padEnd(28)} lapses/game=${r.perGame.toFixed(2)}  total=${r.totalLapses}  n=${r.games}  top=${r.topLapse}`,
+  );
+}
+
+// v4.28 harness upgrade: lapse density by game phase (early/mid/late third,
+// by round — see ai.ts's phaseOf()). Existing detectors only ever reported a
+// flat per-game rate; this exposes WHEN in the game mistakes concentrate,
+// which a flat average can't distinguish (a lapse that's rare overall but
+// heavily late-game-loaded costs far more than the same rate spread evenly,
+// since late-game boards are bigger and each decision has higher stakes).
+console.log('\n--- CPU reasoning lapse density by game phase (per game, each phase) ---');
+const phaseGameCounts = { early: R.games, mid: R.games, late: R.games };
+for (const [key, total] of Object.entries(R.lapseCounts).sort((a, b) => b[1] - a[1])) {
+  const e = R.lapsesByPhase.early[key] || 0;
+  const m = R.lapsesByPhase.mid[key] || 0;
+  const l = R.lapsesByPhase.late[key] || 0;
+  if (e + m + l === 0) continue;
+  console.log(
+    `${key.padEnd(26)} early=${(e / phaseGameCounts.early).toFixed(3)}  mid=${(m / phaseGameCounts.mid).toFixed(3)}  late=${(l / phaseGameCounts.late).toFixed(3)}  (total=${e + m + l} vs flat total=${total})`,
   );
 }
 
@@ -2053,6 +2083,67 @@ for (const watchId of ['the_wolf_of_wall_street', 'butterflyfish_school']) {
 printRarityPowerCurve(cardArchNormRows);
 
 // ---------------------------------------------------------------------------
+// v4.28 harness upgrade: keyword-TIER monotonicity — the existing
+// kwActivationRows/keywordsToNerf/keywordsToBuff buckets read a keyword as one
+// flat number, but keywords.ts prices each keyword on a per-tier ladder
+// (KEYWORD_TIERS, docs/KEYWORD_TIERS.md) where a higher tier is supposed to
+// cost (and deliver) monotonically more. A keyword can look perfectly healthy
+// in aggregate while one specific tier is over- or under-priced relative to
+// its neighbors on the same ladder — invisible until the ladder is split out.
+// Derived entirely from cardArchNormRows (already-computed archetype-
+// normalized per-card residual) grouped by each card's assigned
+// keywordTiers (cardpool.ts), so this needs no new engine/ai instrumentation.
+// ---------------------------------------------------------------------------
+interface KeywordTierRow {
+  kw: string;
+  tier: number;
+  avgDeltaN: number;
+  n: number;
+  cards: number;
+}
+const keywordTierRows: KeywordTierRow[] = (() => {
+  const acc: Record<string, { sumDeltaN: number; n: number; cards: number }> = {};
+  for (const r of cardArchNormRows) {
+    const kt = POOL_BY_ID[r.id]?.keywordTiers;
+    if (!kt) continue;
+    for (const [kw, tier] of Object.entries(kt)) {
+      const key = `${kw}::T${tier}`;
+      const b = (acc[key] ||= { sumDeltaN: 0, n: 0, cards: 0 });
+      b.sumDeltaN += r.delta * r.n;
+      b.n += r.n;
+      b.cards++;
+    }
+  }
+  return Object.entries(acc)
+    .map(([key, b]) => {
+      const [kw, tierStr] = key.split('::T');
+      return { kw, tier: Number(tierStr), avgDeltaN: b.sumDeltaN / b.n, n: b.n, cards: b.cards };
+    })
+    .filter((r) => r.n >= 60)
+    .sort((a, b) => a.kw.localeCompare(b.kw) || a.tier - b.tier);
+})();
+console.log(
+  '\n--- Keyword TIER monotonicity (archetype-normalized delta per tier, min n=60; flags inversions) ---',
+);
+const kwTierGroups = new Map<string, KeywordTierRow[]>();
+for (const r of keywordTierRows) {
+  const arr = kwTierGroups.get(r.kw) || [];
+  arr.push(r);
+  kwTierGroups.set(r.kw, arr);
+}
+for (const [kw, rows] of [...kwTierGroups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  const ladder = rows.map((r) => `T${r.tier}=${r.avgDeltaN >= 0 ? '+' : ''}${r.avgDeltaN.toFixed(1)}(n=${r.n},${r.cards}c)`).join('  ');
+  let inversion = '';
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].avgDeltaN < rows[i - 1].avgDeltaN - 2) {
+      inversion = `  ** INVERSION: T${rows[i].tier} reads weaker than T${rows[i - 1].tier} **`;
+      break;
+    }
+  }
+  console.log(`  ${kw.padEnd(12)} ${ladder}${inversion}`);
+}
+
+// ---------------------------------------------------------------------------
 // v4.19 harness upgrade (task §1): per-card cost-paid vs value delivered —
 // avg dice pips ACTUALLY spent per cast (engine-measured, not printed cost)
 // against casts/game and the normalized residual above. "pipsPerWinPt" is a
@@ -2387,6 +2478,11 @@ try {
           Object.entries(R.lapseCounts).map(([k, n]) => [k, n / (R.games || 1)]),
         ),
         lapsePerGameByArch: archLapseRows,
+        // v4.28 harness upgrade: same lapse counters split by game-phase third
+        // (see phaseOf() in ai.ts) instead of a flat per-game rate.
+        lapsesByPhase: R.lapsesByPhase,
+        // v4.28 harness upgrade: keyword-tier-ladder monotonicity (see above).
+        keywordTierRows,
         balanceSummary,
         // v4.26 harness upgrade: raw dead-in-hand counts + rarity power curve
         // inputs (per-card normalized deltas grouped by rarity at read time).
