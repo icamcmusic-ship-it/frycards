@@ -46,7 +46,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'combat',
     title: '4. COMBAT',
-    body: 'Tap one of your Units, then tap an enemy target to attack. Guard Units must be attacked first.',
+    body: 'From your second turn on: tap one of your Units, then tap an enemy target to attack. Guard Units must be attacked first. (No attacks on your very first turn — your Units settle in this round.)',
   },
   {
     stage: 'cpu',

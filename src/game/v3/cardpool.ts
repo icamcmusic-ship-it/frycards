@@ -722,16 +722,26 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // n>=400, archSpread>=2 — the lens v4.18 flagged as missing). Uniform
   // small trims for the residual top of the table; sized -2 for the two
   // biggest multi-archetype offenders, -1 for the smaller-sample one.
-  cervine_channeler: -2, // +20.9pt, n=1343, spread 4
+  // v4.27: -2 -> -3. Held #1 on the archetype-normalized nerf table across
+  // another full-scale pass (+23.0pt normalized, n=1058, spread 4 — a genuine
+  // multi-archetype outlier, not a deck artifact), the same repeat-offender
+  // escalation this file uses everywhere else.
+  cervine_channeler: -3, // was -2 (v4.19.1), +23.0pt normalized, spread 4
   // v4.26: dr_aries -2 -> -3, worm_brain_host -1 -> -2, and a first-pass
   // nanite_division_marshal -1 — all three are in the five-card outlier
   // cohort the per-card Pierce-pool breakdown surfaced (+15.5 / +15.9 /
   // +19.4pt normalized respectively), the "target the specific low-rarity
   // Pierce outliers directly" lever v4.25's Pierce investigation
   // recommended instead of the clamped keyword-wide cost weight.
-  dr_aries_chief_biogeneticist: -3, // was -2 (v4.19.1), +15.5pt normalized
-  worm_brain_host: -2, // was -1 (v4.19.1), +15.9pt normalized
-  nanite_division_marshal: -1, // first-pass, +19.4pt normalized (n=441)
+  // v4.27: all three still top the archetype-normalized nerf table a pass
+  // after their v4.26 trims, so each takes one more step (dr_aries to the -4
+  // ceiling). nanite_division_marshal is also the pool's primary drafted
+  // Steel carrier, and Steel is this pass's #1 keyword-nerf read (+14.8pt) —
+  // trimming the card is the per-carrier lever the Steel note asks for rather
+  // than a keyword-wide cost weight.
+  dr_aries_chief_biogeneticist: -4, // was -3 (v4.26), +14.5pt normalized
+  worm_brain_host: -3, // was -2 (v4.26), +16.6pt normalized, spread 3
+  nanite_division_marshal: -2, // was -1 (v4.26), +19.1pt normalized (n=444)
   // v4.18: butterflyfish_school's +1 (v4.12) overshot — the v4.18 baseline
   // shows it now at the OPPOSITE extreme (win%=76.5 vs a 42.1 cost-band
   // mean, resid=+34.4pt, cardsToNerf top 3) instead of the under-performer
@@ -848,15 +858,38 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // v4.26: still top-10 cardsToBuff after the v4.24 +1 (-28.0pt resid this
   // pass) — one more small step, keeping the caution its overshoot history
   // warrants.
-  the_wolf_of_wall_street: 2,
+  // v4.27: the +2 buff OVERSHOT (fifth swing in this card's documented
+  // buff/revert history) — it's now +15.7pt on the NORMALIZED nerf table and
+  // the explicit v4.18 watch item flags it again. Reverted to +1 rather than
+  // to neutral: a full revert has previously dropped it back to the
+  // underperforming extreme, so step it back one at a time.
+  the_wolf_of_wall_street: 1, // was 2 (v4.26), overshot to +15.7pt normalized
   // v4.25: first-pass buffs, new top-10 cardsToBuff entries — both Full-
   // Art/Rare multi-keyword Units (Echo/Guard/Steel and Echo/Guard
   // respectively) whose big printed stats/keyword stack apparently isn't
   // converting to wins, likely a FullHouse-gate castability problem more
   // than a raw power problem; a stat nudge is the available lever, sized
   // modest (+1) since the underlying issue may be castability, not power.
-  shattered_horizon_protagonist: 1, // top-10 cardsToBuff, -29.1pt resid
-  skyborne_skeleton_dragon: 1, // top-10 cardsToBuff, -29.1pt resid
+  // v4.27: both +1 stat buffs REVERTED (entries removed below) — the v4.26
+  // carried-forward watch item. The real fix for these two was the v4.26
+  // FullHouse->TwoPair gate ease (they were a castability problem, not a
+  // power problem); with that shipped, the +1 stat buffs are now surplus and
+  // SHP has flipped to +14.7pt on the NORMALIZED nerf table this pass. Same
+  // "the castability fix worked, so revert the stat buff stacked on top"
+  // shape the v4.26 findings predicted. Both removed rather than nerfed —
+  // reverting a now-surplus buff, not compounding a fresh trim on top of it.
+  // v4.27: familiar_in_the_dark / magma_phase_infiltrator / hollow_suit /
+  // void_mother — first-pass trims, all fresh top-of-table normalized-residual
+  // outliers with spread >=4 (genuine multi-archetype overperformers, not
+  // deck artifacts): +18.8 (spread 4), +12.6 (spread 7), +12.0 (spread 5),
+  // +11.6 (spread 5) respectively. familiar_in_the_dark previously carried a
+  // buff that was removed in v4.20; void_mother a stale +2 reverted in v4.26 —
+  // both have since climbed back to the top of the nerf table from neutral, so
+  // a real first trim now rather than leaving them un-actioned again.
+  familiar_in_the_dark: -1, // +18.8pt normalized, spread 4
+  magma_phase_infiltrator: -1, // +12.6pt normalized, spread 7
+  hollow_suit: -1, // +12.0pt normalized, spread 5
+  void_mother: -1, // +11.6pt normalized, spread 5
 };
 
 // ---------------------------------------------------------------------------
@@ -1016,7 +1049,33 @@ function applyManualCostAdj(def: CardDef, id: string) {
   }
 }
 
+// v4.27 DEAD-CODE FIND (same class as v4.26's "Bind X" and v4.25's gate-cost
+// no-ops): MANUAL_VALUE_BUFF used to be applied only at the very END of
+// mapSpell, but three Event branches — the tier===3 board-wipe, the tier>=4
+// "comeback" bombs, and the tier>=2 combo-gated line — all `return base`
+// early, before that block ever ran. So a value buff on any of those Events
+// was silently ignored: the_abyssal_gate's +2 (v4.12) had been dead since the
+// day it was written (it's a tier===3 board wipe), which is why five passes of
+// "buff it more" never moved its residual. Extracted here so the buff is
+// applied at EVERY mapSpell exit, on both the Charm and Event paths.
+function applyManualValueBuff(def: CardDef, id: string) {
+  if (MANUAL_VALUE_BUFF[id] !== undefined && def.onCast) {
+    // Floor at 1 (see the v4.24 note that first added this clamp): a nerf
+    // escalation on a card already at its value floor must no-op, not print an
+    // illegal <1 value that catalog.test.ts rejects.
+    def.onCast = {
+      ...def.onCast,
+      value: Math.max(1, (def.onCast.value || 0) + MANUAL_VALUE_BUFF[id]),
+    };
+  }
+}
+
 const MANUAL_VALUE_BUFF: Record<string, number> = {
+  // v4.27: first-pass buff — top of the archetype-normalized BUFF table
+  // (-5.9pt, spread 12: the single widest-spread underperformer in the pool,
+  // so a genuine card-power gap, not a deck artifact). Its onCast is a
+  // sap(3), so +1 lands cleanly on the established value lever.
+  ruthless_succession: 1, // -5.9pt normalized, spread 12
   kinetic_piercer: 1,
   hive_power_cell: 1,
   consuming_ash_cloud: 1,
@@ -1043,7 +1102,14 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // don't need them; the four bind Charms still topping cardsToBuff get
   // fresh, deliberately-sized Bind 2 values below instead of their stale
   // accumulated (+3/+4) dead sizes.
-  the_abyssal_gate: 2,
+  // v4.27: its old +2 (v4.12) was DEAD CODE (early-return branch, see
+  // applyManualValueBuff) — the -4.9pt normalized residual (spread 10, ten
+  // archetypes: a genuine card-power gap) was measured with the buff doing
+  // NOTHING. Per the v4.26 precedent for freshly-un-deadened buffs (don't
+  // carry the stale accumulated size), reset to a deliberate fresh +1 first
+  // step rather than the carried +2/+3 — the card gets a real buff for the
+  // first time this pass; escalate next pass if the fresh read stays negative.
+  the_abyssal_gate: 1, // fresh first step (old +2 was dead), -4.9pt normalized
   wraithlight_lantern: 2,
   magma_conduit_network: 1,
   // v4.25: isle_of_the_ancients's +1 (v4.12 era) has flipped — it's now
@@ -1209,6 +1275,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     // v4.3: a board wipe earns its old "threshold 6" steepness via a hard
     // numeric/gate cost format instead of a flat die minimum.
     applyCostFormat(base, pickCostFormat(c.id, Math.max(4, tier)));
+    applyManualValueBuff(base, c.id);
     return base;
   }
   if (!asCharm && tier >= 4) {
@@ -1232,6 +1299,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
     }
     base.keywords = ['Echo'];
     base.keywordTiers = assignTiers(base.keywords, tier); // Echo II at rt>=4
+    applyManualValueBuff(base, c.id);
     return base;
   }
   // Practical Combo-gated Events cap at Full House / Large Straight.
@@ -1255,6 +1323,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
           ? { action: 'buff', value: 2, target: 'allFriendlyUnits' }
           : { action: 'sap', value: 5, target: 'anyTarget' };
     applyManualCostAdj(base, c.id);
+    applyManualValueBuff(base, c.id);
     return base;
   }
 
@@ -1324,16 +1393,7 @@ function mapSpell(c: CardTemplate, asCharm: boolean): CardDef {
   if (base.threshold !== undefined && base.castCostKind !== 'exact' && hash(c.id) % 4 === 0) {
     base.overflow = { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } };
   }
-  if (MANUAL_VALUE_BUFF[c.id] !== undefined && base.onCast) {
-    // v4.24: floor at 1 — a repeat-offender nerf escalation on a card
-    // already at (or near) its onCast value floor would otherwise print an
-    // illegal <1 value (caught by catalog.test.ts) instead of just no-op'ing
-    // at the floor, same clamp MANUAL_STAT_TRIM already applies to atk/hp.
-    base.onCast = {
-      ...base.onCast,
-      value: Math.max(1, (base.onCast.value || 0) + MANUAL_VALUE_BUFF[c.id]),
-    };
-  }
+  applyManualValueBuff(base, c.id);
   return base;
 }
 

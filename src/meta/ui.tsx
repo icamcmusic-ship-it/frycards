@@ -13,6 +13,7 @@ export function PopButton({
   color = 'yellow',
   className,
   title,
+  ariaLabel,
 }: {
   key?: React.Key;
   children: React.ReactNode;
@@ -21,6 +22,10 @@ export function PopButton({
   color?: 'yellow' | 'black' | 'red' | 'steel';
   className?: string;
   title?: string;
+  /** Accessible name for icon-only buttons whose `children` is just a glyph
+   * (e.g. the Deck Builder delete button) — without it screen readers
+   * announce a bare "button". */
+  ariaLabel?: string;
 }) {
   const palette = {
     yellow: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
@@ -38,6 +43,7 @@ export function PopButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel}
       className={cn(
         'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors',
         palette,

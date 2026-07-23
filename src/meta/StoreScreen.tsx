@@ -175,7 +175,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     if (!profile || busyId) return;
     setError('');
     setNotice('');
-    setBusyId('bulk:' + pack.id);
+    setBusyId('bulk:' + pack.id + ':' + count);
     try {
       const { data, error } = await buyAndOpenPacks(pack.id, count, currency);
       if (error || !data) {
@@ -951,7 +951,7 @@ function PackTile({
               onClick={() => onBuyBulk(pack, n, 'credits')}
               className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {busyId === 'bulk:' + pack.id ? (
+              {busyId === 'bulk:' + pack.id + ':' + n ? (
                 'OPENING…'
               ) : (
                 <>

@@ -45,7 +45,9 @@ import {
   rerollsRemaining,
   HAND_LIMIT,
   rarityTier,
+  SIM_TUNING,
 } from '../game/v3/engine';
+import { keywordTier } from '../game/v3/keywords';
 import { playTurn, maybeMulliganPlayer, CpuTurnEvent } from '../game/v3/ai';
 import { CardDef, Effect, hasKw } from '../game/v3/cards';
 import { DeckDef } from '../game/v3/engine';
@@ -236,9 +238,13 @@ function AbilityPill({
     // inline keyword mentions are themselves <button>s — nested buttons are
     // invalid HTML (same reasoning as CardFace / BoardUnit).
     <div
-      role="button"
-      tabIndex={onClick ? 0 : -1}
-      aria-disabled={!usable}
+      // Only expose button semantics when there's actually an action. The
+      // opponent's Leader ability/ultimate pills are read-only info panels
+      // (no onClick); announcing them as a disabled button misleads screen
+      // readers into treating static text as a control that was never usable.
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-disabled={onClick ? !usable : undefined}
       onClick={onClick}
       onKeyDown={(e) => {
         if (!onClick) return;
@@ -1589,13 +1595,20 @@ export function GameV4({
     if (g.winner) setStage('over');
   };
 
-  /** v4.4: mid-rarity Echo waives the extra-discard cost entirely (see
-   * engine.ts echoRecast) — resolve those immediately instead of routing
-   * through the fodder-pick step every other Echo still needs. */
+  /** Echo waives the extra-discard "fodder" cost whenever the engine does —
+   * `SIM_TUNING.echoWaiveAllFodder || keywordTier(def,'Echo') >= 2` (Echo II,
+   * i.e. Rare+ under the legacy rarity split, which is BOTH mid- AND
+   * high-rarity). This must mirror engine.ts echoRecast exactly: gating the
+   * free-resolve on `rarityTier === 'mid'` alone (the old check) stranded
+   * high-rarity Echo cards in a fodder pick the engine then ignored — a
+   * phantom discard, or an outright "your hand is empty" block on a play the
+   * engine would have recast for free. */
+  const echoWaivesFodder = (def: CardDef) =>
+    SIM_TUNING.echoWaiveAllFodder || keywordTier(def, 'Echo') >= 2;
   const startEchoRecast = (cardIid: string, dice: number | number[], targetIid?: string) => {
     const c = me.discard.find((h) => h.iid === cardIid);
     if (!c) return;
-    if (rarityTier(c.def.rarity) === 'mid') {
+    if (echoWaivesFodder(c.def)) {
       if (echoRecast(g, dice, cardIid, undefined, targetIid)) {
         setEchoPick(null);
         setSelDie(null);
@@ -1604,8 +1617,8 @@ export function GameV4({
         bump();
         say(
           hasKw(c.def, 'Twin')
-            ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later (Echo cost waived — mid-rarity).`
-            : `${c.def.name} echoes back into play (Echo cost waived — mid-rarity).`,
+            ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later (Echo cost waived).`
+            : `${c.def.name} echoes back into play (Echo cost waived).`,
         );
       } else {
         say('Illegal Echo.');
@@ -1657,8 +1670,8 @@ export function GameV4({
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
     if (pending.kind === 'echo') {
-      // Echo (unless mid-rarity — see startEchoRecast) still needs a fodder
-      // discard from hand: hand off to the fodder-picking step instead of
+      // Echo (unless its fodder is waived — see startEchoRecast) still needs a
+      // fodder discard from hand: hand off to the fodder-picking step instead of
       // resolving immediately, carrying the target (and, for a 'sum'-cost
       // Echo, the dice already picked to pay it) along.
       const dice = pending.dieIndices ?? selDie!;
@@ -2528,16 +2541,26 @@ export function GameV4({
                 title={
                   d.placed
                     ? 'Placed'
-                    : inSumMode
-                      ? 'Toggle into sum'
-                      : stage === 'preRoll'
-                        ? 'Toggle reroll'
-                        : 'Select die'
+                    : !usable
+                      ? 'Leftover die — will Pitch to heal your Leader at the End Phase'
+                      : inSumMode
+                        ? 'Toggle into sum'
+                        : stage === 'preRoll'
+                          ? 'Toggle reroll'
+                          : 'Select die'
                 }
                 aria-label={
                   faceDown
                     ? `Die ${i + 1}: not yet rolled`
-                    : `Die ${i + 1}: value ${d.value}${d.placed ? ' (placed)' : marked ? ' (selected)' : ''}`
+                    : `Die ${i + 1}: value ${d.value}${
+                        d.placed
+                          ? ' (placed)'
+                          : !usable
+                            ? ' (leftover — not selectable now)'
+                            : marked
+                              ? ' (selected)'
+                              : ''
+                      }`
                 }
                 aria-pressed={marked}
               >

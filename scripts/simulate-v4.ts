@@ -552,6 +552,15 @@ interface SuiteResult {
    * v4.20-era audit (only a pool-wide 4-bucket roundBuckets histogram
    * existed before this). */
   archTotalRounds: Record<string, number>;
+  /** v4.27 harness upgrade: "clock speed" — game length (rounds) summed ONLY
+   * over the games each archetype WON, divided by that archetype's win count
+   * at report time. archTotalRounds averages over ALL games an archetype
+   * played (win or lose); this conditions on winning, so an aggro deck that
+   * closes fast reads a low number and a grindy control deck a high one —
+   * the aggro/control speed axis that was previously invisible (a deck could
+   * have an average archTotalRounds either because it wins fast and loses
+   * slow, or the reverse, and the two are indistinguishable without this). */
+  archWinRoundsSum: Record<string, number>;
   /** v4.23 harness upgrade: per-archetype first-player win rate (games
    * where this archetype went first, and wins among those) — the existing
    * `firstWins` counter is pool-wide only, so it can't tell whether
@@ -710,6 +719,7 @@ function newResult(): SuiteResult {
     archW: {},
     archN: {},
     archTotalRounds: {},
+    archWinRoundsSum: {},
     archFirstN: {},
     archFirstW: {},
     locW: { loc: 0, locN: 0, noloc: 0, nolocN: 0 },
@@ -946,6 +956,8 @@ function runGame(
     r.leaderN[winEntry.leaderId] = (r.leaderN[winEntry.leaderId] || 0) + 1;
     r.leaderN[loseEntry.leaderId] = (r.leaderN[loseEntry.leaderId] || 0) + 1;
     r.archW[winEntry.key] = (r.archW[winEntry.key] || 0) + 1;
+    // v4.27: clock-speed — accumulate the closing round only for the winner.
+    r.archWinRoundsSum[winEntry.key] = (r.archWinRoundsSum[winEntry.key] || 0) + rounds / 2;
     (r.matchupN[winEntry.key] ||= {})[loseEntry.key] =
       (r.matchupN[winEntry.key][loseEntry.key] || 0) + 1;
     (r.matchupN[loseEntry.key] ||= {})[winEntry.key] =
@@ -1907,6 +1919,72 @@ const matchupLabels = ARCHETYPES.map((a) => a.label).filter((l) => (R.archN[l] |
   );
 }
 
+// v4.27 harness upgrade: auto-flag the polarized matchup cells so a
+// hard-counter problem surfaces as a ranked finding instead of something a
+// human has to eyeball out of a 20x20 grid. A cell is polarized if one side
+// wins >=68% of a pairing with enough sample (min n=12). Deduped by unordered
+// pair (the matrix stores both directions).
+{
+  const POLAR_THRESHOLD = 68;
+  const POLAR_MIN_N = 12;
+  const flagged: { a: string; b: string; winPct: number; n: number }[] = [];
+  const seen = new Set<string>();
+  for (const rowL of matchupLabels) {
+    for (const colL of matchupLabels) {
+      if (rowL === colL) continue;
+      const key = [rowL, colL].sort().join('||');
+      if (seen.has(key)) continue;
+      const n = R.matchupN[rowL]?.[colL] || 0;
+      if (n < POLAR_MIN_N) continue;
+      const w = R.matchupW[rowL]?.[colL] || 0;
+      const winPct = (100 * w) / n;
+      if (winPct >= POLAR_THRESHOLD || winPct <= 100 - POLAR_THRESHOLD) {
+        seen.add(key);
+        // Orient so the higher-win side is listed first.
+        if (winPct >= 50) flagged.push({ a: rowL, b: colL, winPct, n });
+        else flagged.push({ a: colL, b: rowL, winPct: 100 - winPct, n });
+      }
+    }
+  }
+  flagged.sort((x, y) => y.winPct - x.winPct);
+  console.log(
+    `\n--- v4.27 Polarized matchups (auto-flagged: one side >=${POLAR_THRESHOLD}%, min n=${POLAR_MIN_N}) ---`,
+  );
+  if (flagged.length === 0) {
+    console.log('  (none — no hard-counter pairing crossed the threshold this run)');
+  } else {
+    for (const f of flagged.slice(0, 20)) {
+      console.log(
+        `  ${f.a.slice(0, 22).padEnd(23)} beats ${f.b.slice(0, 22).padEnd(23)} ${f.winPct.toFixed(0)}%  (n=${f.n})`,
+      );
+    }
+    if (flagged.length > 20) console.log(`  ... and ${flagged.length - 20} more`);
+  }
+}
+
+// v4.27 harness upgrade: clock-speed table — average closing round conditioned
+// on WINNING, sorted fastest-first. Reveals the aggro<->control speed axis that
+// archTotalRounds (averaged over win AND loss) blurs together.
+{
+  console.log('\n--- v4.27 Clock speed: avg round a deck closes out its WINS (fast=aggro), min n=30 ---');
+  const rows = matchupLabels
+    .map((label) => ({
+      label,
+      w: R.archW[label] || 0,
+      avgWinRound: (R.archWinRoundsSum[label] || 0) / (R.archW[label] || 1),
+    }))
+    .filter((r) => r.w >= 30)
+    .sort((a, b) => a.avgWinRound - b.avgWinRound);
+  for (const r of rows) {
+    console.log(`  ${r.label.slice(0, 30).padEnd(31)} avg win round=${r.avgWinRound.toFixed(1)}  (wins=${r.w})`);
+  }
+  if (rows.length >= 2) {
+    console.log(
+      `  spread: fastest ${rows[0].avgWinRound.toFixed(1)} -> slowest ${rows[rows.length - 1].avgWinRound.toFixed(1)} rounds`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // v4.19 harness upgrade (task §1): archetype-normalized per-card residuals —
 // the v4.18 priority item 3. For EVERY card (not just Echo/watchlist), its
@@ -2329,6 +2407,13 @@ try {
             ]),
           );
         })(),
+        // v4.27 harness upgrade: derived clock-speed (avg winning round per
+        // archetype) so the aggro/control axis is machine-readable too.
+        clockSpeed: Object.fromEntries(
+          Object.keys(R.archW)
+            .filter((k) => (R.archW[k] || 0) >= 30)
+            .map((k) => [k, { avgWinRound: (R.archWinRoundsSum[k] || 0) / (R.archW[k] || 1), wins: R.archW[k] }]),
+        ),
         setWinRate: Object.fromEntries(
           Object.keys(R.setInDeck)
             .filter((s) => (R.setInDeck[s] || 0) >= 100)
