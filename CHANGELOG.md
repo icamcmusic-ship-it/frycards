@@ -44,6 +44,17 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   - Five outlier cards cost +1: Heart Coral, Needle Seamstress, Merfolk
     Ritual, Pufferfish Lantern, Clawblade Greatsword.
   - Database mechanic columns re-backfilled from the new pool (292 cards).
+- **Match UI / card template**:
+  - Dusk shed picker — ending the turn over the hand limit opens a modal to
+    choose which cards to discard (was: silent discard from the hand's end).
+  - Charms with a targeted on-invoke effect chain to a target pick after
+    the bond pick (was: silent auto-target).
+  - Playable Quick/Ambush hand cards highlight during the clash reaction
+    window.
+  - Card text box no longer repeats keyword/bond/re-bond/Sanctum reminder
+    text the chips already carry; long ability text auto-shrinks before the
+    line clamp bites; rules-line budgets raised per size (standard 3→5,
+    full 5→8). Fixes ability text getting cut off.
 - **New sim harness** (`scripts/simulate-v5.ts`): full-pool CPU-vs-CPU
   tournaments with card residuals, keyword health, mechanic usage, CPU
   lapse counters and engine invariant checks. Replaces the retired v4

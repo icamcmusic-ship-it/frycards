@@ -122,8 +122,9 @@ totalCost = generic + sum(pips)   // "total essence value"
 ```
 
 Cost curve targets by rarity tier rt (0..6): total 1–7, roughly rt-correlated
-with hash spread; units follow might+grit ≈ 2*total ± spread; keywords add
-cost weight (see keywords.ts `KEYWORD_COST`).
+with hash spread; units follow might+grit ≈ 2*(total − keyword surcharge)
+± spread — the keyword surcharge is a PURE cost adder and must never feed
+the stat budget (v5.1 fix; see keywords.ts `KEYWORD_COST`).
 
 ## Card pool (cardpool.ts)
 

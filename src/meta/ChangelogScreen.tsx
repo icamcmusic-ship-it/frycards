@@ -12,6 +12,19 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Fry Cards Update (v5.1)',
+    items: [
+      'The game is now officially Fry Cards — the "Riftbound" codename is retired from every screen. Same essence rules, real name.',
+      'Rules fixes: Siphon can no longer heal you past 20 Vitality (it could previously run your total up past 70 in long games), and the player going second now draws a 6th opening card to soften the first-turn advantage.',
+      'Fairer cards under the hood: combat keywords (Quickstrike, Overrun, Alert, Reckless and friends) were secretly getting their cost surcharge refunded as extra stats — keyword carriers were winning up to 80% of sim games. Keywords now cost what they say they cost. Weights were re-tuned across the board, Tide gained Aerial and Root gained Overrun as home keywords (only ONE card in the whole game could fly before), and five overperformers (Heart Coral, Needle Seamstress, Merfolk Ritual, Pufferfish Lantern, Clawblade Greatsword) cost 1 more.',
+      'A much smarter CPU: it now saves essence to use Quick Events and Ambush units in the clash reaction window, re-bonds loose Worn Charms, chump-blocks (and gang-blocks Overrun attackers) instead of dying with ready guards on the field, correctly fears Doublestrike and Venomous, and throws leftover burn at your face instead of holding it forever.',
+      'You choose what you shed: ending your turn over the 7-card hand limit now opens a picker so YOU decide which cards go to the ash-pile (it used to silently discard from the right side of your hand).',
+      'Charms with an effect on invoke now let you pick the effect\'s target after choosing what to bond to, instead of auto-targeting.',
+      'During the enemy clash, hand cards you can actually invoke in the reaction window now light up so the window is impossible to miss.',
+      'Card faces no longer cut off ability text: the text box stops repeating what the keyword chips already say, long ability text auto-shrinks before it ever clamps, and every card size got a bigger rules-text budget.',
+    ],
+  },
+  {
     version: 'Riptide Update',
     items: [
       'Echo fix: high-rarity Echo cards (Ultra-Rare and up) are meant to recast for free — no extra card to discard — but the board was still asking you to pick a discard that was then ignored, and could even block the recast entirely if your hand was empty. They now echo straight back into play for free, exactly as intended.',
