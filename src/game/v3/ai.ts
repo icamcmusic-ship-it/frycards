@@ -5,7 +5,7 @@
  * when profitable, and (as defender) guard to survive lethal. Returns a
  * CpuTurnEvent log the UI replays as animations.
  */
-import { CardDef, Effect, LEADER_HP, hasKw, totalCost } from './cards';
+import { CardDef, Effect, LEADER_HP, totalCost } from './cards';
 import { EssenceType } from './colors';
 import {
   GameState,
@@ -16,10 +16,8 @@ import {
   autoTarget,
   canInvoke,
   canInvokeLeader,
-  canPayCost,
   declareAttackers,
   declareGuards,
-  effGrit,
   effMight,
   endPhase,
   findUnit,
