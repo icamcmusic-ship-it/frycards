@@ -706,7 +706,10 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // fired-delta is almost entirely THIS card (+10.9pt normalized vs
   // +1.8-4.0 for the other four Avenge carriers) — so the per-card trim IS
   // the Avenge fix, with no keyword-wide lever touched.
-  fayes_true_face: -3,
+  // v4.28: -3 -> -4 (ceiling). Still holding high (+10.9pt normalized this
+  // pass, n=1713, spread 4) a pass after the v4.26 escalation — one more step
+  // to the same -4 ceiling this file's other repeat-offender Units sit at.
+  fayes_true_face: -4, // was -3 (v4.26), +10.9pt normalized, ceiling
   vlad_from_accounting: -1,
   // buffs (win% far BELOW their cost band's mean)
   // v4.26: void_mother's +2 (v4.12 era) REMOVED — the per-card Pierce-pool
@@ -726,7 +729,11 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // another full-scale pass (+23.0pt normalized, n=1058, spread 4 — a genuine
   // multi-archetype outlier, not a deck artifact), the same repeat-offender
   // escalation this file uses everywhere else.
-  cervine_channeler: -3, // was -2 (v4.19.1), +23.0pt normalized, spread 4
+  // v4.28: -3 -> -4 (ceiling). STILL #1 on the archetype-normalized nerf
+  // table a pass later (+21.1pt, n=1077, spread 4 unchanged) — the v4.27
+  // verification run's +18.3pt reading has climbed back up, so one more step
+  // to the same -4 ceiling this file's other repeat-offender Units already sit at.
+  cervine_channeler: -4, // was -3 (v4.27), +21.1pt normalized, spread 4, ceiling
   // v4.26: dr_aries -2 -> -3, worm_brain_host -1 -> -2, and a first-pass
   // nanite_division_marshal -1 — all three are in the five-card outlier
   // cohort the per-card Pierce-pool breakdown surfaced (+15.5 / +15.9 /
@@ -739,9 +746,22 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // Steel carrier, and Steel is this pass's #1 keyword-nerf read (+14.8pt) —
   // trimming the card is the per-carrier lever the Steel note asks for rather
   // than a keyword-wide cost weight.
-  dr_aries_chief_biogeneticist: -4, // was -3 (v4.26), +14.5pt normalized
-  worm_brain_host: -3, // was -2 (v4.26), +16.6pt normalized, spread 3
-  nanite_division_marshal: -2, // was -1 (v4.26), +19.1pt normalized (n=444)
+  // v4.28: dr_aries already at the -4 ceiling (v4.27) and holding roughly
+  // flat (+14.5 -> +14.8pt normalized) — no further stat lever available:
+  // carried forward as a design-tension case rather than reaching for an
+  // untested lever (same treatment where_the_deep_meets_the_sky got at its
+  // own -4 ceiling in v4.22, see BALANCE_SIM_FINDINGS_v4.22.md).
+  dr_aries_chief_biogeneticist: -4, // ceiling (v4.27), +14.8pt normalized (v4.28, was +14.5)
+  // v4.28: both still top the archetype-normalized nerf table a pass after
+  // their v4.27 trims (worm_brain_host +16.6->+15.1pt, held essentially flat;
+  // nanite_division_marshal +19.1->+18.3pt, held essentially flat and still
+  // the pool's primary drafted Steel carrier — Steel is again this pass's #1
+  // keyword-nerf read at +13.8pt) — one more step each, same repeat-offender
+  // escalation this file uses everywhere else. worm_brain_host reaches the
+  // same -4 ceiling dr_aries/wasteland_aberration/cavernous_watcher/
+  // kinetix_enforcer already sit at.
+  worm_brain_host: -4, // was -3 (v4.27), +15.1pt normalized, ceiling
+  nanite_division_marshal: -3, // was -2 (v4.27), +18.3pt normalized (n=446)
   // v4.18: butterflyfish_school's +1 (v4.12) overshot — the v4.18 baseline
   // shows it now at the OPPOSITE extreme (win%=76.5 vs a 42.1 cost-band
   // mean, resid=+34.4pt, cardsToNerf top 3) instead of the under-performer
@@ -863,7 +883,13 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // the explicit v4.18 watch item flags it again. Reverted to +1 rather than
   // to neutral: a full revert has previously dropped it back to the
   // underperforming extreme, so step it back one at a time.
-  the_wolf_of_wall_street: 1, // was 2 (v4.26), overshot to +15.7pt normalized
+  // v4.28: +1 STILL overshot (+14.9pt normalized, sixth swing in this card's
+  // documented history) — the one-at-a-time step-down hasn't found neutral
+  // yet at +1, so it steps down again. Entry removed entirely rather than
+  // set to 0 (a literal 0 buff is a no-op vs. just not having an entry);
+  // watch whether true neutral finally settles it or it swings to the
+  // underperforming extreme again, per its history.
+  // the_wolf_of_wall_street: (removed, was 1) — see MANUAL_STAT_TRIM history above
   // v4.25: first-pass buffs, new top-10 cardsToBuff entries — both Full-
   // Art/Rare multi-keyword Units (Echo/Guard/Steel and Echo/Guard
   // respectively) whose big printed stats/keyword stack apparently isn't
@@ -886,10 +912,29 @@ const MANUAL_STAT_TRIM: Record<string, number> = {
   // buff that was removed in v4.20; void_mother a stale +2 reverted in v4.26 —
   // both have since climbed back to the top of the nerf table from neutral, so
   // a real first trim now rather than leaving them un-actioned again.
-  familiar_in_the_dark: -1, // +18.8pt normalized, spread 4
-  magma_phase_infiltrator: -1, // +12.6pt normalized, spread 7
-  hollow_suit: -1, // +12.0pt normalized, spread 5
-  void_mother: -1, // +11.6pt normalized, spread 5
+  // v4.28: both single-step trims held essentially flat a pass later
+  // (familiar_in_the_dark +18.8->+17.3pt, magma_phase_infiltrator
+  // +12.6->+11.4pt) — still top-of-table normalized outliers with their
+  // original wide archetype spread intact (4 and 7 respectively), so each
+  // escalates one more step rather than sitting un-actioned a second time.
+  familiar_in_the_dark: -2, // was -1 (v4.27), +17.3pt normalized, spread 4
+  magma_phase_infiltrator: -2, // was -1 (v4.27), +11.4pt normalized, spread 7
+  // v4.28: hollow_suit/void_mother's v4.27 single-step trims moved in the
+  // right direction (hollow_suit +12.0->+9.9pt, void_mother +11.6pt-> off
+  // the top-12 table entirely) — held flat, not escalated, since the single
+  // step is actually working.
+  hollow_suit: -1, // +9.9pt normalized (v4.28), spread 5 — held flat, improving
+  void_mother: -1, // dropped off top-12 normalized table this pass — held flat
+  // v4.28: fresh top-of-table normalized nerf outlier, widest archetype
+  // spread this pass (6 archetypes) and one of the cheapest-cast overdeliver
+  // outliers (avgPips=1.52, normDelta=+10.7pt on the card-economy table) —
+  // a genuine multi-archetype power gap, not a deck artifact.
+  titan_of_the_trench: -1, // +10.7pt normalized, spread 6
+  // buffs (win% far BELOW their cost band's mean)
+  // v4.28: fresh top-of-table normalized BUFF outlier (underperforms even
+  // its own archetype baseline), 3-archetype spread — a genuine multi-
+  // archetype power gap.
+  violet_haze_kunoichi: 1, // -4.1pt normalized, spread 3
 };
 
 // ---------------------------------------------------------------------------
@@ -981,7 +1026,17 @@ const MANUAL_THRESHOLD_ADJ: Record<string, number> = {
   // Cost is the untried lever instead: it's already a sum-cost body
   // (threshold 8), so a real threshold bump directly raises how many dice
   // it eats to cast rather than cutting its stats further.
-  kinetix_enforcer: 2,
+  // v4.28: REVERTED. The -4 stat trim + this +2 cost bump stacked has flipped
+  // the card to the opposite extreme — it's now a cardsToBuff/archetype-
+  // normalized UNDERperformer (-4.3pt, n=1019, spread 2), independently
+  // confirmed over-costed on the printed-power screen (z=-1.85, the pool's
+  // #2 lowest) and on the cost-economy table (avgPips=12.35, normDelta=-4.3,
+  // one of the most expensive casts that doesn't pay off). Three independent
+  // signals agreeing is the same overshoot shape the_wolf_of_wall_street/
+  // butterflyfish_school/mesozoic_exchange_student went through — revert the
+  // most-recently-added lever (this cost bump) first, per that precedent,
+  // and leave the older stat trim in place pending a fresh read.
+  // kinetix_enforcer: (removed, was 2) — see MANUAL_STAT_TRIM's -4 entry above
   // v4.26: cavernous_watcher hit MANUAL_STAT_TRIM's -4 ceiling in v4.25 and
   // is STILL #4 cardsToNerf a pass later (+29.6pt resid) — same "stat lever
   // exhausted, cost is the untried lever" shape as kinetix_enforcer above.
@@ -1075,8 +1130,18 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // (-5.9pt, spread 12: the single widest-spread underperformer in the pool,
   // so a genuine card-power gap, not a deck artifact). Its onCast is a
   // sap(3), so +1 lands cleanly on the established value lever.
-  ruthless_succession: 1, // -5.9pt normalized, spread 12
+  // v4.28: the fresh v4.27 +1 moved it in the right direction (-5.9 ->
+  // -4.0pt) but it's still the widest-spread underperformer in the pool
+  // (archs=12, unchanged) — one more step, same repeat-offender escalation
+  // pattern this file uses everywhere else.
+  ruthless_succession: 2, // was 1 (v4.27), -4.0pt normalized, spread 12
   kinetic_piercer: 1,
+  // v4.28: fresh top-of-table normalized BUFF outlier (-5.3pt, archs=2), also
+  // independently flagged on the cost-economy table as one of the most
+  // expensive casts that doesn't pay off (avgPips=11.88) — a genuine
+  // multi-archetype power gap on a Charm, so the value lever applies here
+  // rather than MANUAL_STAT_TRIM (Unit-only).
+  blind_allegiance: 1, // -5.3pt normalized, spread 2
   hive_power_cell: 1,
   consuming_ash_cloud: 1,
   towering_tsunami: 1,
@@ -1109,7 +1174,9 @@ const MANUAL_VALUE_BUFF: Record<string, number> = {
   // carry the stale accumulated size), reset to a deliberate fresh +1 first
   // step rather than the carried +2/+3 — the card gets a real buff for the
   // first time this pass; escalate next pass if the fresh read stays negative.
-  the_abyssal_gate: 1, // fresh first step (old +2 was dead), -4.9pt normalized
+  // v4.28: fresh +1 worked — dropped off the top-12 normalized table entirely
+  // (was #1 worst at -4.9pt). Held flat, not escalated.
+  the_abyssal_gate: 1, // dropped off worst-normalized table this pass — held flat
   wraithlight_lantern: 2,
   magma_conduit_network: 1,
   // v4.25: isle_of_the_ancients's +1 (v4.12 era) has flipped — it's now
