@@ -251,10 +251,10 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   rebondWornCharms(state, pid, observe);
 
   // Leader ability: once per turn, pick the most useful one.
-  useLeaderAbility(state, pid, observe);
+  runLeaderAbility(state, pid, observe);
 }
 
-function useLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
+function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
   const L = p.leader;
   if (!L.invoked || L.shattered || L.abilityUsedThisTurn) return;
@@ -264,8 +264,8 @@ function useLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
   let bestVal = 0;
   abilities.forEach((ab, i) => {
     if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0) return;
-    let v = 0;
     const eff = ab.effect;
+    let v: number;
     if (isRemoval(eff)) v = opp.field.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;

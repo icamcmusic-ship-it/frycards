@@ -213,7 +213,7 @@ const PREMIUM = new Set<string>(['Doublestrike', 'Unbreakable']);
 function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
   // 0-2 keywords, more at higher rarity.
   const r = roll(seed, 'kwcount', 10);
-  let count = 0;
+  let count: number;
   if (rt >= 4) count = r < 2 ? 0 : r < 6 ? 1 : 2;
   else if (rt >= 2) count = r < 3 ? 0 : r < 8 ? 1 : 2;
   else count = r < 5 ? 0 : r < 9 ? 1 : 2;
