@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { fmtCredits, quicksellPrice } from './economy';
@@ -13,8 +13,8 @@ import { cardColors, Color, COLORS } from '../game/v3/colors';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
-const COLOR_FILTERS = ['All', ...COLORS];
-const SORTS = ['Name', 'Rarity', 'Type'] as const;
+const COLOR_FILTERS = ['All', ...COLORS, 'Colorless'];
+const SORTS = ['Name', 'Rarity', 'Type', 'Cost'] as const;
 type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
@@ -209,8 +209,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (ownedOnly && total === 0) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
-    if (color !== 'All' && c.type !== 'Leader' && !cardColors(c).includes(color as Color))
-      return false;
+    if (color !== 'All' && c.type !== 'Leader') {
+      const cc = cardColors(c);
+      if (color === 'Colorless' ? cc.length > 0 : !cc.includes(color as Color)) return false;
+    }
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
@@ -219,6 +221,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       if (d !== 0) return d;
     } else if (sort === 'Type') {
       const d = a.type.localeCompare(b.type);
+      if (d !== 0) return d;
+    } else if (sort === 'Cost') {
+      const d = totalCost(a.cost) - totalCost(b.cost);
       if (d !== 0) return d;
     }
     return a.name.localeCompare(b.name);

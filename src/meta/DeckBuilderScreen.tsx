@@ -460,7 +460,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return m;
   }, [grouped]);
 
-  // Cast-slot curve + keyword density, shown live while editing.
+  // Essence-cost curve + keyword density, shown live while editing.
   const deckStats = useMemo(() => {
     const curve: Record<string, number> = {};
     const keywordCounts: Record<string, number> = {};
@@ -550,7 +550,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
                   </span>
                   <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
-                    {l.hp} HP
+                    RESOLVE {l.resolve ?? 0}
                   </span>
                 </div>
                 <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
@@ -564,8 +564,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{l.name}</div>
                   <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-                    {l.ability ? `Ability ${l.ability.threshold}+` : ''}
-                    {l.ultimate ? ` · Ultimate turn ${l.ultimate.unlockTurn}+` : ''}
+                    {(LEADER_COLORS[l.id] || cardColors(l)).join(' / ') || 'Colorless'}
+                    {l.leaderAbilities?.length
+                      ? ` · ${l.leaderAbilities.length} abilit${l.leaderAbilities.length === 1 ? 'y' : 'ies'}`
+                      : ''}
                   </div>
                   {avail <= 0 && (
                     <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">
@@ -692,19 +694,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             )}
             <select
               className={select}
-              aria-label="Filter by cast slot"
-              value={castFilter}
-              onChange={(e) => setCastFilter(e.target.value)}
+              aria-label="Filter by essence cost"
+              value={costFilter}
+              onChange={(e) => setCostFilter(e.target.value)}
             >
-              {CAST_FILTERS.map((v) => (
+              {COST_FILTERS.map((v) => (
                 <option key={v} value={v}>
-                  {v === 'All'
-                    ? 'Any Cast Slot'
-                    : v === 'Combo'
-                      ? 'Combo-gated'
-                      : v === 'Free'
-                        ? 'Free (Location)'
-                        : `Cast ${v}+`}
+                  {v === 'All' ? 'Any Cost' : `Cost ${v}`}
                 </option>
               ))}
             </select>
@@ -751,11 +747,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
         {/* Deck list */}
         <div className="w-72 shrink-0 border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
-          {/* Deck stats: cast-slot curve, type breakdown, top keywords */}
+          {/* Deck stats: essence-cost curve, type breakdown, top keywords */}
           <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0">
             <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK STATS</div>
             <div className="flex items-end gap-1 h-12 mb-1.5">
-              {['1', '2', '3', '4', '5', '6', 'Combo', 'Free'].map((bucket) => {
+              {COST_BUCKETS.map((bucket) => {
                 const n = deckStats.curve[bucket] || 0;
                 const h = Math.round((n / deckStats.maxCurve) * 100);
                 return (
@@ -763,10 +759,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     <div
                       className="w-full bg-[var(--c-yellow)] ink-border-sm min-h-[2px]"
                       style={{ height: `${Math.max(h, n > 0 ? 8 : 2)}%` }}
-                      title={`${n} card${n === 1 ? '' : 's'} at ${bucket === 'Combo' ? 'Combo-gate' : bucket === 'Free' ? 'Free (Location)' : `Cast ${bucket}`}`}
+                      title={`${n} card${n === 1 ? '' : 's'} at essence cost ${bucket}`}
                     />
                     <span className="text-[7px] font-mono font-bold text-[var(--c-paper)]/70">
-                      {bucket === 'Combo' ? 'CB' : bucket === 'Free' ? 'FR' : bucket}
+                      {bucket}
                     </span>
                   </div>
                 );
@@ -814,11 +810,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     rarityChip(card.rarity),
                   )}
                 >
-                  {castBucket(card) === 'Free'
-                    ? 'FR'
-                    : castBucket(card) === 'Combo'
-                      ? 'CB'
-                      : castBucket(card)}
+                  {costBucket(card)}
                 </span>
                 <span className="text-[10px] font-bold truncate flex-1">{card.name}</span>
                 <span className="text-[9px] font-mono font-black shrink-0">×{n}</span>
