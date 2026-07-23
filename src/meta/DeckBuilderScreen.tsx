@@ -8,7 +8,7 @@ import { MetaHeader, PopButton, CardMarketValuePanel } from './ui';
 import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
-import { CardDef } from '../game/v3/cards';
+import { CardDef, totalCost } from '../game/v3/cards';
 import { MAX_COPIES as ENGINE_MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
 import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
 import { COLOR_HEX, COLOR_LETTER } from './colors';
@@ -274,12 +274,13 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
 // Editor
 // ---------------------------------------------------------------------------
 const TYPE_FILTERS = ['All', 'Unit', 'Charm', 'Event', 'Location'];
-const CAST_FILTERS = ['All', '1', '2', '3', '4', '5', '6', 'Combo', 'Free'];
+// Total-essence-cost buckets (Riftbound v5.0); everything 7+ shares a bucket.
+const COST_FILTERS = ['All', '0', '1', '2', '3', '4', '5', '6', '7+'];
+const COST_BUCKETS = ['0', '1', '2', '3', '4', '5', '6', '7+'];
 
-function castBucket(c: CardDef): string {
-  if (c.type === 'Location') return 'Free';
-  if (c.comboGate) return 'Combo';
-  return String(c.threshold ?? 1);
+function costBucket(c: CardDef): string {
+  const t = totalCost(c.cost);
+  return t >= 7 ? '7+' : String(t);
 }
 
 function shuffleArr<T>(arr: T[]): T[] {
@@ -327,7 +328,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [cardIds, setCardIds] = useState<string[]>(deck?.card_ids || []);
   const [typeFilter, setTypeFilter] = useState('All');
   const [colorFilter, setColorFilter] = useState('All');
-  const [castFilter, setCastFilter] = useState('All');
+  const [costFilter, setCostFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -428,7 +429,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     .filter((c) => {
       if ((availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
-      if (castFilter !== 'All' && castBucket(c) !== castFilter) return false;
+      if (costFilter !== 'All' && costBucket(c) !== costFilter) return false;
       if (colorIdentity && !isColorLegal(c, colorIdentity)) return false;
       if (colorFilter !== 'All' && !cardColors(c).includes(colorFilter as Color)) return false;
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -447,8 +448,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       m.set(id, g);
     }
     return [...m.values()].sort((a, b) => {
-      const ca = a.card.threshold ?? (a.card.comboGate ? 7 : 0);
-      const cb = b.card.threshold ?? (b.card.comboGate ? 7 : 0);
+      const ca = totalCost(a.card.cost);
+      const cb = totalCost(b.card.cost);
       return ca - cb || a.card.name.localeCompare(b.card.name);
     });
   }, [cardIds, db]);
@@ -459,12 +460,12 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return m;
   }, [grouped]);
 
-  // Cast-slot curve + keyword density, shown live while editing.
+  // Essence-cost curve + keyword density, shown live while editing.
   const deckStats = useMemo(() => {
     const curve: Record<string, number> = {};
     const keywordCounts: Record<string, number> = {};
     for (const { card, n } of grouped) {
-      const bucket = castBucket(card);
+      const bucket = costBucket(card);
       curve[bucket] = (curve[bucket] || 0) + n;
       for (const kw of card.keywords || []) keywordCounts[kw] = (keywordCounts[kw] || 0) + n;
     }
@@ -549,7 +550,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     {(l.rarity || 'LEADER').toUpperCase()} LEADER ✸
                   </span>
                   <span className="text-[9px] font-mono font-bold text-[var(--c-paper)]">
-                    {l.hp} HP
+                    RESOLVE {l.resolve ?? 0}
                   </span>
                 </div>
                 <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
@@ -563,8 +564,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{l.name}</div>
                   <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-                    {l.ability ? `Ability ${l.ability.threshold}+` : ''}
-                    {l.ultimate ? ` · Ultimate turn ${l.ultimate.unlockTurn}+` : ''}
+                    {(LEADER_COLORS[l.id] || cardColors(l)).join(' / ') || 'Colorless'}
+                    {l.leaderAbilities?.length
+                      ? ` · ${l.leaderAbilities.length} abilit${l.leaderAbilities.length === 1 ? 'y' : 'ies'}`
+                      : ''}
                   </div>
                   {avail <= 0 && (
                     <div className="text-[9px] font-bold text-[var(--c-red)] mt-1">
@@ -691,19 +694,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             )}
             <select
               className={select}
-              aria-label="Filter by cast slot"
-              value={castFilter}
-              onChange={(e) => setCastFilter(e.target.value)}
+              aria-label="Filter by essence cost"
+              value={costFilter}
+              onChange={(e) => setCostFilter(e.target.value)}
             >
-              {CAST_FILTERS.map((v) => (
+              {COST_FILTERS.map((v) => (
                 <option key={v} value={v}>
-                  {v === 'All'
-                    ? 'Any Cast Slot'
-                    : v === 'Combo'
-                      ? 'Combo-gated'
-                      : v === 'Free'
-                        ? 'Free (Location)'
-                        : `Cast ${v}+`}
+                  {v === 'All' ? 'Any Cost' : `Cost ${v}`}
                 </option>
               ))}
             </select>
@@ -750,11 +747,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
         {/* Deck list */}
         <div className="w-72 shrink-0 border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
-          {/* Deck stats: cast-slot curve, type breakdown, top keywords */}
+          {/* Deck stats: essence-cost curve, type breakdown, top keywords */}
           <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0">
             <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK STATS</div>
             <div className="flex items-end gap-1 h-12 mb-1.5">
-              {['1', '2', '3', '4', '5', '6', 'Combo', 'Free'].map((bucket) => {
+              {COST_BUCKETS.map((bucket) => {
                 const n = deckStats.curve[bucket] || 0;
                 const h = Math.round((n / deckStats.maxCurve) * 100);
                 return (
@@ -762,10 +759,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     <div
                       className="w-full bg-[var(--c-yellow)] ink-border-sm min-h-[2px]"
                       style={{ height: `${Math.max(h, n > 0 ? 8 : 2)}%` }}
-                      title={`${n} card${n === 1 ? '' : 's'} at ${bucket === 'Combo' ? 'Combo-gate' : bucket === 'Free' ? 'Free (Location)' : `Cast ${bucket}`}`}
+                      title={`${n} card${n === 1 ? '' : 's'} at essence cost ${bucket}`}
                     />
                     <span className="text-[7px] font-mono font-bold text-[var(--c-paper)]/70">
-                      {bucket === 'Combo' ? 'CB' : bucket === 'Free' ? 'FR' : bucket}
+                      {bucket}
                     </span>
                   </div>
                 );
@@ -813,11 +810,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     rarityChip(card.rarity),
                   )}
                 >
-                  {castBucket(card) === 'Free'
-                    ? 'FR'
-                    : castBucket(card) === 'Combo'
-                      ? 'CB'
-                      : castBucket(card)}
+                  {costBucket(card)}
                 </span>
                 <span className="text-[10px] font-bold truncate flex-1">{card.name}</span>
                 <span className="text-[9px] font-mono font-black shrink-0">×{n}</span>
