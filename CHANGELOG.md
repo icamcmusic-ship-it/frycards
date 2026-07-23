@@ -7,6 +7,68 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.28 harness upgrades (lapse-by-phase + keyword-tier monotonicity), balance pass, shop-report queue, news post delete
+
+- **Sim harness — two new capture dimensions** (`scripts/simulate-v4.ts`):
+  - **CPU lapse density by game phase**: every existing lapse counter (ai.ts's
+    `lapse()`) now also buckets into early/mid/late thirds by round (new
+    `phaseOf()` helper, `GameStats.lapsesByPhase` in engine.ts) instead of
+    only a flat per-game rate — purely additive telemetry, never read by the
+    AI itself, so it can't change any decision or RNG draw. Confirms the
+    existing benign shapes are phase-driven (stranded dice/idle-ability
+    counters climb through the game as boards fill up; the two "measurement
+    only" fixed-lapse counters concentrate early instead), not a hidden
+    late-game degradation.
+  - **Keyword tier-ladder monotonicity**: groups the existing archetype-
+    normalized per-card residual by each card's assigned `keywordTiers`
+    (cardpool.ts) to check whether a keyword's higher tiers actually
+    outperform its lower tiers, derived entirely from already-computed data
+    (no new engine/ai instrumentation). Flagged a Guard Tier II reading
+    weaker than Tier I/III, but Tier I's sample is only 3 cards vs Tier II's
+    31 — too thin to separate a real pricing inversion from which specific 3
+    cards happen to carry Tier I, so left as a watch item, not an action.
+- **CPU reasoning lapses**: detector floor confirmed again (19th consecutive
+  pass, v4.9→v4.28) — every genuine-mistake detector still reads exactly
+  zero on the full 26,448-game run. No new CPU-reasoning bug found.
+- **Balance pass** (archetype-normalized residual is the primary lens, cross-
+  checked against the raw cost-band table):
+  - Nerf escalations (repeat offenders still topping the normalized table):
+    Cervine Channeler -3→-4 (ceiling), Nanite Division Marshal -2→-3 (also
+    the per-carrier lever for Steel, again this pass's #1 keyword-nerf read),
+    Worm Brain Host -3→-4 (ceiling), Familiar in the Dark -1→-2,
+    Magma-Phase Infiltrator -1→-2, Faye's True Face -3→-4 (ceiling).
+  - Fresh first-pass trim: Titan of the Trench -1 (new top-of-table outlier,
+    widest archetype spread this pass at 6 decks).
+  - Two overshoot reverts (flipped to the opposite extreme — same "revert
+    the most recent lever" pattern as this file's prior overshoot cases):
+    The Wolf of Wall Street's +1 buff removed (sixth swing in its documented
+    history — still overshooting even at +1), and Kinetix Enforcer's cost
+    bump removed after its stacked nerfs (stat trim + cost bump) flipped it
+    to an underperformer on three independent signals (archetype-normalized
+    delta, printed-power z-score, and cost-economy table).
+  - Buffs: Ruthless Succession +1→+2 (still underperforming, widest spread in
+    the pool at 12 archetypes), Blind Allegiance +1 (fresh), Violet Haze
+    Kunoichi +1 (fresh).
+  - Held flat / carried forward: Dr. Aries (already at ceiling, holding),
+    Hollow Suit / Void Mother (v4.27 single-step trims improving as
+    intended), The Abyssal Gate (v4.27 fix resolved it off the worst-
+    normalized table), Shattered Horizon Protagonist (holding +13.6pt
+    post-revert, no clean lever identified this pass).
+  - Card pool re-verified in field-for-field sync with live Supabase before
+    the pass (292/292, md5 identical on `id|name|type|rarity|set|image|
+    flavor`).
+  - Verification run (6/pairing, ~19,800 games) on the patched pool: zero
+    invariant violations, 107/107 vitest green, and every actioned card
+    moved in the intended direction or resolved off the extreme tables
+    (Kinetix Enforcer, Ruthless Succession, Violet Haze Kunoichi and Faye's
+    True Face all dropped out of both top-12 normalized lists entirely).
+- **Bug hunt**: exposed `adminResolveShopReport` (an RPC that existed with no
+  UI ever calling it — Player Shop reports vanished into the database with
+  no moderation path) via a new "OPEN SHOP REPORTS" queue in Creator Tools
+  (strike seller / dismiss, confirm-gated); added a delete action for
+  published News Center posts (creator-only, confirm-gated); removed a
+  stale `eslint-disable` comment in `CardFaceV4.tsx`.
+
 ### v4.27 harness upgrades (clock-speed + polarized matchups), dead-code value-buff fix, balance pass, Echo/Bind UI fixes, bug hunt
 
 - **Sim harness — two new capture dimensions** (`scripts/simulate-v4.ts`):

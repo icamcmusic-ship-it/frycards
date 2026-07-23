@@ -12,6 +12,15 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Groundswell Update',
+    items: [
+      'Balance pass: repeat overperformers came down again (Cervine Channeler, Nanite Division Marshal, Worm Brain Host, Familiar in the Dark, Magma-Phase Infiltrator, Faye\'s True Face), and a fresh outlier — Titan of the Trench — got its first trim. Ruthless Succession, Blind Allegiance and Violet Haze Kunoichi got buffed for consistently underperforming.',
+      'Two overshoot corrections: The Wolf of Wall Street\'s buff came back down again after still testing too strong, and Kinetix Enforcer — which had been nerfed several times in a row — turned out to have been cut too far and is back to a fairer cost.',
+      'Player Shop reports now actually go somewhere: filing a report on a bad listing used to vanish into thin air with no way for anyone to review it. There\'s now a real moderation queue, and bad sellers get dealt with.',
+      'News Center posts can now be deleted after publishing, instead of being stuck up forever once posted.',
+    ],
+  },
+  {
     version: 'Riptide Update',
     items: [
       'Echo fix: high-rarity Echo cards (Ultra-Rare and up) are meant to recast for free — no extra card to discard — but the board was still asking you to pick a discard that was then ignored, and could even block the recast entirely if your hand was empty. They now echo straight back into play for free, exactly as intended.',
