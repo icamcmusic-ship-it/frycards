@@ -1,64 +1,60 @@
 /**
- * v4.2 dice-placement match UI (Rulebook v4.2, docs/RULEBOOK.md).
+ * Riftbound v5.0 match UI (Rulebook v5.0, docs/RULEBOOK.md).
  *
- * Human plays interactively through the engine's public actions; the CPU
- * plays whole turns through the same AI used by the headless playtest
- * harness (src/game/v3/ai.ts). The engine object is mutated in place and
- * held in a ref; a version counter forces re-renders after each action.
+ * Human (P1) plays interactively through the engine's public actions; the
+ * CPU (P2) plays whole turns through the same AI used by the headless
+ * playtest harness (src/game/v3/ai.ts). The engine GameState is mutated in
+ * place and held in state with a stable identity; a version counter forces
+ * re-renders after each action.
+ *
+ * Turn flow: Dawn (automatic) → Main I → Clash → Main II → Dusk (automatic).
+ * Essence is auto-paid: invoking a card exhausts the needed Locations for
+ * you (colored pips first, then generic), and Locations can still be tapped
+ * manually. The defender's guard step + reaction window are the interactive
+ * moments of the opponent's Clash.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Game,
-  Inst,
-  Player,
-  newGame,
+  GameState,
+  PlayerState,
+  UnitInst,
+  LocationInst,
+  PlayerId,
+  GuardAssignments,
+  DeckDef,
+  createGame,
   mulberry32,
-  startTurn,
-  reroll,
-  castFromHand,
-  castLocationFree,
-  activateAbility,
-  activateViaRally,
-  activateUltimate,
-  completeTwin,
-  echoRecast,
-  scrap,
-  abandonTwin,
-  comboCheck,
-  attack,
-  resolveEndPhasePreDiscard,
-  finishEndPhase,
-  canAttack,
-  legalTargets,
-  effAtk,
-  effMaxHp,
-  remainingHp,
-  effThreshold,
-  effAbilityThreshold,
-  tollReduction,
-  matchesPattern,
-  rollValues,
-  opponentOf,
-  mulliganRedraw,
-  defaultDiscardChoice,
-  rerollsRemaining,
-  HAND_LIMIT,
-  rarityTier,
-  SIM_TUNING,
+  endPhase,
+  playWellspring,
+  tapLocationForEssence,
+  invokeCard,
+  invokeLeader,
+  activateLeaderAbility,
+  rebondCharm,
+  declareAttackers,
+  declareGuards,
+  resolveClash,
+  canInvokeLeader,
+  canPayCost,
+  canTarget,
+  legalAttackers,
+  legalGuardsFor,
+  wellspringChoices,
+  effMight,
+  effGrit,
+  remainingGrit,
+  unitHasKw,
+  essenceTotal,
+  findUnit,
 } from '../game/v3/engine';
-import { keywordTier } from '../game/v3/keywords';
-import { playTurn, maybeMulliganPlayer, CpuTurnEvent } from '../game/v3/ai';
-import { CardDef, Effect, hasKw } from '../game/v3/cards';
-import { DeckDef } from '../game/v3/engine';
+import { playTurn, chooseGuards, maybeMulliganPlayer } from '../game/v3/ai';
+import { CardDef, Effect, EssenceCost, MAX_HAND, totalCost, hasKw } from '../game/v3/cards';
+import { COLORS, EssenceType } from '../game/v3/colors';
+import { POOL_BY_ID } from '../game/v3/cardpool';
+import { COLOR_PIP, COLOR_LETTER } from '../meta/colors';
 import { cn } from '../lib/utils';
-import {
-  CardFace,
-  CARD_SIZES,
-  GATE_LABEL,
-  describeEffect,
-  renderKeywordText,
-} from './CardFaceV4';
+import { CardFace, CARD_SIZES, describeEffect, renderKeywordText } from './CardFaceV4';
 import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
@@ -67,7 +63,8 @@ import { fmtCredits, fmtVouchers } from '../meta/economy';
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-const DIE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+const HUMAN: PlayerId = 'P1';
+const CPU: PlayerId = 'P2';
 
 /** Component-scoped keyframes for the match-only combat feedback (damage
  * floats, phase banners, attack flashes) — an inline <style> block rather
@@ -95,20 +92,6 @@ const GAME_CSS = `
   padding: 0 7px;
   box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
 }
-@keyframes gv4-phase-pop {
-  0% { opacity: 0; transform: scale(0.6); }
-  18% { opacity: 1; transform: scale(1.06); }
-  32% { transform: scale(1); }
-  78% { opacity: 1; }
-  100% { opacity: 0; transform: scale(1.02); }
-}
-.gv4-phase-banner { animation: gv4-phase-pop 1.15s ease-out forwards; }
-@keyframes gv4-attack-flash {
-  0%, 100% { filter: none; }
-  30% { filter: brightness(1.7) saturate(1.5); }
-  60% { filter: brightness(0.75); }
-}
-.gv4-attack-flash { animation: gv4-attack-flash 0.65s ease-in-out; }
 .gv4-heal-float {
   position: absolute;
   top: 8px;
@@ -125,10 +108,23 @@ const GAME_CSS = `
   padding: 0 7px;
   box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
 }
-/* v4.26 CPU playback: pulsing outlines on the card the opponent is acting
- * with (yellow) and whatever it's acting on (red) — same color grammar as
- * the human's own attacker/target rings, just animated since the player
- * isn't the one driving. */
+@keyframes gv4-phase-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  18% { opacity: 1; transform: scale(1.06); }
+  32% { transform: scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+.gv4-phase-banner { animation: gv4-phase-pop 1.15s ease-out forwards; }
+@keyframes gv4-attack-flash {
+  0%, 100% { filter: none; }
+  30% { filter: brightness(1.7) saturate(1.5); }
+  60% { filter: brightness(0.75); }
+}
+.gv4-attack-flash { animation: gv4-attack-flash 0.65s ease-in-out; }
+/* Pulsing outlines on the card the opponent is acting with (yellow) and
+ * whatever it's acting on (red) — the same color grammar as the human's own
+ * attacker/target rings, just animated since the player isn't driving. */
 @keyframes gv4-act-ring {
   0%, 100% { outline-offset: 1px; outline-width: 3px; }
   50% { outline-offset: 5px; outline-width: 4px; }
@@ -148,7 +144,7 @@ const GAME_CSS = `
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
- * hits stack cleanly. */
+ * hits stack cleanly. `iid` is a unit iid or a vitality key ('vit:P1'). */
 interface DmgFloat {
   id: number;
   iid: string;
@@ -171,125 +167,75 @@ function FloatLayer({ floats }: { floats?: DmgFloat[] }) {
   );
 }
 
-/** Which in-play cards may a hand-cast / ability effect legally target? */
-function targetsFor(g: Game, pid: string, eff: Effect): Inst[] {
-  const p = g.players[pid];
-  const opp = opponentOf(g, pid);
-  switch (eff.target) {
-    case 'enemyUnit':
-      return [...opp.board];
-    case 'anyTarget':
-      return [...opp.board, opp.leader];
-    case 'friendlyUnit':
-      return [...p.board];
-    case 'friendlyAny':
-      return [...p.board, p.leader];
-    default:
-      return [];
-  }
-}
+const SINGLE_TARGETS = ['enemyUnit', 'friendlyUnit', 'anyTarget', 'friendlyAny'];
 function needsTarget(eff?: Effect): boolean {
-  return !!eff && ['enemyUnit', 'anyTarget', 'friendlyUnit', 'friendlyAny'].includes(eff.target);
+  return !!eff && SINGLE_TARGETS.includes(eff.target);
 }
 
-/** Friendly permanents whose Ability Slot is already spent this turn and
- * whose resting die is high enough to Rally into `unit`'s ability. */
-function rallySourcesFor(g: Game, pid: string, unit: Inst): Inst[] {
+/** All legal explicit targets (unit iids and/or player ids) for an effect
+ * invoked by `pid` — Warded and side restrictions come from engine canTarget. */
+function targetsFor(g: GameState, pid: PlayerId, eff: Effect): string[] {
+  const cands: string[] = [
+    ...g.players.P1.field.map((u) => u.iid),
+    ...g.players.P2.field.map((u) => u.iid),
+    'P1',
+    'P2',
+  ];
+  return cands.filter((iid) => canTarget(g, pid, eff, iid));
+}
+
+/** Essence a player could have right now: floating pool + every untapped
+ * Location counted by its produced type. */
+function potentialPool(p: PlayerState): Partial<Record<EssenceType, number>> {
+  const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
+  for (const l of p.locations) {
+    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+  }
+  return pool;
+}
+
+/** Could this cost be paid if we tapped Locations for it? */
+function canAfford(p: PlayerState, cost?: EssenceCost): boolean {
+  return canPayCost(potentialPool(p), cost);
+}
+
+/**
+ * Auto-payment: exhaust Locations until the floating pool covers `cost`
+ * (colored pips first from matching Locations, then generic from whatever
+ * is most plentiful). Returns true when the pool can pay afterwards.
+ */
+function autoTapFor(g: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
   const p = g.players[pid];
-  const thr = effAbilityThreshold(g, unit);
-  return [...p.board, p.leader, p.location].filter(
-    (x): x is Inst =>
-      !!x &&
-      x.iid !== unit.iid &&
-      x.abilityUsed === true &&
-      x.abilityDie !== undefined &&
-      x.abilityDie >= thr,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Labeled ability pill — the ONE clickable affordance for every Ability
-// Slot / Ultimate on the battlefield (leaders, Locations, board Units), so
-// activations are named buttons ("ABILITY 4+: Sap 2 …") instead of mystery
-// click targets. Disabled pills carry a `title` tooltip explaining why.
-// ---------------------------------------------------------------------------
-function AbilityPill({
-  label,
-  desc,
-  usable,
-  used,
-  usedLabel = 'USED',
-  why,
-  onClick,
-  accent,
-}: {
-  label: string;
-  desc: string;
-  usable?: boolean;
-  used?: boolean;
-  usedLabel?: string;
-  /** Reason this pill is currently disabled — shown as a hover tooltip. */
-  why?: string;
-  onClick?: () => void;
-  accent?: 'red';
-}) {
-  return (
-    // A div, not a <button>: `desc` runs through renderKeywordText, whose
-    // inline keyword mentions are themselves <button>s — nested buttons are
-    // invalid HTML (same reasoning as CardFace / BoardUnit).
-    <div
-      // Only expose button semantics when there's actually an action. The
-      // opponent's Leader ability/ultimate pills are read-only info panels
-      // (no onClick); announcing them as a disabled button misleads screen
-      // readers into treating static text as a control that was never usable.
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-disabled={onClick ? !usable : undefined}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (!onClick) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick();
+  let safety = 64;
+  while (!canPayCost(p.essence, cost) && safety-- > 0) {
+    let tapped = false;
+    // Unmet colored pip → tap a matching Location.
+    for (const c of COLORS) {
+      const need = (cost?.pips[c] ?? 0) - (p.essence[c] ?? 0);
+      if (need > 0) {
+        const loc = p.locations.find((l) => !l.exhausted && l.produces === c);
+        if (loc && tapLocationForEssence(g, pid, loc.iid)) {
+          tapped = true;
+          break;
         }
-      }}
-      title={why}
-      className={cn(
-        'w-full text-[8.5px] font-bold px-1.5 py-1 ink-border-sm text-left leading-tight',
-        usable
-          ? cn(
-              'btn-pop cursor-pointer',
-              accent === 'red'
-                ? 'bg-[var(--c-red)] text-white'
-                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-            )
-          : 'bg-[var(--c-steel)]/70 text-[var(--c-paper)]/70',
-        used && 'line-through opacity-70',
-      )}
-    >
-      <span className="heading-font mr-1">{label}</span>
-      {renderKeywordText(desc, true)}
-      {used ? ` — ${usedLabel}` : ''}
-    </div>
-  );
+      }
+    }
+    if (tapped) continue;
+    // Generic remainder → prefer types NOT needed as pips elsewhere in the
+    // cost (keeps colored sources free), else anything untapped.
+    const spare = p.locations.find((l) => !l.exhausted && !(cost?.pips[l.produces] ?? 0));
+    const loc = spare ?? p.locations.find((l) => !l.exhausted);
+    if (!loc || !tapLocationForEssence(g, pid, loc.iid)) break;
+  }
+  return canPayCost(p.essence, cost);
 }
 
-/** Hover-to-view: board cards render tiny (`micro` tier) so more units fit
- * on screen, so any card whose text a player actually wants to read needs a
- * zoomed, read-only preview on hover — for BOTH the player's own board and
- * the opponent's (previously only the hand had any hover affordance; the
- * enemy board could only be inspected via a click-through modal). Renders
- * through a portal at a viewport-fixed position (like the keyword glossary
- * popover) since board rows sit inside `overflow-x-auto`/`overflow-y-auto`
- * ancestors that would otherwise clip an absolutely-positioned popup.
- * Purely a view — pointer-events-none, so it never steals the hover/click
- * the small card underneath needs for its own targeting affordances. */
-/** The `full` card tier (240×336) is still too small to comfortably read
- * rules text once it's shrunk to fit a text-heavy card (see the dynamic
- * shrink-to-fit in CardFaceV4) — this scales the hover preview up further,
- * on top of already being the largest fixed tier, purely as a visual
- * transform (layout box is unaffected, which is fine: this preview is a
- * pointer-events-none portal overlay, never part of document flow). */
+// ---------------------------------------------------------------------------
+// Hover-to-view: board cards render tiny (`micro` tier) so more units fit on
+// screen; any card whose text a player wants to read gets a zoomed read-only
+// preview on hover (portal at a viewport-fixed position, since board rows sit
+// inside overflow containers that would clip an absolute popup).
+// ---------------------------------------------------------------------------
 export const HOVER_PREVIEW_SCALE = INSPECT_SCALE;
 
 function useHoverPreview<T extends HTMLElement>() {
@@ -313,10 +259,8 @@ function useHoverPreview<T extends HTMLElement>() {
 }
 
 /** Long-press (touch) equivalent of hover, so board-unit inspection works on
- * mobile where there is no hover event. A long press shows the preview and
- * suppresses the click that would otherwise fire on touch-end (so a peek
- * never accidentally triggers an attack/target selection); a short tap
- * behaves as a normal click. */
+ * mobile: a long press shows the preview and suppresses the click that would
+ * otherwise fire on touch-end; a short tap behaves as a normal click. */
 function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -337,8 +281,6 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
       onTap?.();
     }
   };
-  // A card can leave the board (die, get bounced, etc.) mid-press — clear
-  // the pending timer on unmount so it doesn't fire onLongPress afterward.
   useEffect(() => {
     return () => {
       if (timer.current) clearTimeout(timer.current);
@@ -351,9 +293,8 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
   };
 }
 
-/** `title=` tooltips never appear on touch devices (no hover event). This
- * wraps a badge so tapping it also reveals the same text in a small popover,
- * while desktop keeps the native hover tooltip. */
+/** `title=` tooltips never appear on touch devices — this wraps a badge so
+ * tapping it also reveals the same text in a small popover. */
 function Tip({
   text,
   className,
@@ -365,10 +306,6 @@ function Tip({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
-  // Every other popover in the app (KeywordPopover et al) dismisses itself
-  // on an outside click or Escape — this one only toggled off by re-tapping
-  // the same badge, so it could linger over the board indefinitely once
-  // opened on a touch device (no hover to naturally clear it).
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -438,11 +375,101 @@ function HoverPreview({
 }
 
 // ---------------------------------------------------------------------------
-// A unit on the battlefield — the same shared CardFace template used
-// everywhere else (condensed `micro` tier so the board reads as a real
-// battlefield instead of a stack of full cards), with live effective stats
-// rendered in the normal stat-chip slots, status/damage overlays on a
-// wrapper, and a hover-to-view full-size preview (see `useHoverPreview`).
+// Essence pips — the floating pool, rendered as colored circles.
+// ---------------------------------------------------------------------------
+function EssencePips({ pool, size = 16 }: { pool: Partial<Record<EssenceType, number>>; size?: number }) {
+  const pips: { key: string; c: EssenceType }[] = [];
+  for (const c of COLORS) {
+    const n = pool[c] ?? 0;
+    for (let i = 0; i < n; i++) pips.push({ key: `${c}${i}`, c });
+  }
+  if (pips.length === 0) {
+    return <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no essence floating</span>;
+  }
+  return (
+    <span className="flex items-center gap-[3px] flex-wrap">
+      {pips.map((p) => (
+        <span
+          key={p.key}
+          title={`${p.c} essence`}
+          className="flex items-center justify-center rounded-full font-mono font-black leading-none border border-white/70"
+          style={{
+            width: size,
+            height: size,
+            fontSize: size * 0.55,
+            backgroundColor: COLOR_PIP[p.c].bg,
+            color: COLOR_PIP[p.c].fg,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
+          }}
+        >
+          {COLOR_LETTER[p.c]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A Location tile — a basic Wellspring (colored essence square) or a Sanctum
+// (named, inspectable). Tapping produces 1 essence when legal.
+// ---------------------------------------------------------------------------
+function LocationTile({
+  loc,
+  tappable,
+  onTap,
+  onInspect,
+}: {
+  key?: React.Key;
+  loc: LocationInst;
+  tappable: boolean;
+  onTap?: () => void;
+  onInspect?: () => void;
+}) {
+  const sanctum = !!loc.def;
+  const label = sanctum ? loc.def!.name : `${loc.produces} Wellspring`;
+  const action = tappable && !loc.exhausted ? onTap : sanctum ? onInspect : undefined;
+  return (
+    <button
+      onClick={action}
+      disabled={!action}
+      title={
+        loc.exhausted
+          ? `${label} — exhausted (recovers at Dawn)`
+          : tappable
+            ? `${label} — exhaust: add one ${loc.produces} essence`
+            : label
+      }
+      aria-label={`${label}${loc.exhausted ? ', exhausted' : ''}`}
+      className={cn(
+        'flex items-center gap-1 px-1 py-0.5 ink-border-sm shrink-0 text-left',
+        loc.exhausted ? 'opacity-40 rotate-3' : 'btn-pop',
+        sanctum ? 'bg-[var(--c-paper)]' : 'bg-[var(--c-paper)]/90',
+      )}
+      style={{ borderLeft: `5px solid ${COLOR_PIP[loc.produces].bg}` }}
+    >
+      <span
+        className="flex items-center justify-center rounded-full font-mono font-black leading-none shrink-0"
+        style={{
+          width: 14,
+          height: 14,
+          fontSize: 8,
+          backgroundColor: COLOR_PIP[loc.produces].bg,
+          color: COLOR_PIP[loc.produces].fg,
+        }}
+      >
+        {COLOR_LETTER[loc.produces]}
+      </span>
+      <span className="text-[7.5px] font-black leading-tight text-[var(--c-ink)] max-w-[70px] truncate">
+        {sanctum ? loc.def!.name : 'WELLSPRING'}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A unit on the battlefield — the shared CardFace template (`micro` tier)
+// with live Might/Grit in the stat-chip slots, status overlays on a wrapper,
+// and a hover-to-view full-size preview.
 // ---------------------------------------------------------------------------
 function BoardUnit({
   g,
@@ -451,32 +478,36 @@ function BoardUnit({
   highlight,
   dimmed,
   isAttacker,
+  isGuard,
   flash,
   acting,
   acted,
   floats,
+  guardNote,
 }: {
-  g: Game;
-  u: Inst;
+  key?: React.Key;
+  g: GameState;
+  u: UnitInst;
   onClick?: () => void;
+  /** Red ring: legal target / selectable right now. */
   highlight?: boolean;
   dimmed?: boolean;
+  /** Yellow ring: selected attacker (or declared enemy attacker). */
   isAttacker?: boolean;
-  /** Attack feedback: briefly true on the attacker/target of a resolved attack. */
+  /** Blue ring: assigned as a guard this clash. */
+  isGuard?: boolean;
   flash?: boolean;
-  /** CPU playback: this card is the one the opponent is acting WITH. */
   acting?: boolean;
-  /** CPU playback: this card is what the opponent's action is aimed AT. */
   acted?: boolean;
-  /** Floating "-N" damage numbers currently animating over this card. */
   floats?: DmgFloat[];
+  /** Small label under the status badges (e.g. "guards #2"). */
+  guardNote?: string;
 }) {
-  const hp = remainingHp(g, u);
-  const maxHp = effMaxHp(g, u);
-  const atk = effAtk(g, u);
-  const exhausted = u.hasAttacked || u.abilityUsed;
-  const sick = u.enteredThisTurn && !hasKw(u.def, 'Swift');
-  const wardUp = hasKw(u.def, 'Ward') && !u.wardUsed;
+  const atk = effMight(g, u);
+  const maxHp = effGrit(g, u);
+  const hp = remainingGrit(g, u);
+  const sick = u.enteredThisTurn && !unitHasKw(u, 'Reckless');
+  const warded = unitHasKw(u, 'Warded');
   const {
     ref: hoverRef,
     pos: hoverPos,
@@ -495,9 +526,10 @@ function BoardUnit({
         flash && 'gv4-attack-flash',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1 rounded-[4px]',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1 rounded-[4px]',
+        isGuard && 'ring-4 ring-[#29B6F6] -translate-y-1 rounded-[4px]',
         acting && 'gv4-cpu-actor -translate-y-1',
         acted && 'gv4-cpu-target',
-        (exhausted || sick) && 'saturate-50',
+        (u.exhausted || sick) && 'saturate-50',
       )}
     >
       <CardFace
@@ -512,205 +544,200 @@ function BoardUnit({
         <CardFace def={u.def} size="full" live={{ atk, hp, maxHp }} />
       </HoverPreview>
       <div className="absolute -top-1.5 -right-1.5 z-20 flex gap-0.5">
-        {wardUp && (
+        {warded && (
           <Tip
-            text="Ward available — the first damage/Removal against this Unit is prevented"
+            text="Warded — can't be targeted by the opponent's effects"
             className="text-[10px] bg-[#29B6F6] ink-border-sm px-0.5"
           >
             🛡
           </Tip>
         )}
-        {!u.boundThisTurn && u.boundNextTurn && (
+        {u.charms.length > 0 && (
           <Tip
-            text="Bound — will be unable to attack, use abilities, or retaliate on its controller's next turn"
-            className="text-[10px] bg-[#8E44AD]/70 text-white ink-border-sm px-0.5"
-          >
-            ⛓
-          </Tip>
-        )}
-        {u.boundThisTurn && (
-          <Tip
-            text="Bound — cannot attack, use abilities, or retaliate this turn"
+            text={`Bonded Charms: ${u.charms.map((c) => c.def.name).join(', ')}`}
             className="text-[10px] bg-[#8E44AD] text-white ink-border-sm px-0.5"
           >
-            ⛓
+            💠{u.charms.length}
           </Tip>
         )}
         {sick && (
           <Tip
-            text="Just played — can't act until your next turn (no Swift)"
+            text="Just invoked — can't attack until its controller's next turn (no Reckless)"
             className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             z
           </Tip>
         )}
-        {exhausted && !sick && (
+        {u.exhausted && !sick && (
           <Tip
-            text="Exhausted — already attacked or used an ability this turn"
+            text="Exhausted — attacked or was spent this turn; recovers at Dawn"
             className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             ✓
           </Tip>
         )}
       </div>
+      {guardNote && (
+        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 text-[7px] font-black bg-[#29B6F6] text-[var(--c-ink)] px-1 ink-border-sm whitespace-nowrap">
+          {guardNote}
+        </div>
+      )}
       <FloatLayer floats={floats} />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Leader panel — full CardFace plus clearly labeled, non-overlapping ability
-// pills BELOW the card (never squeezed inside its text box): HP lives in the
-// card's stat chip, Resolve/Toll status in the art badge, and the Ability /
-// Ultimate slots are separate named buttons with disabled-reason tooltips.
+// Labeled ability pill — the one clickable affordance for Leader abilities,
+// with disabled-reason tooltips (a div, not a <button>: `desc` runs through
+// renderKeywordText whose keyword mentions are themselves <button>s).
 // ---------------------------------------------------------------------------
-function LeaderPanel({
-  g,
+function AbilityPill({
+  label,
+  desc,
+  usable,
+  used,
+  why,
+  onClick,
+}: {
+  key?: React.Key;
+  label: string;
+  desc: string;
+  usable?: boolean;
+  used?: boolean;
+  why?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-disabled={onClick ? !usable : undefined}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      title={why}
+      className={cn(
+        'w-full text-[8.5px] font-bold px-1.5 py-1 ink-border-sm text-left leading-tight',
+        usable
+          ? 'btn-pop cursor-pointer bg-[var(--c-yellow)] text-[var(--c-ink)]'
+          : 'bg-[var(--c-steel)]/70 text-[var(--c-paper)]/70',
+        used && 'line-through opacity-70',
+      )}
+    >
+      <span className="heading-font mr-1">{label}</span>
+      {renderKeywordText(desc, true)}
+      {used ? ' — USED' : ''}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Leader zone panel — Vitality plate + the Leader card with Resolve badge,
+// invoke button and Resolve-ability pills (human side only).
+// ---------------------------------------------------------------------------
+function LeaderZonePanel({
   p,
   isHuman,
+  vitTargetable,
+  onVitClick,
+  onInvoke,
+  invokeWhy,
   onAbility,
-  onUltimate,
   abilityWhy,
-  ultimateWhy,
-  highlight,
+  onInspect,
+  floats,
   flash,
-  acting,
-  acted,
-  onClickTarget,
-  onInspect,
-  floats,
 }: {
-  g: Game;
-  p: Player;
+  key?: React.Key;
+  p: PlayerState;
   isHuman: boolean;
-  onAbility?: () => void;
-  onUltimate?: () => void;
-  /** Reason the ability pill is disabled right now (undefined = usable). */
-  abilityWhy?: string;
-  ultimateWhy?: string;
-  highlight?: boolean;
+  /** The player's Vitality is a legal target for the pending effect. */
+  vitTargetable?: boolean;
+  onVitClick?: () => void;
+  onInvoke?: () => void;
+  /** Reason the INVOKE LEADER button is disabled (undefined = usable). */
+  invokeWhy?: string;
+  onAbility?: (idx: number) => void;
+  abilityWhy?: (idx: number) => string | undefined;
+  onInspect?: () => void;
+  floats?: DmgFloat[];
   flash?: boolean;
-  /** CPU playback: this Leader is acting / being acted on (pulsing ring). */
-  acting?: boolean;
-  acted?: boolean;
-  onClickTarget?: () => void;
-  onInspect?: () => void;
-  floats?: DmgFloat[];
 }) {
-  const l = p.leader;
-  const hp = Math.max(0, remainingHp(g, l));
-  const maxHp = effMaxHp(g, l);
-  const ab = l.def.ability;
-  const ult = l.def.ultimate;
-  const abThr = effAbilityThreshold(g, l);
-  const toll = tollReduction(g, p.id);
-  const resolveOn = !!l.def.resolve && hp * 2 <= maxHp;
-  // Ability/Ultimate render as the labeled pills below (for BOTH players), so
-  // strip them from the def the shared rules section would otherwise print —
-  // no duplicated or overlapping text inside the card's text box.
-  const liveDef = { ...l.def, hp, ability: undefined, ultimate: undefined };
+  const L = p.leader;
+  const badge = L.shattered
+    ? 'SHATTERED'
+    : L.invoked
+      ? `RESOLVE ${L.resolve}`
+      : `IN LEADER ZONE`;
   return (
-    <div
-      className={cn(
-        'shrink-0 relative w-[140px] flex flex-col gap-0.5',
-        flash && 'gv4-attack-flash',
-        highlight && 'ring-4 ring-[var(--c-red)] rounded-[6px]',
-        acting && 'gv4-cpu-actor',
-        acted && 'gv4-cpu-target',
-      )}
-    >
-      <CardFace
-        def={liveDef}
-        size="standard"
-        maxHp={maxHp}
-        introduceKeywords
-        onClick={onClickTarget ?? onInspect}
-        badge={resolveOn ? `RESOLVE −${l.def.resolve!.x}` : toll > 0 ? `TOLL −${toll}` : undefined}
-      />
-      {ab && (
-        <AbilityPill
-          label={`BASE ABILITY ${abThr}+${abThr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
-          desc={
-            describeEffect(ab.effect) +
-            (l.def.abilityNoRepeatTarget ? " (can't repeat last turn's target)" : '') +
-            (l.def.abilityGrantsTempo ? " — next Unit cast this turn skips summoning sickness" : '')
+    <div className={cn('shrink-0 relative w-[140px] flex flex-col gap-0.5', flash && 'gv4-attack-flash')}>
+      <div
+        role={onVitClick ? 'button' : undefined}
+        tabIndex={onVitClick ? 0 : undefined}
+        onClick={onVitClick}
+        onKeyDown={(e) => {
+          if (!onVitClick) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onVitClick();
           }
-          usable={isHuman && !abilityWhy}
-          used={l.abilityUsed}
-          why={isHuman ? abilityWhy : 'Opponent ability — shown for information'}
-          onClick={isHuman ? onAbility : undefined}
+        }}
+        title={`${isHuman ? 'Your' : "Opponent's"} Vitality — win by reducing the opponent's to 0`}
+        className={cn(
+          'relative flex items-center justify-between px-2 py-1 ink-border-sm heading-font',
+          isHuman ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-red)] text-white',
+          vitTargetable && 'ring-4 ring-[var(--c-red)] cursor-pointer',
+        )}
+      >
+        <span className="text-[9px]">VITALITY</span>
+        <span className="text-xl leading-none">{Math.max(0, p.vitality)}</span>
+        <FloatLayer floats={floats} />
+      </div>
+      <div className={cn('relative', L.shattered && 'grayscale opacity-60')}>
+        <CardFace
+          def={L.def}
+          size="standard"
+          badge={badge}
+          introduceKeywords
+          onClick={onInspect}
         />
+      </div>
+      {isHuman && !L.invoked && !L.shattered && (
+        <button
+          onClick={onInvoke}
+          disabled={!!invokeWhy}
+          title={invokeWhy}
+          className={cn(
+            'heading-font text-[9px] px-2 py-1 ink-border-sm',
+            invokeWhy
+              ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60 cursor-not-allowed'
+              : 'btn-pop bg-[var(--c-red)] text-white',
+          )}
+        >
+          ⚜ INVOKE LEADER
+        </button>
       )}
-      {ult && (
-        <AbilityPill
-          label={`ULTIMATE t${ult.unlockTurn}+, die ${ult.threshold}+:`}
-          desc={describeEffect(ult.effect)}
-          usable={isHuman && !ultimateWhy}
-          used={l.ultimateUsed}
-          usedLabel="SPENT"
-          why={isHuman ? ultimateWhy : 'Opponent ultimate — shown for information'}
-          onClick={isHuman ? onUltimate : undefined}
-          accent="red"
-        />
-      )}
-      <FloatLayer floats={floats} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// The player's Location — a full CardFace (standard size) with its Ability
-// Slot as a labeled pill below, matching the leader/unit presentation.
-// ---------------------------------------------------------------------------
-function LocationPanel({
-  g,
-  loc,
-  onAbility,
-  abilityWhy,
-  isRallySource,
-  onRallyClick,
-  onInspect,
-  floats,
-}: {
-  g: Game;
-  loc: Inst;
-  onAbility?: () => void;
-  abilityWhy?: string;
-  isRallySource?: boolean;
-  onRallyClick?: () => void;
-  onInspect?: () => void;
-  floats?: DmgFloat[];
-}) {
-  const ab = loc.def.ability;
-  const thr = ab ? effAbilityThreshold(g, loc) : null;
-  return (
-    <div
-      className={cn(
-        'relative shrink-0 w-[140px] flex flex-col gap-0.5',
-        isRallySource && 'ring-4 ring-[#8E44AD] rounded-[4px] cursor-pointer',
-      )}
-    >
-      <CardFace
-        // Ability renders as the labeled pill below (see AbilityPill) —
-        // strip it from the def the shared rules section would otherwise
-        // print, same as LeaderPanel already does, so the cost/effect isn't
-        // shown twice on screen at once.
-        def={{ ...loc.def, ability: undefined }}
-        size="standard"
-        introduceKeywords
-        onClick={isRallySource ? onRallyClick : onInspect}
-      />
-      {ab && (
-        <AbilityPill
-          label={`BASE ABILITY ${thr}+${thr !== ab.threshold ? ` (was ${ab.threshold}+)` : ''}:`}
-          desc={describeEffect(ab.effect)}
-          usable={!abilityWhy}
-          used={loc.abilityUsed}
-          why={abilityWhy}
-          onClick={onAbility}
-        />
-      )}
-      <FloatLayer floats={floats} />
+      {L.invoked &&
+        !L.shattered &&
+        (L.def.leaderAbilities ?? []).map((ab, i) => (
+          <AbilityPill
+            key={i}
+            label={`${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}:`}
+            desc={ab.text ?? describeEffect(ab.effect)}
+            usable={isHuman && !abilityWhy?.(i)}
+            used={L.abilityUsedThisTurn}
+            why={
+              isHuman ? abilityWhy?.(i) : 'Opponent Leader ability — shown for information'
+            }
+            onClick={isHuman && onAbility ? () => onAbility(i) : undefined}
+          />
+        ))}
     </div>
   );
 }
@@ -718,124 +745,54 @@ function LocationPanel({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type Stage =
-  'mulligan' | 'awaitRoll' | 'rolling' | 'preRoll' | 'placement' | 'combat' | 'cpu' | 'over';
+type Stage = 'mulligan' | 'play' | 'cpu' | 'cpuGuard' | 'over';
 
-const ROLL_ANIM_MS = 650;
+const PHASE_LABEL: Record<GameState['phase'], string> = {
+  Dawn: 'DAWN',
+  Main1: 'MAIN I',
+  Clash: 'CLASH',
+  Main2: 'MAIN II',
+  Dusk: 'DUSK',
+};
+const PHASE_ORDER: GameState['phase'][] = ['Dawn', 'Main1', 'Clash', 'Main2', 'Dusk'];
 
-// ---------------------------------------------------------------------------
-// v4.26: slow, step-by-step CPU turn playback. The AI is synchronous (the
-// whole turn is computed in one call), but playTurn's presentational
-// observer (ai.ts CpuTurnObserver) reports every distinct action it takes,
-// and a lightweight board snapshot is captured after each one. The UI then
-// REPLAYS those snapshots one action at a time: the board visibly changes
-// with each step, the acting card and its target pulse, damage/heal
-// numbers float, and a banner narrates ("casts Silver Chimera", "attacks
-// your Leader with …"). All pacing tunables live here.
-// ---------------------------------------------------------------------------
+/** Pacing for the narrated replay of the CPU's turn. */
 const CPU_PACE = {
-  /** "Opponent is thinking…" beat before its first action appears. */
-  THINK_MS: 1000,
-  /** Default dwell per narrated action (casts, abilities, echoes, twins…). */
-  STEP_MS: 1250,
-  /** Attacks linger longer so the damage visibly lands before moving on. */
-  ATTACK_MS: 1600,
-  /** Low-salience housekeeping (roll, reroll, scrap, end-of-turn). */
-  MINOR_MS: 850,
+  THINK_MS: 900,
+  BEAT_MS: 1000,
 } as const;
 
-type CpuStepKind = CpuTurnEvent['kind'];
+/** A targeting/bonding choice in progress — resolved by clicking a
+ * highlighted card (or Vitality plate). */
+type Pending =
+  | { kind: 'invoke'; cardIid: string; effect: Effect }
+  | { kind: 'bond'; cardIid: string }
+  | { kind: 'leaderAbility'; idx: number; effect: Effect }
+  | { kind: 'rebond'; charmIid: string };
 
-const CPU_STEP_ICON: Record<CpuStepKind, string> = {
-  turnStart: '🎲',
-  reroll: '🎲',
-  snapCast: '⚡',
-  location: '📍',
-  scrap: '♻',
-  twinComplete: '👯',
-  twinAbandon: '↩',
-  cast: '✨',
-  echo: '🔁',
-  ability: '🔶',
-  ultimate: '💥',
-  rally: '⚡',
-  comboCheck: '🔗',
-  attack: '⚔',
-  endTurn: '🏁',
-};
-
-/** One replayable beat of the CPU's turn. */
-interface CpuStep {
-  kind: CpuStepKind;
-  /** Narration line, without the "<cpuLabel> " prefix. */
-  text: string;
-  /** Board state AFTER this action resolved (a render-only snapshot). */
-  snap: Game;
-  /** Cards the opponent acted WITH (pulse yellow). */
-  actorIids: string[];
-  /** Cards the action landed ON (pulse red, incl. anything damaged/healed). */
-  targetIids: string[];
-  /** Damage/heal numbers to float when this step appears. */
-  floats: DmgFloat[];
-  /** How long this step stays on screen before auto-advancing. */
-  ms: number;
+/** The human's one manual mulligan: shuffle the hand back and redraw the
+ * same number of cards (mirrors ai.ts maybeMulliganPlayer, but by choice).
+ * Module-level so the react-hooks immutability lint doesn't flag the
+ * in-place engine-state mutation the whole match UI is built on. */
+function mulliganRedraw(g: GameState): void {
+  const p = g.players[HUMAN];
+  const n = p.hand.length;
+  p.deck.push(...p.hand);
+  p.hand.length = 0;
+  for (let i = p.deck.length - 1; i > 0; i--) {
+    const j = Math.floor(g.rng() * (i + 1));
+    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+  }
+  for (let i = 0; i < n; i++) {
+    const c = p.deck.pop();
+    if (c) p.hand.push(c);
+  }
 }
 
-/** Render-only structural copy of the Game — every Inst/array the UI reads
- * is copied (defs stay shared; they're immutable), so later engine mutations
- * don't retroactively change an already-captured step. rng/stats are shared
- * by reference: the render path never touches them. */
-function cloneInstView(x: Inst): Inst {
-  return { ...x };
-}
-function clonePlayerView(p: Player): Player {
-  return {
-    ...p,
-    leader: cloneInstView(p.leader),
-    deck: [...p.deck],
-    hand: p.hand.map(cloneInstView),
-    discard: p.discard.map(cloneInstView),
-    banished: [...p.banished],
-    staging: p.staging.map(cloneInstView),
-    board: p.board.map(cloneInstView),
-    location: p.location ? cloneInstView(p.location) : null,
-    dice: p.dice.map((d) => ({ ...d })),
-  };
-}
-function cloneGameView(g: Game): Game {
-  const players: Record<string, Player> = {};
-  for (const pid of g.order) players[pid] = clonePlayerView(g.players[pid]);
-  return { ...g, players, log: [...g.log], pendingAftershocks: [...g.pendingAftershocks] };
-}
-
-/** Everything in play for one player (board + leader + location). */
-function inPlay(p: Player): Inst[] {
-  return [...p.board, p.leader, ...(p.location ? [p.location] : [])];
-}
-
-interface Pending {
-  kind: 'cast' | 'ability' | 'ultimate' | 'echo';
-  cardIid: string;
-  effect: Effect;
-  /** Set when this ability activation is a Rally (donated die from another
-   * already-exhausted permanent) rather than the card's own die. */
-  rallySourceIid?: string;
-  /** v4.3: multi-die selection for a 'sum'-cost card, in place of selDie. */
-  dieIndices?: number[];
-  /** v4.3: the single die committed when this cast was armed (e.g. auto-
-   * picked by the hand preview's CAST button) — takes precedence over
-   * whatever selDie happens to be by the time the target is clicked. */
-  dieIndex?: number;
-}
-
-/** v4.3: in-progress "build a dice sum" cast for a 'sum'-cost hand card.
- * `mode: 'echo'` reuses the same dice-picker for a 'sum'-cost Echo recast
- * (cardIid then refers to a discard-pile card, not a hand card). */
-interface SumCast {
-  cardIid: string;
-  sel: Set<number>;
-  mode?: 'echo';
-}
+/** The clash-pause sentinel: thrown out of playTurn's guard callback so the
+ * CPU's turn halts mid-clash with state.clash.step === 'guards', handing the
+ * guard decision to the human (see resolveCpuTurn / cpuGuard stage). */
+const CLASH_PAUSE: object = { clashPause: true };
 
 export function GameV4({
   humanDeck,
@@ -858,46 +815,28 @@ export function GameV4({
   onExit: () => void;
   onResult?: (won: boolean) => void;
   /** Post-match rewards from recordMatchResult(), shown on the game-over
-   * screen once the parent has recorded the result (null/undefined until
-   * then, or forever for guests). */
+   * screen once the parent has recorded the result. */
   reward?: MatchResult | null;
-  /** Set once the parent gives up retrying a failed recordMatchResult() —
-   * shown in place of the reward banner so a network/server error doesn't
-   * just look like the reward never showed up. */
+  /** Set once the parent gives up retrying a failed recordMatchResult(). */
   rewardError?: string | null;
-  /** True while the parent's recordMatchResult() call (incl. retries) is
-   * still in flight — distinguishes "reward hasn't arrived yet" from the
-   * guest case (reward stays null forever), so the game-over screen can
-   * show a placeholder instead of a blank gap. */
+  /** True while the parent's recordMatchResult() call is still in flight. */
   rewardPending?: boolean;
 }) {
-  // The engine Game object is mutated in place by engine actions; it lives in
+  // The engine GameState is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
-  const [g] = useState<Game>(() => {
-    const game = newGame(humanDeck, cpuDeck, mulberry32(Date.now() % 2147483647));
-    // Give the CPU the same opening-hand judgment the playtest harness always
-    // gave it (maybeMulliganPlayer) — the human's own mulligan stays a manual
-    // UI decision below, but leaving the CPU's hand un-mulliganed made it
-    // meaningfully weaker/more random here than in every simulated game.
-    maybeMulliganPlayer(game, 'B', game.rng);
+  const [g] = useState<GameState>(() => {
+    const game = createGame(humanDeck, cpuDeck, POOL_BY_ID, {
+      rng: mulberry32(Date.now() % 2147483647),
+    });
+    // Give the CPU the same opening-hand judgment the playtest harness gives
+    // it — the human's own mulligan stays a manual UI decision below.
+    maybeMulliganPlayer(game, CPU, game.rng);
     return game;
   });
-  const HUMAN = 'A';
-  const CPU = 'B';
 
-  // v4.26 CPU playback: while the opponent's turn replays, the UI renders
-  // from the current step's SNAPSHOT (so the board advances one action at a
-  // time) instead of the live, already-finished engine state.
-  const [cpuStep, setCpuStep] = useState<{ step: CpuStep; idx: number; total: number } | null>(
-    null,
-  );
-  const view = cpuStep ? cpuStep.step.snap : g;
-  const me = view.players[HUMAN];
-  const foe = view.players[CPU];
-  const cpuActors = new Set(cpuStep ? cpuStep.step.actorIids : []);
-  const cpuTargets = new Set(cpuStep ? cpuStep.step.targetIids : []);
-  const cpuAttackStep = cpuStep?.step.kind === 'attack';
+  const me = g.players[HUMAN];
+  const foe = g.players[CPU];
 
   const [, setVersion] = useState(0);
   const bump = () => {
@@ -907,73 +846,40 @@ export function GameV4({
 
   const [stage, setStage] = useState<Stage>('mulligan');
   const [mulliganUsed, setMulliganUsed] = useState(false);
-  const [selDie, setSelDie] = useState<number | null>(null);
-  const [rerollSel, setRerollSel] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<Pending | null>(null);
-  // v4.3: 'sum'-cost card whose dice selection is currently being built.
-  const [sumCast, setSumCast] = useState<SumCast | null>(null);
-  // A Rally activation in progress: the card whose ability is being
-  // triggered for free, awaiting the player to pick a donor permanent
-  // (an already-exhausted ability user with a high-enough resting die).
-  const [rallyPick, setRallyPick] = useState<string | null>(null);
-  const [attacker, setAttacker] = useState<string | null>(null);
-  // Echo card awaiting fodder — targetIid is set first if the recast effect needs one.
-  const [echoPick, setEchoPick] = useState<{
-    cardIid: string;
-    targetIid?: string;
-    /** v4.3: the dice picked to pay a 'sum'-cost card's Echo recast, carried
-     * from confirmSumEcho through the fodder-discard step below. */
-    dieIndices?: number[];
-  } | null>(null);
-  const [showDiscard, setShowDiscard] = useState(false);
-  // In-game replacement for window.confirm — native confirm dialogs look
-  // jarring against the styled UI and are easy to accidentally dismiss with
-  // a stray tap outside on mobile.
+  // Clash (attacking): the attacker iids toggled on before declaring.
+  const [atkSel, setAtkSel] = useState<Set<string>>(new Set());
+  // Clash (defending, stage 'cpuGuard'): guard assignment under construction.
+  const [guardSel, setGuardSel] = useState<GuardAssignments>({});
+  const [guardFocus, setGuardFocus] = useState<string | null>(null);
+  // CPU-turn narration: one log line at a time.
+  const [cpuBeat, setCpuBeat] = useState<{ text: string; idx: number; total: number } | null>(null);
+  const [showAsh, setShowAsh] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     text: string;
     onConfirm: () => void;
   } | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
-  // v4.8 QoL: the Battle Log is the only record of combos/ward spikes/
-  // fatigue — allow expanding it beyond the 58px strip.
   const [logExpanded, setLogExpanded] = useState(false);
-  // v4.3 hand preview: the hand card currently enlarged above the bottom
-  // dock (hover opens it, click pins it so it survives the mouse leaving).
+  // Hand preview: the hand card currently enlarged above the bottom dock.
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
-  // v4.3 combat feedback: floating damage numbers (diffed per bump), a big
-  // phase banner on stage changes, and a brief flash on attacker/target.
+  // Combat feedback: floating damage numbers + attack flashes + phase banner.
   const [floats, setFloats] = useState<DmgFloat[]>([]);
   const [phaseFx, setPhaseFx] = useState<string | null>(null);
-  const [attackFx, setAttackFx] = useState<{ attacker: string; target: string } | null>(null);
+  const [flashIids, setFlashIids] = useState<Set<string>>(new Set());
   const damageMemoRef = useRef<Map<string, number>>(new Map());
   const floatIdRef = useRef(0);
-  const phaseTimeoutRef = useRef<number | null>(null);
-  const attackFxTimeoutRef = useRef<number | null>(null);
-  const [forcedDiscard, setForcedDiscard] = useState<{ needed: number; picks: string[] } | null>(
-    null,
-  );
   const resultSent = useRef(false);
   const cpuTimeoutRef = useRef<number | null>(null);
   const bannerTimeoutRef = useRef<number | null>(null);
-  const rollTimeoutRef = useRef<number | null>(null);
-  // Every batch of damage floats schedules its own removal timeout — tracked
-  // here so they can all be cancelled on unmount (e.g. conceding mid-combat),
-  // instead of firing later and calling setFloats on an unmounted component.
+  const phaseTimeoutRef = useRef<number | null>(null);
+  const flashTimeoutRef = useRef<number | null>(null);
   const floatTimeoutsRef = useRef<Set<number>>(new Set());
-  // v4.26: CPU turn playback — the AI's whole turn is computed up front (it
-  // has no resumable/step mode), but the observer hook captures a CpuStep
-  // (snapshot + narration + highlights) per action, and these refs drive the
-  // timed replay. cpuStep (declared above, it feeds `view`) is the currently
-  // visible step.
-  const cpuStepsRef = useRef<CpuStep[]>([]);
-  const cpuStepIdxRef = useRef(0);
-  const cpuTurnPlayedRef = useRef(false);
-  // Which die indices are mid-animation (spinning through random faces)
-  // right now — driven by a rolling stage or a reroll, cleared once the
-  // settle timeout fires.
-  const [rollingDice, setRollingDice] = useState<Set<number>>(new Set());
+  const cpuBeatsRef = useRef<string[]>([]);
+  const cpuBeatIdxRef = useRef(0);
+  const cpuDoneRef = useRef<(() => void) | null>(null);
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -988,17 +894,15 @@ export function GameV4({
     () => () => {
       if (cpuTimeoutRef.current !== null) window.clearTimeout(cpuTimeoutRef.current);
       if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
-      if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
       if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
-      if (attackFxTimeoutRef.current !== null) window.clearTimeout(attackFxTimeoutRef.current);
+      if (flashTimeoutRef.current !== null) window.clearTimeout(flashTimeoutRef.current);
       for (const id of floatTimeoutsRef.current) window.clearTimeout(id);
       floatTimeoutsRef.current.clear();
     },
     [],
   );
 
-  /** Show a batch of damage/heal floats and schedule their removal (guarded
-   * against unmount via floatTimeoutsRef). Hoisted so bump() can call it. */
+  /** Show a batch of damage/heal floats and schedule their removal. */
   function spawnFloats(fresh: DmgFloat[]) {
     if (fresh.length === 0) return;
     setFloats((f) => [...f, ...fresh]);
@@ -1010,16 +914,14 @@ export function GameV4({
     floatTimeoutsRef.current.add(timeoutId);
   }
 
-  /** Diff every in-play card's accumulated damage against the last bump and
-   * spawn a floating "-N" over anything that just took a hit — and (v4.26)
-   * a green "+N" over anything that just got healed (Pitch, Mend), so heals
-   * read with the same visual grammar as damage. Hoisted function
-   * declaration so bump() (defined above) can call it safely. */
+  /** Diff every unit's marked damage and both players' Vitality against the
+   * last bump, floating "-N"/"+N" over whatever changed. */
   function recordDamageFloats() {
     const seen = new Map<string, number>();
     const fresh: DmgFloat[] = [];
-    for (const pid of g.order) {
-      for (const u of inPlay(g.players[pid])) {
+    for (const pid of ['P1', 'P2'] as PlayerId[]) {
+      const p = g.players[pid];
+      for (const u of p.field) {
         seen.set(u.iid, u.damage);
         const prev = damageMemoRef.current.get(u.iid);
         if (prev !== undefined && u.damage > prev) {
@@ -1028,22 +930,21 @@ export function GameV4({
           fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: prev - u.damage, kind: 'heal' });
         }
       }
+      const vitKey = `vit:${pid}`;
+      seen.set(vitKey, p.vitality);
+      const prevVit = damageMemoRef.current.get(vitKey);
+      if (prevVit !== undefined && p.vitality < prevVit) {
+        fresh.push({ id: ++floatIdRef.current, iid: vitKey, amount: prevVit - p.vitality, kind: 'dmg' });
+      } else if (prevVit !== undefined && p.vitality > prevVit) {
+        fresh.push({ id: ++floatIdRef.current, iid: vitKey, amount: p.vitality - prevVit, kind: 'heal' });
+      }
     }
     damageMemoRef.current = seen;
     spawnFloats(fresh);
   }
-
-  /** Reset the damage memo to the CURRENT live state without spawning floats
-   * — used after CPU playback (whose steps already floated their own
-   * numbers) so the wrap-up bump() doesn't re-float the whole turn. */
-  function syncDamageMemo() {
-    const seen = new Map<string, number>();
-    for (const pid of g.order) for (const u of inPlay(g.players[pid])) seen.set(u.iid, u.damage);
-    damageMemoRef.current = seen;
-  }
   const floatsFor = (iid: string) => floats.filter((f) => f.iid === iid);
 
-  /** Big center-screen phase banner (ROLL / PLACEMENT / COMBAT / END). */
+  /** Big center-screen phase banner (MAIN I / CLASH / …). */
   const flashPhase = (label: string) => {
     setPhaseFx(label);
     if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
@@ -1053,11 +954,17 @@ export function GameV4({
     }, 1150);
   };
 
-  // v4.19 hover intent: the hand preview only switches after the cursor has
-  // rested ~80ms on a card — sweeping the mouse across the fan no longer
-  // strobes the big preview through every card it crosses, and the lifted
-  // card animating out from under the cursor can't cause enter/leave
-  // oscillation (the hit area lives on a stationary wrapper, see the fan).
+  /** Brief brightness flash on a set of clash participants. */
+  const flashUnits = (iids: string[]) => {
+    setFlashIids(new Set(iids));
+    if (flashTimeoutRef.current !== null) window.clearTimeout(flashTimeoutRef.current);
+    flashTimeoutRef.current = window.setTimeout(() => {
+      setFlashIids(new Set());
+      flashTimeoutRef.current = null;
+    }, 680);
+  };
+
+  // Hand-preview hover intent (rest ~80ms before switching).
   const hoverIntentRef = useRef<number | null>(null);
   const clearHoverIntent = () => {
     if (hoverIntentRef.current !== null) {
@@ -1073,257 +980,47 @@ export function GameV4({
     }, 80);
   };
   useEffect(() => clearHoverIntent, []);
-
   const closePreview = () => {
     clearHoverIntent();
     setPreview(null);
     setPreviewPinned(false);
   };
 
-  // ---- turn driving -------------------------------------------------------
-  // Values are rolled by the engine immediately (startTurn), but they stay
-  // hidden (face-down) until the human player clicks ROLL DICE themselves —
-  // that click is what triggers the reveal animation, so it reads as the
-  // player's own roll rather than numbers just appearing.
-  const beginHumanTurn = () => {
-    // Read from the LIVE player, not the render-scope `me` (which can still
-    // be a CPU-playback snapshot in the closure that calls this).
-    const human = g.players[HUMAN];
-    const fatigueBefore = human.fatigue;
-    startTurn(g);
-    bump();
+  const checkWinner = (): boolean => {
     if (g.winner) {
+      bump();
       setStage('over');
-      return;
+      return true;
     }
-    // v4.8 QoL: Fatigue used to be a Battle Log whisper — surface the
-    // escalating self-damage with the same banner treatment big plays get.
-    if (human.fatigue > fatigueBefore) {
-      say(`OUT OF CARDS — Fatigue deals ${human.fatigue} damage (and it keeps climbing)`);
-    }
-    setRerollSel(new Set());
-    setSelDie(null);
-    setPending(null);
-    // Clear every selection overlay that could have been left armed when the
-    // previous turn ended (sum-cast, Rally donor pick, Echo fodder pick,
-    // attacker) — otherwise e.g. an unconfirmed sum-cast bar from last turn
-    // sticks around and keeps the dice tray in sum-select mode.
-    setSumCast(null);
-    setRallyPick(null);
-    setEchoPick(null);
-    setAttacker(null);
-    closePreview();
-    setStage('awaitRoll');
+    return false;
   };
 
-  const doRollDice = () => {
-    flashPhase('ROLL');
-    setStage('rolling');
-    // Dice are already rolled by startTurn — render however many exist, so
-    // animate however many the engine actually dealt.
-    setRollingDice(new Set(me.dice.map((_, i) => i)));
-    if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
-    rollTimeoutRef.current = window.setTimeout(() => {
-      rollTimeoutRef.current = null;
-      setRollingDice(new Set());
-      setStage('preRoll');
-    }, ROLL_ANIM_MS);
-  };
-
-  // ---- v4.26 CPU turn playback ------------------------------------------
-  /** Possessive, side-aware name for an action's explicit target — read from
-   * the LIVE game mid-playTurn, right after the action resolved (so a target
-   * that just died is still found in its discard pile). */
-  const cpuTargetName = (targetIid: string): string | undefined => {
-    if (targetIid === g.players[HUMAN].leader.iid) return 'your Leader';
-    if (targetIid === g.players[CPU].leader.iid) return 'its own Leader';
-    for (const pid of g.order) {
-      const pl = g.players[pid];
-      const hit = [...inPlay(pl), ...pl.hand, ...pl.discard].find((x) => x.iid === targetIid);
-      if (hit) return pid === HUMAN ? `your ${hit.def.name}` : `its ${hit.def.name}`;
-    }
-    return undefined;
-  };
-
-  const diceFaces = (dice?: number[]) =>
-    dice && dice.length > 0 ? dice.map((v) => DIE_FACES[v - 1] ?? `${v}`).join(' ') : '';
-
-  /** Narration line for one CPU action (rendered as "<cpuLabel> <text>"). */
-  const cpuStepText = (ev: CpuTurnEvent): string => {
-    const tgt = ev.targetIid ? cpuTargetName(ev.targetIid) : undefined;
-    const withDice = ev.dice && ev.dice.length > 0 ? ` with ${diceFaces(ev.dice)}` : '';
-    switch (ev.kind) {
-      case 'turnStart':
-        return `draws, then rolls ${diceFaces(ev.dice)}`;
-      case 'reroll':
-        return `rerolls ${ev.dice?.length === 1 ? 'a die' : `${ev.dice?.length ?? 0} dice`} → ${diceFaces(ev.dice)}`;
-      case 'snapCast':
-        return `Snap-casts ${ev.name}${withDice}${tgt ? ` on ${tgt}` : ''}`;
-      case 'location':
-        return `plays its Location ${ev.name} (free)`;
-      case 'scrap':
-        return `Scraps ${ev.name} to reroll a die → ${diceFaces(ev.dice)}`;
-      case 'twinComplete':
-        return `completes Twin ${ev.name} — it enters play`;
-      case 'twinAbandon':
-        return `abandons staged ${ev.name}`;
-      case 'cast':
-        return `casts ${ev.name}${withDice}${tgt ? ` targeting ${tgt}` : ''}`;
-      case 'echo':
-        return `Echoes ${ev.name} back from its discard pile${tgt ? ` targeting ${tgt}` : ''}`;
-      case 'ability':
-        return `uses ${ev.name}'s Ability${withDice}`;
-      case 'ultimate':
-        return `unleashes ${ev.name}'s ULTIMATE${withDice}`;
-      case 'rally':
-        return `Rallies ${ev.name}'s Ability (free)`;
-      case 'comboCheck':
-        return 'checks for Combos…';
-      case 'attack':
-        return `attacks ${tgt ?? ev.targetName ?? 'a target'} with ${ev.name}`;
-      case 'endTurn':
-        return 'ends its turn';
-    }
-  };
-
-  const cpuStepMs = (kind: CpuStepKind): number => {
-    if (kind === 'attack') return CPU_PACE.ATTACK_MS;
-    if (
-      kind === 'turnStart' ||
-      kind === 'reroll' ||
-      kind === 'scrap' ||
-      kind === 'twinAbandon' ||
-      kind === 'comboCheck' ||
-      kind === 'endTurn'
-    )
-      return CPU_PACE.MINOR_MS;
-    return CPU_PACE.STEP_MS;
-  };
-
-  /** Damage/heal deltas between two snapshots — this step's floating numbers. */
-  const diffSnapshots = (prev: Game, next: Game): DmgFloat[] => {
-    const out: DmgFloat[] = [];
-    for (const pid of next.order) {
-      const before = new Map<string, number>();
-      for (const u of inPlay(prev.players[pid])) before.set(u.iid, u.damage);
-      for (const u of inPlay(next.players[pid])) {
-        const b = before.get(u.iid);
-        if (b === undefined) continue;
-        if (u.damage > b)
-          out.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - b, kind: 'dmg' });
-        else if (u.damage < b)
-          out.push({ id: ++floatIdRef.current, iid: u.iid, amount: b - u.damage, kind: 'heal' });
-      }
-    }
-    return out;
-  };
-
-  // Wrap up playback: back to live state, memo synced (each step already
-  // floated its own numbers), and the human's turn begins.
-  const finishCpuPlayback = () => {
-    setCpuStep(null);
-    syncDamageMemo();
+  // ---- mulligan (human; the CPU's ran at setup) ---------------------------
+  const doMulligan = () => {
+    mulliganRedraw(g);
+    setMulliganUsed(true);
     bump();
-    if (g.winner) {
-      setStage('over');
-      return;
-    }
-    beginHumanTurn();
   };
 
-  // Show the next captured CPU step (or wrap up once they're exhausted).
-  const tickCpuStep = () => {
-    cpuTimeoutRef.current = null;
-    const steps = cpuStepsRef.current;
-    const i = cpuStepIdxRef.current;
-    if (i >= steps.length) {
-      finishCpuPlayback();
-      return;
-    }
-    const step = steps[i];
-    cpuStepIdxRef.current = i + 1;
-    setCpuStep({ step, idx: i, total: steps.length });
-    spawnFloats(step.floats);
-    cpuTimeoutRef.current = window.setTimeout(tickCpuStep, step.ms);
+  const afterMulligan = () => {
+    // createGame already ran the human's first Dawn — the match opens in
+    // P1's Main I.
+    damageMemoRef.current = new Map();
+    recordDamageFloats(); // seed the memo without floats (first pass)
+    setFloats([]);
+    setStage('play');
+    flashPhase('MAIN I');
   };
 
-  // Plays the CPU's entire turn (the AI has no resumable/step mode), while
-  // the observer captures a snapshot + narration per distinct action; the
-  // steps then replay on a timer so the board advances one action at a time
-  // instead of snapping straight to the post-turn result.
-  const resolveCpuTurn = () => {
-    cpuTimeoutRef.current = null;
-    let prev = cloneGameView(g);
-    const steps: CpuStep[] = [];
-    playTurn(g, (ev) => {
-      const snap = cloneGameView(g);
-      const floats = diffSnapshots(prev, snap);
-      // A Combo Check that visibly did nothing isn't worth a beat on screen.
-      if (ev.kind === 'comboCheck' && floats.length === 0 && snap.log.length === prev.log.length) {
-        prev = snap;
-        return;
-      }
-      steps.push({
-        kind: ev.kind,
-        text: cpuStepText(ev),
-        snap,
-        actorIids: ev.iid ? [ev.iid] : [],
-        targetIids: [
-          ...new Set([...(ev.targetIid ? [ev.targetIid] : []), ...floats.map((f) => f.iid)]),
-        ].filter((iid) => iid !== ev.iid),
-        floats,
-        ms: cpuStepMs(ev.kind),
-      });
-      prev = snap;
-    });
-    cpuTurnPlayedRef.current = true;
-    cpuStepsRef.current = steps;
-    cpuStepIdxRef.current = 0;
-    tickCpuStep();
-  };
-
-  const runCpuTurn = () => {
-    setStage('cpu');
-    setCpuStep(null);
-    cpuTurnPlayedRef.current = false;
-    cpuStepsRef.current = [];
-    cpuStepIdxRef.current = 0;
-    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_PACE.THINK_MS);
-  };
-
-  // Lets an impatient player skip straight to the end of the CPU's turn,
-  // whether it's still "thinking" or partway through the replay. Clears all
-  // timers first so an interrupted animation can never soft-lock the turn.
-  const skipCpuDelay = () => {
-    if (cpuTimeoutRef.current !== null) {
-      window.clearTimeout(cpuTimeoutRef.current);
-      cpuTimeoutRef.current = null;
+  // Report the result once.
+  useEffect(() => {
+    if (stage === 'over' && g.winner && !resultSent.current) {
+      resultSent.current = true;
+      onResult?.(g.winner === HUMAN);
     }
-    if (!cpuTurnPlayedRef.current) {
-      playTurn(g);
-      cpuTurnPlayedRef.current = true;
-    }
-    cpuStepIdxRef.current = cpuStepsRef.current.length;
-    finishCpuPlayback();
-  };
+  }, [stage, g.winner, onResult]);
 
-  // Click-to-fast-forward one step: jump to the next action immediately
-  // instead of waiting out the current step's dwell (a click while the CPU
-  // is still "thinking" starts the replay right away).
-  const advanceCpuStep = () => {
-    if (cpuTimeoutRef.current !== null) {
-      window.clearTimeout(cpuTimeoutRef.current);
-      cpuTimeoutRef.current = null;
-    }
-    if (!cpuTurnPlayedRef.current) {
-      resolveCpuTurn();
-      return;
-    }
-    tickCpuStep();
-  };
-
-  // Conceding is a resignation, not a free way to dodge a loss on the
-  // record — report it the same as an in-game defeat before exiting.
+  // Conceding is a resignation, not a free way to dodge a loss on the record.
   const concede = () => {
     if (stage !== 'over' && !resultSent.current) {
       resultSent.current = true;
@@ -1332,851 +1029,527 @@ export function GameV4({
     onExit();
   };
 
-  const afterMulligan = () => {
-    if (g.active === HUMAN) beginHumanTurn();
-    else runCpuTurn();
-  };
-
-  // Report the result once.
-  useEffect(() => {
-    if (stage === 'over' && g.winner && !resultSent.current) {
-      resultSent.current = true;
-      if (g.winner !== 'draw') onResult?.(g.winner === HUMAN);
-    }
-  }, [stage, g.winner, onResult]);
-
-  // Escape closes whatever overlay is frontmost, and backs out of a pending
-  // targeting/attack selection — the same "cancel" affordance as the visible
-  // ✕ buttons, just reachable without a mouse.
+  // Escape closes whatever overlay is frontmost / cancels a pending pick.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      // The confirm dialog (e.g. "Concede this match?") is always the
-      // frontmost overlay when open — check it first so Escape dismisses it
-      // instead of falling through and silently cancelling whatever state it
-      // happens to be occluding underneath.
       if (confirmDialog) setConfirmDialog(null);
       else if (inspect) setInspect(null);
       else if (preview) {
         setPreview(null);
         setPreviewPinned(false);
       } else if (pending) setPending(null);
-      else if (sumCast) setSumCast(null);
-      else if (rallyPick) setRallyPick(null);
-      else if (showDiscard) {
-        setShowDiscard(false);
-        setEchoPick(null);
-      } else if (echoPick) setEchoPick(null);
-      else if (attacker) setAttacker(null);
+      else if (showAsh) setShowAsh(false);
+      else if (atkSel.size > 0) setAtkSel(new Set());
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmDialog, inspect, showDiscard, echoPick, pending, sumCast, rallyPick, attacker, preview]);
+  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel]);
 
-  // ---- mulligan (human only; CPU keeps — its opening heuristic is baked into play) ----
-  const doMulligan = () => {
-    mulliganRedraw(g, HUMAN);
-    setMulliganUsed(true);
-    bump();
-  };
+  // ---- essence & invoking -------------------------------------------------
+  const inMyMain =
+    stage === 'play' &&
+    g.active === HUMAN &&
+    (g.phase === 'Main1' || g.phase === 'Main2') &&
+    !g.clash;
+  /** The human's reaction window: guarding step resolved, damage not yet. */
+  const inMyReaction = g.clash?.step === 'reaction' && g.active === CPU;
+  const canTapNow = inMyMain || inMyReaction;
 
-  // ---- placement helpers --------------------------------------------------
-  const unplaced = me.dice.map((d, i) => ({ ...d, i })).filter((d) => !d.placed);
-  const dieVal =
-    selDie !== null && me.dice[selDie] && !me.dice[selDie].placed ? me.dice[selDie].value : null;
-
-  /** v4.3: `dieIdx` defaults to the tray selection but can be overridden by
-   * the hand preview's CAST button (which may auto-pick a paying die). */
-  const canCastNow = (c: Inst, dieIdx: number | null = selDie): { ok: boolean; why?: string } => {
-    if (c.def.type === 'Location') {
-      // Free Location casts are a Placement Phase bonus action (§7) — not
-      // available before or during the roll, same as every other cast (a
-      // `stage === 'preRoll'`-only check let a Location render as clickable
-      // during 'awaitRoll'/'rolling' too, since neither was excluded).
-      if (stage !== 'placement')
-        return { ok: false, why: 'Free Location cast happens during Placement' };
-      if (me.locationCastThisTurn) return { ok: false, why: 'Location already cast this turn' };
-      if (me.location?.def.id === c.def.id) return { ok: false, why: 'Same-name Location in play' };
-      return { ok: true };
-    }
-    if (stage !== 'placement' && stage !== 'preRoll')
-      return { ok: false, why: 'Casting happens during Placement' };
-    if (stage === 'preRoll' && !c.def.snap)
-      return { ok: false, why: 'Only Snap Charms before the reroll' };
-    const dv =
-      dieIdx !== null && me.dice[dieIdx] && !me.dice[dieIdx].placed ? me.dice[dieIdx].value : null;
-    if (c.def.comboGate) {
-      if (me.comboGateCastThisTurn) return { ok: false, why: 'One Combo-gated card per turn' };
-      if (!matchesPattern(rollValues(me), c.def.comboGate))
-        return { ok: false, why: `Roll lacks ${GATE_LABEL[c.def.comboGate] || c.def.comboGate}` };
-      if (dv === null) return { ok: false, why: 'Select a die' };
-      if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
-        return { ok: false, why: 'No legal target' };
-      return { ok: true };
-    }
-    const thr = effThreshold(g, HUMAN, c.def);
-    if (c.def.castCostKind === 'sum') {
-      const available = unplaced.reduce((s, d) => s + d.value, 0);
-      if (available < thr)
-        return { ok: false, why: `Needs dice totalling ${thr}+ (have ${available})` };
-      if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
-        return { ok: false, why: 'No legal target' };
-      return { ok: true };
-    }
-    if (dv === null) return { ok: false, why: 'Select a die' };
-    if (c.def.castCostKind === 'exact') {
-      if (dv !== thr) return { ok: false, why: `Needs exactly ${thr}` };
-    } else if (dv < thr) {
-      return { ok: false, why: `Needs ${thr}+` };
-    }
-    if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length === 0)
-      return { ok: false, why: 'No legal target' };
-    return { ok: true };
-  };
-
-  /** Whether SOME currently-unplaced die could pay this card's cost, without
-   * requiring one to already be selected — `canCastNow` alone reports every
-   * threshold/exact-cost card as illegal ("Select a die") until a specific
-   * die is picked first, so hand cards looked uncastable by default even
-   * when the roll could clearly pay for them. Used only to decide whether a
-   * card should look dimmed before the player has committed to a die. */
-  const canCastWithAnyDie = (c: Inst): boolean => {
-    if (c.def.type === 'Location') return canCastNow(c).ok;
-    // Mirror canCastNow's stage gating (casting is a Placement/Snap action).
-    if (stage !== 'placement' && stage !== 'preRoll') return false;
-    if (stage === 'preRoll' && !c.def.snap) return false;
-    // Mirrors canCastNow's branch order exactly (minus the "a die must
-    // already be selected" checks). Also requires an unplaced die to
-    // actually exist — canCastNow's own `dieVal === null` check implicitly
-    // forbids this once every die is placed, since selecting an
-    // already-placed die still yields dieVal null; this needs the same
-    // guard since it never reads dieVal at all.
-    if (c.def.comboGate)
-      return (
-        unplaced.length > 0 &&
-        !me.comboGateCastThisTurn &&
-        matchesPattern(rollValues(me), c.def.comboGate) &&
-        (!needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0)
-      );
-    const thr = effThreshold(g, HUMAN, c.def);
-    if (c.def.castCostKind === 'sum') {
-      if (unplaced.reduce((s, d) => s + d.value, 0) < thr) return false;
-      return !needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0;
-    }
-    const anyDieWorks =
-      c.def.castCostKind === 'exact'
-        ? unplaced.some((d) => d.value === thr)
-        : unplaced.some((d) => d.value >= thr);
-    if (!anyDieWorks) return false;
-    return !needsTarget(c.def.onCast) || targetsFor(g, HUMAN, c.def.onCast!).length > 0;
-  };
-
-  const tryCast = (c: Inst, dieIdx: number | null = selDie) => {
-    if (c.def.type === 'Location') {
-      const chk = canCastNow(c);
-      if (!chk.ok) {
-        say(chk.why || 'Illegal');
-        return;
+  /** Why can't this hand card be invoked right now? (undefined = it can) */
+  const invokeWhy = (c: { def: CardDef }): string | undefined => {
+    const def = c.def;
+    const quick = def.type === 'Event' && def.subtype === 'Quick';
+    const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
+    if (!inMyMain) {
+      if (inMyReaction) {
+        if (!quick && !ambush) return 'Only Quick Events / Ambush units in a reaction window';
+      } else {
+        return 'Invoke during your own main phases';
       }
-      if (castLocationFree(g, c.iid)) {
-        bump();
-        say(`${c.def.name} enters play (free).`);
-      } else say('Illegal placement.');
-      return;
     }
-    const chk = canCastNow(c, dieIdx);
-    if (!chk.ok) {
-      say(chk.why || 'Illegal');
-      return;
-    }
-    // 'sum'-cost cards (no comboGate) are cast by building a dice selection,
-    // not by picking a single die first — arm the sum-select overlay instead
-    // of casting immediately.
-    if (c.def.castCostKind === 'sum' && !c.def.comboGate) {
-      setSumCast({ cardIid: c.iid, sel: new Set() });
-      setSelDie(null);
-      say('Click dice to build the sum, then CAST.');
-      return;
-    }
-    if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
-      setPending({
-        kind: 'cast',
-        cardIid: c.iid,
-        effect: c.def.onCast!,
-        dieIndex: dieIdx ?? undefined,
-      });
-      return;
-    }
-    if (castFromHand(g, dieIdx!, c.iid)) {
-      setSelDie(null);
-      // A Snap cast can place a die that was marked for reroll — drop it from
-      // the selection so the mark doesn't linger on a disabled die.
-      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
+    if (!canAfford(me, def.cost)) return 'Not enough essence (even tapping every Location)';
+    if (def.type === 'Charm' && me.field.length === 0) return 'Needs a friendly unit to bond to';
+    return undefined;
+  };
+
+  /** Actually invoke a hand card (auto-taps Locations for its cost). */
+  const doInvoke = (cardIid: string, opts: { targetIid?: string; bondTargetIid?: string }) => {
+    const card = me.hand.find((c) => c.iid === cardIid);
+    if (!card) return;
+    autoTapFor(g, HUMAN, card.def.cost);
+    if (invokeCard(g, HUMAN, cardIid, opts)) {
       bump();
-      say(
-        hasKw(c.def, 'Twin')
-          ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later.`
-          : `${c.def.name} resolves.`,
-      );
-    } else say('Illegal placement.');
-    // A fixed-target cast (e.g. Sap enemyLeader) never opens the target
-    // picker above, so lethal damage can land right here — check for it,
-    // or the game-over screen never appears (the UI would just sit in
-    // Placement with the win already decided internally).
-    if (g.winner) setStage('over');
+      say(`${card.def.name} invoked.`);
+    } else {
+      bump(); // taps may have happened
+      say("Can't invoke that right now.");
+    }
+    checkWinner();
   };
 
-  /** v4.3: cheapest still-unplaced die that pays this card's single-die cost
-   * — lets the preview's CAST button work without a manual die pick first. */
-  const pickAutoDie = (c: Inst): number | null => {
-    if (c.def.type === 'Location') return null;
-    if (c.def.castCostKind === 'sum' && !c.def.comboGate) return null;
-    const thr = effThreshold(g, HUMAN, c.def);
-    const cands = unplaced
-      .filter((d) => {
-        if (c.def.comboGate) return true; // any die value pays a pattern gate
-        return c.def.castCostKind === 'exact' ? d.value === thr : d.value >= thr;
-      })
-      .sort((a, b) => a.value - b.value);
-    return cands.length > 0 ? cands[0].i : null;
-  };
-
-  /** CAST from the enlarged hand preview: reuse the selected die if it pays,
-   * otherwise auto-pick the cheapest one that does, then run the normal
-   * cast flow (sum-builder / target picker / immediate resolve). */
-  const castFromPreview = (c: Inst) => {
-    let dieIdx = selDie;
-    if (c.def.type !== 'Location' && !canCastNow(c, dieIdx).ok) {
-      const auto = pickAutoDie(c);
-      if (auto !== null) {
-        dieIdx = auto;
-        setSelDie(auto);
-      }
+  /** Click a hand card's INVOKE button: route through bond/target picking. */
+  const tryInvoke = (cardIid: string) => {
+    const card = me.hand.find((c) => c.iid === cardIid);
+    if (!card) return;
+    const why = invokeWhy(card);
+    if (why) {
+      say(why);
+      return;
     }
     closePreview();
-    tryCast(c, dieIdx);
-  };
-
-  // ---- 'sum'-cost casting: build a multi-die selection, then confirm ------
-  const cancelSumCast = () => setSumCast(null);
-
-  const toggleSumDie = (i: number) => {
-    setSumCast((sc) => {
-      if (!sc) return sc;
-      const sel = new Set(sc.sel);
-      if (sel.has(i)) sel.delete(i);
-      else sel.add(i);
-      return { ...sc, sel };
-    });
-  };
-
-  const confirmSumCast = () => {
-    if (!sumCast || sumCast.sel.size === 0) return;
-    const c = me.hand.find((h) => h.iid === sumCast.cardIid);
-    if (!c) {
-      setSumCast(null);
+    if (card.def.type === 'Charm') {
+      setPending({ kind: 'bond', cardIid });
+      say('Pick a friendly unit to bond the Charm to.');
       return;
     }
-    const dieIndices = [...sumCast.sel];
-    if (needsTarget(c.def.onCast) && targetsFor(g, HUMAN, c.def.onCast!).length > 0) {
-      setPending({ kind: 'cast', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
-      setSumCast(null);
+    if (needsTarget(card.def.onInvoke) && targetsFor(g, HUMAN, card.def.onInvoke!).length > 0) {
+      setPending({ kind: 'invoke', cardIid, effect: card.def.onInvoke! });
+      say('Pick a highlighted target.');
       return;
     }
-    if (castFromHand(g, dieIndices, c.iid)) {
-      // A Snap sum-cast during preRoll can place dice that were marked for
-      // reroll — drop them from the selection so the marks don't linger on
-      // disabled dice (same cleanup the single-die cast path does).
-      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
-      say(`${c.def.name} resolves.`);
+    doInvoke(cardIid, {});
+  };
+
+  const tryWellspring = (type: EssenceType) => {
+    if (playWellspring(g, HUMAN, type)) {
       bump();
-    } else say('Illegal placement.');
-    setSumCast(null);
-    if (g.winner) setStage('over');
+      say(`${type} Wellspring enters your Location row.`);
+    } else say('One Wellspring per turn, in your own main phase.');
   };
 
-  /** Echo waives the extra-discard "fodder" cost whenever the engine does —
-   * `SIM_TUNING.echoWaiveAllFodder || keywordTier(def,'Echo') >= 2` (Echo II,
-   * i.e. Rare+ under the legacy rarity split, which is BOTH mid- AND
-   * high-rarity). This must mirror engine.ts echoRecast exactly: gating the
-   * free-resolve on `rarityTier === 'mid'` alone (the old check) stranded
-   * high-rarity Echo cards in a fodder pick the engine then ignored — a
-   * phantom discard, or an outright "your hand is empty" block on a play the
-   * engine would have recast for free. */
-  const echoWaivesFodder = (def: CardDef) =>
-    SIM_TUNING.echoWaiveAllFodder || keywordTier(def, 'Echo') >= 2;
-  const startEchoRecast = (cardIid: string, dice: number | number[], targetIid?: string) => {
-    const c = me.discard.find((h) => h.iid === cardIid);
-    if (!c) return;
-    if (echoWaivesFodder(c.def)) {
-      if (echoRecast(g, dice, cardIid, undefined, targetIid)) {
-        setEchoPick(null);
-        setSelDie(null);
-        setSumCast(null);
-        setShowDiscard(false);
-        bump();
-        say(
-          hasKw(c.def, 'Twin')
-            ? `${c.def.name} staged — match a ${me.staging.find((s) => s.iid === c.iid)?.stagedDie} later (Echo cost waived).`
-            : `${c.def.name} echoes back into play (Echo cost waived).`,
-        );
-      } else {
-        say('Illegal Echo.');
-      }
-      if (g.winner) setStage('over');
-      return;
-    }
-    // Non-mid Echo needs a hand card as fodder (engine: echoRecast fails
-    // without one) — with an empty hand the fodder prompt would just strand
-    // the player in a pick that can never be completed.
-    if (me.hand.length === 0) {
-      say('Echo needs a card in hand to discard — your hand is empty.');
-      setEchoPick(null);
-      setSumCast(null);
-      return;
-    }
-    setEchoPick({ cardIid, dieIndices: Array.isArray(dice) ? dice : undefined, targetIid });
-    setSumCast(null);
-    say('Now pick a hand card to discard.');
+  const tryTapLocation = (loc: LocationInst) => {
+    if (tapLocationForEssence(g, HUMAN, loc.iid)) bump();
+    else say('Essence comes in your main phases (or your reaction window).');
   };
 
-  // ---- 'sum'-cost Echo recast: same dice-picker as confirmSumCast, but the
-  // card lives in discard and resolution still needs a fodder discard from
-  // hand — hands off to echoPick/tryEchoFodder instead of casting directly
-  // (unless mid-rarity, which startEchoRecast resolves right away).
-  const confirmSumEcho = () => {
-    if (!sumCast || sumCast.sel.size === 0) return;
-    const c = me.discard.find((h) => h.iid === sumCast.cardIid);
-    if (!c) {
-      setSumCast(null);
+  const leaderInvokeWhy = ((): string | undefined => {
+    const L = me.leader;
+    if (L.invoked || L.shattered) return undefined;
+    if (!inMyMain) return 'Invoke your Leader during your own main phases';
+    if (!canAfford(me, L.def.cost)) return 'Not enough essence (even tapping every Location)';
+    return undefined;
+  })();
+
+  const tryInvokeLeader = () => {
+    if (leaderInvokeWhy) {
+      say(leaderInvokeWhy);
       return;
     }
-    const dieIndices = [...sumCast.sel];
-    if (needsTarget(c.def.onCast)) {
-      if (targetsFor(g, HUMAN, c.def.onCast!).length === 0) {
-        say('No legal target.');
-        setSumCast(null);
-        return;
-      }
-      setPending({ kind: 'echo', cardIid: c.iid, effect: c.def.onCast!, dieIndices });
-      // Dice are captured in pending.dieIndices — disarm the SUM ECHO bar so
-      // dice clicks aren't stuck in sum-toggle mode behind the target picker.
-      setSumCast(null);
+    autoTapFor(g, HUMAN, me.leader.def.cost);
+    if (canInvokeLeader(g, HUMAN) && invokeLeader(g, HUMAN)) {
+      bump();
+      say(`${me.leader.def.name} takes the field.`);
+    } else say("Can't invoke your Leader right now.");
+  };
+
+  const leaderAbilityWhy = (idx: number): string | undefined => {
+    const L = me.leader;
+    if (!L.invoked || L.shattered) return 'Leader not on the field';
+    if (!inMyMain) return 'Leader abilities resolve during your main phases';
+    if (L.abilityUsedThisTurn) return 'One Leader ability per turn — already used';
+    const ab = L.def.leaderAbilities?.[idx];
+    if (!ab) return 'No such ability';
+    if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0)
+      return `Needs ${-ab.resolveDelta} Resolve (has ${L.resolve})`;
+    return undefined;
+  };
+
+  const tryLeaderAbility = (idx: number) => {
+    const why = leaderAbilityWhy(idx);
+    if (why) {
+      say(why);
       return;
     }
-    startEchoRecast(c.iid, dieIndices);
+    const ab = me.leader.def.leaderAbilities![idx];
+    if (needsTarget(ab.effect) && targetsFor(g, HUMAN, ab.effect).length > 0) {
+      setPending({ kind: 'leaderAbility', idx, effect: ab.effect });
+      say('Pick a highlighted target.');
+      return;
+    }
+    if (activateLeaderAbility(g, HUMAN, idx)) {
+      bump();
+      say('Leader ability resolves.');
+    } else say('Illegal.');
+    checkWinner();
+  };
+
+  const tryRebond = (charmIid: string) => {
+    if (!inMyMain) {
+      say('Re-bond during your own main phases.');
+      return;
+    }
+    const charm = me.wornCharms.find((c) => c.iid === charmIid);
+    if (!charm) return;
+    if (me.field.length === 0) {
+      say('No friendly unit to re-bond to.');
+      return;
+    }
+    const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
+    if (!canAfford(me, cost)) {
+      say(`Re-bond costs ${cost.generic} essence.`);
+      return;
+    }
+    setPending({ kind: 'rebond', charmIid });
+    say('Pick a friendly unit to re-bond the Charm to.');
+  };
+
+  // ---- pending-target resolution ------------------------------------------
+  const isPendingTarget = (iid: string): boolean => {
+    if (!pending) return false;
+    if (pending.kind === 'bond' || pending.kind === 'rebond') {
+      const u = findUnit(g, iid);
+      return !!u && u.owner === HUMAN;
+    }
+    return canTarget(g, HUMAN, pending.effect, iid);
   };
 
   const resolvePendingOn = (targetIid: string) => {
     if (!pending) return;
-    if (pending.kind === 'echo') {
-      // Echo (unless its fodder is waived — see startEchoRecast) still needs a
-      // fodder discard from hand: hand off to the fodder-picking step instead of
-      // resolving immediately, carrying the target (and, for a 'sum'-cost
-      // Echo, the dice already picked to pay it) along.
-      const dice = pending.dieIndices ?? selDie!;
-      setPending(null);
-      startEchoRecast(pending.cardIid, dice, targetIid);
-      return;
-    }
-    let ok = false;
-    if (pending.kind === 'cast')
-      ok = castFromHand(
-        g,
-        pending.dieIndices ?? pending.dieIndex ?? selDie!,
-        pending.cardIid,
-        targetIid,
-      );
-    else if (pending.kind === 'ability')
-      ok = pending.rallySourceIid
-        ? activateViaRally(g, pending.cardIid, pending.rallySourceIid, targetIid)
-        : activateAbility(g, pending.dieIndex ?? selDie!, pending.cardIid, targetIid);
-    else if (pending.kind === 'ultimate')
-      ok = activateUltimate(g, pending.dieIndex ?? selDie!, targetIid);
+    const p = pending;
     setPending(null);
-    if (ok) {
-      setSelDie(null);
-      // A Snap cast can place a die that was marked for reroll — drop it from
-      // the selection so the mark doesn't linger on a disabled die.
-      setRerollSel((s) => new Set([...s].filter((i) => !me.dice[i].placed)));
-      bump();
-    } else say('Illegal target.');
-    if (g.winner) setStage('over');
-  };
-
-  const tryAbility = (c: Inst) => {
-    if (stage !== 'placement') {
-      say('Abilities resolve during Placement.');
-      return;
-    }
-    if (!c.def.ability) return;
-    if (c.abilityUsed) {
-      say('Already used this turn.');
-      return;
-    }
-    if (dieVal === null) {
-      say('Select a die.');
-      return;
-    }
-    const thr = effAbilityThreshold(g, c);
-    if (dieVal < thr) {
-      say(`Needs ${thr}+.`);
-      return;
-    }
-    if (c.def.type === 'Unit' && c.hasAttacked) {
-      say('Attacked already — abilities locked.');
-      return;
-    }
-    if (c.def.type === 'Unit' && c.boundThisTurn) {
-      say(`Bound — can't act this turn.`);
-      return;
-    }
-    if (c.def.type === 'Unit' && c.enteredThisTurn && !hasKw(c.def, 'Swift')) {
-      say('Just played — can’t act yet.');
-      return;
-    }
-    if (needsTarget(c.def.ability.effect)) {
-      let ts = targetsFor(g, HUMAN, c.def.ability.effect);
-      // Mirror the engine's abilityNoRepeatTarget rule — last turn's target
-      // is never a legal explicit pick, so don't count (or later offer) it.
-      if (c.def.abilityNoRepeatTarget && c.lastAbilityTargetIid)
-        ts = ts.filter((t) => t.iid !== c.lastAbilityTargetIid);
-      if (ts.length === 0) {
-        say('No legal target.');
+    switch (p.kind) {
+      case 'invoke':
+        doInvoke(p.cardIid, { targetIid });
         return;
-      }
-      // Capture the paying die now, like 'cast' already does — selDie can
-      // change (or clear) between arming this targeted ability and the
-      // player actually clicking a target (e.g. casting an unrelated hand
-      // card off a different die in between), and resolvePendingOn used to
-      // trust whatever selDie happened to be by then instead of this one.
-      setPending({
-        kind: 'ability',
-        cardIid: c.iid,
-        effect: c.def.ability.effect,
-        dieIndex: selDie ?? undefined,
-      });
-      return;
-    }
-    if (activateAbility(g, selDie!, c.iid)) {
-      setSelDie(null);
-      bump();
-    } else say('Illegal.');
-    if (g.winner) setStage('over');
-  };
-
-  const tryRally = (u: Inst) => {
-    if (stage !== 'placement') {
-      say('Rally resolves during Placement.');
-      return;
-    }
-    if (!u.def.ability || u.abilityUsed) return;
-    if (u.hasAttacked || u.boundThisTurn) {
-      say(`Can't Rally — exhausted or bound.`);
-      return;
-    }
-    if (u.enteredThisTurn && !hasKw(u.def, 'Swift')) {
-      say('Just played — can’t act yet.');
-      return;
-    }
-    if (rallySourcesFor(g, HUMAN, u).length === 0) {
-      say('No exhausted permanent has a high-enough resting die.');
-      return;
-    }
-    if (needsTarget(u.def.ability.effect)) {
-      // Mirror the engine's abilityNoRepeatTarget rule (same filter tryAbility
-      // and the pendingTargets render-time computation already apply) so a
-      // Rally-able card whose only remaining legal target is last turn's
-      // target doesn't open a donor-pick UI that dead-ends into a target
-      // picker with nothing selectable.
-      let ts = targetsFor(g, HUMAN, u.def.ability.effect);
-      if (u.def.abilityNoRepeatTarget && u.lastAbilityTargetIid)
-        ts = ts.filter((t) => t.iid !== u.lastAbilityTargetIid);
-      if (ts.length === 0) {
-        say('No legal target.');
+      case 'bond':
+        doInvoke(p.cardIid, { bondTargetIid: targetIid });
+        return;
+      case 'leaderAbility':
+        if (activateLeaderAbility(g, HUMAN, p.idx, targetIid)) {
+          bump();
+          say('Leader ability resolves.');
+        } else say('Illegal target.');
+        checkWinner();
+        return;
+      case 'rebond': {
+        const charm = me.wornCharms.find((c) => c.iid === p.charmIid);
+        autoTapFor(g, HUMAN, { generic: charm?.def.rebondCost ?? 0, pips: {} });
+        if (rebondCharm(g, HUMAN, p.charmIid, targetIid)) {
+          bump();
+          say('Charm re-bonded.');
+        } else say('Illegal re-bond.');
         return;
       }
     }
-    setRallyPick(u.iid);
+  };
+
+  // ---- phase driving ------------------------------------------------------
+  const myAttackers = stage === 'play' ? legalAttackers(g, HUMAN) : [];
+
+  const advanceMyPhase = () => {
     setPending(null);
-    say('Pick a donor — an exhausted permanent with a high-enough resting die.');
-  };
-
-  const resolveRallySource = (sourceIid: string) => {
-    if (!rallyPick) return;
-    const u = [...me.board, me.leader, me.location].find(
-      (x): x is Inst => !!x && x.iid === rallyPick,
-    );
-    if (!u || !u.def.ability) {
-      setRallyPick(null);
-      return;
-    }
-    if (needsTarget(u.def.ability.effect)) {
-      setPending({
-        kind: 'ability',
-        cardIid: u.iid,
-        effect: u.def.ability.effect,
-        rallySourceIid: sourceIid,
-      });
-      setRallyPick(null);
-      return;
-    }
-    if (activateViaRally(g, u.iid, sourceIid)) {
-      bump();
-    } else say('Illegal Rally.');
-    setRallyPick(null);
-    if (g.winner) setStage('over');
-  };
-
-  const tryUltimate = () => {
-    const ult = me.leader.def.ultimate;
-    if (!ult || me.leader.ultimateUsed) return;
-    if (stage !== 'placement') {
-      say('Ultimates resolve during Placement.');
-      return;
-    }
-    if (me.turnsTaken < ult.unlockTurn) {
-      say(`Unlocks on your turn ${ult.unlockTurn}.`);
-      return;
-    }
-    if (dieVal === null || dieVal < ult.threshold) {
-      say(`Select a die of ${ult.threshold}+.`);
-      return;
-    }
-    if (needsTarget(ult.effect)) {
-      if (targetsFor(g, HUMAN, ult.effect).length === 0) {
-        say('No legal target.');
-        return;
-      }
-      setPending({
-        kind: 'ultimate',
-        cardIid: me.leader.iid,
-        effect: ult.effect,
-        dieIndex: selDie ?? undefined,
-      });
-      return;
-    }
-    if (activateUltimate(g, selDie!)) {
-      setSelDie(null);
-      bump();
-    } else say('Illegal.');
-    if (g.winner) setStage('over');
-  };
-
-  const tryScrap = (c: Inst) => {
-    if (stage !== 'placement') {
-      say('Scrap works during Placement.');
-      return;
-    }
-    if (selDie === null) {
-      say('Select the die to reroll.');
-      return;
-    }
-    if (scrap(g, c.iid, selDie)) {
-      bump();
-      say(`Scrapped ${c.def.name}: die is now ${me.dice[selDie].value}.`);
-    } else say('Illegal Scrap.');
-  };
-
-  const tryCompleteTwin = (s: Inst) => {
-    if (stage !== 'placement') {
-      say('Twin completes during Placement.');
-      return;
-    }
-    if (dieVal === null) {
-      say('Select a die.');
-      return;
-    }
-    if (dieVal !== s.stagedDie) {
-      say(`Needs the exact face ${s.stagedDie}.`);
-      return;
-    }
-    if (completeTwin(g, selDie!, s.iid)) {
-      setSelDie(null);
-      bump();
-      say(`${s.def.name} completed!`);
-    } else
-      say(g.rules.twinMode === 'oneDiePerTurn' ? 'One die per Twin card per turn.' : 'Illegal.');
-    if (g.winner) setStage('over');
-  };
-
-  const tryEchoFodder = (fodder: Inst) => {
-    if (!echoPick) return;
-    // A 'sum'-cost Echo already collected its dice in confirmSumEcho; every
-    // other Echo still needs a single die selected right here.
-    const dice = echoPick.dieIndices ?? (selDie !== null ? selDie : null);
-    if (dice === null) {
-      say('Select a die.');
-      return;
-    }
-    const target = me.discard.find((c) => c.iid === echoPick.cardIid);
-    if (!target) {
-      setEchoPick(null);
-      return;
-    }
-    if (echoRecast(g, dice, echoPick.cardIid, fodder.iid, echoPick.targetIid)) {
-      setEchoPick(null);
-      setSelDie(null);
-      setShowDiscard(false);
-      bump();
-      // A Twin card Echoes back into STAGING (engine: echoRecast's Twin
-      // branch), not straight into play — mirror the mid-rarity path's text.
-      say(
-        hasKw(target.def, 'Twin')
-          ? `${target.def.name} staged — match a ${me.staging.find((s) => s.iid === target.iid)?.stagedDie} later.`
-          : `${target.def.name} echoes back into play.`,
-      );
-    } else {
-      say('Illegal Echo.');
-      setEchoPick(null);
-    }
-    if (g.winner) setStage('over');
-  };
-
-  const toCombat = () => {
-    comboCheck(g);
-    bump();
-    if (g.winner) {
-      setStage('over');
-      return;
-    }
-    setSelDie(null);
-    setPending(null);
-    // Placement-only selection modes must not leak into Combat: a live
-    // sum-cast keeps the dice in sum-select mode, an armed Rally pick keeps
-    // donors highlighted, and a pending Echo fodder pick would hijack hand
-    // clicks (tryEchoFodder) during Combat.
-    setSumCast(null);
-    setRallyPick(null);
-    setEchoPick(null);
+    setAtkSel(new Set());
     closePreview();
-    flashPhase('COMBAT');
-    setStage('combat');
-  };
-
-  const finishTurn = (picks?: string[]) => {
-    const queue = picks ? [...picks] : undefined;
-    finishEndPhase(g, (hand) => {
-      if (queue && queue.length) {
-        const iid = queue.shift()!;
-        const found = hand.find((c) => c.iid === iid);
-        if (found) return found;
-      }
-      return defaultDiscardChoice(hand);
-    });
-    bump();
-    if (g.winner) {
-      setStage('over');
-      return;
-    }
-    setAttacker(null);
-    runCpuTurn();
-  };
-
-  // End Phase discards down to HAND_LIMIT (§3.7) — the rulebook gives the
-  // player the choice of which cards, so route through a picker modal
-  // whenever ending the turn would otherwise force a discard. Pitch/Tribute
-  // are resolved first since Tribute can draw a card and push the hand over
-  // the limit even when it wasn't before — the picker needs the post-draw
-  // hand size, not the pre-draw one.
-  const attemptFinishTurn = () => {
-    flashPhase('END');
-    resolveEndPhasePreDiscard(g);
-    bump();
-    if (g.winner) {
-      setStage('over');
-      return;
-    }
-    const needed = me.hand.length - HAND_LIMIT;
-    if (needed > 0) {
-      setForcedDiscard({ needed, picks: [] });
-      return;
-    }
-    finishTurn();
-  };
-
-  const toggleForcedDiscardPick = (iid: string) => {
-    setForcedDiscard((fd) => {
-      if (!fd) return fd;
-      const picks = fd.picks.includes(iid)
-        ? fd.picks.filter((x) => x !== iid)
-        : fd.picks.length < fd.needed
-          ? [...fd.picks, iid]
-          : fd.picks;
-      return { ...fd, picks };
-    });
-  };
-
-  const confirmForcedDiscard = () => {
-    if (!forcedDiscard || forcedDiscard.picks.length !== forcedDiscard.needed) return;
-    const picks = forcedDiscard.picks;
-    setForcedDiscard(null);
-    finishTurn(picks);
-  };
-
-  const doReroll = () => {
-    // A Snap cast during preRoll can place a die that was already marked for
-    // reroll (its tray button goes disabled, so it can't be unmarked) — the
-    // engine skips placed dice but would still spend the reroll charge.
-    const picks = [...rerollSel].filter((i) => !me.dice[i].placed);
-    if (picks.length === 0 && rerollSel.size > 0) {
-      setRerollSel(new Set());
-      say('Those dice are already placed — mark unplaced dice to reroll, or KEEP ALL.');
-      return;
-    }
-    reroll(g, picks);
-    setRerollSel(new Set());
-    if (picks.length > 0) {
-      setRollingDice(new Set(picks));
-      if (rollTimeoutRef.current !== null) window.clearTimeout(rollTimeoutRef.current);
-      rollTimeoutRef.current = window.setTimeout(() => {
-        rollTimeoutRef.current = null;
-        setRollingDice(new Set());
-      }, ROLL_ANIM_MS);
-    }
-    bump();
-    if (g.stage === 'PLACEMENT') flashPhase('PLACEMENT');
-    setStage(g.stage === 'PLACEMENT' ? 'placement' : 'preRoll');
-  };
-
-  // ---- combat helpers -----------------------------------------------------
-  // v4.4: attacker-aware — excludes the enemy Leader when `attacker` is
-  // mid-Frenzy's second swing (see engine.ts legalTargets), so the target
-  // picker never even offers an illegal face attack for that swing.
-  const combatTargets = attacker ? legalTargets(g, HUMAN, attacker) : [];
-
-  const tryAttackTarget = (iid: string) => {
-    if (!attacker) return;
-    if (attack(g, attacker, iid)) {
-      // Attack feedback: flash both combatants for the animation's duration.
-      setAttackFx({ attacker, target: iid });
-      if (attackFxTimeoutRef.current !== null) window.clearTimeout(attackFxTimeoutRef.current);
-      attackFxTimeoutRef.current = window.setTimeout(() => {
-        setAttackFx(null);
-        attackFxTimeoutRef.current = null;
-      }, 680);
-      const stillCan = me.board.find((u) => u.iid === attacker && canAttack(g, u));
-      setAttacker(stillCan ? attacker : null);
+    if (g.phase === 'Main2') {
+      // Ends the turn: Dusk (auto-shed) → pass → CPU's Dawn → its Main I.
+      endPhase(g);
       bump();
-    } else say('Illegal target (Guard?).');
-    if (g.winner) setStage('over');
-  };
-
-  // Targeting overlay for pending effects. An `abilityNoRepeatTarget`
-  // ability (engine: activateAbility rejects an explicit re-pick of last
-  // turn's target) must not offer that target — otherwise the picker
-  // highlights a card that always resolves to "Illegal target."
-  const pendingTargets = pending
-    ? (() => {
-        let ts = targetsFor(g, HUMAN, pending.effect);
-        if (pending.kind === 'ability') {
-          const src = [...me.board, me.leader, me.location].find(
-            (x): x is Inst => !!x && x.iid === pending.cardIid,
-          );
-          if (src?.def.abilityNoRepeatTarget && src.lastAbilityTargetIid)
-            ts = ts.filter((t) => t.iid !== src.lastAbilityTargetIid);
-        }
-        return ts;
-      })()
-    : [];
-  const isPendingTarget = (iid: string) => pendingTargets.some((t) => t.iid === iid);
-
-  const rallyUnit = rallyPick
-    ? [...me.board, me.leader, me.location].find((x): x is Inst => !!x && x.iid === rallyPick)
-    : null;
-  const rallySources = rallyUnit ? rallySourcesFor(g, HUMAN, rallyUnit) : [];
-  const isRallySource = (iid: string) => rallySources.some((s) => s.iid === iid);
-
-  const echoables = me.discard.filter((c) => hasKw(c.def, 'Echo') && !c.echoSpent);
-
-  // ---- labeled ability-slot state (why is this pill disabled?) -------------
-  const leaderAbilityWhy = (() => {
-    const l = me.leader;
-    if (!l.def.ability) return undefined;
-    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
-    if (l.abilityUsed) return 'Already used this turn';
-    const thr = effAbilityThreshold(g, l);
-    if (dieVal === null) return `Select a die of ${thr}+ first`;
-    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
-    return undefined;
-  })();
-  const leaderUltimateWhy = (() => {
-    const l = me.leader;
-    const ult = l.def.ultimate;
-    if (!ult) return undefined;
-    if (l.ultimateUsed) return 'Already spent — once per game';
-    if (stage !== 'placement') return 'Ultimates resolve during your Placement Phase';
-    if (me.turnsTaken < ult.unlockTurn)
-      return `Unlocks on your turn ${ult.unlockTurn} (this is your turn ${me.turnsTaken})`;
-    if (dieVal === null) return `Select a die of ${ult.threshold}+ first`;
-    if (dieVal < ult.threshold) return `Needs a die of ${ult.threshold}+ (selected: ${dieVal})`;
-    return undefined;
-  })();
-  const locationAbilityWhy = (() => {
-    const loc = me.location;
-    if (!loc?.def.ability) return undefined;
-    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
-    if (loc.abilityUsed) return 'Already used this turn';
-    const thr = effAbilityThreshold(g, loc);
-    if (dieVal === null) return `Select a die of ${thr}+ first`;
-    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
-    return undefined;
-  })();
-  const unitAbilityWhy = (u: Inst): string | undefined => {
-    if (!u.def.ability) return undefined;
-    if (stage !== 'placement') return 'Abilities resolve during your Placement Phase';
-    if (u.abilityUsed) return 'Already used this turn';
-    if (u.hasAttacked) return 'Attacked this turn — abilities locked';
-    if (u.boundThisTurn) return "Bound — can't act this turn";
-    if (u.enteredThisTurn && !hasKw(u.def, 'Swift')) return "Just played — can't act yet";
-    const thr = effAbilityThreshold(g, u);
-    if (dieVal === null) return `Select a die of ${thr}+ first`;
-    if (dieVal < thr) return `Needs a die of ${thr}+ (selected: ${dieVal})`;
-    return undefined;
-  };
-
-  // ---- contextual hint bar (item: keywords/actions unintuitive) ------------
-  const hint = (() => {
-    if (pending) return 'Pick a highlighted target for the effect (✕ or Esc to cancel).';
-    if (rallyPick) return 'Pick a highlighted donor — an exhausted permanent with a resting die.';
-    if (sumCast) return 'Click dice in the tray to build the sum, then confirm in the orange bar.';
-    if (echoPick) return 'Pick a card in your hand to discard — that pays the Echo cost.';
-    switch (stage) {
-      case 'awaitRoll':
-        return 'Dice are your only resource — no mana. Click ROLL DICE to roll them.';
-      case 'rolling':
-        return 'Rolling…';
-      case 'preRoll':
-        return `Click dice to mark them, then REROLL (${rerollsRemaining(g, HUMAN)} left) — or KEEP ALL. Snap Charms can be cast right now.`;
-      case 'placement':
-        return selDie !== null
-          ? `Die ${dieVal ?? '?'} selected — hover a hand card and press CAST, or press an ABILITY pill · dice left: ${unplaced.length}`
-          : `Hover a card in hand to preview & cast it · Locations cast free · dice left: ${unplaced.length} (leftovers Pitch = heal your Leader 1 each)`;
-      case 'combat':
-        if (me.turnsTaken <= 1)
-          return 'No attacks on your very first turn — END TURN when ready (leftover dice Pitch to heal your Leader).';
-        return attacker
-          ? 'Now click a highlighted enemy to attack it (Guards must fall first).'
-          : 'Click one of your ready Units, then an enemy target. END TURN when done.';
-      case 'cpu':
-        return `${cpuLabel} is playing its turn — watch each action land (click the banner for the next action, SKIP ▸▸ to fast-forward).`;
-      default:
-        return null;
+      if (checkWinner()) return;
+      runCpuTurn();
+      return;
     }
+    if (endPhase(g)) {
+      bump();
+      flashPhase(PHASE_LABEL[g.phase]);
+    }
+    checkWinner();
+  };
+
+  // ---- clash: human attacking ---------------------------------------------
+  const toggleAttacker = (iid: string) => {
+    setAtkSel((s) => {
+      const n = new Set(s);
+      if (n.has(iid)) n.delete(iid);
+      else n.add(iid);
+      return n;
+    });
+  };
+
+  const declareMyAttack = () => {
+    if (atkSel.size === 0) return;
+    if (!declareAttackers(g, [...atkSel])) {
+      say('Illegal attack selection.');
+      return;
+    }
+    setAtkSel(new Set());
+    // The CPU assigns its guards immediately (same heuristic the harness
+    // uses); the clash bar then shows the lines before damage resolves.
+    const guards = chooseGuards(g, CPU);
+    if (!declareGuards(g, guards)) declareGuards(g, {});
+    bump();
+    const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
+      (v: string[]) => v.length > 0,
+    ).length;
+    say(guarded > 0 ? `${cpuLabel} assigns ${guarded} guard line(s).` : `${cpuLabel} lets it through!`);
+  };
+
+  const resolveMyClash = () => {
+    if (!g.clash) return;
+    const participants = [
+      ...g.clash.attackers,
+      ...Object.values(g.clash.guards).flat(),
+    ];
+    if (resolveClash(g)) {
+      flashUnits(participants);
+      bump();
+      say('Clash resolves!');
+    }
+    checkWinner();
+  };
+
+  // ---- CPU turn (narrated from the engine log) ----------------------------
+  const stopCpuTimer = () => {
+    if (cpuTimeoutRef.current !== null) {
+      window.clearTimeout(cpuTimeoutRef.current);
+      cpuTimeoutRef.current = null;
+    }
+  };
+
+  const tickCpuBeat = () => {
+    cpuTimeoutRef.current = null;
+    const beats = cpuBeatsRef.current;
+    const i = cpuBeatIdxRef.current;
+    if (i >= beats.length) {
+      const done = cpuDoneRef.current;
+      cpuDoneRef.current = null;
+      setCpuBeat(null);
+      done?.();
+      return;
+    }
+    cpuBeatIdxRef.current = i + 1;
+    setCpuBeat({ text: beats[i], idx: i, total: beats.length });
+    cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, CPU_PACE.BEAT_MS);
+  };
+
+  /** Replay `lines` as staggered narration beats, then call `onDone`. */
+  const narrate = (lines: string[], onDone: () => void) => {
+    cpuBeatsRef.current = lines;
+    cpuBeatIdxRef.current = 0;
+    cpuDoneRef.current = onDone;
+    if (lines.length === 0) {
+      onDone();
+      return;
+    }
+    tickCpuBeat();
+  };
+
+  const skipCpuBeats = () => {
+    stopCpuTimer();
+    cpuBeatIdxRef.current = cpuBeatsRef.current.length;
+    tickCpuBeat();
+  };
+
+  const beginHumanTurn = () => {
+    setCpuBeat(null);
+    bump();
+    if (checkWinner()) return;
+    setPending(null);
+    setAtkSel(new Set());
+    setGuardSel({});
+    setGuardFocus(null);
+    closePreview();
+    setStage('play');
+    flashPhase('YOUR TURN');
+  };
+
+  /** Play the CPU's turn. If it declares an attack, playTurn is paused at the
+   * guard step (via the CLASH_PAUSE sentinel) and the human takes over guard
+   * assignment; otherwise the whole turn runs through and it's back to P1. */
+  const resolveCpuTurn = () => {
+    cpuTimeoutRef.current = null;
+    const logStart = g.log.length;
+    let paused = false;
+    try {
+      playTurn(g, CPU, {
+        chooseGuardsFor: () => {
+          throw CLASH_PAUSE;
+        },
+      });
+    } catch (e) {
+      if (e !== CLASH_PAUSE) throw e;
+      paused = true;
+    }
+    bump();
+    narrate(g.log.slice(logStart), () => {
+      if (checkWinner()) return;
+      if (paused && g.clash && g.clash.step === 'guards') {
+        setGuardSel({});
+        setGuardFocus(g.clash.attackers[0] ?? null);
+        setStage('cpuGuard');
+        say(`${cpuLabel} attacks — assign your guards!`);
+      } else {
+        beginHumanTurn();
+      }
+    });
+  };
+
+  const runCpuTurn = () => {
+    setStage('cpu');
+    setCpuBeat(null);
+    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_PACE.THINK_MS);
+  };
+
+  /** After the human's guard step + reaction window resolve the clash, the
+   * CPU finishes its turn (Main II, Dusk) and play passes back. */
+  const continueCpuAfterClash = () => {
+    const logStart = g.log.length;
+    endPhase(g); // Clash → Main II (clash must be 'done')
+    playTurn(g, CPU); // Main II plays, then Dusk → the human's Dawn
+    bump();
+    setStage('cpu');
+    narrate(g.log.slice(logStart), () => {
+      if (checkWinner()) return;
+      beginHumanTurn();
+    });
+  };
+
+  // ---- clash: human defending (stage 'cpuGuard') --------------------------
+  const guardStep = stage === 'cpuGuard' && g.clash?.step === 'guards';
+  const reactionStep = stage === 'cpuGuard' && g.clash?.step === 'reaction';
+  const cpuAttackerIids = stage === 'cpuGuard' ? (g.clash?.attackers ?? []) : [];
+
+  const guardOf = (unitIid: string): string | null => {
+    for (const [a, gs] of Object.entries(guardSel) as [string, string[]][]) {
+      if (gs.includes(unitIid)) return a;
+    }
+    return null;
+  };
+
+  const toggleGuard = (unitIid: string) => {
+    if (!guardStep || !guardFocus) return;
+    setGuardSel((sel) => {
+      const next: GuardAssignments = {};
+      for (const [a, gs] of Object.entries(sel) as [string, string[]][]) {
+        next[a] = gs.filter((x) => x !== unitIid);
+      }
+      const already = sel[guardFocus]?.includes(unitIid);
+      if (!already) {
+        const legal = legalGuardsFor(g, guardFocus).some((u) => u.iid === unitIid);
+        if (!legal) {
+          say("That unit can't guard this attacker (exhausted, or Aerial rules).");
+          return sel;
+        }
+        next[guardFocus] = [...(next[guardFocus] ?? []), unitIid];
+      }
+      for (const a of Object.keys(next)) if (next[a].length === 0) delete next[a];
+      return next;
+    });
+  };
+
+  const guardProblem = ((): string | null => {
+    for (const [a, gs] of Object.entries(guardSel) as [string, string[]][]) {
+      const attacker = findUnit(g, a);
+      if (attacker && unitHasKw(attacker, 'Swarmproof') && gs.length === 1) {
+        return `${attacker.def.name} is Swarmproof — guard with 2+ units or none.`;
+      }
+    }
+    return null;
+  })();
+
+  const confirmGuards = () => {
+    if (guardProblem) {
+      say(guardProblem);
+      return;
+    }
+    if (declareGuards(g, guardSel)) {
+      bump();
+      say('Guards set — reaction window: Quick Events & Ambush units are live.');
+    } else {
+      say('Illegal guard assignment.');
+    }
+  };
+
+  const resolveCpuClash = () => {
+    if (!g.clash) return;
+    const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
+    if (resolveClash(g)) {
+      flashUnits(participants);
+      bump();
+    }
+    if (checkWinner()) return;
+    continueCpuAfterClash();
+  };
+
+  // ---- render helpers -----------------------------------------------------
+  const guardedBy = (attackerIid: string): string[] =>
+    (guardStep ? guardSel[attackerIid] : g.clash?.guards[attackerIid]) ?? [];
+
+  const clashLines = (g.clash?.attackers ?? []).map((aIid, i) => {
+    const a = findUnit(g, aIid);
+    const gs = guardedBy(aIid)
+      .map((iid) => findUnit(g, iid)?.def.name)
+      .filter(Boolean);
+    return {
+      iid: aIid,
+      n: i + 1,
+      name: a?.def.name ?? '(gone)',
+      guards: gs as string[],
+    };
+  });
+
+  // Coach stage: coarse key for the first-match walkthrough.
+  const coachStage =
+    stage === 'cpu'
+      ? 'cpu'
+      : stage === 'cpuGuard'
+        ? 'guard'
+        : stage === 'play'
+          ? g.phase === 'Clash'
+            ? 'clash'
+            : g.phase === 'Main2'
+              ? 'main2'
+              : 'main1'
+          : stage;
+
+  // Contextual hint bar.
+  const hint = (() => {
+    if (pending) {
+      if (pending.kind === 'bond' || pending.kind === 'rebond')
+        return 'Pick a highlighted friendly unit for the Charm (✕ or Esc to cancel).';
+      return 'Pick a highlighted target for the effect (✕ or Esc to cancel).';
+    }
+    if (stage === 'cpuGuard') {
+      if (guardStep)
+        return 'Select an attacker line, then click your units to guard it (multiple guards OK). Unguarded attackers hit your Vitality.';
+      return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
+    }
+    if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
+    if (stage === 'play') {
+      if (g.clash) return 'Guards are set — RESOLVE CLASH to deal damage.';
+      switch (g.phase) {
+        case 'Main1':
+        case 'Main2':
+          return `Play a Wellspring (once per turn), tap Locations for essence — or just INVOKE: the cost auto-taps. ${
+            g.phase === 'Main1' ? 'NEXT moves to the Clash.' : 'NEXT ends your turn.'
+          }`;
+        case 'Clash':
+          return myAttackers.length === 0
+            ? 'No ready attackers — NEXT to skip to Main II.'
+            : 'Click your ready units to add them to the attack, then DECLARE ATTACK (or NEXT to skip).';
+        default:
+          return null;
+      }
+    }
+    return null;
   })();
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
-  const previewInfo = previewCard
-    ? {
-        chk: canCastNow(previewCard),
-        auto: pickAutoDie(previewCard),
-        isSum: previewCard.def.castCostKind === 'sum' && !previewCard.def.comboGate,
-        canScrapNow: hasKw(previewCard.def, 'Scrap') && stage === 'placement' && selDie !== null,
-      }
-    : null;
-  const previewCastable =
-    !!previewInfo &&
-    (previewInfo.chk.ok || (previewInfo.auto !== null && previewInfo.chk.why === 'Select a die'));
+  const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
+
+  const phaseButtonLabel =
+    g.phase === 'Main1'
+      ? 'TO CLASH ▸'
+      : g.phase === 'Clash'
+        ? 'SKIP TO MAIN II ▸'
+        : g.phase === 'Main2'
+          ? me.hand.length > MAX_HAND
+            ? `END TURN (shed ${me.hand.length - MAX_HAND}) ▸`
+            : 'END TURN ▸'
+          : 'NEXT ▸';
+
+  const showPhaseButton =
+    stage === 'play' && (!g.clash || g.clash.step === 'done') && g.phase !== 'Dawn' && g.phase !== 'Dusk';
 
   // ---------------------------------------------------------------------------
   // Render
@@ -2189,7 +1562,8 @@ export function GameV4({
       }}
     >
       <style>{GAME_CSS}</style>
-      {/* Top bar */}
+
+      {/* Top bar: concede, turn/phase tracker, actions */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
         <button
           onClick={() => {
@@ -2204,74 +1578,104 @@ export function GameV4({
         >
           ✕ CONCEDE
         </button>
-        <span className="heading-font text-[11px] text-[var(--c-yellow)]">
-          TURN {Math.ceil(view.turn / 2) || 1} ·{' '}
-          {stage === 'cpu'
-            ? "CPU'S TURN"
-            : stage === 'awaitRoll'
-              ? 'YOUR ROLL'
-              : stage === 'rolling'
-                ? 'ROLLING…'
-                : stage === 'preRoll'
-                  ? 'REROLL & SNAP'
-                  : stage === 'placement'
-                    ? 'PLACEMENT'
-                    : stage === 'combat'
-                      ? 'COMBAT'
-                      : stage.toUpperCase()}
+        <span className="heading-font text-[11px] text-[var(--c-yellow)] shrink-0">
+          TURN {g.turn} · {g.active === HUMAN ? 'YOU' : 'CPU'}
         </span>
-        <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate">
+        {/* Phase tracker: Dawn → Main I → Clash → Main II → Dusk */}
+        <div className="flex items-center gap-0.5">
+          {PHASE_ORDER.map((ph) => (
+            <span
+              key={ph}
+              className={cn(
+                'heading-font text-[8px] px-1.5 py-0.5 ink-border-sm',
+                g.phase === ph
+                  ? g.active === HUMAN
+                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                    : 'bg-[var(--c-red)] text-white'
+                  : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/50',
+              )}
+            >
+              {PHASE_LABEL[ph]}
+            </span>
+          ))}
+        </div>
+        <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate hidden sm:inline">
           {humanLabel} vs {cpuLabel}
         </span>
         <div className="ml-auto flex items-center gap-1">
-          {stage === 'placement' && (
+          {stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 && (
             <button
-              onClick={toCombat}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
+              onClick={declareMyAttack}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
             >
-              COMBO CHECK → COMBAT
+              ⚔ DECLARE ATTACK ({atkSel.size})
             </button>
           )}
-          {stage === 'combat' && (
+          {stage === 'play' && g.clash && g.clash.step !== 'done' && (
             <button
-              onClick={attemptFinishTurn}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm"
+              onClick={resolveMyClash}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
             >
-              END TURN {unplaced.length > 0 ? `(pitch ${unplaced.length}⚄)` : ''}
+              💥 RESOLVE CLASH
             </button>
           )}
-          {stage === 'awaitRoll' && (
+          {showPhaseButton && (
             <button
-              onClick={doRollDice}
-              className="btn-pop heading-font text-[11px] bg-[var(--c-red)] text-white px-3 py-1 ink-border-sm animate-pulse"
+              onClick={advanceMyPhase}
+              className={cn(
+                'btn-pop heading-font text-[10px] px-2 py-0.5 ink-border-sm',
+                g.phase === 'Main2'
+                  ? 'bg-[var(--c-red)] text-white'
+                  : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+              )}
             >
-              🎲 ROLL DICE
+              {phaseButtonLabel}
             </button>
           )}
-          {stage === 'preRoll' && (
+          {stage === 'cpu' && (
             <button
-              onClick={doReroll}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm"
+              onClick={skipCpuBeats}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
             >
-              {rerollSel.size > 0
-                ? `REROLL ${rerollSel.size} (${rerollsRemaining(g, HUMAN)} left)`
-                : 'KEEP ALL'}{' '}
-              →
+              SKIP ▸▸
+            </button>
+          )}
+          {guardStep && (
+            <button
+              onClick={confirmGuards}
+              disabled={!!guardProblem}
+              title={guardProblem ?? undefined}
+              className={cn(
+                'heading-font text-[10px] px-2 py-0.5 ink-border-sm',
+                guardProblem
+                  ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
+                  : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
+              )}
+            >
+              🛡 CONFIRM GUARDS
+            </button>
+          )}
+          {reactionStep && (
+            <button
+              onClick={resolveCpuClash}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
+            >
+              💥 RESOLVE CLASH
             </button>
           )}
         </div>
       </div>
 
-      {/* Contextual hint bar — plain-words summary of what's possible right now */}
+      {/* Contextual hint bar */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
         <div className="px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
           💡 {hint}
         </div>
       )}
 
-      <CoachOverlay stage={stage} />
+      <CoachOverlay stage={coachStage} />
 
-      {/* Phase banner — big center-screen callout on ROLL/PLACEMENT/COMBAT/END */}
+      {/* Phase banner */}
       {phaseFx && (
         <div className="absolute inset-0 z-[60] pointer-events-none flex items-center justify-center">
           <div className="gv4-phase-banner heading-font text-4xl sm:text-5xl text-[var(--c-yellow)] bg-[var(--c-ink)]/85 px-8 py-3 ink-border-md shadow-hard-black-xs">
@@ -2285,26 +1689,27 @@ export function GameV4({
           {banner}
         </div>
       )}
+
+      {/* CPU turn narration */}
       {stage === 'cpu' && (
         <div
           role="button"
           tabIndex={0}
-          onClick={advanceCpuStep}
+          onClick={skipCpuBeats}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              advanceCpuStep();
+              skipCpuBeats();
             }
           }}
-          title="Click to show the opponent's next action immediately"
+          title="Click to fast-forward the opponent's turn"
           className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none"
         >
-          {cpuStep ? (
+          {cpuBeat ? (
             <>
-              <span className="mr-1">{CPU_STEP_ICON[cpuStep.step.kind]}</span>
-              {cpuLabel} {renderKeywordText(cpuStep.step.text)}
+              {renderKeywordText(cpuBeat.text)}
               <span className="ml-2 text-[8px] font-mono opacity-80">
-                {cpuStep.idx + 1}/{cpuStep.total} · click ▸
+                {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
               </span>
             </>
           ) : (
@@ -2312,9 +1717,15 @@ export function GameV4({
           )}
         </div>
       )}
+
+      {/* Pending target bar */}
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-          PICK A TARGET — {renderKeywordText(describeEffect(pending.effect))}
+          {pending.kind === 'bond'
+            ? 'BOND — pick a friendly unit'
+            : pending.kind === 'rebond'
+              ? 'RE-BOND — pick a friendly unit'
+              : `PICK A TARGET — ${describeEffect(pending.effect)}`}
           <button
             onClick={() => setPending(null)}
             aria-label="Cancel targeting"
@@ -2324,284 +1735,173 @@ export function GameV4({
           </button>
         </div>
       )}
-      {rallyPick && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#8E44AD] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-          PICK A DONOR — an exhausted permanent with a high-enough resting die
-          <button
-            onClick={() => setRallyPick(null)}
-            aria-label="Cancel Rally"
-            className="bg-[var(--c-ink)] px-1"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-      {sumCast &&
-        (() => {
-          const isEcho = sumCast.mode === 'echo';
-          const c = (isEcho ? me.discard : me.hand).find((h) => h.iid === sumCast.cardIid);
-          const target = c ? effThreshold(g, HUMAN, c.def) : 0;
-          const total = [...sumCast.sel].reduce((s, i) => s + (me.dice[i]?.value ?? 0), 0);
-          const met = total >= target;
-          return (
-            <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[#B45309] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-              {isEcho ? 'SUM ECHO' : 'SUM CAST'} — {c?.def.name}: Σ {total}/{target}
-              <span className="text-[9px] font-bold opacity-90">
-                {met ? '✓ enough — confirm!' : `need ${target - total} more`}
-              </span>
-              <button
-                onClick={isEcho ? confirmSumEcho : confirmSumCast}
-                disabled={!met}
-                className={cn(
-                  'px-1.5 py-0.5',
-                  met ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-ink)]/40',
-                )}
-              >
-                {isEcho ? 'ECHO' : 'CAST'}
-              </button>
-              <button
-                onClick={cancelSumCast}
-                aria-label={isEcho ? 'Cancel sum echo' : 'Cancel sum cast'}
-                className="bg-[var(--c-ink)] px-1"
-              >
-                ✕
-              </button>
-            </div>
-          );
-        })()}
-      {!pending && attacker && stage === 'combat' && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-          SELECT AN ATTACK TARGET
-          <button
-            onClick={() => setAttacker(null)}
-            aria-label="Cancel attack"
-            className="bg-[var(--c-ink)] text-white px-1"
-          >
-            ✕
-          </button>
+
+      {/* Clash bar — attacker → guard lines (both directions) */}
+      {g.clash && (stage === 'play' || stage === 'cpuGuard') && (
+        <div className="absolute left-1/2 top-[4.6rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
+          <span className="heading-font text-[9px] text-[var(--c-red)]">
+            {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
+          </span>
+          {clashLines.map((line) => (
+            <button
+              key={line.iid}
+              onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
+              className={cn(
+                'text-[8.5px] font-bold px-1 py-0.5 leading-tight text-left',
+                guardStep
+                  ? guardFocus === line.iid
+                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm'
+                    : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)] ink-border-sm btn-pop'
+                  : 'text-[var(--c-paper)]/85',
+              )}
+            >
+              #{line.n} {line.name} →{' '}
+              {line.guards.length > 0 ? line.guards.join(' + ') : guardStep ? 'unguarded' : 'YOU'}
+            </button>
+          ))}
+          {reactionStep && (
+            <span className="text-[8px] font-bold text-[#29B6F6]">
+              REACTION WINDOW — Quick / Ambush cards playable
+            </span>
+          )}
         </div>
       )}
 
       {/* Enemy row */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
       <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25 min-h-0 overflow-y-auto">
-        <LeaderPanel
-          g={view}
+        <LeaderZonePanel
           p={foe}
           isHuman={false}
-          highlight={
-            (!!pending && isPendingTarget(foe.leader.iid)) ||
-            (!!attacker && combatTargets.some((t) => t.iid === foe.leader.iid))
-          }
-          flash={attackFx?.target === foe.leader.iid}
-          acting={cpuActors.has(foe.leader.iid)}
-          acted={cpuTargets.has(foe.leader.iid)}
-          floats={floatsFor(foe.leader.iid)}
-          onClickTarget={
-            pending && isPendingTarget(foe.leader.iid)
-              ? () => resolvePendingOn(foe.leader.iid)
-              : attacker && combatTargets.some((t) => t.iid === foe.leader.iid)
-                ? () => tryAttackTarget(foe.leader.iid)
-                : undefined
-          }
+          vitTargetable={!!pending && isPendingTarget(CPU)}
+          onVitClick={pending && isPendingTarget(CPU) ? () => resolvePendingOn(CPU) : undefined}
           onInspect={() => setInspect(foe.leader.def)}
+          floats={floatsFor(`vit:${CPU}`)}
+          flash={flashIids.has(`vit:${CPU}`)}
         />
         <div className="flex-1 min-w-0">
-          <div className="flex gap-1 items-center text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5">
+          <div className="flex gap-1.5 items-center text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5 flex-wrap">
             <span>
-              CPU · hand {foe.hand.length} · deck {foe.deck.length} · discard {foe.discard.length}
-              {foe.banished.length > 0 && <> · banished {foe.banished.length}</>}
+              {cpuLabel} · hand {foe.hand.length} · deck {foe.deck.length} · ash{' '}
+              {foe.ashPile.length}
+              {foe.voidPile.length > 0 && <> · void {foe.voidPile.length}</>}
             </span>
-            {/* v4.26: the opponent's dice tray, visible while its turn plays
-                back — spent dice dim as each action places them. */}
-            {stage === 'cpu' && foe.dice.length > 0 && (
-              <span className="flex gap-0.5 items-center ml-1" title="Opponent's dice this turn">
-                {foe.dice.map((d, i) => (
-                  <span
-                    key={i}
-                    className={cn(
-                      'text-[15px] leading-none px-0.5 ink-border-sm bg-[var(--c-paper)] text-[var(--c-ink)] rounded-[3px]',
-                      d.placed && 'opacity-25',
-                    )}
-                  >
-                    {DIE_FACES[d.value - 1]}
-                  </span>
-                ))}
-              </span>
-            )}
-            {foe.location && (
-              <span
-                role="button"
-                tabIndex={0}
-                className={cn(
-                  'bg-[var(--c-steel)] px-1 ink-border-sm text-[var(--c-paper)] cursor-pointer',
-                  cpuActors.has(foe.location.iid) && 'gv4-cpu-actor',
-                )}
-                onClick={() => setInspect(foe.location!.def)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setInspect(foe.location!.def);
-                  }
-                }}
-                title="Click to inspect the enemy Location"
-                aria-label={`Inspect enemy Location: ${foe.location.def.name}`}
-              >
-                📍 {foe.location.def.name}
-              </span>
-            )}
-            {foe.staging.length > 0 && <span>staging {foe.staging.length}</span>}
+            <span className="flex gap-0.5 items-center">
+              {foe.locations.map((l) => (
+                <LocationTile
+                  key={l.iid}
+                  loc={l}
+                  tappable={false}
+                  onInspect={l.def ? () => setInspect(l.def!) : undefined}
+                />
+              ))}
+              {foe.locations.length === 0 && <span className="opacity-50">no Locations</span>}
+            </span>
+            {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={12} />}
           </div>
           <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
-            {foe.board.length === 0 && (
+            {foe.field.length === 0 && (
               <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-                  Empty Board
+                  Empty Field
                 </span>
               </div>
             )}
-            {foe.board.map((u) => {
-              const targetable =
-                (!!pending && isPendingTarget(u.iid)) ||
-                (!!attacker && combatTargets.some((t) => t.iid === u.iid));
+            {foe.field.map((u) => {
+              const targetable = !!pending && isPendingTarget(u.iid);
+              const attacking = cpuAttackerIids.includes(u.iid) || g.clash?.attackers.includes(u.iid);
+              const focusLine = guardStep && guardFocus === u.iid;
               return (
-                <React.Fragment key={u.iid}>
-                  <BoardUnit
-                    g={view}
-                    u={u}
-                    highlight={targetable}
-                    flash={attackFx?.target === u.iid}
-                    acting={cpuActors.has(u.iid)}
-                    acted={cpuTargets.has(u.iid)}
-                    floats={floatsFor(u.iid)}
-                    onClick={
-                      pending && isPendingTarget(u.iid)
-                        ? () => resolvePendingOn(u.iid)
-                        : attacker && combatTargets.some((t) => t.iid === u.iid)
-                          ? () => tryAttackTarget(u.iid)
-                          : () => setInspect(u.def)
-                    }
-                  />
-                </React.Fragment>
+                <BoardUnit
+                  key={u.iid}
+                  g={g}
+                  u={u}
+                  highlight={targetable || !!focusLine}
+                  isAttacker={!!attacking}
+                  flash={flashIids.has(u.iid)}
+                  floats={floatsFor(u.iid)}
+                  guardNote={
+                    attacking
+                      ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING`
+                      : undefined
+                  }
+                  onClick={
+                    targetable
+                      ? () => resolvePendingOn(u.iid)
+                      : guardStep && cpuAttackerIids.includes(u.iid)
+                        ? () => setGuardFocus(u.iid)
+                        : () => setInspect(u.def)
+                  }
+                />
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* Midline: dice tray + log */}
+      {/* Midline: essence pool + log + piles */}
       <div className="flex flex-wrap items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-        <div className="flex gap-1.5 items-center shrink-0">
-          {me.dice.map((d, i) => {
-            const isRolling = rollingDice.has(i);
-            const faceDown = stage === 'awaitRoll';
-            const inSumMode = !!sumCast;
-            const usable =
-              !d.placed && !isRolling && (stage === 'placement' || stage === 'preRoll');
-            const marked = inSumMode
-              ? sumCast!.sel.has(i)
-              : stage === 'preRoll'
-                ? rerollSel.has(i)
-                : selDie === i;
-            return (
-              <button
-                key={i}
-                disabled={!usable}
-                onClick={() => {
-                  if (inSumMode) {
-                    toggleSumDie(i);
-                  } else if (stage === 'preRoll') {
-                    setRerollSel((s) => {
-                      const n = new Set(s);
-                      if (n.has(i)) n.delete(i);
-                      else n.add(i);
-                      return n;
-                    });
-                  } else {
-                    setSelDie(selDie === i ? null : i);
-                    setPending(null);
-                  }
-                }}
-                className={cn(
-                  'w-12 h-12 ink-border-md rounded-md text-3xl leading-none flex items-center justify-center transition-transform',
-                  isRolling && 'die-rolling',
-                  faceDown
-                    ? 'bg-[var(--c-steel)] text-[var(--c-paper)]/40'
-                    : d.placed
-                      ? 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/25'
-                      : marked
-                        ? inSumMode
-                          ? 'bg-[#B45309] text-white -translate-y-1 shadow-hard-black-xs'
-                          : stage === 'preRoll'
-                            ? 'bg-[var(--c-red)] text-white -translate-y-1 shadow-hard-black-xs'
-                            : 'bg-[var(--c-yellow)] text-[var(--c-ink)] -translate-y-1 shadow-hard-black-xs'
-                        : 'bg-[var(--c-paper)] text-[var(--c-ink)] shadow-hard-black-xs',
-                  usable && 'btn-pop',
-                )}
-                title={
-                  d.placed
-                    ? 'Placed'
-                    : !usable
-                      ? 'Leftover die — will Pitch to heal your Leader at the End Phase'
-                      : inSumMode
-                        ? 'Toggle into sum'
-                        : stage === 'preRoll'
-                          ? 'Toggle reroll'
-                          : 'Select die'
-                }
-                aria-label={
-                  faceDown
-                    ? `Die ${i + 1}: not yet rolled`
-                    : `Die ${i + 1}: value ${d.value}${
-                        d.placed
-                          ? ' (placed)'
-                          : !usable
-                            ? ' (leftover — not selectable now)'
-                            : marked
-                              ? ' (selected)'
-                              : ''
-                      }`
-                }
-                aria-pressed={marked}
-              >
-                {faceDown ? '🎲' : DIE_FACES[d.value - 1]}
-              </button>
-            );
-          })}
-          {stage === 'awaitRoll' && (
-            <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[150px] leading-tight">
-              Click ROLL DICE to roll your dice.
-            </span>
-          )}
-          {stage === 'cpu' && (
-            <>
-              <span className="text-[10px] font-bold text-[var(--c-yellow)] ml-1 max-w-[260px] leading-tight">
-                {cpuStep ? (
-                  `${CPU_STEP_ICON[cpuStep.step.kind]} ${cpuLabel} ${cpuStep.step.text}`
-                ) : (
-                  <span className="animate-pulse">{cpuLabel} is thinking…</span>
-                )}
+        <div className="flex flex-col gap-1 shrink-0 max-w-[46vw]">
+          <div className="flex items-center gap-1.5">
+            <span className="heading-font text-[8px] text-[var(--c-paper)]/70">ESSENCE</span>
+            <EssencePips pool={me.essence} />
+            <Tip
+              text="Your floating essence — produced by exhausting Locations, spent on Essence Costs, and emptied at the end of every phase. Invoking auto-taps Locations for you."
+              className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1"
+            >
+              ?
+            </Tip>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {me.locations.map((l) => (
+              <LocationTile
+                key={l.iid}
+                loc={l}
+                tappable={canTapNow}
+                onTap={() => tryTapLocation(l)}
+                onInspect={l.def ? () => setInspect(l.def!) : undefined}
+              />
+            ))}
+            {inMyMain && !me.wellspringPlayedThisTurn && (
+              <span className="flex items-center gap-0.5 bg-[var(--c-ink)] ink-border-sm px-1 py-0.5">
+                <span className="text-[7px] font-black text-[var(--c-yellow)]">+ WELLSPRING</span>
+                {wellspringChoices(g, HUMAN).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => tryWellspring(t)}
+                    title={`Play a ${t} Wellspring (one per turn, free)`}
+                    className="btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70"
+                    style={{
+                      width: 16,
+                      height: 16,
+                      fontSize: 9,
+                      backgroundColor: COLOR_PIP[t].bg,
+                      color: COLOR_PIP[t].fg,
+                    }}
+                  >
+                    {COLOR_LETTER[t]}
+                  </button>
+                ))}
               </span>
-              <button
-                onClick={advanceCpuStep}
-                title="Show the opponent's next action now"
-                className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm ml-1"
-              >
-                NEXT ▸
-              </button>
-              <button
-                onClick={skipCpuDelay}
-                title="Fast-forward to the end of the opponent's turn"
-                className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
-              >
-                SKIP ▸▸
-              </button>
-            </>
-          )}
-          {stage === 'preRoll' && (
-            <span className="text-[9px] font-bold text-[var(--c-paper)]/60 ml-1 max-w-[130px] leading-tight">
-              Pick dice to reroll ({rerollsRemaining(g, HUMAN)} left). Snap Charms castable now.
-            </span>
+            )}
+            {me.locations.length === 0 && !inMyMain && (
+              <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no Locations yet</span>
+            )}
+          </div>
+          {me.wornCharms.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="heading-font text-[7px] text-[var(--c-paper)]/60">WORN CHARMS</span>
+              {me.wornCharms.map((c) => (
+                <button
+                  key={c.iid}
+                  onClick={() => tryRebond(c.iid)}
+                  title={`Re-bond ${c.def.name} to a friendly unit for ${c.def.rebondCost ?? 0} essence`}
+                  className="btn-pop text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm"
+                >
+                  💠 {c.def.name} · RE-BOND {c.def.rebondCost ?? 0}
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <div
@@ -2620,26 +1920,20 @@ export function GameV4({
               {logExpanded ? '▾ LESS' : '▴ MORE'}
             </button>
           </div>
-          {/* Rendered from `view` so the log streams in sync with the CPU
-              playback instead of showing the whole turn's lines up front. */}
-          {view.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
-            // Keyed by absolute position in the log (not the relative slice
-            // index) — the log only ever grows, so as it does the window
-            // this slice shows shifts and a relative index would silently
-            // relabel every earlier line each render.
-            <div key={view.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
+          {g.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
+            <div key={g.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">
           <button
-            onClick={() => setShowDiscard((s) => !s)}
+            onClick={() => setShowAsh((s) => !s)}
             className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
           >
-            DISCARD {me.discard.length}
-            {echoables.length > 0 ? ` · ${echoables.length} ECHO` : ''}
+            ASH-PILE {me.ashPile.length}
           </button>
           <span className="text-[8px] font-bold text-[var(--c-paper)]/50">
-            deck {me.deck.length} · banished {me.banished.length}
+            deck {me.deck.length}
+            {me.voidPile.length > 0 && <> · void {me.voidPile.length}</>}
           </span>
         </div>
       </div>
@@ -2647,185 +1941,75 @@ export function GameV4({
       {/* My row */}
       <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
       <div className="flex gap-2 px-2 pt-1.5 pb-1 items-start flex-1 min-h-0 overflow-y-auto bg-[var(--c-ink)]/25">
-        <LeaderPanel
-          g={view}
+        <LeaderZonePanel
           p={me}
           isHuman
+          vitTargetable={!!pending && isPendingTarget(HUMAN)}
+          onVitClick={pending && isPendingTarget(HUMAN) ? () => resolvePendingOn(HUMAN) : undefined}
+          onInvoke={tryInvokeLeader}
+          invokeWhy={leaderInvokeWhy}
+          onAbility={tryLeaderAbility}
           abilityWhy={leaderAbilityWhy}
-          ultimateWhy={leaderUltimateWhy}
-          onAbility={() => tryAbility(me.leader)}
-          onUltimate={tryUltimate}
-          highlight={
-            (!!pending && isPendingTarget(me.leader.iid)) ||
-            (!!rallyPick && isRallySource(me.leader.iid))
-          }
-          acted={cpuTargets.has(me.leader.iid)}
-          flash={cpuAttackStep && cpuTargets.has(me.leader.iid)}
-          floats={floatsFor(me.leader.iid)}
-          onClickTarget={
-            pending && isPendingTarget(me.leader.iid)
-              ? () => resolvePendingOn(me.leader.iid)
-              : rallyPick && isRallySource(me.leader.iid)
-                ? () => resolveRallySource(me.leader.iid)
-                : undefined
-          }
           onInspect={() => setInspect(me.leader.def)}
+          floats={floatsFor(`vit:${HUMAN}`)}
+          flash={flashIids.has(`vit:${HUMAN}`)}
         />
-        {me.location ? (
-          <LocationPanel
-            g={view}
-            loc={me.location}
-            onAbility={() => tryAbility(me.location!)}
-            abilityWhy={locationAbilityWhy}
-            isRallySource={!!rallyPick && isRallySource(me.location.iid)}
-            onRallyClick={() => resolveRallySource(me.location!.iid)}
-            onInspect={() => setInspect(me.location!.def)}
-            floats={floatsFor(me.location.iid)}
-          />
-        ) : (
-          <div className="w-[100px] shrink-0 h-[196px] text-[8px] font-bold text-[var(--c-paper)]/30 ink-border-sm border-dashed p-1 flex items-center justify-center text-center">
-            no Location
-            <br />
-            (cast one free each turn)
-          </div>
-        )}
-        {me.staging.length > 0 && (
-          <div className="w-[150px] shrink-0">
-            <div className="text-[8px] font-bold text-[var(--c-paper)]/60">STAGING (Twin)</div>
-            {me.staging.map((s) => (
-              <div
-                key={s.iid}
-                className="flex items-center gap-1 bg-[#8E44AD]/40 ink-border-sm p-0.5 mt-0.5"
-              >
-                <span className="text-lg leading-none text-[var(--c-paper)]">
-                  {DIE_FACES[(s.stagedDie ?? 1) - 1]}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Inspect ${s.def.name}`}
-                    className="text-[8px] font-bold text-[var(--c-paper)] truncate cursor-pointer"
-                    onClick={() => setInspect(s.def)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setInspect(s.def);
-                      }
-                    }}
-                  >
-                    {s.def.name}
-                  </div>
-                  <div className="text-[7px] text-[var(--c-paper)]/60">
-                    match a {s.stagedDie} to complete
-                  </div>
-                </div>
-                <button
-                  onClick={() => tryCompleteTwin(s)}
-                  className="btn-pop text-[8px] font-bold bg-[var(--c-yellow)] px-1 ink-border-sm"
-                >
-                  SET
-                </button>
-                {stage === 'preRoll' && (
-                  <button
-                    onClick={() => {
-                      setConfirmDialog({
-                        text: `Abandon ${s.def.name} and return it to hand?`,
-                        onConfirm: () => {
-                          abandonTwin(g, s.iid);
-                          bump();
-                        },
-                      });
-                    }}
-                    title="Abandon (return to hand)"
-                    aria-label={`Abandon ${s.def.name} and return it to hand`}
-                    className="btn-pop text-[8px] font-bold bg-[var(--c-red)] text-white px-1 ink-border-sm"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
         <div className="flex-1 min-w-0">
           <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
-            {me.board.length === 0 && (
+            {me.field.length === 0 && (
               <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
                 <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-                  Empty Board
+                  Empty Field
                 </span>
               </div>
             )}
-            {me.board.map((u) => {
-              const canAtt = stage === 'combat' && canAttack(g, u);
+            {me.field.map((u) => {
               const targetable = !!pending && isPendingTarget(u.iid);
-              const isSource = !!rallyPick && isRallySource(u.iid);
-              const rallyReady =
-                stage === 'placement' &&
-                u.def.ability &&
-                !u.abilityUsed &&
-                !u.hasAttacked &&
-                !u.boundThisTurn &&
-                !(u.enteredThisTurn && !hasKw(u.def, 'Swift')) &&
-                hasKw(u.def, 'Rally');
+              const canAtt =
+                stage === 'play' &&
+                g.phase === 'Clash' &&
+                !g.clash &&
+                myAttackers.some((x) => x.iid === u.iid);
+              const guardAssigned = guardOf(u.iid);
+              const isDeclaredGuard =
+                !!g.clash &&
+                g.clash.step !== 'guards' &&
+                Object.values(g.clash.guards).some((gs: string[]) => gs.includes(u.iid));
+              const canGuardNow =
+                guardStep && !!guardFocus && legalGuardsFor(g, guardFocus).some((x) => x.iid === u.iid);
               return (
-                <div key={u.iid} className="flex flex-col items-center gap-0.5 shrink-0 w-[78px]">
-                  <BoardUnit
-                    g={view}
-                    u={u}
-                    isAttacker={attacker === u.iid}
-                    highlight={targetable || isSource || (canAtt && attacker !== u.iid)}
-                    flash={
-                      attackFx?.attacker === u.iid ||
-                      attackFx?.target === u.iid ||
-                      (cpuAttackStep && cpuTargets.has(u.iid))
-                    }
-                    acted={cpuTargets.has(u.iid)}
-                    floats={floatsFor(u.iid)}
-                    onClick={
-                      targetable
-                        ? () => resolvePendingOn(u.iid)
-                        : isSource
-                          ? () => resolveRallySource(u.iid)
-                          : canAtt
-                            ? () => setAttacker(attacker === u.iid ? null : u.iid)
-                            : () => setInspect(u.def)
-                    }
-                  />
-                  {u.def.ability && (
-                    <AbilityPill
-                      label={`BASE ABILITY ${effAbilityThreshold(g, u)}+${
-                        effAbilityThreshold(g, u) !== u.def.ability.threshold
-                          ? ` (was ${u.def.ability.threshold}+)`
-                          : ''
-                      }:`}
-                      desc={describeEffect(u.def.ability.effect)}
-                      usable={!unitAbilityWhy(u)}
-                      used={u.abilityUsed}
-                      why={unitAbilityWhy(u)}
-                      onClick={() => tryAbility(u)}
-                    />
-                  )}
-                  {rallyReady && (
-                    <button
-                      onClick={() => tryRally(u)}
-                      title="Rally: trigger this ability for free using another exhausted permanent's resting die"
-                      className="btn-pop text-[7px] font-bold px-1 ink-border-sm bg-[#8E44AD] text-white"
-                    >
-                      ⚡ RALLY
-                    </button>
-                  )}
-                </div>
+                <BoardUnit
+                  key={u.iid}
+                  g={g}
+                  u={u}
+                  isAttacker={atkSel.has(u.iid) || (!!g.clash && g.clash.attackers.includes(u.iid))}
+                  isGuard={!!guardAssigned || isDeclaredGuard}
+                  highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
+                  flash={flashIids.has(u.iid)}
+                  floats={floatsFor(u.iid)}
+                  guardNote={
+                    guardAssigned
+                      ? `guards #${(g.clash?.attackers.indexOf(guardAssigned) ?? 0) + 1}`
+                      : undefined
+                  }
+                  onClick={
+                    targetable
+                      ? () => resolvePendingOn(u.iid)
+                      : guardStep
+                        ? () => toggleGuard(u.iid)
+                        : canAtt || atkSel.has(u.iid)
+                          ? () => toggleAttacker(u.iid)
+                          : () => setInspect(u.def)
+                  }
+                />
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* Hand dock — compact cards along the very bottom; hover/click a card
-          to open the enlarged preview above it and CAST from the preview. */}
+      {/* Hand dock — fan of cards along the very bottom; hover/click a card
+          to open the enlarged preview above it and INVOKE from the preview. */}
       <div
         className="relative shrink-0 z-30 bg-[var(--c-ink)]/85 border-t-2 border-[var(--c-yellow)]/50"
         onMouseLeave={() => {
@@ -2833,7 +2017,7 @@ export function GameV4({
           if (!previewPinned) setPreview(null);
         }}
       >
-        {previewCard && previewInfo && (
+        {previewCard && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-stretch gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs">
             <div
               className="relative shrink-0"
@@ -2846,16 +2030,7 @@ export function GameV4({
                 className="absolute top-0 left-0"
                 style={{ transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
               >
-                <CardFace
-                  def={previewCard.def}
-                  size="full"
-                  introduceKeywords
-                  effectiveThreshold={
-                    previewCard.def.threshold !== undefined
-                      ? effThreshold(g, HUMAN, previewCard.def)
-                      : undefined
-                  }
-                />
+                <CardFace def={previewCard.def} size="full" introduceKeywords />
               </div>
             </div>
             <div className="flex flex-col gap-1.5 w-[160px]">
@@ -2867,68 +2042,28 @@ export function GameV4({
                 ✕ CLOSE
               </button>
               <button
-                onClick={() => castFromPreview(previewCard)}
-                disabled={!previewCastable}
+                onClick={() => tryInvoke(previewCard.iid)}
+                disabled={!!previewWhy}
                 className={cn(
                   'heading-font text-sm px-3 py-2 ink-border-md shadow-hard-black-xs',
-                  previewCastable
-                    ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                    : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/40 cursor-not-allowed',
+                  previewWhy
+                    ? 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/40 cursor-not-allowed'
+                    : 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]',
                 )}
               >
-                {previewCard.def.type === 'Location'
-                  ? 'CAST — FREE'
-                  : previewInfo.isSum
-                    ? 'CAST — PICK DICE'
-                    : 'CAST'}
+                {previewCard.def.type === 'Charm'
+                  ? 'INVOKE — BOND'
+                  : needsTarget(previewCard.def.onInvoke)
+                    ? 'INVOKE — PICK TARGET'
+                    : 'INVOKE'}
               </button>
-              {!previewInfo.chk.ok && previewInfo.chk.why !== 'Select a die' && (
+              {previewWhy ? (
                 <span className="text-[9px] font-bold text-[var(--c-red)] leading-tight">
-                  {previewInfo.chk.why}
+                  {previewWhy}
                 </span>
-              )}
-              {!previewInfo.chk.ok &&
-                previewInfo.chk.why === 'Select a die' &&
-                previewInfo.auto === null && (
-                  <span className="text-[9px] font-bold text-[var(--c-red)] leading-tight">
-                    No unplaced die pays this cost.
-                  </span>
-                )}
-              {!previewInfo.chk.ok &&
-                previewInfo.chk.why === 'Select a die' &&
-                previewInfo.auto !== null && (
-                  <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
-                    Will spend a die showing {me.dice[previewInfo.auto].value}.
-                  </span>
-                )}
-              {previewInfo.chk.ok &&
-                selDie !== null &&
-                !previewInfo.isSum &&
-                previewCard.def.type !== 'Location' && (
-                  <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
-                    Will spend the selected die ({dieVal}).
-                  </span>
-                )}
-              {previewInfo.isSum && (
-                <span className="text-[9px] font-bold text-[var(--c-paper)]/70 leading-tight">
-                  Sum cost: after CAST, click dice in the tray until they total{' '}
-                  {effThreshold(g, HUMAN, previewCard.def)}+, then confirm.
-                </span>
-              )}
-              {previewInfo.canScrapNow && (
-                <button
-                  onClick={() => {
-                    tryScrap(previewCard);
-                    closePreview();
-                  }}
-                  className="btn-pop text-[9px] font-bold bg-[var(--c-red)] text-white px-2 py-1 ink-border-sm"
-                >
-                  SCRAP → reroll die {dieVal}
-                </button>
-              )}
-              {hasKw(previewCard.def, 'Scrap') && !previewInfo.canScrapNow && (
-                <span className="text-[8px] font-bold text-[var(--c-paper)]/50 leading-tight">
-                  Scrap: select a die during Placement, then reopen this card.
+              ) : (
+                <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
+                  Cost {totalCost(previewCard.def.cost)} — Locations auto-tap to pay.
                 </span>
               )}
             </div>
@@ -2936,17 +2071,10 @@ export function GameV4({
         )}
         <div className="flex items-center gap-2 px-2 pt-1">
           <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
-            HAND {me.hand.length}/{HAND_LIMIT}
-            {echoPick ? ' — pick a card to DISCARD for Echo' : ' · tap or hover a card to preview'}
+            HAND {me.hand.length}/{MAX_HAND} · tap or hover a card to preview
+            {inMyReaction || reactionStep ? ' · REACTION: Quick & Ambush only' : ''}
           </span>
         </div>
-        {/* A real card-fan: each card fanned out on a slight rotation/arc
-            around a shared pivot below the dock, overlapping its neighbors,
-            and docked low enough that only roughly its top half (art +
-            name) shows at rest — mimicking how a fan of physical cards is
-            actually held, and freeing up board space above. Hovering (or
-            focusing) a card lifts it clear of the fan so its full face and
-            the cast preview above are readable. */}
         <div className="relative h-[100px] overflow-hidden" style={{ perspective: 800 }}>
           {me.hand.length === 0 && (
             <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
@@ -2955,38 +2083,24 @@ export function GameV4({
           )}
           <div className="absolute left-1/2 bottom-0 -translate-x-1/2 flex">
             {me.hand.map((c, i) => {
-              const chk = canCastNow(c);
-              const canScrapNow = hasKw(c.def, 'Scrap') && stage === 'placement' && selDie !== null;
-              // Before a die is selected, judge dimming on "could any of my
-              // dice pay for this" rather than the stricter per-die check,
-              // which always fails pre-selection with "Select a die".
-              const potentiallyCastable = selDie === null ? canCastWithAnyDie(c) : chk.ok;
+              const why = invokeWhy(c);
               const n = me.hand.length;
               const mid = (n - 1) / 2;
               const off = i - mid;
               const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));
               const arcDrop = Math.abs(off) * 3;
               const isFocused = preview === c.iid;
-              const activate = echoPick
-                ? () => tryEchoFodder(c)
-                : () => {
-                    clearHoverIntent();
-                    setPreview(c.iid);
-                    setPreviewPinned(true);
-                  };
+              const activate = () => {
+                clearHoverIntent();
+                setPreview(c.iid);
+                setPreviewPinned(true);
+              };
               return (
-                // v4.19: the pointer hit area is this STATIONARY wrapper —
-                // the card visual inside animates (lift/rotate) with
-                // pointer-events disabled, so the hover target never moves
-                // out from under the cursor mid-transition. That was the
-                // root of the finicky hand hover: the lifted card vacated
-                // its own hover area, handing the cursor to a neighbor,
-                // which lifted in turn — an enter/leave oscillation.
                 <div
                   key={c.iid}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${c.def.name} — preview and cast`}
+                  aria-label={`${c.def.name} — preview and invoke`}
                   className="relative shrink-0 outline-none"
                   style={{
                     width: CARD_SIZES.compact.w,
@@ -2994,19 +2108,10 @@ export function GameV4({
                     marginLeft: i === 0 ? 0 : -46,
                     zIndex: isFocused ? 50 : i,
                   }}
-                  onMouseEnter={() => {
-                    if (!echoPick) previewIntent(c.iid);
-                  }}
+                  onMouseEnter={() => previewIntent(c.iid)}
                   onFocus={() => {
-                    // Clear any pending debounced hover-intent timer first —
-                    // otherwise a mouse hover that started on a different
-                    // card just before this one got keyboard-focused can
-                    // still fire afterward and silently snap the preview
-                    // back away from the just-focused card.
-                    if (!echoPick) {
-                      clearHoverIntent();
-                      setPreview(c.iid);
-                    }
+                    clearHoverIntent();
+                    setPreview(c.iid);
                   }}
                   onClick={activate}
                   onKeyDown={(e) => {
@@ -3028,12 +2133,9 @@ export function GameV4({
                     <CardFace
                       def={c.def}
                       size="compact"
-                      dimmed={!potentiallyCastable && !echoPick && !canScrapNow}
-                      highlight={!!echoPick || preview === c.iid}
+                      dimmed={!!why}
+                      highlight={preview === c.iid}
                       introduceKeywords
-                      effectiveThreshold={
-                        c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
-                      }
                     />
                   </div>
                 </div>
@@ -3043,125 +2145,43 @@ export function GameV4({
         </div>
       </div>
 
-      {/* Discard drawer */}
-      {showDiscard && (
+      {/* Ash-pile drawer */}
+      {showAsh && (
         <div className="absolute right-2 left-2 sm:left-auto top-16 bottom-24 w-auto sm:w-[260px] max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
           <div className="flex justify-between items-center mb-1">
-            <span className="heading-font text-[10px] text-[var(--c-yellow)]">DISCARD PILE</span>
+            <span className="heading-font text-[10px] text-[var(--c-yellow)]">ASH-PILE</span>
             <button
-              onClick={() => {
-                setShowDiscard(false);
-                setEchoPick(null);
-              }}
-              aria-label="Close discard pile"
+              onClick={() => setShowAsh(false)}
+              aria-label="Close ash-pile"
               className="btn-pop text-[10px] bg-[var(--c-red)] text-white px-1.5 ink-border-sm"
             >
               ✕
             </button>
           </div>
           <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
-            Echo cards can be recast: select a die, click ECHO, then discard one card from hand.
+            Shattered units, resolved Events and shed cards end up here.
           </div>
           <div className="flex flex-wrap gap-1">
-            {me.discard.map((c) => {
-              const eligible = hasKw(c.def, 'Echo') && !c.echoSpent;
-              return (
-                <div key={c.iid} className="flex flex-col gap-0.5">
-                  <CardFace
-                    def={c.def}
-                    size="compact"
-                    dimmed={!eligible}
-                    introduceKeywords
-                    effectiveThreshold={
-                      c.def.threshold !== undefined ? effThreshold(g, HUMAN, c.def) : undefined
-                    }
-                    onClick={() => setInspect(c.def)}
-                  />
-                  {eligible && stage === 'placement' && (
-                    <button
-                      onClick={() => {
-                        // 'sum'-cost Echo cards can't be paid with a single
-                        // die (their threshold is a dice-total, not a face
-                        // value) — arm the same multi-die builder the hand
-                        // cast flow uses, instead of the single-die checks
-                        // below (which would always fail for these).
-                        if (c.def.castCostKind === 'sum' && !c.def.comboGate) {
-                          setSumCast({ cardIid: c.iid, sel: new Set(), mode: 'echo' });
-                          setSelDie(null);
-                          say('Click dice to build the sum, then ECHO.');
-                          return;
-                        }
-                        if (selDie === null) {
-                          say('Select a die first.');
-                          return;
-                        }
-                        if (c.def.comboGate) {
-                          if (me.comboGateCastThisTurn) {
-                            say('One Combo-gated card per turn.');
-                            return;
-                          }
-                          if (!matchesPattern(rollValues(me), c.def.comboGate)) {
-                            say(`Roll lacks ${GATE_LABEL[c.def.comboGate] || c.def.comboGate}.`);
-                            return;
-                          }
-                        } else {
-                          const thr = effThreshold(g, HUMAN, c.def);
-                          if (c.def.castCostKind === 'exact') {
-                            if (dieVal !== thr) {
-                              say(`Needs exactly ${thr} to Echo this.`);
-                              return;
-                            }
-                          } else if (dieVal !== null && dieVal < thr) {
-                            say(`Needs ${thr}+ to Echo this.`);
-                            return;
-                          }
-                        }
-                        if (needsTarget(c.def.onCast)) {
-                          if (targetsFor(g, HUMAN, c.def.onCast!).length === 0) {
-                            say('No legal target.');
-                            return;
-                          }
-                          // Capture the die now (selDie is non-null here,
-                          // checked above) — otherwise resolvePendingOn falls
-                          // back to whatever selDie is when a target is
-                          // clicked, which can have changed in between.
-                          setPending({
-                            kind: 'echo',
-                            cardIid: c.iid,
-                            effect: c.def.onCast!,
-                            dieIndices: [selDie!],
-                          });
-                          return;
-                        }
-                        startEchoRecast(c.iid, selDie!);
-                      }}
-                      className={cn(
-                        'btn-pop text-[8px] font-bold px-1 ink-border-sm',
-                        echoPick?.cardIid === c.iid
-                          ? 'bg-[var(--c-red)] text-white'
-                          : 'bg-[#8E44AD] text-white',
-                      )}
-                    >
-                      {echoPick?.cardIid === c.iid ? 'PICK FODDER…' : 'ECHO'}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {me.discard.length === 0 && (
+            {me.ashPile.map((c) => (
+              <CardFace
+                key={c.iid}
+                def={c.def}
+                size="compact"
+                introduceKeywords
+                onClick={() => setInspect(c.def)}
+              />
+            ))}
+            {me.ashPile.length === 0 && (
               <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">empty</span>
             )}
           </div>
         </div>
       )}
 
-      {/* Card inspector — the same universal template used everywhere else
-          (deck builder, collection, pack reveals), so a card reads
-          identically no matter where it's inspected from. */}
+      {/* Card inspector */}
       {inspect && <Card3DInspector def={inspect} onClose={() => setInspect(null)} />}
 
-      {/* In-game confirm dialog — styled replacement for window.confirm (see
-          the `confirmDialog` state above). */}
+      {/* In-game confirm dialog */}
       {confirmDialog && (
         <div className="absolute inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
           <div
@@ -3193,78 +2213,7 @@ export function GameV4({
         </div>
       )}
 
-      {/* Forced discard (hand size &gt; 8 at End Phase) — player picks which cards */}
-      {forcedDiscard && (
-        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center p-4 overflow-y-auto">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Discard down to ${HAND_LIMIT}`}
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 text-center max-w-3xl my-auto"
-          >
-            <div className="heading-font text-xl mb-1">Discard Down to {HAND_LIMIT}</div>
-            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
-              Pick {forcedDiscard.needed} card{forcedDiscard.needed > 1 ? 's' : ''} to discard (
-              {forcedDiscard.picks.length}/{forcedDiscard.needed} selected).
-            </div>
-            <div className="flex gap-1.5 justify-center flex-wrap mb-4">
-              {me.hand.map((c) => {
-                const picked = forcedDiscard.picks.includes(c.iid);
-                return (
-                  <div key={c.iid} className="flex flex-col gap-0.5">
-                    <CardFace
-                      def={c.def}
-                      size="compact"
-                      highlight={picked}
-                      dimmed={!picked && forcedDiscard.picks.length >= forcedDiscard.needed}
-                      introduceKeywords
-                      onClick={() => toggleForcedDiscardPick(c.iid)}
-                    />
-                    {picked && (
-                      <span className="text-[8px] font-bold text-[var(--c-red)]">DISCARD</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => {
-                // v4.8 QoL: fill the selection with the engine's own default
-                // discard heuristic (duplicates first, then highest cost) —
-                // one click instead of hunting for safe cuts by hand.
-                const picks: string[] = [];
-                let rest = [...me.hand];
-                while (picks.length < forcedDiscard.needed && rest.length > 0) {
-                  const pick = defaultDiscardChoice(rest);
-                  picks.push(pick.iid);
-                  rest = rest.filter((c) => c.iid !== pick.iid);
-                }
-                setForcedDiscard({ needed: forcedDiscard.needed, picks });
-              }}
-              className="heading-font text-xs px-4 py-2 mr-2 ink-border-sm shadow-hard-black-xs btn-pop bg-[var(--c-steel)] text-[var(--c-paper)]"
-              title="Auto-select the suggested discards (spare duplicates, then the most expensive cards)"
-            >
-              SUGGEST
-            </button>
-            <button
-              onClick={confirmForcedDiscard}
-              disabled={forcedDiscard.picks.length !== forcedDiscard.needed}
-              className={cn(
-                'heading-font text-xs px-5 py-2 ink-border-sm shadow-hard-black-xs sticky bottom-2',
-                forcedDiscard.picks.length === forcedDiscard.needed
-                  ? 'btn-pop bg-[var(--c-red)] text-white'
-                  : 'bg-[var(--c-steel)]/40 text-[var(--c-paper)]/50 cursor-not-allowed',
-              )}
-            >
-              CONFIRM DISCARD
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Mulligan overlay — large readable cards, a clear question, two
-          prominent buttons, and a plain-words explainer of what a mulligan
-          actually does. */}
+      {/* Mulligan overlay */}
       {stage === 'mulligan' && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-center justify-center p-4 overflow-y-auto">
           <div
@@ -3282,7 +2231,7 @@ export function GameV4({
             <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-4 leading-snug">
               {mulliganUsed
                 ? 'That was your one mulligan — this hand is yours now. Click any card to zoom in, then KEEP to start.'
-                : 'A mulligan shuffles all 7 of these cards back into your deck and draws 7 fresh ones. You get exactly one per game. Click any card to zoom in.'}
+                : `A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${me.hand.length} fresh ones. You get exactly one per game. Click any card to zoom in.`}
             </div>
             <div className="flex gap-2 justify-center flex-wrap mb-5">
               {me.hand.map((c) => (
@@ -3296,8 +2245,6 @@ export function GameV4({
                 </React.Fragment>
               ))}
             </div>
-            {/* Sticky so the actions stay reachable on phones, where 7 stacked
-                cards push the bottom of the panel well past the viewport. */}
             <div className="flex gap-4 justify-center flex-wrap sticky bottom-0 bg-[var(--c-paper)] py-2 -mb-2">
               <button
                 onClick={afterMulligan}
@@ -3310,7 +2257,7 @@ export function GameV4({
                   onClick={doMulligan}
                   className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"
                 >
-                  ↻ MULLIGAN — redraw 7
+                  ↻ MULLIGAN — redraw {me.hand.length}
                 </button>
               )}
             </div>
@@ -3328,7 +2275,7 @@ export function GameV4({
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center"
           >
             <div className="heading-font text-3xl mb-2">
-              {g.winner === 'draw' ? 'DRAW' : g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
+              {g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
             </div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
               {g.log.slice(-2).join(' · ')}

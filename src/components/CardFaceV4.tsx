@@ -1,13 +1,21 @@
 /**
- * Shared v4.2 card-face rendering — the ONE card template used everywhere
+ * Shared v5.0 card-face rendering — the ONE card template used everywhere
  * (match UI, deck builder, collection, store/pack reveals) so a card looks
  * and reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
+ *
+ * Riftbound conversion: the dice-era Cast Slot cost UI (threshold die,
+ * exact/sum kinds, combo-pattern gates) is replaced by an ESSENCE COST row
+ * of colored pips + a generic numeral; ATK/HP gems are now Might/Grit;
+ * the type line prints "Type — Subtype"; Leaders show Resolve and their
+ * two Resolve abilities; keyword chips come from the new binary keyword
+ * set (KEYWORD_TEXT). Card dimensions, the regular-art frame, the
+ * Full-Art treatment, and the rarity/foil/serialized systems are unchanged.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Dices, Swords, Heart, Crown, MapPin, Wand2, Zap } from 'lucide-react';
-import { CardDef, CardType, Effect } from '../game/v3/cards';
+import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
+import { CardDef, CardType, Effect, EssenceCost, totalCost } from '../game/v3/cards';
 import { cn } from '../lib/utils';
 import {
   rarityChip,
@@ -17,16 +25,15 @@ import {
   isMythic,
   RARITY_HEX,
 } from '../meta/rarity';
-import { cardColors } from '../game/v3/colors';
+import { cardColors, COLORS } from '../game/v3/colors';
+import { KEYWORD_TEXT } from '../game/v3/keywords';
 import {
-  cardKeywords,
-  mechanicLabels,
-  KEYWORD_TIERS,
-  keywordTier,
-  MechanicLabel,
-  CardKeyword,
-} from '../game/v3/keywords';
-import { COLOR_PIP, colorBg, colorHexPrimary } from '../meta/colors';
+  COLOR_PIP,
+  GENERIC_PIP,
+  COLOR_LETTER,
+  colorBg,
+  colorHexPrimary,
+} from '../meta/colors';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -170,7 +177,7 @@ const PREMIUM_CSS = `
 }
 .premium-card:hover .my-corona,
 .premium-boost .my-corona { opacity: 1; animation: my-corona-kf 3.6s ease-in-out infinite; }
-/* Embossed stat gem — Mythic-exclusive faceted look for ATK/HP chips,
+/* Embossed stat gem — Mythic-exclusive faceted look for Might/Grit chips,
    restyled amethyst for the Void Eclipse template */
 .my-gem {
   background-image: linear-gradient(160deg, rgba(255,255,255,0.35) 0%, rgba(214,166,255,0.12) 45%, rgba(10,6,24,0.35) 100%) !important;
@@ -299,15 +306,7 @@ const OUTER_BORDER_PX: Record<CardSize, number> = { micro: 1, compact: 2, standa
  * card's outer border ring, so premium border animations never overlap the
  * name/stats/chips/flavor content. Same technique as `.my-void`/`.ur-aurora`
  * in PREMIUM_CSS, expressed as an inline style for layers whose base class
- * lives in index.css (ultra-sparkle, rarity-sheen).
- *
- * v4.22: previously a static `inset-0` object — that positioned the ring
- * flush with the card's padding edge, i.e. `outerBorder`-width pixels
- * *inside* the actual card border, so the Ultra-Rare ring effect visibly
- * floated inset from the real edge instead of hugging it. Now takes `size`
- * and negative-insets by `OUTER_BORDER_PX[size]` to land exactly on the true
- * outer edge (the card wrapper's own `overflow-hidden` still clips it to the
- * frame, so this can't bleed past the card). */
+ * lives in index.css (ultra-sparkle, rarity-sheen). */
 function edgeRingMaskStyle(size: CardSize): React.CSSProperties {
   const b = OUTER_BORDER_PX[size];
   return {
@@ -333,127 +332,44 @@ const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> =
   Event: Zap,
 };
 
-/** v4.3: short rules explainer per keyword, shown in a click-to-open popover. */
+/** v5.0 glossary backing every clickable term on a card face: the full
+ * Riftbound keyword set (KEYWORD_TEXT) plus the subtype/frame terms a card
+ * can print (Quick, Slow, Bound, Worn, Sanctum, Re-bond, Resolve, …). */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
-  Guard:
-    'While you control any Guard Unit, your opponent must attack a Guard Unit first — resolved one at a time until none remain.',
-  Swift: "May attack or use an Ability Slot the turn it's cast, instead of waiting a turn.",
-  Pierce:
-    "Leftover damage past what's needed to destroy the target Unit carries through to the enemy Leader, capped at half this card's ATK (rounded down, minimum 1).",
-  Ward: "Prevents the first instance of damage or Removal against this card each turn (not retaliation from its own attack) and spikes 1 damage back at the attacker in combat. Refreshes every End Phase.",
-  Frenzy:
-    "May attack a second time in the same Combat Phase if it survives its first attack. Only the second attack takes doubled retaliation, and it can't target the enemy Leader directly unless no other target remains or you're behind on Units.",
-  Anchor:
-    "This card's effective Cast Slot cost drops by 1 for each other Anchor card you control in play, to a max total of -3. The first time a card's own discount hits that cap, it permanently gains +2/+2.",
-  Echo: "After this card is discarded (any reason), it can later be recast from Discard by paying its cost plus discarding one extra card from hand — waived entirely for Rare/Super-Rare cards.",
-  Scrap:
-    'Discard this card from hand to reroll one of your unplaced dice, any time during Placement Phase.',
-  Rally:
-    "Once per turn, activate this card's Ability Slot for free using a die already resting on another exhausted friendly Ability Slot.",
-  Twin: 'Has two Cast Slots requiring an identical rolled face value. Filling the first parks it in your Staging Zone until a matching die completes it.',
-  Bulwark:
-    'Flat reduction to damage this Unit takes from attacks — both when defending and when it deals/takes retaliation while attacking.',
-  Toll: 'While this Unit is in play, ALL incoming damage to your Leader (any source) is reduced.',
-  Avenge:
-    'Permanently gains +1/+1 whenever another friendly Unit dies — an automatic trigger, no priority window.',
-  Crescendo: 'Adds bonus value to this Event per die showing a 6 that you placed this turn.',
-  Aftershock:
-    'After this Event resolves, it queues a smaller repeat of its effect to fire at the very start of your next turn.',
-  Snap: 'May be cast during your Reroll Phase, before the reroll window closes, instead of waiting for Placement.',
-  Tribute: 'Triggers at your End Phase if you Pitched 2 or more dice this turn.',
-  Excavate:
-    "This Location's Ability Slot threshold drops the longer it stays continuously in play.",
-  Contested:
-    "This Location's passive doubles while your opponent controls no Location of their own.",
-  Resolve: 'While your Leader is at or below half HP, its Ability Slot threshold drops.',
-  Ultimate:
-    'A second, once-per-game Leader Ability Slot, usable starting on a specific turn of yours.',
-  Sap: 'Deals damage directly to the named target, bypassing normal combat.',
-  Mend: 'Heals that much damage from the named target.',
-  Bind: "Target enemy Unit can't attack, use an Ability Slot, or deal retaliation damage during its controller's next turn.",
-  Surge: 'Draw a card (does nothing if your deck is empty — it never causes a loss).',
-  Overflow:
-    "If the die placed on this slot beats its effective threshold by this much or more, the bonus effect triggers immediately in addition to the card's normal effect.",
-  Combo: "Triggers if your final five-die roll contains the named pattern as a subset, checked once at Combo Check regardless of when the card was cast.",
-  Steel:
-    'The first X damage this Unit would take each turn, from any source (attacks, Sap, Pierce overflow), is prevented instead of reduced. Refreshes every End Phase, checked Ward -> Steel -> Bulwark -> Frenzy.',
-  Overrun:
-    "If this Unit's combat damage would be fully prevented or absorbed by Ward, Steel, or Bulwark, it deals 1 damage anyway. Doesn't apply to retaliation.",
-  Foothold: 'The first Unit you cast each turn costs 1 less while this Location is in play.',
+  ...KEYWORD_TEXT,
+  Quick: 'Quick Event — may be invoked in any priority window, including during the opponent’s turn or a Clash.',
+  Slow: 'Slow Event — may only be invoked during your own main phase.',
+  Bound: 'Bound Charm — bonds to a unit and is shattered along with it.',
+  Worn: 'Worn Charm — survives its bonded unit; pay its Re-bond cost to bond it to another unit.',
+  Sanctum: 'Sanctum Location — exhaust it for 1 essence of its type; it also carries an ability.',
+  Wellspring: 'Basic Location — exhausts for 1 essence of its type. Supplied automatically; takes no deck slots.',
+  Resolve: 'A Leader’s loyalty. Leader abilities spend or build Resolve; at 0 Resolve the Leader is shattered.',
+  Essence: 'Mana — produced by exhausting Locations. Colored pips must be paid with matching essence; generic with anything.',
+  Shatter: 'Destroy — the card goes to the Ash-pile.',
+  Banish: 'Remove from the game — the card goes to The Void.',
+  Erode: 'Mill — cards from the top of a deck go to the Ash-pile.',
+  Vitality: 'Your life total. Start at 20; at 0 you lose.',
 };
 
-/** v4.3: player-facing display label for each dice-pattern gate. */
-export const GATE_LABEL: Record<string, string> = {
-  AnyPair: 'PAIRS',
-  TwoPair: 'TWO PAIR',
-  ThreeKind: '3 OF A KIND',
-  FourKind: '4 OF A KIND',
-  Yahtzee: '5 OF A KIND',
-  FullHouse: 'FULL HOUSE',
-  SmallStraight: 'SM. STRAIGHT',
-  LargeStraight: 'LG. STRAIGHT',
-  ThreeOdds: '3 ODDS',
-  ThreeEvens: '3 EVENS',
-};
-
-/** Measured chance a focused player rolls each gate pattern within the
- * standard two rerolls (from scripts/pattern-hitrate.ts) — surfaced in the
- * combo-gate cost popover so players can judge how reliable a gate is. */
-export const GATE_HIT_RATE: Record<string, number> = {
-  AnyPair: 100,
-  ThreeOdds: 97,
-  ThreeEvens: 97,
-  ThreeKind: 74,
-  TwoPair: 74,
-  SmallStraight: 44,
-  FullHouse: 35,
-  FourKind: 29,
-  LargeStraight: 18,
-  Yahtzee: 5,
-};
-
-/** v4.3: short badge text for this card's Cast Slot cost, any format.
- * `threshold` overrides `def.threshold` — pass the live effective value
- * (post-Anchor-discount) during a match so the badge reflects what it
- * actually costs right now, not just what's printed. */
-export function costBadge(def: CardDef, threshold = def.threshold): string | null {
-  if (def.comboGate) return GATE_LABEL[def.comboGate] || def.comboGate;
-  if (threshold === undefined) return null;
-  if (def.castCostKind === 'exact') return `=${threshold}`;
-  if (def.castCostKind === 'sum') return `Σ${threshold}`;
-  return `${threshold}+`;
-}
-
-/** v4.3: one-line plain-English summary of this card's Cast Slot cost. */
-export function costSummary(def: CardDef): string | null {
-  if (def.comboGate) return `Cast: roll ${GATE_LABEL[def.comboGate] || def.comboGate}`;
-  if (def.threshold === undefined) return null;
-  if (def.castCostKind === 'exact') return `Cast: one die showing exactly ${def.threshold}`;
-  if (def.castCostKind === 'sum') return `Cast: dice totalling ${def.threshold}+`;
-  return `Cast: one die ${def.threshold}+`;
-}
-
-/** Plain-English phrase for who/what an effect hits — spelled out so a rules
- * line never leaves the reader guessing (e.g. a bare "Sap 2" used to not say
- * *who* takes the 2 damage). */
+/** Plain-English phrase for who/what an effect hits. */
 function targetPhrase(target: Effect['target']): string {
   switch (target) {
-    case 'enemyLeader':
-      return 'the enemy Leader';
-    case 'friendlyLeader':
-      return 'your Leader';
     case 'enemyUnit':
-      return 'a target enemy Unit';
+      return 'a target enemy unit';
     case 'friendlyUnit':
-      return 'a target friendly Unit';
-    case 'friendlyAny':
-      return 'your Leader or a friendly Unit';
+      return 'a target friendly unit';
     case 'anyTarget':
-      return 'a target enemy Unit or the enemy Leader';
+      return 'any target';
+    case 'enemyPlayer':
+      return 'the enemy player';
+    case 'friendlyPlayer':
+      return 'you';
+    case 'friendlyAny':
+      return 'you or a friendly unit';
     case 'allEnemyUnits':
-      return 'ALL enemy Units';
+      return 'ALL enemy units';
     case 'allFriendlyUnits':
-      return 'ALL friendly Units';
+      return 'ALL friendly units';
     case 'self':
       return 'this card';
     case 'none':
@@ -461,100 +377,93 @@ function targetPhrase(target: Effect['target']): string {
   }
 }
 
+/** One-line rules sentence for an Effect, in Riftbound terms. */
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
   switch (eff.action) {
-    case 'sap':
-      return `Sap ${v} to ${targetPhrase(eff.target)}`;
-    case 'mend':
-      return `Mend ${v} to ${targetPhrase(eff.target)}`;
+    case 'damage':
+      return `Deal ${v} damage to ${targetPhrase(eff.target)}`;
+    case 'heal':
+      return eff.target === 'friendlyPlayer' || eff.target === 'none'
+        ? `Gain ${v} Vitality`
+        : `Heal ${v} from ${targetPhrase(eff.target)}`;
     case 'draw':
-      return `Surge — draw ${v || 1} card${(v || 1) === 1 ? '' : 's'}`;
-    case 'bind':
-      // A bind carrying a numeric value ALSO saps the bound Unit for that
-      // amount ("Bind + Sap X" — engine.ts, since v4.26). Surface the damage
-      // in the rules text so a Bind 2 doesn't read identically to a value-less
-      // bind on the card face, ability pills, and CPU narration.
-      return (eff.value ?? 0) > 0
-        ? `Bind + Sap ${v} to ${targetPhrase(eff.target)} (bound: can't attack, use its Ability Slot, or retaliate next turn)`
-        : `Bind ${targetPhrase(eff.target)} (can't attack, use its Ability Slot, or retaliate next turn)`;
-    case 'destroy':
-      return `Destroy ${targetPhrase(eff.target)}`;
+      return `Deal ${v || 1} card${(v || 1) === 1 ? '' : 's'} (draw)`;
     case 'buff': {
       const isAll = eff.target === 'allFriendlyUnits';
       const subject =
-        eff.target === 'self' ? 'This card' : isAll ? 'ALL friendly Units' : 'A target friendly Unit';
+        eff.target === 'self' ? 'This card' : isAll ? 'ALL friendly units' : 'a target friendly unit';
       return `${subject} ${isAll ? 'get' : 'gets'} +${v}/+${v}`;
     }
+    case 'shatter':
+      return `Shatter ${targetPhrase(eff.target)}`;
+    case 'banish':
+      return `Banish ${targetPhrase(eff.target)}`;
+    case 'erode':
+      return `Erode ${v || 1} (mill the enemy deck)`;
+    case 'recover':
+      return `Recover ${targetPhrase(eff.target) || 'a friendly permanent'}`;
   }
 }
 
-/** Every rules line this card prints, one entry per ability/keyword effect —
- * phrased as a plain-English trigger ("when this happens") followed by what
- * it does, so a line reads on its own without needing outside context. */
+const TRIGGER_PHRASE: Record<NonNullable<CardDef['triggers']>[number]['when'], string> = {
+  enters: 'When this enters the field',
+  dies: 'When this dies',
+  dealsClashDamage: 'Whenever this deals clash damage',
+  atDawn: 'At Dawn',
+  atDusk: 'At Dusk',
+};
+
+/** Every rules line this card prints — trigger phrase + what it does. */
 export function cardRuleLines(def: CardDef): string[] {
   const bits: string[] = [];
-  if (def.comboGate && def.onCast)
+  if (def.onInvoke) {
     bits.push(
-      `Cast by rolling ${GATE_LABEL[def.comboGate] || def.comboGate}: ${describeEffect(def.onCast)}`,
+      def.type === 'Unit'
+        ? `When this enters the field: ${describeEffect(def.onInvoke)}`
+        : `On invoke: ${describeEffect(def.onInvoke)}`,
     );
-  else if (def.onCast) bits.push(`When cast: ${describeEffect(def.onCast)}`);
-  if (def.ability)
-    bits.push(
-      `Base Ability (place a die showing ${def.ability.threshold}+): ${describeEffect(def.ability.effect)}`,
-    );
-  if (def.combo)
-    bits.push(
-      `Combo (if your roll has ${GATE_LABEL[def.combo.pattern] || def.combo.pattern}): ${describeEffect(def.combo.effect)}`,
-    );
-  if (def.overflow)
-    bits.push(
-      `Overflow (die beats this card's cost by ${def.overflow.amount}+): also ${describeEffect(def.overflow.effect)}`,
-    );
-  if (def.twinBonus) bits.push(`Twin bonus (once both dice are placed): ${describeEffect(def.twinBonus)}`);
-  if (def.stagedPassive)
-    bits.push(`While staged, waiting for its match (Twin): ${describeEffect(def.stagedPassive)} each of your turns`);
-  if (def.aftershock)
-    bits.push(`Aftershock — at the start of your next turn: ${describeEffect(def.aftershock)}`);
-  if (def.crescendo)
-    bits.push(`Crescendo: +${def.crescendo.x} for each die showing a 6 you placed this turn`);
-  if (def.bulwark) bits.push(`Bulwark ${def.bulwark.x}: reduces damage from attacks by ${def.bulwark.x}`);
-  if (def.toll) bits.push(`Toll ${def.toll.x}: reduces all damage to your Leader by ${def.toll.x}`);
-  if (def.steel)
-    bits.push(
-      `Steel ${def.steel.x}: the first ${def.steel.x} damage this Unit would take each turn, from any source, is prevented`,
-    );
-  if (def.avenge) bits.push('Avenge: whenever another friendly Unit dies, this gets +1/+1');
+  }
+  for (const t of def.triggers ?? []) {
+    bits.push(`${TRIGGER_PHRASE[t.when]}: ${describeEffect(t.effect)}`);
+  }
+  if (def.produces) bits.push(`Exhaust: add one ${def.produces} essence`);
   if (def.locPassive)
     bits.push(
-      def.locPassive === 'ATK_ALL'
-        ? 'Passive: all your Units get +2 ATK'
-        : 'Passive: all your Units get +2 max HP',
+      def.locPassive === 'MIGHT_ALL'
+        ? 'Your units get +1 Might'
+        : 'Your units get +1 Grit',
     );
-  if (def.contested) bits.push("Contested: this Location's passive is doubled while your opponent controls no Location");
-  if (def.excavate)
+  if (def.bond) {
+    const stats = `+${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`;
+    const grants = def.bond.grants?.length ? ` and ${def.bond.grants.join(', ')}` : '';
+    bits.push(`Bonded unit gets ${stats}${grants}`);
+  }
+  if (def.rebondCost !== undefined) bits.push(`Re-bond ${def.rebondCost}`);
+  for (const ab of def.leaderAbilities ?? []) {
     bits.push(
-      `Excavate ${def.excavate.x}: this Location's Ability cost drops ${def.excavate.x} lower for each turn it's stayed in play`,
+      ab.text ??
+        `${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}: ${describeEffect(ab.effect)}`,
     );
-  if (def.tribute)
-    bits.push(`Tribute — at your End Phase, if you Pitched 2+ dice this turn: ${describeEffect(def.tribute)}`);
-  if (def.snap) bits.push('Snap: may be cast during your Reroll Phase, not just Placement');
-  if (def.foothold)
-    bits.push("Foothold: the first Unit you cast each turn costs 1 less while this is in play");
-  if (def.resolve)
-    bits.push(
-      `Resolve ${def.resolve.x}: this card's Ability cost drops ${def.resolve.x} while your Leader is at half HP or less`,
-    );
-  if (def.ultimate)
-    bits.push(
-      `Ultimate — starting your turn ${def.ultimate.unlockTurn}, once per game (place a die showing ${def.ultimate.threshold}+): ${describeEffect(def.ultimate.effect)}`,
-    );
+  }
   return bits;
 }
 
 /** Flat rules text — used for tooltips/inline text that just want one string. */
 export function cardRules(def: CardDef): string {
   return cardRuleLines(def).join(' · ');
+}
+
+/** Plain-English summary of an Essence Cost, for the cost row's popover. */
+export function costSummary(def: CardDef): string | null {
+  if (!def.cost) return null;
+  const parts: string[] = [];
+  for (const c of COLORS) {
+    const n = def.cost.pips[c] ?? 0;
+    if (n > 0) parts.push(`${n} ${c}`);
+  }
+  if (def.cost.generic > 0 || parts.length === 0) parts.push(`${def.cost.generic} generic`);
+  return `Essence Cost: ${parts.join(' + ')} (total ${totalCost(def.cost)})`;
 }
 
 /** Scales a font size down as text grows past a soft length target, so long
@@ -566,10 +475,97 @@ function fitFontSize(text: string, base: number, min: number, softLimit: number)
   return Math.max(min, Math.round(scaled * 10) / 10);
 }
 
-/** A small tinted, icon-led stat pill (ATK/HP) — replaces plain emoji text
- * with a proper badge so the stat line reads as UI, not a caption. */
+/** Per-tier pip diameter/font for the essence-cost row. */
+const PIP_SIZE: Record<CardSize, { d: number; f: number }> = {
+  micro: { d: 10, f: 6 },
+  compact: { d: 13, f: 7.5 },
+  standard: { d: 16, f: 9 },
+  full: { d: 20, f: 11 },
+};
+
+/**
+ * v5.0 ESSENCE COST row — one colored pip circle per colored pip in the
+ * cost (COLOR_PIP swatch + COLOR_LETTER glyph), plus a neutral numeral pip
+ * for the generic portion when generic > 0. A card whose cost is entirely
+ * empty (colorless, generic 0) still prints a "0" generic pip for
+ * non-Leader cards so "free" reads as a printed cost, not a missing one.
+ * Lives where the dice-era Cast Slot badge used to sit (header, right of
+ * the name).
+ */
+export function EssenceCostRow({
+  cost,
+  type,
+  size,
+  onArt,
+}: {
+  cost?: EssenceCost;
+  type: CardType;
+  size: CardSize;
+  /** Sitting directly over artwork (Full-Art header, micro board token) —
+   * adds a drop shadow + white ring so pips read over any art. */
+  onArt?: boolean;
+}) {
+  const { d, f } = PIP_SIZE[size];
+  const pips: { key: string; bg: string; fg: string; glyph: string; title: string }[] = [];
+  for (const c of COLORS) {
+    const n = cost?.pips[c] ?? 0;
+    for (let i = 0; i < n; i++) {
+      pips.push({
+        key: `${c}${i}`,
+        bg: COLOR_PIP[c].bg,
+        fg: COLOR_PIP[c].fg,
+        glyph: COLOR_LETTER[c],
+        title: `${c} essence`,
+      });
+    }
+  }
+  const generic = cost?.generic ?? 0;
+  if (generic > 0 || (pips.length === 0 && type !== 'Leader')) {
+    pips.push({
+      key: 'generic',
+      bg: GENERIC_PIP.bg,
+      fg: GENERIC_PIP.fg,
+      glyph: String(generic),
+      title: `${generic} generic essence`,
+    });
+  }
+  if (pips.length === 0) return null;
+  return (
+    <span
+      className="flex items-center gap-[2px] shrink-0 flex-wrap justify-end max-w-[55%]"
+      aria-label={`Essence cost: ${pips.map((p) => p.title).join(', ')}`}
+    >
+      {pips.map((p) => (
+        <span
+          key={p.key}
+          title={p.title}
+          className={cn(
+            'flex items-center justify-center rounded-full font-mono font-black leading-none shrink-0',
+            onArt ? 'border border-white/80' : 'border border-[var(--c-ink)]',
+          )}
+          style={{
+            width: d,
+            height: d,
+            fontSize: f,
+            backgroundColor: p.bg,
+            color: p.fg,
+            boxShadow: onArt
+              ? '0 1px 3px rgba(0,0,0,0.8)'
+              : 'inset 0 1px 1px rgba(255,255,255,0.55)',
+          }}
+        >
+          {p.glyph}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** A small tinted, icon-led stat gem (Might/Grit/Resolve) — a proper badge
+ * so the stat line reads as UI, not a caption. */
 function StatChip({
   icon: Icon,
+  label,
   value,
   maxValue,
   printed,
@@ -579,21 +575,19 @@ function StatChip({
   onArt,
 }: {
   icon: React.ComponentType<{ className?: string }>;
+  /** Accessible/hover name of the stat ("Might" / "Grit" / "Resolve"). */
+  label: string;
   value?: number;
   maxValue?: number;
-  /** v4.3 live-match stats: the printed value this live value has drifted
-   * from (buff/nerf). Rendered struck through inside the chip itself, so
-   * modified stats live in the normal stat position rather than as an extra
-   * badge. Omitted (or equal to `value`) renders a plain chip. */
+  /** Live-match stats: the printed value this live value has drifted from
+   * (buff/nerf), rendered struck through inside the chip itself. */
   printed?: number;
   tier: CardSize;
   tint: string;
-  /** v4.7 Mythic-exclusive: render the chip as an embossed faceted "stat
-   * gem" (gold bevel + inner shadow) instead of the flat tinted pill. */
+  /** v4.7 Mythic-exclusive: embossed faceted "stat gem" treatment. */
   emboss?: boolean;
-  /** v4.26: chip sits directly over artwork (Full-Art bottom panel, micro
-   * board cards) — swaps the translucent paper-tint fill for a solid dark
-   * backing + text shadow so the numbers read over ANY art. */
+  /** Chip sits directly over artwork (Full-Art bottom panel, micro board
+   * cards) — solid dark backing + text shadow so numbers read over ANY art. */
   onArt?: boolean;
 }) {
   const textClass =
@@ -614,6 +608,8 @@ function StatChip({
           : 'w-1.5 h-1.5';
   return (
     <span
+      title={label}
+      aria-label={`${label} ${value ?? ''}`}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full font-mono font-black border',
         emboss && 'my-gem',
@@ -649,14 +645,10 @@ const POPOVER_EST_HEIGHT = 90;
 
 /**
  * v4.3: a keyword pill that opens a small popover with its rules text on
- * click — used anywhere a keyword chip is shown (card template, board
- * Units) so players never have to guess what a keyword does. The popover
- * renders through a portal at a viewport-fixed position computed from the
- * button's own bounding rect (clamped to stay on-screen) rather than as an
- * absolutely-positioned child — every place this chip is used sits inside
- * at least one `overflow-hidden`/`overflow-auto` ancestor (the card face
- * itself, the battlefield shell, scrollable hand/collection rows), which
- * would otherwise clip an absolutely-positioned popover into invisibility.
+ * click — used anywhere a keyword chip is shown so players never have to
+ * guess what a keyword does. The popover renders through a portal at a
+ * viewport-fixed position (clamped to stay on-screen) since every place this
+ * chip is used sits inside at least one `overflow-hidden` ancestor.
  */
 const SEEN_KEYWORDS_KEY = 'frycards_seen_keywords';
 
@@ -682,26 +674,15 @@ function markKeywordSeen(kw: string): void {
 const AUTO_INTRO_GAP_MS = 3500;
 const AUTO_INTRO_VISIBLE_MS = 6000;
 /** Module-level, shared by every KeywordChip on the page: when several
- * never-seen keywords mount at once (e.g. a fresh opening hand full of
- * distinct keywords), this staggers their auto-introduce popovers instead
- * of firing them all on top of each other in one unreadable stack. */
+ * never-seen keywords mount at once, this staggers their auto-introduce
+ * popovers instead of firing them all on top of each other. */
 let nextAutoIntroSlot = 0;
 
-/** Shared popover behavior for any clickable keyword mention — the pill chip
- * (kwList) and any inline keyword mention found inside a rules sentence both
- * drive the same click-to-open/auto-introduce popover through this hook, so
- * a keyword is equally clickable whichever form it's rendered in. */
+/** Shared popover behavior for any clickable keyword mention. */
 function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: string) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
-  // Pending auto-close timer for the auto-introduced popover — cleared the
-  // moment the player interacts with it manually, so a manual re-open isn't
-  // cut short by a timeout scheduled for the earlier auto-open.
   const autoCloseRef = useRef<number | null>(null);
-  // v4.19: tier-aware — callers that know the card's exact tier pass its
-  // tier-specific description (tierDescription via cardKeywords); the
-  // generic KEYWORD_GLOSSARY stays as the fallback for tier-less mentions
-  // (inline rules words like Sap/Mend/Bind, HowToPlay links, log lines).
   const text = textOverride ?? KEYWORD_GLOSSARY[kw];
 
   const clearAutoClose = () => {
@@ -766,18 +747,10 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
 }
 
 /** Renders the popover itself (via portal) — shared by the pill chip and the
- * inline keyword link so both look/behave identically once opened.
- *
- * v4.24 bug fix: this used to render a `fixed inset-0` backdrop div to catch
- * outside clicks. Because it sat at a very high z-index over the ENTIRE
- * viewport, it intercepted the first click on literally anything else on
- * screen (a different keyword chip, a different card's cost badge, a nav
- * button) — that click just closed the current popover instead of reaching
- * whatever the user actually meant to click, forcing a second click. Now
- * dismissal is driven by document-level listeners instead of an intercepting
- * overlay, so a click on another trigger closes this popover AND still
- * reaches that trigger's own handler in the same gesture. Also now closes on
- * Escape, matching every real modal in the app. */
+ * inline keyword link so both look/behave identically once opened. Dismissal
+ * is driven by document-level listeners (not an intercepting overlay) so a
+ * click on another trigger closes this popover AND still reaches that
+ * trigger's own handler in the same gesture. Also closes on Escape. */
 function KeywordPopover({
   kw,
   text,
@@ -828,23 +801,12 @@ function KeywordPopover({
   );
 }
 
-/** v4.4: Magic the Gathering-style keyword line — the bare keyword name
- * (clickable/underlined, same glossary popover as any other keyword mention)
- * immediately followed by its reminder text in italics, so the explainer is
- * readable straight off the card without needing to click anything. Replaces
- * the old opaque yellow "badge" pill, which hid the definition behind a tap
- * and read as a UI chip rather than card text. */
-/** v4.19: the card's ONLY mechanics surface — a compact clickable pill chip.
- * Keyword chips show "Name + tier roman" (plus the bundled activation cost
- * for activated keywords); tapping opens the shared glossary popover with the
- * TIER-SPECIFIC description (tierDescription via cardKeywords). Mechanic
- * chips (mechanicLabels) render identically with their structured label.
- * Free-form rules text is gone from card faces entirely. */
+/** A compact clickable keyword/mechanic pill. Tapping opens the shared
+ * glossary popover with the keyword's rules text (KEYWORD_TEXT). */
 export function KeywordChip({
   kw,
   label,
   text,
-  cost,
   small,
   autoIntroduce,
   accent,
@@ -852,19 +814,13 @@ export function KeywordChip({
   key?: React.Key;
   /** Base keyword name — popover title + "seen keywords" localStorage key. */
   kw: string;
-  /** Chip label, e.g. "Bulwark II" (defaults to the bare keyword name). */
+  /** Chip label (defaults to the bare keyword name). */
   label?: string;
-  /** Tier-specific popover text; falls back to KEYWORD_GLOSSARY when omitted. */
+  /** Popover text; falls back to KEYWORD_GLOSSARY when omitted. */
   text?: string;
-  /** Bundled activation cost (activated keywords) — printed on the chip. */
-  cost?: string;
   small?: boolean;
   /** Auto-opens this keyword's popover once per device the first time it's
-   * ever seen (tracked in localStorage), so new players discover the
-   * glossary exists instead of needing to guess the name is clickable.
-   * Only pass this from live-match contexts (hand/board) — passing it from
-   * a screen that renders many cards at once (Collection, Deck Builder)
-   * would fire a stack of popovers simultaneously. */
+   * ever seen. Only pass from live-match contexts (hand/board). */
   autoIntroduce?: boolean;
   /** Chip tint (defaults to the neutral ink-on-paper pill). */
   accent?: string;
@@ -888,9 +844,6 @@ export function KeywordChip({
         }}
       >
         <span className="truncate">{label ?? kw}</span>
-        {cost && (
-          <span className="opacity-70 font-semibold normal-case truncate shrink-[2]">· {cost}</span>
-        )}
       </button>
       {pos && popText && (
         <KeywordPopover kw={label ?? kw} text={popText} pos={pos} close={close} triggerRef={btnRef} />
@@ -899,66 +852,9 @@ export function KeywordChip({
   );
 }
 
-/** Short kind label + longer plain-English explainer for each structured
- * mechanic chip — the popover body backing mechanicLabels(def)'s chips. */
-function mechanicExplain(def: CardDef, m: MechanicLabel): string {
-  switch (m.kind) {
-    case 'onCast':
-      return def.comboGate
-        ? `${describeEffect(def.onCast!)} — triggers when this card is cast by rolling ${GATE_LABEL[def.comboGate] || def.comboGate}.`
-        : `${describeEffect(def.onCast!)} — triggers once, the moment this card is cast.`;
-    case 'ability':
-      return `Ability Slot: place a die showing ${def.ability!.threshold}+ on this card (once per turn) to trigger: ${describeEffect(def.ability!.effect)}.`;
-    case 'combo':
-      return `At Combo Check, if your final five-die roll contains ${GATE_LABEL[def.combo!.pattern] || def.combo!.pattern}: ${describeEffect(def.combo!.effect)}.`;
-    case 'overflow':
-      return `If the die placed to cast this beats its effective cost by ${def.overflow!.amount}+, also: ${describeEffect(def.overflow!.effect)}.`;
-    case 'twinBonus':
-      return `Once both Twin dice are placed: ${describeEffect(def.twinBonus!)}.`;
-    case 'stagedPassive':
-      return `While parked in your Staging Zone waiting for its Twin match: ${describeEffect(def.stagedPassive!)} each of your turns.`;
-    case 'aftershock':
-      return `Aftershock — at the very start of your next turn, a delayed repeat fires: ${describeEffect(def.aftershock!)}.`;
-    case 'tribute':
-      return `Tribute — at your End Phase, if you Pitched enough dice this turn: ${describeEffect(def.tribute!)}.`;
-    case 'locPassive':
-      return def.locPassive === 'ATK_ALL'
-        ? 'Passive while this Location is in play: all your Units get +2 ATK.'
-        : 'Passive while this Location is in play: all your Units get +2 max HP.';
-    case 'ultimate':
-      return `Ultimate — starting your turn ${def.ultimate!.unlockTurn}, once per game, place a die showing ${def.ultimate!.threshold}+: ${describeEffect(def.ultimate!.effect)}.`;
-  }
-}
-
-/** Per-mechanic-kind chip tint so mechanic chips scan by category. */
-const MECHANIC_ACCENT: Record<MechanicLabel['kind'], string> = {
-  onCast: '#B45309',
-  ability: '#0E7490',
-  combo: '#A855F7',
-  overflow: '#DC2626',
-  twinBonus: '#7C3AED',
-  stagedPassive: '#7C3AED',
-  aftershock: '#EA580C',
-  tribute: '#64748B',
-  locPassive: '#16A34A',
-  ultimate: '#B91C1C',
-};
-
-/** The tier's bundled activation cost, for activated keywords ('' otherwise). */
-function keywordActivation(def: CardDef, kw: string): string {
-  const kd = KEYWORD_TIERS[kw];
-  if (!kd?.activated) return '';
-  return kd.tiers[Math.min(kd.tiers.length, Math.max(1, keywordTier(def, kw))) - 1].activation ?? '';
-}
-
-/** v4.3.1: an inline, in-sentence keyword mention (e.g. "Twin bonus:" inside
- * a rules line, or a keyword named inside a Combo/Overflow/Aftershock
- * description) — opens the exact same glossary popover as the pill chip
- * above. Previously, only a card's top-of-box keyword pills were clickable;
- * any mention of a keyword *inside* the generated rules sentences (or a
- * pill hidden by the small-card slice cap) had no way to open its
- * definition. This makes every recognized keyword word clickable wherever
- * it appears, not just in the pill row. */
+/** An inline, in-sentence keyword mention — opens the exact same glossary
+ * popover as the pill chip, so every recognized keyword word is clickable
+ * wherever it appears, not just in the pill row. */
 function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boolean }) {
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw);
   if (!text) return <>{kw}</>;
@@ -980,11 +876,9 @@ function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boole
   );
 }
 
-/** v4.3: click-to-open popover explaining a card's Cast Slot cost — the same
- * portal popover the keyword chips use (see useKeywordPopover's rationale for
- * why it must portal), so the cost badge is no longer a hover-only `title`
- * affordance. Wraps whatever badge content is passed as children in a real
- * <button>; the `title` attr is kept as a desktop hover fallback. */
+/** Click-to-open popover explaining a card's Essence Cost — same portal
+ * popover the keyword chips use. Wraps whatever badge content is passed as
+ * children in a real <button>; `title` kept as a desktop hover fallback. */
 function CostInfoButton({
   text,
   className,
@@ -1029,7 +923,7 @@ function CostInfoButton({
       </button>
       {pos && (
         <KeywordPopover
-          kw="CAST COST"
+          kw="ESSENCE COST"
           text={text}
           pos={pos}
           close={() => setPos(null)}
@@ -1040,22 +934,15 @@ function CostInfoButton({
   );
 }
 
-/** Sorted longest-first so a multi-word keyword (if ever added) is matched
- * before any single-word keyword it might contain. */
+/** Sorted longest-first so a multi-word keyword is matched before any
+ * single-word keyword it might contain. */
 const KEYWORD_NAMES = Object.keys(KEYWORD_GLOSSARY).sort((a, b) => b.length - a.length);
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** \b word-boundary on both sides — matches a keyword regardless of
- * surrounding punctuation ("Anchor.", "Anchor,", "(Anchor)") or position in
- * the sentence, matches every repeated occurrence (global flag), and never
- * matches a keyword as a partial word inside a longer word (e.g. "Rush"
- * inside "Rushmore") since \b requires an actual word/non-word transition. */
 const KEYWORD_TEXT_RE = new RegExp(`\\b(${KEYWORD_NAMES.map(escapeRegExp).join('|')})\\b`, 'g');
 
 /** Splits `text` on every recognized keyword mention and renders each one as
- * a clickable `KeywordText`, so any card sentence — combo text, "while
- * staged" passives, Overflow/Aftershock/Ultimate lines, etc — gets working
- * click-to-define keywords wherever they're mentioned, not just when a
- * keyword is its own top-level pill. */
+ * a clickable `KeywordText`, so any card sentence gets working
+ * click-to-define keywords wherever they're mentioned. */
 export function renderKeywordText(text: string, small?: boolean): React.ReactNode {
   if (!text) return text;
   const parts = text.split(KEYWORD_TEXT_RE);
@@ -1071,10 +958,7 @@ export function renderKeywordText(text: string, small?: boolean): React.ReactNod
   );
 }
 
-/** Per-set flavor-text styling — a distinct "print run" identity per set.
- * The live catalog is one consolidated set now ("Volume #1"); the legacy
- * per-set cases are kept for cached/offline data that may still carry the
- * old set names. */
+/** Per-set flavor-text styling — a distinct "print run" identity per set. */
 function setStyle(set?: string): { label: string; className: string; bar: string } {
   switch (set) {
     case 'Volume #1':
@@ -1110,18 +994,12 @@ function setStyle(set?: string): { label: string; className: string; bar: string
   }
 }
 
-/** Card art with a graceful fallback if the image 404s or never loads. Uses
- * object-contain (not cover) so the full 4:3 art is always visible — never
- * cropped — inside its fixed-aspect box; art narrower than 4:3 letterboxes
- * instead of losing its edges. */
-/** True when `src` points at a video file rather than a still image — Full-Art
- * cards may be a short looping clip instead of a static image. Sniffed from
- * the file extension (ignoring any querystring) since that's all a plain
- * URL string gives us; no separate "is this a video" field on CardDef. */
+/** True when `src` points at a video file rather than a still image. */
 function isVideoSrc(src: string): boolean {
   return /\.(mp4|webm|mov)(\?|#|$)/i.test(src);
 }
 
+/** Card art with a graceful fallback if the image 404s or never loads. */
 function CardArt({
   def,
   onLoaded,
@@ -1130,17 +1008,12 @@ function CardArt({
   def: CardDef;
   onLoaded?: () => void;
   /** Full-Art template: the image fills its box edge-to-edge (object-cover)
-   * instead of ever letterboxing — the whole card is the art, so a
-   * letterboxed bar would read as a rendering bug rather than the intended
-   * treatment. */
+   * instead of ever letterboxing. */
   cover?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
-  // v4.24 bug fix: a caller that keeps one CardFace mounted at a fixed spot
-  // while swapping which card it shows (no remount, no `key`) used to latch
-  // `broken` forever once any image 404'd — every later card shown in that
-  // same slot rendered "NO IMAGE" even though its art was fine. Reset
-  // whenever the image URL actually changes.
+  // Reset whenever the image URL actually changes (a caller may swap `def`
+  // without remounting).
   useEffect(() => setBroken(false), [def.image]);
   if (!def.image || broken) {
     return (
@@ -1172,8 +1045,6 @@ function CardArt({
   return (
     <img
       src={def.image}
-      // Decorative: the card wrapper already carries a full aria-label, so an
-      // empty alt suppresses screen readers from reading the raw image URL.
       alt=""
       className={artClass}
       draggable={false}
@@ -1184,10 +1055,9 @@ function CardArt({
   );
 }
 
-/** The three fixed pixel sizes for `CardFace`'s `size` prop — exported so any
- * wrapper that needs to reserve exact space for a card (e.g. a flip-reveal
- * container) can read the real dimensions instead of hardcoding a magic
- * number that could silently drift out of sync with this table. */
+/** The fixed pixel sizes for `CardFace`'s `size` prop — exported so any
+ * wrapper that needs to reserve exact space for a card can read the real
+ * dimensions instead of hardcoding a magic number. */
 export const CARD_SIZES = {
   micro: { w: 78, h: 109 },
   compact: { w: 110, h: 154 },
@@ -1200,10 +1070,7 @@ export type CardSize = keyof typeof SIZES;
 
 /** Hand-tuned per-tier presentation values. `compact` and `standard` are NOT
  * just a linear shrink of `full` — each tier gets its own font sizes, border
- * weights, keyword caps and content toggles so small cards stay legible
- * instead of reusing full-size styling squeezed into a smaller box. Only
- * three fixed tiers exist anywhere in the app; nothing renders at an
- * arbitrary pixel size. */
+ * weights, keyword caps and content toggles so small cards stay legible. */
 const TIER: Record<
   CardSize,
   {
@@ -1215,10 +1082,6 @@ const TIER: Record<
     headerPy: string;
     typeIconSize: string;
     nameFont: { base: number; min: number; soft: number };
-    comboBadge: string;
-    showDiceIcon: boolean;
-    costBadge: string;
-    freeBadge: string;
     artBorder: string;
     artRing: boolean;
     rarityChip: string;
@@ -1227,13 +1090,13 @@ const TIER: Record<
     typeLine: string;
     showSetSuffix: boolean;
     textBoxPad: string;
-    /** Max keyword+mechanic chips shown; overflow collapses into a "+N" chip
-     * (full preview/inspector always shows everything). */
+    /** Max keyword chips shown; overflow collapses into a "+N" chip. */
     keywordMax: number;
     keywordSmall: boolean;
-    /** Print each activated keyword's bundled cost on its chip — only tiers
-     * wide enough for it; smaller tiers keep the cost in the popover. */
-    chipCosts: boolean;
+    /** Render the card's rules text (card.text + generated lines). */
+    showRules: boolean;
+    rulesFont: number;
+    rulesLines: number;
     showFlavor: boolean;
   }
 > = {
@@ -1246,10 +1109,6 @@ const TIER: Record<
     headerPy: 'py-[1px]',
     typeIconSize: 'w-2 h-2',
     nameFont: { base: 7, min: 5.5, soft: 9 },
-    comboBadge: 'text-[5.5px] px-0.5 py-[1px]',
-    showDiceIcon: false,
-    costBadge: 'text-[6.5px] px-0.5 h-3 min-w-3',
-    freeBadge: 'text-[5.5px] px-0.5 py-[1px]',
     artBorder: 'border',
     artRing: false,
     rarityChip: 'text-[5px] px-0.5',
@@ -1260,7 +1119,9 @@ const TIER: Record<
     textBoxPad: 'p-0.5',
     keywordMax: 2,
     keywordSmall: true,
-    chipCosts: false,
+    showRules: false,
+    rulesFont: 6,
+    rulesLines: 0,
     showFlavor: false,
   },
   compact: {
@@ -1272,10 +1133,6 @@ const TIER: Record<
     headerPy: 'py-0.5',
     typeIconSize: 'w-2.5 h-2.5',
     nameFont: { base: 9.5, min: 7, soft: 11 },
-    comboBadge: 'text-[6.5px] px-1 py-0.5',
-    showDiceIcon: false,
-    costBadge: 'text-[8px] px-1 h-4 min-w-4',
-    freeBadge: 'text-[6.5px] px-1 py-0.5',
     artBorder: 'border',
     artRing: false,
     rarityChip: 'text-[6px] px-1',
@@ -1286,7 +1143,9 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 4,
     keywordSmall: true,
-    chipCosts: false,
+    showRules: true,
+    rulesFont: 6.5,
+    rulesLines: 2,
     showFlavor: false,
   },
   standard: {
@@ -1298,10 +1157,6 @@ const TIER: Record<
     headerPy: 'py-0.5',
     typeIconSize: 'w-3 h-3',
     nameFont: { base: 11, min: 8, soft: 13 },
-    comboBadge: 'text-[7.5px] px-1 py-0.5',
-    showDiceIcon: false,
-    costBadge: 'text-[9px] px-1 h-5 min-w-5',
-    freeBadge: 'text-[7.5px] px-1 py-0.5',
     artBorder: 'border-2',
     artRing: false,
     rarityChip: 'text-[7px] px-1',
@@ -1312,7 +1167,9 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 6,
     keywordSmall: false,
-    chipCosts: false,
+    showRules: true,
+    rulesFont: 7.5,
+    rulesLines: 3,
     showFlavor: false,
   },
   full: {
@@ -1324,10 +1181,6 @@ const TIER: Record<
     headerPy: 'py-1',
     typeIconSize: 'w-3.5 h-3.5',
     nameFont: { base: 13, min: 8.5, soft: 15 },
-    comboBadge: 'text-[9px] px-1.5 py-0.5',
-    showDiceIcon: true,
-    costBadge: 'text-[11px] px-1.5 h-7 min-w-7',
-    freeBadge: 'text-[9px] px-1.5 py-0.5',
     artBorder: 'border-[3px]',
     artRing: true,
     rarityChip: 'text-[9px] px-1.5 py-0.5',
@@ -1336,59 +1189,96 @@ const TIER: Record<
     typeLine: 'mt-1 text-[10px]',
     showSetSuffix: true,
     textBoxPad: 'p-1.5',
-    // v4.22: used to be 99 ("full preview always shows everything") — but a
-    // procedurally-loaded card can carry a long tail of keyword+mechanic
-    // chips, and with no cap the chip row just kept wrapping until it ran
-    // past the text box and off the bottom of the card. Capped like every
-    // other tier now; the "+N" overflow chip (below) covers the rest, and
-    // the inspector/expanded view is where a player goes to see everything
-    // in full via each chip's own popover anyway.
     keywordMax: 8,
     keywordSmall: false,
-    chipCosts: true,
+    showRules: true,
+    rulesFont: 9,
+    rulesLines: 5,
     showFlavor: true,
   },
 };
 
-/** v4.26 overflow-proof chip row: renders keyword + mechanic chips into a
+/** A chip printed in the rules box — keywords, Charm bond/Re-bond, Location
+ * passive/produce — each with its glossary/explainer popover text. */
+export interface FaceChip {
+  kw: string;
+  label: string;
+  text?: string;
+  accent?: string;
+}
+
+/** All chips a card prints: one per keyword (KEYWORD_TEXT popover), plus
+ * structured chips for Charm bond stats/grants, Worn Re-bond, and Sanctum
+ * passives. */
+export function faceChips(def: CardDef): FaceChip[] {
+  const chips: FaceChip[] = [];
+  for (const kw of def.keywords ?? []) {
+    chips.push({ kw, label: kw, text: KEYWORD_TEXT[kw as keyof typeof KEYWORD_TEXT] });
+  }
+  if (def.bond) {
+    chips.push({
+      kw: 'Bond',
+      label: `Bond +${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`,
+      text: 'While this Charm is bonded to a unit, the unit gets these bonus stats (Might/Grit).',
+      accent: '#0E7490',
+    });
+    for (const g of def.bond.grants ?? []) {
+      chips.push({
+        kw: g,
+        label: `Grants ${g}`,
+        text: `Bonded unit gains ${g}: ${KEYWORD_TEXT[g as keyof typeof KEYWORD_TEXT] ?? ''}`,
+        accent: '#0E7490',
+      });
+    }
+  }
+  if (def.rebondCost !== undefined) {
+    chips.push({
+      kw: 'Worn',
+      label: `Re-bond ${def.rebondCost}`,
+      text: `Worn Charm — survives its bonded unit. Pay ${def.rebondCost} essence to bond it to another unit.`,
+      accent: '#B45309',
+    });
+  }
+  if (def.locPassive) {
+    chips.push({
+      kw: 'Sanctum',
+      label: def.locPassive === 'MIGHT_ALL' ? '+1 Might to your units' : '+1 Grit to your units',
+      text:
+        def.locPassive === 'MIGHT_ALL'
+          ? 'Static passive while this Location is in play: all your units get +1 Might.'
+          : 'Static passive while this Location is in play: all your units get +1 Grit.',
+      accent: '#16A34A',
+    });
+  }
+  return chips;
+}
+
+/** v4.26 overflow-proof chip row: renders keyword chips into a
  * height-bounded, clipped container and then MEASURES it — if the rendered
  * rows don't fit the tier's height budget, it drops one chip at a time (each
- * drop grows the "+N" overflow chip) until everything genuinely fits. The
- * static per-tier `keywordMax` is only the starting upper bound; the real cap
- * is whatever the actual labels/wrapping allow, so a wall of long keyword
- * names can never push later content (flavor, footer) off the card. */
+ * drop grows the "+N" overflow chip) until everything genuinely fits. */
 function FittedChips({
   def,
   size,
-  keywordChips,
-  mechChips,
+  chips,
   introduceKeywords,
 }: {
   def: CardDef;
   size: CardSize;
-  keywordChips: CardKeyword[];
-  mechChips: MechanicLabel[];
+  chips: FaceChip[];
   introduceKeywords?: boolean;
 }) {
   const cfg = TIER[size];
-  const total = keywordChips.length + mechChips.length;
+  const total = chips.length;
   const [cap, setCap] = useState(cfg.keywordMax);
   const ref = useRef<HTMLDivElement>(null);
-  // Reset the budget whenever the card (or tier) this slot shows changes —
-  // a caller that swaps `def` without remounting must re-measure from scratch.
-  // Render-time state adjustment (the React-sanctioned "derived state" form,
-  // not an effect) so the stale cap never paints.
+  // Reset the budget whenever the card (or tier) this slot shows changes.
   const resetKey = `${def.id}|${size}`;
   const [prevResetKey, setPrevResetKey] = useState(resetKey);
   if (prevResetKey !== resetKey) {
     setPrevResetKey(resetKey);
     setCap(cfg.keywordMax);
   }
-  // Runs after every commit: while the clipped container still overflows its
-  // height budget, shed one more chip (min 1 so the "+N" always has an
-  // anchor). Cap only ever decreases between resets, so the cascade is
-  // bounded (≤ keywordMax pre-paint passes) — this is deliberate DOM
-  // measurement, the one job useLayoutEffect exists for.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = ref.current;
@@ -1404,8 +1294,6 @@ function FittedChips({
       ref={ref}
       className={cn(
         'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px] overflow-hidden',
-        // Hard per-tier row budget — the measurement above shrinks the chip
-        // count until the rows genuinely fit inside this clip box.
         size === 'full'
           ? 'max-h-[42px]'
           : size === 'standard'
@@ -1415,25 +1303,15 @@ function FittedChips({
               : 'max-h-[11px]',
       )}
     >
-      {keywordChips.slice(0, shown).map((k) => (
+      {chips.slice(0, shown).map((k, i) => (
         <KeywordChip
-          key={k.kw}
+          key={`${k.kw}-${i}`}
           kw={k.kw}
           label={k.label}
-          text={k.description}
-          cost={cfg.chipCosts ? keywordActivation(def, k.kw) : undefined}
+          text={k.text}
           small={cfg.keywordSmall}
           autoIntroduce={introduceKeywords}
-          accent={k.atCap ? '#B45309' : undefined}
-        />
-      ))}
-      {mechChips.slice(0, Math.max(0, shown - keywordChips.length)).map((m, i) => (
-        <KeywordChip
-          key={`${m.kind}-${i}`}
-          kw={m.label}
-          text={mechanicExplain(def, m)}
-          small={cfg.keywordSmall}
-          accent={MECHANIC_ACCENT[m.kind]}
+          accent={k.accent}
         />
       ))}
       {hidden > 0 && (
@@ -1452,11 +1330,9 @@ function FittedChips({
 }
 
 /** v4.26 lowest-priority element on the card: flavor text renders at up to
- * `maxLines` clamped lines, then MEASURES its (height-constrained) wrapper —
- * whenever the clamped paragraph still doesn't fit the leftover space, it
- * sheds one line at a time and finally unmounts entirely at zero. Keywords,
- * stats and cost always win the space fight; flavor gracefully yields, never
- * clips mid-glyph, and never pushes anything off the card. */
+ * `maxLines` clamped lines, then MEASURES its wrapper — whenever the clamped
+ * paragraph still doesn't fit the leftover space it sheds one line at a time
+ * and finally unmounts entirely at zero. */
 function FittedFlavor({
   text,
   fontPx,
@@ -1471,8 +1347,6 @@ function FittedFlavor({
   const MAX_LINES = 4;
   const [lines, setLines] = useState(MAX_LINES);
   const ref = useRef<HTMLDivElement>(null);
-  // Same render-time reset + bounded measure-and-shed loop as FittedChips —
-  // see that component for the pattern rationale.
   const resetKey = `${text}|${fontPx}`;
   const [prevResetKey, setPrevResetKey] = useState(resetKey);
   if (prevResetKey !== resetKey) {
@@ -1512,13 +1386,26 @@ function FittedFlavor({
   );
 }
 
-/** v4.26: the `micro` tier is no longer a shrunken copy of the full template
- * — it's a purpose-built board token. The art fills the whole footprint
- * (object-cover) with top/bottom gradient scrims; the top strip carries the
- * type glyph + auto-shrinking name and the cast-cost badge; the bottom strip
- * carries up to two keyword chips (with a "+N" spillover) and solid-backed
- * ATK/HP chips, so a battlefield card reads name/cost/stats/keywords at a
- * glance instead of squeezing six rows of 5px template furniture. */
+/** Type line text: "Type — Subtype" (e.g. "Event — Quick"). */
+function typeLineText(def: CardDef): string {
+  return def.subtype ? `${def.type} — ${def.subtype}` : def.type;
+}
+
+/** The card's full printed rules text: `card.text` if authored, otherwise
+ * the generated lines from its structured mechanics. */
+function rulesText(def: CardDef): string {
+  if (def.text) return def.text;
+  // Leader ability lines print separately (see the Leader block), so skip
+  // them here to avoid double-printing.
+  const lines = cardRuleLines({ ...def, leaderAbilities: undefined });
+  return lines.join(' ');
+}
+
+/** v4.26: the `micro` tier is a purpose-built board token, not a shrunken
+ * full card. The art fills the whole footprint with top/bottom scrims; the
+ * top strip carries the type glyph + auto-shrinking name and the essence
+ * cost pips; the bottom strip carries up to two keyword chips (with a "+N"
+ * spillover) and solid-backed Might/Grit gems (Resolve for Leaders). */
 function MicroCard({
   def,
   dimmed,
@@ -1530,26 +1417,23 @@ function MicroCard({
   badge,
   count,
   foilCount,
-  maxHp,
   live,
-  effectiveThreshold,
   introduceKeywords,
   serial,
 }: Omit<CardFaceProps, 'size' | 'key'>) {
   const { w, h } = SIZES.micro;
-  const keywordChips = cardKeywords(def);
-  const mechChips = mechanicLabels(def);
-  const totalChips = keywordChips.length + mechChips.length;
+  const chips = faceChips(def);
+  const totalChips = chips.length;
   const MAX_KW = 2;
-  const shownKw = keywordChips.slice(0, MAX_KW);
+  const shownKw = chips.slice(0, MAX_KW);
   const hiddenChips = totalChips - shownKw.length;
   const isFoil = foil && !serial;
   const mythic = isMythic(def.rarity) && !serial;
-  const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
-  const label = `${def.name}, ${def.type}${atkHp}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
+  const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
   const TypeIcon = TYPE_ICON[def.type];
   const nameFontPx = fitFontSize(def.name, 7.5, 5.5, 12);
-  const cardColorsForFace = def.type === 'Leader' ? [] : cardColors(def);
+  const cardColorsForFace = cardColors(def);
   return (
     <div
       role="button"
@@ -1590,7 +1474,7 @@ function MicroCard({
             'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0) 36%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.55) 72%, rgba(0,0,0,0.92) 100%)',
         }}
       />
-      {/* Name + cost strip */}
+      {/* Name + essence-cost strip */}
       <div className="relative z-10 flex items-start justify-between gap-0.5 px-1 pt-0.5 shrink-0">
         <span
           className="flex items-center gap-0.5 min-w-0 heading-font leading-tight text-white"
@@ -1602,42 +1486,7 @@ function MicroCard({
             {def.name}
           </span>
         </span>
-        {def.comboGate ? (
-          <CostInfoButton
-            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.`}
-            className="heading-font shrink-0 rounded-full border border-[var(--c-ink)] bg-[#A855F7] text-white text-[5px] px-0.5 py-[1px] leading-tight"
-            title={costSummary(def) || undefined}
-          >
-            {GATE_LABEL[def.comboGate] || def.comboGate}
-          </CostInfoButton>
-        ) : def.type === 'Location' ? (
-          <CostInfoButton
-            text="Locations cast free: once per turn, as a bonus action alongside your five die placements — no die, no Cast Slot. Max one Location in play."
-            className="heading-font shrink-0 rounded-full border border-[var(--c-ink)] bg-[var(--c-steel)] text-white text-[5px] px-0.5 py-[1px]"
-            title="Cast: free"
-          >
-            FREE
-          </CostInfoButton>
-        ) : def.type !== 'Leader' && def.threshold !== undefined ? (
-          <CostInfoButton
-            text={
-              effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
-                ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn.`
-                : `${costSummary(def)}.`
-            }
-            className={cn(
-              'heading-font font-mono shrink-0 flex items-center justify-center rounded-full border border-[var(--c-ink)] text-[6.5px] h-3.5 min-w-3.5 px-0.5',
-              def.castCostKind === 'exact'
-                ? 'bg-[#0E7490] text-white'
-                : def.castCostKind === 'sum'
-                  ? 'bg-[#B45309] text-white'
-                  : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-            )}
-            title={costSummary(def) || undefined}
-          >
-            {costBadge(def, effectiveThreshold ?? def.threshold)}
-          </CostInfoButton>
-        ) : null}
+        <EssenceCostRow cost={def.cost} type={def.type} size="micro" onArt />
       </div>
       {/* Corner status badges (count / foil / serial / caller badge) */}
       {(badge || serial || isFoil || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
@@ -1673,19 +1522,19 @@ function MicroCard({
         </div>
       )}
       <div className="flex-1 min-h-0" />
-      {/* Bottom strip: keyword chips + solid-backed stats */}
+      {/* Bottom strip: keyword chips + solid-backed stat gems */}
       <div className="relative z-10 flex flex-col gap-[2px] px-1 pb-1 shrink-0">
         {(shownKw.length > 0 || hiddenChips > 0) && (
           <div className="flex flex-row flex-wrap content-start gap-0.5 max-h-[11px] overflow-hidden">
-            {shownKw.map((k) => (
+            {shownKw.map((k, i) => (
               <KeywordChip
-                key={k.kw}
+                key={`${k.kw}-${i}`}
                 kw={k.kw}
                 label={k.label}
-                text={k.description}
+                text={k.text}
                 small
                 autoIntroduce={introduceKeywords}
-                accent={k.atCap ? '#B45309' : undefined}
+                accent={k.accent}
               />
             ))}
             {hiddenChips > 0 && (
@@ -1715,20 +1564,25 @@ function MicroCard({
           </span>
           {def.type === 'Unit' &&
             (live ? (
-              <span className="flex items-center gap-0.5 shrink-0" title={`Printed ${def.atk}/${def.hp}`}>
+              <span
+                className="flex items-center gap-0.5 shrink-0"
+                title={`Printed ${def.might}/${def.grit}`}
+              >
                 <StatChip
                   icon={Swords}
+                  label="Might"
                   value={live.atk}
-                  printed={def.atk}
+                  printed={def.might}
                   tier="micro"
-                  tint={live.atk > (def.atk ?? 0) ? '#4ADE80' : '#F87171'}
+                  tint={live.atk > (def.might ?? 0) ? '#4ADE80' : '#F87171'}
                   onArt
                 />
                 <StatChip
-                  icon={Heart}
+                  icon={Shield}
+                  label="Grit"
                   value={live.hp}
                   maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                  printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                  printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
                   tier="micro"
                   tint={live.hp < live.maxHp ? '#F87171' : '#4ADE80'}
                   onArt
@@ -1736,22 +1590,18 @@ function MicroCard({
               </span>
             ) : (
               <span className="flex items-center gap-0.5 shrink-0">
-                <StatChip icon={Swords} value={def.atk} tier="micro" tint="#F87171" onArt />
-                <StatChip icon={Heart} value={def.hp} tier="micro" tint="#4ADE80" onArt />
+                <StatChip icon={Swords} label="Might" value={def.might} tier="micro" tint="#F87171" onArt />
+                <StatChip icon={Shield} label="Grit" value={def.grit} tier="micro" tint="#4ADE80" onArt />
               </span>
             ))}
           {def.type === 'Leader' && (
             <span className="shrink-0">
               <StatChip
-                icon={Heart}
-                value={def.hp}
-                maxValue={maxHp}
+                icon={Shield}
+                label="Resolve"
+                value={def.resolve}
                 tier="micro"
-                tint={
-                  maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
-                    ? '#F87171'
-                    : '#4ADE80'
-                }
+                tint="#A78BFA"
                 onArt
               />
             </span>
@@ -1780,9 +1630,7 @@ interface CardFaceProps {
   badge?: string;
   count?: number;
   foilCount?: number;
-  maxHp?: number;
   live?: { atk: number; hp: number; maxHp: number };
-  effectiveThreshold?: number;
   introduceKeywords?: boolean;
   serial?: { number: number; cap: number };
 }
@@ -1799,19 +1647,14 @@ export function CardFace({
   badge,
   count,
   foilCount,
-  maxHp,
   live,
-  effectiveThreshold,
   introduceKeywords,
   serial,
 }: {
   key?: React.Key;
   def: CardDef;
-  /** Card size — one of three fixed, hand-tuned tiers (real 2.5:3.5
-   * proportions at every tier): `compact` for dense rows (hand, discard,
-   * showcases), `standard` for a browsable grid (deck builder pool), `full`
-   * for the primary "read the whole card" view (collection grid, inspector,
-   * pack reveal). */
+  /** Card size — one of the fixed, hand-tuned tiers (real 2.5:3.5
+   * proportions at every tier). */
   size?: CardSize;
   dimmed?: boolean;
   highlight?: boolean;
@@ -1819,40 +1662,29 @@ export function CardFace({
   foil?: boolean;
   /** Set false to suppress the animated shimmer overlay while still showing
    * the foil badge/glow — for callers (Card3DInspector) that layer their
-   * own pointer-driven holographic sheen and would otherwise double up two
-   * competing animated overlays on the same card. */
+   * own pointer-driven holographic sheen. */
   foilEffect?: boolean;
   onClick?: () => void;
   footer?: React.ReactNode;
   badge?: string;
   count?: number;
   foilCount?: number;
-  /** Leader template only: shows `${def.hp}/${maxHp}` instead of just current HP. */
-  maxHp?: number;
-  /** Live-match only (Units on the battlefield): effective ATK / current HP /
-   * effective max HP. Rendered in the normal StatChip position — green when
-   * above the printed value, red when below/damaged, with the printed value
-   * struck through inside the chip — never as a separate extra badge. */
+  /** Live-match only (Units on the battlefield): effective Might / current
+   * Grit / effective max Grit. Rendered in the normal StatChip position —
+   * green when above the printed value, red when below/damaged, with the
+   * printed value struck through inside the chip. */
   live?: { atk: number; hp: number; maxHp: number };
-  /** Live-match only: this card's Cast threshold after Anchor discounts, so
-   * the cost badge can show the real number alongside the printed one
-   * instead of leaving the discount invisible. Omit outside a match. */
-  effectiveThreshold?: number;
   /** Live-match only: auto-opens each of this card's keyword glossary
-   * popovers once per device, the first time that keyword is ever seen, so
-   * new players discover the glossary exists instead of needing to guess
-   * they can click a keyword pill. */
+   * popovers once per device, the first time that keyword is ever seen. */
   introduceKeywords?: boolean;
-  /** A numbered Serialized print (see grant_pack_contents' 1%-per-pack roll
-   * and player_serialized_cards) — the rarest possible pull, always foil-free
-   * and never quick-sellable. Renders a rotating prismatic frame + an
-   * engraved number plate instead of the normal rarity treatment. */
+  /** A numbered Serialized print — the rarest possible pull, always
+   * foil-free. Renders a rotating prismatic frame + an engraved number
+   * plate instead of the normal rarity treatment. */
   serial?: { number: number; cap: number };
 }) {
-  // v4.26: the board/list `micro` tier renders through its own purpose-built
+  // The board/list `micro` tier renders through its own purpose-built
   // art-forward template (see MicroCard) instead of a shrunken full card.
-  // Safe to branch here: CardFace itself calls no hooks (they all live in
-  // child components), so the early return can't reorder any hook calls.
+  // Safe to branch here: CardFace itself calls no hooks.
   if (size === 'micro') {
     return (
       <MicroCard
@@ -1866,9 +1698,7 @@ export function CardFace({
         badge={badge}
         count={count}
         foilCount={foilCount}
-        maxHp={maxHp}
         live={live}
-        effectiveThreshold={effectiveThreshold}
         introduceKeywords={introduceKeywords}
         serial={serial}
       />
@@ -1876,67 +1706,37 @@ export function CardFace({
   }
   const { w, h } = SIZES[size];
   const cfg = TIER[size];
-  // v4.19: the card's mechanics render EXCLUSIVELY as clickable chips —
-  // keyword chips (name + tier roman + bundled activation cost) from
-  // cardKeywords(), mechanic chips from mechanicLabels(). No free-form
-  // rules text is printed on the face anymore; every chip's tier-specific
-  // description lives in its click-to-open glossary popover.
-  const keywordChips: CardKeyword[] = cardKeywords(def);
-  const mechChips: MechanicLabel[] = mechanicLabels(def);
-  const totalChips = keywordChips.length + mechChips.length;
+  const chips = faceChips(def);
   const set = setStyle(def.set);
-  // v4.13: Leaders don't carry a color themselves (LEADER_COLORS is their
-  // deck-identity, a different concept from a printed card's own color).
-  const cardColorsForFace = def.type === 'Leader' ? [] : cardColors(def);
-  const atkHp = def.type === 'Unit' ? `, ${def.atk} attack, ${def.hp} health` : '';
+  // v5.0: a card's color identity is printed on the card — the colored pips
+  // in its Essence Cost (plus a Location's produced type). Leaders have a
+  // printed cost too, so they tint like everything else.
+  const cardColorsForFace = cardColors(def);
+  const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
   const isFoil = foil && !serial;
-  const label = `${def.name}, ${def.type}${atkHp}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
-  // v4.15: the card's visible fill/background now tracks its color identity
-  // (cardColorsForFace, computed above) instead of rarity — rarity keeps the
-  // border/glow/corner-gem treatment below (rarityBorder/rarityGlow/rarityHex)
-  // so it's still legible at a glance, just no longer via the body tint.
+  // The card's visible fill/background tracks its color identity; rarity
+  // keeps the border/glow/corner-gem treatment (rarityBorder/rarityGlow).
   const colorFillHex = colorHexPrimary(cardColorsForFace);
-  // Long names/flavor text shrink to fit via fitFontSize below. The card's
-  // own footprint is a hard 2.5:3.5 (w:h) rectangle at every tier — it never
-  // grows to accommodate overflow; any residual overflow clips at the
-  // (already overflow-hidden) outer edge instead of distorting the ratio.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
-  // v4.19: with rules text gone, flavor gets the whole remaining text box —
-  // autoscale off its own length, and the render below additionally hard
-  // line-clamps + hides overflow so flavor can NEVER run off the frame.
-  // Flavor only prints at the `full` tier at all (cfg.showFlavor): every
-  // smaller template (board micro, hand compact, grid standard) drops it.
+  const rules = rulesText(def);
   const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 110);
-  // v4.3: Rare+ get a tinted background; Super-Rare/Ultra-Rare/Mythic add an
-  // animated sheen; Mythic additionally gets a pulsing frame and a distinct
-  // gold-on-red name banner instead of the shared tinted-paper header.
   const mythic = isMythic(def.rarity) && !serial;
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
-  // v4.15: body background now comes from color identity, not rarity —
-  // Rare+ still gets the stronger animated-sheen/mythic/ultra *effect layers*
-  // below (those track rarityAnimated/isMythic, unchanged), just tinted by
-  // the card's color instead of its rarity.
   const bg = colorBg(cardColorsForFace);
   const TypeIcon = TYPE_ICON[def.type];
   // Full-Art: the uploaded image fills the entire card footprint edge to
-  // edge instead of sitting in a boxed 4:3 art window; every normal piece of
-  // card text (header, stat line, text box) instead floats on top of it in
-  // semi-transparent panels so the art itself is the whole card, not just a
-  // fraction of it.
+  // edge; every normal piece of card text floats on top of it in
+  // semi-transparent panels so the art itself is the whole card.
   const fullArt = def.rarity === 'Full-Art' && !serial;
-  // Ultra-Rare: a visibly stronger treatment than the shared Rare+ template
-  // (heavier glow, a gold hairline border ring around the art, and a
-  // brighter/faster sheen sweep) so it doesn't just look like Super-Rare
-  // with a different tint.
   const ultra = def.rarity === 'Ultra-Rare' && !serial;
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
-    // carry its own interactive control (e.g. a "details" button), and
-    // nested <button> elements are invalid HTML / break screen-reader and
-    // keyboard navigation.
+    // carry its own interactive control, and nested <button> elements are
+    // invalid HTML / break screen-reader and keyboard navigation.
     <div
       role="button"
       tabIndex={onClick ? 0 : -1}
@@ -1947,8 +1747,7 @@ export function CardFace({
         if (!onClick) return;
         // Guard against nested interactive chips (KeywordChip/CostInfoButton
         // buttons inside this card): their own Enter/Space keydown bubbles up
-        // to this div, which would otherwise ALSO fire the card's onClick
-        // (e.g. popping open the inspector) on top of the chip's own action.
+        // to this div.
         if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -1974,21 +1773,13 @@ export function CardFace({
                 ? 'ultra-frame'
                 : cfg.showGlow && rarityGlow(def.rarity)),
         // Mythic already animates its own box-shadow pulse (mythic-frame) —
-        // stacking foil-glow's competing box-shadow keyframes on the same
-        // element causes the two animations to visibly stutter against each
-        // other, so a mythic foil gets only the (already more intense) frame.
+        // stacking foil-glow's competing box-shadow keyframes causes visible
+        // stutter, so a mythic foil gets only the frame.
         isFoil && !dimmed && !mythic && 'foil-glow',
-        // v4.7: opts this card into the hover-gated premium layers
-        // (.ur-prisma / .my-heat) — cheap at rest, full effect on hover or
-        // inside a .premium-boost container (the 3D inspector).
         (ultra || mythic) && !dimmed && 'premium-card',
       )}
     >
-      {/* Corner gem — a small decorative flourish marking Rare+ prints,
-          echoing the rarity color at a glance even before reading text.
-          Positioned at the corner (not negative-offset) since the card
-          wrapper clips overflow — the rotated square's tips peek past the
-          edge for a "corner tag" look instead of being invisible. */}
+      {/* Corner gem — a small decorative flourish marking Rare+ prints. */}
       {cfg.showCornerGem && def.rarity && def.rarity !== 'Common' && def.rarity !== 'Uncommon' && (
         <span
           aria-hidden
@@ -1997,14 +1788,10 @@ export function CardFace({
         />
       )}
 
-      {/* Header: name + dice-medallion cost badge. Mythic prints a distinct
-          gold-on-red name banner instead of the shared tinted-paper header.
-          Full-Art drops the boxed panel entirely — the name/icon float
-          directly on the full-bleed art (which sits behind as an absolutely-
-          positioned layer) with a text-shadow for legibility instead of a
-          background chip, so nothing visually competes with the art itself.
-          The vignette overlay (below, layered under this header) carries the
-          actual contrast work at the top edge. */}
+      {/* Header: name + ESSENCE COST row (where the dice-era cost badge
+          lived). Mythic prints a distinct gold-on-red name banner; Full-Art
+          drops the boxed panel entirely — name/pips float directly on the
+          full-bleed art with a text-shadow/scrim for legibility. */}
       <div
         className={cn(
           'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 z-10',
@@ -2015,10 +1802,7 @@ export function CardFace({
             : ultra
               ? 'ultra-banner border-[#8a6d1f]'
               : fullArt
-                ? // v4.26 full-art legibility: the header row carries its own
-                  // top-down gradient scrim (on top of the art's vignette) so
-                  // the name/cost never rely on the art being dark up top.
-                  'bg-gradient-to-b from-black/60 via-black/25 to-transparent'
+                ? 'bg-gradient-to-b from-black/60 via-black/25 to-transparent'
                 : 'border-[var(--c-ink)]/15',
         )}
         style={
@@ -2030,8 +1814,6 @@ export function CardFace({
         <span
           className={cn(
             'flex items-center gap-1 min-w-0 heading-font leading-tight',
-            // Ultra's gold-leaf banner always needs dark text regardless of
-            // theme (var(--c-ink) can be light in dark themes).
             mythic ? 'text-[var(--c-yellow)]' : ultra ? 'text-[#241a04]' : fullArt && 'text-white',
           )}
           style={
@@ -2049,87 +1831,25 @@ export function CardFace({
               fullArt && 'opacity-95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]',
             )}
           />
-          {/* v4.26: hard two-line clamp on top of the auto-shrink — a
-              pathologically long name can no longer grow the header row and
-              squeeze the rest of the card's vertical budget. */}
+          {/* Hard two-line clamp on top of the auto-shrink. */}
           <span className="break-words line-clamp-2" style={{ fontSize: nameFontPx }}>
             {def.name}
           </span>
         </span>
-        {def.comboGate ? (
+        {(def.cost || def.type !== 'Leader') && (
           <CostInfoButton
-            text={`${costSummary(def)}. Your final five-die roll must genuinely contain this pattern; the die placed to cast can be any value. Max one Combo-gated card per turn.${
-              GATE_HIT_RATE[def.comboGate] !== undefined
-                ? ` A focused player hits this ~${GATE_HIT_RATE[def.comboGate]}% of turns (two rerolls).`
-                : ''
-            }`}
-            className={cn(
-              'heading-font shrink-0 flex items-center gap-0.5 rounded-full border-2 border-[var(--c-ink)] bg-[#A855F7] text-white text-center',
-              cfg.comboBadge,
-            )}
+            text={`${costSummary(def) ?? 'Essence Cost: 0'}. Colored pips must be paid with matching essence (exhaust your Locations); generic pips with essence of any type.`}
+            className="shrink-0"
             title={costSummary(def) || undefined}
           >
-            {cfg.showDiceIcon && <Dices className="w-3 h-3" />}
-            {GATE_LABEL[def.comboGate] || def.comboGate}
+            <EssenceCostRow cost={def.cost} type={def.type} size={size} onArt={fullArt} />
           </CostInfoButton>
-        ) : def.type !== 'Location' && def.type !== 'Leader' && def.threshold !== undefined ? (
-          <span
-            className={cn(
-              'flex flex-col items-end shrink-0',
-              // Centering a two-line stack (badge + "was X") shifts the
-              // badge itself higher than the single-line case — nudge the
-              // whole stack down so the badge still lines up with the name.
-              effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && 'mt-1.5',
-            )}
-          >
-            <CostInfoButton
-              text={
-                effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
-                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn.`
-                  : `${costSummary(def)}.`
-              }
-              className={cn(
-                'heading-font font-mono flex items-center justify-center rounded-full border-2 border-[var(--c-ink)]',
-                def.castCostKind === 'exact'
-                  ? 'bg-[#0E7490] text-white'
-                  : def.castCostKind === 'sum'
-                    ? 'bg-[#B45309] text-white'
-                    : 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-                cfg.costBadge,
-              )}
-              title={
-                effectiveThreshold !== undefined && effectiveThreshold !== def.threshold
-                  ? `${costSummary(def)} — reduced to ${effectiveThreshold} this turn`
-                  : costSummary(def) || undefined
-              }
-            >
-              {costBadge(def, effectiveThreshold ?? def.threshold)}
-            </CostInfoButton>
-            {effectiveThreshold !== undefined && effectiveThreshold !== def.threshold && (
-              <span className="text-[6px] font-bold text-[var(--c-steel)] line-through leading-none mt-0.5">
-                was {costBadge(def)}
-              </span>
-            )}
-          </span>
-        ) : def.type === 'Location' ? (
-          <CostInfoButton
-            text="Locations cast free: once per turn, as a bonus action alongside your five die placements — no die, no Cast Slot. Max one Location in play."
-            className={cn(
-              'heading-font shrink-0 rounded-full border-2 border-[var(--c-ink)] bg-[var(--c-steel)] text-white',
-              cfg.freeBadge,
-            )}
-            title="Cast: free — once per turn as a bonus action"
-          >
-            FREE
-          </CostInfoButton>
-        ) : null}
+        )}
       </div>
 
       {/* Art — Full-Art fills the entire card footprint edge-to-edge behind
-          every other layer (absolutely positioned, out of flow, so the
-          header/stat-line/text box that follow simply overlay it in normal
-          flow). Every other rarity keeps the classic fixed 4:3 boxed art so
-          the full uploaded image always shows, never cropped. */}
+          every other layer. Every other rarity keeps the classic fixed 4:3
+          boxed art so the full uploaded image always shows, never cropped. */}
       <div
         className={cn(
           'relative overflow-hidden',
@@ -2149,15 +1869,6 @@ export function CardFace({
           style={
             fullArt
               ? {
-                  // A single continuous scrim carries all the contrast work
-                  // now that the header/type-line/text-box no longer paint
-                  // their own boxed backgrounds — dark enough at the very
-                  // top for the name and at the bottom ~45% for stats/
-                  // keywords/rules/flavor to always read regardless of the
-                  // art's own brightness, clear through the middle so the
-                  // art still reads as the whole card. The radial pass adds
-                  // a soft edge/corner vignette so any art unifies with the
-                  // frame instead of looking like a cropped rectangle.
                   background: [
                     'radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%)',
                     'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.08) 16%, rgba(0,0,0,0.02) 38%, rgba(0,0,0,0.15) 52%, rgba(0,0,0,0.62) 66%, rgba(0,0,0,0.96) 100%)',
@@ -2166,11 +1877,6 @@ export function CardFace({
               : { boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }
           }
         />
-        {/* Full-Art's art box IS the whole card (absolute inset-0), so this
-            chip's usual top-right corner is the same corner the header's
-            cost badge occupies in normal flow — showing both collided the
-            two together. The Full-Art treatment already reads as its own
-            rarity at a glance, so skip the redundant chip there instead. */}
         {def.rarity && !fullArt && (
           <span
             className={cn(
@@ -2226,20 +1932,11 @@ export function CardFace({
       </div>
 
       {/* Full-Art pins the type-line + text-box group to the bottom edge as
-          one block (via this wrapper) instead of letting it sit directly
-          under the header like every other rarity — that leaves a real
-          clear window of art in the middle of the card instead of the art
-          only ever peeking through above/below two stacked text panels.
-          `display: contents` makes the wrapper invisible to layout for
-          every other rarity, so their structure/behavior is unchanged. */}
+          one block; `display: contents` makes the wrapper invisible to
+          layout for every other rarity. */}
       <div className={fullArt ? 'relative flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
-        {/* v4.26 full-art legibility: a backdrop-blur "frosted" panel behind
-            the whole bottom text region (type line + keywords + flavor),
-            fading in from transparent so it reads as part of the art's
-            vignette rather than a hard-edged box. Combined with the scrim
-            gradient behind it, name/stats/keywords stay readable over ANY
-            art, including near-white or high-detail images the plain scrim
-            alone couldn't tame. */}
+        {/* Full-art legibility: a backdrop-blur "frosted" panel behind the
+            whole bottom text region, fading in from transparent. */}
         {fullArt && (
           <div
             aria-hidden
@@ -2251,10 +1948,9 @@ export function CardFace({
             }}
           />
         )}
-        {/* Type / rarity / stat line — sits on the same continuous bottom
-          scrim as the text box below it now (no boxed pill of its own),
-          reading as one unbroken panel over the art instead of a stack of
-          separate floating chips. */}
+        {/* Type line — "Type — Subtype" (+ produced-essence pip for
+            Locations) with the Might/Grit gems (Resolve for Leaders) on the
+            right, in the same slots the old ATK/HP chips used. */}
         <div
           className={cn(
             'relative z-10 flex items-center justify-between shrink-0',
@@ -2262,44 +1958,67 @@ export function CardFace({
             'px-1.5',
           )}
         >
-          <span
-            className={cn(
-              'font-bold uppercase truncate',
-              fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+          <span className="flex items-center gap-1 min-w-0">
+            <span
+              className={cn(
+                'font-bold uppercase truncate',
+                fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+              )}
+              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+            >
+              {typeLineText(def)}
+              {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+            </span>
+            {def.type === 'Location' && def.produces && (
+              <span
+                aria-label={`Produces ${def.produces} essence`}
+                title={`Exhaust: add one ${def.produces} essence`}
+                className={cn(
+                  'flex items-center justify-center rounded-full font-mono font-black leading-none shrink-0',
+                  fullArt ? 'border border-white/80' : 'border border-[var(--c-ink)]',
+                )}
+                style={{
+                  width: PIP_SIZE[size].d - 4,
+                  height: PIP_SIZE[size].d - 4,
+                  fontSize: PIP_SIZE[size].f - 2,
+                  backgroundColor: COLOR_PIP[def.produces].bg,
+                  color: COLOR_PIP[def.produces].fg,
+                }}
+              >
+                {COLOR_LETTER[def.produces]}
+              </span>
             )}
-            style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
-          >
-            {def.type}
-            {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
           </span>
           {def.type === 'Unit' &&
             (live ? (
               // Live battlefield stats in the same StatChip slots the printed
-              // values use: green = buffed above printed, red = below printed /
-              // damaged, printed value struck through inside the chip.
+              // values use: green = buffed above printed, red = below printed
+              // / damaged, printed value struck through inside the chip.
               <span
                 className="flex items-center gap-1 shrink-0"
-                title={`Printed ${def.atk}/${def.hp}`}
+                title={`Printed ${def.might}/${def.grit}`}
               >
                 <StatChip
                   icon={Swords}
+                  label="Might"
                   value={live.atk}
-                  printed={def.atk}
+                  printed={def.might}
                   tier={size}
-                  tint={live.atk > (def.atk ?? 0) ? '#16A34A' : 'var(--c-red)'}
+                  tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
                   emboss={mythic}
                   onArt={fullArt}
                 />
                 <StatChip
-                  icon={Heart}
+                  icon={Shield}
+                  label="Grit"
                   value={live.hp}
                   maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                  printed={live.maxHp !== (def.hp ?? 0) ? (def.hp ?? 0) : undefined}
+                  printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
                   tier={size}
                   tint={
                     live.hp < live.maxHp
                       ? 'var(--c-red)'
-                      : live.maxHp > (def.hp ?? 0)
+                      : live.maxHp > (def.grit ?? 0)
                         ? '#16A34A'
                         : '#22C55E'
                   }
@@ -2311,15 +2030,17 @@ export function CardFace({
               <span className="flex items-center gap-1 shrink-0">
                 <StatChip
                   icon={Swords}
-                  value={def.atk}
+                  label="Might"
+                  value={def.might}
                   tier={size}
                   tint="var(--c-red)"
                   emboss={mythic}
                   onArt={fullArt}
                 />
                 <StatChip
-                  icon={Heart}
-                  value={def.hp}
+                  icon={Shield}
+                  label="Grit"
+                  value={def.grit}
                   tier={size}
                   tint="#22C55E"
                   emboss={mythic}
@@ -2329,16 +2050,14 @@ export function CardFace({
             ))}
           {def.type === 'Leader' && (
             <span className="shrink-0">
+              {/* Resolve gem — the Leader's loyalty, shown prominently where
+                  a Unit's stats sit. */}
               <StatChip
-                icon={Heart}
-                value={def.hp}
-                maxValue={maxHp}
+                icon={Shield}
+                label="Resolve"
+                value={def.resolve}
                 tier={size}
-                tint={
-                  maxHp !== undefined && def.hp !== undefined && def.hp * 2 <= maxHp
-                    ? 'var(--c-red)'
-                    : '#22C55E'
-                }
+                tint="#7C3AED"
                 emboss={mythic}
                 onArt={fullArt}
               />
@@ -2346,22 +2065,12 @@ export function CardFace({
           )}
         </div>
 
-        {/* Text box — keywords/rules/flavor sit on a subtly shaded, bordered
-          panel (a real "text box" like a printed card) instead of floating
-          directly on the paper background. flex-1 so it fills the remaining
-          height and pushes the footer to the bottom. Full-Art drops the
-          boxed panel — no border, no background of its own, no side margin
-          — so it reads as the same unbroken bottom scrim as the type line
-          above it rather than a separate floating glass rectangle; the
-          vignette overlay behind the art is what actually darkens this
-          whole region, with a per-line text-shadow as a legibility backstop
-          for whatever the art itself looks like underneath. */}
+        {/* Text box — keyword chips + rules text + Leader abilities +
+            flavor on a subtly shaded, bordered panel. Full-Art drops the
+            boxed panel so it reads as the same unbroken bottom scrim as the
+            type line above it. */}
         <div
           className={cn(
-            // v4.26: overflow-hidden at the text-box level is the final
-            // backstop — combined with the measured chip cap (FittedChips)
-            // and the line-shedding flavor block (FittedFlavor), nothing in
-            // this box can ever paint past the card frame.
             'relative z-10 flex flex-col overflow-hidden',
             fullArt ? 'shrink min-h-0' : 'flex-1 min-h-0',
             cfg.textBoxPad,
@@ -2378,21 +2087,72 @@ export function CardFace({
               : {
                   backgroundColor: mythic
                     ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-                    : // Near-paper panel with a whisper of the card's color —
-                      // keeps chip/flavor contrast solid over the (now much
-                      // stronger) color-identity body wash.
-                      `color-mix(in srgb, ${colorFillHex} 8%, var(--c-paper))`,
+                    : `color-mix(in srgb, ${colorFillHex} 8%, var(--c-paper))`,
                 }
           }
         >
-          {totalChips > 0 && (
+          {chips.length > 0 && (
             <FittedChips
               def={def}
               size={size}
-              keywordChips={keywordChips}
-              mechChips={mechChips}
+              chips={chips}
               introduceKeywords={introduceKeywords}
             />
+          )}
+
+          {/* Rules text — card.text (or the generated lines from its
+              structured mechanics), with every recognized keyword mention
+              clickable. Hard line-clamped so it can never run off frame. */}
+          {cfg.showRules && rules && (
+            <p
+              className={cn('leading-snug break-words font-semibold', chips.length > 0 && 'mt-1')}
+              style={{
+                fontSize: cfg.rulesFont,
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: cfg.rulesLines,
+                overflow: 'hidden',
+                textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+              }}
+            >
+              {renderKeywordText(rules, size !== 'full')}
+            </p>
+          )}
+
+          {/* Leader abilities — the two Resolve-costed ability lines,
+              each prefixed by its Resolve delta. */}
+          {cfg.showRules && def.type === 'Leader' && (def.leaderAbilities?.length ?? 0) > 0 && (
+            <div className={cn('flex flex-col gap-0.5', 'mt-1')}>
+              {def.leaderAbilities!.map((ab, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'flex items-start gap-1 leading-snug break-words',
+                    fullArt ? 'text-white' : undefined,
+                  )}
+                  style={{
+                    fontSize: cfg.rulesFont,
+                    textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+                  }}
+                >
+                  <span
+                    className="shrink-0 font-mono font-black rounded-full px-1 border"
+                    style={{
+                      fontSize: Math.max(6, cfg.rulesFont - 1),
+                      color: '#7C3AED',
+                      borderColor: 'color-mix(in srgb, #7C3AED 45%, transparent)',
+                      backgroundColor: 'color-mix(in srgb, #7C3AED 12%, transparent)',
+                    }}
+                    title="Resolve cost"
+                  >
+                    {ab.resolveDelta > 0 ? `+${ab.resolveDelta}` : ab.resolveDelta}
+                  </span>
+                  <span className="font-semibold min-w-0">
+                    {renderKeywordText(ab.text ?? describeEffect(ab.effect), size !== 'full')}
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
 
           {cfg.showFlavor && def.flavor && (
@@ -2408,21 +2168,8 @@ export function CardFace({
         </div>
       </div>
 
-      {/* Footer: set/print bar + color-identity pips + optional slot content
-          (e.g. deck-count badge). v4.13: color pips sit right above the set
-          bar — same footer row real estate, no header-layout risk (the
-          header's fitFontSize math is already tightly packed). Multicolor
-          cards show one pip per color, in COLORS order. */}
-      {/* v4.22: was a solid pip circle stamped with an MTG-style shorthand
-          letter (R/U/G/K/P/S/C) that read as a "random unrelated letter" —
-          the abbreviation scheme doesn't map to the color names players
-          actually see (COLOR_HEX/COLOR_LETTER), so a card's color pip and
-          its printed color could look disconnected at a glance. Swapped for
-          a plain swatch dot (no glyph) — the pip's own fill IS the color, no
-          decoding required — with a slightly heavier ink ring so it reads
-          clearly against the "Monochrome & Pop" ink-border language used
-          everywhere else on the face. The full color name(s) are still one
-          hover/long-press away via `title`. */}
+      {/* Footer: color-identity swatch dots (from the printed cost pips) +
+          set/print bar + optional slot content. */}
       {cardColorsForFace.length > 0 && !fullArt && (
         <div
           className="relative z-10 flex justify-center gap-1 shrink-0 bg-[var(--c-paper)]/70 py-[2px]"
@@ -2441,12 +2188,7 @@ export function CardFace({
       {def.set && !fullArt && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
       )}
-      {/* Full-Art: the footer's color pips + set bar used to render in the
-          normal flex flow like every other rarity — an opaque bg-paper strip
-          that cut across the bottom of the art instead of letting it run
-          edge-to-edge. Rendered as a floating overlay instead: no background
-          band, just the swatch dots with a drop-shadow for legibility over
-          whatever the art looks like underneath. */}
+      {/* Full-Art: floating swatch dots instead of an opaque footer band. */}
       {fullArt && cardColorsForFace.length > 0 && (
         <div
           className="absolute z-20 bottom-1.5 right-1.5 flex gap-1"
@@ -2479,30 +2221,19 @@ export function CardFace({
             'rarity-sheen absolute inset-0 pointer-events-none',
             mythic ? 'opacity-80' : ultra ? 'opacity-70' : 'opacity-50',
           )}
-          // Ultra-Rare: the moving sheen stays on the border ring only, so
-          // the animation never sweeps across (and fights) the card text.
+          // Ultra-Rare: the moving sheen stays on the border ring only.
           style={ultra ? edgeRingMaskStyle(size) : undefined}
         />
       )}
-      {/* v4.6 Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
+      {/* Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
           gold corner brackets, over the animated gold-leaf name banner. */}
       {ultra && !dimmed && (
         <>
           <div
             aria-hidden
             className="ultra-sparkle pointer-events-none"
-            // Confined to the border ring — the gold-dust twinkle used to
-            // sit over the whole face, including the text box. Also hugs the
-            // card's true outer edge now (see edgeRingMaskStyle) instead of
-            // sitting inset by the frame's own border width.
             style={edgeRingMaskStyle(size)}
           />
-          {/* v4.8 "Aurora Vault" (full tier only): chromatic cut-corner
-              lattice with two counter-rotating light-traces, plus a hover/
-              inspector-gated aurora ribbon sweep. Smaller tiers keep just
-              the sparkle + frame — hairline SVG line-work turns to mud
-              below ~140px wide, and grids of small cards shouldn't pay for
-              the extra layers. */}
           {size === 'full' ? (
             <>
               <UltraFiligree size={size} />
@@ -2526,17 +2257,10 @@ export function CardFace({
           )}
         </>
       )}
-      {/* v4.6 Mythic "Living Inferno": embers rising off the card face, on
-          top of the animated red/gold banner and pulsing two-tone frame. */}
+      {/* Mythic "Void Eclipse" premium layers. */}
       {mythic && !dimmed && (
         <>
           <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
-          {/* v4.8 "Void Eclipse" (full tier only): slow-rotating nebula
-              border frame (masked to the edge so art/text stay clear), a
-              pulsing eclipse-corona sigil + beveled corner shards, a
-              drifting parallax starfield, and a hover/inspector-gated
-              violet/crimson corona bloom. Embossed amethyst stat gems
-              (see StatChip's `emboss`) apply at every tier. */}
           {size === 'full' && (
             <>
               <div aria-hidden className={cn('my-void absolute inset-0 z-20', cfg.rounded)} />
@@ -2567,9 +2291,6 @@ export function CardInspectorModal({
   onClose: () => void;
   actions?: React.ReactNode;
 }) {
-  // Every other modal in the app (Card3DInspector, PlayerProfileModal, …)
-  // closes on Escape — this one didn't, a real keyboard-accessibility gap
-  // for a role="dialog" element.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -2578,9 +2299,8 @@ export function CardInspectorModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // v4.25: also missing the focus management Card3DInspector already has —
-  // a keyboard user opening this via Enter/Space landed with focus still on
-  // whatever triggered it, sitting behind the (only visually) fixed overlay.
+  // Focus management — a keyboard user opening this via Enter/Space should
+  // land inside the dialog, and return to the trigger on close.
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;

@@ -1,303 +1,172 @@
 import React, { useState } from 'react';
 import { MetaHeader } from '../meta/ui';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
+import { KEYWORDS, KEYWORD_TEXT } from '../game/v3/keywords';
+import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
+import { COLOR_PIP, COLOR_LETTER } from '../meta/colors';
 
-// Condensed view of docs/RULEBOOK.md (Definitive Rulebook v4.21), plus a
-// standalone rarity-system explainer and an app feature guide — this used to
-// be a popup shown only on first launch; it's now its own page reachable
-// any time from the Main Menu's HOW TO PLAY button.
-const SECTIONS = [
+// Condensed view of docs/RULEBOOK.md (Riftbound Rulebook v5.0), plus a
+// standalone rarity-system explainer and an app feature guide — reachable
+// any time from the Main Menu's HOW TO PLAY button (and auto-opened on a
+// first-ever visit).
+const SECTIONS: { title: string; body: [string, string][] }[] = [
   {
     title: '1 · Objective & Setup',
     body: [
       [
         'Win Condition',
-        'Reduce the enemy Leader from 64 HP to 0. Drawing with an empty deck no longer loses the game outright — instead your Leader takes escalating Fatigue damage (1, then 2, then 3...) each Draw Phase you cannot draw. Simultaneous KOs are a draw.',
+        "Reduce your opponent's Vitality from 20 to 0, or force them to Deal (draw) from an empty deck — either ends the game on the spot.",
       ],
       [
         'Deck',
-        '30 cards (Units, Locations, Charms, Events) plus one Leader kept separate. Max 3 copies of any card (Full-Art, Ultra-Rare and Mythic cards are capped lower — see the Rarity System section).',
+        '30 cards (Units, Sanctums, Charms, Events) plus one Leader kept separate in the Leader zone. Copy caps by rarity: Common/Uncommon/Rare up to 3, Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1.',
+      ],
+      [
+        'Color legality',
+        "A card's color identity is the colored pips in its Essence Cost. Every colored pip in your deck must fall inside your Leader's two-color identity; colorless cards (generic-only costs) fit any deck.",
       ],
       [
         'Setup',
-        'Both players draw 7. One mulligan each (shuffle back, redraw 7). The first player skips their first Draw Phase, and nobody may attack on their own first turn.',
-      ],
-      [
-        'Dice',
-        'Every turn you roll five six-sided dice and spend them one at a time — one die per action. Dice are the entire economy: there are no resources or mana.',
+        'Both players draw an opening hand with one mulligan each (shuffle back, redraw). The first player skips the Deal on their very first Dawn.',
       ],
     ],
   },
   {
     title: '2 · Turn Structure',
     body: [
-      ['Draw', 'Draw 1 card (any pending Aftershock effects resolve just before this).'],
-      ['Roll', 'Roll your five dice.'],
       [
-        'Reroll',
-        'Reroll any subset of your dice, up to two times. Charms with Snap may be cast during this window, before you lock your reroll.',
+        'Dawn',
+        'Recover (untap) all your exhausted permanents, "At Dawn" triggers fire, then Deal one card. Fully automatic in this client.',
       ],
       [
-        'Placement',
-        'Place dice one at a time onto: a Cast Slot in hand, an Ability Slot in play, the second slot of a staged Twin card, or an Echo card in your Discard. You may also cast ONE Location per turn completely free — no die.',
+        'Main Phase I',
+        'Invoke Units, Charms, Events, Sanctums, or your Leader — and play one basic Wellspring (once per turn, free, any Essence Type in your Leader’s identity).',
       ],
       [
-        'Combo Check',
-        'Your final die values — all five, placed or not — are checked against Combo patterns on cards you control (pairs, straights, full houses…). Each qualifying card triggers once.',
+        'Clash',
+        'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
       ],
+      ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
       [
-        'Combat',
-        'Attacks are declared and resolved one at a time. Guard Units must be attacked first. Leaders never retaliate.',
-      ],
-      [
-        'End',
-        'Discard down to 8. Unplaced dice are Pitched: each heals your Leader 1 (no effect at full HP). Ward refreshes for both players.',
+        'Dusk',
+        '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.',
       ],
     ],
   },
   {
-    title: '3 · Casting & Dice',
+    title: '3 · Essence & Wellsprings',
     body: [
       [
-        'Cast Slot',
-        'Every non-Location card prints a threshold 1–6. Most want a die of that value OR HIGHER, but some instead want EXACTLY that value, or the SUM of several dice.',
+        'Producing essence',
+        'Exhaust a Location to produce one Essence of its type. Basic Wellsprings take no deck slots — once per turn you simply play one from the game itself. Sanctums are invoked from hand for their cost and produce essence AND carry an ability.',
       ],
       [
-        'Combo-gated',
-        'Any card type can cost a pattern instead of a number (e.g. "Combo: Full House") — any die casts it the moment your roll contains the pattern. Max ONE Combo-gated card per turn.',
+        'Paying costs',
+        'A cost’s colored pips must be paid with matching Essence; the generic part (the gray numeral) with any Essence. In this client, invoking auto-taps the Locations needed — you can also tap them manually.',
       ],
       [
-        'Ability Slot',
-        'Cards in play may have a repeatable ability with its own threshold, once per turn. A Unit that uses an ability cannot also attack that turn (and vice versa).',
+        'Pool empties',
+        'Unspent Essence disappears at the end of every phase — there is no banking essence across phases or turns.',
       ],
       [
-        'Locations',
-        'Cast FREE once per turn as a bonus action — the only card type that never uses a die. Max one in play; a new one replaces the old.',
-      ],
-      [
-        'Pitch',
-        "Any die you don't use may be Pitched at end of turn for Mend 1 to your Leader — no effect if your Leader is already at full HP.",
-      ],
-      [
-        'Scrap',
-        'Discard a Scrap card from hand to reroll one unplaced die, any time during Placement.',
+        'Timing',
+        'Slow Events, Charms, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases plus the guard-step reaction window of either player’s Clash.',
       ],
     ],
   },
   {
-    title: '4 · Combat',
+    title: '4 · Card Types & Invoking',
+    body: [
+      [
+        'Unit',
+        'Has Might (damage it deals) and Grit (damage it takes). Attacks and guards. Freshly invoked units are "summoning sick" — they can’t attack until your next turn unless they have Reckless.',
+      ],
+      [
+        'Location',
+        'Wellspring (basic, essence-only) or Sanctum (essence + a static/triggered ability, invoked from hand).',
+      ],
+      [
+        'Charm',
+        'Bonds to one of your units and grants stats/keywords. Bound Charms go to the Ash-pile when their unit leaves; Worn Charms survive and can later re-bond to another unit for their re-bond cost.',
+      ],
+      [
+        'Event',
+        'Resolves once, then goes to the Ash-pile. Quick = any priority window; Slow = your own main phases only.',
+      ],
+      [
+        'Leader',
+        'Starts in the Leader zone; invoke it once you can afford its cost. It has Resolve instead of Might/Grit: its abilities spend (or build) Resolve, one activation per turn — at 0 Resolve it is shattered and gone for the game.',
+      ],
+    ],
+  },
+  {
+    title: '5 · The Clash (Combat)',
     body: [
       [
         'Attacking',
-        'Pick a ready Unit, pick a target (enemy Unit or Leader). Both deal their ATK simultaneously — except Leaders, who never deal retaliation.',
-      ],
-      ['Guard', 'While the defender controls any Guard Unit, attacks must target a Guard Unit.'],
-      [
-        'Pierce',
-        "If a Pierce attacker destroys its target, the leftover damage carries through to the enemy Leader — even through Guard — capped at half the attacker's ATK (rounded down, min 1).",
+        'Only recovered, non-Immobile units without summoning sickness (unless Reckless) may attack. Attacking exhausts the unit unless it has Alert.',
       ],
       [
-        'Ward',
-        'Prevents the first instance of damage or removal against this Unit each turn (not retaliation on its own attack); a prevented ATTACK also spikes 1 damage back at the attacker. Refreshes every End Phase, both players.',
+        'Guarding',
+        'The defender assigns any of their un-exhausted units to guard attackers — several guards may gang up on one attacker. Unguarded attackers deal their Might straight to the defender’s Vitality.',
       ],
       [
-        'Damage order',
-        'Ward (full prevention) → Steel (per-turn pool) → Bulwark (flat reduction) → Frenzy (multiplier). A Unit’s combined Steel + Bulwark prevention is capped at 4 per hit. Damage is persistent; a Unit at 0 HP dies immediately.',
+        'Guard restrictions',
+        'Aerial attackers can only be guarded by Aerial or Skywatch units. Swarmproof attackers must be guarded by two or more units, or not at all.',
       ],
       [
-        'Overrun',
-        "If a hit is fully prevented (Ward/Steel/Bulwark zero it) and the attacker has ATK above 0, an Overrun attacker still punches through half its ATK (rounded down, min 1).",
+        'Reaction window',
+        'After guards are set, the defender may still invoke Quick Events and Ambush units (tapping Locations for essence as needed) before damage resolves.',
       ],
       [
-        'Frenzy',
-        'May attack twice if it survives its first attack; only the SECOND swing takes doubled retaliation. Unless you have fewer Units than the defender, that second swing cannot target the enemy Leader directly (except when nothing else is left to hit).',
-      ],
-      ['Bind', 'A Bound Unit cannot attack, use abilities, or deal retaliation next turn.'],
-    ],
-  },
-  {
-    title: '5 · Keywords — Units',
-    body: [
-      [
-        'Keyword tiers',
-        'Keywords come in numbered tiers (I–V) — a higher tier is a stronger version of the same ability. Tap any keyword chip on a card to read exactly what ITS tier does.',
-      ],
-      ['Guard', 'Enemies must attack your Guard Units first.'],
-      ['Swift', 'May attack or use an ability the turn it is played.'],
-      [
-        'Pierce',
-        'Excess damage from killing a Unit hits the enemy Leader — capped at a third of ATK (I), half ATK (II), or uncapped (III).',
-      ],
-      ['Ward', 'Blocks the first hit or hostile effect each turn; a blocked attack spikes 1 damage back at the attacker.'],
-      ['Frenzy', 'Second attack if it survives; doubled retaliation on that second swing only.'],
-      ['Bulwark X', 'Takes X less damage from every attack (after Ward and Steel, before Frenzy).'],
-      [
-        'Steel X',
-        'A per-turn pool absorbing up to X damage from ANY source — combat, retaliation, Sap, Removal. Refreshes every turn, both players.',
+        'Damage',
+        'Simultaneous, except Quickstrike/Doublestrike deal a first-strike sub-step. Venomous damage is lethal at any amount, Siphon converts damage into Vitality, and Overrun sends excess damage past shattered guards through to the defender.',
       ],
       [
-        'Toll X',
-        'ALL damage to your Leader — attacks, Sap, Pierce, anything — is reduced by X while this Unit lives (total reduction from every Toll source caps at 3).',
-      ],
-      [
-        'Avenge',
-        'Permanently gains +1/+1 whenever another friendly Unit dies. Fully automatic; caps at +1/+1 total per card.',
-      ],
-      [
-        'Twin',
-        'Two Cast Slots needing the SAME face value, placed on different turns; it waits in your Staging Zone in between (and may grant a small passive while parked). Completing it triggers a printed bonus.',
-      ],
-      [
-        'Anchor',
-        "Threshold −1 per other Anchor card you have in play (max −3, min 1). The first time a card's own discount hits that cap, it permanently gains +2/+2.",
-      ],
-      [
-        'Echo',
-        'After it hits your Discard: recast it once by paying its cost — Echo I also discards one extra card from hand, Echo II skips the extra discard. Once per copy — the next discard banishes it.',
-      ],
-      [
-        'Rally',
-        "Once per Rally card each turn (its own Ability exhaustion), activate its ability for free using a die already resting on another used Ability Slot — that resting die must still meet this ability's threshold.",
+        'State checks',
+        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — Unbreakable units survive. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
       ],
     ],
   },
   {
-    title: '6 · Keywords — Leaders, Events, Charms, Locations',
-    body: [
-      [
-        'Resolve X (Leader)',
-        "While at or below half HP, your Leader's ability threshold drops by X — the comeback engine.",
-      ],
-      [
-        'Ultimate(N) (Leader)',
-        'A second, once-per-game ability slot that unlocks on your Nth turn. Big, late, inevitable.',
-      ],
-      [
-        'Crescendo X (Event)',
-        "The Event's effect grows by X for every die of value 6 you placed this turn. Hot rolls pay off; cold rolls still cast it.",
-      ],
-      [
-        'Aftershock (Event)',
-        'After resolving, a delayed half-strength repeat fires at the very start of your next turn.',
-      ],
-      ['Snap (Charm)', 'Castable during your Reroll Phase, before you lock the reroll.'],
-      ['Overflow X', 'Bonus if the die placed beats the threshold by X or more.'],
-      ['Combo: [Pattern]', 'Passive bonus at Combo Check when your roll contains the pattern.'],
-      ['Foothold (Location)', 'Your first Unit cast each turn costs 1 less (stacks with Anchor).'],
-      ['Tribute (Location)', 'Bonus at your End Phase if you Pitched 2+ dice this turn.'],
-      ['Excavate X (Location)', 'Its ability threshold drops by X every turn it stays in play.'],
-      ['Contested (Location)', 'Its passive is doubled while your opponent has no Location.'],
-      ['Surge / Mend / Sap', 'Draw a card / heal X (never past max) / deal X direct damage.'],
-    ],
+    title: '6 · Keywords',
+    body: KEYWORDS.map((kw) => [kw, KEYWORD_TEXT[kw]] as [string, string]),
   },
   {
-    title: '7 · Combo Patterns',
-    body: [
-      ['Any Pair', 'Two dice with the same value. Hits ~99% of turns if you chase it.'],
-      [
-        'Three Odds / Three Evens',
-        'Three or more dice that are all odd (or all even). About as easy to hit as Any Pair.',
-      ],
-      ['Two Pair / Three Kind', 'Reliable mid-tier payoffs (~54–56% when chased).'],
-      ['Small Straight', 'Four sequential values (~33% chased).'],
-      ['Full House', 'Three of one value + two of another (~18% chased).'],
-      ['4-Kind / Lg Straight', 'Bombs (~10–13% chased).'],
-      ['Yahtzee', 'All five dice equal (~1%) — trophy territory.'],
-      [
-        'Subset rule',
-        'Your dice satisfy every pattern they genuinely contain — a Yahtzee also counts as a Pair, Three and Four of a Kind, all at once.',
-      ],
-      [
-        'Rate limit',
-        'No matter how many Combo-gated cards qualify, you may cast only one per turn.',
-      ],
-    ],
+    title: '7 · Essence Identity (the Seven Colors)',
+    body: COLORS.map((c) => [c, COLOR_IDENTITY[c]] as [string, string]),
   },
   {
-    title: '8 · A Worked Turn',
+    title: '8 · Strategy Primer',
     body: [
       [
-        'The roll',
-        'Say you roll 2, 3, 3, 5, 6. Your hand holds a Unit costing "one die 4+", a Charm costing "dice totalling 7+", and an Event gated on Any Pair.',
+        'Curve out',
+        'Play your free Wellspring every single turn — it is your mana growth. Missing one puts you a full essence behind for the rest of the game.',
       ],
       [
-        'Reading it',
-        "The pair of 3s satisfies Any Pair — the Event can be cast with ANY one die (the 2 is perfect, it pays nothing else). The 5 or 6 pays the Unit. The remaining 6+3 (or 5+3) covers the Charm's Σ7 sum cost.",
+        'Color discipline',
+        'Double-pip costs want multiple Wellsprings of that color. Check your hand’s pips before choosing which Wellspring type to play.',
       ],
       [
-        "Order doesn't",
-        'Patterns read die VALUES, placed or not — a spent 3 still counts toward the pair all turn, so casting order never breaks a Combo. Cast the Event with the 2, the Unit with the 5, the Charm with 6+3, in any order. One die (a 3) is left.',
+        'Guard math',
+        'A guard that kills the attacker OR survives the hit is usually worth it; chump-guarding only to save Vitality is a last resort. Remember multiple guards can pile onto one big attacker.',
       ],
       [
-        'The leftover',
-        'Place the spare 3 on an Ability Slot if any card in play wants 3 or less — otherwise it Pitches at End Phase for Mend 1. A die is never wasted unless your Leader is already at full HP.',
+        'Leader timing',
+        'Leader abilities are repeating value every turn — invoke your Leader as soon as it’s affordable, but mind its Resolve: spending it to 0 shatters the Leader for good.',
       ],
       [
-        'Combo Check',
-        'Before Combat, your five FINAL die values are checked against Combo patterns printed on cards you control in play — dice you placed still count; this is about values, not who spent what.',
-      ],
-    ],
-  },
-  {
-    title: '9 · Dice Math Cheat Sheet',
-    body: [
-      [
-        'One die 4+',
-        'A single fresh die shows 4+ half the time. Across five dice you almost always have one — the cost is really about WHICH die you can spare.',
-      ],
-      [
-        'Exact costs',
-        'Needing exactly one value (=3) hits ~67% across five fresh dice — but rerolls chase it hard: keep everything else, spin the rest.',
-      ],
-      [
-        'Sum costs',
-        'Five dice average ~17.5 total. A Σ13+ cost usually eats three dice — check what the rest of your hand needs BEFORE paying a big sum.',
-      ],
-      [
-        'Pairs & straights',
-        'Any Pair appears in ~99% of turns if chased with rerolls. Three of a Kind ~56%, Small Straight ~33%, Full House ~18%, Large Straight ~13%, Yahtzee ~1%.',
-      ],
-      [
-        'Reroll strategy',
-        'You get up to TWO rerolls of any subset. Decide your plan first (straight vs matching), keep dice that serve it, spin the rest — never reroll dice that already pay a cost you intend to use.',
-      ],
-    ],
-  },
-  {
-    title: '10 · Strategy Primer',
-    body: [
-      [
-        'Tempo',
-        'Every die is one action. A turn that places all five dice nearly always beats a turn that pitches two. Cheap cards exist to convert bad dice into board.',
-      ],
-      [
-        'Guard walls',
-        'Aggro loses to a well-timed Guard Unit — enemies MUST attack it first. Guards with high HP buy your bombs time to come online.',
-      ],
-      [
-        'When to Pitch',
-        'Pitching at full HP heals nothing — that die is wasted. If your Leader is damaged, pitching two dice also arms any Tribute Location you control.',
-      ],
-      [
-        'Fighting from behind',
-        "Behind on board? Look for board wipes and mass Sap on high-rarity Events, your Leader's Ultimate (unlocks on a fixed turn — plan around it), and Resolve Leaders whose abilities get CHEAPER below half HP. The comeback tools are real — losing the early board is not losing the game.",
-      ],
-      [
-        'Ability vs attack',
-        'A Unit cannot attack AND use its Ability Slot in the same turn. Utility Units (Mend/Surge/Bind abilities) are usually worth more exhausted on their slot than swinging for 2.',
-      ],
-      [
-        'Echo value',
-        'Echo cards are two cards in one — but the recast costs a die AND a discard. Never Echo when your hand is already thin; Echo when a dead card in hand can be the fodder.',
+        'Reaction plays',
+        'Hold Quick Events and Ambush units to punish the opponent’s Clash — a surprise guard-step unit or removal spell can flip a whole attack.',
       ],
       [
         'Hand discipline',
-        "The End Phase cap is 8 — banking cards is fine, flooding is not. If you're at 9+ going into End Phase, cast something cheap rather than discarding it for free.",
+        'Dusk sheds you down to 7 — if you’re over, invoke something in Main II rather than discarding it for free.',
       ],
     ],
   },
   {
-    title: '11 · Rarity System',
+    title: '9 · Rarity System',
     body: [
       [
         'The ladder',
@@ -309,7 +178,7 @@ const SECTIONS = [
       ],
       [
         'Full-Art',
-        'A visually distinct print tier whose art fills the entire card edge-to-edge (some Full-Art cards are short looping video clips instead of a still image) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system (quicksell, pack odds).',
+        'A visually distinct print tier whose art fills the entire card edge-to-edge (some are short looping video clips) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system.',
       ],
       [
         'Foil',
@@ -317,16 +186,16 @@ const SECTIONS = [
       ],
       [
         'Serialized',
-        "The rarest possible pull: a numbered 1-of-however-many-are-left print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed, server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. Numbering starts at #1 for each tier and counts up until that tier's supply runs out for good. About a 1-in-100 chance on every pack you open. Serialized copies can never be foil and can never be quick sold — they're yours to keep or show off. Every Serialized pull posts to the News Center (with an opt-out for your username in Settings).",
+        "The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.",
       ],
       [
         'No pity, no guarantees',
-        'There is no pity system of any kind — no product guarantees a Super-Rare, Full-Art, Ultra-Rare or Mythic. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
+        'There is no pity system of any kind. Chase slots always pay at least a Rare — everything above that is genuine luck. Every pack shows its exact server-side odds under VIEW DROP ODDS before you spend anything.',
       ],
     ],
   },
   {
-    title: '12 · Packs, Boxes & Opening',
+    title: '10 · Packs, Boxes & Opening',
     body: [
       [
         'Pack anatomy',
@@ -349,17 +218,13 @@ const SECTIONS = [
         'Marked slots avoid cards you already own at cap. Any pull past your per-rarity copy cap auto-converts to credits instead of a dead duplicate.',
       ],
       [
-        'Pack XP',
-        'Every pack you open grants 20 account XP — leveling up pays credits, and every 5th level pays vouchers.',
-      ],
-      [
         'Daily freebies',
-        'Two separate daily faucets: the free Daily Pack in the Store (every 20 hours), and the Daily Login Reward on the main menu (once per calendar day, escalating over a 7-day streak — day 7 is the jackpot; miss a day and the streak resets).',
+        'Two separate daily faucets: the free Daily Pack in the Store (every 20 hours), and the Daily Login Reward on the main menu (once per calendar day, escalating over a 7-day streak).',
       ],
     ],
   },
   {
-    title: '13 · Economy & Currencies',
+    title: '11 · Economy & Currencies',
     body: [
       [
         'Credits',
@@ -375,7 +240,7 @@ const SECTIONS = [
       ],
       [
         'Player-to-player',
-        'The Marketplace (fixed listings and auctions, 5% seller fee), direct friend Trades, and level-50 Player Shops all move cards between real players — prices there are whatever the market bears.',
+        'The Marketplace (fixed listings and auctions, 5% seller fee), direct friend Trades, and level-50 Player Shops all move cards between real players.',
       ],
       [
         'XP sources',
@@ -384,7 +249,7 @@ const SECTIONS = [
     ],
   },
   {
-    title: '14 · Using FryCards — Every Feature',
+    title: '12 · Using FryCards — Every Feature',
     body: [
       [
         'Collection',
@@ -392,15 +257,11 @@ const SECTIONS = [
       ],
       [
         'Deck Builder',
-        'Assemble a legal 30-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your cast-slot curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
+        'Assemble a legal 30-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your essence-cost curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
       ],
       [
         'Store',
         'Buy packs and boxes with credits or vouchers, claim your free Daily Pack every 20 hours, open in bulk, and check VIEW DROP ODDS on any pack before buying.',
-      ],
-      [
-        'Daily Login',
-        'On the main menu: claim once per calendar day. Rewards escalate across a 7-day streak cycle (credits, a free pack on day 5, vouchers on day 7), plus a growing bonus for your total streak.',
       ],
       [
         'Battle Pass',
@@ -408,15 +269,11 @@ const SECTIONS = [
       ],
       [
         'Missions & Achievements',
-        'Daily/weekly missions and permanent achievements pay out credits, vouchers and free packs for playing normally — opening packs, logging in, trading and selling all count.',
+        'Daily/weekly missions and permanent achievements pay out credits, vouchers and free packs for playing normally.',
       ],
       [
-        'Marketplace',
-        'List spare cards for a fixed price or run a timed auction with bids and a buyout. Sellers pay a 5% fee on completed sales.',
-      ],
-      [
-        'Player Shops',
-        'Unlocks at level 50 — open your own storefront, sell individual cards, bundles or blind Mystery Packs, and build a public seller rating over time.',
+        'Marketplace & Shops',
+        'List spare cards for a fixed price or run a timed auction with bids and a buyout (5% seller fee). Player Shops unlock at level 50.',
       ],
       [
         'Friends & Trading',
@@ -454,7 +311,21 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
               <dl className="px-4 py-3 grid gap-2 text-sm">
                 {sec.body.map(([term, desc]) => (
                   <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
-                    <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start">
+                    <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
+                      {sec.title.includes('Essence Identity') && (
+                        <span
+                          className="inline-flex items-center justify-center rounded-full font-mono font-black shrink-0"
+                          style={{
+                            width: 14,
+                            height: 14,
+                            fontSize: 8,
+                            backgroundColor: COLOR_PIP[term as (typeof COLORS)[number]]?.bg,
+                            color: COLOR_PIP[term as (typeof COLORS)[number]]?.fg,
+                          }}
+                        >
+                          {COLOR_LETTER[term as (typeof COLORS)[number]]}
+                        </span>
+                      )}
                       {term}
                     </dt>
                     <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
@@ -462,7 +333,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                     </dd>
                   </div>
                 ))}
-                {sec.title === '11 · Rarity System' && (
+                {sec.title === '9 · Rarity System' && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {RARITY_ORDER.map((r) => (
                       <span
@@ -479,7 +350,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          DEFINITIVE RULEBOOK V4.21 · docs/RULEBOOK.md
+          RIFTBOUND RULEBOOK V5.0 · docs/RULEBOOK.md
         </div>
       </div>
     </div>
