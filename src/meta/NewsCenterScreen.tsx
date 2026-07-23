@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, ScrollText, Newspaper } from 'lucide-react';
+import { Sparkles, ScrollText, Newspaper, Trash2 } from 'lucide-react';
 import { MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
 import {
@@ -8,6 +8,7 @@ import {
   NewsPost,
   SerializedFeedEntry,
   createNewsPost,
+  deleteNewsPost,
 } from '../lib/supabase';
 import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
@@ -50,6 +51,7 @@ export function NewsCenterScreen({
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // A rejected fetch (network failure) here used to leave `loading` stuck
   // true forever — the .then() callback never ran, `setLoading(false)` never
@@ -77,6 +79,21 @@ export function NewsCenterScreen({
   }, []);
 
   const isCreator = profile?.role === 'creator';
+
+  const handleDeletePost = async (id: string) => {
+    if (deletingId) return;
+    if (!window.confirm('Delete this post? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      const err = await deleteNewsPost(id);
+      if (err) setLoadErr(err);
+      else load();
+    } catch {
+      setLoadErr("Couldn't delete — check your connection and try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -204,11 +221,24 @@ export function NewsCenterScreen({
                 key={p.id}
                 className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] p-4"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="heading-font text-sm">{p.title}</h3>
-                  <span className="text-[10px] font-bold text-[var(--c-steel)]">
-                    {timeAgo(p.published_at)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                      {timeAgo(p.published_at)}
+                    </span>
+                    {isCreator && (
+                      <button
+                        onClick={() => handleDeletePost(p.id)}
+                        disabled={deletingId !== null}
+                        aria-label={`Delete post "${p.title}"`}
+                        title="Delete post"
+                        className="text-[var(--c-steel)] hover:text-[var(--c-red)] disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-[12px] font-medium mt-1.5 whitespace-pre-wrap leading-snug">
                   {p.body}

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pencil, Check, Search, ShieldAlert, Flag } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   equipCosmetic,
@@ -8,9 +8,12 @@ import {
   adminGrantCurrency,
   adminSetRole,
   adminGrantCard,
+  fetchOpenShopReports,
+  adminResolveShopReport,
   PublicProfile,
   PlayerRole,
   ShopItem,
+  ShopReport,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, ProgressBar, xpForLevel } from './ui';
 import { RoleBadge } from './RoleBadge';
@@ -369,6 +372,50 @@ function CreatorTools() {
 
   const cardKnown = POOL_V4.some((c) => c.id === cardId);
 
+  // Player Shop reports — reportListing() lets any player file one of these,
+  // but until now nothing in the app ever surfaced them again, so a report
+  // just vanished into the database with no way to act on it.
+  const [reports, setReports] = useState<ShopReport[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  const loadReports = () => {
+    setReportsLoading(true);
+    fetchOpenShopReports()
+      .then(setReports)
+      .finally(() => setReportsLoading(false));
+  };
+
+  useEffect(() => {
+    loadReports();
+  }, []);
+
+  const resolveReport = async (report: ShopReport, action: 'strike' | 'dismiss') => {
+    if (resolvingId) return;
+    if (
+      !confirm(
+        action === 'strike'
+          ? 'Strike the seller and resolve this report?'
+          : 'Dismiss this report with no action?',
+      )
+    )
+      return;
+    setResolvingId(report.id);
+    setError('');
+    try {
+      const err = await adminResolveShopReport(report.id, action);
+      if (err) setError(err);
+      else {
+        setNotice(action === 'strike' ? 'Seller struck, report resolved.' : 'Report dismissed.');
+        loadReports();
+      }
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   const handleSearch = async () => {
     if (!query.trim() || searching) return;
     setSearching(true);
@@ -614,6 +661,54 @@ function CreatorTools() {
               </PopButton>
             </div>
           </>
+        )}
+
+        {/* Shop reports — global moderation queue, independent of the
+            player search above. */}
+        <div className="heading-font text-xs mb-1 mt-6 flex items-center gap-1.5">
+          <Flag className="w-3.5 h-3.5" /> OPEN SHOP REPORTS
+        </div>
+        {reportsLoading ? (
+          <div className="text-[10px] font-bold text-[var(--c-steel)] animate-pulse">
+            Loading reports…
+          </div>
+        ) : reports.length === 0 ? (
+          <div className="text-[10px] font-bold text-[var(--c-steel)]">
+            No open reports right now.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {reports.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5 flex-wrap"
+              >
+                <div className="text-[10px] font-bold">
+                  <span className="heading-font text-[9px] bg-[var(--c-red)] text-white px-1 mr-1">
+                    {r.reason.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                  Listing {r.listing_id.slice(0, 8)}…
+                  {r.note && <span className="text-[var(--c-steel)]"> — "{r.note}"</span>}
+                </div>
+                <div className="flex gap-1.5">
+                  <PopButton
+                    color="red"
+                    disabled={resolvingId !== null}
+                    onClick={() => resolveReport(r, 'strike')}
+                  >
+                    {resolvingId === r.id ? '…' : 'STRIKE SELLER'}
+                  </PopButton>
+                  <PopButton
+                    color="steel"
+                    disabled={resolvingId !== null}
+                    onClick={() => resolveReport(r, 'dismiss')}
+                  >
+                    DISMISS
+                  </PopButton>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

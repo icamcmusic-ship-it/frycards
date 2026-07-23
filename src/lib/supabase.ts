@@ -1485,3 +1485,17 @@ export async function adminResolveShopReport(
   });
   return rpcError(error);
 }
+
+/** Open (unresolved) Player Shop reports — creator-only moderation queue.
+ * reportListing() above lets any player file one of these, but until now
+ * there was no way to ever see or act on them again short of a raw SQL
+ * query — adminResolveShopReport existed with nothing in the UI to call it. */
+export async function fetchOpenShopReports(): Promise<ShopReport[]> {
+  const { data, error } = await supabase
+    .from('shop_reports')
+    .select('*')
+    .eq('status', 'open')
+    .order('created_at', { ascending: false });
+  if (error) console.error('fetchOpenShopReports failed:', error.message);
+  return (data as ShopReport[]) || [];
+}
