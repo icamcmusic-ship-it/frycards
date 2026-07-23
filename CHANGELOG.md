@@ -7,6 +7,37 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v5.0 RIFTBOUND — full game conversion
+
+The entire game moved from the v4.x dice-placement rules to the **Riftbound**
+rulebook: an essence-based TCG. See `docs/RULEBOOK.md` (v5.0) and
+`docs/RIFTBOUND_SPEC.md`.
+
+- **Seven new colors (Essence Types)**: Ember, Tide, Root, Gale, Light,
+  Shadow, Void — printed on cards as colored cost pips (color identity is no
+  longer derived from keywords). Leaders keep two-color identities.
+- **New core loop**: Locations exhaust for Essence; spells are Invoked by
+  paying Essence Costs (colored pips + generic). Turn = Dawn → Main I →
+  Clash → Main II → Dusk. Vitality starts at 20.
+- **Combat**: attacker/guard clash system with the rulebook keyword set —
+  Aerial, Overrun, Quickstrike, Doublestrike, Venomous, Siphon, Alert,
+  Reckless, Swarmproof, Skywatch, Warded, Unbreakable, Ambush, Immobile.
+  Keyword tiers (I–V) are retired.
+- **Card types reworked**: Units have Might/Grit; Locations split into
+  Wellsprings (basic, auto-supplied — no deck slots) and Sanctums; Charms
+  split into Bound/Worn (re-bond); Events split into Quick/Slow; Leaders
+  start in the Leader zone with Resolve-costed abilities.
+- **Card pool** regenerated: every catalog card deterministically assigned
+  Riftbound mechanics (essence cost, colors, stats, keywords, effects).
+- **Card templates** redesigned for essence costs, Might/Grit gems, subtype
+  lines, and Resolve — same card dimensions, same regular-art and Full-Art
+  image treatments.
+- **Database**: `cards` table gained `essence_cost`, `essence_types`,
+  `might`, `grit`, `card_subtype`, `resolve`, `rules_text`, backfilled from
+  the pool.
+- **Removed**: all dice mechanics (rolls, Cast Slots, combos, patterns,
+  pitch/staging) and the dice-era sim scripts/docs.
+
 ### v4.27 harness upgrades (clock-speed + polarized matchups), dead-code value-buff fix, balance pass, Echo/Bind UI fixes, bug hunt
 
 - **Sim harness — two new capture dimensions** (`scripts/simulate-v4.ts`):

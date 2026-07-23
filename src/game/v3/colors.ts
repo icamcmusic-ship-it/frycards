@@ -1,129 +1,71 @@
 /**
- * v4.13/v4.14: card colors (MTG-style) — a deckbuilding-legal strategic
- * identity layered on top of the existing keyword system, NOT a
- * replacement for it. Keywords stay the mechanical vocabulary; colors
- * group keywords into broader playstyle lanes and give each Leader a color
- * identity that deck legality (`DeckBuilderScreen.validateDeckList`)
- * enforces — see `docs/COLOR_IDENTITY.md` for the full design rationale,
- * card-color/Leader-identity audit, and (§6) the v4.14 expansion from 5 to
- * 7 colors documented below.
+ * Riftbound v5.0 Essence Types — the game's seven colors.
  *
- * v4.14: expanded 5→7. Renamed Umbral→Obsidian and Radiant→Prism (same
- * keywords, new names — Prism was renamed off "Radiant" specifically so it
- * wouldn't read as a near-synonym of the new Solar color). Split
- * Crescendo/Foothold/Contested/Snap off Prism into a new Solar color
- * (situational/opportunistic-timing, vs. Prism's direct dice-pattern
- * synergy). Added Slate — a true colorless catch-all for cards with no
- * color-mapped keyword (replaces the old guessed-color `COLOR_OF_ACTION`
- * fallback; a Slate card is legal in every Leader's deck by definition,
- * same as a colorless card in MTG — see `isColorLegal`).
- *
- * Assignment is derived, not hashed: a card's color(s) come straight from
- * whichever already-assigned keywords it carries (`cardpool.ts`'s
- * `primaryKw`/secondary-keyword picks), so this file adds zero new
- * hash-assignment surface and can never desync from a card's real keywords.
+ * Unlike the old v4.x system (colors derived from keywords), a card's color
+ * identity is now printed directly on the card: it is the set of colored
+ * pips in its Essence Cost (`CardDef.cost.pips`). A card whose cost has no
+ * colored pips is colorless and legal in every deck. See
+ * docs/RIFTBOUND_SPEC.md and docs/COLOR_IDENTITY.md.
  */
-import { CardDef } from './cards';
+import type { CardDef } from './cards';
 
-export type Color =
-  | 'Crimson'
-  | 'Azure'
-  | 'Verdant'
-  | 'Obsidian'
-  | 'Prism'
-  | 'Solar'
-  | 'Slate';
+export type Color = 'Ember' | 'Tide' | 'Root' | 'Gale' | 'Light' | 'Shadow' | 'Void';
+/** Alias — the rulebook calls colors "Essence Types". */
+export type EssenceType = Color;
 
-export const COLORS: Color[] = [
-  'Crimson',
-  'Azure',
-  'Verdant',
-  'Obsidian',
-  'Prism',
-  'Solar',
-  'Slate',
-];
+export const COLORS: Color[] = ['Ember', 'Tide', 'Root', 'Gale', 'Light', 'Shadow', 'Void'];
 
 export const COLOR_IDENTITY: Record<Color, string> = {
-  Crimson: 'Aggro / burst damage',
-  Azure: 'Control / defense',
-  Verdant: 'Ramp / growth',
-  Obsidian: 'Attrition / value (formerly Umbral)',
-  Prism: 'Dice-pattern synergy / tempo (formerly Radiant)',
-  Solar: 'Situational / opportunistic timing',
-  Slate: 'Colorless — no color-mapped keyword',
+  Ember: 'Aggression, direct damage, haste',
+  Tide: 'Card draw, bounce, tempo',
+  Root: 'Big stats, essence ramp, growth',
+  Gale: 'Evasion (Aerial/Alert), small fast units',
+  Light: 'Protection, lifegain (Siphon), buffs',
+  Shadow: 'Removal, Forfeit synergy, ash-pile recursion',
+  Void: 'Banish effects, denial, high-cost payoffs',
 };
 
-/** Every keyword this pool actually assigns, mapped to its color family.
- * Keywords not in this list (Resolve/Ultimate — Leader-only flags with no
- * deck-legality role) simply don't contribute a color. */
-export const COLOR_OF_KEYWORD: Record<string, Color> = {
-  Frenzy: 'Crimson',
-  Swift: 'Crimson',
-  Pierce: 'Crimson',
-  Overrun: 'Crimson',
-  Guard: 'Azure',
-  Ward: 'Azure',
-  Bulwark: 'Azure',
-  Toll: 'Azure',
-  Anchor: 'Verdant',
-  Excavate: 'Verdant',
-  Scrap: 'Verdant',
-  Tribute: 'Verdant',
-  Echo: 'Obsidian',
-  Avenge: 'Obsidian',
-  Steel: 'Obsidian',
-  Aftershock: 'Obsidian',
-  Twin: 'Prism',
-  Rally: 'Prism',
-  Crescendo: 'Solar',
-  Foothold: 'Solar',
-  Contested: 'Solar',
-  Snap: 'Solar',
+/** Keywords thematically at home in each Essence Type — used by the card
+ * pool to pick on-color keywords for a card's rolled cost, and by the deck
+ * builder to score archetype fit. Not a legality rule. */
+export const KEYWORDS_OF_COLOR: Record<Color, string[]> = {
+  Ember: ['Reckless', 'Overrun', 'Quickstrike'],
+  Tide: ['Ambush', 'Warded'],
+  Root: ['Swarmproof', 'Unbreakable'],
+  Gale: ['Aerial', 'Alert', 'Skywatch'],
+  Light: ['Siphon', 'Skywatch', 'Warded'],
+  Shadow: ['Venomous', 'Doublestrike'],
+  Void: ['Immobile', 'Unbreakable', 'Ambush'],
 };
 
 /**
- * A card's color identity: the color(s) of its keywords (a Unit with a
- * primary keyword in one color family and a secondary keyword in another
- * is genuinely multicolor, mirroring `mapUnit`'s existing primary+secondary
- * keyword assignment in `cardpool.ts`), deduped and stably ordered by
- * `COLORS`. A card with no color-mapped keyword (some keyword-less Charms/
- * Events) is colorless: `['Slate']`, not a guessed themed color.
+ * A card's color identity: the Essence Types among its cost pips (plus a
+ * Location's produced type), stably ordered by COLORS. Empty array =
+ * colorless (legal everywhere).
  */
 export function cardColors(def: CardDef): Color[] {
   const set = new Set<Color>();
-  for (const kw of def.keywords || []) {
-    const c = COLOR_OF_KEYWORD[kw];
-    if (c) set.add(c);
+  for (const [t, n] of Object.entries(def.cost?.pips ?? {})) {
+    if (n && n > 0) set.add(t as Color);
   }
-  if (set.size === 0) return ['Slate'];
+  if (def.produces) set.add(def.produces);
   return COLORS.filter((c) => set.has(c));
 }
 
-/**
- * Leader color identities — derived from each Leader's existing archetype
- * roster in `scripts/simulate-v4.ts` (the keyword pair each archetype
- * leans on), picked as the 2 colors covering the most of that Leader's
- * archetype keyword-instances, with ties broken toward whichever pair no
- * other Leader already has. See `docs/COLOR_IDENTITY.md` §6 for the full
- * v4.14 re-derivation (every one of the 8 pairs below is now unique — the
- * v4.13 Avatar of the Abyss / Apex Nanite Shinobi identity collision is
- * fixed). Slate is colorless and never appears in a Leader identity.
- */
+/** Leader color identities (2 Essence Types each, all pairs unique). */
 export const LEADER_COLORS: Record<string, Color[]> = {
-  avatar_of_the_abyss: ['Verdant', 'Prism'],
-  ethereal_sea_witch: ['Azure', 'Verdant'],
-  mer_king: ['Azure', 'Obsidian'],
-  legendary_diver: ['Crimson', 'Prism'],
-  crimson_vector_commander: ['Crimson', 'Azure'],
-  apex_nanite_shinobi: ['Verdant', 'Obsidian'],
-  ruinwalker_overseer: ['Azure', 'Solar'],
-  sovereign_of_the_dying_star: ['Obsidian', 'Crimson'],
+  avatar_of_the_abyss: ['Shadow', 'Void'],
+  ethereal_sea_witch: ['Tide', 'Light'],
+  mer_king: ['Tide', 'Root'],
+  legendary_diver: ['Ember', 'Gale'],
+  crimson_vector_commander: ['Ember', 'Light'],
+  apex_nanite_shinobi: ['Gale', 'Shadow'],
+  ruinwalker_overseer: ['Root', 'Void'],
+  sovereign_of_the_dying_star: ['Ember', 'Void'],
 };
 
-/** True if every color `cardColors(def)` returns is within `identity` — the
- * deck-legality rule DeckBuilderScreen enforces. `Slate` (colorless) is
- * always legal regardless of identity, same as a colorless card in MTG. */
+/** Deck legality: every colored pip on the card must be inside the Leader's
+ * identity. Colorless cards are always legal. */
 export function isColorLegal(def: CardDef, identity: Color[]): boolean {
-  return cardColors(def).every((c) => c === 'Slate' || identity.includes(c));
+  return cardColors(def).every((c) => identity.includes(c));
 }

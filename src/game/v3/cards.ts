@@ -1,31 +1,56 @@
 /**
- * Card data for Rulebook v3.0 (dice-placement rules).
- * Every non-Leader card prints a Cast Slot threshold (1-6), or is a
- * Combo-gated Event with a pattern cost instead.
+ * Riftbound v5.0 card data model. Essence-based costs, Might/Grit units,
+ * Location/Charm/Event subtypes, Leaders with Resolve. Replaces the v4.x
+ * dice-placement model (Cast Slots, thresholds, combos) entirely.
+ * See docs/RIFTBOUND_SPEC.md.
  */
+import type { EssenceType } from './colors';
 
-export type ComboPattern =
-  | 'AnyPair'
-  | 'TwoPair'
-  | 'ThreeKind'
-  | 'SmallStraight'
-  | 'FullHouse'
-  | 'LargeStraight'
-  | 'FourKind'
-  | 'Yahtzee'
-  /** v4.3: at least 3 of your 5 dice show an odd value. */
-  | 'ThreeOdds'
-  /** v4.3: at least 3 of your 5 dice show an even value. */
-  | 'ThreeEvens';
+export type { EssenceType };
 
-export type EffectAction = 'sap' | 'mend' | 'draw' | 'bind' | 'destroy' | 'buff';
+export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
+
+export type Rarity =
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Full-Art' | 'Ultra-Rare' | 'Mythic';
+
+/** Location subtypes: Wellsprings are basic (essence only, auto-supplied by
+ * the engine, not collectible); Sanctums are collectible utility Locations. */
+export type LocationSubtype = 'Wellspring' | 'Sanctum';
+/** Charm subtypes: Bound dies with its unit; Worn survives and can re-bond. */
+export type CharmSubtype = 'Bound' | 'Worn';
+/** Event subtypes: Quick = any priority window; Slow = own main phase only. */
+export type EventSubtype = 'Quick' | 'Slow';
+export type CardSubtype = LocationSubtype | CharmSubtype | EventSubtype;
+
+/** An Essence Cost: colored pips + a generic amount payable with anything. */
+export interface EssenceCost {
+  generic: number;
+  pips: Partial<Record<EssenceType, number>>;
+}
+
+/** Total essence value (converted cost). */
+export function totalCost(cost?: EssenceCost): number {
+  if (!cost) return 0;
+  return cost.generic + Object.values(cost.pips).reduce((a, b) => a + (b ?? 0), 0);
+}
+
+export type EffectAction =
+  | 'damage' // deal damage to a unit or player
+  | 'heal' // restore Vitality / remove marked damage
+  | 'draw' // Deal cards
+  | 'buff' // +value Might and +value Grit
+  | 'shatter' // destroy → Ash-pile
+  | 'banish' // remove → The Void
+  | 'erode' // mill opponent
+  | 'recover'; // ready a friendly permanent
+
 export type EffectTarget =
   | 'enemyUnit'
   | 'friendlyUnit'
-  | 'anyTarget' // enemy unit or enemy leader (AI picks); sap/destroy style
-  | 'enemyLeader'
-  | 'friendlyLeader'
-  | 'friendlyAny' // friendly unit or own leader (mend style)
+  | 'anyTarget' // enemy unit or the enemy player
+  | 'enemyPlayer'
+  | 'friendlyPlayer'
+  | 'friendlyAny' // friendly unit or yourself
   | 'allEnemyUnits'
   | 'allFriendlyUnits'
   | 'self'
@@ -37,421 +62,193 @@ export interface Effect {
   target: EffectTarget;
 }
 
-export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
+/** Triggered ability timing per rulebook §11. */
+export type TriggerWhen = 'enters' | 'dies' | 'dealsClashDamage' | 'atDawn' | 'atDusk';
 
-export type Rarity =
-  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Full-Art' | 'Ultra-Rare' | 'Mythic';
+export interface TriggeredAbility {
+  when: TriggerWhen;
+  effect: Effect;
+}
+
+/** A Leader ability: costs Resolve to activate (negative delta spends,
+ * positive builds), once per turn. */
+export interface LeaderAbility {
+  resolveDelta: number; // e.g. +1 or -2 applied to the Leader's Resolve
+  effect: Effect;
+  text?: string;
+}
 
 export interface CardDef {
   id: string;
   name: string;
   type: CardType;
+  subtype?: CardSubtype;
   /** Core identity preserved from the backend card catalog. */
   rarity?: Rarity;
   set?: string;
   image?: string;
   flavor?: string;
-  /**
-   * Cast Slot cost target. Undefined only for Combo-gated cards and Leaders.
-   * Paired with `castCostKind` (v4.3) to pick how the die(s) placed here must
-   * relate to this number — see `castCostKind`.
-   */
-  threshold?: number;
-  /**
-   * v4.3: how a numeric `threshold` is paid. Every Unit/Charm/Event prints
-   * one of the five cost formats: this field (with `threshold`) covers two
-   * of them; `comboGate` (below) covers the other three (Pairs and every
-   * kind/straight/house pattern, plus Three Odds/Evens via the matching
-   * `ComboPattern`).
-   * - 'atLeast' (default/legacy): one die of value >= threshold.
-   * - 'exact': one die showing exactly threshold.
-   * - 'sum': any number of unplaced dice whose total >= threshold.
-   */
-  castCostKind?: 'atLeast' | 'exact' | 'sum';
-  /** Combo-gated cost: the roll must contain this pattern. Usable on any card type (v4.3), not just Events. */
-  comboGate?: ComboPattern;
-  atk?: number;
-  hp?: number;
-  /** Simple keywords: Guard, Swift, Pierce, Ward, Frenzy, Anchor, Echo, Scrap, Rally, Twin. */
-  keywords?: string[];
-  /**
-   * v4.19 keyword tier system: tier (1..5, rendered I..V) per keyword in
-   * `keywords`. A keyword+tier always means the same ability and cost
-   * contribution on every card — see src/game/v3/keywords.ts
-   * (KEYWORD_TIERS) and docs/KEYWORD_TIERS.md. Absent entries (and legacy /
-   * curated cards with no map at all) resolve via keywords.ts's
-   * `keywordTier()` defaults, which reproduce exact pre-tier behavior.
-   */
-  keywordTiers?: Record<string, number>;
-  /** One Ability Slot (repeatable, once per turn, mutually exclusive with attacking). */
-  ability?: { threshold: number; effect: Effect };
-  /** Effect on cast (Charms/Events resolve this then discard; Units trigger it on entry). */
-  onCast?: Effect;
-  /** Passive Combo bonus while in play, checked at the Combo Check step. */
-  combo?: { pattern: ComboPattern; effect: Effect };
-  /** Overflow X: die exceeds effective threshold by X or more -> bonus. */
-  overflow?: { amount: number; effect: Effect };
-  /** Twin bonus effect, triggered when the second matched die completes the card. */
-  twinBonus?: Effect;
-  /** v4.2: passive effect a Twin card grants once per controller turn while parked in Staging. */
-  stagedPassive?: Effect;
-  /** Location passive for the controller's Units. */
-  locPassive?: 'ATK_ALL' | 'HP_ALL';
-  text?: string;
 
-  // -- v4.2 keywords --
-  /** Resolve X (Leader): while at/below half HP, Ability Slot threshold -X (min 1). */
-  resolve?: { x: number };
-  /** Ultimate(N) (Leader): a second, once-per-game Ability Slot, usable from your Nth turn on. */
-  ultimate?: { unlockTurn: number; threshold: number; effect: Effect };
-  /** Crescendo X (Event): +X to this Event's numeric effect per die of value 6 you placed this turn. */
-  crescendo?: { x: number };
-  /** Bulwark X (Unit): flat reduction to damage this Unit takes from attacks (after Ward, before Frenzy). */
-  bulwark?: { x: number };
-  /** Toll X (Unit): reduces ALL incoming damage to your Leader (any source) by X while this Unit lives. */
-  toll?: { x: number };
-  /** v4.4 Steel X (Unit): the first X damage this Unit would take EACH TURN, from any source
-   * (attacks, Sap, Pierce overflow), is prevented instead of reduced — a per-turn absorption
-   * pool, refreshing every End Phase like Ward, distinct from Bulwark (flat, attacks only). */
-  steel?: { x: number };
-  /** Avenge (Unit): +1/+1 permanently whenever another friendly Unit dies (state-based, no priority window). */
-  avenge?: boolean;
-  /** Aftershock (Event): after resolving, queues this effect to fire at the very start of your next turn, before Draw Phase. */
-  aftershock?: Effect;
-  /** Tribute (Location): triggers at your End Phase if you Pitched 2+ dice this turn. */
-  tribute?: Effect;
-  /** Excavate X (Location): Ability Slot threshold drops by X per controller turn in play (min 1). */
-  excavate?: { x: number };
-  /** Contested (Location): its passive is doubled while the opponent controls no Location. */
-  contested?: boolean;
-  /** Snap (Charm): may be cast during the Reroll Phase (before the reroll window closes), not just Placement. */
-  snap?: boolean;
-  /** v4.4 Foothold (Location): the first Unit you cast each turn costs 1 less while this Location is in play. */
-  foothold?: boolean;
-  /** v4.4 (Leader): this Leader's Ability grants tempo instead of pure card
-   * advantage — the next friendly Unit cast this same turn enters play
-   * without summoning sickness (as if it had Swift). Currently only
-   * Legendary Diver. */
-  abilityGrantsTempo?: boolean;
-  /** v4.4 (Leader): this Leader's Ability can't target the same permanent
-   * two activations in a row — still repeatable every turn, just can't
-   * compound onto one already-tough Unit forever. Currently only Apex
-   * Nanite Shinobi, whose uncapped repeat-buff was a stat-snowball engine
-   * when paired with any sticky defensive body. */
-  abilityNoRepeatTarget?: boolean;
+  /** Essence Cost. Every invokable card has one (Leaders included). */
+  cost?: EssenceCost;
+
+  /** Unit stats. */
+  might?: number;
+  grit?: number;
+
+  /** Keywords from the Riftbound set — see keywords.ts KEYWORDS. */
+  keywords?: string[];
+
+  /** Effect on invoke (Events resolve this then go to the Ash-pile; Units
+   * trigger it on entering the field). */
+  onInvoke?: Effect;
+  /** Triggered abilities ("When/Whenever/At ..."). */
+  triggers?: TriggeredAbility[];
+
+  // -- Location (Sanctum) --
+  /** Essence Type this Location produces when exhausted. */
+  produces?: EssenceType;
+  /** Sanctum static passive for the controller's units. */
+  locPassive?: 'MIGHT_ALL' | 'GRIT_ALL';
+
+  // -- Charm --
+  /** Stat/keyword grants while bonded to a unit. */
+  bond?: { might?: number; grit?: number; grants?: string[] };
+  /** Worn Charms: essence cost (generic) to re-bond to another unit. */
+  rebondCost?: number;
+
+  // -- Leader --
+  /** Starting Resolve (loyalty). Shattered at 0. */
+  resolve?: number;
+  /** Activated abilities, one activation per turn, cost/build Resolve. */
+  leaderAbilities?: LeaderAbility[];
+
+  text?: string;
 }
 
-// v4.1: raised (28 -> 64) to lengthen games by ~4 rounds toward the 8-10 round
-// target — a ~6-round meta at 28 HP was ending before reactive decks could
-// stabilize. 64 HP lands the average near ~10 rounds in the sim's length
-// distribution while keeping deck-out rare on 30-card decks.
-export const LEADER_HP = 64;
+/** Starting Vitality per rulebook §3. (Name kept from v4.x for the many
+ * screens that import it; it is now the PLAYER's life total, not a Leader
+ * HP stat.) */
+export const LEADER_HP = 20;
+export const STARTING_VITALITY = LEADER_HP;
 
-const U = (
-  id: string,
-  name: string,
-  threshold: number,
-  atk: number,
-  hp: number,
-  extra: Partial<CardDef> = {},
-): CardDef => ({ id, name, type: 'Unit', threshold, atk, hp, ...extra });
-
-export const CARDS_V3: CardDef[] = [
-  // ---- Leaders (LEADER_HP HP, no ATK, one Ability Slot) ----
-  {
-    id: 'leader_ember',
-    name: 'Emberlord Kaz',
-    type: 'Leader',
-    hp: LEADER_HP,
-    ability: { threshold: 5, effect: { action: 'sap', value: 2, target: 'anyTarget' } },
-    text: 'Ability 5+: Sap 2 (any Unit or Leader).',
-  },
-  {
-    id: 'leader_verdant',
-    name: 'Verdant Matriarch',
-    type: 'Leader',
-    hp: LEADER_HP,
-    ability: { threshold: 5, effect: { action: 'mend', value: 3, target: 'friendlyAny' } },
-    text: 'Ability 5+: Mend 3 (your Leader or a friendly Unit).',
-  },
-  {
-    id: 'leader_gearwright',
-    name: 'Gearwright Otto',
-    type: 'Leader',
-    hp: LEADER_HP,
-    ability: { threshold: 4, effect: { action: 'draw', value: 1, target: 'none' } },
-    text: 'Ability 4+: Surge (draw a card).',
-  },
-  {
-    id: 'leader_shadow',
-    name: 'Shadow Duelist Vex',
-    type: 'Leader',
-    hp: LEADER_HP,
-    ability: { threshold: 4, effect: { action: 'bind', target: 'enemyUnit' } },
-    text: 'Ability 4+: Bind a target enemy Unit.',
-  },
-
-  // ---- Units ----
-  U('dice_goblin', 'Dice Goblin', 1, 2, 1),
-  U('scrap_rat', 'Scrap Rat', 1, 1, 1, {
-    keywords: ['Scrap'],
-    text: 'Scrap: discard from hand to reroll one unplaced die.',
-  }),
-  U('shield_bearer', 'Shield Bearer', 2, 1, 4, { keywords: ['Guard'] }),
-  U('swift_fox', 'Swift Fox', 2, 2, 2, { keywords: ['Swift'] }),
-  U('pair_prowler', 'Pair Prowler', 2, 2, 2, {
-    combo: { pattern: 'AnyPair', effect: { action: 'buff', value: 1, target: 'self' } },
-    text: 'Combo Any Pair: this gains +1/+1.',
-  }),
-  U('wardancer', 'Wardancer', 3, 2, 4, { keywords: ['Ward'] }),
-  U('pikeman', 'Pikeman', 3, 3, 3),
-  U('echo_shade', 'Echo Shade', 3, 3, 2, { keywords: ['Echo'] }),
-  U('anchorite', 'Anchorite', 3, 2, 3, { keywords: ['Anchor'] }),
-  U('field_medic', 'Field Medic', 3, 1, 4, {
-    ability: { threshold: 4, effect: { action: 'mend', value: 2, target: 'friendlyAny' } },
-    text: 'Ability 4+: Mend 2.',
-  }),
-  U('lancer', 'Lancer', 4, 4, 3, { keywords: ['Pierce'] }),
-  U('berserker', 'Berserker', 4, 5, 4, { keywords: ['Frenzy'] }),
-  U('rally_captain', 'Rally Captain', 4, 3, 3, {
-    keywords: ['Rally'],
-    ability: { threshold: 3, effect: { action: 'buff', value: 1, target: 'friendlyUnit' } },
-    text: 'Ability 3+: a friendly Unit gains +1/+1. Rally.',
-  }),
-  U('triad_mystic', 'Triad Mystic', 4, 2, 4, {
-    combo: { pattern: 'ThreeKind', effect: { action: 'sap', value: 2, target: 'anyTarget' } },
-    text: 'Combo Three of a Kind: Sap 2.',
-  }),
-  U('anchor_keeper', 'Anchor Keeper', 4, 3, 5, { keywords: ['Anchor'] }),
-  U('tower_golem', 'Tower Golem', 5, 3, 8, { keywords: ['Guard'] }),
-  U('phoenix', 'Ashen Phoenix', 5, 4, 3, { keywords: ['Echo', 'Swift'] }),
-  U('bulwark', 'Living Bulwark', 5, 2, 8, {
-    keywords: ['Guard', 'Bulwark'],
-    bulwark: { x: 2 },
-  }),
-  U('twin_flames', 'Twin Flames', 3, 4, 4, {
-    keywords: ['Twin'],
-    twinBonus: { action: 'sap', value: 3, target: 'enemyLeader' },
-    text: 'Twin 3: when completed, Sap 3 the enemy Leader.',
-  }),
-  U('war_titan', 'War Titan', 6, 7, 7),
-  U('siege_drake', 'Siege Drake', 6, 6, 5, { keywords: ['Pierce'] }),
-
-  // ---- Charms ----
-  {
-    id: 'spark',
-    name: 'Spark',
-    type: 'Charm',
-    threshold: 1,
-    onCast: { action: 'sap', value: 2, target: 'enemyUnit' },
-    text: 'Sap 2 a target enemy Unit.',
-  },
-  {
-    id: 'tinker',
-    name: 'Tinker',
-    type: 'Charm',
-    threshold: 1,
-    keywords: ['Scrap'],
-    onCast: { action: 'draw', value: 1, target: 'none' },
-    text: 'Surge. Scrap.',
-  },
-  {
-    id: 'salve',
-    name: 'Soothing Salve',
-    type: 'Charm',
-    threshold: 2,
-    onCast: { action: 'mend', value: 3, target: 'friendlyAny' },
-    text: 'Mend 3.',
-  },
-  {
-    id: 'insight',
-    name: 'Insight',
-    type: 'Charm',
-    threshold: 2,
-    onCast: { action: 'draw', value: 1, target: 'none' },
-    overflow: { amount: 2, effect: { action: 'draw', value: 1, target: 'none' } },
-    text: 'Surge. Overflow 2: Surge again.',
-  },
-  {
-    id: 'shackles',
-    name: 'Shackles',
-    type: 'Charm',
-    threshold: 3,
-    onCast: { action: 'bind', target: 'enemyUnit' },
-    text: 'Bind a target enemy Unit.',
-  },
-  {
-    id: 'bolt',
-    name: 'Bolt',
-    type: 'Charm',
-    threshold: 3,
-    onCast: { action: 'sap', value: 3, target: 'anyTarget' },
-    text: 'Sap 3 any Unit or Leader.',
-  },
-
-  // ---- Events ----
-  {
-    id: 'fireball',
-    name: 'Fireball',
-    type: 'Event',
-    threshold: 5,
-    onCast: { action: 'sap', value: 4, target: 'anyTarget' },
-    overflow: { amount: 1, effect: { action: 'sap', value: 2, target: 'enemyLeader' } },
-    text: 'Sap 4. Overflow 1: Sap 2 the enemy Leader.',
-  },
-  {
-    id: 'annihilate',
-    name: 'Annihilate',
-    type: 'Event',
-    threshold: 6,
-    onCast: { action: 'destroy', target: 'enemyUnit' },
-    text: 'Destroy a target enemy Unit.',
-  },
-  {
-    id: 'lucky_streak',
-    name: 'Lucky Streak',
-    type: 'Event',
-    comboGate: 'AnyPair',
-    onCast: { action: 'draw', value: 2, target: 'none' },
-    text: 'Combo Any Pair: draw 2 cards.',
-  },
-  {
-    id: 'straight_shot',
-    name: 'Straight Shot',
-    type: 'Event',
-    comboGate: 'SmallStraight',
-    onCast: { action: 'sap', value: 4, target: 'anyTarget' },
-    text: 'Combo Small Straight: Sap 4.',
-  },
-  {
-    id: 'full_charge',
-    name: 'Full Charge',
-    type: 'Event',
-    comboGate: 'ThreeKind',
-    onCast: { action: 'sap', value: 5, target: 'enemyLeader' },
-    text: 'Combo Three of a Kind: Sap 5 the enemy Leader.',
-  },
-  {
-    id: 'house_rules',
-    name: 'House Rules',
-    type: 'Event',
-    comboGate: 'FullHouse',
-    onCast: { action: 'buff', value: 2, target: 'allFriendlyUnits' },
-    text: 'Combo Full House: all friendly Units gain +2/+2.',
-  },
-  {
-    id: 'grand_slam',
-    name: 'Grand Slam',
-    type: 'Event',
-    comboGate: 'FourKind',
-    onCast: { action: 'destroy', target: 'allEnemyUnits' },
-    text: 'Combo Four of a Kind: destroy all enemy Units.',
-  },
-  {
-    id: 'jackpot',
-    name: 'Jackpot',
-    type: 'Event',
-    comboGate: 'Yahtzee',
-    onCast: { action: 'sap', value: 10, target: 'enemyLeader' },
-    text: 'Combo Yahtzee: Sap 10 the enemy Leader.',
-  },
-
-  // ---- Locations ----
-  {
-    id: 'training_grounds',
-    name: 'Training Grounds',
-    type: 'Location',
-    locPassive: 'ATK_ALL',
-    text: 'Your Units get +1 ATK.',
-  },
-  {
-    id: 'sanctum',
-    name: 'Verdant Sanctum',
-    type: 'Location',
-    locPassive: 'HP_ALL',
-    text: 'Your Units get +1 max HP.',
-  },
-  {
-    id: 'dice_den',
-    name: 'Dice Den',
-    type: 'Location',
-    ability: { threshold: 3, effect: { action: 'draw', value: 1, target: 'none' } },
-    text: 'Ability 3+: Surge.',
-  },
-];
-
-export const CARD_DB: Record<string, CardDef> = Object.fromEntries(CARDS_V3.map((c) => [c.id, c]));
-
-/** 40-card decklists (id -> copies, max 3) per Leader. */
-export const DECKLISTS_V3: Record<string, Record<string, number>> = {
-  leader_ember: {
-    dice_goblin: 3,
-    swift_fox: 3,
-    pikeman: 3,
-    berserker: 3,
-    lancer: 3,
-    spark: 3,
-    bolt: 3,
-    fireball: 3,
-    phoenix: 3,
-    twin_flames: 3,
-    war_titan: 2,
-    full_charge: 3,
-    lucky_streak: 2,
-    training_grounds: 1,
-    tinker: 2,
-  },
-  leader_verdant: {
-    shield_bearer: 3,
-    wardancer: 3,
-    field_medic: 3,
-    tower_golem: 3,
-    bulwark: 3,
-    anchor_keeper: 3,
-    anchorite: 3,
-    salve: 3,
-    insight: 3,
-    annihilate: 3,
-    war_titan: 3,
-    shackles: 3,
-    sanctum: 2,
-    house_rules: 2,
-  },
-  leader_gearwright: {
-    pair_prowler: 3,
-    triad_mystic: 3,
-    echo_shade: 3,
-    insight: 3,
-    tinker: 3,
-    lucky_streak: 3,
-    straight_shot: 3,
-    full_charge: 3,
-    rally_captain: 3,
-    war_titan: 3,
-    pikeman: 3,
-    grand_slam: 1,
-    jackpot: 1,
-    shield_bearer: 3,
-    house_rules: 2,
-  },
-  leader_shadow: {
-    swift_fox: 3,
-    echo_shade: 3,
-    wardancer: 3,
-    lancer: 3,
-    shackles: 3,
-    bolt: 3,
-    spark: 3,
-    phoenix: 3,
-    berserker: 3,
-    insight: 3,
-    pikeman: 3,
-    tinker: 3,
-    siege_drake: 2,
-    annihilate: 2,
-  },
-};
+/** Hand size cap enforced at Dusk (Shed down to 7). */
+export const MAX_HAND = 7;
 
 export function hasKw(def: CardDef, kw: string): boolean {
   return !!def.keywords?.includes(kw);
 }
+
+const cost = (generic: number, pips: Partial<Record<EssenceType, number>> = {}): EssenceCost => ({
+  generic,
+  pips,
+});
+
+const U = (
+  id: string,
+  name: string,
+  c: EssenceCost,
+  might: number,
+  grit: number,
+  extra: Partial<CardDef> = {},
+): CardDef => ({ id, name, type: 'Unit', cost: c, might, grit, ...extra });
+
+/** Small curated starter set (offline/dev fallback; the real pool comes from
+ * cardpool.ts over the full catalog). */
+export const CARDS_V3: CardDef[] = [
+  {
+    id: 'leader_ember',
+    name: 'Emberlord Kaz',
+    type: 'Leader',
+    cost: cost(1, { Ember: 2 }),
+    resolve: 4,
+    leaderAbilities: [
+      { resolveDelta: -1, effect: { action: 'damage', value: 2, target: 'anyTarget' }, text: '-1: 2 damage to any target.' },
+      { resolveDelta: 1, effect: { action: 'buff', value: 1, target: 'friendlyUnit' }, text: '+1: a friendly unit gets +1/+1.' },
+    ],
+    text: 'Leader — Resolve 4.',
+  },
+  {
+    id: 'leader_verdant',
+    name: 'Root Matriarch',
+    type: 'Leader',
+    cost: cost(2, { Root: 2 }),
+    resolve: 5,
+    leaderAbilities: [
+      { resolveDelta: -1, effect: { action: 'heal', value: 3, target: 'friendlyAny' }, text: '-1: heal 3.' },
+      { resolveDelta: 1, effect: { action: 'draw', value: 1, target: 'none' }, text: '+1: Deal a card.' },
+    ],
+    text: 'Leader — Resolve 5.',
+  },
+
+  U('cinder_whelp', 'Cinder Whelp', cost(0, { Ember: 1 }), 2, 1, { keywords: ['Reckless'] }),
+  U('tide_scout', 'Tide Scout', cost(1, { Tide: 1 }), 1, 2, {
+    onInvoke: { action: 'draw', value: 1, target: 'none' },
+    text: 'When this unit enters the field, Deal a card.',
+  }),
+  U('root_guardian', 'Root Guardian', cost(2, { Root: 1 }), 2, 5, { keywords: ['Skywatch'] }),
+  U('gale_harrier', 'Gale Harrier', cost(1, { Gale: 1 }), 2, 2, { keywords: ['Aerial'] }),
+  U('lightbound_healer', 'Lightbound Healer', cost(1, { Light: 1 }), 2, 3, { keywords: ['Siphon'] }),
+  U('shadow_asp', 'Shadow Asp', cost(1, { Shadow: 1 }), 1, 1, { keywords: ['Venomous'] }),
+  U('void_maw', 'Void Maw', cost(4, { Void: 2 }), 6, 6, { keywords: ['Unbreakable', 'Immobile'] }),
+  U('war_titan', 'War Titan', cost(5, { Root: 1 }), 7, 7, { keywords: ['Overrun'] }),
+
+  {
+    id: 'ember_bolt',
+    name: 'Ember Bolt',
+    type: 'Event',
+    subtype: 'Quick',
+    cost: cost(1, { Ember: 1 }),
+    onInvoke: { action: 'damage', value: 3, target: 'anyTarget' },
+    text: 'Quick — 3 damage to any target.',
+  },
+  {
+    id: 'undertow',
+    name: 'Undertow',
+    type: 'Event',
+    subtype: 'Slow',
+    cost: cost(2, { Tide: 1 }),
+    onInvoke: { action: 'draw', value: 2, target: 'none' },
+    text: 'Slow — Deal two cards.',
+  },
+  {
+    id: 'oblivion_rift',
+    name: 'Oblivion Rift',
+    type: 'Event',
+    subtype: 'Slow',
+    cost: cost(3, { Void: 2 }),
+    onInvoke: { action: 'banish', target: 'enemyUnit' },
+    text: 'Slow — Banish a target enemy unit.',
+  },
+  {
+    id: 'wardens_sigil',
+    name: "Warden's Sigil",
+    type: 'Charm',
+    subtype: 'Bound',
+    cost: cost(1, { Light: 1 }),
+    bond: { might: 1, grit: 2 },
+    text: 'Bound — bonded unit gets +1/+2.',
+  },
+  {
+    id: 'stormforged_blade',
+    name: 'Stormforged Blade',
+    type: 'Charm',
+    subtype: 'Worn',
+    cost: cost(2, { Ember: 1 }),
+    rebondCost: 2,
+    bond: { might: 2, grants: ['Quickstrike'] },
+    text: 'Worn — bonded unit gets +2/+0 and Quickstrike. Re-bond 2.',
+  },
+  {
+    id: 'sanctum_of_embers',
+    name: 'Sanctum of Embers',
+    type: 'Location',
+    subtype: 'Sanctum',
+    cost: cost(2),
+    produces: 'Ember',
+    locPassive: 'MIGHT_ALL',
+    text: 'Sanctum — exhaust: add one Ember essence. Your units get +1 Might.',
+  },
+];
+
+export const CARD_DB: Record<string, CardDef> = Object.fromEntries(CARDS_V3.map((c) => [c.id, c]));
