@@ -56,6 +56,17 @@ const RARITY_TIER: Record<string, number> = {
 /** Per-card hash seed: id + type + rarity, per the spec. */
 const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Common'}`;
 
+/** v5.1 balance pass: per-card total-cost adjustments from sim outliers
+ * (played-vs-deck residual > +9pt with played win > 55%). */
+const COST_ADJUST: Record<string, number> = {
+  heart_coral: +1, // +21.7pt residual Sanctum
+  needle_seamstress: +1, // 78% played win at cost 3
+  merfolk_ritual: +1, // 74% played win Worn charm
+  pufferfish_lantern: +1, // 77% played win at cost 2
+  clawblade_greatsword: +1, // +15.4pt residual Worn charm
+};
+const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
+
 // ---------------------------------------------------------------------------
 // Color assignment. Two-color cards must only use pairs some Leader actually
 // has (LEADER_COLORS), otherwise they'd be undraftable dead weight — the
@@ -226,13 +237,18 @@ function mapUnit(c: CardTemplate): CardDef {
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
   const keywords = pickUnitKeywords(seed, colors, rt);
-  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + keywordCostAdj(keywords)));
+  const base = baseTotal(seed, rt);
+  const kwAdj = keywordCostAdj(keywords);
+  const total = Math.max(1, Math.min(7, base + kwAdj + adjustFor(c.id)));
   const cost = buildCost(seed, colors, total, rt);
   const t = totalCost(cost);
 
-  // Stats: might+grit ≈ 2*total + spread(-1..+2); Ember/Gale lean might,
-  // Root/Light lean grit.
-  const budget = Math.max(2, 2 * t + (roll(seed, 'stat-spread', 4) - 1));
+  // Stats: might+grit ≈ 2*(total MINUS the keyword surcharge) + spread.
+  // The keyword surcharge must not feed the stat budget — otherwise keywords
+  // are free stats (the exact skew the v5.0 sims found: Quickstrike carriers
+  // at 80% win). Ember/Gale lean might, Root/Light lean grit.
+  const statBase = Math.max(1, t - Math.max(0, kwAdj));
+  const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1));
   const primary = colors[0];
   const mightShare =
     primary === 'Ember' || primary === 'Gale'
@@ -318,7 +334,7 @@ function mapEvent(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  const total = baseTotal(seed, rt);
+  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id)));
   const cost = buildCost(seed, colors, total, rt);
   const t = totalCost(cost);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
@@ -345,7 +361,7 @@ function mapCharm(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  const total = baseTotal(seed, rt);
+  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id)));
   const cost = buildCost(seed, colors, total, rt);
   const t = totalCost(cost);
   const subtype: CharmSubtype = roll(seed, 'ch-sub', 100) < 60 ? 'Bound' : 'Worn';
@@ -404,7 +420,10 @@ function mapLocation(c: CardTemplate): CardDef {
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   // Sanctums are always mono-colored: their produced type IS their identity.
   const produces = pick(seed, 3, COLORS);
-  const total = Math.max(1, Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2)));
+  const total = Math.max(
+    1,
+    Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id)),
+  );
   const cost: EssenceCost = { generic: total - 1, pips: { [produces]: 1 } };
 
   const def: CardDef = {

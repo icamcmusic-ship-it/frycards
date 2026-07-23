@@ -49,21 +49,23 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
 /** Cost weight each keyword contributes to a card's essence cost in the
  * pool's deterministic assignment (roughly: +1 total cost per 2 weight).
  * Immobile is a drawback and discounts. */
+// v5.1: weights are now a PURE cost surcharge (the stat budget no longer
+// grows with them), tuned over two full sim passes to land carriers near 50%.
 export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 2,
-  Overrun: 2,
-  Quickstrike: 2,
-  Doublestrike: 4,
-  Venomous: 3,
-  Siphon: 2,
+  Overrun: 3,
+  Quickstrike: 3,
+  Doublestrike: 3,
+  Venomous: 2,
+  Siphon: 1,
   Alert: 2,
-  Reckless: 2,
+  Reckless: 1,
   Swarmproof: 1,
-  Skywatch: 1,
-  Warded: 2,
-  Unbreakable: 4,
+  Skywatch: 0,
+  Warded: 0,
+  Unbreakable: 6,
   Ambush: 1,
-  Immobile: -3,
+  Immobile: -2,
 };
 
 /** Short label for card-face chips. */
