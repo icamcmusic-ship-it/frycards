@@ -12,6 +12,16 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Riptide Update',
+    items: [
+      'Echo fix: high-rarity Echo cards (Ultra-Rare and up) are meant to recast for free — no extra card to discard — but the board was still asking you to pick a discard that was then ignored, and could even block the recast entirely if your hand was empty. They now echo straight back into play for free, exactly as intended.',
+      'Bind cards now tell the truth: several binding Charms also deal direct damage when they bind (Bind + Sap), but the card text only said "Bind" and hid the damage. Card faces, ability pills and the opponent-turn narration now show the full "Bind + Sap X".',
+      'The Abyssal Gate finally works as written — a buff we thought we\'d given it (twice) turned out to be silently doing nothing due to the same class of tooling bug we\'ve been hunting down, so this board-clearing Event has been quietly weaker than its numbers for a long time. Fixed, then given a fresh, measured buff. Ruthless Succession, the single most consistently underwhelming Event across every deck, also got a buff.',
+      'Balance pass: a batch of long-running overperformers came down (Cervine Channeler, Worm Brain Host, Nanite Division Marshal, Dr. Aries, plus first-time trims for Familiar in the Dark, Magma-Phase Infiltrator, Hollow Suit and Void Mother), and three cards whose buffs had overshot were walked back (The Wolf of Wall Street, and the two Full-Art dragons Shattered Horizon Protagonist / Skyborne Skeleton Dragon, whose real fix last update — an easier combo requirement — made their extra stat bump surplus).',
+      'Bug-hunt & quality-of-life pass: the trade builder no longer lets you offer more copies of a card than you actually have free (deck-locked copies were being double-counted across normal and foil), the Marketplace no longer offers a BID button when you\'re already the top bidder (it now reads "TOP BID ✓" so you can\'t bid against yourself), a bulk pack-open no longer shows your best pull twice in the haul summary, the ×5 and ×10 open buttons no longer both say "OPENING…" at once, and the first-match tutorial no longer tells brand-new players to attack on turn one (when attacks aren\'t allowed yet). Plus better screen-reader labels on the deck-delete button, the opponent\'s Leader ability panels, and leftover dice during combat.',
+    ],
+  },
+  {
     version: 'Convergence Update',
     items: [
       'One set to rule them all: every card in the game now belongs to a single set, Volume #1 — the old Blue Coral, Crimson Circuit, Dragonbone Wastes and Full Arts Collection 1 split is gone (no card mechanics changed). The store shelf was rebuilt to match: one Volume #1 Booster Pack, one Volume #1 Booster Box, and your Daily Free Pack. The old per-set packs, Standard Box and Starter Pack left the shelf (an unopened Starter Pack in MY PACKS still opens fine).',

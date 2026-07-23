@@ -7,6 +7,96 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v4.27 harness upgrades (clock-speed + polarized matchups), dead-code value-buff fix, balance pass, Echo/Bind UI fixes, bug hunt
+
+- **Sim harness — two new capture dimensions** (`scripts/simulate-v4.ts`):
+  - **Clock speed**: per-archetype average closing round conditioned on
+    *winning* (`archWinRoundsSum`, `clockSpeed` in the JSON dump). The
+    existing `archTotalRounds` averages over wins *and* losses, so an aggro
+    deck that closes fast and a control deck that grinds could read the same
+    number; conditioning on the win exposes the aggro↔control speed axis
+    directly (this pass: 7.0 rounds for Diver Straight-Combo up to 16.9 for
+    Sea Witch Bind-Straight Combo).
+  - **Polarized matchups**: auto-flags any head-to-head cell where one side
+    wins ≥68% (min n=12), deduped per unordered pair and ranked — a
+    hard-counter/RPS problem now surfaces as a finding instead of something a
+    human has to eyeball out of a 20×20 grid.
+- **Dead-code find + fix (`cardpool.ts` `MANUAL_VALUE_BUFF`)**: the value
+  buff was only applied at the very end of `mapSpell`, but three Event
+  branches (`tier===3` board wipe, `tier>=4` bombs, `tier>=2` combo-gated)
+  all `return base` early — so a value buff on any of those Events was
+  silently a no-op. `the_abyssal_gate`'s +2 (v4.12) had been dead since the
+  day it was written, explaining five passes of "buff it more" that never
+  moved its residual. Extracted `applyManualValueBuff()` and call it at every
+  `mapSpell` exit. Same class as v4.26's "Bind X" and v4.25's gate-cost
+  no-ops. `the_abyssal_gate` reset to a fresh +1 (per the v4.26 precedent for
+  freshly-un-deadened buffs — don't carry the stale accumulated size).
+- **Balance pass** (archetype-normalized residual lens; full 26,448-game run,
+  zero invariant violations, 107/107 vitest green):
+  - Nerfs: `cervine_channeler` -2→-3 (+23.0pt normalized, spread 4),
+    `worm_brain_host` -2→-3, `nanite_division_marshal` -1→-2 (also the
+    per-carrier lever for Steel, this pass's #1 keyword-nerf read),
+    `dr_aries_chief_biogeneticist` -3→-4 (ceiling). First-pass trims:
+    `familiar_in_the_dark` -1 (+18.8pt, spread 4), `magma_phase_infiltrator`
+    -1 (+12.6pt, spread 7), `hollow_suit` -1 (+12.0pt, spread 5),
+    `void_mother` -1 (+11.6pt, spread 5).
+  - Reverts of overshot buffs: `the_wolf_of_wall_street` +2→+1 (now +15.7pt
+    normalized — fifth swing in its documented history, stepped back one),
+    `shattered_horizon_protagonist` +1→0 and `skyborne_skeleton_dragon` +1→0
+    (the v4.26 carried-forward watch item — the FullHouse→TwoPair gate ease
+    was the real fix; the stat buffs stacked on top are now surplus, SHP at
+    +14.7pt).
+  - Buffs: `the_abyssal_gate` fresh +1 (see dead-code fix; -4.9pt, spread
+    10), `ruthless_succession` +1 (-5.9pt normalized, spread 12 — the single
+    widest-spread underperformer in the pool).
+  - Deliberately NOT re-nerfed: Blue-Ringed Octopus / Porcelain Lobster /
+    Wasteland Aberration remain top of the raw cost-band table but do not
+    appear on the archetype-normalized table (their high residual is deck
+    quality, not card power — the recurring "artifact, not outlier" caution).
+- **CPU reasoning**: every genuine-mistake lapse detector reads exactly zero
+  again (`lapseMissedLethal`, `lapseWastedCastableDie`,
+  `lapseIdleLeaderAbility_genuine`, `lapseUnitAbilityOrderFixed`,
+  `lapseMulliganKeptMarginal`, `lapseEchoOverAbilitySequencing`) — 18th
+  consecutive pass. No new CPU-reasoning bug.
+- **Card pool**: re-verified in field-for-field sync with live Supabase
+  (292/292, md5 identical) before the pass.
+
+#### Bug hunt & QoL (this pass)
+
+- **Echo high-rarity recast desync** (`GameV4.tsx`): the engine waives Echo's
+  extra-discard "fodder" cost for both mid- AND high-rarity cards
+  (`keywordTier(def,'Echo') >= 2`), but the UI only free-resolved the mid
+  case. A high-rarity Echo recast was routed through the fodder-pick step the
+  engine then ignored (a phantom discard), or blocked outright with "your
+  hand is empty" on a play the engine would have recast for free. The UI now
+  mirrors the engine's exact waiver condition.
+- **Bind X rules text** (`CardFaceV4.tsx` `describeEffect`): a bind carrying a
+  value also saps the bound Unit (since v4.26), but the card text showed only
+  "Bind {target}" and hid the damage — a Bind 2 read identically to a
+  value-less bind. Now renders "Bind + Sap X" on card faces, ability pills,
+  and CPU narration.
+- **Trade builder over-offer** (`SocialScreen.tsx`): deck-locked copies were
+  capped against the *combined* spare total for each variant independently,
+  so a card with locked copies could offer more normal AND foil than existed
+  (a trade `createTrade` then rejected server-side). Now uses the shared
+  `spareSplit()` (normal-first, foil-spillover), same as Collection/Market.
+- **Auction bid-against-yourself** (`MarketplaceScreen.tsx`): the BID button
+  stayed active while you were already the top bidder (re-holding a larger
+  amount of your own credits for no gain). Disabled and relabelled "TOP
+  BID ✓" when `highBidder`.
+- **Pack bulk-open** (`PackOpening.tsx`): the best pull was rendered twice in
+  a >12-card haul summary (spotlight + compact grid). Its group is now
+  excluded from the grid. Also (`StoreScreen.tsx`) the ×5 and ×10 open
+  buttons shared one busy key, so both showed "OPENING…" at once — the count
+  is now part of the key.
+- **First-match tutorial** (`CoachOverlay.tsx`): the combat step told brand-
+  new players (on turn 1, when attacks are illegal) to attack. Reworded with
+  the first-turn exception.
+- **Accessibility**: `PopButton` gained an `ariaLabel` prop; the icon-only
+  deck-delete button, the opponent's read-only Leader ability pills (no
+  longer announced as disabled buttons), and leftover combat dice (no longer
+  claiming to be selectable) all got correct labels.
+
 ### v4.26 Volume #1 consolidation, shop rework, CPU turn replay, "Bind X", balance pass, full-app bug hunt
 
 - **Volume #1**: all 292 live cards consolidated into a single set,

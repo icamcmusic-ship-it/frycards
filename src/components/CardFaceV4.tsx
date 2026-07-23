@@ -471,7 +471,13 @@ export function describeEffect(eff: Effect): string {
     case 'draw':
       return `Surge — draw ${v || 1} card${(v || 1) === 1 ? '' : 's'}`;
     case 'bind':
-      return `Bind ${targetPhrase(eff.target)} (can't attack, use its Ability Slot, or retaliate next turn)`;
+      // A bind carrying a numeric value ALSO saps the bound Unit for that
+      // amount ("Bind + Sap X" — engine.ts, since v4.26). Surface the damage
+      // in the rules text so a Bind 2 doesn't read identically to a value-less
+      // bind on the card face, ability pills, and CPU narration.
+      return (eff.value ?? 0) > 0
+        ? `Bind + Sap ${v} to ${targetPhrase(eff.target)} (bound: can't attack, use its Ability Slot, or retaliate next turn)`
+        : `Bind ${targetPhrase(eff.target)} (can't attack, use its Ability Slot, or retaliate next turn)`;
     case 'destroy':
       return `Destroy ${targetPhrase(eff.target)}`;
     case 'buff': {

@@ -263,13 +263,17 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 {isAuction && (
                   <PopButton
                     color="red"
-                    disabled={busy || !profile}
+                    // Already the top bidder: bidding again would only refund
+                    // your own hold and re-hold a larger amount against
+                    // yourself for no competitive gain. Disable and say so.
+                    disabled={busy || !profile || highBidder}
+                    title={highBidder ? "You're already the top bidder" : undefined}
                     onClick={() => {
                       setBidAmount(minBidFor(l));
                       setBidFor(l);
                     }}
                   >
-                    BID ▸
+                    {highBidder ? 'TOP BID ✓' : 'BID ▸'}
                   </PopButton>
                 )}
                 {(l.listing_type === 'fixed' || l.buyout != null) && (

@@ -244,6 +244,8 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     color="black"
                     disabled={deletingId !== null}
                     onClick={() => handleDelete(d)}
+                    ariaLabel={`Delete deck ${d.name}`}
+                    title={`Delete deck ${d.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
                   </PopButton>

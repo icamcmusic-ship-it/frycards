@@ -24,6 +24,7 @@ import {
 import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
+import { spareSplit } from './CollectionScreen';
 import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';
 import { RoleBadge } from './RoleBadge';
@@ -792,11 +793,16 @@ function TradeComposerModal({
         .filter((c) => c.quantity + c.foil_quantity > 0 && POOL_BY_ID[c.card_id]?.type !== 'Leader')
         .map((c) => {
           const def = POOL_BY_ID[c.card_id];
-          // Spare (unlocked) copies across both variants, then capped by
-          // however many of the chosen variant actually exist.
-          const spare = Math.max(0, c.quantity + c.foil_quantity - (lockedMap.get(c.card_id) || 0));
-          const normalMax = Math.min(c.quantity, spare);
-          const foilMax = Math.min(c.foil_quantity, spare);
+          // Deck-locked copies must be split across the two variants
+          // (normal-first, foil-spillover) exactly as Collection/Marketplace
+          // do via the shared spareSplit — otherwise a card with locked copies
+          // double-counts its spare, letting the picker offer more normal AND
+          // foil than actually exist and building a trade createTrade then
+          // rejects server-side.
+          const { normal: normalMax, foil: foilMax } = spareSplit(
+            { q: c.quantity, f: c.foil_quantity },
+            lockedMap.get(c.card_id) || 0,
+          );
           return (
             <React.Fragment key={c.card_id}>
               {normalMax > 0 && (
