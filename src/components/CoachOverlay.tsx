@@ -25,33 +25,28 @@ function markCoachDone(): void {
   }
 }
 
-type CoachStage = 'awaitRoll' | 'preRoll' | 'placement' | 'combat' | 'cpu';
+type CoachStage = 'main1' | 'clash' | 'main2' | 'cpu';
 
 const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
-    stage: 'awaitRoll',
-    title: '1. ROLL',
-    body: 'Dice are your only resource — no mana. Click ROLL DICE to roll five for this turn.',
+    stage: 'main1',
+    title: '1. MAIN PHASE — ESSENCE & INVOKING',
+    body: 'Essence is your mana: play one free Wellspring per turn (pick a color of your Leader), and exhaust Locations to produce it. Just hit INVOKE on a hand card — the Locations tap themselves to pay. Invoke Units, Charms, Events, Sanctums, or your Leader.',
   },
   {
-    stage: 'preRoll',
-    title: '2. REROLL',
-    body: 'Reroll any dice you don’t like — up to twice — or keep them all. Snap Charms can be cast right now too.',
+    stage: 'clash',
+    title: '2. CLASH — ATTACK!',
+    body: 'Click your ready units to add them to the attack, then DECLARE ATTACK. The opponent assigns guards; unguarded attackers hit their Vitality directly. Freshly invoked units are exhausted-in-spirit (summoning sick) unless they have Reckless.',
   },
   {
-    stage: 'placement',
-    title: '3. PLACE YOUR DICE',
-    body: 'Spend each die: pay a card’s Cast cost, activate an Ability Slot, or Pitch a leftover die to heal your Leader 1. Hover or tap a card in your hand to preview it and CAST from the preview.',
-  },
-  {
-    stage: 'combat',
-    title: '4. COMBAT',
-    body: 'From your second turn on: tap one of your Units, then tap an enemy target to attack. Guard Units must be attacked first. (No attacks on your very first turn — your Units settle in this round.)',
+    stage: 'main2',
+    title: '3. MAIN PHASE II',
+    body: 'A second main phase after the Clash — spend fresh essence from any Locations you didn’t tap, then END TURN. At Dusk you shed down to 7 cards and the opponent takes their turn.',
   },
   {
     stage: 'cpu',
-    title: '5. OPPONENT’S TURN',
-    body: 'Watch the CPU play out its turn — you’ll roll fresh dice again next round.',
+    title: '4. OPPONENT’S TURN',
+    body: 'Watch the opponent play. If it attacks, YOU assign guards — pick an attacker line, click your units to block, then confirm. A reaction window follows where Quick Events and Ambush units can still be invoked before damage.',
   },
 ];
 
@@ -67,24 +62,15 @@ export function CoachOverlay({ stage }: { stage: string }) {
       shown.current.add(next.stage);
       setStep(next);
     } else if (shown.current.size >= SCRIPT.length) {
-      // v4.24 bug fix: every step has now been shown at least once, but the
-      // player never clicked the final step's own "GOT IT — I'M READY"
-      // button before the game moved on — the 'cpu' stage in particular
-      // advances itself on timers with no player input required
-      // (GameV4.tsx's tickCpuStep -> beginHumanTurn), so it's easy to
-      // miss. Previously this fell through to the branch below, which just
-      // hides the callout WITHOUT marking the tutorial done — the whole
-      // 5-step walkthrough would then silently replay from step 1 on the
-      // player's next match, indefinitely. Treat "shown every step" as a
-      // real completion.
+      // Every step has been shown at least once — treat it as a completion
+      // even if the final step's own button was never clicked (the 'cpu'
+      // stage advances itself on timers with no player input required).
       markCoachDone();
       setDismissed(true);
       setStep(null);
     } else {
-      // The game has moved on to a stage this step doesn't cover — hide it
-      // rather than leaving it stuck on screen indefinitely (e.g. a player
-      // who watches the CPU's turn play out without clicking "GOT IT" would
-      // otherwise still see that callout sitting over their own next turn).
+      // The game moved on to a stage this step doesn't cover — hide it
+      // rather than leaving it stuck on screen indefinitely.
       setStep((cur) => (cur && cur.stage !== stage ? null : cur));
     }
   }, [stage, dismissed]);
