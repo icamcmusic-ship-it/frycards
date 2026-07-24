@@ -20,6 +20,7 @@ import {
   OwnedSerializedCard,
 } from '../lib/supabase';
 import { preloadImages } from '../lib/preload';
+import { withTimeout } from '../lib/utils';
 
 export interface MetaState {
   session: Session | null;
@@ -98,8 +99,13 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // would hang every player on the splash screen with no way out.
   useEffect(() => {
     let cancelled = false;
-    supabase.auth
-      .getSession()
+    // A request that stalls instead of erroring (dead connection, hung
+    // proxy) never resolves the getSession() promise at all — without a
+    // bound here, `loading` would stay stuck true forever and the player
+    // would be stranded on the splash screen with no retry affordance.
+    withTimeout(supabase.auth.getSession(), 20_000, { data: { session: null } } as Awaited<
+      ReturnType<typeof supabase.auth.getSession>
+    >)
       .then(({ data }) => {
         if (cancelled) return;
         setSession(data.session);
@@ -131,7 +137,10 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // image up front so the Store never shows art popping in mid-browse.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchShopItems(), fetchPackTypes()])
+    Promise.all([
+      withTimeout(fetchShopItems(), 20_000, [] as ShopItem[]),
+      withTimeout(fetchPackTypes(), 20_000, [] as PackType[]),
+    ])
       .then(([items, packs]) => {
         if (cancelled) return;
         setShopItems(items);
