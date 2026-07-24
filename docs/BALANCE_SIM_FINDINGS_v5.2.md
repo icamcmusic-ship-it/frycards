@@ -264,3 +264,39 @@ vitality kills / 19-25% deck-out, consistent with v5.1's healthy split.
 6. **Swarmproof cost-2/3 carriers running hot across both seeds** — worth a
    dedicated look at whether Swarmproof's stat budget is still slightly
    generous even after the v5.1 surcharge fix.
+
+## Actioned this pass (post-v5.2 follow-up)
+
+- **CPU essence-hoarding / dead reaction window (item 1, highest priority)**:
+  `mainPhasePlays` in `src/game/v3/ai.ts` now reserves one Quick-removal
+  Event or Ambush unit per turn from its own main-phase play loop (playing
+  it anyway if it's the only card in hand, so a turn never goes fully idle),
+  and floats all essence up front on turns where the hand holds no such
+  card, instead of always tapping minimally. Re-verified with
+  `scripts/simulate-v5.ts` at reduced and full scale: reaction plays went
+  from 35/2,208 (seed 1337) and 119/2,208 (seed 777) to 150+ and 237
+  respectively in equivalent-scale re-runs — a 4-5x increase — with
+  `invariantCount: 0` in every run.
+- **Unbreakable (item 3.3)**: weight 6→7 in `keywords.ts`.
+- **Siphon (item 3.4)**: weight 1→2 in `keywords.ts`, reversing part of the
+  v5.1 cut.
+- **Swarmproof (item 3.6)**: weight 1→2 in `keywords.ts` after both seeds
+  showed its cost-2/3 carriers running hot.
+- **Cost tiers 6-7 (item 4)**: re-reviewed the stat-budget curve in
+  `cardpool.ts`; no tier is a consistent outlier across both seeds and
+  residuals stay small everywhere, so no cost-curve change was made — the
+  tier-6/7 heat looks like cohort noise, not a curve problem.
+- **Attack-decision divergence (item 5)**: dropped `chooseAttackers`'
+  `effMight >= 4 && survives` branch, which had no counterpart in the sim's
+  shadow heuristic and was a pure source of divergence; post-fix divergence
+  measured 36.5% (seed 1337) / 32.3% (seed 777), in-band-to-improved versus
+  the 34-37% baseline.
+- **Removal-targeting suboptimal rate (item 5)**: `autoTarget` (engine.ts)
+  and the reaction-window quick-removal target picker (ai.ts) now exclude
+  Unbreakable units from Shatter-effect targeting (Shatter silently no-ops
+  on Unbreakable, so targeting one when a shatterable target was legal was
+  a pure waste). Post-fix suboptimal rate measured 6.6% / 7.0%, at the low
+  end of the 6.1-7.9% baseline band.
+- Re-ran `npm run test`, `npm run typecheck` and `npm run lint` after all
+  changes: 65/65 tests pass, typecheck clean, lint has only the same 18
+  pre-existing warnings (0 errors) unrelated to this pass.
