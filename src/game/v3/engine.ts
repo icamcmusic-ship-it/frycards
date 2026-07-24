@@ -250,6 +250,7 @@ function payCost(pool: Partial<Record<EssenceType, number>>, cost?: EssenceCost)
 }
 
 function clearEssence(state: GameState): void {
+  telemetry.onEssenceCleared?.(state);
   state.players.P1.essence = {};
   state.players.P2.essence = {};
 }
@@ -445,10 +446,26 @@ export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string
   }
 }
 
+// ---------------------------------------------------------------------------
+// Telemetry hooks (sim harness instrumentation; no-ops in normal play)
+// ---------------------------------------------------------------------------
+export interface EngineTelemetry {
+  /** Fired just before an essence pool is cleared at a phase boundary. */
+  onEssenceCleared?: (state: GameState) => void;
+  /** Fired when a keyword mechanically procs (Siphon gain, Venomous kill,
+   * Overrun spill, Quickstrike/Doublestrike pre-kill). `amount` is the
+   * magnitude where meaningful (damage/vitality), else 1. */
+  onKeywordProc?: (kw: string, amount: number) => void;
+}
+/** Mutable hook registry — the sim harness assigns, the UI leaves empty. */
+export const telemetry: EngineTelemetry = {};
+
 /** Siphon vitality gain, capped at starting Vitality (same cap as healing). */
 function siphonGain(state: GameState, source: UnitInst, amount: number): void {
   const p = state.players[source.owner];
-  p.vitality = Math.min(LEADER_HP, p.vitality + amount);
+  const gained = Math.min(LEADER_HP, p.vitality + amount) - p.vitality;
+  p.vitality += gained;
+  if (gained > 0) telemetry.onKeywordProc?.('Siphon', gained);
 }
 
 function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): void {
@@ -614,7 +631,9 @@ export function stateBasedChecks(state: GameState): void {
         u.venomed = false; // survives; damage stays marked
         continue;
       }
+      const byVenom = u.venomed && u.damage < effGrit(state, u);
       removeUnit(state, u, 'ash');
+      if (byVenom) telemetry.onKeywordProc?.('Venomous', 1);
     }
   }
   if (state.clash) {
@@ -1023,12 +1042,19 @@ export function resolveClash(state: GameState): boolean {
   for (const step of ['first', 'normal'] as const) {
     if (state.winner || !state.clash) break;
     const packets = collectStepWithHistory(state, step, everGuarded);
+    const preFieldCount =
+      step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;
     for (const pkt of packets) {
       if (pkt.amount > 0) dealtBy.add(pkt.source.iid);
       if (pkt.targetUnit) damageUnit(state, pkt.targetUnit, pkt.amount, pkt.source);
       else if (pkt.targetPlayer) damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
     }
     stateBasedChecks(state);
+    if (step === 'first' && packets.length > 0) {
+      const died =
+        preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
+      if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
+    }
   }
   for (const iid of dealtBy) {
     const u = findUnit(state, iid);
@@ -1064,6 +1090,8 @@ function collectStepWithHistory(
       // Never guarded: hits the defender. Guards all dead already: Overrun only.
       if (!everGuarded.has(attackerIid) || unitHasKw(attacker, 'Overrun')) {
         packets.push({ source: attacker, targetPlayer: defenderId, amount: might });
+        if (everGuarded.has(attackerIid) && might > 0)
+          telemetry.onKeywordProc?.('Overrun', might);
       }
       continue;
     }
@@ -1077,6 +1105,7 @@ function collectStepWithHistory(
     }
     if (might > 0 && unitHasKw(attacker, 'Overrun')) {
       packets.push({ source: attacker, targetPlayer: defenderId, amount: might });
+      telemetry.onKeywordProc?.('Overrun', might);
     }
   }
   return packets;

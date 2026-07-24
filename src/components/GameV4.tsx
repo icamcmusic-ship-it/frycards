@@ -48,7 +48,7 @@ import {
   essenceTotal,
   findUnit,
 } from '../game/v3/engine';
-import { playTurn, chooseGuards, maybeMulliganPlayer } from '../game/v3/ai';
+import { playTurn, chooseGuards, maybeMulliganPlayer, reactionPlays } from '../game/v3/ai';
 import { CardDef, Effect, EssenceCost, MAX_HAND, totalCost, hasKw } from '../game/v3/cards';
 import { COLORS, EssenceType } from '../game/v3/colors';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -855,7 +855,7 @@ export function GameV4({
   const [guardFocus, setGuardFocus] = useState<string | null>(null);
   // CPU-turn narration: one log line at a time.
   const [cpuBeat, setCpuBeat] = useState<{ text: string; idx: number; total: number } | null>(null);
-  const [showAsh, setShowAsh] = useState(false);
+  const [showAsh, setShowAsh] = useState<false | 'me' | 'foe'>(false);
   /** Dusk shed picker: null = closed; array = card iids chosen to shed. */
   const [shedPick, setShedPick] = useState<string[] | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -1071,7 +1071,16 @@ export function GameV4({
         return 'Invoke during your own main phases';
       }
     }
-    if (!canAfford(me, def.cost)) return 'Not enough essence (even tapping every Location)';
+    if (!canAfford(me, def.cost)) {
+      // Say WHICH pip is short when the problem is color, not quantity.
+      const pool = potentialPool(me);
+      const missing = (Object.entries(def.cost?.pips ?? {}) as [EssenceType, number][])
+        .filter(([t, n]) => (pool[t] ?? 0) < (n ?? 0))
+        .map(([t]) => t);
+      return missing.length > 0
+        ? `Needs ${missing.join(' + ')} essence your Locations can't produce yet`
+        : 'Not enough essence (even tapping every Location)';
+    }
     if (def.type === 'Charm' && me.field.length === 0) return 'Needs a friendly unit to bond to';
     return undefined;
   };
@@ -1106,10 +1115,21 @@ export function GameV4({
       say('Pick a friendly unit to bond the Charm to.');
       return;
     }
-    if (needsTarget(card.def.onInvoke) && targetsFor(g, HUMAN, card.def.onInvoke!).length > 0) {
-      setPending({ kind: 'invoke', cardIid, effect: card.def.onInvoke! });
-      say('Pick a highlighted target.');
-      return;
+    if (needsTarget(card.def.onInvoke)) {
+      const targets = targetsFor(g, HUMAN, card.def.onInvoke!);
+      if (targets.length > 0) {
+        setPending({ kind: 'invoke', cardIid, effect: card.def.onInvoke! });
+        say('Pick a highlighted target.');
+        return;
+      }
+      // No legal target and the card is a pure Event: don't let it
+      // fizzle-waste itself (the effect resolves into nothing while the
+      // cost and card are still spent). Units/Charms keep their body/bond
+      // value, so they stay playable and just lose the rider.
+      if (card.def.type === 'Event') {
+        say('No legal target for its effect — invoking now would waste the card.');
+        return;
+      }
     }
     doInvoke(cardIid, {});
   };
@@ -1302,11 +1322,20 @@ export function GameV4({
     // uses); the clash bar then shows the lines before damage resolves.
     const guards = chooseGuards(g, CPU);
     if (!declareGuards(g, guards)) declareGuards(g, {});
+    // The defending CPU gets its clash reaction window (Quick Events /
+    // Ambush units) before damage — same as the sim harness gives it.
+    const reactions: string[] = [];
+    reactionPlays(g, CPU, (ev) => {
+      if (ev.kind === 'invoke') reactions.push(ev.name);
+    });
     bump();
     const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
       (v: string[]) => v.length > 0,
     ).length;
-    say(guarded > 0 ? `${cpuLabel} assigns ${guarded} guard line(s).` : `${cpuLabel} lets it through!`);
+    const guardMsg =
+      guarded > 0 ? `${cpuLabel} assigns ${guarded} guard line(s).` : `${cpuLabel} lets it through!`;
+    say(reactions.length > 0 ? `${guardMsg} Reaction: ${reactions.join(', ')}!` : guardMsg);
+    checkWinner();
   };
 
   const resolveMyClash = () => {
@@ -1808,9 +1837,15 @@ export function GameV4({
         <div className="flex-1 min-w-0">
           <div className="flex gap-1.5 items-center text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5 flex-wrap">
             <span>
-              {cpuLabel} · hand {foe.hand.length} · deck {foe.deck.length} · ash{' '}
-              {foe.ashPile.length}
-              {foe.voidPile.length > 0 && <> · void {foe.voidPile.length}</>}
+              {cpuLabel} · hand {foe.hand.length} · deck {foe.deck.length} ·{' '}
+              <button
+                onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
+                className="underline decoration-dotted hover:text-[var(--c-paper)]"
+                title="Inspect the opponent's ash-pile and void"
+              >
+                ash {foe.ashPile.length}
+                {foe.voidPile.length > 0 && <> · void {foe.voidPile.length}</>}
+              </button>
             </span>
             <span className="flex gap-0.5 items-center">
               {foe.locations.map((l) => (
@@ -1952,7 +1987,7 @@ export function GameV4({
         </div>
         <div className="flex flex-col gap-0.5 text-right shrink-0">
           <button
-            onClick={() => setShowAsh((s) => !s)}
+            onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
             className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
           >
             ASH-PILE {me.ashPile.length}
@@ -2251,33 +2286,62 @@ export function GameV4({
       {/* Ash-pile drawer */}
       {showAsh && (
         <div className="absolute right-2 left-2 sm:left-auto top-16 bottom-24 w-auto sm:w-[260px] max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
-          <div className="flex justify-between items-center mb-1">
-            <span className="heading-font text-[10px] text-[var(--c-yellow)]">ASH-PILE</span>
-            <button
-              onClick={() => setShowAsh(false)}
-              aria-label="Close ash-pile"
-              className="btn-pop text-[10px] bg-[var(--c-red)] text-white px-1.5 ink-border-sm"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
-            Shattered units, resolved Events and shed cards end up here.
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {me.ashPile.map((c) => (
-              <CardFace
-                key={c.iid}
-                def={c.def}
-                size="compact"
-                introduceKeywords
-                onClick={() => setInspect(c.def)}
-              />
-            ))}
-            {me.ashPile.length === 0 && (
-              <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">empty</span>
-            )}
-          </div>
+          {(() => {
+            const owner = showAsh === 'foe' ? foe : me;
+            const label = showAsh === 'foe' ? `${cpuLabel.toUpperCase()} ASH-PILE` : 'ASH-PILE';
+            return (
+              <>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="heading-font text-[10px] text-[var(--c-yellow)]">{label}</span>
+                  <button
+                    onClick={() => setShowAsh(false)}
+                    aria-label="Close ash-pile"
+                    className="btn-pop text-[10px] bg-[var(--c-red)] text-white px-1.5 ink-border-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
+                  Shattered units, resolved Events and shed cards end up here.
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {owner.ashPile.map((c) => (
+                    <CardFace
+                      key={c.iid}
+                      def={c.def}
+                      size="compact"
+                      introduceKeywords
+                      onClick={() => setInspect(c.def)}
+                    />
+                  ))}
+                  {owner.ashPile.length === 0 && (
+                    <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">empty</span>
+                  )}
+                </div>
+                {owner.voidPile.length > 0 && (
+                  <>
+                    <div className="heading-font text-[10px] text-[var(--c-yellow)] mt-2 mb-1">
+                      THE VOID
+                    </div>
+                    <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
+                      Banished cards — removed from the game.
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {owner.voidPile.map((c) => (
+                        <CardFace
+                          key={c.iid}
+                          def={c.def}
+                          size="compact"
+                          introduceKeywords
+                          onClick={() => setInspect(c.def)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

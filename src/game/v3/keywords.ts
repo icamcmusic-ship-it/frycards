@@ -51,23 +51,33 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
  * Immobile is a drawback and discounts. */
 // v5.1: weights are now a PURE cost surcharge (the stat budget no longer
 // grows with them), tuned over two full sim passes to land carriers near 50%.
-// v5.2: Unbreakable 6->7 (archetype-normalized delta was still +12.3, the
-// largest in the pool, after the v5.1 bump) and Swarmproof 1->2 (cost-2/3
-// Swarmproof carriers ran hot across both v5.2 seeds even post-surcharge-fix)
-// pushed up; Siphon 1->2 (archetype-normalized delta -8.7, confirmed
-// under-costed net of cohort — reversing part of the v5.1 cut).
+// v5.3 (docs/BALANCE_SIM_FINDINGS_v5.3.md, two seeds + matched-deck run,
+// then post-change verification pairs): Unbreakable stays 7 — the 9 (and
+// effectively-identical 8) trials cratered its carriers, and the original
+// +16.5 read turned out to be mostly the OLD dead-reaction-window meta:
+// with reaction plays live and the big-Ambush reservation capped, carriers
+// settle near even at 7; Venomous 2->3
+// and Aerial 2->3 (consistently positive normalized deltas across three
+// passes); Quickstrike 3->4 (mildly positive every pass since v5.1);
+// Siphon 2->0 — REVERSING v5.2's bump, which read the negative normalized
+// delta backwards (carriers UNDERperform their cohort: overpriced, not
+// underpriced), and still negative at 1 in the verification pair;
+// Swarmproof 2->1 (flipped negative both verification seeds under the new
+// reaction-heavy CPU meta); Warded 0->-1 (consistently negative across
+// three passes — targeting denial rarely converts to wins, so it now
+// discounts like Immobile).
 export const KEYWORD_COST: Record<Keyword, number> = {
-  Aerial: 2,
+  Aerial: 3,
   Overrun: 3,
-  Quickstrike: 3,
+  Quickstrike: 4,
   Doublestrike: 3,
-  Venomous: 2,
-  Siphon: 2,
+  Venomous: 3,
+  Siphon: 0,
   Alert: 2,
   Reckless: 1,
-  Swarmproof: 2,
+  Swarmproof: 1,
   Skywatch: 0,
-  Warded: 0,
+  Warded: -1,
   Unbreakable: 7,
   Ambush: 1,
   Immobile: -2,

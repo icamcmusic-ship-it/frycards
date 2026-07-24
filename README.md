@@ -78,7 +78,7 @@ CPU opponent is `src/game/v3/ai.ts`, and `scripts/simulate-v5.ts` runs
 CPU-vs-CPU playtests across randomized archetype matchups with invariant
 checks (no runaway Vitality, hand-limit/duplicate-iid checks, deck
 conservation) plus CPU decision-quality and keyword/cost-tier balance
-telemetry. See [`docs/BALANCE_SIM_FINDINGS_v5.2.md`](docs/BALANCE_SIM_FINDINGS_v5.2.md)
+telemetry. See [`docs/BALANCE_SIM_FINDINGS_v5.3.md`](docs/BALANCE_SIM_FINDINGS_v5.3.md)
 for the latest sim pass and what changed and why; `docs/ROADMAP.md` tracks
 forward-looking work.
 

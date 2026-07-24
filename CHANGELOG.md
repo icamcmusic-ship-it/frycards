@@ -7,6 +7,52 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v5.3 — Reaction window for real, balance settle, essence icons everywhere
+
+- **CPU fix (the big one)**: the clash reaction window finally works. v5.2
+  taught the CPU to hold a Quick Event / Ambush unit back — but locations
+  only recover at their owner's own Dawn, so a CPU that tapped everything
+  during its turn still had no essence when the window opened. The CPU now
+  reserves the *locations* to pay for its held reaction card through its
+  whole turn (capped at cost 3 so it never skips a development turn holding
+  a bomb). Sim-verified: reaction plays went from 150/237 per 2,208-game
+  suite to **3,038/3,624 (~20-25x)**, zero invariant violations.
+- **CPU fix**: all-in lethal attacks no longer ignore guards — the CPU now
+  assumes each ready defender soaks one attacker (Overrun spill counted)
+  and only goes all-in when lethal survives worst-case guarding. Suicides
+  into ready Venomous guards dropped 179/163 → 135/58 per suite.
+- **Match UI fix**: the CPU now actually gets its reaction window when YOU
+  attack (it was only wired up for sim games — a whole defensive subsystem
+  was dead against human players), with its plays narrated in the clash bar.
+- **Match UI fix**: a targeted Event with no legal target (empty or
+  all-Warded enemy board) can no longer be invoked into a fizzle that wastes
+  the card and essence — the client blocks it with an explanation. Units and
+  Charms still play for their body/bond value and just lose the rider.
+- **Balance** (from the v5.3 sim pass, `docs/BALANCE_SIM_FINDINGS_v5.3.md`):
+  keyword weights — Venomous 2→3, Aerial 2→3, Quickstrike 3→4, Siphon 2→0
+  (reversing v5.2's backwards read), Swarmproof 2→1, Warded 0→-1 (now a
+  small discount), Unbreakable kept at 7 after trials at 8-9 showed its old
+  overperformance was mostly the dead-reaction-window meta. Thirteen
+  cross-run-confirmed card cost adjustments (7 up, 6 down) plus a new
+  stat-budget trim mechanism for cost-capped outliers (Nanite Division
+  Marshal -2).
+- **Essence icons everywhere**: the 7 essence-type SVG glyphs now render in
+  the card color-identity dots (header, footer band, and Full-Art floating
+  dots), the Starter-Box Leader picker (which previously showed no color
+  identity at all), and the Deck Builder's Leader-select list.
+- **QoL**: opponent's ash-pile and Void are now inspectable (tap the ash
+  counter in its info row); your own ash drawer also lists banished cards;
+  the "not enough essence" tooltip now names the exact pip color your
+  Locations can't produce yet.
+- **Sim harness (v5.3)**: real keyword activation counts via new engine
+  telemetry hooks, real wasted-essence and venomous-suicide lapse counters
+  (both were dead counters in v5.1/v5.2), accurate erode tracking, a 7×7
+  color-vs-color matchup matrix, keyword-by-cost-band stats, a separate
+  deck seed for matched-cohort reruns, mulligan/vitality-margin/deck-remaining
+  telemetry.
+- **Docs**: retired `docs/BALANCE_SIM_FINDINGS_v5.2.md` (superseded by
+  v5.3) and pruned all but the latest raw sim-run dump.
+
 ### v5.2 — CPU reaction-window fix, keyword re-tune, README catch-up
 
 - **CPU fix**: the main-phase play loop always spent Quick Events and Ambush

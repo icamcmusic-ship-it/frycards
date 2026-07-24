@@ -56,16 +56,38 @@ const RARITY_TIER: Record<string, number> = {
 /** Per-card hash seed: id + type + rarity, per the spec. */
 const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Common'}`;
 
-/** v5.1 balance pass: per-card total-cost adjustments from sim outliers
- * (played-vs-deck residual > +9pt with played win > 55%). */
+/** Per-card total-cost adjustments from sim outliers (residuals confirmed
+ * across at least two independent runs before a card is listed).
+ * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v5.3.md):
+ * repeat overperformers +1, repeat underperformers -1. */
 const COST_ADJUST: Record<string, number> = {
-  heart_coral: +1, // +21.7pt residual Sanctum
-  needle_seamstress: +1, // 78% played win at cost 3
-  merfolk_ritual: +1, // 74% played win Worn charm
-  pufferfish_lantern: +1, // 77% played win at cost 2
-  clawblade_greatsword: +1, // +15.4pt residual Worn charm
+  heart_coral: +1, // v5.1: +21.7pt residual Sanctum
+  needle_seamstress: +1, // v5.1: 78% played win at cost 3
+  merfolk_ritual: +1, // v5.1: 74% played win Worn charm
+  pufferfish_lantern: +1, // v5.1: 77% played win at cost 2
+  clawblade_greatsword: +1, // v5.1: +15.4pt residual Worn charm
+  slate_scaled_serpent: +1, // v5.3: +8.9/+12.5 residual, 3rd consecutive pass
+  worm_brain_host: +1, // v5.3: +8.7/+7.2 both seeds
+  smokeveil_striketeam: +1, // v5.3: +6.5/+11.2 both seeds (and v5.2)
+  crowned_manatee: +1, // v5.3: +8.0/+6.3 both seeds (and v5.2)
+  constellation_crabs: +1, // v5.3: +7.6 seed 777 + both v5.2 seeds
+  nebula_clutch: +1, // v5.3: +9.7 seed 1337 + both v5.2 seeds
+  shatterline: +1, // v5.3: +6.8/+7.8 both seeds
+  submerged_starfall: -1, // v5.3: -9.5 + v5.2 seed-1337 -8.7
+  nanite_purge_protocol: -1, // v5.3: negative both seeds + v5.2 seed 777
+  coral_collapse: -1, // v5.3: -4.2 + v5.2 negative list
+  tectonic_rift: -1, // v5.3: -4.4 + v5.2 negative list
+  consuming_ash_cloud: -1, // v5.3: 13.8% absolute played win, -5.2 residual
+  research_fleet: -1, // v5.3: 65%/74% dead-in-hand two passes running
 };
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
+
+/** v5.3: per-card STAT-budget adjustments, for overperformers already at the
+ * cost cap of 7 where a COST_ADJUST would be clipped to nothing. */
+const STAT_ADJUST: Record<string, number> = {
+  nanite_division_marshal: -2, // +8.5/+13.7 residual both seeds at cost 7
+};
+const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
 // ---------------------------------------------------------------------------
 // Color assignment. Two-color cards must only use pairs some Leader actually
@@ -248,7 +270,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // are free stats (the exact skew the v5.0 sims found: Quickstrike carriers
   // at 80% win). Ember/Gale lean might, Root/Light lean grit.
   const statBase = Math.max(1, t - Math.max(0, kwAdj));
-  const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1));
+  const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1) + statAdjustFor(c.id));
   const primary = colors[0];
   const mightShare =
     primary === 'Ember' || primary === 'Gale'
