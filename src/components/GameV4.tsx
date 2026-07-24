@@ -1600,6 +1600,7 @@ export function GameV4({
               });
           }}
           className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
+          aria-label="Concede match"
         >
           ✕ CONCEDE
         </button>
