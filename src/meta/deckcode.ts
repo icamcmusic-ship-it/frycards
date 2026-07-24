@@ -40,9 +40,9 @@ export function decodeDeckCode(
     const n = nStr ? parseInt(nStr, 10) : 1;
     const card = db.get(id);
     if (!card) return { error: `Unknown card id: ${id}` };
-    // v4.8: enforce the per-rarity copy caps (Mythic 1, Super-Rare/Full-Art/
-    // Ultra-Rare 2, else 3), not just the flat MAX_COPIES — an imported code
-    // could previously smuggle in an illegal 2x Mythic.
+    // Enforce the per-rarity copy caps (Mythic 1, Super-Rare/Full-Art/
+    // Ultra-Rare 2, else the rulebook's 4), not just the flat MAX_COPIES —
+    // an imported code could previously smuggle in an illegal 2x Mythic.
     const cap = maxCopiesForRarity(card.rarity);
     if (!Number.isFinite(n) || n < 1 || n > cap)
       return { error: `Bad count for ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).` };

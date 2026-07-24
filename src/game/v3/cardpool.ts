@@ -505,9 +505,10 @@ function mapLocation(c: CardTemplate): CardDef {
 }
 
 // ---------------------------------------------------------------------------
-// Leader mapping — identities from LEADER_COLORS; cost 3-4 total with one pip
-// of each identity color, Resolve 3-6 by rarity, and two abilities (a minus
-// spender themed to the first color, and a small plus builder).
+// Leader mapping — identities from LEADER_COLORS; cost 3-4 total (+1 for
+// Commander, so 3-5) with one pip of each identity color, Resolve 3-6 by
+// rarity, and two abilities (a minus spender themed to the first color, and
+// a small plus builder).
 // ---------------------------------------------------------------------------
 function leaderMinusAbility(seed: string, color: Color): LeaderAbility {
   switch (color) {

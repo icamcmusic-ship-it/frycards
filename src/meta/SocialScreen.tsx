@@ -703,7 +703,7 @@ function TradeComposerModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const { profile, collection, decks } = useMeta();
+  const { profile, collection, decks, serializedCards } = useMeta();
   // Cards locked into any of our own saved decks can't be traded — mirrors
   // assert_cards_available's deck-lock check the create_trade RPC enforces.
   const locked = useMemo(() => {
@@ -711,6 +711,14 @@ function TradeComposerModal({
     for (const d of decks) for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
     return m;
   }, [decks]);
+  // Serialized prints live inside `quantity` but can never be traded —
+  // reserve that many NORMAL copies out of the "you give" picker (same
+  // model as Collection quicksell / Marketplace sell).
+  const serializedReserved = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
+    return m;
+  }, [serializedCards]);
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
@@ -787,6 +795,7 @@ function TradeComposerModal({
     list: TradeCardItem[],
     setList: (l: TradeCardItem[]) => void,
     lockedMap: Map<string, number> = new Map(),
+    reservedMap: Map<string, number> = new Map(),
   ) => (
     <div className="flex flex-wrap gap-1 max-h-52 overflow-y-auto ink-border-sm p-2 bg-[var(--c-paper)]">
       {source
@@ -799,10 +808,12 @@ function TradeComposerModal({
           // double-counts its spare, letting the picker offer more normal AND
           // foil than actually exist and building a trade createTrade then
           // rejects server-side.
-          const { normal: normalMax, foil: foilMax } = spareSplit(
+          const { normal: normalRaw, foil: foilMax } = spareSplit(
             { q: c.quantity, f: c.foil_quantity },
             lockedMap.get(c.card_id) || 0,
           );
+          // Serialized prints (our side only) can never be traded.
+          const normalMax = Math.max(0, normalRaw - (reservedMap.get(c.card_id) || 0));
           return (
             <React.Fragment key={c.card_id}>
               {normalMax > 0 && (
@@ -877,7 +888,7 @@ function TradeComposerModal({
           </p>
 
           <div className="heading-font text-xs mb-1">YOU GIVE</div>
-          {renderPicker(collection, offer, setOffer, locked)}
+          {renderPicker(collection, offer, setOffer, locked, serializedReserved)}
           <div className="flex items-center gap-2 mt-2 mb-4">
             <Coins className="w-4 h-4" />
             <input

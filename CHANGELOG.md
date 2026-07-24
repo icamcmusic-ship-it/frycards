@@ -60,6 +60,23 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 - **Docs**: `RULEBOOK.md` rewritten for v6.0, spec updated, stale 30-card
   references cleaned across App/menu/How-To-Play, and the keyword glossary
   now labels each keyword's card type.
+- **Bug-hunt pass** (adversarial review of the engine + every meta screen):
+  - Engine: Sanctum `atDawn`/`atDusk` triggered abilities never fired
+    (`runTriggers` only scanned units — dead printed text since v5.0);
+    Resonant's second resolution re-aims via autoTarget when the explicit
+    target died to the first; invoking the Leader now sets
+    `invokedCardThisTurn` so it enables Surge.
+  - CPU: `reserveLocationsForCost` is Bountiful-aware (no more failed or
+    doubled reservations around 2-yield Sanctums); attack/guard trade math
+    accounts for Hardened's -1 per packet (incl. Venomous needing ≥1 real
+    damage); the human mulligan button allows the legal mulligan-to-0.
+  - Meta screens: Serialized prints are reserved out of the Marketplace
+    sell form, trade composer, and Player Shop listing picker (server
+    always rejected them; the UI offered them anyway); a grouped pack-haul
+    summary dropped the *whole group* containing the best pull instead of
+    just the spotlighted copy; Profile's cosmetic locker treated
+    `cost_vouchers = 0` as "free" and showed unowned paid cosmetics as
+    equippable.
 
 ### v5.3 — Reaction window for real, balance settle, essence icons everywhere
 

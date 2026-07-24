@@ -409,6 +409,17 @@ function runTriggers(
       applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
     }
   }
+  // Sanctum Locations carry atDawn/atDusk triggers too (cardpool prints them
+  // on roughly half of non-Bountiful Sanctums) — these were dead text until
+  // v6.0: only units were ever scanned.
+  if (!unit && (when === 'atDawn' || when === 'atDusk')) {
+    for (const l of [...state.players[pid].locations]) {
+      for (const t of l.def?.triggers ?? []) {
+        if (t.when !== when) continue;
+        applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
+      }
+    }
+  }
 }
 
 const SINGLE_TARGETS = ['enemyUnit', 'friendlyUnit', 'anyTarget', 'friendlyAny'];
@@ -942,11 +953,21 @@ export function invokeCard(
       break;
     }
     case 'Event': {
-      // v6.0 Resonant: the Event's effect resolves twice.
+      // v6.0 Resonant: the Event's effect resolves twice. If the explicit
+      // target is gone (or illegal) by the second resolution — it usually
+      // died to the first — fall back to auto-targeting instead of letting
+      // the whole second resolution fizzle.
       const times = hasKw(def, 'Resonant') ? 2 : 1;
       if (times === 2) telemetry.onKeywordProc?.('Resonant', 1);
       for (let i = 0; i < times; i++) {
-        if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
+        if (!def.onInvoke) continue;
+        const target =
+          i === 0 ||
+          opts.targetIid === undefined ||
+          canTarget(state, pid, def.onInvoke, opts.targetIid)
+            ? opts.targetIid
+            : undefined;
+        applyEffect(state, pid, def.onInvoke, target);
       }
       p.ashPile.push(card);
       break;
@@ -1023,6 +1044,8 @@ export function invokeLeader(state: GameState, pid: PlayerId): boolean {
   payCost(p.essence, p.leader.def.cost);
   p.leader.invoked = true;
   p.leader.resolve = p.leader.def.resolve ?? 0;
+  // The Leader is a card — invoking it enables the Surge discount too.
+  p.invokedCardThisTurn = true;
   state.log.push(`${pid} invokes their Leader, ${p.leader.def.name}.`);
   return true;
 }

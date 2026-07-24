@@ -148,17 +148,32 @@ function CardStackPicker({
     return m;
   }, [decks]);
 
+  // Serialized prints count inside `quantity` but can never be listed in a
+  // player shop — reserve them like Collection/Marketplace do.
+  const { serializedCards } = useMeta();
+  const serializedReserved = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
+    return m;
+  }, [serializedCards]);
+
   const sellable = useMemo(
     () =>
       collection
         .filter((c) => {
           const def = POOL_BY_ID[c.card_id];
           if (!def || def.type === 'Leader') return false;
-          return c.quantity + c.foil_quantity - (locked.get(c.card_id) || 0) > 0;
+          return (
+            c.quantity +
+              c.foil_quantity -
+              (locked.get(c.card_id) || 0) -
+              (serializedReserved.get(c.card_id) || 0) >
+            0
+          );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
-    [collection, locked, search],
+    [collection, locked, serializedReserved, search],
   );
 
   // Look the selected card up in the full collection, not the search-filtered
@@ -178,7 +193,10 @@ function CardStackPicker({
   const spare = selected
     ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
     : { normal: 0, foil: 0 };
-  const totalSpare = foil ? spare.foil : spare.normal;
+  // Serialized prints are normal copies that can never be listed.
+  const totalSpare = foil
+    ? spare.foil
+    : Math.max(0, spare.normal - (serializedReserved.get(cardId) || 0));
   // Copies of this exact card/foil combo already staged in `items` don't
   // stop being "spare" — but they're no longer available to add again, so
   // the input's max (and the "of X spare" label) must be reduced by however

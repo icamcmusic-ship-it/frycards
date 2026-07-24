@@ -2415,7 +2415,7 @@ export function GameV4({
               >
                 ✓ KEEP THIS HAND
               </button>
-              {me.hand.length > 1 && (
+              {me.hand.length > 0 && (
                 <button
                   onClick={doMulligan}
                   className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"

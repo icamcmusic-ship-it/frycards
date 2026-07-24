@@ -20,6 +20,8 @@ const ENTRIES: ChangelogEntry[] = [
       'The seven essence icons were redrawn as bold, filled glyphs — the old line-art versions were so thin they rendered invisible inside the small cost pips (and a CSS quirk could blank them out entirely on live builds). Fire, droplet, leaf, gust, sun, crescent and void-ring now read clearly at every size, from board tokens to the full-card view.',
       'The CPU understands every new keyword: it counts Bountiful Sanctums as double essence when planning, gets Surge discounts, and its opening-hand judgment uses the new rulebook mulligan (it gives up a card to escape a dead hand, just like you).',
       'How To Play was rewritten for the new rules — deck construction, the repeatable mulligan, and a keyword glossary that now labels which card type each keyword belongs to.',
+      'Bug-hunt pass: Sanctum Locations with "At Dawn/At Dusk" abilities finally DO them — that text has been silently dead since the essence rules launched (only units were ever checked for phase triggers). A Resonant Event whose target dies to the first resolution now re-aims its second resolution instead of wasting it, and invoking your Leader counts as "a card invoked this turn" for Surge discounts.',
+      "Economy honesty fixes: your one-of-a-kind Serialized prints can no longer be offered up by the Marketplace sell form, the trade composer, or Player Shop listings (the server always rejected it — now the UI never offers it); a bulk pack-opening's haul summary no longer hides the extra copies of your best pull; and the Profile cosmetic locker no longer shows unowned paid cosmetics as equippable.",
     ],
   },
   {

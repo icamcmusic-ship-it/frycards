@@ -37,11 +37,13 @@ export function ProfileScreen({
   const [equippingId, setEquippingId] = useState<string | null>(null);
 
   const ownedIds = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
-  // Free items (cost 0) are always equippable — but battle pass exclusives
-  // must actually be owned, whatever their price columns say.
+  // Free items (credits cost 0) are always equippable — but battle pass
+  // exclusives must actually be owned, whatever their price columns say.
+  // NOTE: `cost_vouchers === 0` must NOT count as free — everywhere else
+  // (StoreScreen) 0 vouchers means "not voucher-purchasable", so treating it
+  // as free here let unowned paid cosmetics show as equippable.
   const usable = (s: ShopItem) =>
-    ownedIds.has(s.id) ||
-    (!s.is_season_pass_exclusive && (s.cost_credits === 0 || s.cost_vouchers === 0));
+    ownedIds.has(s.id) || (!s.is_season_pass_exclusive && s.cost_credits === 0);
 
   const handleEquip = async (item: ShopItem) => {
     if (equippingId) return;
