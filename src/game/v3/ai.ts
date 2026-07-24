@@ -278,20 +278,12 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     }
   }
 
-  // If a card was reserved for the reaction window but there's nothing else
-  // left to spend essence on this turn, and the reserved card is the ONLY
-  // affordable play remaining, play it anyway rather than wasting the turn
-  // (holding it into the opponent's turn only helps if we actually have
-  // spare essence there; a truly essence-starved hand should just develop).
-  if (reservedIid && !state.winner) {
+  // If the reserved card is the ONLY card in hand (nothing else to develop
+  // at all), play it now rather than wasting the entire turn on a reaction
+  // window that may never open.
+  if (reservedIid && !state.winner && p.hand.length === 1) {
     const reserved = p.hand.find((c) => c.iid === reservedIid);
-    const others = p.hand.some(
-      (c) =>
-        c.iid !== reservedIid &&
-        invokePriority(state, pid, c.def) >= -50 &&
-        canAffordPotential(state, pid, c.def.cost),
-    );
-    if (reserved && !others && canAffordPotential(state, pid, reserved.def.cost)) {
+    if (reserved && canAffordPotential(state, pid, reserved.def.cost)) {
       tapForCost(state, pid, reserved.def.cost);
       if (canInvoke(state, pid, reserved.iid)) {
         const targetIid = chooseTarget(state, pid, reserved.def);
@@ -384,7 +376,6 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
           unitHasKw(u, 'Quickstrike') ||
           unitHasKw(u, 'Unbreakable'));
     if (kills && survives) picked.push(u.iid);
-    else if (effMight(state, u) >= 4 && survives) picked.push(u.iid);
   }
   return picked;
 }
@@ -528,9 +519,13 @@ export function reactionPlays(
       // Point removal at the biggest live attacker (fall back to autoTarget).
       let targetIid: string | undefined;
       if (quickRemoval && state.clash) {
+        const isShatter = c.def.onInvoke?.action === 'shatter';
         const attackers = state.clash.attackers
           .map((iid) => findUnit(state, iid))
-          .filter((u): u is UnitInst => !!u && !unitHasKw(u, 'Warded'))
+          .filter(
+            (u): u is UnitInst =>
+              !!u && !unitHasKw(u, 'Warded') && !(isShatter && unitHasKw(u, 'Unbreakable')),
+          )
           .sort((a, b) => effMight(state, b) - effMight(state, a));
         targetIid = attackers[0]?.iid;
       }

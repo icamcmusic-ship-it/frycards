@@ -412,8 +412,12 @@ export function canTarget(state: GameState, pid: PlayerId, eff: Effect, iid: str
 export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string | undefined {
   const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
+  // Shatter can't affect Unbreakable units (engine no-ops it) — exclude them
+  // from consideration for that action so a shatter effect never gets pointed
+  // at a target it will just whiff on while a killable target sits legal.
+  const excludeUnbreakable = eff.action === 'shatter';
   const biggestEnemy = [...opp.field]
-    .filter((u) => !unitHasKw(u, 'Warded'))
+    .filter((u) => !unitHasKw(u, 'Warded') && !(excludeUnbreakable && unitHasKw(u, 'Unbreakable')))
     .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
   switch (eff.target) {
     case 'enemyUnit':
