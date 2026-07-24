@@ -7,6 +7,59 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v5.1 — Fry Cards rename, balance overhaul, smarter CPU
+
+- **Name**: the game is now simply **Fry Cards** — the "Riftbound" codename is
+  retired from all player-facing screens (rules docs keep it as a historical
+  note).
+- **Rules fixes**:
+  - Siphon vitality gain is capped at 20, matching healing (it could
+    previously run a player's Vitality up past 70).
+  - The second player now draws a 6th opening card to offset the
+    first-mover advantage (sims measured ~56% first-player win rate).
+- **CPU overhaul** (all found via the new v5 sim harness):
+  - Taps Locations to pay per spell instead of floating everything — so it
+    now has essence available to use Quick Events and Ambush units in the
+    clash reaction window, which it previously never did.
+  - Re-bonds loose Worn Charms (previously never; 2,600+ re-bonds per
+    2,208-game suite after the fix).
+  - Chump-guards and gang-guards when facing lethal instead of dying with
+    ready units, and models Doublestrike/Overrun damage correctly when
+    deciding guards.
+  - Avoids suicidal attacks into ready Venomous guards; plays anyTarget
+    damage to the face instead of holding it forever when the enemy board
+    is empty.
+- **Balance pass** (three full sim passes, 292-card pool):
+  - Fixed a structural pool bug: keyword cost surcharges were feeding the
+    stat budget, making combat keywords effectively free stats
+    (Quickstrike carriers sat at 80% win rate). Keywords are now a pure
+    cost surcharge.
+  - Keyword weights retuned: Overrun/Quickstrike/Alert up; Doublestrike,
+    Venomous, Reckless, Siphon, Swarmproof, Warded, Skywatch down;
+    Unbreakable priced as the premium it is; Immobile discount reduced
+    (walls got better once the CPU learned to guard).
+  - Tide is now an Aerial color and Root an Overrun color, fixing a pool
+    where only ONE card in 292 had Aerial and aggro colors owned every
+    good keyword (Ember/Gale were winning ~70% of games).
+  - Five outlier cards cost +1: Heart Coral, Needle Seamstress, Merfolk
+    Ritual, Pufferfish Lantern, Clawblade Greatsword.
+  - Database mechanic columns re-backfilled from the new pool (292 cards).
+- **Match UI / card template**:
+  - Dusk shed picker — ending the turn over the hand limit opens a modal to
+    choose which cards to discard (was: silent discard from the hand's end).
+  - Charms with a targeted on-invoke effect chain to a target pick after
+    the bond pick (was: silent auto-target).
+  - Playable Quick/Ambush hand cards highlight during the clash reaction
+    window.
+  - Card text box no longer repeats keyword/bond/re-bond/Sanctum reminder
+    text the chips already carry; long ability text auto-shrinks before the
+    line clamp bites; rules-line budgets raised per size (standard 3→5,
+    full 5→8). Fixes ability text getting cut off.
+- **New sim harness** (`scripts/simulate-v5.ts`): full-pool CPU-vs-CPU
+  tournaments with card residuals, keyword health, mechanic usage, CPU
+  lapse counters and engine invariant checks. Replaces the retired v4
+  dice-era harness.
+
 ### v5.0 RIFTBOUND — full game conversion
 
 The entire game moved from the v4.x dice-placement rules to the **Riftbound**

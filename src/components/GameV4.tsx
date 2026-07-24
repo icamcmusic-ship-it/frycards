@@ -765,7 +765,7 @@ const CPU_PACE = {
 /** A targeting/bonding choice in progress — resolved by clicking a
  * highlighted card (or Vitality plate). */
 type Pending =
-  | { kind: 'invoke'; cardIid: string; effect: Effect }
+  | { kind: 'invoke'; cardIid: string; effect: Effect; bondTargetIid?: string }
   | { kind: 'bond'; cardIid: string }
   | { kind: 'leaderAbility'; idx: number; effect: Effect }
   | { kind: 'rebond'; charmIid: string };
@@ -855,6 +855,8 @@ export function GameV4({
   // CPU-turn narration: one log line at a time.
   const [cpuBeat, setCpuBeat] = useState<{ text: string; idx: number; total: number } | null>(null);
   const [showAsh, setShowAsh] = useState(false);
+  /** Dusk shed picker: null = closed; array = card iids chosen to shed. */
+  const [shedPick, setShedPick] = useState<string[] | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     text: string;
     onConfirm: () => void;
@@ -1210,11 +1212,21 @@ export function GameV4({
     setPending(null);
     switch (p.kind) {
       case 'invoke':
-        doInvoke(p.cardIid, { targetIid });
+        doInvoke(p.cardIid, { targetIid, bondTargetIid: p.bondTargetIid });
         return;
-      case 'bond':
+      case 'bond': {
+        // v5.1: a Charm whose on-invoke effect needs a target now chains to
+        // a second pick instead of silently auto-targeting.
+        const card = me.hand.find((c) => c.iid === p.cardIid);
+        const eff = card?.def.onInvoke;
+        if (card && eff && needsTarget(eff) && targetsFor(g, HUMAN, eff).length > 0) {
+          setPending({ kind: 'invoke', cardIid: p.cardIid, effect: eff, bondTargetIid: targetIid });
+          say('Bond set — now pick a target for its effect.');
+          return;
+        }
         doInvoke(p.cardIid, { bondTargetIid: targetIid });
         return;
+      }
       case 'leaderAbility':
         if (activateLeaderAbility(g, HUMAN, p.idx, targetIid)) {
           bump();
@@ -1237,16 +1249,28 @@ export function GameV4({
   // ---- phase driving ------------------------------------------------------
   const myAttackers = stage === 'play' ? legalAttackers(g, HUMAN) : [];
 
+  const finishTurn = () => {
+    // Ends the turn: Dusk (sheds from the END of the hand) → pass → CPU's
+    // Dawn → its Main I.
+    endPhase(g);
+    bump();
+    if (checkWinner()) return;
+    runCpuTurn();
+  };
+
   const advanceMyPhase = () => {
     setPending(null);
     setAtkSel(new Set());
     closePreview();
     if (g.phase === 'Main2') {
-      // Ends the turn: Dusk (auto-shed) → pass → CPU's Dawn → its Main I.
-      endPhase(g);
-      bump();
-      if (checkWinner()) return;
-      runCpuTurn();
+      // v5.1: over the hand limit — let the player CHOOSE what to shed
+      // (the engine sheds from the end of the hand, so the picker just
+      // reorders the chosen cards to the back before ending the turn).
+      if (me.hand.length > MAX_HAND) {
+        setShedPick([]);
+        return;
+      }
+      finishTurn();
       return;
     }
     if (endPhase(g)) {
@@ -2134,7 +2158,9 @@ export function GameV4({
                       def={c.def}
                       size="compact"
                       dimmed={!!why}
-                      highlight={preview === c.iid}
+                      // During the clash reaction window, playable Quick /
+                      // Ambush cards light up so the window is discoverable.
+                      highlight={preview === c.iid || ((inMyReaction || reactionStep) && !why)}
                       introduceKeywords
                     />
                   </div>
@@ -2144,6 +2170,81 @@ export function GameV4({
           </div>
         </div>
       </div>
+
+      {/* Dusk shed picker — choose which cards go to the ash-pile. */}
+      {shedPick !== null && (
+        <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-[var(--c-ink)] ink-border-md p-3 max-w-[720px] w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <span className="heading-font text-sm text-[var(--c-yellow)]">
+                SHED TO {MAX_HAND} — pick {me.hand.length - MAX_HAND} card
+                {me.hand.length - MAX_HAND === 1 ? '' : 's'} to discard
+              </span>
+              <button
+                onClick={() => setShedPick(null)}
+                aria-label="Cancel shedding"
+                className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
+              >
+                ✕ BACK
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {me.hand.map((c) => {
+                const sel = shedPick.includes(c.iid);
+                return (
+                  <button
+                    key={c.iid}
+                    onClick={() =>
+                      setShedPick((s) =>
+                        s === null
+                          ? s
+                          : sel
+                            ? s.filter((x) => x !== c.iid)
+                            : s.length < me.hand.length - MAX_HAND
+                              ? [...s, c.iid]
+                              : s,
+                      )
+                    }
+                    aria-pressed={sel}
+                    aria-label={`${sel ? 'Keep' : 'Shed'} ${c.def.name}`}
+                    className={cn('relative rounded-[3px]', sel && 'ring-4 ring-[var(--c-red)]')}
+                  >
+                    <CardFace def={c.def} size="compact" dimmed={sel} />
+                    {sel && (
+                      <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center heading-font text-[11px] text-white bg-[var(--c-red)]/90 py-0.5">
+                        SHED
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-center mt-3">
+              <button
+                disabled={shedPick.length !== me.hand.length - MAX_HAND}
+                onClick={() => {
+                  // Engine sheds from the END of the hand: move the chosen
+                  // cards to the back, keeping everything else in order.
+                  const chosen = new Set(shedPick);
+                  const keep = me.hand.filter((c) => !chosen.has(c.iid));
+                  const shed = me.hand.filter((c) => chosen.has(c.iid));
+                  me.hand.splice(0, me.hand.length, ...keep, ...shed);
+                  setShedPick(null);
+                  finishTurn();
+                }}
+                className={cn(
+                  'heading-font text-sm px-4 py-2 ink-border-md',
+                  shedPick.length === me.hand.length - MAX_HAND
+                    ? 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                    : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/40 cursor-not-allowed',
+                )}
+              >
+                SHED &amp; END TURN ▸
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ash-pile drawer */}
       {showAsh && (

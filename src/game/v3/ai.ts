@@ -5,7 +5,7 @@
  * when profitable, and (as defender) guard to survive lethal. Returns a
  * CpuTurnEvent log the UI replays as animations.
  */
-import { CardDef, Effect, LEADER_HP, totalCost } from './cards';
+import { CardDef, Effect, EssenceCost, LEADER_HP, totalCost } from './cards';
 import { EssenceType } from './colors';
 import {
   GameState,
@@ -16,6 +16,7 @@ import {
   autoTarget,
   canInvoke,
   canInvokeLeader,
+  canPayCost,
   declareAttackers,
   declareGuards,
   effMight,
@@ -27,6 +28,7 @@ import {
   legalGuardsFor,
   opponentOf,
   playWellspring,
+  rebondCharm,
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
@@ -37,7 +39,15 @@ import {
 /** Event log entries the UI animates while replaying the CPU's turn. */
 export type CpuTurnEvent =
   | { kind: 'wellspring'; essence: EssenceType }
-  | { kind: 'invoke'; name: string; iid: string; targetIid?: string; targetName?: string }
+  | {
+      kind: 'invoke';
+      name: string;
+      iid: string;
+      targetIid?: string;
+      targetName?: string;
+      /** Set when the DEFENDER invoked this during the clash reaction window. */
+      by?: PlayerId;
+    }
   | { kind: 'leaderInvoke'; name: string }
   | { kind: 'leaderAbility'; name: string; text?: string; targetIid?: string }
   | { kind: 'rebond'; name: string; targetIid: string }
@@ -113,12 +123,61 @@ function tapAllLocations(state: GameState, pid: PlayerId): void {
   }
 }
 
+/** Could `cost` be paid from the current pool plus untapped locations? */
+function canAffordPotential(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
+  if (!cost) return true;
+  const p = state.players[pid];
+  const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
+  for (const l of p.locations) {
+    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+  }
+  return canPayCost(pool, cost);
+}
+
+/**
+ * Tap just enough locations to pay `cost` (pips first, then generic),
+ * leaving the rest untapped for the clash reaction window. Returns true if
+ * the pool can then pay the cost.
+ */
+function tapForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
+  const p = state.players[pid];
+  if (canPayCost(p.essence, cost)) return true;
+  if (!cost || !canAffordPotential(state, pid, cost)) return false;
+  // Cover colored pips.
+  for (const [t, need] of Object.entries(cost.pips) as [EssenceType, number][]) {
+    while ((p.essence[t] ?? 0) < (need ?? 0)) {
+      const loc = p.locations.find((l) => !l.exhausted && l.produces === t);
+      if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
+    }
+  }
+  // Cover the rest with any untapped location.
+  let safety = p.locations.length + 1;
+  while (!canPayCost(p.essence, cost) && safety-- > 0) {
+    const loc = p.locations.find((l) => !l.exhausted);
+    if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
+  }
+  return canPayCost(p.essence, cost);
+}
+
 function isRemoval(eff?: Effect): boolean {
   return (
     !!eff &&
     (eff.action === 'shatter' || eff.action === 'banish' ||
       (eff.action === 'damage' && (eff.target === 'enemyUnit' || eff.target === 'anyTarget')))
   );
+}
+
+/** Re-bond loose Worn Charms onto the biggest friendly unit when affordable. */
+function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
+  const p = state.players[pid];
+  if (p.wornCharms.length === 0 || p.field.length === 0) return;
+  const target = [...p.field].sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+  for (const charm of [...p.wornCharms]) {
+    tapForCost(state, pid, { generic: charm.def.rebondCost ?? 0, pips: {} });
+    if (rebondCharm(state, pid, charm.iid, target.iid)) {
+      observe?.({ kind: 'rebond', name: charm.def.name, targetIid: target.iid });
+    }
+  }
 }
 
 /** Value of invoking this card right now. */
@@ -128,7 +187,9 @@ function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   if (def.type === 'Unit') v += 5;
   if (isRemoval(def.onInvoke)) {
     const biggest = opp.field.filter((u) => !unitHasKw(u, 'Warded'))[0];
-    v += biggest ? 20 : -100; // removal only with a live target
+    // Removal wants a live target; anyTarget damage can still go face.
+    if (biggest) v += 20;
+    else v += def.onInvoke?.target === 'anyTarget' ? -5 : -100;
   }
   if (def.onInvoke?.target === 'allEnemyUnits' && opp.field.length < 2) v -= 60;
   if (def.type === 'Charm' && state.players[pid].field.length === 0) v -= 200;
@@ -148,11 +209,13 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     const t = chooseWellspring(state, pid);
     if (t && playWellspring(state, pid, t)) observe?.({ kind: 'wellspring', essence: t });
   }
-  tapAllLocations(state, pid);
-
+  // Tap-to-pay per spell (rather than floating everything): whatever stays
+  // untapped is live essence for the clash reaction window.
   // Invoke the Leader once affordable (its abilities are recurring value).
-  if (!p.leader.invoked && !p.leader.shattered && canInvokeLeader(state, pid)) {
-    if (invokeLeader(state, pid)) observe?.({ kind: 'leaderInvoke', name: p.leader.def.name });
+  if (!p.leader.invoked && !p.leader.shattered && canAffordPotential(state, pid, p.leader.def.cost)) {
+    tapForCost(state, pid, p.leader.def.cost);
+    if (canInvokeLeader(state, pid) && invokeLeader(state, pid))
+      observe?.({ kind: 'leaderInvoke', name: p.leader.def.name });
   }
 
   // Greedily invoke the best affordable cards.
@@ -160,10 +223,16 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   while (progress && !state.winner) {
     progress = false;
     const playable = p.hand
-      .filter((c) => canInvoke(state, pid, c.iid))
+      .filter(
+        (c) =>
+          invokePriority(state, pid, c.def) >= -50 &&
+          canAffordPotential(state, pid, c.def.cost) &&
+          !(c.def.type === 'Charm' && p.field.length === 0),
+      )
       .sort((a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def));
     for (const c of playable) {
-      if (invokePriority(state, pid, c.def) < -50) continue;
+      if (!tapForCost(state, pid, c.def.cost)) continue;
+      if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
       const bondTargetIid =
         c.def.type === 'Charm'
@@ -178,11 +247,14 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     }
   }
 
+  // Re-bond loose Worn Charms with leftover potential essence.
+  rebondWornCharms(state, pid, observe);
+
   // Leader ability: once per turn, pick the most useful one.
-  useLeaderAbility(state, pid, observe);
+  runLeaderAbility(state, pid, observe);
 }
 
-function useLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
+function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
   const L = p.leader;
   if (!L.invoked || L.shattered || L.abilityUsedThisTurn) return;
@@ -192,8 +264,8 @@ function useLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
   let bestVal = 0;
   abilities.forEach((ab, i) => {
     if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0) return;
-    let v = 0;
     const eff = ab.effect;
+    let v: number;
     if (isRemoval(eff)) v = opp.field.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
@@ -241,12 +313,20 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     // Attack if a typical guard trade favors us (we kill and survive, or
     // Quickstrike/Venomous makes the trade cheap).
     const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+    const qsKills =
+      (unitHasKw(u, 'Quickstrike') || unitHasKw(u, 'Doublestrike')) &&
+      (effMight(state, u) >= remainingGrit(state, worst) || unitHasKw(u, 'Venomous'));
     const kills =
       effMight(state, u) >= remainingGrit(state, worst) || unitHasKw(u, 'Venomous');
+    // A ready Venomous guard makes any contact lethal — only Unbreakable or a
+    // Quickstrike pre-kill survives the exchange.
+    const venomGuard = possibleGuards.some((g) => unitHasKw(g, 'Venomous'));
     const survives =
-      effMight(state, worst) < remainingGrit(state, u) ||
-      unitHasKw(u, 'Quickstrike') ||
-      unitHasKw(u, 'Unbreakable');
+      (venomGuard
+        ? unitHasKw(u, 'Unbreakable') || qsKills
+        : effMight(state, worst) < remainingGrit(state, u) ||
+          unitHasKw(u, 'Quickstrike') ||
+          unitHasKw(u, 'Unbreakable'));
     if (kills && survives) picked.push(u.iid);
     else if (effMight(state, u) >= 4 && survives) picked.push(u.iid);
   }
@@ -268,10 +348,20 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     .map((iid) => findUnit(state, iid))
     .filter((a): a is UnitInst => !!a)
     .sort((a, b) => effMight(state, b) - effMight(state, a));
+  // Damage the defender is on track to take: unguarded attackers hit face
+  // (Doublestrike twice); guarded Overrun attackers spill past guard grit.
   const unguardedDamage = () =>
-    attackers
-      .filter((a) => !(assignments[a.iid]?.length))
-      .reduce((s, a) => s + effMight(state, a), 0);
+    attackers.reduce((s, a) => {
+      const hits = unitHasKw(a, 'Doublestrike') ? 2 : 1;
+      const guards = assignments[a.iid] ?? [];
+      if (guards.length === 0) return s + effMight(state, a) * hits;
+      if (!unitHasKw(a, 'Overrun')) return s;
+      const guardGrit = guards.reduce((g, iid) => {
+        const u = findUnit(state, iid);
+        return g + (u ? Math.max(1, remainingGrit(state, u)) : 0);
+      }, 0);
+      return s + Math.max(0, effMight(state, a) * hits - guardGrit);
+    }, 0);
 
   for (const attacker of attackers) {
     const legal = legalGuardsFor(state, attacker.iid).filter((g) => !used.has(g.iid));
@@ -305,7 +395,106 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       used.add(best.g.iid);
     }
   }
+  // Facing lethal after profitable blocks: chump-guard everything we can,
+  // biggest attackers first, rather than dying with ready guards on the field.
+  if (unguardedDamage() >= me.vitality) {
+    for (const attacker of attackers) {
+      if (unguardedDamage() < me.vitality) break;
+      if (assignments[attacker.iid]?.length) continue;
+      const legal = legalGuardsFor(state, attacker.iid).filter((g) => !used.has(g.iid));
+      if (legal.length === 0) continue;
+      const swarm = unitHasKw(attacker, 'Swarmproof');
+      if (swarm) {
+        if (legal.length < 2) continue;
+        const pair = legal
+          .sort((a, b) => effMight(state, a) - effMight(state, b))
+          .slice(0, 2)
+          .map((g) => g.iid);
+        assignments[attacker.iid] = pair;
+        pair.forEach((iid) => used.add(iid));
+      } else {
+        // Cheapest body soaks the hit.
+        const chump = legal.sort(
+          (a, b) =>
+            effMight(state, a) + remainingGrit(state, a) - (effMight(state, b) + remainingGrit(state, b)),
+        )[0];
+        assignments[attacker.iid] = [chump.iid];
+        used.add(chump.iid);
+      }
+    }
+  }
+  // Still facing lethal: stack extra guards onto Overrun attackers to soak
+  // the spill (multiple guards per attacker are legal).
+  let extraSafety = me.field.length + 1;
+  while (unguardedDamage() >= me.vitality && extraSafety-- > 0) {
+    const spillers = attackers.filter(
+      (a) => (assignments[a.iid]?.length ?? 0) > 0 && unitHasKw(a, 'Overrun'),
+    );
+    let added = false;
+    for (const a of spillers) {
+      const legal = legalGuardsFor(state, a.iid).filter((g) => !used.has(g.iid));
+      if (legal.length === 0) continue;
+      const extra = legal.sort((x, y) => remainingGrit(state, y) - remainingGrit(state, x))[0];
+      assignments[a.iid].push(extra.iid);
+      used.add(extra.iid);
+      added = true;
+      break;
+    }
+    if (!added) break;
+  }
   return assignments;
+}
+
+/**
+ * Defender's reaction window (after guards, before damage): tap locations
+ * and invoke Quick Events — removal pointed at the biggest attacker — and
+ * cheap Ambush units for board presence. Exported for the sim harness and UI.
+ */
+export function reactionPlays(
+  state: GameState,
+  defender: PlayerId,
+  observe?: CpuTurnObserver,
+): number {
+  if (state.clash?.step !== 'reaction' || state.active === defender) return 0;
+  const p = state.players[defender];
+  let plays = 0;
+  tapAllLocations(state, defender);
+  let progress = true;
+  while (progress && !state.winner) {
+    progress = false;
+    const options = p.hand
+      .filter((c) => canInvoke(state, defender, c.iid))
+      .sort((a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def));
+    for (const c of options) {
+      const quickRemoval = c.def.type === 'Event' && isRemoval(c.def.onInvoke);
+      const ambushUnit = c.def.type === 'Unit';
+      if (!quickRemoval && !ambushUnit) continue;
+      // Point removal at the biggest live attacker (fall back to autoTarget).
+      let targetIid: string | undefined;
+      if (quickRemoval && state.clash) {
+        const attackers = state.clash.attackers
+          .map((iid) => findUnit(state, iid))
+          .filter((u): u is UnitInst => !!u && !unitHasKw(u, 'Warded'))
+          .sort((a, b) => effMight(state, b) - effMight(state, a));
+        targetIid = attackers[0]?.iid;
+      }
+      targetIid ??= c.def.onInvoke ? autoTarget(state, defender, c.def.onInvoke) : undefined;
+      if (invokeCard(state, defender, c.iid, { targetIid })) {
+        observe?.({
+          kind: 'invoke',
+          name: c.def.name,
+          iid: c.iid,
+          targetIid,
+          targetName: targetIid ? findUnit(state, targetIid)?.def.name : undefined,
+          by: defender,
+        });
+        plays++;
+        progress = true;
+        break;
+      }
+    }
+  }
+  return plays;
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +538,9 @@ export function playTurn(
       const defender = opponentOf(pid);
       const guards = (opts.chooseGuardsFor ?? chooseGuards)(state, defender);
       if (declareGuards(state, guards)) observe({ kind: 'guard', assignments: guards });
+      // CPU-vs-CPU (sims): the defending CPU uses its reaction window unless
+      // the UI is driving the defender (it passes chooseGuardsFor).
+      if (!opts.chooseGuardsFor) reactionPlays(state, defender, observe);
       if (resolveClash(state)) observe({ kind: 'clash' });
     }
     if (!state.winner && endPhase(state)) observe({ kind: 'phase', phase: state.phase });

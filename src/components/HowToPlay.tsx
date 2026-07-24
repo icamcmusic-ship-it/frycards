@@ -27,7 +27,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Setup',
-        'Both players draw an opening hand with one mulligan each (shuffle back, redraw). The first player skips the Deal on their very first Dawn.',
+        'Both players draw a 5-card opening hand; the second player draws a 6th card to offset going second. The first player skips the Deal on their very first Dawn.',
       ],
     ],
   },
@@ -120,7 +120,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Damage',
-        'Simultaneous, except Quickstrike/Doublestrike deal a first-strike sub-step. Venomous damage is lethal at any amount, Siphon converts damage into Vitality, and Overrun sends excess damage past shattered guards through to the defender.',
+        'Simultaneous, except Quickstrike/Doublestrike deal a first-strike sub-step. Venomous damage is lethal at any amount, Siphon converts damage into Vitality (never above 20), and Overrun sends excess damage past shattered guards through to the defender.',
       ],
       [
         'State checks',
@@ -350,7 +350,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          RIFTBOUND RULEBOOK V5.0 · docs/RULEBOOK.md
+          FRY CARDS RULEBOOK V5.0
         </div>
       </div>
     </div>

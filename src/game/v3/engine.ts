@@ -326,7 +326,10 @@ export function createGame(
   const handSize = opts.handSize ?? STARTING_HAND;
   for (const p of [state.players.P1, state.players.P2]) {
     if (opts.shuffle !== false) shuffleArr(p.deck, rng);
-    for (let i = 0; i < handSize; i++) {
+    // Second player draws one extra card to offset the first-mover advantage
+    // (v5.1: sims measured 55.8% P1 win rate without it).
+    const n = handSize + (p.id === 'P2' && handSize > 0 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
       const c = p.deck.pop();
       if (c) p.hand.push(c);
     }
@@ -438,17 +441,23 @@ export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string
   }
 }
 
+/** Siphon vitality gain, capped at starting Vitality (same cap as healing). */
+function siphonGain(state: GameState, source: UnitInst, amount: number): void {
+  const p = state.players[source.owner];
+  p.vitality = Math.min(LEADER_HP, p.vitality + amount);
+}
+
 function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): void {
   if (amount <= 0) return;
   u.damage += amount;
   if (source && unitHasKw(source, 'Venomous')) u.venomed = true;
-  if (source && unitHasKw(source, 'Siphon')) state.players[source.owner].vitality += amount;
+  if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, amount);
 }
 
 function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: UnitInst): void {
   if (amount <= 0) return;
   state.players[pid].vitality -= amount;
-  if (source && unitHasKw(source, 'Siphon')) state.players[source.owner].vitality += amount;
+  if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, amount);
 }
 
 /**

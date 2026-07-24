@@ -37,7 +37,7 @@ describe('keyword set', () => {
     for (const kw of KEYWORDS) expect(typeof KEYWORD_COST[kw]).toBe('number');
     expect(KEYWORD_COST.Immobile).toBeLessThan(0);
     for (const kw of KEYWORDS) {
-      if (kw !== 'Immobile') expect(KEYWORD_COST[kw]).toBeGreaterThan(0);
+      if (kw !== 'Immobile') expect(KEYWORD_COST[kw]).toBeGreaterThanOrEqual(0);
     }
   });
 

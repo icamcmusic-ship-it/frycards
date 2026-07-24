@@ -339,7 +339,18 @@ describe('clash', () => {
     declareGuards(s, {});
     resolveClash(s);
     expect(s.players.P2.vitality).toBe(LEADER_HP - 3);
-    expect(s.players.P1.vitality).toBe(LEADER_HP + 3);
+    // Siphon gain is capped at starting Vitality (same cap as healing).
+    expect(s.players.P1.vitality).toBe(LEADER_HP);
+  });
+
+  test('Siphon gain restores missing vitality up to the cap', () => {
+    const s = clashSetup();
+    s.players.P1.vitality = 15;
+    const a = summonUnit(s, 'P1', U('drainer', 3, 3, ['Siphon']));
+    declareAttackers(s, [a.iid]);
+    declareGuards(s, {});
+    resolveClash(s);
+    expect(s.players.P1.vitality).toBe(18);
   });
 
   test('Overrun spills excess damage past dead guards to the defender', () => {

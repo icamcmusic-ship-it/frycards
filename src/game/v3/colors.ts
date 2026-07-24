@@ -30,8 +30,8 @@ export const COLOR_IDENTITY: Record<Color, string> = {
  * builder to score archetype fit. Not a legality rule. */
 export const KEYWORDS_OF_COLOR: Record<Color, string[]> = {
   Ember: ['Reckless', 'Overrun', 'Quickstrike'],
-  Tide: ['Ambush', 'Warded'],
-  Root: ['Swarmproof', 'Unbreakable'],
+  Tide: ['Ambush', 'Warded', 'Aerial'],
+  Root: ['Swarmproof', 'Unbreakable', 'Overrun'],
   Gale: ['Aerial', 'Alert', 'Skywatch'],
   Light: ['Siphon', 'Skywatch', 'Warded'],
   Shadow: ['Venomous', 'Doublestrike'],

@@ -52,7 +52,7 @@ function PlayScreen({
         </PopButton>
         <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR DECK</h1>
         <span className="text-[10px] font-bold text-[var(--c-paper)]/60">
-          Riftbound rules v5.0 · 30-card decks · start at {LEADER_HP} Vitality
+          Fry Cards rules v5.0 · 30-card decks · start at {LEADER_HP} Vitality
         </span>
       </div>
       <div className="p-6 max-w-6xl mx-auto">

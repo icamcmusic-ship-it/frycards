@@ -1145,7 +1145,7 @@ const TIER: Record<
     keywordSmall: true,
     showRules: true,
     rulesFont: 6.5,
-    rulesLines: 2,
+    rulesLines: 3,
     showFlavor: false,
   },
   standard: {
@@ -1169,7 +1169,7 @@ const TIER: Record<
     keywordSmall: false,
     showRules: true,
     rulesFont: 7.5,
-    rulesLines: 3,
+    rulesLines: 5,
     showFlavor: false,
   },
   full: {
@@ -1193,7 +1193,7 @@ const TIER: Record<
     keywordSmall: false,
     showRules: true,
     rulesFont: 9,
-    rulesLines: 5,
+    rulesLines: 8,
     showFlavor: true,
   },
 };
@@ -1394,11 +1394,33 @@ function typeLineText(def: CardDef): string {
 /** The card's full printed rules text: `card.text` if authored, otherwise
  * the generated lines from its structured mechanics. */
 function rulesText(def: CardDef): string {
-  if (def.text) return def.text;
-  // Leader ability lines print separately (see the Leader block), so skip
-  // them here to avoid double-printing.
-  const lines = cardRuleLines({ ...def, leaderAbilities: undefined });
-  return lines.join(' ');
+  // v5.1: the text box prints ONLY information no chip already carries —
+  // on-invoke effects and triggered abilities. Keywords, Bond stats,
+  // Re-bond cost, Sanctum passives and produced essence all render as chips
+  // (or the type-line pip), so repeating their reminder text here was what
+  // pushed the real ability lines past the line clamp and cut them off.
+  const bits: string[] = [];
+  if (def.onInvoke) {
+    bits.push(
+      def.type === 'Unit'
+        ? `When this enters the field: ${describeEffect(def.onInvoke)}.`
+        : `${describeEffect(def.onInvoke)}.`,
+    );
+  }
+  for (const t of def.triggers ?? []) {
+    bits.push(`${TRIGGER_PHRASE[t.when]}: ${describeEffect(t.effect)}.`);
+  }
+  if (bits.length > 0) return bits.map(cap1).join(' ');
+  // No structured mechanics at all (authored/dev cards): fall back to the
+  // printed text — but only when no chip/pip already tells the story.
+  const chipCovered =
+    def.keywords?.length || def.bond || def.rebondCost !== undefined || def.locPassive || def.produces;
+  if (!chipCovered && def.text) return def.text;
+  return '';
+}
+
+function cap1(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** v4.26: the `micro` tier is a purpose-built board token, not a shrunken
@@ -2107,7 +2129,9 @@ export function CardFace({
             <p
               className={cn('leading-snug break-words font-semibold', chips.length > 0 && 'mt-1')}
               style={{
-                fontSize: cfg.rulesFont,
+                // Long ability text auto-shrinks (down to -2px) before the
+                // line clamp is ever allowed to bite.
+                fontSize: fitFontSize(rules, cfg.rulesFont, cfg.rulesFont - 2, 90),
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
                 WebkitLineClamp: cfg.rulesLines,

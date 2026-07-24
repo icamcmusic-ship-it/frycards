@@ -1,7 +1,7 @@
-# RIFTBOUND — FryCards Rulebook v5.0
+# FRY CARDS Rulebook v5.1
 
-FryCards now plays under the **Riftbound** rules: an essence-based trading
-card game. This document is the paper rulebook adapted for the digital
+Fry Cards plays under an essence-based trading card game ruleset (v5,
+formerly codenamed "Riftbound"). This document is the paper rulebook adapted for the digital
 client; digital adaptations are marked **[digital]**.
 
 ## 1. Glossary of Terms
@@ -30,7 +30,7 @@ client; digital adaptations are marked **[digital]**.
 | Quickstrike | Deals damage before normal clash damage |
 | Doublestrike | Deals both quickstrike and normal damage |
 | Venomous | Any damage dealt is lethal |
-| Siphon | Damage dealt also gains you that much Vitality |
+| Siphon | Damage dealt also gains you that much Vitality (never above 20) |
 | Alert | Doesn't exhaust when attacking |
 | Reckless | Can act the turn it enters the field |
 | Swarmproof | Must be guarded by two or more units |
@@ -67,11 +67,14 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 ## 3. Objective & Setup
 
 - Reduce your opponent's **Vitality from 20 to 0**, or force them to Deal
-  from an empty deck.
+  from an empty deck. Vitality can never rise above 20.
 - **[digital]** Decks are 30 cards (adaptation of the paper 60-card rule),
   with per-rarity copy caps: Common/Uncommon/Rare up to 3, Super-Rare /
   Full-Art / Ultra-Rare up to 2, Mythic 1.
-- Opening hand: 7 cards, with mulligans (each mulligan draws one fewer).
+- **[digital]** Opening hand: 5 cards; the second player draws a 6th card
+  to offset the first-mover advantage (adaptation of the paper 7-card
+  hand + mulligan rule; the CPU takes one automatic mulligan on a hand
+  with no cheap plays or no units).
 
 ## 4. Turn Structure
 
