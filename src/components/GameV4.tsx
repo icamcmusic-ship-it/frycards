@@ -38,6 +38,9 @@ import {
   canInvokeLeader,
   canPayCost,
   canTarget,
+  effectiveCost,
+  locationYield,
+  mulliganHand,
   legalAttackers,
   legalGuardsFor,
   wellspringChoices,
@@ -186,11 +189,11 @@ function targetsFor(g: GameState, pid: PlayerId, eff: Effect): string[] {
 }
 
 /** Essence a player could have right now: floating pool + every untapped
- * Location counted by its produced type. */
+ * Location counted by its produced type (Bountiful Sanctums count double). */
 function potentialPool(p: PlayerState): Partial<Record<EssenceType, number>> {
   const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
   for (const l of p.locations) {
-    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
   }
   return pool;
 }
@@ -771,23 +774,12 @@ type Pending =
   | { kind: 'leaderAbility'; idx: number; effect: Effect }
   | { kind: 'rebond'; charmIid: string };
 
-/** The human's one manual mulligan: shuffle the hand back and redraw the
- * same number of cards (mirrors ai.ts maybeMulliganPlayer, but by choice).
+/** The human's rulebook mulligan: shuffle the hand back and draw one card
+ * FEWER (engine mulliganHand) — repeatable until the player keeps.
  * Module-level so the react-hooks immutability lint doesn't flag the
  * in-place engine-state mutation the whole match UI is built on. */
 function mulliganRedraw(g: GameState): void {
-  const p = g.players[HUMAN];
-  const n = p.hand.length;
-  p.deck.push(...p.hand);
-  p.hand.length = 0;
-  for (let i = p.deck.length - 1; i > 0; i--) {
-    const j = Math.floor(g.rng() * (i + 1));
-    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
-  }
-  for (let i = 0; i < n; i++) {
-    const c = p.deck.pop();
-    if (c) p.hand.push(c);
-  }
+  mulliganHand(g, HUMAN);
 }
 
 /** The clash-pause sentinel: thrown out of playTurn's guard callback so the
@@ -846,7 +838,7 @@ export function GameV4({
   };
 
   const [stage, setStage] = useState<Stage>('mulligan');
-  const [mulliganUsed, setMulliganUsed] = useState(false);
+  const [mulliganCount, setMulliganCount] = useState(0);
   const [pending, setPending] = useState<Pending | null>(null);
   // Clash (attacking): the attacker iids toggled on before declaring.
   const [atkSel, setAtkSel] = useState<Set<string>>(new Set());
@@ -1001,7 +993,7 @@ export function GameV4({
   // ---- mulligan (human; the CPU's ran at setup) ---------------------------
   const doMulligan = () => {
     mulliganRedraw(g);
-    setMulliganUsed(true);
+    setMulliganCount((n) => n + 1);
     bump();
   };
 
@@ -1071,7 +1063,7 @@ export function GameV4({
         return 'Invoke during your own main phases';
       }
     }
-    if (!canAfford(me, def.cost)) {
+    if (!canAfford(me, effectiveCost(g, HUMAN, def))) {
       // Say WHICH pip is short when the problem is color, not quantity.
       const pool = potentialPool(me);
       const missing = (Object.entries(def.cost?.pips ?? {}) as [EssenceType, number][])
@@ -1089,7 +1081,7 @@ export function GameV4({
   const doInvoke = (cardIid: string, opts: { targetIid?: string; bondTargetIid?: string }) => {
     const card = me.hand.find((c) => c.iid === cardIid);
     if (!card) return;
-    autoTapFor(g, HUMAN, card.def.cost);
+    autoTapFor(g, HUMAN, effectiveCost(g, HUMAN, card.def));
     if (invokeCard(g, HUMAN, cardIid, opts)) {
       bump();
       say(`${card.def.name} invoked.`);
@@ -2124,7 +2116,12 @@ export function GameV4({
                 </span>
               ) : (
                 <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
-                  Cost {totalCost(previewCard.def.cost)} — Locations auto-tap to pay.
+                  Cost {totalCost(effectiveCost(g, HUMAN, previewCard.def))}
+                  {totalCost(effectiveCost(g, HUMAN, previewCard.def)) !==
+                  totalCost(previewCard.def.cost)
+                    ? ' (Surge discount)'
+                    : ''}{' '}
+                  — Locations auto-tap to pay.
                 </span>
               )}
             </div>
@@ -2390,15 +2387,14 @@ export function GameV4({
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto"
           >
             <div className="heading-font text-3xl mb-1">
-              {mulliganUsed ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
+              {mulliganCount > 0 ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
             </div>
             <div className="text-[12px] font-bold text-[var(--c-steel)] mb-1">
               Opening hand — {playerName}
+              {mulliganCount > 0 ? ` · mulligan ×${mulliganCount}` : ''}
             </div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-4 leading-snug">
-              {mulliganUsed
-                ? 'That was your one mulligan — this hand is yours now. Click any card to zoom in, then KEEP to start.'
-                : `A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${me.hand.length} fresh ones. You get exactly one per game. Click any card to zoom in.`}
+              {`A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${Math.max(0, me.hand.length - 1)} fresh ones — one FEWER each time (rulebook §3). You can mulligan as often as you like. Click any card to zoom in.`}
             </div>
             <div className="flex gap-2 justify-center flex-wrap mb-5">
               {me.hand.map((c) => (
@@ -2419,12 +2415,12 @@ export function GameV4({
               >
                 ✓ KEEP THIS HAND
               </button>
-              {!mulliganUsed && (
+              {me.hand.length > 0 && (
                 <button
                   onClick={doMulligan}
                   className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"
                 >
-                  ↻ MULLIGAN — redraw {me.hand.length}
+                  ↻ MULLIGAN — draw {me.hand.length - 1}
                 </button>
               )}
             </div>

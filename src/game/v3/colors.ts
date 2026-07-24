@@ -31,11 +31,11 @@ export const COLOR_IDENTITY: Record<Color, string> = {
 export const KEYWORDS_OF_COLOR: Record<Color, string[]> = {
   Ember: ['Reckless', 'Overrun', 'Quickstrike'],
   Tide: ['Ambush', 'Warded', 'Aerial'],
-  Root: ['Swarmproof', 'Unbreakable', 'Overrun'],
+  Root: ['Swarmproof', 'Unbreakable', 'Overrun', 'Regenerate'],
   Gale: ['Aerial', 'Alert', 'Skywatch'],
-  Light: ['Siphon', 'Skywatch', 'Warded'],
+  Light: ['Siphon', 'Skywatch', 'Warded', 'Regenerate'],
   Shadow: ['Venomous', 'Doublestrike'],
-  Void: ['Immobile', 'Unbreakable', 'Ambush'],
+  Void: ['Immobile', 'Unbreakable', 'Ambush', 'Hardened'],
 };
 
 /**

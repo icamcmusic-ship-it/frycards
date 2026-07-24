@@ -356,12 +356,20 @@ function mapEvent(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id)));
+  // v6.0 Event keywords: ~12% Surge (conditional discount, +1 printed cost),
+  // ~8% Resonant (double resolution, rare+ only, +2 printed cost — its
+  // effect is scaled from the PRE-surcharge total so it doesn't double a
+  // full-cost effect for free).
+  const kwRoll = roll(seed, 'ev-kw', 100);
+  const keywords: string[] =
+    kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
+  const kwAdj = keywords.includes('Resonant') ? 2 : keywords.includes('Surge') ? 1 : 0;
+  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
-  const t = totalCost(cost);
+  const t = Math.max(1, totalCost(cost) - kwAdj);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
   const fx = eventEffect(seed, colors[0], t, subtype === 'Slow');
-  return {
+  const def: CardDef = {
     id: c.id,
     name: c.name,
     type: 'Event',
@@ -374,6 +382,8 @@ function mapEvent(c: CardTemplate): CardDef {
     flavor: c.flavor,
     text: `${subtype} — ${cap(effectText(fx))}.`,
   };
+  if (keywords.length) def.keywords = keywords;
+  return def;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,12 +393,18 @@ function mapCharm(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id)));
-  const cost = buildCost(seed, colors, total, rt);
-  const t = totalCost(cost);
   const subtype: CharmSubtype = roll(seed, 'ch-sub', 100) < 60 ? 'Bound' : 'Worn';
+  // v6.0 Charm keywords: ~12% Runic (bond cantrip, +1 printed cost); ~12%
+  // of BOUND charms Soulbound (returns to hand when its unit dies, +1).
+  const kwRoll = roll(seed, 'ch-kw2', 100);
+  const charmKws: string[] =
+    kwRoll < 12 ? ['Runic'] : kwRoll < 24 && subtype === 'Bound' ? ['Soulbound'] : [];
+  const kwAdj = charmKws.length > 0 ? 1 : 0;
+  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
+  const cost = buildCost(seed, colors, total, rt);
+  // Bond stats scale from the pre-surcharge total (keywords are never free stats).
+  const t = Math.max(1, totalCost(cost) - kwAdj);
 
-  // Bond stats scale with cost.
   const statBudget = Math.max(1, t + 1 - (subtype === 'Worn' ? 1 : 0));
   const mShare = roll(seed, 'ch-split', 3); // 0 mighty, 1 even, 2 gritty
   const might =
@@ -423,6 +439,7 @@ function mapCharm(c: CardTemplate): CardDef {
     image: c.image,
     flavor: c.flavor,
   };
+  if (charmKws.length) def.keywords = charmKws;
   const statText = `+${bond.might ?? 0}/+${bond.grit ?? 0}`;
   if (subtype === 'Worn') {
     def.rebondCost = Math.max(1, Math.ceil(t / 2));
@@ -442,9 +459,17 @@ function mapLocation(c: CardTemplate): CardDef {
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   // Sanctums are always mono-colored: their produced type IS their identity.
   const produces = pick(seed, 3, COLORS);
-  const total = Math.max(
-    1,
-    Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id)),
+  // v6.0 Location keywords: ~12% Bountiful (taps for 2 essence — replaces
+  // any other ability, +2 printed cost), ~14% Sacred (Dawn lifegain, +1).
+  const kwRoll = roll(seed, 'loc-kw2', 100);
+  const locKws: string[] = kwRoll < 12 ? ['Bountiful'] : kwRoll < 26 ? ['Sacred'] : [];
+  const kwAdj = locKws.includes('Bountiful') ? 2 : locKws.includes('Sacred') ? 1 : 0;
+  // Base total keeps the pre-v6 1..4 clamp so keyword-free Sanctums price
+  // identically; the keyword surcharge stacks on top (ceiling 6).
+  const total = Math.min(
+    6,
+    Math.max(1, Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id))) +
+      kwAdj,
   );
   const cost: EssenceCost = { generic: total - 1, pips: { [produces]: 1 } };
 
@@ -460,8 +485,14 @@ function mapLocation(c: CardTemplate): CardDef {
     image: c.image,
     flavor: c.flavor,
   };
-  const base = `Sanctum — exhaust: add one ${produces} essence.`;
-  if (roll(seed, 'loc-kind', 2) === 0) {
+  if (locKws.length) def.keywords = locKws;
+  const base = locKws.includes('Bountiful')
+    ? `Sanctum — exhaust: add TWO ${produces} essence.`
+    : `Sanctum — exhaust: add one ${produces} essence.`;
+  if (locKws.includes('Bountiful')) {
+    // Bountiful is the whole card: double essence, no second ability.
+    def.text = base;
+  } else if (roll(seed, 'loc-kind', 2) === 0) {
     def.locPassive = roll(seed, 'loc-passive', 2) === 0 ? 'MIGHT_ALL' : 'GRIT_ALL';
     def.text = `${base} Your units get +1 ${def.locPassive === 'MIGHT_ALL' ? 'Might' : 'Grit'}.`;
   } else {
@@ -474,9 +505,10 @@ function mapLocation(c: CardTemplate): CardDef {
 }
 
 // ---------------------------------------------------------------------------
-// Leader mapping — identities from LEADER_COLORS; cost 3-4 total with one pip
-// of each identity color, Resolve 3-6 by rarity, and two abilities (a minus
-// spender themed to the first color, and a small plus builder).
+// Leader mapping — identities from LEADER_COLORS; cost 3-4 total (+1 for
+// Commander, so 3-5) with one pip of each identity color, Resolve 3-6 by
+// rarity, and two abilities (a minus spender themed to the first color, and
+// a small plus builder).
 // ---------------------------------------------------------------------------
 function leaderMinusAbility(seed: string, color: Color): LeaderAbility {
   switch (color) {
@@ -557,12 +589,16 @@ function mapLeader(c: CardTemplate): CardDef {
   const pips: Partial<Record<Color, number>> = {};
   for (const col of identity) pips[col] = (pips[col] ?? 0) + 1;
   const pipSum = Object.values(pips).reduce((a, b) => a + (b ?? 0), 0);
-  const total = 3 + roll(seed, 'ldr-cost', 2); // 3-4
+  // v6.0 Leader keywords: each Leader rolls Commander (+1 Might aura while
+  // fielded, +1 essence cost), Resolute (Resolve regen at Dawn), or neither.
+  const kwRoll = roll(seed, 'ldr-kw6', 6);
+  const leaderKws: string[] = kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : [];
+  const total = 3 + roll(seed, 'ldr-cost', 2) + (leaderKws.includes('Commander') ? 1 : 0); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = leaderMinusAbility(seed, identity[0]);
   const plus = leaderPlusAbility(seed, identity[1] ?? identity[0]);
-  return {
+  const def: CardDef = {
     id: c.id,
     name: c.name,
     type: 'Leader',
@@ -575,6 +611,8 @@ function mapLeader(c: CardTemplate): CardDef {
     flavor: c.flavor,
     text: `Leader — Resolve ${resolve}. ${minus.text} ${plus.text}`,
   };
+  if (leaderKws.length) def.keywords = leaderKws;
+  return def;
 }
 
 // ---------------------------------------------------------------------------

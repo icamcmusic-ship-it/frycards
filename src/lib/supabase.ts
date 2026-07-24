@@ -612,7 +612,7 @@ export async function claimDailyLogin(): Promise<{
 
 /**
  * Opens the free "Starter Box" every new signup receives: grants the chosen
- * Leader + a legal, auto-saved 30-card deck + 8 bonus commons/uncommons. See
+ * Leader + a legal, auto-saved 60-card deck + 8 bonus commons/uncommons. See
  * `claim_starter_box` (SECURITY DEFINER) for the server-side logic.
  */
 export async function claimStarterBox(leaderId: string): Promise<{

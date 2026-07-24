@@ -1,22 +1,46 @@
 /**
- * Riftbound v5.0 keyword table sanity: the legal set, UI text, and cost
- * weights all stay in lockstep, and the color theming table only references
- * real keywords.
+ * Riftbound v6.0 keyword table sanity: the legal set, UI text, cost weights,
+ * and per-type vocabulary all stay in lockstep, and the color theming table
+ * only references real keywords.
  */
 import { describe, expect, test } from 'vitest';
-import { KEYWORDS, KEYWORD_COST, KEYWORD_TEXT, Keyword, isKeyword, keywordLabel } from './keywords';
+import {
+  KEYWORDS,
+  KEYWORD_COST,
+  KEYWORD_TEXT,
+  KEYWORD_TYPES,
+  Keyword,
+  isKeyword,
+  keywordLabel,
+  keywordsForType,
+} from './keywords';
 import { KEYWORDS_OF_COLOR } from './colors';
 
 const EXPECTED = [
+  // 14 rulebook Unit keywords
   'Aerial', 'Overrun', 'Quickstrike', 'Doublestrike', 'Venomous', 'Siphon',
   'Alert', 'Reckless', 'Swarmproof', 'Skywatch', 'Warded', 'Unbreakable',
   'Ambush', 'Immobile',
+  // v6.0 type keywords: 2 per card type
+  'Regenerate', 'Hardened', // Unit
+  'Surge', 'Resonant', // Event
+  'Runic', 'Soulbound', // Charm
+  'Bountiful', 'Sacred', // Location
+  'Commander', 'Resolute', // Leader
 ];
 
 describe('keyword set', () => {
-  test('exactly the 14 rulebook keywords, unique', () => {
+  test('the 14 rulebook keywords + 10 v6.0 type keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
+  });
+
+  test('every keyword maps to a card type; non-Unit types have exactly 2', () => {
+    for (const kw of KEYWORDS) expect(KEYWORD_TYPES[kw]).toBeTruthy();
+    expect(keywordsForType('Unit').length).toBe(16);
+    for (const t of ['Event', 'Charm', 'Location', 'Leader'] as const) {
+      expect(keywordsForType(t).length, `${t} keywords`).toBe(2);
+    }
   });
 
   test('isKeyword recognizes the set and rejects retired v4.x keywords', () => {

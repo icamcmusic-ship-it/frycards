@@ -16,7 +16,7 @@ const STARTER_MAX_RARITY_IDX = RARITIES.indexOf('Rare');
 /**
  * Full-screen Leader picker for the one-time Starter Box: the player chooses
  * which Leader to open (Rare rarity or below only) before `claim_starter_box`
- * grants that Leader + its deterministic legal 30-card deck. Leader roster
+ * grants that Leader + its deterministic legal 60-card deck. Leader roster
  * comes straight from POOL_LEADERS (populated at boot by App.tsx's
  * applyCardPool call) so there's no duplicate hand-rolled Leader list to
  * keep in sync.

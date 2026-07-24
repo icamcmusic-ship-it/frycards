@@ -59,7 +59,8 @@ function defFor(cardId: string): CardDef {
 }
 
 export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
-  const { session, profile, collection, decks, refreshProfile, refreshCollection } = useMeta();
+  const { session, profile, collection, decks, serializedCards, refreshProfile, refreshCollection } =
+    useMeta();
   const userId = session?.user?.id;
   const [tab, setTab] = useState<Tab>('browse');
   const [listings, setListings] = useState<MarketListing[]>([]);
@@ -401,6 +402,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           <SellForm
             collection={collection}
             decksLocked={decks}
+            serializedCards={serializedCards}
             busy={busy}
             onSubmit={(opts) =>
               run(
@@ -477,10 +479,14 @@ function SellForm({
   collection,
   decksLocked,
   busy,
+  serializedCards,
   onSubmit,
 }: {
   collection: { card_id: string; quantity: number; foil_quantity: number }[];
   decksLocked: { card_ids: string[] }[];
+  /** Owned Serialized prints — never listable, so that many NORMAL copies
+   * are reserved out of the sell math (they live inside `quantity`). */
+  serializedCards: { card_id: string }[];
   busy: boolean;
   onSubmit: (opts: {
     cardId: string;
@@ -507,13 +513,26 @@ function SellForm({
     return m;
   }, [decksLocked]);
 
+  // Serialized prints count inside `quantity` but can never be listed
+  // (create_listing rejects them server-side) — reserve them like
+  // CollectionScreen's sell UI does.
+  const serializedReserved = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
+    return m;
+  }, [serializedCards]);
+
   const sellable = useMemo(
     () =>
       collection
         .filter((c) => {
           const def = POOL_BY_ID[c.card_id];
           if (!def || def.type === 'Leader') return false;
-          const spare = c.quantity + c.foil_quantity - (locked.get(c.card_id) || 0);
+          const spare =
+            c.quantity +
+            c.foil_quantity -
+            (locked.get(c.card_id) || 0) -
+            (serializedReserved.get(c.card_id) || 0);
           return spare > 0;
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
@@ -537,7 +556,10 @@ function SellForm({
   const spare = selected
     ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
     : { normal: 0, foil: 0 };
-  const maxQty = foil ? spare.foil : spare.normal;
+  // Serialized prints are normal copies that can never be listed.
+  const maxQty = foil
+    ? spare.foil
+    : Math.max(0, spare.normal - (serializedReserved.get(cardId) || 0));
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
   // Buyout only applies to auctions — a stale buyout value left over from
@@ -575,8 +597,9 @@ function SellForm({
                 { q: c.quantity, f: c.foil_quantity },
                 locked.get(c.card_id) || 0,
               );
+              const sellableNormal = s.normal - (serializedReserved.get(c.card_id) || 0);
               setCardId(c.card_id);
-              setFoil(s.normal <= 0 && s.foil > 0);
+              setFoil(sellableNormal <= 0 && s.foil > 0);
               setQuantity(1);
             }}
             className={cn(

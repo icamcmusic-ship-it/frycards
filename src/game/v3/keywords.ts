@@ -1,11 +1,17 @@
 /**
- * Riftbound v5.0 keyword abilities — the full legal set from the rulebook
+ * Riftbound v5.x keyword abilities — the full legal set from the rulebook
  * glossary, with UI descriptions and cost weights for the card pool's
  * essence-cost calculation. The v4.x tier system is retired: every keyword
- * is binary (a unit has it or it doesn't).
+ * is binary (a card has it or it doesn't).
+ *
+ * v6.0: every card TYPE now has its own keyword vocabulary. The original
+ * fourteen rulebook keywords stay Unit-only; each of the other four types
+ * gained two type-specific keywords (see KEYWORD_TYPES below).
  */
+import type { CardType } from './cards';
 
 export const KEYWORDS = [
+  // -- Unit keywords (rulebook §1) --
   'Aerial',
   'Overrun',
   'Quickstrike',
@@ -20,12 +26,60 @@ export const KEYWORDS = [
   'Unbreakable',
   'Ambush',
   'Immobile',
+  // -- v6.0 Unit keywords --
+  'Regenerate',
+  'Hardened',
+  // -- v6.0 Event keywords --
+  'Surge',
+  'Resonant',
+  // -- v6.0 Charm keywords --
+  'Runic',
+  'Soulbound',
+  // -- v6.0 Location keywords --
+  'Bountiful',
+  'Sacred',
+  // -- v6.0 Leader keywords --
+  'Commander',
+  'Resolute',
 ] as const;
 
 export type Keyword = (typeof KEYWORDS)[number];
 
 export function isKeyword(s: string): s is Keyword {
   return (KEYWORDS as readonly string[]).includes(s);
+}
+
+/** Which card type each keyword can legally be printed on. */
+export const KEYWORD_TYPES: Record<Keyword, CardType> = {
+  Aerial: 'Unit',
+  Overrun: 'Unit',
+  Quickstrike: 'Unit',
+  Doublestrike: 'Unit',
+  Venomous: 'Unit',
+  Siphon: 'Unit',
+  Alert: 'Unit',
+  Reckless: 'Unit',
+  Swarmproof: 'Unit',
+  Skywatch: 'Unit',
+  Warded: 'Unit',
+  Unbreakable: 'Unit',
+  Ambush: 'Unit',
+  Immobile: 'Unit',
+  Regenerate: 'Unit',
+  Hardened: 'Unit',
+  Surge: 'Event',
+  Resonant: 'Event',
+  Runic: 'Charm',
+  Soulbound: 'Charm',
+  Bountiful: 'Location',
+  Sacred: 'Location',
+  Commander: 'Leader',
+  Resolute: 'Leader',
+};
+
+/** Keywords legal on a given card type. */
+export function keywordsForType(t: CardType): Keyword[] {
+  return KEYWORDS.filter((kw) => KEYWORD_TYPES[kw] === t);
 }
 
 /** Player-facing rules text per keyword (rulebook §1 "Keyword Abilities"). */
@@ -44,6 +98,16 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Unbreakable: "Can't be shattered or dealt lethal damage.",
   Ambush: 'Can be invoked at any time, even outside your main phase.',
   Immobile: "Can't attack.",
+  Regenerate: 'At Dawn, heal all damage marked on this unit.',
+  Hardened: 'Damage dealt to this unit is reduced by 1.',
+  Surge: 'Costs 1 less if you already invoked another card this turn.',
+  Resonant: 'Its effect resolves twice.',
+  Runic: 'When this Charm bonds to a unit from your hand, Deal a card.',
+  Soulbound: 'When the bonded unit leaves the field, return this Charm to your hand.',
+  Bountiful: 'Exhausts for 2 essence instead of 1.',
+  Sacred: 'At your Dawn, restore 1 Vitality.',
+  Commander: 'While your Leader is on the field, your units get +1 Might.',
+  Resolute: 'At your Dawn, your invoked Leader recovers 1 Resolve (up to its starting value).',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -66,6 +130,9 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
 // reaction-heavy CPU meta); Warded 0->-1 (consistently negative across
 // three passes — targeting denial rarely converts to wins, so it now
 // discounts like Immobile).
+// v6.0: initial weights for the ten new type keywords (unit weights feed
+// mapUnit's surcharge; the non-unit weights feed each type mapper's own
+// cost adjustment).
 export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 3,
   Overrun: 3,
@@ -81,6 +148,16 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Unbreakable: 7,
   Ambush: 1,
   Immobile: -2,
+  Regenerate: 3,
+  Hardened: 3,
+  Surge: 1,
+  Resonant: 4,
+  Runic: 2,
+  Soulbound: 2,
+  Bountiful: 4,
+  Sacred: 2,
+  Commander: 2,
+  Resolute: 2,
 };
 
 /** Short label for card-face chips. */

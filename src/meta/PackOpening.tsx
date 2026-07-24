@@ -846,10 +846,20 @@ function SummaryStage({
           </div>
           <div className="flex flex-wrap justify-center gap-2 max-w-5xl px-2 max-h-[38vh] overflow-y-auto">
             {/* The best pull already has the full-size spotlight above — drop
-                its group from the compact grid so the standout card isn't
-                rendered twice in a bulk haul. */}
+                that ONE copy from its group (not the whole group: a triple
+                top-rarity pull used to hide the other two copies entirely,
+                under-reporting the haul). */}
             {groups
-              .filter((grp) => !grp.indices.includes(bestIndex))
+              .map((grp) =>
+                grp.indices.includes(bestIndex)
+                  ? {
+                      ...grp,
+                      count: grp.count - 1,
+                      indices: grp.indices.filter((i) => i !== bestIndex),
+                    }
+                  : grp,
+              )
+              .filter((grp) => grp.count > 0)
               .map((grp, gi) => {
               const allSold = grp.indices.every((i) => sold.has(i));
               return (

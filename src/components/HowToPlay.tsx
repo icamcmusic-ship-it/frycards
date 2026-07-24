@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MetaHeader } from '../meta/ui';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
-import { KEYWORDS, KEYWORD_TEXT } from '../game/v3/keywords';
+import { KEYWORDS, KEYWORD_TEXT, KEYWORD_TYPES } from '../game/v3/keywords';
 import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
@@ -20,7 +20,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck',
-        '30 cards (Units, Sanctums, Charms, Events) plus one Leader kept separate in the Leader zone. Copy caps by rarity: Common/Uncommon/Rare up to 3, Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1.',
+        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1.',
       ],
       [
         'Color legality',
@@ -28,7 +28,11 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Setup',
-        'Both players draw a 5-card opening hand; the second player draws a 6th card to offset going second. The first player skips the Deal on their very first Dawn.',
+        'Both players draw a 7-card opening hand; the second player draws an 8th card to offset going second. The first player skips the Deal on their very first Dawn.',
+      ],
+      [
+        'Mulligan',
+        'Before the first turn you may shuffle your hand back and draw one card FEWER — as many times as you like (7 → 6 → 5 → …). Keep only when you are happy with the hand.',
       ],
     ],
   },
@@ -131,7 +135,15 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
   },
   {
     title: '6 · Keywords',
-    body: KEYWORDS.map((kw) => [kw, KEYWORD_TEXT[kw]] as [string, string]),
+    // v6.0: every card type has its own keyword vocabulary — non-Unit
+    // keywords are labeled with the type they appear on.
+    body: KEYWORDS.map(
+      (kw) =>
+        [
+          KEYWORD_TYPES[kw] === 'Unit' ? kw : `${kw} (${KEYWORD_TYPES[kw]})`,
+          KEYWORD_TEXT[kw],
+        ] as [string, string],
+    ),
   },
   {
     title: '7 · Essence Identity (the Seven Colors)',
@@ -175,7 +187,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Copy caps',
-        'Common/Uncommon/Rare: up to 3 copies in a deck. Super-Rare/Full-Art/Ultra-Rare: up to 2. Mythic: exactly 1.',
+        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Full-Art/Ultra-Rare: up to 2. Mythic: exactly 1.',
       ],
       [
         'Full-Art',
@@ -208,7 +220,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Starter Box',
-        'Every new account claims one free Starter Box from the Store: pick any Rare-or-below Leader and it opens into that Leader, a ready-to-play legal 30-card deck built around it, and some bonus cards.',
+        'Every new account claims one free Starter Box from the Store: pick any Rare-or-below Leader and it opens into that Leader, a ready-to-play legal 60-card deck built around it, and some bonus cards.',
       ],
       [
         'Mass opening',
@@ -258,7 +270,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck Builder',
-        'Assemble a legal 30-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your essence-cost curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
+        'Assemble a legal 60-card deck plus Leader from your Collection. QUICKBUILD auto-fills a legal deck; the stats panel shows your essence-cost curve, card types and keywords. The same physical copy can never be locked into two decks at once.',
       ],
       [
         'Store',
@@ -355,7 +367,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          FRY CARDS RULEBOOK V5.0
+          FRY CARDS RULEBOOK V6.0
         </div>
       </div>
     </div>

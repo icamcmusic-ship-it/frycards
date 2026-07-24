@@ -31,31 +31,31 @@ test('requires a Leader before checking anything else', () => {
   expect(issues).toEqual([{ text: 'Pick a Leader.' }]);
 });
 
-test('flags a deck that is not exactly 30 cards', () => {
-  const issues = validateDeckList(leader, fillDeck(29), db);
-  expect(issues.some((i) => i.text.includes('exactly 30'))).toBe(true);
+test('flags a deck below the 60-card minimum', () => {
+  const issues = validateDeckList(leader, fillDeck(59), db);
+  expect(issues.some((i) => i.text.includes('at least 60'))).toBe(true);
 });
 
-test('accepts an exactly-30-card deck within all copy caps', () => {
+test('accepts an exactly-60-card deck within all copy caps', () => {
   const ids = fillDeck(DECK_SIZE);
   const issues = validateDeckList(leader, ids, db);
   expect(issues).toEqual([]);
 });
 
-test('rejects more than 3 copies of one card (v4.2 cap, up from legacy 2)', () => {
+test('rejects more than 4 copies of one card (rulebook §3 cap)', () => {
   const card = units[0];
   const ids = [
-    ...Array(4).fill(card.id),
-    ...fillDeck(DECK_SIZE - 4).filter((id) => id !== card.id),
+    ...Array(5).fill(card.id),
+    ...fillDeck(DECK_SIZE - 5).filter((id) => id !== card.id),
   ];
   const issues = validateDeckList(leader, ids.slice(0, DECK_SIZE), db);
   expect(issues.some((i) => i.text.includes('Too many copies'))).toBe(true);
 });
 
-test('rejects a Leader card sitting inside the 30-card list', () => {
+test('rejects a Leader card sitting inside the main deck list', () => {
   const ids = [leader.id, ...fillDeck(DECK_SIZE - 1)];
   const issues = validateDeckList(leader, ids, db);
-  expect(issues.some((i) => i.text.includes('Leaders cannot be in the 30-card deck'))).toBe(true);
+  expect(issues.some((i) => i.text.includes('Leaders cannot be in the main deck'))).toBe(true);
 });
 
 test('v4.13 enforces color identity — an off-identity card is rejected', () => {

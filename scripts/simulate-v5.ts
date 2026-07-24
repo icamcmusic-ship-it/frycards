@@ -51,6 +51,24 @@
  *    game seed to split cohort noise from engine/AI changes (v5.2 item 2).
  *  - Mulligan rate, winner vitality margin, average deck remaining at end.
  *
+ * v6.0 additions (rulebook alignment + 10 new type keywords):
+ *  - 60-card decks / 7-card hands / rulebook mulligan flow through decks.ts
+ *    and ai.ts automatically; keyword tables cover the ten new type keywords
+ *    (Regenerate, Hardened, Surge, Resonant, Runic, Soulbound, Bountiful,
+ *    Sacred, Commander, Resolute) via the same telemetry hooks.
+ *  - Tempo signature: per-card average FIRST-play turn (cardReport
+ *    avgFirstPlayTurn) — separates early-curve workhorses from late bombs
+ *    with identical win rates.
+ *  - Board metrics: average units on the battlefield per turn sample.
+ *  - Clash metrics: clashes per game, average attackers per clash, average
+ *    turn of each game's first clash.
+ *  - Mulligan outcome split: win rate of hands that mulliganed vs kept
+ *    (the rulebook mulligan now costs a card, so this is a real tradeoff).
+ *  - Comeback rate: how often the eventual winner was BEHIND on vitality at
+ *    the turn-8 snapshot (measures whether games are decided early).
+ *  - Essence spend: total printed cost invoked per game (economy throughput,
+ *    complements wastedEssencePerGame).
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -101,14 +119,26 @@ interface CardStat {
   timesPlayed: number;
   timesDrawn: number;
   timesDeadInHand: number; // drawn but never played, game ended with it in hand
+  // v6.0 tempo signature: sum/count of the turn this card was FIRST played
+  // in a game (avg = firstPlayTurnSum / firstPlayGames).
+  firstPlayTurnSum: number;
+  firstPlayGames: number;
 }
 const cardStats: Record<string, CardStat> = {};
 function cs(id: string): CardStat {
   return (cardStats[id] ??= {
     inDeckGames: 0, inDeckWins: 0, playedGames: 0, playedWins: 0,
     drawnGames: 0, drawnWins: 0, timesPlayed: 0, timesDrawn: 0, timesDeadInHand: 0,
+    firstPlayTurnSum: 0, firstPlayGames: 0,
   });
 }
+
+// --- v6.0: board / clash / mulligan-outcome / comeback / essence-spend ------
+const boardMetrics = { turnSamples: 0, unitsOnBoardSum: 0 };
+const clashMetrics = { clashes: 0, attackersSum: 0, firstClashTurnSum: 0, gamesWithClash: 0 };
+const mullOutcome = { mullGames: 0, mullWins: 0, keepGames: 0, keepWins: 0 };
+const comeback = { measured: 0, comebackWins: 0 }; // winner behind on vitality at the turn-8 snapshot
+let essenceSpentTotal = 0; // sum of printed totals of every invoked card
 
 interface KwStat { carrierGames: number; carrierWins: number; activations: number }
 const kwStats: Record<string, KwStat> = {};
@@ -360,8 +390,15 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   const rng = mulberry32(seed);
   telemetryEnabled = false; // createGame runs Dawn; enable after setup
   const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
-  if (maybeMulliganPlayer(state, 'P1', rng)) mech.mulligans++;
-  if (maybeMulliganPlayer(state, 'P2', rng)) mech.mulligans++;
+  const mulled: Record<PlayerId, boolean> = { P1: false, P2: false };
+  if (maybeMulliganPlayer(state, 'P1', rng)) {
+    mech.mulligans++;
+    mulled.P1 = true;
+  }
+  if (maybeMulliganPlayer(state, 'P2', rng)) {
+    mech.mulligans++;
+    mulled.P2 = true;
+  }
   telemetryEnabled = true;
 
   const played: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
@@ -375,6 +412,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
   let turns = 0;
   let logCursor = 0;
+  let firstClashTurn = 0;
+  // Turn-8 vitality snapshot for the comeback metric.
+  let vitAt8: Record<PlayerId, number> | null = null;
   while (!state.winner && turns < MAX_TURNS) {
     turns++;
     const pid = state.active;
@@ -419,6 +459,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         const actor = ev.by ?? pid;
         if (ev.by) mech.reactionPlays++;
         if (def) {
+          // v6.0 tempo signature: first time this game this player played it.
+          if (!played[actor].has(def.id)) {
+            const s = cs(def.id);
+            s.firstPlayTurnSum += turns;
+            s.firstPlayGames++;
+          }
+          essenceSpentTotal += totalCost(def.cost);
           played[actor].add(def.id);
           cs(def.id).timesPlayed++;
           if (def.type === 'Location') mech.sanctumPlays++;
@@ -535,6 +582,19 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     // always gets an open reaction window before damage resolves). Usage
     // rate is reported via mech.reactionPlays / opportunities.
     if (guardEv) cpuDecisions.reactionWindowOpportunities++;
+
+    // --- v6.0 board / clash / comeback sampling -------------------------
+    boardMetrics.turnSamples++;
+    boardMetrics.unitsOnBoardSum +=
+      state.players.P1.field.length + state.players.P2.field.length;
+    if (attackEv && attackEv.iids.length > 0) {
+      clashMetrics.clashes++;
+      clashMetrics.attackersSum += attackEv.iids.length;
+      if (firstClashTurn === 0) firstClashTurn = turns;
+    }
+    if (turns === 8 && !vitAt8) {
+      vitAt8 = { P1: state.players.P1.vitality, P2: state.players.P2.vitality };
+    }
 
     // --- v5.2 essence-curve efficiency ---
     const cardsPlayedThisTurn = new Set(
@@ -659,6 +719,25 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   if (winner) {
     mech.winnerVitalitySum += state.players[winner].vitality;
     mech.loserDeckRemainingSum += state.players[opponentOf(winner)].deck.length;
+    // v6.0 mulligan-outcome split + comeback rate.
+    for (const pid of ['P1', 'P2'] as PlayerId[]) {
+      const won = winner === pid;
+      if (mulled[pid]) {
+        mullOutcome.mullGames++;
+        if (won) mullOutcome.mullWins++;
+      } else {
+        mullOutcome.keepGames++;
+        if (won) mullOutcome.keepWins++;
+      }
+    }
+    if (vitAt8) {
+      comeback.measured++;
+      if (vitAt8[winner] < vitAt8[opponentOf(winner)]) comeback.comebackWins++;
+    }
+  }
+  if (firstClashTurn > 0) {
+    clashMetrics.gamesWithClash++;
+    clashMetrics.firstClashTurnSum += firstClashTurn;
   }
   void perGame.erodeStart; // v5.3: erode now tracked per-turn (see loop)
 
@@ -702,10 +781,15 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (won) s.drawnWins++;
     }
 
-    // Keyword carrier stats (played carriers only).
+    // Keyword carrier stats (played carriers only). v6.0: an invoked Leader
+    // counts as a played carrier of its own Leader keywords
+    // (Commander/Resolute), which never appear in invoke events.
     const kwSeen = new Set<string>();
     for (const id of played[pid]) {
       for (const kw of POOL_BY_ID[id]?.keywords ?? []) kwSeen.add(kw);
+    }
+    if (p.leader.invoked || p.leader.shattered) {
+      for (const kw of p.leader.def.keywords ?? []) kwSeen.add(kw);
     }
     for (const kw of kwSeen) {
       kwStats[kw].carrierGames++;
@@ -850,6 +934,8 @@ const cardReport = Object.entries(cardStats)
       residual: +(pct(s.playedWins, s.playedGames) - pct(s.inDeckWins, s.inDeckGames)).toFixed(1),
       playedGames: s.playedGames,
       deadInHandRate: pct(s.timesDeadInHand, s.timesDrawn),
+      avgFirstPlayTurn:
+        s.firstPlayGames > 0 ? +(s.firstPlayTurnSum / s.firstPlayGames).toFixed(1) : null,
     };
   });
 
@@ -970,7 +1056,7 @@ const watchlistReport = WATCHLIST_IDS.map((id) => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v5.3',
+    version: 'v6.0',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1007,6 +1093,28 @@ const report = {
     mulliganRatePct: pct(mech.mulligans, mech.games * 2),
     avgWinnerVitality: +(mech.winnerVitalitySum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
     avgLoserDeckRemaining: +(mech.loserDeckRemainingSum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
+    essenceSpentPerGame: +(essenceSpentTotal / Math.max(1, mech.games)).toFixed(1),
+  },
+  // v6.0: board/clash texture, mulligan outcomes, comeback rate.
+  boardMetrics: {
+    avgUnitsOnBoard: +(boardMetrics.unitsOnBoardSum / Math.max(1, boardMetrics.turnSamples)).toFixed(2),
+    turnSamples: boardMetrics.turnSamples,
+  },
+  clashMetrics: {
+    clashesPerGame: +(clashMetrics.clashes / Math.max(1, mech.games)).toFixed(2),
+    avgAttackersPerClash: +(clashMetrics.attackersSum / Math.max(1, clashMetrics.clashes)).toFixed(2),
+    avgFirstClashTurn: +(clashMetrics.firstClashTurnSum / Math.max(1, clashMetrics.gamesWithClash)).toFixed(1),
+    gamesWithClashPct: pct(clashMetrics.gamesWithClash, mech.games),
+  },
+  mulliganOutcome: {
+    mullWinPct: pct(mullOutcome.mullWins, mullOutcome.mullGames),
+    mullGames: mullOutcome.mullGames,
+    keepWinPct: pct(mullOutcome.keepWins, mullOutcome.keepGames),
+    keepGames: mullOutcome.keepGames,
+  },
+  comeback: {
+    comebackWinPct: pct(comeback.comebackWins, comeback.measured),
+    measuredGames: comeback.measured,
   },
   colorMatchups: Object.fromEntries(
     COLORS.map((a) => [
@@ -1069,6 +1177,10 @@ console.log('\nCost tiers (v5.2):', JSON.stringify(report.costTiers, null, 2));
 console.log('\nCPU decision taxonomy (v5.2):', JSON.stringify(report.cpuDecisionTaxonomy, null, 2));
 console.log('\nEssence curve (v5.2):', JSON.stringify(report.essenceCurve, null, 2));
 console.log('\nSeat-swap first-player edge (v5.2):', JSON.stringify(report.seatSwap, null, 2));
+console.log('\nBoard metrics (v6.0):', JSON.stringify(report.boardMetrics, null, 2));
+console.log('\nClash metrics (v6.0):', JSON.stringify(report.clashMetrics, null, 2));
+console.log('\nMulligan outcome (v6.0):', JSON.stringify(report.mulliganOutcome, null, 2));
+console.log('\nComeback rate (v6.0):', JSON.stringify(report.comeback, null, 2));
 console.log('\nColor matchups (v5.3):', JSON.stringify(report.colorMatchups, null, 2));
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);

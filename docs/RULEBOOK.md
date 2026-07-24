@@ -1,8 +1,8 @@
-# FRY CARDS Rulebook v5.1
+# FRY CARDS Rulebook v6.0
 
-Fry Cards plays under an essence-based trading card game ruleset (v5,
-formerly codenamed "Riftbound"). This document is the paper rulebook adapted for the digital
-client; digital adaptations are marked **[digital]**.
+Fry Cards plays under an essence-based trading card game ruleset (v6,
+formerly codenamed "Riftbound"). This document is the paper rulebook adapted
+for the digital client; digital adaptations are marked **[digital]**.
 
 ## 1. Glossary of Terms
 
@@ -23,6 +23,8 @@ client; digital adaptations are marked **[digital]**.
 
 ### Keyword abilities
 
+Unit keywords (rulebook §1):
+
 | Keyword | Meaning |
 |---|---|
 | Aerial | Can only be guarded by other Aerial or Skywatch units |
@@ -39,6 +41,21 @@ client; digital adaptations are marked **[digital]**.
 | Unbreakable | Can't be shattered or dealt lethal damage |
 | Ambush | Can be invoked at any time, even outside your main phase |
 | Immobile | Can't attack |
+| Regenerate | At Dawn, heal all damage marked on this unit |
+| Hardened | Damage dealt to this unit is reduced by 1 |
+
+**v6.0:** every other card type has its own keyword pair:
+
+| Keyword (type) | Meaning |
+|---|---|
+| Surge (Event) | Costs 1 less if you already invoked another card this turn |
+| Resonant (Event) | Its effect resolves twice |
+| Runic (Charm) | When it bonds to a unit from your hand, Deal a card |
+| Soulbound (Charm) | When the bonded unit leaves the field, return this Charm to your hand |
+| Bountiful (Location) | Exhausts for 2 essence instead of 1 |
+| Sacred (Location) | At your Dawn, restore 1 Vitality |
+| Commander (Leader) | While your Leader is on the field, your units get +1 Might |
+| Resolute (Leader) | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
 
 ### Zones
 
@@ -51,7 +68,8 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 - **Location** — exhausts to produce Essence.
   - *Wellspring* — essence only. **[digital]** Basic Wellsprings take no
     deck slots: once per turn you may play one basic Wellspring of any
-    Essence Type in your Leader's identity.
+    Essence Type in your Leader's identity (the rulebook's "unlimited basic
+    Wellspring copies" exception, digital form).
   - *Sanctum* — produces essence AND carries an ability; invoked from hand.
 - **Charm** — bonds to a unit.
   - *Bound* — stays; goes to the Ash-pile if its unit leaves the field.
@@ -68,18 +86,22 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 
 - Reduce your opponent's **Vitality from 20 to 0**, or force them to Deal
   from an empty deck. Vitality can never rise above 20.
-- **[digital]** Decks are 30 cards (adaptation of the paper 60-card rule),
-  with per-rarity copy caps: Common/Uncommon/Rare up to 3, Super-Rare /
-  Full-Art / Ultra-Rare up to 2, Mythic 1.
-- **[digital]** Opening hand: 5 cards; the second player draws a 6th card
-  to offset the first-mover advantage (adaptation of the paper 7-card
-  hand + mulligan rule; the CPU takes one automatic mulligan on a hand
-  with no cheap plays or no units).
+- Decks are **at least 60 cards** with **no more than 4 copies of any
+  card** (rulebook §3). **[digital]** the editor caps decks at 100 cards,
+  and premium rarities carry stricter economy caps: Super-Rare / Full-Art /
+  Ultra-Rare up to 2, Mythic 1.
+- Opening hand: **7 cards**. **[digital]** the second player draws an 8th
+  card to offset the measured first-mover advantage.
+- **Mulligan** (rulebook §3): before the first turn you may shuffle your
+  hand back into your deck and draw **one card fewer** — repeatable
+  (7 → 6 → 5 → …). **[digital]** the CPU mulls once on a hand with no
+  cheap plays or no units.
 
 ## 4. Turn Structure
 
-1. **Dawn Phase** — Recover all your exhausted permanents; "at Dawn"
-   triggers; Deal one card (the first player skips this on turn 1).
+1. **Dawn Phase** — Recover all your exhausted permanents; Regenerate units
+   heal; Sacred Locations and Resolute Leaders tick; "at Dawn" triggers;
+   Deal one card (the first player skips this on turn 1).
 2. **Main Phase I** — Invoke Units, Charms, Events, Sanctums, or your
    Leader; play one basic Wellspring (once per turn).
 3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
@@ -90,9 +112,11 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 
 ## 5. Essence & Invoking
 
-- Exhaust a Location to produce one Essence of its type.
+- Exhaust a Location to produce one Essence of its type (two for
+  Bountiful Sanctums).
 - A cost's colored pips must be paid with matching Essence; the generic
   part with any Essence. Unspent Essence empties at the end of each phase.
+- Surge Events cost 1 less once you have invoked another card this turn.
 - Slow Events, Charms, Sanctums, and Leaders: own main phases only.
   Quick Events and Ambush cards: any priority window — **[digital]** in this
   client that means your main phases plus the guard-step reaction window of
@@ -107,13 +131,17 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   attackers can only be guarded by Aerial or Skywatch units.
 - Venomous damage is lethal regardless of amount; Overrun sends excess
   damage past shattered guards through to the defending player; Siphon
-  converts damage dealt into Vitality.
+  converts damage dealt into Vitality; Hardened shaves 1 off every damage
+  packet (a fully-absorbed hit applies no Venom and feeds no Siphon).
 
 ## 7. Death, Removal & State-Based Checks
 
 Before any player acts, the game automatically checks: 0-or-less Vitality
 loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
 shatters a unit (Unbreakable survives); illegally bonded Charms unbond.
+When a unit leaves the field, its Bound Charms go to the Ash-pile, Worn
+Charms stay on the field unbonded, and Soulbound Charms return to their
+owner's hand.
 
 ## 8. Essence Identity (the seven colors)
 
@@ -140,7 +168,7 @@ the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
 
 | Phase | What happens |
 |---|---|
-| Dawn | Recover, triggers, Deal one card |
+| Dawn | Recover, Regenerate/Sacred/Resolute, triggers, Deal one card |
 | Main I | Invoke spells, play one Wellspring |
 | Clash | Attack, guard, deal damage |
 | Main II | Invoke spells |

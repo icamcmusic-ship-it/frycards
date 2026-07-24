@@ -20,8 +20,11 @@ import {
   declareAttackers,
   declareGuards,
   effMight,
+  effectiveCost,
   endPhase,
   findUnit,
+  locationYield,
+  mulliganHand,
   invokeCard,
   invokeLeader,
   legalAttackers,
@@ -69,24 +72,14 @@ function handIsKeepable(hand: { def: CardDef }[]): boolean {
 
 /**
  * One-shot opening mulligan for a single player: redraw a hand with no cheap
- * plays or no Units (shuffle back, redraw same size). Returns true if
- * mulliganed.
+ * plays or no Units. Rulebook §3: the new hand is one card SMALLER (engine
+ * mulliganHand), so the CPU only mulls genuinely dead hands, and only once.
+ * Returns true if mulliganed.
  */
-export function maybeMulliganPlayer(state: GameState, pid: PlayerId, rng: () => number): boolean {
+export function maybeMulliganPlayer(state: GameState, pid: PlayerId, _rng: () => number): boolean {
   const p = state.players[pid];
   if (handIsKeepable(p.hand)) return false;
-  const n = p.hand.length;
-  p.deck.push(...p.hand);
-  p.hand = [];
-  for (let i = p.deck.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
-  }
-  for (let i = 0; i < n; i++) {
-    const c = p.deck.pop();
-    if (c) p.hand.push(c);
-  }
-  return true;
+  return mulliganHand(state, pid);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,36 +123,60 @@ function tapAllLocations(state: GameState, pid: PlayerId): void {
 }
 
 /** Reserve untapped locations able to pay `cost` (pips first, then any for
- * generic). Returns true if fully covered; on failure reserves nothing. */
+ * generic), counting Bountiful Sanctums as 2 essence so they neither break
+ * the reservation nor get over-reserved. Excess yield from a picked
+ * location carries over as surplus toward the rest of the cost. Returns
+ * true if fully covered; on failure reserves nothing. */
 function reserveLocationsForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
   if (!cost) return true;
   const p = state.players[pid];
   const free = p.locations.filter((l) => !l.exhausted && !reservedLocations.has(l.iid));
-  const picked: string[] = [];
-  for (const [t, need] of Object.entries(cost.pips) as [EssenceType, number][]) {
-    for (let i = 0; i < (need ?? 0); i++) {
-      const idx = free.findIndex((l) => l.produces === t && !picked.includes(l.iid));
-      if (idx < 0) return false;
-      picked.push(free[idx].iid);
+  const picked = new Set<string>();
+  const surplus: Partial<Record<EssenceType, number>> = {};
+  for (const [t, needRaw] of Object.entries(cost.pips) as [EssenceType, number][]) {
+    let need = needRaw ?? 0;
+    while (need > 0) {
+      // Smallest-yield matching location first, so a Bountiful isn't burned
+      // covering a single pip a basic Wellspring could cover.
+      const candidates = free
+        .filter((l) => l.produces === t && !picked.has(l.iid))
+        .sort((a, b) => locationYield(a) - locationYield(b));
+      const loc = candidates.find((l) => locationYield(l) >= need) ?? candidates[0];
+      if (!loc) return false;
+      picked.add(loc.iid);
+      const y = locationYield(loc);
+      if (y > need) surplus[t] = (surplus[t] ?? 0) + (y - need);
+      need = Math.max(0, need - y);
     }
   }
-  for (let i = 0; i < cost.generic; i++) {
-    const loc = free.find((l) => !picked.includes(l.iid));
+  let generic = cost.generic;
+  // Spend pip surplus on the generic part first.
+  for (const t of Object.keys(surplus) as EssenceType[]) {
+    const use = Math.min(generic, surplus[t] ?? 0);
+    generic -= use;
+  }
+  while (generic > 0) {
+    // Largest-yield first: fewest locations tied up for the generic part.
+    const loc = free
+      .filter((l) => !picked.has(l.iid))
+      .sort((a, b) => locationYield(b) - locationYield(a))[0];
     if (!loc) return false;
-    picked.push(loc.iid);
+    picked.add(loc.iid);
+    generic -= locationYield(loc);
   }
   for (const iid of picked) reservedLocations.add(iid);
   return true;
 }
 
-/** Could `cost` be paid from the current pool plus untapped locations? */
+/** Could `cost` be paid from the current pool plus untapped locations
+ * (Bountiful Sanctums count double)? */
 function canAffordPotential(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
   if (!cost) return true;
   const p = state.players[pid];
   const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
   for (const l of p.locations) {
     if (!l.exhausted && !reservedLocations.has(l.iid))
-      pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+      pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
   }
   return canPayCost(pool, cost);
 }
@@ -189,6 +206,12 @@ function tapForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolea
     if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
   }
   return canPayCost(p.essence, cost);
+}
+
+/** Damage `raw` actually marks on `target` (v6.0 Hardened shaves 1 per
+ * packet — a fully-absorbed hit also applies no Venom). */
+function packetDamage(target: UnitInst, raw: number): number {
+  return unitHasKw(target, 'Hardened') ? Math.max(0, raw - 1) : raw;
 }
 
 function isRemoval(eff?: Effect): boolean {
@@ -306,12 +329,12 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         (c) =>
           c.iid !== reservedIid &&
           invokePriority(state, pid, c.def) >= -50 &&
-          canAffordPotential(state, pid, c.def.cost) &&
+          canAffordPotential(state, pid, effectiveCost(state, pid, c.def)) &&
           !(c.def.type === 'Charm' && p.field.length === 0),
       )
       .sort((a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def));
     for (const c of playable) {
-      if (!tapForCost(state, pid, c.def.cost)) continue;
+      if (!tapForCost(state, pid, effectiveCost(state, pid, c.def))) continue;
       if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
       const bondTargetIid =
@@ -333,8 +356,8 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (reservedIid && !state.winner && p.hand.length === 1) {
     const reserved = p.hand.find((c) => c.iid === reservedIid);
     if (reserved) for (const l of p.locations) reservedLocations.delete(l.iid);
-    if (reserved && canAffordPotential(state, pid, reserved.def.cost)) {
-      tapForCost(state, pid, reserved.def.cost);
+    if (reserved && canAffordPotential(state, pid, effectiveCost(state, pid, reserved.def))) {
+      tapForCost(state, pid, effectiveCost(state, pid, reserved.def));
       if (canInvoke(state, pid, reserved.iid)) {
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
@@ -430,18 +453,21 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     // Attack if a typical guard trade favors us (we kill and survive, or
     // Quickstrike/Venomous makes the trade cheap).
     const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+    const hitOnWorst = packetDamage(worst, effMight(state, u));
     const qsKills =
       (unitHasKw(u, 'Quickstrike') || unitHasKw(u, 'Doublestrike')) &&
-      (effMight(state, u) >= remainingGrit(state, worst) || unitHasKw(u, 'Venomous'));
+      (hitOnWorst >= remainingGrit(state, worst) ||
+        (unitHasKw(u, 'Venomous') && hitOnWorst > 0));
     const kills =
-      effMight(state, u) >= remainingGrit(state, worst) || unitHasKw(u, 'Venomous');
+      hitOnWorst >= remainingGrit(state, worst) ||
+      (unitHasKw(u, 'Venomous') && hitOnWorst > 0);
     // A ready Venomous guard makes any contact lethal — only Unbreakable or a
     // Quickstrike pre-kill survives the exchange.
     const venomGuard = possibleGuards.some((g) => unitHasKw(g, 'Venomous'));
     const survives =
       (venomGuard
         ? unitHasKw(u, 'Unbreakable') || qsKills
-        : effMight(state, worst) < remainingGrit(state, u) ||
+        : packetDamage(u, effMight(state, worst)) < remainingGrit(state, u) ||
           unitHasKw(u, 'Quickstrike') ||
           unitHasKw(u, 'Unbreakable'));
     if (kills && survives) picked.push(u.iid);
@@ -487,9 +513,13 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     // Profitable single block: guard kills attacker or survives the hit.
     const scored = legal
       .map((g) => {
-        const kills = effMight(state, g) >= remainingGrit(state, attacker) || unitHasKw(g, 'Venomous');
+        const hitOnAttacker = packetDamage(attacker, effMight(state, g));
+        const kills =
+          hitOnAttacker >= remainingGrit(state, attacker) ||
+          (unitHasKw(g, 'Venomous') && hitOnAttacker > 0);
         const survives =
-          effMight(state, attacker) < remainingGrit(state, g) || unitHasKw(g, 'Unbreakable');
+          packetDamage(g, effMight(state, attacker)) < remainingGrit(state, g) ||
+          unitHasKw(g, 'Unbreakable');
         let v = 0;
         if (kills) v += 3;
         if (survives) v += 2;

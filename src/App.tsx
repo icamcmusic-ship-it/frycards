@@ -53,7 +53,7 @@ function PlayScreen({
         </PopButton>
         <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR DECK</h1>
         <span className="text-[10px] font-bold text-[var(--c-paper)]/60">
-          Fry Cards rules v5.0 · 30-card decks · start at {LEADER_HP} Vitality
+          Fry Cards rules v6.0 · 60-card decks · start at {LEADER_HP} Vitality
         </span>
       </div>
       <div className="p-6 max-w-6xl mx-auto">
@@ -80,8 +80,8 @@ function PlayScreen({
         </div>
         {guest ? (
           <p className="text-[11px] font-bold text-[var(--c-steel)]">
-            Create an account to build and save your own decks in the Deck Builder (30 cards, max
-            3 copies each).
+            Create an account to build and save your own decks in the Deck Builder (60+ cards, max
+            4 copies each).
           </p>
         ) : (
           <>
@@ -94,7 +94,7 @@ function PlayScreen({
               </p>
             ) : legalDecks.length === 0 ? (
               <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8">
-                No legal decks yet — build one in the Deck Builder (30 cards, max 3 copies each).
+                No legal decks yet — build one in the Deck Builder (60+ cards, max 4 copies each).
               </p>
             ) : (
               <div className="flex flex-wrap gap-4 mb-8">

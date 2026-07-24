@@ -96,6 +96,9 @@ export interface PlayerState {
   /** Essence pool — empties at the end of every phase. */
   essence: Partial<Record<EssenceType, number>>;
   wellspringPlayedThisTurn: boolean;
+  /** True once this player has invoked any card this turn (Surge discount).
+   * Reset for both players at each Dawn. */
+  invokedCardThisTurn: boolean;
 }
 
 export type ClashStep = 'guards' | 'reaction' | 'done';
@@ -190,10 +193,18 @@ function sanctumBonus(p: PlayerState, passive: 'MIGHT_ALL' | 'GRIT_ALL'): number
   return p.locations.filter((l) => l.def?.locPassive === passive).length;
 }
 
+/** v6.0 Commander: +1 Might to all your units while your Leader is fielded. */
+function commanderBonus(p: PlayerState): number {
+  return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Commander') ? 1 : 0;
+}
+
 export function effMight(state: GameState, u: UnitInst): number {
   const p = state.players[u.owner];
   const charm = u.charms.reduce((s, c) => s + (c.def.bond?.might ?? 0), 0);
-  return Math.max(0, (u.def.might ?? 0) + u.permMight + charm + sanctumBonus(p, 'MIGHT_ALL'));
+  return Math.max(
+    0,
+    (u.def.might ?? 0) + u.permMight + charm + sanctumBonus(p, 'MIGHT_ALL') + commanderBonus(p),
+  );
 }
 
 export function effGrit(state: GameState, u: UnitInst): number {
@@ -258,7 +269,7 @@ function clearEssence(state: GameState): void {
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
-export const STARTING_HAND = 5;
+export const STARTING_HAND = 7;
 
 export interface GameOptions {
   rng?: Rng;
@@ -312,6 +323,7 @@ export function createGame(
       },
       essence: {},
       wellspringPlayedThisTurn: false,
+      invokedCardThisTurn: false,
     };
   };
   const state: GameState = {
@@ -337,6 +349,30 @@ export function createGame(
   }
   runDawn(state); // first player's Dawn (skips the Deal on turn 1)
   return state;
+}
+
+/**
+ * Rulebook §3 mulligan: shuffle the hand back into the deck and draw one card
+ * FEWER than the hand held before. Repeatable (each mulligan shrinks the next
+ * hand by one). Only legal before the first turn's actions — the UI/AI call
+ * this right after createGame. Returns false when the hand is already empty.
+ */
+export function mulliganHand(state: GameState, pid: PlayerId): boolean {
+  const p = state.players[pid];
+  const n = p.hand.length - 1;
+  if (n < 0) return false;
+  p.deck.push(...p.hand);
+  p.hand = [];
+  for (let i = p.deck.length - 1; i > 0; i--) {
+    const j = Math.floor(state.rng() * (i + 1));
+    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
+  }
+  for (let i = 0; i < n; i++) {
+    const c = p.deck.pop();
+    if (c) p.hand.push(c);
+  }
+  state.log.push(`${pid} mulligans to ${n}.`);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +407,17 @@ function runTriggers(
     for (const t of u.def.triggers ?? []) {
       if (t.when !== when) continue;
       applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
+    }
+  }
+  // Sanctum Locations carry atDawn/atDusk triggers too (cardpool prints them
+  // on roughly half of non-Bountiful Sanctums) — these were dead text until
+  // v6.0: only units were ever scanned.
+  if (!unit && (when === 'atDawn' || when === 'atDusk')) {
+    for (const l of [...state.players[pid].locations]) {
+      for (const t of l.def?.triggers ?? []) {
+        if (t.when !== when) continue;
+        applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
+      }
     }
   }
 }
@@ -470,6 +517,12 @@ function siphonGain(state: GameState, source: UnitInst, amount: number): void {
 
 function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): void {
   if (amount <= 0) return;
+  // v6.0 Hardened: every packet of damage dealt to this unit is reduced by 1.
+  if (unitHasKw(u, 'Hardened')) {
+    amount -= 1;
+    telemetry.onKeywordProc?.('Hardened', 1);
+    if (amount <= 0) return; // fully absorbed: no venom mark, no siphon
+  }
   u.damage += amount;
   if (source && unitHasKw(source, 'Venomous')) u.venomed = true;
   if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, amount);
@@ -601,7 +654,12 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   if (idx < 0) return;
   p.field.splice(idx, 1);
   for (const charm of u.charms) {
-    if (charm.def.subtype === 'Worn') p.wornCharms.push(charm);
+    // v6.0 Soulbound: the Charm returns to its owner's hand instead of dying
+    // with (or outliving) its unit.
+    if (hasKw(charm.def, 'Soulbound')) {
+      telemetry.onKeywordProc?.('Soulbound', 1);
+      p.hand.push({ iid: charm.iid, def: charm.def });
+    } else if (charm.def.subtype === 'Worn') p.wornCharms.push(charm);
     else p.ashPile.push({ iid: charm.iid, def: charm.def });
   }
   u.charms = [];
@@ -659,10 +717,36 @@ function runDawn(state: GameState): void {
   for (const u of p.field) {
     u.exhausted = false;
     u.enteredThisTurn = false;
+    // v6.0 Regenerate: heals all marked damage at its controller's Dawn.
+    if (u.damage > 0 && unitHasKw(u, 'Regenerate')) {
+      telemetry.onKeywordProc?.('Regenerate', u.damage);
+      u.damage = 0;
+    }
   }
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
   p.wellspringPlayedThisTurn = false;
+  // v6.0 Surge tracking resets for both players at every turn boundary.
+  state.players.P1.invokedCardThisTurn = false;
+  state.players.P2.invokedCardThisTurn = false;
+  // v6.0 Sacred: each Sacred Location restores 1 Vitality at its Dawn.
+  for (const l of p.locations) {
+    if (l.def && hasKw(l.def, 'Sacred') && p.vitality < LEADER_HP) {
+      p.vitality += 1;
+      telemetry.onKeywordProc?.('Sacred', 1);
+    }
+  }
+  // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
+  const L = p.leader;
+  if (
+    L.invoked &&
+    !L.shattered &&
+    hasKw(L.def, 'Resolute') &&
+    L.resolve < (L.def.resolve ?? 0)
+  ) {
+    L.resolve += 1;
+    telemetry.onKeywordProc?.('Resolute', 1);
+  }
   runTriggers(state, state.active, 'atDawn');
   // Deal 1 (first player skips on turn 1).
   if (!(state.turn === 1 && state.active === 'P1')) dealCards(state, state.active, 1);
@@ -754,13 +838,43 @@ export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: s
   const loc = p.locations.find((l) => l.iid === locIid);
   if (!loc || loc.exhausted) return false;
   loc.exhausted = true;
-  p.essence[loc.produces] = (p.essence[loc.produces] ?? 0) + 1;
+  // v6.0 Bountiful Sanctums produce 2 essence per exhaust.
+  const amount = loc.def && hasKw(loc.def, 'Bountiful') ? 2 : 1;
+  if (amount === 2) telemetry.onKeywordProc?.('Bountiful', 1);
+  p.essence[loc.produces] = (p.essence[loc.produces] ?? 0) + amount;
   return true;
+}
+
+/** Essence a location adds when exhausted (Bountiful Sanctums give 2). */
+export function locationYield(loc: LocationInst): number {
+  return loc.def && hasKw(loc.def, 'Bountiful') ? 2 : 1;
 }
 
 // ---------------------------------------------------------------------------
 // Invoking
 // ---------------------------------------------------------------------------
+/**
+ * v6.0: the cost this card would actually charge `pid` right now. Surge
+ * Events cost 1 less (from the generic part first, then any colored pip)
+ * once their controller has invoked another card this turn.
+ */
+export function effectiveCost(
+  state: GameState,
+  pid: PlayerId,
+  def: CardDef,
+): EssenceCost | undefined {
+  const cost = def.cost;
+  if (!cost) return cost;
+  if (!hasKw(def, 'Surge') || !state.players[pid].invokedCardThisTurn) return cost;
+  if (cost.generic > 0) return { generic: cost.generic - 1, pips: cost.pips };
+  for (const t of COLORS) {
+    if ((cost.pips[t] ?? 0) > 0) {
+      return { generic: 0, pips: { ...cost.pips, [t]: (cost.pips[t] ?? 0) - 1 } };
+    }
+  }
+  return cost;
+}
+
 function timingLegal(state: GameState, pid: PlayerId, def: CardDef): boolean {
   const quick = def.type === 'Event' && def.subtype === 'Quick';
   const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
@@ -778,7 +892,7 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
   const def = card.def;
   if (def.type === 'Leader') return false;
   if (!timingLegal(state, pid, def)) return false;
-  if (!canPayCost(p.essence, def.cost)) return false;
+  if (!canPayCost(p.essence, effectiveCost(state, pid, def))) return false;
   if (def.type === 'Charm' && p.field.length === 0) return false;
   return true;
 }
@@ -813,8 +927,11 @@ export function invokeCard(
     if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
   }
 
-  payCost(p.essence, def.cost);
+  const cost = effectiveCost(state, pid, def);
+  if (hasKw(def, 'Surge') && cost !== def.cost) telemetry.onKeywordProc?.('Surge', 1);
+  payCost(p.essence, cost);
   p.hand.splice(p.hand.indexOf(card), 1);
+  p.invokedCardThisTurn = true;
   state.log.push(`${pid} invokes ${def.name}.`);
 
   switch (def.type) {
@@ -836,12 +953,32 @@ export function invokeCard(
       break;
     }
     case 'Event': {
-      if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
+      // v6.0 Resonant: the Event's effect resolves twice. If the explicit
+      // target is gone (or illegal) by the second resolution — it usually
+      // died to the first — fall back to auto-targeting instead of letting
+      // the whole second resolution fizzle.
+      const times = hasKw(def, 'Resonant') ? 2 : 1;
+      if (times === 2) telemetry.onKeywordProc?.('Resonant', 1);
+      for (let i = 0; i < times; i++) {
+        if (!def.onInvoke) continue;
+        const target =
+          i === 0 ||
+          opts.targetIid === undefined ||
+          canTarget(state, pid, def.onInvoke, opts.targetIid)
+            ? opts.targetIid
+            : undefined;
+        applyEffect(state, pid, def.onInvoke, target);
+      }
       p.ashPile.push(card);
       break;
     }
     case 'Charm': {
       bondTarget!.charms.push({ iid: card.iid, def });
+      // v6.0 Runic: bonding this Charm from hand Deals its controller a card.
+      if (hasKw(def, 'Runic')) {
+        telemetry.onKeywordProc?.('Runic', 1);
+        dealCards(state, pid, 1);
+      }
       if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
       break;
     }
@@ -907,6 +1044,8 @@ export function invokeLeader(state: GameState, pid: PlayerId): boolean {
   payCost(p.essence, p.leader.def.cost);
   p.leader.invoked = true;
   p.leader.resolve = p.leader.def.resolve ?? 0;
+  // The Leader is a card — invoking it enables the Surge discount too.
+  p.invokedCardThisTurn = true;
   state.log.push(`${pid} invokes their Leader, ${p.leader.def.name}.`);
   return true;
 }
