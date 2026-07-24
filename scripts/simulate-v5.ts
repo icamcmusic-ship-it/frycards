@@ -53,6 +53,7 @@ import {
   legalAttackers,
   remainingGrit,
   canInvoke,
+  findUnit,
 } from '../src/game/v3/engine';
 import { POOL_BY_ID, POOL_V4 } from '../src/game/v3/cardpool';
 import { buildDeck, randomArchetype } from '../src/game/v3/decks';
@@ -124,10 +125,8 @@ const cpuDecisions = {
   guardOpportunities: 0,
   targetSuboptimal: 0, // removal aimed at a live enemy when a bigger one was legal
   targetOpportunities: 0,
-  sequencingSuboptimal: 0, // a cheaper card was played before a strictly-better-value one it could also afford, wasting essence when both didn't fit
-  sequencingOpportunities: 0,
-  reactionWindowMissed: 0, // reaction window open, defender had a legal Quick/Ambush play, didn't use it
-  reactionWindowOpportunities: 0,
+  reactionWindowOpportunities: 0, // clashes where the defender had an open reaction window
+
 };
 
 // --- v5.2: essence-curve efficiency -----------------------------------------
@@ -223,6 +222,66 @@ function unguardableLethal(state: GameState, pid: PlayerId): boolean {
   return dmg >= opp.vitality;
 }
 
+/** Archetype cohort key: the acting Leader's id (8 fixed 2-color identities —
+ * randomArchetype() always themes decks off the Leader's own colors, so
+ * Leader id is a clean, stable cohort proxy for "deck archetype"). */
+function archetypeOf(deck: DeckDef): string {
+  return deck.leaderId;
+}
+
+/** Shadow (lookahead) heuristic: which ready attackers would deal EITHER
+ * unguardable free damage OR a favorable/kill trade, independent of ai.ts's
+ * actual chooseAttackers implementation. Used only to flag divergence — not
+ * a claim that this heuristic is more correct. */
+function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
+  const opp = state.players[opponentOf(pid)];
+  const ready = opp.field.filter((u) => !u.exhausted);
+  const out = new Set<string>();
+  // Replicates legalAttackers()'s field-state criteria without its phase
+  // gate (this snapshot is taken pre-Main1, before state.phase === 'Clash').
+  const candidates = state.players[pid].field.filter(
+    (u) =>
+      !u.exhausted &&
+      !u.def.keywords?.includes('Immobile') &&
+      (!u.enteredThisTurn || u.def.keywords?.includes('Reckless')),
+  );
+  for (const u of candidates) {
+    const m = effMight(state, u);
+    if (m <= 0) continue;
+    const possibleGuards = ready.filter((g) => {
+      if (u.def.keywords?.includes('Aerial'))
+        return g.def.keywords?.includes('Aerial') || g.def.keywords?.includes('Skywatch');
+      return true;
+    });
+    if (possibleGuards.length === 0) {
+      out.add(u.iid);
+      continue;
+    }
+    const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+    const kills = m >= remainingGrit(state, worst) || u.def.keywords?.includes('Venomous');
+    const survives = effMight(state, worst) < remainingGrit(state, u) || u.def.keywords?.includes('Unbreakable');
+    if (kills && survives) out.add(u.iid);
+  }
+  return out;
+}
+
+/** Lightweight winner-only replay for the seat-swap suite (v5.2): plays a
+ * full game with the same engine + CPU as runGame() but skips all telemetry
+ * so it can be run twice per pair (once each seat) without touching the
+ * main tournament's card/keyword/leader accumulators. */
+function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | null {
+  const rng = mulberry32(seed);
+  const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
+  maybeMulliganPlayer(state, 'P1', rng);
+  maybeMulliganPlayer(state, 'P2', rng);
+  let turns = 0;
+  while (!state.winner && turns < MAX_TURNS) {
+    turns++;
+    playTurn(state, state.active);
+  }
+  return state.winner;
+}
+
 function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): void {
   const rng = mulberry32(seed);
   const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
@@ -255,7 +314,25 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       p.field.some((u) => !u.exhausted && !u.enteredThisTurn) && unguardableLethal(state, pid);
     void hadLethal;
 
+    // --- v5.2 shadow-decision snapshots (pre-turn state; Main1 rarely
+    // shrinks the acting player's own ready-attacker set before Clash, so
+    // this is a reasonable proxy for the state legalAttackers() saw). ---
+    const preHasReadyAttacker = p.field.some(
+      (u) => !u.exhausted && !u.def.keywords?.includes('Immobile') && (!u.enteredThisTurn || u.def.keywords?.includes('Reckless')),
+    );
+    const preShadowAttackers = preHasReadyAttacker ? shadowAttackers(state, pid) : null;
+    const preOppBiggestByIid = new Map<string, number>();
+    for (const u of state.players[opponentOf(pid)].field) {
+      if (!u.def.keywords?.includes('Warded')) preOppBiggestByIid.set(u.iid, effMight(state, u));
+    }
+    const preOppMaxMight = preOppBiggestByIid.size
+      ? Math.max(...preOppBiggestByIid.values())
+      : 0;
+    const preLocations = p.locations.length + (p.wellspringPlayedThisTurn ? 0 : 1);
+    const preHandIds = new Set(p.hand.map((c) => c.iid));
+
     const events = playTurn(state, pid);
+    curveStats.totalTurns++;
 
     // --- event-based mechanics telemetry ---
     let usedAbility = false;
@@ -284,6 +361,80 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
     // --- lapse: missed lethal (had it pre-turn, opponent still alive) ---
     if (couldLethal && !state.winner) lapses.missedLethal++;
+
+    // --- v5.2 CPU decision-quality taxonomy -----------------------------
+    const attackEv = events.find((e) => e.kind === 'attack') as
+      | { iids: string[] }
+      | undefined;
+    if (preShadowAttackers) {
+      cpuDecisions.attackOpportunities++;
+      const actual = new Set(attackEv?.iids ?? []);
+      const same =
+        actual.size === preShadowAttackers.size &&
+        [...actual].every((i) => preShadowAttackers.has(i));
+      if (!same) cpuDecisions.attackDivergence++;
+    }
+
+    const guardEv = events.find((e) => e.kind === 'guard') as
+      | { assignments: Record<string, string[]> }
+      | undefined;
+    if (guardEv) {
+      const defender = opponentOf(pid);
+      const defField = state.players[defender].field;
+      cpuDecisions.guardOpportunities++;
+      // Shadow guard: for each attacker, if a ready blocker exists that both
+      // kills the attacker AND survives, was it used? (Ignores the "must
+      // chump for lethal" branch — that's covered by tookGuardableLethal.)
+      const usedByActual = new Set(Object.values(guardEv.assignments).flat());
+      let missedProfitable = false;
+      for (const [attackerIid, guards] of Object.entries(guardEv.assignments)) {
+        if (guards.length > 0) continue;
+        const attacker = findUnit(state, attackerIid);
+        if (!attacker) continue;
+        const readyBlockers = defField.filter((g) => !g.exhausted && !usedByActual.has(g.iid));
+        const profitable = readyBlockers.find(
+          (g) =>
+            effMight(state, g) >= remainingGrit(state, attacker) &&
+            effMight(state, attacker) < remainingGrit(state, g),
+        );
+        if (profitable) missedProfitable = true;
+      }
+      if (missedProfitable) cpuDecisions.guardDivergence++;
+    }
+
+    for (const ev of events) {
+      if (ev.kind !== 'invoke') continue;
+      const def = POOL_BY_ID[ev.iid.split('#')[0]];
+      if (!def) continue;
+      const isRemovalLike =
+        def.onInvoke &&
+        (def.onInvoke.action === 'shatter' ||
+          def.onInvoke.action === 'banish' ||
+          (def.onInvoke.action === 'damage' &&
+            (def.onInvoke.target === 'enemyUnit' || def.onInvoke.target === 'anyTarget')));
+      if (!isRemovalLike || !ev.targetIid) continue;
+      cpuDecisions.targetOpportunities++;
+      const chosenMight = preOppBiggestByIid.get(ev.targetIid) ?? -1;
+      if (chosenMight >= 0 && chosenMight < preOppMaxMight) cpuDecisions.targetSuboptimal++;
+    }
+
+    // Reaction-window opportunity = a clash happened this turn (the defender
+    // always gets an open reaction window before damage resolves). Usage
+    // rate is reported via mech.reactionPlays / opportunities.
+    if (guardEv) cpuDecisions.reactionWindowOpportunities++;
+
+    // --- v5.2 essence-curve efficiency ---
+    const cardsPlayedThisTurn = new Set(
+      events.filter((e) => e.kind === 'invoke' && !e.by).map((e) => (e as { iid: string }).iid),
+    );
+    const heldPlayable = [...p.hand].some((c) => {
+      if (preHandIds.has(c.iid) && !cardsPlayedThisTurn.has(c.iid)) {
+        return totalCost(c.def.cost) <= preLocations;
+      }
+      return false;
+    });
+    if (heldPlayable) curveStats.heldPlayableCardTurns++;
+    curveStats.essenceFloatedEstimate += Math.max(0, preLocations - cardsPlayedThisTurn.size);
 
     // --- lapse: idle leader (invoked, unused ability, resolve unchanged) ---
     if (
@@ -445,6 +596,29 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (won) kwStats[kw].carrierWins++;
     }
 
+    // v5.2: archetype cohort + archetype-scoped keyword carrier stats.
+    const arch = archetypeOf(deck);
+    const as = (archetypeStats[arch] ??= { games: 0, wins: 0 });
+    as.games++;
+    if (won) as.wins++;
+    for (const kw of kwSeen) {
+      const ka = (kwArchetypeStats[kw][arch] ??= { games: 0, wins: 0 });
+      ka.games++;
+      if (won) ka.wins++;
+    }
+
+    // v5.2: per-cost-tier win rates (played + deck baseline).
+    for (const id of inDeck) {
+      const t = ts(totalCost(POOL_BY_ID[id]?.cost));
+      t.deckGames++;
+      if (won) t.deckWins++;
+    }
+    for (const id of played[pid]) {
+      const t = ts(totalCost(POOL_BY_ID[id]?.cost));
+      t.playedGames++;
+      if (won) t.playedWins++;
+    }
+
     // Leader stats.
     const ls = (leaderStats[deck.leaderId] ??= {
       games: 0, wins: 0, invoked: 0, shattered: 0, abilityUses: 0,
@@ -486,6 +660,34 @@ for (let i = 0; i < decks.length; i++) {
 }
 
 // ---------------------------------------------------------------------------
+// v5.2: paired-seed seat-swap suite — isolate the first-mover edge from
+// cohort noise. For each of a fixed sample of deck pairings, play the SAME
+// two decks under the SAME seed twice, once each way round, so the only
+// thing that changes between the pair is which deck is P1. Kept in its own
+// counters (not folded into card/keyword/leader stats) so it can't skew
+// those cohorts.
+// ---------------------------------------------------------------------------
+const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0 };
+{
+  const swapRng = mulberry32(SEED ^ 0x5eed5eed);
+  const SEAT_SWAP_PAIRS = Math.min(200, decks.length * (decks.length - 1));
+  for (let n = 0; n < SEAT_SWAP_PAIRS; n++) {
+    const i = Math.floor(swapRng() * decks.length);
+    let j = Math.floor(swapRng() * decks.length);
+    if (j === i) j = (j + 1) % decks.length;
+    const pairSeed = Math.floor(swapRng() * 1e9) + 1;
+    // Run A-as-P1 / B-as-P2 and B-as-P1 / A-as-P2 with the identical seed.
+    // We don't reuse runGame() (it would pollute the main tournament stats);
+    // instead replay the same lightweight winner-only simulation.
+    const winnerAisP1 = seatSwapGame(decks[i], decks[j], pairSeed);
+    const winnerBisP1 = seatSwapGame(decks[j], decks[i], pairSeed);
+    seatSwap.pairs++;
+    if (winnerAisP1 === 'P1') seatSwap.deckAWinsAsP1++;
+    if (winnerBisP1 === 'P2') seatSwap.deckAWinsAsP2++;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 const pct = (a: number, b: number) => (b > 0 ? +((100 * a) / b).toFixed(1) : 0);
@@ -520,20 +722,106 @@ for (const c of cardReport) {
   cb.wins += Math.round((c.playedWin / 100) * c.playedGames);
 }
 
+// v5.2: archetype-normalized keyword delta. For each keyword, weight each
+// cohort's (carrierWin - cohortBaselineWin) by that cohort's carrier-game
+// count, so a keyword's headline number reflects performance NET of which
+// Leaders happened to carry it, not raw win%.
+function archNormalizedDelta(kw: string): { delta: number; games: number } {
+  let weighted = 0;
+  let games = 0;
+  for (const [arch, s] of Object.entries(kwArchetypeStats[kw])) {
+    if (s.games === 0) continue;
+    const baseline = archetypeStats[arch];
+    if (!baseline || baseline.games === 0) continue;
+    const cohortWin = (100 * s.wins) / s.games;
+    const cohortBaseline = (100 * baseline.wins) / baseline.games;
+    weighted += s.games * (cohortWin - cohortBaseline);
+    games += s.games;
+  }
+  return { delta: games > 0 ? +(weighted / games).toFixed(1) : 0, games };
+}
+
 const kwReport = Object.entries(kwStats)
   .filter(([, s]) => s.carrierGames > 0)
-  .map(([kw, s]) => ({
-    keyword: kw,
-    carrierWin: pct(s.carrierWins, s.carrierGames),
-    carrierGames: s.carrierGames,
-    poolCarriers: POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw)).length,
-  }))
+  .map(([kw, s]) => {
+    const norm = archNormalizedDelta(kw);
+    return {
+      keyword: kw,
+      carrierWin: pct(s.carrierWins, s.carrierGames),
+      carrierGames: s.carrierGames,
+      poolCarriers: POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw)).length,
+      archetypeNormalizedDelta: norm.delta,
+    };
+  })
   .sort((a, b) => b.carrierWin - a.carrierWin);
+
+// v5.2: per-cost-tier win rates + residual vs that tier's deck baseline.
+const tierReport = Object.entries(tierStats)
+  .map(([tier, s]) => ({
+    tier: Number(tier),
+    playedWinPct: pct(s.playedWins, s.playedGames),
+    deckWinPct: pct(s.deckWins, s.deckGames),
+    residual: +(pct(s.playedWins, s.playedGames) - pct(s.deckWins, s.deckGames)).toFixed(1),
+    playedGames: s.playedGames,
+  }))
+  .sort((a, b) => a.tier - b.tier);
+
+// v5.2: CPU decision-quality taxonomy summary.
+const cpuDecisionReport = {
+  attack: {
+    divergenceRate: pct(cpuDecisions.attackDivergence, cpuDecisions.attackOpportunities),
+    opportunities: cpuDecisions.attackOpportunities,
+  },
+  guard: {
+    divergenceRate: pct(cpuDecisions.guardDivergence, cpuDecisions.guardOpportunities),
+    opportunities: cpuDecisions.guardOpportunities,
+  },
+  removalTargeting: {
+    suboptimalRate: pct(cpuDecisions.targetSuboptimal, cpuDecisions.targetOpportunities),
+    opportunities: cpuDecisions.targetOpportunities,
+  },
+  reactionWindow: {
+    playsPerOpportunity: +(mech.reactionPlays / Math.max(1, cpuDecisions.reactionWindowOpportunities)).toFixed(2),
+    opportunities: cpuDecisions.reactionWindowOpportunities,
+  },
+};
+
+// v5.2: essence-curve efficiency.
+const curveReport = {
+  heldPlayableCardTurnPct: pct(curveStats.heldPlayableCardTurns, curveStats.totalTurns),
+  totalTurns: curveStats.totalTurns,
+  avgEssenceFloatedPerTurn: +(curveStats.essenceFloatedEstimate / Math.max(1, curveStats.totalTurns)).toFixed(2),
+};
+
+// v5.2: paired-seed seat-swap first-player-advantage measurement.
+const seatSwapReport = {
+  pairs: seatSwap.pairs,
+  firstSeatWinPct: pct(seatSwap.deckAWinsAsP1 + seatSwap.deckAWinsAsP2, seatSwap.pairs * 2),
+};
+
+// v5.2 carry-forward: re-read the five v5.1 +1-cost-adjusted cards regardless
+// of the >=20-played-games cutoff so they always show up in the report.
+const WATCHLIST_IDS = [
+  'heart_coral', 'needle_seamstress', 'merfolk_ritual', 'pufferfish_lantern', 'clawblade_greatsword',
+];
+const watchlistReport = WATCHLIST_IDS.map((id) => {
+  const s = cs(id);
+  const def = POOL_BY_ID[id];
+  return {
+    id,
+    name: def?.name,
+    cost: totalCost(def?.cost),
+    playedWin: pct(s.playedWins, s.playedGames),
+    deckWin: pct(s.inDeckWins, s.inDeckGames),
+    residual: +(pct(s.playedWins, s.playedGames) - pct(s.inDeckWins, s.inDeckGames)).toFixed(1),
+    playedGames: s.playedGames,
+  };
+});
 
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v5.0',
+    version: 'v5.2',
     seed: SEED,
     decks: NUM_DECKS,
     gamesPerPairing: GAMES_PER_PAIRING,
@@ -591,6 +879,14 @@ const report = {
   topUnderperformers: byResidual.slice(-15).reverse(),
   deadestInHand: [...cardReport].sort((a, b) => b.deadInHandRate - a.deadInHandRate).slice(0, 15),
   baselineWin: overallWin,
+  archetypes: Object.fromEntries(
+    Object.entries(archetypeStats).map(([id, s]) => [id, { name: POOL_BY_ID[id]?.name, winPct: pct(s.wins, s.games), games: s.games }]),
+  ),
+  costTiers: tierReport,
+  cpuDecisionTaxonomy: cpuDecisionReport,
+  essenceCurve: curveReport,
+  seatSwap: seatSwapReport,
+  watchlist: watchlistReport,
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -603,6 +899,10 @@ console.log('\nLeaders:', JSON.stringify(report.leaders, null, 2));
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
 console.log('\nCost bands:', JSON.stringify(report.costBands, null, 2));
+console.log('\nCost tiers (v5.2):', JSON.stringify(report.costTiers, null, 2));
+console.log('\nCPU decision taxonomy (v5.2):', JSON.stringify(report.cpuDecisionTaxonomy, null, 2));
+console.log('\nEssence curve (v5.2):', JSON.stringify(report.essenceCurve, null, 2));
+console.log('\nSeat-swap first-player edge (v5.2):', JSON.stringify(report.seatSwap, null, 2));
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');
