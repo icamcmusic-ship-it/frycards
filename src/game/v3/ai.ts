@@ -202,6 +202,16 @@ function chooseTarget(state: GameState, pid: PlayerId, def: CardDef): string | u
   return autoTarget(state, pid, def.onInvoke);
 }
 
+/** A card that's actually useful to hold for the opponent's reaction window:
+ * a Quick removal Event, or an Ambush unit (both legal outside the caster's
+ * own main phase). Reserving these lets the reaction window ever fire. */
+function isReactionCandidate(def: CardDef): boolean {
+  return (
+    (def.type === 'Event' && def.subtype === 'Quick' && isRemoval(def.onInvoke)) ||
+    (def.type === 'Unit' && !!def.keywords?.includes('Ambush'))
+  );
+}
+
 function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
   // Play a Wellspring (once per turn) then float all essence.
@@ -209,8 +219,28 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     const t = chooseWellspring(state, pid);
     if (t && playWellspring(state, pid, t)) observe?.({ kind: 'wellspring', essence: t });
   }
-  // Tap-to-pay per spell (rather than floating everything): whatever stays
-  // untapped is live essence for the clash reaction window.
+
+  // Only hold essence back for the reaction window if the hand actually
+  // contains something that window can use (a Quick removal Event or Ambush
+  // unit) — otherwise floating everything upfront avoids the partial-tap
+  // fragmentation bug where an early card's generic payment eats a colored
+  // location a later, unsorted card needed, leaving it falsely unaffordable
+  // even though total essence was sufficient.
+  const reserveCandidates = p.hand.filter((c) => isReactionCandidate(c.def));
+  const holdForReaction = reserveCandidates.length > 0;
+  // Reserve just the single best reaction card from this turn's own main
+  // phase — Quick Events/Ambush units are legal in the caster's own main
+  // phase too, and would otherwise always get spent there first, leaving
+  // nothing for the reaction window. The rest of the hand still plays
+  // normally.
+  const reservedIid = holdForReaction
+    ? [...reserveCandidates].sort(
+        (a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def),
+      )[0].iid
+    : undefined;
+
+  if (!holdForReaction) tapAllLocations(state, pid);
+
   // Invoke the Leader once affordable (its abilities are recurring value).
   if (!p.leader.invoked && !p.leader.shattered && canAffordPotential(state, pid, p.leader.def.cost)) {
     tapForCost(state, pid, p.leader.def.cost);
@@ -225,6 +255,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     const playable = p.hand
       .filter(
         (c) =>
+          c.iid !== reservedIid &&
           invokePriority(state, pid, c.def) >= -50 &&
           canAffordPotential(state, pid, c.def.cost) &&
           !(c.def.type === 'Charm' && p.field.length === 0),
@@ -243,6 +274,31 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
         progress = true;
         break;
+      }
+    }
+  }
+
+  // If a card was reserved for the reaction window but there's nothing else
+  // left to spend essence on this turn, and the reserved card is the ONLY
+  // affordable play remaining, play it anyway rather than wasting the turn
+  // (holding it into the opponent's turn only helps if we actually have
+  // spare essence there; a truly essence-starved hand should just develop).
+  if (reservedIid && !state.winner) {
+    const reserved = p.hand.find((c) => c.iid === reservedIid);
+    const others = p.hand.some(
+      (c) =>
+        c.iid !== reservedIid &&
+        invokePriority(state, pid, c.def) >= -50 &&
+        canAffordPotential(state, pid, c.def.cost),
+    );
+    if (reserved && !others && canAffordPotential(state, pid, reserved.def.cost)) {
+      tapForCost(state, pid, reserved.def.cost);
+      if (canInvoke(state, pid, reserved.iid)) {
+        const targetIid = chooseTarget(state, pid, reserved.def);
+        const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
+        if (invokeCard(state, pid, reserved.iid, { targetIid })) {
+          observe?.({ kind: 'invoke', name: reserved.def.name, iid: reserved.iid, targetIid, targetName });
+        }
       }
     }
   }
