@@ -1588,13 +1588,15 @@ function MicroCard({
               <span
                 key={c}
                 aria-hidden
-                className="w-1.5 h-1.5 rounded-full border border-white/80 shrink-0"
+                className="w-2 h-2 rounded-full border border-white/80 shrink-0 flex items-center justify-center"
                 style={{
                   backgroundColor: COLOR_PIP[c].bg,
                   boxShadow: '0 1px 2px rgba(0,0,0,0.8)',
                 }}
                 title={`Color: ${c}`}
-              />
+              >
+                <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={5} />
+              </span>
             ))}
           </span>
           {def.type === 'Unit' &&
@@ -2220,9 +2222,11 @@ export function CardFace({
             <span
               key={c}
               aria-hidden
-              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-[var(--c-ink)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)]"
+              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-[var(--c-ink)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)] flex items-center justify-center"
               style={{ backgroundColor: COLOR_PIP[c].bg }}
-            />
+            >
+              <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={6} />
+            </span>
           ))}
         </div>
       )}
@@ -2239,12 +2243,14 @@ export function CardFace({
             <span
               key={c}
               aria-hidden
-              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-white/80"
+              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-white/80 flex items-center justify-center"
               style={{
                 backgroundColor: COLOR_PIP[c].bg,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,0,0,0.35)',
               }}
-            />
+            >
+              <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={6} />
+            </span>
           ))}
         </div>
       )}

@@ -564,8 +564,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 </div>
                 <div className="p-3 pt-1">
                   <div className="heading-font text-base leading-tight">{l.name}</div>
-                  <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-                    {(LEADER_COLORS[l.id] || cardColors(l)).join(' / ') || 'Colorless'}
+                  <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1 flex items-center gap-1 flex-wrap">
+                    {(LEADER_COLORS[l.id] || cardColors(l)).map((c) => (
+                      <span key={c} className="inline-flex items-center gap-0.5">
+                        <span
+                          className="w-3 h-3 rounded-full inline-flex items-center justify-center"
+                          style={{ backgroundColor: COLOR_HEX[c] }}
+                        >
+                          <EssenceIcon type={c} color="#FFFFFF" size={8} />
+                        </span>
+                        {c}
+                      </span>
+                    ))}
+                    {(LEADER_COLORS[l.id] || cardColors(l)).length === 0 && 'Colorless'}
                     {l.leaderAbilities?.length
                       ? ` · ${l.leaderAbilities.length} abilit${l.leaderAbilities.length === 1 ? 'y' : 'ies'}`
                       : ''}

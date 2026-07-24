@@ -33,11 +33,14 @@ describe('keyword set', () => {
     }
   });
 
-  test('every keyword has a cost weight; Immobile is the only discount', () => {
+  test('every keyword has a cost weight; only drawback-ish keywords discount', () => {
     for (const kw of KEYWORDS) expect(typeof KEYWORD_COST[kw]).toBe('number');
-    expect(KEYWORD_COST.Immobile).toBeLessThan(0);
+    // Immobile is a real drawback; Warded discounts since v5.3 (three sim
+    // passes showed targeting denial consistently under-converting to wins).
+    const discounts: Keyword[] = ['Immobile', 'Warded'];
+    for (const kw of discounts) expect(KEYWORD_COST[kw]).toBeLessThan(0);
     for (const kw of KEYWORDS) {
-      if (kw !== 'Immobile') expect(KEYWORD_COST[kw]).toBeGreaterThanOrEqual(0);
+      if (!discounts.includes(kw)) expect(KEYWORD_COST[kw]).toBeGreaterThanOrEqual(0);
     }
   });
 

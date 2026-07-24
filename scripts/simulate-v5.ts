@@ -4,7 +4,7 @@
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
  * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
  * verified by scripts/fetch-cards.ts, and re-verified live for v5.2 — see
- * docs/BALANCE_SIM_FINDINGS_v5.2.md) and reports:
+ * docs/BALANCE_SIM_FINDINGS_v5.3.md) and reports:
  *
  *  - match outcomes: win rates by Leader, color, first/second player,
  *    win condition (vitality vs deck-out), game length distribution
@@ -20,7 +20,7 @@
  *    color-clogged hands
  *  - invariant violations (engine correctness canaries)
  *
- * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v5.2.md carry-forward items):
+ * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v5.3.md carry-forward items):
  *  - archetype-normalized keyword deltas: carrier win rate residual computed
  *    against each game's own Leader-archetype baseline (8 Leaders = 8
  *    cohorts), not the flat 50% global baseline, to strip cohort noise.
@@ -35,7 +35,23 @@
  *  - essence-curve efficiency: turns ending with a castable, affordable hand
  *    card that was not played (held-playable-card turns).
  *
- * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed]
+ * v5.3 additions:
+ *  - REAL keyword activation counts via engine telemetry hooks (Siphon gain,
+ *    Venomous kills, Overrun spill, Quickstrike pre-kills, Ambush reaction
+ *    invokes) — the v5.2 `activations` field existed but was never fed.
+ *  - REAL wastedEssenceWithPlay / venomousSuicide lapse counters (both were
+ *    dead counters in v5.1/v5.2 — declared, never incremented).
+ *  - Accurate erode tracking (opponent deck shrink during the acting
+ *    player's turn) — the old totalErode expression was a no-op.
+ *  - Color-vs-color matchup matrix (7x7 by Leader identity) — the missing
+ *    cohort-controlled color signal flagged in v5.2 item 5.
+ *  - Keyword carrier win rates split by carrier cost band (1-2 / 3-4 / 5+),
+ *    for the "Swarmproof cheap carriers run hot" question (v5.2 item 6).
+ *  - Separate deckSeed CLI arg: rerun the SAME deck cohort under a different
+ *    game seed to split cohort noise from engine/AI changes (v5.2 item 2).
+ *  - Mulligan rate, winner vitality margin, average deck remaining at end.
+ *
+ * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
 import * as fs from 'fs';
@@ -54,7 +70,11 @@ import {
   remainingGrit,
   canInvoke,
   findUnit,
+  canPayCost,
+  essenceTotal,
+  telemetry,
 } from '../src/game/v3/engine';
+import { LEADER_COLORS } from '../src/game/v3/colors';
 import { POOL_BY_ID, POOL_V4 } from '../src/game/v3/cardpool';
 import { buildDeck, randomArchetype } from '../src/game/v3/decks';
 import { playTurn, maybeMulliganPlayer } from '../src/game/v3/ai';
@@ -63,6 +83,9 @@ import type { DeckDef } from '../src/game/v3/engine';
 const GAMES_PER_PAIRING = Number(process.argv[2] ?? 4);
 const NUM_DECKS = Number(process.argv[3] ?? 24);
 const SEED = Number(process.argv[4] ?? 1337);
+/** Deck-draft seed, defaulting to SEED. Pass a different game seed with the
+ * SAME deckSeed to hold the deck cohort fixed across runs (v5.2 item 2). */
+const DECK_SEED = Number(process.argv[5] ?? SEED);
 const MAX_TURNS = 60;
 
 // ---------------------------------------------------------------------------
@@ -136,8 +159,25 @@ const curveStats = {
   essenceFloatedEstimate: 0, // sum of (locations - cards played this turn) as a rough float proxy
 };
 
+// --- v5.3: color-vs-color matchup matrix (by Leader identity) --------------
+const colorMatchup: Record<string, Record<string, { games: number; wins: number }>> = {};
+for (const a of COLORS) {
+  colorMatchup[a] = {};
+  for (const b of COLORS) colorMatchup[a][b] = { games: 0, wins: 0 };
+}
+
+// --- v5.3: keyword carrier stats by carrier cost band ----------------------
+type CostBand = '1-2' | '3-4' | '5+';
+const bandOf = (t: number): CostBand => (t <= 2 ? '1-2' : t <= 4 ? '3-4' : '5+');
+const kwBandStats: Record<string, Record<CostBand, { games: number; wins: number }>> = {};
+for (const kw of KEYWORDS)
+  kwBandStats[kw] = { '1-2': { games: 0, wins: 0 }, '3-4': { games: 0, wins: 0 }, '5+': { games: 0, wins: 0 } };
+
 const mech = {
   games: 0,
+  mulligans: 0,
+  winnerVitalitySum: 0,
+  loserDeckRemainingSum: 0,
   turnsTotal: 0,
   p1Wins: 0,
   vitalityWins: 0,
@@ -165,6 +205,39 @@ const lapses = {
   wastedEssenceWithPlay: 0, // phase ended with essence that could pay for a card in hand
   idleLeader: 0, // leader invoked but ability unused on a turn it had a legal use
   colorCloggedGames: 0, // game ended with >=3 hand cards never castable vs deck colors
+};
+
+// --- v5.3: engine telemetry hooks ------------------------------------------
+// Real keyword activation counts + real wasted-essence measurement, fed by
+// the engine at the moment things actually happen. Disabled during the
+// seat-swap suite so it can't pollute the main tournament counters.
+let telemetryEnabled = false;
+telemetry.onKeywordProc = (kw, amount) => {
+  if (!telemetryEnabled) return;
+  if (kwStats[kw]) kwStats[kw].activations += amount;
+};
+telemetry.onEssenceCleared = (state) => {
+  if (!telemetryEnabled) return;
+  for (const pid of ['P1', 'P2'] as PlayerId[]) {
+    const p = state.players[pid];
+    const tot = essenceTotal(p.essence);
+    if (tot <= 0) continue;
+    mech.wastedEssenceTotal += tot;
+    // Lapse only when the ACTIVE player ends a main phase with essence that
+    // could pay for a castable hand card right now.
+    if (
+      pid === state.active &&
+      (state.phase === 'Main1' || state.phase === 'Main2') &&
+      p.hand.some(
+        (c) =>
+          c.def.type !== 'Leader' &&
+          canPayCost(p.essence, c.def.cost) &&
+          !(c.def.type === 'Charm' && p.field.length === 0),
+      )
+    ) {
+      lapses.wastedEssenceWithPlay++;
+    }
+  }
 };
 
 const invariants: string[] = [];
@@ -270,6 +343,7 @@ function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
  * so it can be run twice per pair (once each seat) without touching the
  * main tournament's card/keyword/leader accumulators. */
 function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | null {
+  telemetryEnabled = false;
   const rng = mulberry32(seed);
   const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
   maybeMulliganPlayer(state, 'P1', rng);
@@ -284,9 +358,11 @@ function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | 
 
 function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): void {
   const rng = mulberry32(seed);
+  telemetryEnabled = false; // createGame runs Dawn; enable after setup
   const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
-  maybeMulliganPlayer(state, 'P1', rng);
-  maybeMulliganPlayer(state, 'P2', rng);
+  if (maybeMulliganPlayer(state, 'P1', rng)) mech.mulligans++;
+  if (maybeMulliganPlayer(state, 'P2', rng)) mech.mulligans++;
+  telemetryEnabled = true;
 
   const played: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
   const drawn: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
@@ -330,6 +406,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       : 0;
     const preLocations = p.locations.length + (p.wellspringPlayedThisTurn ? 0 : 1);
     const preHandIds = new Set(p.hand.map((c) => c.iid));
+    const preOppDeck = state.players[opponentOf(pid)].deck.length;
 
     const events = playTurn(state, pid);
     curveStats.totalTurns++;
@@ -357,7 +434,27 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         perGame.leaderAbilityUses[pid]++;
       }
       if (ev.kind === 'rebond') mech.rebonds++;
+      // v5.3: Ambush activation = a UNIT invoked during the reaction window.
+      if (ev.kind === 'invoke' && ev.by) {
+        const def = POOL_BY_ID[ev.iid.split('#')[0]];
+        if (def?.keywords?.includes('Ambush')) kwStats['Ambush'].activations++;
+      }
     }
+
+    // v5.3: erode = the opponent's deck shrink during the acting player's
+    // turn, net of any draws their own reaction-window Ambush units made
+    // (the opponent never Deals otherwise on this turn).
+    let oppReactionDraws = 0;
+    for (const ev of events) {
+      if (ev.kind === 'invoke' && ev.by) {
+        const def = POOL_BY_ID[ev.iid.split('#')[0]];
+        if (def?.onInvoke?.action === 'draw') oppReactionDraws += def.onInvoke.value ?? 0;
+      }
+    }
+    mech.totalErode += Math.max(
+      0,
+      preOppDeck - state.players[opponentOf(pid)].deck.length - oppReactionDraws,
+    );
 
     // --- lapse: missed lethal (had it pre-turn, opponent still alive) ---
     if (couldLethal && !state.winner) lapses.missedLethal++;
@@ -400,6 +497,22 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         if (profitable) missedProfitable = true;
       }
       if (missedProfitable) cpuDecisions.guardDivergence++;
+    }
+
+    // v5.3: venomous suicide — a non-Unbreakable attacker walked into a
+    // declared Venomous guard and died in the exchange. (Guards are declared
+    // AFTER attacks, so this only flags attacks into a board that already
+    // showed a ready Venomous unit — i.e. the attacker had the information.)
+    if (guardEv) {
+      for (const [attackerIid, guardIids] of Object.entries(guardEv.assignments)) {
+        if (guardIids.length === 0) continue;
+        const aDef = POOL_BY_ID[attackerIid.split('#')[0]];
+        if (!aDef || aDef.keywords?.includes('Unbreakable')) continue;
+        const venomGuard = guardIids.some((g) =>
+          POOL_BY_ID[g.split('#')[0]]?.keywords?.includes('Venomous'),
+        );
+        if (venomGuard && !findUnit(state, attackerIid)) lapses.venomousSuicide++;
+      }
     }
 
     for (const ev of events) {
@@ -543,8 +656,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     if (loser.vitality <= 0) mech.vitalityWins++;
     else mech.deckOutWins++;
   }
-  mech.totalErode +=
-    perGame.erodeStart.P1 - state.players.P1.deck.length - drawn.P1.size >= 0 ? 0 : 0; // erode tracked via ash below
+  if (winner) {
+    mech.winnerVitalitySum += state.players[winner].vitality;
+    mech.loserDeckRemainingSum += state.players[opponentOf(winner)].deck.length;
+  }
+  void perGame.erodeStart; // v5.3: erode now tracked per-turn (see loop)
 
   // --- per-player postgame accounting ---
   const decks: Record<PlayerId, DeckDef> = { P1: deckA, P2: deckB };
@@ -596,6 +712,32 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (won) kwStats[kw].carrierWins++;
     }
 
+    // v5.3: keyword carrier stats by carrier cost band (counted once per
+    // (keyword, band) per game, mirroring the carrier-game convention).
+    const kwBandSeen = new Set<string>();
+    for (const id of played[pid]) {
+      const d = POOL_BY_ID[id];
+      for (const kw of d?.keywords ?? []) kwBandSeen.add(`${kw}|${bandOf(totalCost(d?.cost))}`);
+    }
+    for (const key of kwBandSeen) {
+      const [kw, band] = key.split('|') as [string, CostBand];
+      const s = kwBandStats[kw]?.[band];
+      if (s) {
+        s.games++;
+        if (won) s.wins++;
+      }
+    }
+
+    // v5.3: color-vs-color matchup matrix (Leader identity colors).
+    const myCols = LEADER_COLORS[deck.leaderId] ?? [];
+    const oppCols = LEADER_COLORS[decks[opponentOf(pid)].leaderId] ?? [];
+    for (const a of myCols) {
+      for (const b of oppCols) {
+        colorMatchup[a][b].games++;
+        if (won) colorMatchup[a][b].wins++;
+      }
+    }
+
     // v5.2: archetype cohort + archetype-scoped keyword carrier stats.
     const arch = archetypeOf(deck);
     const as = (archetypeStats[arch] ??= { games: 0, wins: 0 });
@@ -643,8 +785,8 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 // ---------------------------------------------------------------------------
 // Run the tournament
 // ---------------------------------------------------------------------------
-console.log(`Fry Cards v5 sim: pool=${POOL_V4.length} cards, decks=${NUM_DECKS}, games/pairing=${GAMES_PER_PAIRING}, seed=${SEED}`);
-const rootRng = mulberry32(SEED);
+console.log(`Fry Cards v5 sim: pool=${POOL_V4.length} cards, decks=${NUM_DECKS}, games/pairing=${GAMES_PER_PAIRING}, seed=${SEED}, deckSeed=${DECK_SEED}`);
+const rootRng = mulberry32(DECK_SEED);
 const decks: DeckDef[] = [];
 for (let i = 0; i < NUM_DECKS; i++) decks.push(buildDeck(randomArchetype(rootRng)));
 
@@ -745,12 +887,19 @@ const kwReport = Object.entries(kwStats)
   .filter(([, s]) => s.carrierGames > 0)
   .map(([kw, s]) => {
     const norm = archNormalizedDelta(kw);
+    const bands = Object.fromEntries(
+      (Object.entries(kwBandStats[kw]) as [CostBand, { games: number; wins: number }][])
+        .filter(([, b]) => b.games > 0)
+        .map(([band, b]) => [band, { winPct: pct(b.wins, b.games), games: b.games }]),
+    );
     return {
       keyword: kw,
       carrierWin: pct(s.carrierWins, s.carrierGames),
       carrierGames: s.carrierGames,
+      activations: s.activations,
       poolCarriers: POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw)).length,
       archetypeNormalizedDelta: norm.delta,
+      byCostBand: bands,
     };
   })
   .sort((a, b) => b.carrierWin - a.carrierWin);
@@ -821,8 +970,9 @@ const watchlistReport = WATCHLIST_IDS.map((id) => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v5.2',
+    version: 'v5.3',
     seed: SEED,
+    deckSeed: DECK_SEED,
     decks: NUM_DECKS,
     gamesPerPairing: GAMES_PER_PAIRING,
     games: mech.games,
@@ -852,7 +1002,23 @@ const report = {
     slowEventPlays: mech.slowEventPlays,
     reactionPlays: mech.reactionPlays,
     shedsPerGame: +(mech.totalSheds / mech.games).toFixed(2),
+    erodePerGame: +(mech.totalErode / mech.games).toFixed(2),
+    wastedEssencePerGame: +(mech.wastedEssenceTotal / mech.games).toFixed(2),
+    mulliganRatePct: pct(mech.mulligans, mech.games * 2),
+    avgWinnerVitality: +(mech.winnerVitalitySum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
+    avgLoserDeckRemaining: +(mech.loserDeckRemainingSum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
   },
+  colorMatchups: Object.fromEntries(
+    COLORS.map((a) => [
+      a,
+      Object.fromEntries(
+        COLORS.filter((b) => colorMatchup[a][b].games > 0).map((b) => [
+          b,
+          { winPct: pct(colorMatchup[a][b].wins, colorMatchup[a][b].games), games: colorMatchup[a][b].games },
+        ]),
+      ),
+    ]),
+  ),
   lapses,
   invariantViolations: invariants.slice(0, 50),
   leaders: Object.fromEntries(
@@ -903,6 +1069,7 @@ console.log('\nCost tiers (v5.2):', JSON.stringify(report.costTiers, null, 2));
 console.log('\nCPU decision taxonomy (v5.2):', JSON.stringify(report.cpuDecisionTaxonomy, null, 2));
 console.log('\nEssence curve (v5.2):', JSON.stringify(report.essenceCurve, null, 2));
 console.log('\nSeat-swap first-player edge (v5.2):', JSON.stringify(report.seatSwap, null, 2));
+console.log('\nColor matchups (v5.3):', JSON.stringify(report.colorMatchups, null, 2));
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');

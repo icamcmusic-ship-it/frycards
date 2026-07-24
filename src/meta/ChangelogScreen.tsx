@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Reaction Update (v5.3)',
+    items: [
+      'The clash reaction window is now a real threat: the CPU deliberately saves Locations during its own turn so it can answer your attacks with Quick Events and Ambush units — and it now gets that window when you attack, too (it turns out it was only ever reacting in our test games, never against real players).',
+      "Smarter attacks: the CPU no longer throws everything at you the moment its total damage looks lethal — it accounts for your guards first, so you'll see far fewer hopeless all-ins (and far fewer of its units suiciding into your Venomous blockers).",
+      "You can no longer waste a targeted Event when it has nothing legal to hit (empty or fully Warded enemy board) — the game blocks it and tells you why, instead of eating the card and your essence.",
+      'Balance pass: Venomous, Aerial and Quickstrike units now cost a touch more; Siphon and Swarmproof units cost less; Warded units get a small discount (being untargetable just doesn\'t win as many games as it should). Seven repeat overperformers (including Slate-Scaled Serpent, Nebula Clutch and Shatterline) cost 1 more; six repeat underperformers (including Submerged Starfall and Research Fleet) cost 1 less; Nanite Division Marshal slimmed down.',
+      'The seven essence-type icons now appear everywhere colors do: on card color-identity dots, the Starter-Box Leader picker (which previously didn\'t show colors at all), and the Deck Builder\'s Leader list.',
+      "New lookouts: tap the opponent's ash counter to inspect their ash-pile and Void (yours now shows banished cards too), and the \"not enough essence\" message now names the exact color you're missing.",
+    ],
+  },
+  {
     version: 'Fry Cards Update (v5.1)',
     items: [
       'The game is now officially Fry Cards — the "Riftbound" codename is retired from every screen. Same essence rules, real name.',

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { POOL_LEADERS } from '../game/v3/cardpool';
+import { LEADER_COLORS } from '../game/v3/colors';
+import { COLOR_PIP } from './colors';
+import { EssenceIcon } from '../components/EssenceIcon';
 import { SafeImage } from './SafeImage';
 import { PopButton } from './ui';
 import { RARITY_CHIP } from './rarity';
@@ -103,6 +106,24 @@ export function LeaderPicker({
                   </div>
                   <div className="px-2 pb-2">
                     <div className="heading-font text-xs truncate">{leader.name}</div>
+                    {(LEADER_COLORS[leader.id] ?? []).length > 0 && (
+                      <div
+                        className="flex items-center gap-1 mt-0.5"
+                        title={`Essence identity: ${(LEADER_COLORS[leader.id] ?? []).join(' / ')}`}
+                      >
+                        {(LEADER_COLORS[leader.id] ?? []).map((c) => (
+                          <span key={c} className="inline-flex items-center gap-0.5 text-[8px] font-black text-[var(--c-steel)]">
+                            <span
+                              className="w-3 h-3 rounded-full inline-flex items-center justify-center border border-[var(--c-ink)]"
+                              style={{ backgroundColor: COLOR_PIP[c].bg }}
+                            >
+                              <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={8} />
+                            </span>
+                            {c.toUpperCase()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {leader.flavor && (
                       <p className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5 line-clamp-2">
                         {leader.flavor}

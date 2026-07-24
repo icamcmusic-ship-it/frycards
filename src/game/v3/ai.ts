@@ -117,10 +117,39 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
   return best;
 }
 
+/** Location iids being held untapped for the opponent-turn reaction window.
+ * Locations only recover at their owner's own Dawn, so essence for a
+ * reaction play must come from locations deliberately left untapped through
+ * the caster's whole turn — reserving just the card (v5.2) was not enough. */
+const reservedLocations = new Set<string>();
+
 function tapAllLocations(state: GameState, pid: PlayerId): void {
   for (const l of [...state.players[pid].locations]) {
-    if (!l.exhausted) tapLocationForEssence(state, pid, l.iid);
+    if (!l.exhausted && !reservedLocations.has(l.iid)) tapLocationForEssence(state, pid, l.iid);
   }
+}
+
+/** Reserve untapped locations able to pay `cost` (pips first, then any for
+ * generic). Returns true if fully covered; on failure reserves nothing. */
+function reserveLocationsForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
+  if (!cost) return true;
+  const p = state.players[pid];
+  const free = p.locations.filter((l) => !l.exhausted && !reservedLocations.has(l.iid));
+  const picked: string[] = [];
+  for (const [t, need] of Object.entries(cost.pips) as [EssenceType, number][]) {
+    for (let i = 0; i < (need ?? 0); i++) {
+      const idx = free.findIndex((l) => l.produces === t && !picked.includes(l.iid));
+      if (idx < 0) return false;
+      picked.push(free[idx].iid);
+    }
+  }
+  for (let i = 0; i < cost.generic; i++) {
+    const loc = free.find((l) => !picked.includes(l.iid));
+    if (!loc) return false;
+    picked.push(loc.iid);
+  }
+  for (const iid of picked) reservedLocations.add(iid);
+  return true;
 }
 
 /** Could `cost` be paid from the current pool plus untapped locations? */
@@ -129,7 +158,8 @@ function canAffordPotential(state: GameState, pid: PlayerId, cost?: EssenceCost)
   const p = state.players[pid];
   const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
   for (const l of p.locations) {
-    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+    if (!l.exhausted && !reservedLocations.has(l.iid))
+      pool[l.produces] = (pool[l.produces] ?? 0) + 1;
   }
   return canPayCost(pool, cost);
 }
@@ -146,14 +176,16 @@ function tapForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolea
   // Cover colored pips.
   for (const [t, need] of Object.entries(cost.pips) as [EssenceType, number][]) {
     while ((p.essence[t] ?? 0) < (need ?? 0)) {
-      const loc = p.locations.find((l) => !l.exhausted && l.produces === t);
+      const loc = p.locations.find(
+        (l) => !l.exhausted && !reservedLocations.has(l.iid) && l.produces === t,
+      );
       if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
     }
   }
   // Cover the rest with any untapped location.
   let safety = p.locations.length + 1;
   while (!canPayCost(p.essence, cost) && safety-- > 0) {
-    const loc = p.locations.find((l) => !l.exhausted);
+    const loc = p.locations.find((l) => !l.exhausted && !reservedLocations.has(l.iid));
     if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
   }
   return canPayCost(p.essence, cost);
@@ -206,6 +238,12 @@ function chooseTarget(state: GameState, pid: PlayerId, def: CardDef): string | u
  * a Quick removal Event, or an Ambush unit (both legal outside the caster's
  * own main phase). Reserving these lets the reaction window ever fire. */
 function isReactionCandidate(def: CardDef): boolean {
+  // Cap at total cost 3: reserving both the card AND the locations to pay
+  // for it (see reserveLocationsForCost) is only worth it when the hold is
+  // cheap — reserving 5-7 locations for a big Ambush bomb skips whole
+  // development turns (v5.3 verification runs showed exactly that: cost-7
+  // Ambush carriers cratered while reserved).
+  if (totalCost(def.cost) > 3) return false;
   return (
     (def.type === 'Event' && def.subtype === 'Quick' && isRemoval(def.onInvoke)) ||
     (def.type === 'Unit' && !!def.keywords?.includes('Ambush'))
@@ -233,13 +271,24 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   // phase too, and would otherwise always get spent there first, leaving
   // nothing for the reaction window. The rest of the hand still plays
   // normally.
-  const reservedIid = holdForReaction
+  let reservedIid = holdForReaction
     ? [...reserveCandidates].sort(
         (a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def),
       )[0].iid
     : undefined;
 
-  if (!holdForReaction) tapAllLocations(state, pid);
+  // Also reserve the LOCATIONS to pay for it: locations only recover at our
+  // own Dawn, so unless some stay untapped through this whole turn there is
+  // no essence when the opponent-turn reaction window opens (the root cause
+  // of the near-zero reaction plays measured through v5.2). If the cost
+  // can't be covered, drop the reservation and play the card normally.
+  for (const l of p.locations) reservedLocations.delete(l.iid); // re-plan each main
+  if (reservedIid) {
+    const rc = p.hand.find((c) => c.iid === reservedIid);
+    if (!rc || !reserveLocationsForCost(state, pid, rc.def.cost)) reservedIid = undefined;
+  }
+
+  if (!reservedIid) tapAllLocations(state, pid);
 
   // Invoke the Leader once affordable (its abilities are recurring value).
   if (!p.leader.invoked && !p.leader.shattered && canAffordPotential(state, pid, p.leader.def.cost)) {
@@ -283,6 +332,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   // window that may never open.
   if (reservedIid && !state.winner && p.hand.length === 1) {
     const reserved = p.hand.find((c) => c.iid === reservedIid);
+    if (reserved) for (const l of p.locations) reservedLocations.delete(l.iid);
     if (reserved && canAffordPotential(state, pid, reserved.def.cost)) {
       tapForCost(state, pid, reserved.def.cost);
       if (canInvoke(state, pid, reserved.iid)) {
@@ -342,9 +392,28 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const opp = state.players[opponentOf(pid)];
   const candidates = legalAttackers(state, pid);
   const defenders = opp.field.filter((u) => !u.exhausted);
-  const totalMight = candidates.reduce((s, u) => s + effMight(state, u), 0);
-  // Lethal on the table (even through some guards): all-in.
-  if (totalMight >= opp.vitality) return candidates.map((u) => u.iid);
+  // All-in only when lethal survives worst-case guarding: assume each ready
+  // defender fully absorbs one attacker (biggest first; Overrun still
+  // spills past the guard's remaining grit). The old check ("total might >=
+  // vitality") ignored guards entirely and fed both the venomous-suicide
+  // and took-guardable-lethal lapse counters with doomed all-ins.
+  const sorted = [...candidates].sort((a, b) => effMight(state, b) - effMight(state, a));
+  let guardsLeft = defenders.length;
+  let throughDamage = 0;
+  for (const u of sorted) {
+    const m = effMight(state, u);
+    const guardable = defenders.some(
+      (g) =>
+        !unitHasKw(u, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch'),
+    );
+    if (!guardable || guardsLeft <= 0) {
+      throughDamage += m;
+    } else {
+      guardsLeft--;
+      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - 1); // chump spill
+    }
+  }
+  if (throughDamage >= opp.vitality) return candidates.map((u) => u.iid);
   const picked: string[] = [];
   for (const u of candidates) {
     const m = effMight(state, u);
@@ -505,6 +574,8 @@ export function reactionPlays(
   if (state.clash?.step !== 'reaction' || state.active === defender) return 0;
   const p = state.players[defender];
   let plays = 0;
+  // The reaction window is what the reserved locations were saved for.
+  for (const l of p.locations) reservedLocations.delete(l.iid);
   tapAllLocations(state, defender);
   let progress = true;
   while (progress && !state.winner) {
