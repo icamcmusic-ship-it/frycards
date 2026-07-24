@@ -12,6 +12,20 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Clash & Coverage Update (v6.1)',
+    date: 'July 2026',
+    items: [
+      "Overrun now works exactly as written: a guarded attacker whose guards die early (say, to your Quickstrike blocker) no longer slams its FULL damage into your face — only Overrun attackers spill through, and only the EXCESS past what the guards absorbed. This was quietly the biggest source of \"where did all that damage come from?\" moments in the game.",
+      'The clash reaction window now belongs to BOTH players, as the rulebook says: you can answer with Quick Events and Ambush units during your OWN clash too — declare attackers, see the guards, then spring a surprise before damage resolves. The CPU does the same on its side.',
+      "A sharper CPU across the board: it now respects Venomous and Quickstrike when choosing blocks (no more feeding its best unit to a 1/1 Venomous), knows a Swarmproof attacker can't be stopped by a lone guard, makes free attacks and favorable trades instead of only all-or-nothing swings, stops shattering its own Leader for one measly removal, plans its Wellspring colors around its Leader's cost, and prizes Resonant Events and Bountiful Sanctums like it should.",
+      'Random and quick-match decks now draw on nearly the WHOLE card pool — deck generation reached only about half the catalog before; you should see far more variety across opponents and random decks.',
+      'Keyword pricing now comes from one honest table: Resonant Events cost 1 more (they were winning far too often), Bountiful Locations cost 1 less (they were winning far too little), and Resolute Leaders cost 1 more.',
+      'Rules tightening: the mulligan is now correctly locked to the very start of the game (the engine would previously accept one mid-match), "when this dies" abilities now fire when a unit is banished to The Void too — not just when it goes to the ash-pile — and running out of cards during setup now properly loses the game.',
+      'Crash safety: if anything unexpected breaks mid-match the game now recovers and hands you the turn (with a full-app safety net behind it) instead of white-screening your match away.',
+      'Quality of life: the end-of-turn shed picker has its promised SUGGEST button, Escape now also closes the shed picker and battle log, mulligans warn you when a small hand gets risky, this changelog shows dates, the News Center headline always matches the newest update, the Bounty Shop and Social screens show a RETRY button instead of hanging or pretending to be empty, auction countdowns tick every 10 seconds and ended auctions disable their buttons immediately, imported deck codes are fully validated (size and no Leaders in the main deck), the sell list can no longer offer a just-pulled Serialized print, bulk quicksell shows live progress, the Deck Builder gained a CHANGE LEADER button, and the game finally writes its own name one way everywhere: FRY CARDS.',
+    ],
+  },
+  {
     version: 'Rulebook Update (v6.0)',
     items: [
       'Fry Cards now plays by the full paper rulebook: decks are AT LEAST 60 cards (up to 100) with a maximum of 4 copies of any card, opening hands are 7 cards, and the mulligan is the real one — shuffle back and redraw one card FEWER, as many times as you like. Premium rarities keep their tighter collector caps (Super-Rare/Full-Art/Ultra-Rare 2, Mythic 1). Existing 30-card decks are marked incomplete — open them in the Deck Builder and QUICKBUILD or fill them up to 60. The Starter Box now grants a full legal 60-card deck.',

@@ -115,7 +115,7 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
  * Immobile is a drawback and discounts. */
 // v5.1: weights are now a PURE cost surcharge (the stat budget no longer
 // grows with them), tuned over two full sim passes to land carriers near 50%.
-// v5.3 (docs/BALANCE_SIM_FINDINGS_v5.3.md, two seeds + matched-deck run,
+// v5.3 (docs/BALANCE_SIM_FINDINGS_v6.1.md, two seeds + matched-deck run,
 // then post-change verification pairs): Unbreakable stays 7 — the 9 (and
 // effectively-identical 8) trials cratered its carriers, and the original
 // +16.5 read turned out to be mostly the OLD dead-reaction-window meta:

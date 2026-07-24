@@ -9,7 +9,7 @@
  * are just utility cards.
  */
 import { CardDef, totalCost } from './cards';
-import { DeckDef } from './engine';
+import { DeckDef, mulberry32 } from './engine';
 import { POOL_BY_ID, POOL_LEADERS, POOL_V4, poolByType } from './cardpool';
 import { Color, isColorLegal, KEYWORDS_OF_COLOR, LEADER_COLORS } from './colors';
 
@@ -43,6 +43,11 @@ export interface Archetype {
   units: number;
   spells: number;
   sanctums: number;
+  /** Seed for the deck builder's score jitter — varies card ranking per deck
+   * so many random decks cover most of the pool instead of the same greedy
+   * top slice. buildDeck is deterministic for a given archetype (same seed =
+   * same deck); omitted = no jitter (legacy handcrafted archetypes). */
+  seed?: number;
 }
 
 /** Color-identity-filtered pool for a Leader — every generated deck must be
@@ -89,8 +94,15 @@ function take(
   count: number,
   used: Set<string>,
   bucketCounts: [number, number, number],
+  rng: () => number,
 ): [string, number][] {
-  const ranked = pool.filter((c) => !used.has(c.id)).sort((a, b) => score(b, arch) - score(a, arch));
+  // Seeded jitter on top of the archetype score: rankings stay coherent but
+  // vary per deck, so the full pool gets exercised across many random decks.
+  const ranked = pool
+    .filter((c) => !used.has(c.id))
+    .map((c) => ({ c, s: score(c, arch) + rng() * 6 }))
+    .sort((a, b) => b.s - a.s)
+    .map((x) => x.c);
   const out: [string, number][] = [];
   let remaining = count;
   for (const c of ranked) {
@@ -122,6 +134,9 @@ function take(
 }
 
 export function buildDeck(arch: Archetype): DeckDef {
+  // Seeded per-archetype rng: same archetype (same seed) => same deck, so
+  // sims stay reproducible. No seed => zero jitter (legacy behavior).
+  const rng: () => number = arch.seed === undefined ? () => 0 : mulberry32(arch.seed >>> 0);
   const used = new Set<string>();
   const counts: Record<string, number> = {};
   const buckets: [number, number, number] = [0, 0, 0];
@@ -134,12 +149,12 @@ export function buildDeck(arch: Archetype): DeckDef {
     ...legalPoolByType('Event', arch.leaderId),
   ];
   const sanctums = legalPoolByType('Location', arch.leaderId);
-  add(take(units, arch, arch.units, used, buckets));
-  add(take(spells, arch, arch.spells, used, buckets));
-  add(take(sanctums, arch, arch.sanctums, used, buckets));
+  add(take(units, arch, arch.units, used, buckets, rng));
+  add(take(spells, arch, arch.spells, used, buckets, rng));
+  add(take(sanctums, arch, arch.sanctums, used, buckets, rng));
   let total = Object.values(counts).reduce((a, b) => a + b, 0);
   if (total < DECK_SIZE) {
-    add(take([...units, ...spells], arch, DECK_SIZE - total, used, buckets));
+    add(take([...units, ...spells], arch, DECK_SIZE - total, used, buckets, rng));
     total = Object.values(counts).reduce((a, b) => a + b, 0);
   }
   // Trim overflow deterministically.
@@ -207,5 +222,6 @@ export function randomArchetype(rng: () => number = Math.random): Archetype {
     units,
     spells,
     sanctums,
+    seed: Math.floor(rng() * 0x7fffffff),
   };
 }

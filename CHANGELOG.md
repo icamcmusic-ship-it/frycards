@@ -7,6 +7,56 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v6.1 — Clash & Coverage: rulebook combat fixes, sharper CPU, full-pool decks
+
+- **Overrun spill fixed (engine)**: a guarded attacker whose guards all died
+  in the Quickstrike sub-step was pushing its FULL Might to the defender's
+  face; now only Overrun attackers spill, and only the excess past what the
+  guards absorbed (rulebook §6).
+- **Reaction window for both players (rulebook §5)**: `reactionOpenFor` now
+  opens the guard-step window to the active player too — Quick Events and
+  Ambush units can answer in your OWN Clash, in the match UI and for the CPU.
+- **Rules tightening**: mulligan legality is gated to the start of the game;
+  opening-hand draws and mulligan redraws route through the empty-deck loss
+  check; `'dies'` triggers fire on banish as well as ash.
+- **Keyword pricing unified**: all non-Unit keyword surcharges now come from
+  `KEYWORD_COST` (previously hardcoded per-mapper and contradicting the
+  table). Balance changes: Resonant +1 (2→3), Bountiful −1 (2→1),
+  Resolute +1 (0→1). Sim-verified: Resonant settled +20.7→+7.1 delta,
+  Bountiful −24→+8.2.
+- **CPU intelligence pass**: Venomous/Quickstrike-aware blocking,
+  Swarmproof-aware attacking, free attacks and favorable trades, no Leader
+  self-shatter for minor value, Resonant/Bountiful play priority, Surge
+  discounts in planning, Leader pips in Wellspring choice, per-game
+  reservation state (was leaking across games), no essence waste on failed
+  rebonds.
+- **Full-pool deck generation**: seeded jitter in the deck scorer lifts
+  random-deck pool coverage from ~54% to ~88% of the non-Leader catalog
+  (Supabase ↔ bundled catalog parity re-verified, 292/292 ids).
+- **Crash safety**: app-level ErrorBoundary; CPU-turn exceptions recover to
+  the human's turn instead of white-screening the match.
+- **Bug fixes / QoL**: News Center headline derived from the newest
+  changelog entry (was hardcoded two releases stale); Bounty Shop and Social
+  screens get error + RETRY states instead of hanging/false-empty; auction
+  countdown ticks every 10s and ended auctions disable BID/BUY; the sell
+  list reacts to serialized pulls (missing useMemo dep); deck-code import
+  validates deck size and rejects Leaders in the body; signOut clears local
+  session state immediately; bulk quicksell shows live progress; Dusk shed
+  picker gained the promised SUGGEST button and Escape support; mulligan UI
+  warns on small hands and stops at 1 card; leader invoke reports
+  already-invoked/shattered honestly; Deck Builder gained CHANGE LEADER and
+  a dirty-check on the leader-step BACK; changelog entries show dates;
+  guest Play screen says QUICK MATCH; consistent FRY CARDS wordmark.
+- **Sim harness v6.1**: leader-vs-leader matchup matrix, per-card-type play
+  stats, per-card play rate, full-pool coverage report, opening-hand curve
+  quality, win-margin histogram; fixed the seat-swap first-player metric
+  (old one measured deck A's overall win rate, i.e. nothing). Findings:
+  `docs/BALANCE_SIM_FINDINGS_v6.1.md` (v5.3 findings doc removed; only the
+  latest sim-run JSON is kept).
+- **Docs cleanup**: retired `docs/RIFTBOUND_SPEC.md` and scrubbed the
+  internal codename from code comments; `scripts/backfill-riftbound-db.ts`
+  renamed to `backfill-cards-db.ts`.
+
 ### v6.0 — Full rulebook alignment, ten type keywords, MTG-format card faces
 
 - **Rulebook deck rules (the big one)**: decks are now **at least 60 cards**
@@ -99,7 +149,7 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
   all-Warded enemy board) can no longer be invoked into a fizzle that wastes
   the card and essence — the client blocks it with an explanation. Units and
   Charms still play for their body/bond value and just lose the rider.
-- **Balance** (from the v5.3 sim pass, `docs/BALANCE_SIM_FINDINGS_v5.3.md`):
+- **Balance** (from the v5.3 sim pass, `docs/BALANCE_SIM_FINDINGS_v6.1.md`):
   keyword weights — Venomous 2→3, Aerial 2→3, Quickstrike 3→4, Siphon 2→0
   (reversing v5.2's backwards read), Swarmproof 2→1, Warded 0→-1 (now a
   small discount), Unbreakable kept at 7 after trials at 8-9 showed its old

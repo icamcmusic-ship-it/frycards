@@ -4,7 +4,7 @@
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
  * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
  * verified by scripts/fetch-cards.ts, and re-verified live for v5.2 — see
- * docs/BALANCE_SIM_FINDINGS_v5.3.md) and reports:
+ * docs/BALANCE_SIM_FINDINGS_v6.1.md) and reports:
  *
  *  - match outcomes: win rates by Leader, color, first/second player,
  *    win condition (vitality vs deck-out), game length distribution
@@ -20,7 +20,7 @@
  *    color-clogged hands
  *  - invariant violations (engine correctness canaries)
  *
- * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v5.3.md carry-forward items):
+ * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v6.1.md carry-forward items):
  *  - archetype-normalized keyword deltas: carrier win rate residual computed
  *    against each game's own Leader-archetype baseline (8 Leaders = 8
  *    cohorts), not the flat 50% global baseline, to strip cohort noise.

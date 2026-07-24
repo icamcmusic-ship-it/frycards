@@ -58,7 +58,7 @@ const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Co
 
 /** Per-card total-cost adjustments from sim outliers (residuals confirmed
  * across at least two independent runs before a card is listed).
- * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v5.3.md):
+ * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v6.1.md):
  * repeat overperformers +1, repeat underperformers -1. */
 const COST_ADJUST: Record<string, number> = {
   heart_coral: +1, // v5.1: +21.7pt residual Sanctum
