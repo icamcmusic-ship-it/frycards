@@ -6,7 +6,7 @@ import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
-// Condensed view of docs/RULEBOOK.md (Riftbound Rulebook v5.0), plus a
+// Condensed view of docs/RULEBOOK.md (Rulebook v5.0), plus a
 // standalone rarity-system explainer and an app feature guide — reachable
 // any time from the Main Menu's HOW TO PLAY button (and auto-opened on a
 // first-ever visit).
@@ -262,7 +262,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     ],
   },
   {
-    title: '12 · Using FryCards — Every Feature',
+    title: '12 · Using Fry Cards — Every Feature',
     body: [
       [
         'Collection',

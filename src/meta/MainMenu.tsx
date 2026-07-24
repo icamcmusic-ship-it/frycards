@@ -381,6 +381,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             key={t.key}
             onClick={() => !t.disabled && onNavigate(t.key)}
             disabled={t.disabled}
+            title={t.disabled ? 'Create an account to unlock' : undefined}
             className={`btn-pop w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:-translate-y-1'}`}
           >
             {t.icon}

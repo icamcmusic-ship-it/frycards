@@ -1,8 +1,8 @@
 /**
- * Riftbound v5.0 card data model. Essence-based costs, Might/Grit units,
+ * Fry Cards v5.0 card data model. Essence-based costs, Might/Grit units,
  * Location/Charm/Event subtypes, Leaders with Resolve. Replaces the v4.x
  * dice-placement model (Cast Slots, thresholds, combos) entirely.
- * See docs/RIFTBOUND_SPEC.md.
+ *
  */
 import type { EssenceType } from './colors';
 
@@ -96,7 +96,7 @@ export interface CardDef {
   might?: number;
   grit?: number;
 
-  /** Keywords from the Riftbound set — see keywords.ts KEYWORDS. */
+  /** Keywords from the Fry Cards set — see keywords.ts KEYWORDS. */
   keywords?: string[];
 
   /** Effect on invoke (Events resolve this then go to the Ash-pile; Units

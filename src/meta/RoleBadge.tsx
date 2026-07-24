@@ -15,7 +15,7 @@ const ROLE_STYLES: Record<
     label: 'CREATOR',
     bg: 'linear-gradient(135deg, #ff5722, #ffc107)',
     fg: '#111',
-    title: 'Creator — built FryCards. Full access to everything.',
+    title: 'Creator — built Fry Cards. Full access to everything.',
   },
   founder: {
     label: 'FOUNDER',

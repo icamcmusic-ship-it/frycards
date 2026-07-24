@@ -1,5 +1,5 @@
 /**
- * Riftbound v6.0 deck builder. Produces legal 60-card decks (rulebook §3:
+ * Fry Cards v6.0 deck builder. Produces legal 60-card decks (rulebook §3:
  * at least 60 cards, no more than 4 copies of any card; premium rarities
  * keep stricter economy caps) from the remapped POOL_V4, each built around
  * an archetype (keyword theme + cost curve) so games exercise real strategic

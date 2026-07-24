@@ -1,5 +1,5 @@
 /**
- * Icon glyphs for the seven Riftbound v5.0 Essence Types (see
+ * Icon glyphs for the seven Fry Cards v5.0 Essence Types (see
  * `src/game/v3/colors.ts`). Source SVGs live in `src/assets/essence/` and
  * are single-color line-art (black fill/stroke), so we render them as a CSS
  * mask tinted to whatever `color` the pip needs (its `COLOR_PIP` fg, a

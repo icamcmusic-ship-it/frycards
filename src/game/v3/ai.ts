@@ -1,11 +1,11 @@
 /**
- * Riftbound v5.0 CPU opponent. Plays a full turn through the engine's public
+ * Fry Cards v5.0 CPU opponent. Plays a full turn through the engine's public
  * actions at main-phase speed: play a Wellspring, develop by curve, use
  * removal on the biggest threat, invoke/use the Leader when useful, attack
  * when profitable, and (as defender) guard to survive lethal. Returns a
  * CpuTurnEvent log the UI replays as animations.
  */
-import { CardDef, Effect, EssenceCost, LEADER_HP, totalCost } from './cards';
+import { CardDef, Effect, EssenceCost, LEADER_HP, hasKw, totalCost } from './cards';
 import { EssenceType } from './colors';
 import {
   GameState,
@@ -93,6 +93,12 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
   const demand: Partial<Record<EssenceType, number>> = {};
   for (const c of p.hand) {
     for (const [t, n] of Object.entries(c.def.cost?.pips ?? {})) {
+      demand[t as EssenceType] = (demand[t as EssenceType] ?? 0) + (n ?? 0);
+    }
+  }
+  // The Leader still has to be paid for too — count its pips until invoked.
+  if (!p.leader.invoked && !p.leader.shattered) {
+    for (const [t, n] of Object.entries(p.leader.def.cost?.pips ?? {})) {
       demand[t as EssenceType] = (demand[t as EssenceType] ?? 0) + (n ?? 0);
     }
   }

@@ -1,7 +1,7 @@
 /**
- * Riftbound v5.0 catalog audit: every card in the deterministically-assigned
+ * Fry Cards v5.0 catalog audit: every card in the deterministically-assigned
  * pool (cardpool.ts over the full generated catalog) must satisfy the
- * structural invariants of the Riftbound data model — legal essence costs,
+ * structural invariants of the Fry Cards data model — legal essence costs,
  * sane unit stats, only real keywords, color identities draftable under at
  * least one Leader, complete Leaders, and typed subtypes — and the whole
  * assignment must be deterministic.

@@ -68,7 +68,7 @@ function CardBackFace() {
       {back ? (
         <img src={back} alt="Card back" className="w-full h-full object-cover" draggable={false} />
       ) : (
-        <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRYCARDS</div>
+        <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRY CARDS</div>
       )}
     </div>
   );

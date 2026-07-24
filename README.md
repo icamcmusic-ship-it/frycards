@@ -83,7 +83,6 @@ for the latest sim pass and what changed and why; `docs/ROADMAP.md` tracks
 forward-looking work.
 
 The game was converted to this essence-based ruleset from an earlier
-dice-placement prototype (internally codenamed "Riftbound" during that
-conversion — see `docs/RIFTBOUND_SPEC.md` for the implementation contract
-and `CHANGELOG.md` for history); the shipped, player-facing name has always
-been **Fry Cards**.
+dice-placement prototype (see `CHANGELOG.md` for history); the shipped,
+player-facing name has always been **Fry Cards**, and `docs/RULEBOOK.md`
+is the canonical rules reference.

@@ -101,6 +101,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   const [leaderboardError, setLeaderboardError] = useState(false);
   const [leaderboardAttempt, setLeaderboardAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
+  // A rejected mount reload (network failure) used to fall straight through
+  // to the normal empty states — the screen claimed "no friends / no trades"
+  // when in truth it simply hadn't loaded anything.
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
@@ -157,9 +162,13 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     // Guards a stale in-flight reload() (e.g. from a fast sign-out/sign-in)
     // from clobbering friendships/trades/profiles state after userId changes.
     let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
     (async () => {
       try {
         await reload(() => cancelled);
+      } catch {
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -167,7 +176,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [reload]);
+  }, [reload, loadAttempt]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';
 
@@ -258,6 +267,16 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
           </PopButton>
         </div>
 
+        {loadError && (
+          <div className="mb-4 bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex items-center justify-between gap-3">
+            <span className="text-[11px] font-bold text-[var(--c-steel)]">
+              Couldn't load your friends & trades. Check your connection and try again.
+            </span>
+            <PopButton color="red" onClick={() => setLoadAttempt((n) => n + 1)}>
+              RETRY
+            </PopButton>
+          </div>
+        )}
         {error && (
           <div className="mb-4">
             <Notice text={error} />

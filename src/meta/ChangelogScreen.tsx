@@ -10,7 +10,7 @@ interface ChangelogEntry {
 // Condensed, user-facing view of CHANGELOG.md — trimmed to the highlights
 // players actually care about (new features, balance headlines), not every
 // internal playtest data point tracked in the full file.
-const ENTRIES: ChangelogEntry[] = [
+export const ENTRIES: ChangelogEntry[] = [
   {
     version: 'Rulebook Update (v6.0)',
     items: [
@@ -303,6 +303,9 @@ export function ChangelogScreen({ onBack }: { onBack: () => void }) {
           >
             <div className="flex items-center justify-between px-4 py-2 bg-[var(--c-steel)]">
               <span className="heading-font text-sm text-[var(--c-yellow)]">{entry.version}</span>
+              {entry.date && (
+                <span className="text-[10px] font-bold text-[var(--c-paper)]/60">{entry.date}</span>
+              )}
             </div>
             <ul className="px-5 py-3 flex flex-col gap-1.5 list-disc">
               {entry.items.map((item, i) => (

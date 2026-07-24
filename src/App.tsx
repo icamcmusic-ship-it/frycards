@@ -30,6 +30,39 @@ import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 
 // ---------------------------------------------------------------------------
+// Error boundary — a render crash anywhere below used to white-screen the
+// whole app with no way back short of a manual reload.
+// ---------------------------------------------------------------------------
+class ErrorBoundary extends React.Component {
+  declare props: { children: React.ReactNode };
+  state = { crashed: false };
+
+  static getDerivedStateFromError() {
+    return { crashed: true };
+  }
+
+  render() {
+    if (!this.state.crashed) return this.props.children;
+    return (
+      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
+          FRY CARDS
+        </div>
+        <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">
+          Something broke. Your collection and progress are safe.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+        >
+          BACK TO MENU
+        </button>
+      </div>
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Play setup — a freshly-rolled random deck, or one of the player's own
 // saved decks
 // ---------------------------------------------------------------------------
@@ -51,7 +84,11 @@ function PlayScreen({
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR DECK</h1>
+        {/* Guests can't choose anything — the random deck is their only
+            option, so "CHOOSE YOUR DECK" would be a lie. */}
+        <h1 className="heading-font text-xl text-[var(--c-yellow)]">
+          {guest ? 'QUICK MATCH' : 'CHOOSE YOUR DECK'}
+        </h1>
         <span className="text-[10px] font-bold text-[var(--c-paper)]/60">
           Fry Cards rules v6.0 · 60-card decks · start at {LEADER_HP} Vitality
         </span>
@@ -250,7 +287,7 @@ function AppInner() {
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
-          FRYCARDS
+          FRY CARDS
         </div>
         <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{bootError}</p>
         <button
@@ -267,7 +304,7 @@ function AppInner() {
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex items-center justify-center">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          FRYCARDS
+          FRY CARDS
         </div>
       </div>
     );
@@ -391,7 +428,7 @@ export default function App() {
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
-          FRYCARDS
+          FRY CARDS
         </div>
         <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{poolError}</p>
         <button
@@ -413,7 +450,7 @@ export default function App() {
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          FRYCARDS
+          FRY CARDS
         </div>
         <div className="text-[var(--c-paper)] font-mono text-xs">
           {progress.total > 0
@@ -431,8 +468,10 @@ export default function App() {
   }
 
   return (
-    <MetaProvider>
-      <AppInner />
-    </MetaProvider>
+    <ErrorBoundary>
+      <MetaProvider>
+        <AppInner />
+      </MetaProvider>
+    </ErrorBoundary>
   );
 }

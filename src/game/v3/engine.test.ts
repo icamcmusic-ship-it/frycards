@@ -1,5 +1,5 @@
 /**
- * Riftbound v5.0 engine tests: essence payment (colored pips + generic),
+ * Fry Cards v5.0 engine tests: essence payment (colored pips + generic),
  * wellsprings, phase flow + dusk shed, clash math per keyword, leader
  * resolve/shatter, charm bond/re-bond, and both win conditions.
  */

@@ -1,5 +1,5 @@
 /**
- * Riftbound v5.x keyword abilities — the full legal set from the rulebook
+ * Fry Cards v5.x keyword abilities — the full legal set from the rulebook
  * glossary, with UI descriptions and cost weights for the card pool's
  * essence-cost calculation. The v4.x tier system is retired: every keyword
  * is binary (a card has it or it doesn't).
@@ -133,6 +133,10 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
 // v6.0: initial weights for the ten new type keywords (unit weights feed
 // mapUnit's surcharge; the non-unit weights feed each type mapper's own
 // cost adjustment).
+// v6.1: the non-Unit mappers now price keywords from THIS table (the
+// hardcoded per-mapper surcharges are gone), with values informed by the
+// 2208-game sim: Resonant up (carriers +20.7 win-rate delta), Bountiful
+// down (-24), Sacred kept cheap (-14.6), Runic/Soulbound/Resolute at 1.
 export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 3,
   Overrun: 3,
@@ -151,13 +155,13 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Regenerate: 3,
   Hardened: 3,
   Surge: 1,
-  Resonant: 4,
-  Runic: 2,
-  Soulbound: 2,
-  Bountiful: 4,
-  Sacred: 2,
+  Resonant: 3,
+  Runic: 1,
+  Soulbound: 1,
+  Bountiful: 1,
+  Sacred: 1,
   Commander: 2,
-  Resolute: 2,
+  Resolute: 1,
 };
 
 /** Short label for card-face chips. */

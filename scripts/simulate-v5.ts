@@ -69,6 +69,15 @@
  *  - Essence spend: total printed cost invoked per game (economy throughput,
  *    complements wastedEssencePerGame).
  *
+ * v6.1 additions:
+ *  - Leader-vs-leader matchup matrix (8x8 win rates).
+ *  - Per-card-type play stats (plays/game + played-game win rate by type).
+ *  - Per-card playRatePerDeckGame (times played / games in deck).
+ *  - Full-pool coverage: which of the non-Leader catalog cards were never
+ *    drafted into a deck or never hit the table across the whole run.
+ *  - Opening-hand curve quality: win rate by post-mulligan average cost.
+ *  - Win-margin histogram (winner's remaining vitality buckets).
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -202,6 +211,25 @@ const bandOf = (t: number): CostBand => (t <= 2 ? '1-2' : t <= 4 ? '3-4' : '5+')
 const kwBandStats: Record<string, Record<CostBand, { games: number; wins: number }>> = {};
 for (const kw of KEYWORDS)
   kwBandStats[kw] = { '1-2': { games: 0, wins: 0 }, '3-4': { games: 0, wins: 0 }, '5+': { games: 0, wins: 0 } };
+
+// --- v6.1: leader-vs-leader matchup matrix ---------------------------------
+const leaderMatchup: Record<string, Record<string, { games: number; wins: number }>> = {};
+
+// --- v6.1: per-card-type play stats -----------------------------------------
+const typeStats: Record<string, { plays: number; playedGames: number; playedWins: number }> = {};
+function tps(t: string) {
+  return (typeStats[t] ??= { plays: 0, playedGames: 0, playedWins: 0 });
+}
+
+// --- v6.1: opening-hand curve quality ---------------------------------------
+// Win rate bucketed by the average printed cost of the (post-mulligan)
+// opening hand — measures how punishing a top-heavy opener is.
+const openingCurve: Record<string, { games: number; wins: number }> = {};
+const openingBucket = (avg: number) => (avg < 2.5 ? '<2.5' : avg < 3.5 ? '2.5-3.5' : '>=3.5');
+
+// --- v6.1: win-margin histogram (winner's remaining vitality) ---------------
+const winMargin: Record<string, number> = {};
+const marginBucket = (v: number) => (v <= 5 ? '1-5' : v <= 10 ? '6-10' : v <= 15 ? '11-15' : '16+');
 
 const mech = {
   games: 0,
@@ -401,6 +429,14 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   }
   telemetryEnabled = true;
 
+  // v6.1: opening-hand curve quality (post-mulligan hand).
+  const openingAvgCost: Record<PlayerId, number> = { P1: 0, P2: 0 };
+  for (const pid of ['P1', 'P2'] as PlayerId[]) {
+    const hand = state.players[pid].hand;
+    if (hand.length > 0)
+      openingAvgCost[pid] = hand.reduce((s, c) => s + totalCost(c.def.cost), 0) / hand.length;
+  }
+
   const played: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
   const drawn: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
   const perGame = {
@@ -468,6 +504,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
           essenceSpentTotal += totalCost(def.cost);
           played[actor].add(def.id);
           cs(def.id).timesPlayed++;
+          tps(def.type).plays++;
           if (def.type === 'Location') mech.sanctumPlays++;
           if (def.type === 'Charm') mech.charmPlays++;
           if (def.type === 'Event' && def.subtype === 'Quick') mech.quickEventPlays++;
@@ -717,6 +754,16 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     else mech.deckOutWins++;
   }
   if (winner) {
+    // v6.1: win-margin histogram + leader-vs-leader matchup matrix.
+    const wv = state.players[winner].vitality;
+    if (wv > 0) winMargin[marginBucket(wv)] = (winMargin[marginBucket(wv)] ?? 0) + 1;
+    const winDeck = winner === 'P1' ? deckA : deckB;
+    const loseDeck = winner === 'P1' ? deckB : deckA;
+    const lm = ((leaderMatchup[winDeck.leaderId] ??= {})[loseDeck.leaderId] ??= { games: 0, wins: 0 });
+    lm.games++;
+    lm.wins++;
+    const lmRev = ((leaderMatchup[loseDeck.leaderId] ??= {})[winDeck.leaderId] ??= { games: 0, wins: 0 });
+    lmRev.games++;
     mech.winnerVitalitySum += state.players[winner].vitality;
     mech.loserDeckRemainingSum += state.players[opponentOf(winner)].deck.length;
     // v6.0 mulligan-outcome split + comeback rate.
@@ -779,6 +826,23 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       s.drawnGames++;
       s.timesDrawn++;
       if (won) s.drawnWins++;
+    }
+
+    // v6.1: opening-hand curve outcome + per-type played-game outcomes.
+    if (winner) {
+      const oc = (openingCurve[openingBucket(openingAvgCost[pid])] ??= { games: 0, wins: 0 });
+      oc.games++;
+      if (won) oc.wins++;
+    }
+    const typesPlayed = new Set<string>();
+    for (const id of played[pid]) {
+      const t = POOL_BY_ID[id]?.type;
+      if (t) typesPlayed.add(t);
+    }
+    for (const t of typesPlayed) {
+      const s = tps(t);
+      s.playedGames++;
+      if (won) s.playedWins++;
     }
 
     // Keyword carrier stats (played carriers only). v6.0: an invoked Leader
@@ -893,7 +957,7 @@ for (let i = 0; i < decks.length; i++) {
 // counters (not folded into card/keyword/leader stats) so it can't skew
 // those cohorts.
 // ---------------------------------------------------------------------------
-const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0 };
+const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0, firstSeatWins: 0, decidedGames: 0 };
 {
   const swapRng = mulberry32(SEED ^ 0x5eed5eed);
   const SEAT_SWAP_PAIRS = Math.min(200, decks.length * (decks.length - 1));
@@ -910,6 +974,16 @@ const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0 };
     seatSwap.pairs++;
     if (winnerAisP1 === 'P1') seatSwap.deckAWinsAsP1++;
     if (winnerBisP1 === 'P2') seatSwap.deckAWinsAsP2++;
+    // v6.1 fix: the actual first-seat edge — how often the P1 SEAT wins,
+    // across both orderings. (The old firstSeatWinPct summed deck A's wins
+    // in both seats, i.e. deck A's overall win rate, which is ~50% by
+    // construction and measured nothing.)
+    for (const w of [winnerAisP1, winnerBisP1]) {
+      if (w) {
+        seatSwap.decidedGames++;
+        if (w === 'P1') seatSwap.firstSeatWins++;
+      }
+    }
   }
 }
 
@@ -933,6 +1007,8 @@ const cardReport = Object.entries(cardStats)
       deckWin: pct(s.inDeckWins, s.inDeckGames),
       residual: +(pct(s.playedWins, s.playedGames) - pct(s.inDeckWins, s.inDeckGames)).toFixed(1),
       playedGames: s.playedGames,
+      // v6.1: how often the card actually hits the table when decked.
+      playRatePerDeckGame: s.inDeckGames > 0 ? +(s.timesPlayed / s.inDeckGames).toFixed(2) : 0,
       deadInHandRate: pct(s.timesDeadInHand, s.timesDrawn),
       avgFirstPlayTurn:
         s.firstPlayGames > 0 ? +(s.firstPlayTurnSum / s.firstPlayGames).toFixed(1) : null,
@@ -1031,7 +1107,9 @@ const curveReport = {
 // v5.2: paired-seed seat-swap first-player-advantage measurement.
 const seatSwapReport = {
   pairs: seatSwap.pairs,
-  firstSeatWinPct: pct(seatSwap.deckAWinsAsP1 + seatSwap.deckAWinsAsP2, seatSwap.pairs * 2),
+  firstSeatWinPct: pct(seatSwap.firstSeatWins, seatSwap.decidedGames),
+  decidedGames: seatSwap.decidedGames,
+  deckAWinPct: pct(seatSwap.deckAWinsAsP1 + seatSwap.deckAWinsAsP2, seatSwap.pairs * 2),
 };
 
 // v5.2 carry-forward: re-read the five v5.1 +1-cost-adjusted cards regardless
@@ -1053,10 +1131,30 @@ const watchlistReport = WATCHLIST_IDS.map((id) => {
   };
 });
 
+// v6.1: full-pool coverage — how much of the 292-card catalog the random
+// deck cohort actually exercised (never-decked / decked-but-never-played).
+const poolCoverage = (() => {
+  const nonLeader = POOL_V4.filter((c: CardDef) => c.type !== 'Leader');
+  const neverDecked = nonLeader.filter((c: CardDef) => !(cardStats[c.id]?.inDeckGames ?? 0)).map((c: CardDef) => c.id);
+  const neverPlayed = nonLeader.filter(
+    (c: CardDef) => (cardStats[c.id]?.inDeckGames ?? 0) > 0 && !(cardStats[c.id]?.timesPlayed ?? 0),
+  ).map((c: CardDef) => c.id);
+  return {
+    poolNonLeader: nonLeader.length,
+    deckedPct: pct(nonLeader.length - neverDecked.length, nonLeader.length),
+    playedPct: pct(
+      nonLeader.length - neverDecked.length - neverPlayed.length,
+      nonLeader.length,
+    ),
+    neverDecked,
+    deckedButNeverPlayed: neverPlayed,
+  };
+})();
+
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.0',
+    version: 'v6.1',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1161,6 +1259,29 @@ const report = {
   essenceCurve: curveReport,
   seatSwap: seatSwapReport,
   watchlist: watchlistReport,
+  // v6.1 additions.
+  leaderMatchups: Object.fromEntries(
+    Object.entries(leaderMatchup).map(([a, row]) => [
+      POOL_BY_ID[a]?.name ?? a,
+      Object.fromEntries(
+        Object.entries(row).map(([b, s]) => [
+          POOL_BY_ID[b]?.name ?? b,
+          { winPct: pct(s.wins, s.games), games: s.games },
+        ]),
+      ),
+    ]),
+  ),
+  cardTypes: Object.fromEntries(
+    Object.entries(typeStats).map(([t, s]) => [
+      t,
+      { playsPerGame: +(s.plays / Math.max(1, mech.games)).toFixed(2), playedGameWinPct: pct(s.playedWins, s.playedGames) },
+    ]),
+  ),
+  openingCurve: Object.fromEntries(
+    Object.entries(openingCurve).map(([b, s]) => [b, { winPct: pct(s.wins, s.games), games: s.games }]),
+  ),
+  winMarginHistogram: winMargin,
+  poolCoverage,
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -1182,6 +1303,11 @@ console.log('\nClash metrics (v6.0):', JSON.stringify(report.clashMetrics, null,
 console.log('\nMulligan outcome (v6.0):', JSON.stringify(report.mulliganOutcome, null, 2));
 console.log('\nComeback rate (v6.0):', JSON.stringify(report.comeback, null, 2));
 console.log('\nColor matchups (v5.3):', JSON.stringify(report.colorMatchups, null, 2));
+console.log('\nLeader matchups (v6.1):', JSON.stringify(report.leaderMatchups, null, 2));
+console.log('\nCard types (v6.1):', JSON.stringify(report.cardTypes, null, 2));
+console.log('\nOpening-hand curve (v6.1):', JSON.stringify(report.openingCurve, null, 2));
+console.log('\nWin-margin histogram (v6.1):', JSON.stringify(report.winMarginHistogram, null, 2));
+console.log(`\nPool coverage (v6.1): ${report.poolCoverage.deckedPct}% decked, ${report.poolCoverage.playedPct}% played of ${report.poolCoverage.poolNonLeader} non-Leader cards; never decked: ${report.poolCoverage.neverDecked.length}, decked-never-played: ${report.poolCoverage.deckedButNeverPlayed.length}`);
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');

@@ -146,6 +146,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     return m;
   }, [owned, lockedByDecks, serializedByCard]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Live "SELLING i/N…" progress while the bulk loop runs — a long loop
+  // previously sat on a static "SELLING…" with no sign it was advancing.
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [bulkNotice, setBulkNotice] = useState('');
   const [bulkError, setBulkError] = useState('');
 
@@ -156,6 +159,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     setBulkNotice('');
     let totalCredits = 0;
     let totalCards = 0;
+    setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
     try {
       for (const c of POOL_V4) {
         if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
@@ -186,6 +190,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           if (data) {
             totalCredits += data.total;
             totalCards += data.sold;
+            setBulkProgress((p) => (p ? { ...p, done: totalCards } : p));
           }
         }
       }
@@ -198,6 +203,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       setBulkError('Something went wrong — check your connection and try again.');
     } finally {
       setBulkBusy(false);
+      setBulkProgress(null);
       refreshCollection();
       refreshProfile();
     }
@@ -484,7 +490,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     }}
                   >
                     {bulkBusy
-                      ? 'SELLING…'
+                      ? bulkProgress
+                        ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
+                        : 'SELLING…'
                       : `QUICKSELL ALL ${r.toUpperCase()} (${spareByRarity.get(r)})`}
                   </PopButton>
                 ),

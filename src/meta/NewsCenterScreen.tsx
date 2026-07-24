@@ -9,13 +9,16 @@ import {
   SerializedFeedEntry,
   createNewsPost,
 } from '../lib/supabase';
+import { ENTRIES } from './ChangelogScreen';
 import { RARITY_CHIP } from './rarity';
 import { SafeImage } from './SafeImage';
 
-/** Mirrors ChangelogScreen's newest entry headline — kept as a short pointer
- * here rather than duplicating the full log (see ChangelogScreen.tsx). */
-const LATEST_UPDATE_HEADLINE =
-  'Convergence Update — Volume #1 set, store rework, watchable CPU turns, card readability overhaul & app-wide bug hunt';
+/** Derived from ChangelogScreen's newest entry so this pointer can never
+ * drift out of date again (it used to be a hard-coded copy of an old
+ * update's headline). */
+const LATEST = ENTRIES[0];
+const teaser = (LATEST?.items[0] ?? '').slice(0, 140);
+const LATEST_UPDATE_HEADLINE = `${LATEST?.version ?? 'Latest update'} — ${teaser}${(LATEST?.items[0] ?? '').length > 140 ? '…' : ''}`;
 
 function timeAgo(iso: string | null | undefined): string {
   const ms = iso ? Date.now() - new Date(iso).getTime() : NaN;
