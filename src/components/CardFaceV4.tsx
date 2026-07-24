@@ -11,6 +11,16 @@
  * two Resolve abilities; keyword chips come from the new binary keyword
  * set (KEYWORD_TEXT). Card dimensions, the regular-art frame, the
  * Full-Art treatment, and the rarity/foil/serialized systems are unchanged.
+ *
+ * v6.0 MTG-format layout pass: information lives where a Magic card puts it —
+ * name + cost on the top line, art, a type line whose right slot carries the
+ * rarity marker (set-symbol position), a text box (keywords → rules →
+ * flavor), and a Might/Grit stat plate anchored to the BOTTOM-RIGHT corner
+ * (Resolve there for Leaders, like planeswalker loyalty). The old footer
+ * color-dot band is gone — color identity is already printed in the cost
+ * pips — which reclaims vertical space for the text box so rules stop
+ * running off the card. Art ratios are untouched (regular 4:3 box,
+ * Full-Art full-bleed).
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -540,8 +550,12 @@ export function EssenceCostRow({
   }
   if (pips.length === 0) return null;
   return (
+    // NOTE: no percentage max-width here — this row often sits inside a
+    // shrink-to-fit <button> (CostInfoButton), where `max-w-[55%]` resolves
+    // against the button's own content width and collapses the row into a
+    // one-pip-per-line vertical stack.
     <span
-      className="flex items-center gap-[2px] shrink-0 flex-wrap justify-end max-w-[55%]"
+      className="flex items-center gap-[2px] shrink-0 flex-wrap justify-end max-w-full"
       aria-label={`Essence cost: ${pips.map((p) => p.title).join(', ')}`}
     >
       {pips.map((p) => (
@@ -1158,7 +1172,7 @@ const TIER: Record<
     keywordSmall: true,
     showRules: true,
     rulesFont: 6.5,
-    rulesLines: 3,
+    rulesLines: 4,
     showFlavor: false,
   },
   standard: {
@@ -1182,7 +1196,7 @@ const TIER: Record<
     keywordSmall: false,
     showRules: true,
     rulesFont: 7.5,
-    rulesLines: 5,
+    rulesLines: 6,
     showFlavor: false,
   },
   full: {
@@ -1202,11 +1216,11 @@ const TIER: Record<
     typeLine: 'mt-1 text-[10px]',
     showSetSuffix: true,
     textBoxPad: 'p-1.5',
-    keywordMax: 8,
+    keywordMax: 10,
     keywordSmall: false,
     showRules: true,
     rulesFont: 9,
-    rulesLines: 8,
+    rulesLines: 10,
     showFlavor: true,
   },
 };
@@ -1308,7 +1322,7 @@ function FittedChips({
       className={cn(
         'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px] overflow-hidden',
         size === 'full'
-          ? 'max-h-[42px]'
+          ? 'max-h-[54px]'
           : size === 'standard'
             ? 'max-h-[30px]'
             : size === 'compact'
@@ -1770,6 +1784,76 @@ export function CardFace({
   const fullArt = def.rarity === 'Full-Art' && !serial;
   const ultra = def.rarity === 'Ultra-Rare' && !serial;
 
+  // MTG-format stat plate content — Might/Grit (Resolve for Leaders) shown
+  // in the bottom-right corner like a P/T box. Live-match values render
+  // green (buffed) / red (damaged/nerfed) with the printed value struck
+  // through inside the chip.
+  const statChips =
+    def.type === 'Unit' ? (
+      live ? (
+        <>
+          <StatChip
+            icon={Swords}
+            label="Might"
+            value={live.atk}
+            printed={def.might}
+            tier={size}
+            tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
+            emboss={mythic}
+            onArt={fullArt}
+          />
+          <StatChip
+            icon={Shield}
+            label="Grit"
+            value={live.hp}
+            maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
+            printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
+            tier={size}
+            tint={
+              live.hp < live.maxHp
+                ? 'var(--c-red)'
+                : live.maxHp > (def.grit ?? 0)
+                  ? '#16A34A'
+                  : '#22C55E'
+            }
+            emboss={mythic}
+            onArt={fullArt}
+          />
+        </>
+      ) : (
+        <>
+          <StatChip
+            icon={Swords}
+            label="Might"
+            value={def.might}
+            tier={size}
+            tint="var(--c-red)"
+            emboss={mythic}
+            onArt={fullArt}
+          />
+          <StatChip
+            icon={Shield}
+            label="Grit"
+            value={def.grit}
+            tier={size}
+            tint="#22C55E"
+            emboss={mythic}
+            onArt={fullArt}
+          />
+        </>
+      )
+    ) : def.type === 'Leader' ? (
+      <StatChip
+        icon={Shield}
+        label="Resolve"
+        value={def.resolve}
+        tier={size}
+        tint="#7C3AED"
+        emboss={mythic}
+        onArt={fullArt}
+      />
+    ) : null;
+
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
     // carry its own interactive control, and nested <button> elements are
@@ -1914,7 +1998,10 @@ export function CardFace({
               : { boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }
           }
         />
-        {def.rarity && !fullArt && (
+        {/* Small tiers keep the rarity chip on the art (their type line's
+            right slot carries the stats instead); the full tier prints
+            rarity on the type line, MTG set-symbol position. */}
+        {def.rarity && !fullArt && size !== 'full' && (
           <span
             className={cn(
               'absolute top-1 right-1 font-black rounded-full leading-tight',
@@ -2030,79 +2117,24 @@ export function CardFace({
               </span>
             )}
           </span>
-          {def.type === 'Unit' &&
-            (live ? (
-              // Live battlefield stats in the same StatChip slots the printed
-              // values use: green = buffed above printed, red = below printed
-              // / damaged, printed value struck through inside the chip.
+          {/* MTG format: at the full tier the type line's right slot carries
+              the rarity marker (set-symbol position) and stats live in the
+              bottom stat plate. The shorter tiers put the stats here instead
+              (their text box can't spare a plate row) with rarity on the art. */}
+          {size === 'full' || fullArt ? (
+            def.rarity && (
               <span
-                className="flex items-center gap-1 shrink-0"
-                title={`Printed ${def.might}/${def.grit}`}
+                className={cn(
+                  'font-black rounded-full leading-tight shrink-0',
+                  cfg.rarityChip,
+                  rarityChip(def.rarity),
+                )}
               >
-                <StatChip
-                  icon={Swords}
-                  label="Might"
-                  value={live.atk}
-                  printed={def.might}
-                  tier={size}
-                  tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
-                  emboss={mythic}
-                  onArt={fullArt}
-                />
-                <StatChip
-                  icon={Shield}
-                  label="Grit"
-                  value={live.hp}
-                  maxValue={live.maxHp !== live.hp ? live.maxHp : undefined}
-                  printed={live.maxHp !== (def.grit ?? 0) ? (def.grit ?? 0) : undefined}
-                  tier={size}
-                  tint={
-                    live.hp < live.maxHp
-                      ? 'var(--c-red)'
-                      : live.maxHp > (def.grit ?? 0)
-                        ? '#16A34A'
-                        : '#22C55E'
-                  }
-                  emboss={mythic}
-                  onArt={fullArt}
-                />
+                {def.rarity}
               </span>
-            ) : (
-              <span className="flex items-center gap-1 shrink-0">
-                <StatChip
-                  icon={Swords}
-                  label="Might"
-                  value={def.might}
-                  tier={size}
-                  tint="var(--c-red)"
-                  emboss={mythic}
-                  onArt={fullArt}
-                />
-                <StatChip
-                  icon={Shield}
-                  label="Grit"
-                  value={def.grit}
-                  tier={size}
-                  tint="#22C55E"
-                  emboss={mythic}
-                  onArt={fullArt}
-                />
-              </span>
-            ))}
-          {def.type === 'Leader' && (
-            <span className="shrink-0">
-              {/* Resolve gem — the Leader's loyalty, shown prominently where
-                  a Unit's stats sit. */}
-              <StatChip
-                icon={Shield}
-                label="Resolve"
-                value={def.resolve}
-                tier={size}
-                tint="#7C3AED"
-                emboss={mythic}
-                onArt={fullArt}
-              />
-            </span>
+            )
+          ) : (
+            statChips && <span className="flex items-center gap-1 shrink-0">{statChips}</span>
           )}
         </div>
 
@@ -2209,34 +2241,46 @@ export function CardFace({
 
           {!fullArt && <div className="flex-1 shrink-[2]" />}
         </div>
+
+        {/* Framed full-tier cards: the stat plate is a real flow row pinned
+            under the text box (bottom-right, MTG P/T position) so it can
+            never cover rules text. */}
+        {!fullArt && size === 'full' && statChips && (
+          <div className="relative z-10 flex justify-end shrink-0 px-1.5 pb-1 -mt-0.5">
+            <div className="flex items-center gap-0.5 rounded-[3px] px-0.5 py-[1px] bg-[var(--c-paper)] border border-[var(--c-ink)]/40 shadow-hard-black-xs">
+              {statChips}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Footer: color-identity swatch dots (from the printed cost pips) +
-          set/print bar + optional slot content. */}
-      {cardColorsForFace.length > 0 && !fullArt && (
-        <div
-          className="relative z-10 flex justify-center gap-1 shrink-0 bg-[var(--c-paper)]/70 py-[2px]"
-          title={`Color: ${cardColorsForFace.join('/')}`}
-        >
-          {cardColorsForFace.map((c) => (
-            <span
-              key={c}
-              aria-hidden
-              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-[var(--c-ink)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.55)] flex items-center justify-center"
-              style={{ backgroundColor: COLOR_PIP[c].bg }}
-            >
-              <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={6} />
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Set/print bar — the thin colored strip at the very bottom edge
+          (MTG collector-line position). The old color-dot footer band is
+          gone: color identity is already printed in the cost pips. */}
       {def.set && !fullArt && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
       )}
-      {/* Full-Art: floating swatch dots instead of an opaque footer band. */}
+      {/* Full-Art: the stat plate floats over the art's bottom-right corner
+          on a dark backing (there is no frame to sit on). */}
+      {fullArt && statChips && (
+        <div
+          className="absolute z-30 bottom-1 right-1 flex items-center gap-0.5 rounded-[3px] px-0.5 py-[1px] bg-black/55 backdrop-blur-[2px]"
+          title={
+            def.type === 'Unit'
+              ? live
+                ? `Might/Grit — printed ${def.might}/${def.grit}`
+                : `Might ${def.might} / Grit ${def.grit}`
+              : `Resolve ${def.resolve}`
+          }
+        >
+          {statChips}
+        </div>
+      )}
+      {/* Full-Art: floating color swatch dots, bottom-LEFT (the stat plate
+          owns the bottom-right corner). */}
       {fullArt && cardColorsForFace.length > 0 && (
         <div
-          className="absolute z-20 bottom-1.5 right-1.5 flex gap-1"
+          className="absolute z-20 bottom-1.5 left-1.5 flex gap-1"
           title={`Color: ${cardColorsForFace.join('/')}`}
         >
           {cardColorsForFace.map((c) => (

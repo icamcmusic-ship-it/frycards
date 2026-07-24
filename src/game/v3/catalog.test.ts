@@ -93,10 +93,19 @@ test('subtypes: Locations are Sanctums with produces; Charms/Events typed', () =
     if (c.type === 'Location') {
       expect(c.subtype, `${c.id}: Location subtype`).toBe('Sanctum');
       expect(c.produces, `${c.id}: Sanctum must produce an essence type`).toBeTruthy();
-      expect(
-        !!c.locPassive !== !!(c.triggers && c.triggers.length > 0),
-        `${c.id}: Sanctum needs exactly one of locPassive / trigger`,
-      ).toBe(true);
+      // v6.0: Bountiful Sanctums ARE their ability (double essence — no
+      // passive/trigger); every other Sanctum has exactly one of the two.
+      if (c.keywords?.includes('Bountiful')) {
+        expect(
+          !c.locPassive && !(c.triggers && c.triggers.length > 0),
+          `${c.id}: Bountiful Sanctum must have no other ability`,
+        ).toBe(true);
+      } else {
+        expect(
+          !!c.locPassive !== !!(c.triggers && c.triggers.length > 0),
+          `${c.id}: Sanctum needs exactly one of locPassive / trigger`,
+        ).toBe(true);
+      }
     }
     if (c.type === 'Charm') {
       expect(['Bound', 'Worn']).toContain(c.subtype);

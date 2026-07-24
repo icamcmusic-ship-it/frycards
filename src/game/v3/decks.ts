@@ -1,21 +1,30 @@
 /**
- * Riftbound v5.0 deck builder. Produces legal 30-card decks (rarity copy
- * caps, Leader color identity) from the remapped POOL_V4, each built around
+ * Riftbound v6.0 deck builder. Produces legal 60-card decks (rulebook §3:
+ * at least 60 cards, no more than 4 copies of any card; premium rarities
+ * keep stricter economy caps) from the remapped POOL_V4, each built around
  * an archetype (keyword theme + cost curve) so games exercise real strategic
- * diversity rather than one goodstuff pile. Wellsprings are auto-supplied by
- * the engine and take no deck slots; Sanctums are just utility cards.
+ * diversity rather than one goodstuff pile. Basic Wellsprings are
+ * auto-supplied by the engine and take no deck slots (the rulebook's
+ * "unlimited basic Wellspring copies" exception, digital form); Sanctums
+ * are just utility cards.
  */
 import { CardDef, totalCost } from './cards';
 import { DeckDef } from './engine';
 import { POOL_BY_ID, POOL_LEADERS, POOL_V4, poolByType } from './cardpool';
 import { Color, isColorLegal, KEYWORDS_OF_COLOR, LEADER_COLORS } from './colors';
 
-const DECK_SIZE = 30;
-export const MAX_COPIES = 3;
+/** Rulebook §3: decks are at least 60 cards. Auto-built decks use exactly 60. */
+export const DECK_MIN = 60;
+/** Sanity ceiling for the deck editor / deck codes. */
+export const DECK_MAX = 100;
+const DECK_SIZE = DECK_MIN;
+/** Rulebook §3: no more than 4 copies of any card. */
+export const MAX_COPIES = 4;
 
 /**
- * Per-rarity deck copy caps: Common/Uncommon/Rare up to 3, Super-Rare/
- * Full-Art/Ultra-Rare up to 2, Mythic exactly 1.
+ * Per-rarity deck copy caps: Common/Uncommon/Rare up to the rulebook's 4,
+ * Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1 (the premium
+ * caps are stricter economy limits layered under the rulebook's 4-copy max).
  */
 export function maxCopiesForRarity(rarity?: string): number {
   if (rarity === 'Mythic') return 1;
@@ -187,9 +196,9 @@ export function randomArchetype(rng: () => number = Math.random): Archetype {
     rng,
   ).slice(0, 2 + Math.floor(rng() * 2));
   const effects = shuffle(ALL_EFFECTS, rng).slice(0, 1 + Math.floor(rng() * 3));
-  const units = 16 + Math.floor(rng() * 5); // 16-20
-  const sanctums = 2 + Math.floor(rng() * 2); // 2-3
-  const spells = Math.max(4, DECK_SIZE - units - sanctums);
+  const units = 32 + Math.floor(rng() * 9); // 32-40
+  const sanctums = 4 + Math.floor(rng() * 3); // 4-6
+  const spells = Math.max(8, DECK_SIZE - units - sanctums);
   return {
     label: `${leader?.name ?? 'Unknown Leader'} — Randomized Build`,
     leaderId,

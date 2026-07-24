@@ -9,16 +9,24 @@ import { CardFace, CardInspectorModal } from '../components/CardFaceV4';
 import { rarityChip } from './rarity';
 import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
-import { MAX_COPIES as ENGINE_MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
+import {
+  DECK_MAX,
+  DECK_MIN,
+  MAX_COPIES as ENGINE_MAX_COPIES,
+  maxCopiesForRarity,
+} from '../game/v3/decks';
 import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
 import { EssenceIcon } from '../components/EssenceIcon';
 
-// v4.2 Rulebook §2: 30-card deck, max 3 copies of any card, Leader kept separate.
-export const DECK_SIZE = 30;
+// Rulebook §3: at least 60 cards, max 4 copies of any card, Leader kept
+// separate. DECK_SIZE is the build target (the minimum); DECK_MAX is the
+// editor's sanity ceiling.
+export const DECK_SIZE = DECK_MIN;
+export { DECK_MIN, DECK_MAX };
 // Re-exported from the engine's own constant (also what deckcode.ts imports)
-// instead of a second hand-copied `= 3` — the two used to be independent
+// instead of a second hand-copied literal — the two used to be independent
 // constants with nothing keeping them in sync.
 export const MAX_COPIES = ENGINE_MAX_COPIES;
 
@@ -56,8 +64,10 @@ export function validateDeckList(
     issues.push({ text: 'Pick a Leader.' });
     return issues;
   }
-  if (cardIds.length !== DECK_SIZE)
-    issues.push({ text: `Deck must be exactly ${DECK_SIZE} cards (currently ${cardIds.length}).` });
+  if (cardIds.length < DECK_MIN)
+    issues.push({ text: `Deck must be at least ${DECK_MIN} cards (currently ${cardIds.length}).` });
+  if (cardIds.length > DECK_MAX)
+    issues.push({ text: `Deck cannot exceed ${DECK_MAX} cards (currently ${cardIds.length}).` });
 
   const byId = new Map<string, number>();
   for (const id of cardIds) {
@@ -68,7 +78,7 @@ export function validateDeckList(
     }
     byId.set(id, (byId.get(id) || 0) + 1);
     if (c.type === 'Leader')
-      issues.push({ text: `${c.name}: Leaders cannot be in the 30-card deck.` });
+      issues.push({ text: `${c.name}: Leaders cannot be in the main deck.` });
   }
   for (const [id, n] of byId) {
     // v4.8: per-rarity caps (Mythic 1, Super-Rare/Full-Art/Ultra-Rare 2,
@@ -235,7 +245,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                   />
                 </div>
                 <div className="px-3 text-[11px] font-bold text-[var(--c-steel)]">
-                  {leader?.name || 'Unknown Leader'} · {d.card_ids.length}/{DECK_SIZE} cards
+                  {leader?.name || 'Unknown Leader'} · {d.card_ids.length}/{DECK_MIN}+ cards
                 </div>
                 <div className="flex gap-2 p-3">
                   <PopButton color="yellow" className="flex-1" onClick={() => setEditing(d)}>
@@ -369,7 +379,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
 
   const addCard = (card: CardDef) => {
     if (!leader) return;
-    if (cardIds.length >= DECK_SIZE) return;
+    if (cardIds.length >= DECK_MAX) return;
     if (countOf(card.id) >= maxCopiesForRarity(card.rarity)) return;
     if (countOf(card.id) >= (availableQty.get(card.id) || 0)) return;
     setCardIds([...cardIds, card.id]);
@@ -379,8 +389,8 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     if (idx >= 0) setCardIds([...cardIds.slice(0, idx), ...cardIds.slice(idx + 1)]);
   };
 
-  /** Auto-fills a legal 30-card deck from owned cards — any mix of cards
-   * is legal (30 cards, max 3 copies). */
+  /** Auto-fills a legal 60-card deck from owned cards (rulebook: at least
+   * 60 cards, per-rarity copy caps). */
   const handleQuickbuild = () => {
     if (
       cardIds.length > 0 &&
@@ -634,12 +644,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           <span
             className={cn(
               'heading-font text-sm px-2 py-1 ink-border-sm',
-              cardIds.length === DECK_SIZE
+              cardIds.length >= DECK_MIN && cardIds.length <= DECK_MAX
                 ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
                 : 'bg-[var(--c-red)] text-[var(--c-paper)]',
             )}
+            title={`Decks need at least ${DECK_MIN} cards (max ${DECK_MAX})`}
           >
-            {cardIds.length}/{DECK_SIZE}
+            {cardIds.length}/{DECK_MIN}+
           </span>
           <PopButton
             color="steel"
@@ -732,7 +743,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   <CardFace
                     def={c}
                     count={inDeck}
-                    dimmed={maxAddable <= 0 || cardIds.length >= DECK_SIZE}
+                    dimmed={maxAddable <= 0 || cardIds.length >= DECK_MAX}
                     onClick={() => addCard(c)}
                     footer={
                       <button

@@ -7,6 +7,60 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v6.0 — Full rulebook alignment, ten type keywords, MTG-format card faces
+
+- **Rulebook deck rules (the big one)**: decks are now **at least 60 cards**
+  (editor ceiling 100) with a **4-copy maximum** per card, replacing the
+  30-card / 3-copy digital adaptation. Premium rarities keep the stricter
+  economy caps (SR/FA/UR ≤2, Mythic 1). Enforced client-side
+  (`decks.ts`/`DeckBuilderScreen`/deck codes) AND server-side
+  (`rarity_copy_cap`, `save_deck` — `is_valid` is now `60..100`); existing
+  decks were re-graded and `claim_starter_box` now builds a legal 60-card
+  starter deck (3 copies per card).
+- **Rulebook hands & mulligan**: opening hands are 7 cards (P2 still draws
+  an 8th as the measured first-mover offset). The mulligan is the rulebook's:
+  shuffle back, draw **one fewer**, repeatable — engine `mulliganHand()`,
+  a repeat-capable match-UI overlay, and the CPU/sim path all use it.
+- **Ten new keywords — two per card type** (engine-implemented, cost-weighted,
+  deterministically assigned across ~58 pool cards, backfilled to the DB):
+  - Unit **Regenerate** (heals all marked damage at Dawn) and **Hardened**
+    (every damage packet reduced by 1; a fully-absorbed hit applies no venom
+    and feeds no Siphon).
+  - Event **Surge** (costs 1 less after another invoke this turn — engine
+    `effectiveCost()`, honored by the match UI and the CPU) and **Resonant**
+    (the effect resolves twice).
+  - Charm **Runic** (bonding from hand Deals a card) and **Soulbound**
+    (returns to its owner's hand when the bonded unit leaves the field).
+  - Location **Bountiful** (exhausts for 2 essence — `locationYield()`,
+    counted by the CPU's affordability planning) and **Sacred** (restores 1
+    Vitality at its controller's Dawn).
+  - Leader **Commander** (+1 Might aura while fielded) and **Resolute**
+    (regains 1 Resolve at Dawn, up to the printed value).
+  All ten feed the sim's keyword telemetry; new engine tests cover each
+  (`keywords-v6.test.ts`).
+- **MTG-format card template rework** (`CardFaceV4`): name+cost top line,
+  art (ratios untouched: regular 4:3 box, Full-Art full-bleed), a type line
+  whose right slot carries the rarity marker at full size (stats there at
+  the smaller tiers, rarity on the art), a text box ordered keywords →
+  rules → flavor with bigger per-tier budgets, and a bottom-right stat
+  plate (Might/Grit; Resolve for Leaders). The redundant color-dot footer
+  band is gone. Fixed a long-standing bug where the essence-cost row could
+  collapse into a one-pip-per-line vertical stack inside its popover button.
+- **Essence icons redrawn**: all seven glyphs are now bold filled
+  silhouettes (the old stroke-based gale/tide/void/shadow icons rendered
+  ~0.4px strokes at pip size — effectively blank), and `EssenceIcon` quotes
+  its CSS `mask-image` url so Vite's inlined data-URIs can't silently kill
+  the mask (which hid the icon entirely) on production builds.
+- **Sim harness v6.0 data capture**: per-card average first-play turn
+  (tempo signature), board density (avg units on board per turn), clash
+  texture (clashes/game, attackers/clash, first-clash turn), mulligan
+  outcome split (mull vs keep win rates), turn-8 comeback rate, and essence
+  spent per game; invoked Leaders now count as carriers of their own
+  Commander/Resolute keywords.
+- **Docs**: `RULEBOOK.md` rewritten for v6.0, spec updated, stale 30-card
+  references cleaned across App/menu/How-To-Play, and the keyword glossary
+  now labels each keyword's card type.
+
 ### v5.3 — Reaction window for real, balance settle, essence icons everywhere
 
 - **CPU fix (the big one)**: the clash reaction window finally works. v5.2

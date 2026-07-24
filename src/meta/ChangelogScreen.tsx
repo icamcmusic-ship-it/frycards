@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Rulebook Update (v6.0)',
+    items: [
+      'Fry Cards now plays by the full paper rulebook: decks are AT LEAST 60 cards (up to 100) with a maximum of 4 copies of any card, opening hands are 7 cards, and the mulligan is the real one — shuffle back and redraw one card FEWER, as many times as you like. Premium rarities keep their tighter collector caps (Super-Rare/Full-Art/Ultra-Rare 2, Mythic 1). Existing 30-card decks are marked incomplete — open them in the Deck Builder and QUICKBUILD or fill them up to 60. The Starter Box now grants a full legal 60-card deck.',
+      'Ten brand-new keyword abilities, two for every card type, live across the pool right now: Units gained Regenerate (heals all damage at Dawn) and Hardened (every hit is reduced by 1); Events gained Surge (costs 1 less if you already invoked a card this turn) and Resonant (the effect resolves TWICE); Charms gained Runic (bonding it draws a card) and Soulbound (returns to your hand when its unit dies); Locations gained Bountiful (taps for 2 essence) and Sacred (restores 1 Vitality at your Dawn); Leaders gained Commander (+1 Might to all your units while fielded) and Resolute (regains 1 Resolve at Dawn).',
+      "Card faces were reorganized into the classic trading-card format: name and essence cost on the top line, art, a type line carrying the rarity marker, then a text box that reads keywords → rules → flavor, with Might/Grit (or a Leader's Resolve) in a proper stat plate at the bottom-right corner. Nothing runs off the card anymore — the redundant color-dot footer is gone (your cost pips already show color identity) and every size tier got a bigger text budget. Art ratios are untouched.",
+      'The seven essence icons were redrawn as bold, filled glyphs — the old line-art versions were so thin they rendered invisible inside the small cost pips (and a CSS quirk could blank them out entirely on live builds). Fire, droplet, leaf, gust, sun, crescent and void-ring now read clearly at every size, from board tokens to the full-card view.',
+      'The CPU understands every new keyword: it counts Bountiful Sanctums as double essence when planning, gets Surge discounts, and its opening-hand judgment uses the new rulebook mulligan (it gives up a card to escape a dead hand, just like you).',
+      'How To Play was rewritten for the new rules — deck construction, the repeatable mulligan, and a keyword glossary that now labels which card type each keyword belongs to.',
+    ],
+  },
+  {
     version: 'Reaction Update (v5.3)',
     items: [
       'The clash reaction window is now a real threat: the CPU deliberately saves Locations during its own turn so it can answer your attacks with Quick Events and Ambush units — and it now gets that window when you attack, too (it turns out it was only ever reacting in our test games, never against real players).',

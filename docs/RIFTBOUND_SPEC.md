@@ -68,8 +68,12 @@ every colored pip on every card must be inside the Leader's identity.
 
 ## Keywords (KEYWORDS in keywords.ts — the only legal set)
 
-Aerial, Overrun, Quickstrike, Doublestrike, Venomous, Siphon, Alert,
-Reckless, Swarmproof, Skywatch, Warded, Unbreakable, Ambush, Immobile.
+Unit: Aerial, Overrun, Quickstrike, Doublestrike, Venomous, Siphon, Alert,
+Reckless, Swarmproof, Skywatch, Warded, Unbreakable, Ambush, Immobile,
+Regenerate, Hardened.
+v6.0 type keywords — Event: Surge, Resonant · Charm: Runic, Soulbound ·
+Location: Bountiful, Sacred · Leader: Commander, Resolute
+(see `KEYWORD_TYPES` in keywords.ts and docs/RULEBOOK.md for semantics).
 
 Semantics (rulebook §1/§6):
 - **Aerial**: can only be guarded by Aerial or Skywatch units.
@@ -91,9 +95,10 @@ Semantics (rulebook §1/§6):
 
 ## Engine (src/game/v3/engine.ts — rewritten in place)
 
-- Two players; human vs AI. Starting Vitality **20**. Deck **30** cards
-  (digital adaptation of the 60-card paper rule; rarity copy caps unchanged:
-  C/U/R ≤3, SR/FA/UR ≤2, Mythic 1).
+- Two players; human vs AI. Starting Vitality **20**. Deck **at least 60**
+  cards (rulebook §3; editor ceiling 100). Copy caps: C/U/R ≤4 (the
+  rulebook max), SR/FA/UR ≤2, Mythic 1. Opening hand **7** (+1 for the
+  second player); rulebook mulligan — repeatable, one card fewer each time.
 - Win: opponent at 0 Vitality, or opponent must Deal from an empty deck.
 - **Wellsprings**: once per turn during a main phase, a player may play one
   basic Wellspring (auto-supplied, any type in their Leader's identity, not

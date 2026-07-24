@@ -65,8 +65,12 @@ export function EssenceIcon({
         height: size,
         flexShrink: 0,
         backgroundColor: color,
-        WebkitMaskImage: `url(${url})`,
-        maskImage: `url(${url})`,
+        // Quoted url(): Vite inlines small SVGs as data: URIs whose
+        // unencoded parens/quotes break an unquoted CSS url() token — a
+        // failed mask-image hides the element entirely, which is exactly
+        // the "blank essence icon" bug on production builds.
+        WebkitMaskImage: `url("${url}")`,
+        maskImage: `url("${url}")`,
         WebkitMaskRepeat: 'no-repeat',
         maskRepeat: 'no-repeat',
         WebkitMaskPosition: 'center',

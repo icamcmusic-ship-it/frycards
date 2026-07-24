@@ -20,8 +20,11 @@ import {
   declareAttackers,
   declareGuards,
   effMight,
+  effectiveCost,
   endPhase,
   findUnit,
+  locationYield,
+  mulliganHand,
   invokeCard,
   invokeLeader,
   legalAttackers,
@@ -69,24 +72,14 @@ function handIsKeepable(hand: { def: CardDef }[]): boolean {
 
 /**
  * One-shot opening mulligan for a single player: redraw a hand with no cheap
- * plays or no Units (shuffle back, redraw same size). Returns true if
- * mulliganed.
+ * plays or no Units. Rulebook §3: the new hand is one card SMALLER (engine
+ * mulliganHand), so the CPU only mulls genuinely dead hands, and only once.
+ * Returns true if mulliganed.
  */
-export function maybeMulliganPlayer(state: GameState, pid: PlayerId, rng: () => number): boolean {
+export function maybeMulliganPlayer(state: GameState, pid: PlayerId, _rng: () => number): boolean {
   const p = state.players[pid];
   if (handIsKeepable(p.hand)) return false;
-  const n = p.hand.length;
-  p.deck.push(...p.hand);
-  p.hand = [];
-  for (let i = p.deck.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
-  }
-  for (let i = 0; i < n; i++) {
-    const c = p.deck.pop();
-    if (c) p.hand.push(c);
-  }
-  return true;
+  return mulliganHand(state, pid);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,14 +145,15 @@ function reserveLocationsForCost(state: GameState, pid: PlayerId, cost?: Essence
   return true;
 }
 
-/** Could `cost` be paid from the current pool plus untapped locations? */
+/** Could `cost` be paid from the current pool plus untapped locations
+ * (Bountiful Sanctums count double)? */
 function canAffordPotential(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
   if (!cost) return true;
   const p = state.players[pid];
   const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
   for (const l of p.locations) {
     if (!l.exhausted && !reservedLocations.has(l.iid))
-      pool[l.produces] = (pool[l.produces] ?? 0) + 1;
+      pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
   }
   return canPayCost(pool, cost);
 }
@@ -306,12 +300,12 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         (c) =>
           c.iid !== reservedIid &&
           invokePriority(state, pid, c.def) >= -50 &&
-          canAffordPotential(state, pid, c.def.cost) &&
+          canAffordPotential(state, pid, effectiveCost(state, pid, c.def)) &&
           !(c.def.type === 'Charm' && p.field.length === 0),
       )
       .sort((a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def));
     for (const c of playable) {
-      if (!tapForCost(state, pid, c.def.cost)) continue;
+      if (!tapForCost(state, pid, effectiveCost(state, pid, c.def))) continue;
       if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
       const bondTargetIid =
@@ -333,8 +327,8 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (reservedIid && !state.winner && p.hand.length === 1) {
     const reserved = p.hand.find((c) => c.iid === reservedIid);
     if (reserved) for (const l of p.locations) reservedLocations.delete(l.iid);
-    if (reserved && canAffordPotential(state, pid, reserved.def.cost)) {
-      tapForCost(state, pid, reserved.def.cost);
+    if (reserved && canAffordPotential(state, pid, effectiveCost(state, pid, reserved.def))) {
+      tapForCost(state, pid, effectiveCost(state, pid, reserved.def));
       if (canInvoke(state, pid, reserved.iid)) {
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;

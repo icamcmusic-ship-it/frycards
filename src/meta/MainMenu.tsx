@@ -198,7 +198,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     {
       key: 'decks',
       label: 'DECK BUILDER',
-      desc: guest ? 'Requires an account' : 'Forge 30-card decks',
+      desc: guest ? 'Requires an account' : 'Forge 60-card decks',
       icon: <Layers className="w-8 h-8" />,
       color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       disabled: guest,
