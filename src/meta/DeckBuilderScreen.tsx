@@ -11,8 +11,9 @@ import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType } from '../game/v3/cardpo
 import { CardDef, totalCost } from '../game/v3/cards';
 import { MAX_COPIES as ENGINE_MAX_COPIES, maxCopiesForRarity } from '../game/v3/decks';
 import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
-import { COLOR_HEX, COLOR_LETTER } from './colors';
+import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
+import { EssenceIcon } from '../components/EssenceIcon';
 
 // v4.2 Rulebook §2: 30-card deck, max 3 copies of any card, Leader kept separate.
 export const DECK_SIZE = 30;
@@ -612,7 +613,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   className="w-3.5 h-3.5 rounded-full border border-white/40 flex items-center justify-center text-[7px] font-black leading-none text-white"
                   style={{ backgroundColor: COLOR_HEX[c] }}
                 >
-                  {COLOR_LETTER[c]}
+                  <EssenceIcon type={c} color="#FFFFFF" size={9} />
                 </span>
               ))}
             </span>

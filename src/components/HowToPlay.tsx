@@ -3,7 +3,8 @@ import { MetaHeader } from '../meta/ui';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
 import { KEYWORDS, KEYWORD_TEXT } from '../game/v3/keywords';
 import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
-import { COLOR_PIP, COLOR_LETTER } from '../meta/colors';
+import { COLOR_PIP } from '../meta/colors';
+import { EssenceIcon } from './EssenceIcon';
 
 // Condensed view of docs/RULEBOOK.md (Riftbound Rulebook v5.0), plus a
 // standalone rarity-system explainer and an app feature guide — reachable
@@ -323,7 +324,11 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                             color: COLOR_PIP[term as (typeof COLORS)[number]]?.fg,
                           }}
                         >
-                          {COLOR_LETTER[term as (typeof COLORS)[number]]}
+                          <EssenceIcon
+                            type={term as (typeof COLORS)[number]}
+                            color={COLOR_PIP[term as (typeof COLORS)[number]]?.fg}
+                            size={8}
+                          />
                         </span>
                       )}
                       {term}

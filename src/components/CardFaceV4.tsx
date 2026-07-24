@@ -25,7 +25,7 @@ import {
   isMythic,
   RARITY_HEX,
 } from '../meta/rarity';
-import { cardColors, COLORS } from '../game/v3/colors';
+import { cardColors, COLORS, Color } from '../game/v3/colors';
 import { KEYWORD_TEXT } from '../game/v3/keywords';
 import {
   COLOR_PIP,
@@ -34,6 +34,7 @@ import {
   colorBg,
   colorHexPrimary,
 } from '../meta/colors';
+import { EssenceIcon } from './EssenceIcon';
 
 export function kwList(def: CardDef): string[] {
   return def.keywords || [];
@@ -506,7 +507,14 @@ export function EssenceCostRow({
   onArt?: boolean;
 }) {
   const { d, f } = PIP_SIZE[size];
-  const pips: { key: string; bg: string; fg: string; glyph: string; title: string }[] = [];
+  const pips: {
+    key: string;
+    bg: string;
+    fg: string;
+    glyph: string;
+    title: string;
+    color?: Color;
+  }[] = [];
   for (const c of COLORS) {
     const n = cost?.pips[c] ?? 0;
     for (let i = 0; i < n; i++) {
@@ -516,6 +524,7 @@ export function EssenceCostRow({
         fg: COLOR_PIP[c].fg,
         glyph: COLOR_LETTER[c],
         title: `${c} essence`,
+        color: c,
       });
     }
   }
@@ -554,7 +563,11 @@ export function EssenceCostRow({
               : 'inset 0 1px 1px rgba(255,255,255,0.55)',
           }}
         >
-          {p.glyph}
+          {p.color ? (
+            <EssenceIcon type={p.color} color={p.fg} size={Math.round(d * 0.62)} />
+          ) : (
+            p.glyph
+          )}
         </span>
       ))}
     </span>
@@ -2007,7 +2020,11 @@ export function CardFace({
                   color: COLOR_PIP[def.produces].fg,
                 }}
               >
-                {COLOR_LETTER[def.produces]}
+                <EssenceIcon
+                  type={def.produces}
+                  color={COLOR_PIP[def.produces].fg}
+                  size={PIP_SIZE[size].d - 8}
+                />
               </span>
             )}
           </span>

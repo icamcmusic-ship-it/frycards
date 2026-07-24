@@ -3,7 +3,8 @@
  *
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
  * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
- * verified by scripts/fetch-cards.ts) and reports:
+ * verified by scripts/fetch-cards.ts, and re-verified live for v5.2 — see
+ * docs/BALANCE_SIM_FINDINGS_v5.2.md) and reports:
  *
  *  - match outcomes: win rates by Leader, color, first/second player,
  *    win condition (vitality vs deck-out), game length distribution
@@ -18,6 +19,21 @@
  *    suicide attacks, wasted essence with playable cards, idle leaders,
  *    color-clogged hands
  *  - invariant violations (engine correctness canaries)
+ *
+ * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v5.2.md carry-forward items):
+ *  - archetype-normalized keyword deltas: carrier win rate residual computed
+ *    against each game's own Leader-archetype baseline (8 Leaders = 8
+ *    cohorts), not the flat 50% global baseline, to strip cohort noise.
+ *  - paired-seed seat-swap suite: same deck pairing + identical seed, seats
+ *    swapped, run as its own isolated mini-suite (not mixed into card/keyword
+ *    stats) to measure the first-mover edge net of cohort composition.
+ *  - per-cost-tier win rates + residual vs that tier's deck-baseline average.
+ *  - CPU decision-quality taxonomy: shadow (lookahead) re-decisions for
+ *    attack / guard / removal-target choices, diffed against the CPU's
+ *    actual choice and bucketed by decision type — generalizes the v5.1
+ *    lapse counters into a fuller reasoning-lapse taxonomy.
+ *  - essence-curve efficiency: turns ending with a castable, affordable hand
+ *    card that was not played (held-playable-card turns).
  *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed]
  * Output: JSON report to docs/sim-runs/ + console summary.
@@ -77,6 +93,49 @@ for (const kw of KEYWORDS) kwStats[kw] = { carrierGames: 0, carrierWins: 0, acti
 const leaderStats: Record<string, { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }> = {};
 const colorStats: Record<string, { games: number; wins: number }> = {};
 for (const c of COLORS) colorStats[c] = { games: 0, wins: 0 };
+
+// --- v5.2: archetype-normalized keyword deltas -----------------------------
+// Cohort key = Leader id (8 distinct Leaders, each a fixed 2-color identity —
+// the natural "archetype" unit since randomArchetype() always themes off the
+// Leader's own colors). kwArchetypeStats lets us compute each keyword's
+// carrier win rate residual against ITS OWN cohort mix rather than a flat
+// 50% baseline.
+const archetypeStats: Record<string, { games: number; wins: number }> = {};
+const kwArchetypeStats: Record<string, Record<string, { games: number; wins: number }>> = {};
+for (const kw of KEYWORDS) kwArchetypeStats[kw] = {};
+
+// --- v5.2: per-cost-tier win rates ------------------------------------------
+const tierStats: Record<string, { playedGames: number; playedWins: number; deckGames: number; deckWins: number }> = {};
+function ts(tier: number) {
+  const k = String(tier);
+  return (tierStats[k] ??= { playedGames: 0, playedWins: 0, deckGames: 0, deckWins: 0 });
+}
+
+// --- v5.2: CPU decision-quality taxonomy ------------------------------------
+// Each entry: a decision point where a simple shadow (lookahead) heuristic,
+// computed from the SAME visible state, would have chosen differently than
+// the CPU's actual choice. Not all divergences are "wrong" (both heuristics
+// are simplifications of the real optimum) — they're a signal for a human
+// pass over the game log, same caveat as v5.1's tookGuardableLethal metric.
+const cpuDecisions = {
+  attackDivergence: 0, // shadow attacker set != actual attacker set
+  attackOpportunities: 0,
+  guardDivergence: 0, // shadow guard assignment leaves different residual damage
+  guardOpportunities: 0,
+  targetSuboptimal: 0, // removal aimed at a live enemy when a bigger one was legal
+  targetOpportunities: 0,
+  sequencingSuboptimal: 0, // a cheaper card was played before a strictly-better-value one it could also afford, wasting essence when both didn't fit
+  sequencingOpportunities: 0,
+  reactionWindowMissed: 0, // reaction window open, defender had a legal Quick/Ambush play, didn't use it
+  reactionWindowOpportunities: 0,
+};
+
+// --- v5.2: essence-curve efficiency -----------------------------------------
+const curveStats = {
+  heldPlayableCardTurns: 0, // turn ended with an on-color, affordable-by-locations card still in hand
+  totalTurns: 0,
+  essenceFloatedEstimate: 0, // sum of (locations - cards played this turn) as a rough float proxy
+};
 
 const mech = {
   games: 0,
