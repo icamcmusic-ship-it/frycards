@@ -7,6 +7,45 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v5.2 — CPU reaction-window fix, keyword re-tune, README catch-up
+
+- **CPU fix**: the main-phase play loop always spent Quick Events and Ambush
+  units the instant they were affordable during the CPU's own turn, so the
+  clash reaction window almost never had anything left to use it with (sims
+  showed near-zero reaction plays despite the v5.1 essence-tapping fix).
+  The CPU now holds back one such card per turn for the opponent's clash
+  reaction window instead, and floats all essence up front on turns where
+  nothing in hand is reaction-capable (removing a partial-tapping edge case
+  that could leave an affordable card falsely un-castable). Sim-verified:
+  reaction plays roughly 4-5x more common across both test seeds, with no
+  new invariant violations.
+- **Removal targeting fix**: default auto-targeting (used by the CPU and by
+  triggered abilities) no longer points a Shatter effect at an Unbreakable
+  unit, which can't be shattered and would silently waste the effect; it now
+  picks the biggest legal target that can actually be shattered.
+  Reaction-window Quick removal targeting gets the same fix.
+- **Attack-declaration tightening**: the CPU's attack heuristic now attacks
+  only when a trade against the worst likely guard is genuinely favorable
+  (kills and survives) or the hit is unguardable, dropping an extra
+  "attack anyway if survives" case that was adding attacks a lookahead
+  cross-check disagreed with.
+- **Keyword cost re-tune** (`src/game/v3/keywords.ts`, from the v5.2 sim
+  pass in `docs/BALANCE_SIM_FINDINGS_v5.2.md`): Unbreakable's cost weight
+  raised again (6→7) — it stayed the single strongest keyword by a wide
+  margin even after the v5.1 bump; Swarmproof raised (1→2) after its cost-2/3
+  carriers ran hot across both sim seeds; Siphon raised (1→2), partially
+  reversing the v5.1 cut now that cohort-normalized data shows it was
+  under-costed rather than genuinely weak.
+- **README**: rewrote "The Game" and the surrounding sections, which still
+  described the retired v4.2 dice/Cast-Slot ruleset, to match the shipped
+  essence-based v5 engine (Essence types, Might/Grit, Resolve, keywords,
+  Dawn/Main/Clash/Dusk turn structure, all 8 Leaders).
+- **Docs cleanup**: retired `docs/BALANCE_SIM_FINDINGS_v5.1.md` (superseded
+  by v5.2) and stale raw sim-run dumps under `docs/sim-runs/`;
+  `docs/RIFTBOUND_SPEC.md` now points readers to `docs/RULEBOOK.md` as the
+  canonical rules reference and is kept only for its implementation-contract
+  detail.
+
 ### v5.1 — Fry Cards rename, balance overhaul, smarter CPU
 
 - **Name**: the game is now simply **Fry Cards** — the "Riftbound" codename is

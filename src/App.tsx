@@ -6,6 +6,7 @@ import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
 import { preloadImages } from './lib/preload';
+import { withTimeout } from './lib/utils';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
@@ -362,7 +363,11 @@ export default function App() {
   // screen forever with no way out, so any failure here surfaces a retry.
   useEffect(() => {
     let cancelled = false;
-    fetchCardTemplates()
+    // A stalled request (bad proxy, dropped connection) never rejects — it
+    // just never resolves — which would otherwise strand players on this
+    // screen forever with no retry button. 20s is generous enough for a
+    // slow connection but bounded.
+    withTimeout(fetchCardTemplates(), 20_000, null)
       .then((templates) => {
         if (cancelled) return;
         if (templates) applyCardPool(templates);

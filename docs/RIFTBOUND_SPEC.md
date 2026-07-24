@@ -1,5 +1,14 @@
 # Riftbound Conversion Spec (v5.0)
 
+> **Status: shipped.** This was the implementation contract for the v4.x
+> dice-placement → essence-based conversion; the conversion is complete and
+> live. For the current player-facing rules, see
+> [`docs/RULEBOOK.md`](RULEBOOK.md) — that's the canonical rules reference,
+> kept in sync with the engine. This doc is retained only for the
+> module-level implementation details (file/table contracts) not covered by
+> the rulebook. "Riftbound" was the internal codename during conversion; the
+> shipped game is **Fry Cards** — see `CHANGELOG.md`.
+
 FryCards is converted from the v4.x dice-placement rules to the **Riftbound**
 rulebook (essence-based TCG). This document is the implementation contract all
 modules follow. Dice, Cast Slots, rolls, combos, and patterns are GONE.

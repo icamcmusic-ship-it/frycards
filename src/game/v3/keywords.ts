@@ -51,19 +51,24 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
  * Immobile is a drawback and discounts. */
 // v5.1: weights are now a PURE cost surcharge (the stat budget no longer
 // grows with them), tuned over two full sim passes to land carriers near 50%.
+// v5.2: Unbreakable 6->7 (archetype-normalized delta was still +12.3, the
+// largest in the pool, after the v5.1 bump) and Swarmproof 1->2 (cost-2/3
+// Swarmproof carriers ran hot across both v5.2 seeds even post-surcharge-fix)
+// pushed up; Siphon 1->2 (archetype-normalized delta -8.7, confirmed
+// under-costed net of cohort — reversing part of the v5.1 cut).
 export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 2,
   Overrun: 3,
   Quickstrike: 3,
   Doublestrike: 3,
   Venomous: 2,
-  Siphon: 1,
+  Siphon: 2,
   Alert: 2,
   Reckless: 1,
-  Swarmproof: 1,
+  Swarmproof: 2,
   Skywatch: 0,
   Warded: 0,
-  Unbreakable: 6,
+  Unbreakable: 7,
   Ambush: 1,
   Immobile: -2,
 };

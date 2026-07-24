@@ -52,7 +52,8 @@ import { playTurn, chooseGuards, maybeMulliganPlayer } from '../game/v3/ai';
 import { CardDef, Effect, EssenceCost, MAX_HAND, totalCost, hasKw } from '../game/v3/cards';
 import { COLORS, EssenceType } from '../game/v3/colors';
 import { POOL_BY_ID } from '../game/v3/cardpool';
-import { COLOR_PIP, COLOR_LETTER } from '../meta/colors';
+import { COLOR_PIP } from '../meta/colors';
+import { EssenceIcon } from './EssenceIcon';
 import { cn } from '../lib/utils';
 import { CardFace, CARD_SIZES, describeEffect, renderKeywordText } from './CardFaceV4';
 import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
@@ -402,7 +403,7 @@ function EssencePips({ pool, size = 16 }: { pool: Partial<Record<EssenceType, nu
             boxShadow: '0 1px 2px rgba(0,0,0,0.6)',
           }}
         >
-          {COLOR_LETTER[p.c]}
+          <EssenceIcon type={p.c} color={COLOR_PIP[p.c].fg} size={Math.round(size * 0.62)} />
         </span>
       ))}
     </span>
@@ -457,7 +458,7 @@ function LocationTile({
           color: COLOR_PIP[loc.produces].fg,
         }}
       >
-        {COLOR_LETTER[loc.produces]}
+        <EssenceIcon type={loc.produces} color={COLOR_PIP[loc.produces].fg} size={9} />
       </span>
       <span className="text-[7.5px] font-black leading-tight text-[var(--c-ink)] max-w-[70px] truncate">
         {sanctum ? loc.def!.name : 'WELLSPRING'}
@@ -1599,6 +1600,7 @@ export function GameV4({
               });
           }}
           className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
+          aria-label="Concede match"
         >
           ✕ CONCEDE
         </button>
@@ -1903,7 +1905,7 @@ export function GameV4({
                       color: COLOR_PIP[t].fg,
                     }}
                   >
-                    {COLOR_LETTER[t]}
+                    <EssenceIcon type={t} color={COLOR_PIP[t].fg} size={10} />
                   </button>
                 ))}
               </span>
