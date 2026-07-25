@@ -355,7 +355,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     placeholder="Search by username…"
                     className="flex-1 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
                   />
-                  <PopButton color="black" onClick={handleSearch} disabled={searching}>
+                  <PopButton
+                    color="black"
+                    onClick={handleSearch}
+                    disabled={searching}
+                    ariaLabel="Search players"
+                  >
                     <Search className="w-4 h-4" />
                   </PopButton>
                 </div>
@@ -484,6 +489,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       <PopButton
                         color="steel"
                         disabled={busy}
+                        ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
                         onClick={() => {
                           if (
                             confirm(`Remove ${other?.username || 'this player'} from your friends?`)
@@ -890,7 +896,7 @@ function TradeComposerModal({
             TRADE WITH {(partner.username || 'PLAYER').toUpperCase()}
             <RoleBadge role={partner.role} />
           </div>
-          <PopButton color="yellow" onClick={onClose}>
+          <PopButton color="yellow" onClick={onClose} ariaLabel="Close trade composer">
             ✕
           </PopButton>
         </div>

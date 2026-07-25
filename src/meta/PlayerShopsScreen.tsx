@@ -492,6 +492,7 @@ function ReportModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
+      aria-label="Report listing"
     >
       <div
         className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
