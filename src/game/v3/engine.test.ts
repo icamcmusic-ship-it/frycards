@@ -28,6 +28,7 @@ import {
   makeCardInst,
   mulberry32,
   playWellspring,
+  wellspringAllowance,
   rebondCharm,
   resolveClash,
   summonUnit,
@@ -146,6 +147,71 @@ describe('wellsprings', () => {
     expect(playWellspring(s, 'P2', 'Ember')).toBe(false);
     endPhase(s); // -> Clash
     expect(playWellspring(s, 'P1', 'Ember')).toBe(false);
+  });
+
+  // v6.6 first-mover compensation: the player who did NOT take the first
+  // turn gets a second opening Wellspring, and it arrives exhausted.
+  test('second player gets two opening Wellsprings, the second exhausted', () => {
+    // Needs real cards: the second player Deals on their opening Dawn, and an
+    // empty deck would end the game there.
+    const s = game({ deck: [VANILLA.id, VANILLA.id, VANILLA.id] });
+    expect(wellspringAllowance(s, 'P1')).toBe(1);
+    expect(wellspringAllowance(s, 'P2')).toBe(2);
+    // Hand the turn to P2 so they can act in their own Main phase.
+    endPhase(s); // Clash
+    endPhase(s); // Main2
+    endPhase(s); // Dusk -> P2's Dawn -> Main1
+    expect(s.active).toBe('P2');
+    expect(playWellspring(s, 'P2', 'Ember')).toBe(true);
+    expect(playWellspring(s, 'P2', 'Ember')).toBe(true);
+    expect(playWellspring(s, 'P2', 'Ember')).toBe(false); // allowance spent
+    expect(s.players.P2.locations.map((l) => l.exhausted)).toEqual([false, true]);
+  });
+
+  test('the compensation follows whoever went second, not the P2 seat', () => {
+    const dd = (leaderId: string) => ({ leaderId, cards: [] });
+    const s = createGame(dd(LEADER.id), dd(LEADER.id), POOL, {
+      rng: mulberry32(42),
+      shuffle: false,
+      handSize: 0,
+      firstPlayer: 'P2',
+    });
+    expect(s.active).toBe('P2');
+    expect(wellspringAllowance(s, 'P2')).toBe(1);
+    expect(wellspringAllowance(s, 'P1')).toBe(2);
+  });
+
+  test('the bonus allowance is opening-turn only', () => {
+    const s = game();
+    s.turn = 2;
+    expect(wellspringAllowance(s, 'P2')).toBe(1);
+  });
+});
+
+describe('turn order', () => {
+  test('P2 going first skips its own turn-1 Deal and rolls the turn counter', () => {
+    const dd = (leaderId: string) => ({ leaderId, cards: [VANILLA.id, VANILLA.id, VANILLA.id] });
+    const s = createGame(dd(LEADER.id), dd(LEADER.id), POOL, {
+      rng: mulberry32(7),
+      shuffle: false,
+      handSize: 0,
+      firstPlayer: 'P2',
+    });
+    expect(s.firstPlayer).toBe('P2');
+    // The player on the play skips the opening Deal; the other one draws.
+    expect(s.players.P2.hand.length).toBe(0);
+    expect(s.turn).toBe(1);
+    endPhase(s); // Clash
+    endPhase(s); // Main2
+    endPhase(s); // Dusk -> P1's turn
+    expect(s.active).toBe('P1');
+    expect(s.turn).toBe(1); // still turn 1: P1 is the second player here
+    expect(s.players.P1.hand.length).toBe(1); // P1 dealt on their Dawn
+    endPhase(s);
+    endPhase(s);
+    endPhase(s); // back around to P2
+    expect(s.active).toBe('P2');
+    expect(s.turn).toBe(2);
   });
 });
 

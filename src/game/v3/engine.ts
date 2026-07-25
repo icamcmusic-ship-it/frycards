@@ -125,6 +125,13 @@ export interface GameState {
   phase: Phase;
   /** Turn counter: 1 = first player's first turn. */
   turn: number;
+  /** Which seat took the first turn. Not always P1: the UI randomises this
+   * per match so the human isn't permanently on the play (and so the
+   * second-player compensation applies to whichever side actually goes
+   * second). Everything that used to key off the literal 'P1' — the turn-1
+   * Deal skip, the turn counter rollover, the Wellspring allowance — keys
+   * off this instead. */
+  firstPlayer: PlayerId;
   winner: PlayerId | null;
   clash: ClashState | null;
   log: string[];
@@ -283,6 +290,8 @@ export interface GameOptions {
   shuffle?: boolean;
   /** Default STARTING_HAND. */
   handSize?: number;
+  /** Which seat takes the first turn. Defaults to 'P1'. */
+  firstPlayer?: PlayerId;
 }
 
 function shuffleArr<T>(arr: T[], rng: Rng): void {
@@ -332,9 +341,11 @@ export function createGame(
       invokedCardThisTurn: false,
     };
   };
+  const firstPlayer = opts.firstPlayer ?? 'P1';
   const state: GameState = {
     players: { P1: mk('P1', deckP1), P2: mk('P2', deckP2) },
-    active: 'P1',
+    active: firstPlayer,
+    firstPlayer,
     phase: 'Dawn',
     turn: 1,
     winner: null,
@@ -778,7 +789,7 @@ function runDawn(state: GameState): void {
   }
   runTriggers(state, state.active, 'atDawn');
   // Deal 1 (first player skips on turn 1).
-  if (!(state.turn === 1 && state.active === 'P1')) dealCards(state, state.active, 1);
+  if (!(state.turn === 1 && state.active === state.firstPlayer)) dealCards(state, state.active, 1);
   if (!state.winner) state.phase = 'Main1';
 }
 
@@ -794,7 +805,7 @@ function runDusk(state: GameState): void {
     state.log.push(`${p.id} sheds ${c.def.name}.`);
   }
   state.active = opponentOf(state.active);
-  if (state.active === 'P1') state.turn++;
+  if (state.active === state.firstPlayer) state.turn++;
   clearEssence(state);
   if (!state.winner) runDawn(state);
 }
@@ -862,7 +873,7 @@ export function wellspringChoices(state: GameState, pid: PlayerId): EssenceType[
  * accrues on.
  */
 export function wellspringAllowance(state: GameState, pid: PlayerId): number {
-  return pid === 'P2' && state.turn === 1 ? 2 : 1;
+  return pid !== state.firstPlayer && state.turn === 1 ? 2 : 1;
 }
 
 /** Play one basic Wellspring (auto-supplied) — own main phase, within this

@@ -189,7 +189,6 @@ import {
   effMight,
   legalAttackers,
   remainingGrit,
-  canInvoke,
   findUnit,
   canPayCost,
   essenceTotal,
@@ -504,7 +503,6 @@ telemetry.onGuardAssign = (attackerIid, guardIid, mustSurvive) => {
 // against the live state ai.ts itself decided from, at that exact moment.
 telemetry.onAttackDecision = (state, pid, chosen) => {
   if (!telemetryEnabled) return;
-  attackDecisionSeen = true;
   cpuDecisions.attackOpportunities++;
   const shadow = shadowAttackers(state, pid);
   const actual = new Set(chosen);
@@ -567,11 +565,6 @@ const fpDiagnosis = {
   vitDiffByTurn: {} as Record<number, { sum: number; n: number }>,
 };
 const lengthBucket = (t: number) => (t <= 10 ? '<=10' : t <= 20 ? '11-20' : t <= 30 ? '21-30' : '>30');
-
-// --- v6.6: ground-truth attack-decision capture ----------------------------
-// Fed by telemetry.onAttackDecision straight out of ai.ts's chooseAttackers,
-// so the shadow comparison runs against the SAME state the CPU decided from.
-let attackDecisionSeen = false;
 
 const invariants: string[] = [];
 function checkInvariants(state: GameState, game: number, turn: number): void {

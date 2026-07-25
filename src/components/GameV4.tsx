@@ -43,6 +43,7 @@ import {
   mulliganHand,
   legalAttackers,
   legalGuardsFor,
+  wellspringAllowance,
   wellspringChoices,
   effMight,
   effGrit,
@@ -835,8 +836,14 @@ export function GameV4({
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
   const [g] = useState<GameState>(() => {
+    const rng = mulberry32(Date.now() % 2147483647);
     const game = createGame(humanDeck, cpuDeck, POOL_BY_ID, {
-      rng: mulberry32(Date.now() % 2147483647),
+      rng,
+      // Coin-flip for the first turn. The human seat is fixed at P1, so
+      // without this the player was permanently on the play every single
+      // match — and the second-player compensation (the extra opening
+      // Wellspring) would only ever have gone to the CPU.
+      firstPlayer: rng() < 0.5 ? HUMAN : CPU,
     });
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
@@ -1640,6 +1647,13 @@ export function GameV4({
   const mulliganDialogRef = useDialogFocus(stage === 'mulligan');
   const gameOverDialogRef = useDialogFocus(stage === 'over' && !!g.winner);
 
+  /** Wellsprings the player may still place this turn (2 on the opening turn
+   * when on the draw — see engine `wellspringAllowance`). */
+  const wellspringsLeft = Math.max(
+    0,
+    wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn,
+  );
+
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
 
@@ -1687,6 +1701,19 @@ export function GameV4({
         </button>
         <span className="heading-font text-[11px] text-[var(--c-yellow)] shrink-0">
           TURN {g.turn} · {g.active === HUMAN ? 'YOU' : 'CPU'}
+        </span>
+        {/* Who won the opening coin-flip. It is randomised per match now, and
+            it changes real things (the turn-1 Deal skip, the second player's
+            bonus Wellspring), so it can't be left implicit. */}
+        <span
+          className="heading-font text-[8px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-steel)]/60 text-[var(--c-paper)] shrink-0 hidden sm:inline"
+          title={
+            g.firstPlayer === HUMAN
+              ? 'You went first — you skipped the Deal on turn 1.'
+              : 'You went second — you got a second (exhausted) Wellspring on your opening turn.'
+          }
+        >
+          {g.firstPlayer === HUMAN ? 'ON THE PLAY' : 'ON THE DRAW'}
         </span>
         {/* Phase tracker: Dawn → Main I → Clash → Main II → Dusk */}
         <div className="flex items-center gap-0.5">
@@ -1977,12 +2004,20 @@ export function GameV4({
             ))}
             {inMyMain && !me.wellspringPlayedThisTurn && (
               <span className="flex items-center gap-0.5 bg-[var(--c-ink)] ink-border-sm px-1 py-0.5">
-                <span className="text-[7px] font-black text-[var(--c-yellow)]">+ WELLSPRING</span>
+                <span className="text-[7px] font-black text-[var(--c-yellow)]">
+                  {/* On the draw, the opening turn carries two — say so, or a
+                      player has no way to know the second one is available. */}
+                  {wellspringsLeft > 1 ? `+ WELLSPRING ×${wellspringsLeft}` : '+ WELLSPRING'}
+                </span>
                 {wellspringChoices(g, HUMAN).map((t) => (
                   <button
                     key={t}
                     onClick={() => tryWellspring(t)}
-                    title={`Play a ${t} Wellspring (one per turn, free)`}
+                    title={
+                      wellspringsLeft > 1
+                        ? `Play a ${t} Wellspring — ${wellspringsLeft} left this turn (you are on the draw; the second arrives exhausted)`
+                        : `Play a ${t} Wellspring (free)`
+                    }
                     aria-label={`Play a ${t} Wellspring`}
                     className="btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70"
                     style={{

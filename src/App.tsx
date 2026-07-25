@@ -252,6 +252,48 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
 
 // ---------------------------------------------------------------------------
 // App shell
+/**
+ * Boot splash. The bootstrap allows each network call up to 20 seconds before
+ * it gives up and shows the retry screen, so on a slow or flaky connection
+ * the player can sit in front of a bare pulsing logo for twenty seconds with
+ * no indication that anything is happening or wrong. This keeps the same
+ * splash but starts explaining itself after a few seconds, and offers a
+ * manual retry rather than making the player wait out the full deadline.
+ */
+function BootSplash({ onRetry }: { onRetry: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+        FRY CARDS
+      </div>
+      {elapsed >= 4 && (
+        <p
+          className="text-[var(--c-paper)]/80 font-bold text-xs max-w-xs"
+          role="status"
+          aria-live="polite"
+        >
+          {elapsed >= 10
+            ? 'Still connecting — your network looks slow right now.'
+            : 'Connecting to the server…'}
+        </p>
+      )}
+      {elapsed >= 10 && (
+        <button
+          onClick={onRetry}
+          className="btn-pop heading-font text-xs px-4 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+        >
+          RETRY NOW
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 function AppInner() {
   const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
@@ -300,15 +342,7 @@ function AppInner() {
     );
   }
 
-  if (loading || !themeLoaded) {
-    return (
-      <div className="w-full h-screen bg-[var(--c-ink)] flex items-center justify-center">
-        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          FRY CARDS
-        </div>
-      </div>
-    );
-  }
+  if (loading || !themeLoaded) return <BootSplash onRetry={retryBoot} />;
 
   if (!session && !guest) return <AuthScreen />;
 
