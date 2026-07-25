@@ -825,7 +825,14 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
     .eq('status', 'active')
     .order('ends_at')
     .limit(200);
-  if (error) console.error('fetchMarketListings failed:', error.message);
+  if (error) {
+    console.error('fetchMarketListings failed:', error.message);
+    // Throw instead of returning [] — callers (MarketplaceScreen.reload)
+    // catch this to show an error+retry state; silently returning an empty
+    // array made a broken query indistinguishable from a genuinely empty
+    // market.
+    throw error;
+  }
   return (data as MarketListing[]) || [];
 }
 
@@ -836,7 +843,10 @@ export async function fetchMyMarketActivity(userId: string): Promise<MarketListi
     .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
     .order('created_at', { ascending: false })
     .limit(50);
-  if (error) console.error('fetchMyMarketActivity failed:', error.message);
+  if (error) {
+    console.error('fetchMyMarketActivity failed:', error.message);
+    throw error;
+  }
   return (data as MarketListing[]) || [];
 }
 
