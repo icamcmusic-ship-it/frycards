@@ -480,6 +480,13 @@ export function costSummary(def: CardDef): string | null {
   return `Essence Cost: ${parts.join(' + ')} (total ${totalCost(def.cost)})`;
 }
 
+/** A Serialized print's total run (`serial.cap`) is NaN when the supply
+ * table failed to load (see fetchMySerializedCards) — render that as "?"
+ * rather than a literal "NaN", which would look like a rendering bug. */
+function capText(cap: number): string | number {
+  return Number.isNaN(cap) ? '?' : cap;
+}
+
 /** Scales a font size down as text grows past a soft length target, so long
  * names/flavor text shrink to fit instead of getting clipped or truncated.
  * Never shrinks below `min`. */
@@ -1496,7 +1503,7 @@ function MicroCard({
   const isFoil = foil && !serial;
   const mythic = isMythic(def.rarity) && !serial;
   const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
-  const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const TypeIcon = TYPE_ICON[def.type];
   const nameFontPx = fitFontSize(def.name, 7.5, 5.5, 12);
   const cardColorsForFace = cardColors(def);
@@ -1565,9 +1572,9 @@ function MicroCard({
           {serial && (
             <span
               className="serial-plate text-[5px] font-black px-0.5 rounded-full tracking-wide"
-              title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+              title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
             >
-              #{serial.number}/{serial.cap}
+              #{serial.number}/{capText(serial.cap)}
             </span>
           )}
           {isFoil && (
@@ -1783,7 +1790,7 @@ export function CardFace({
   const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
   const isFoil = foil && !serial;
-  const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
   // The card's visible fill/background tracks its color identity; rarity
   // keeps the border/glow/corner-gem treatment (rarityBorder/rarityGlow).
@@ -2055,9 +2062,9 @@ export function CardFace({
               'serial-plate absolute top-1 left-1 font-black rounded-full tracking-wide',
               cfg.foilBadge,
             )}
-            title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+            title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
           >
-            #{serial.number}/{serial.cap}
+            #{serial.number}/{capText(serial.cap)}
           </span>
         )}
         {(foilCount || 0) > 0 && (

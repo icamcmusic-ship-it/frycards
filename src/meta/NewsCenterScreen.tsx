@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, ScrollText, Newspaper } from 'lucide-react';
 import { MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
@@ -58,21 +58,31 @@ export function NewsCenterScreen({
   // true forever — the .then() callback never ran, `setLoading(false)` never
   // fired, and both sections just rendered blank with no loading indicator
   // and no way to tell it had failed.
+  //
+  // A generation counter guards against an older in-flight load() resolving
+  // after a newer one (e.g. RETRY clicked twice, or a mount + a fast RETRY)
+  // and clobbering fresher posts/feed with stale data.
+  const loadGen = useRef(0);
   const load = () => {
+    const gen = ++loadGen.current;
     setLoading(true);
     Promise.all([fetchNewsPosts(), fetchSerializedFeed()])
       .then(([p, f]) => {
+        if (gen !== loadGen.current) return;
         setPosts(p);
         setFeed(f);
         setLoadErr(null);
       })
       .catch(() => {
+        if (gen !== loadGen.current) return;
         // Leave posts/feed as whatever they were — the empty-state copy
         // below at least still renders something instead of a silent blank
         // section with no explanation and no way to retry.
         setLoadErr("Couldn't load the news feed. Check your connection.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (gen === loadGen.current) setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -93,9 +103,10 @@ export function NewsCenterScreen({
             <span className="text-[12px] font-bold text-[var(--c-red)]">{loadErr}</span>
             <button
               onClick={load}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
+              disabled={loading}
+              className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0 disabled:opacity-40"
             >
-              RETRY
+              {loading ? 'RETRYING…' : 'RETRY'}
             </button>
           </div>
         )}

@@ -1474,9 +1474,14 @@ export async function fetchMySerializedCards(userId: string): Promise<OwnedSeria
   if (error) console.error('fetchMySerializedCards (cards) failed:', error.message);
   if (supplyError) console.error('fetchMySerializedCards (supply) failed:', supplyError.message);
   const capByRarity = new Map((supply || []).map((s) => [s.rarity, s.cap as number]));
+  // NaN (rendered as "?" — see CollectionScreen/NewsCenterScreen) when the
+  // supply query itself failed: defaulting to 0 here used to make an owned
+  // Serialized card's print run look sold-out ("#N of 0") instead of just
+  // unknown, which is a scary and misleading thing to show over a card the
+  // player actually owns.
   return ((data as Omit<OwnedSerializedCard, 'cap'>[]) || []).map((r) => ({
     ...r,
-    cap: capByRarity.get(r.rarity) ?? 0,
+    cap: capByRarity.get(r.rarity) ?? (supplyError ? NaN : 0),
   }));
 }
 
