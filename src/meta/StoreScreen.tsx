@@ -518,6 +518,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         onClick={() => setOddsPack(pack)}
                         className="px-2 ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
                         title="View drop odds"
+                        aria-label="View drop odds"
                       >
                         <Percent className="w-3.5 h-3.5" />
                       </button>
@@ -857,6 +858,7 @@ function PackTile({
               onClick={() => setIdx((i) => (i - 1 + variants.length) % variants.length)}
               className="w-5 h-5 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
               title="Previous set"
+              aria-label="Previous set"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -875,6 +877,7 @@ function PackTile({
               onClick={() => setIdx((i) => (i + 1) % variants.length)}
               className="w-5 h-5 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
               title="Next set"
+              aria-label="Next set"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
