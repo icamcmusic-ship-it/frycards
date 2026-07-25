@@ -504,6 +504,12 @@ export interface EngineTelemetry {
    * Overrun spill, Quickstrike/Doublestrike pre-kill). `amount` is the
    * magnitude where meaningful (damage/vitality), else 1. */
   onKeywordProc?: (kw: string, amount: number) => void;
+  /** Fired once per (attacker, guard) pair as `chooseGuards` (ai.ts) assigns
+   * a guard, with whether the defender was already facing lethal damage
+   * (`mustSurvive`) at the moment of assignment — a forced chump-block
+   * assigned only to survive is not the same CPU-quality signal as a
+   * discretionary guard that dies for nothing. */
+  onGuardAssign?: (attackerIid: string, guardIid: string, mustSurvive: boolean) => void;
 }
 /** Mutable hook registry — the sim harness assigns, the UI leaves empty. */
 export const telemetry: EngineTelemetry = {};

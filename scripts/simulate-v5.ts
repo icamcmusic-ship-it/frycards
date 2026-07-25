@@ -124,6 +124,15 @@
  *    distinct from the existing attacker-side venomousSuicide and the
  *    missed-profitable-block guardDivergence check.
  *
+ * v6.5 additions:
+ *  - mustSurvive-aware guard-trade split (v6.4 carry-forward #5): a new
+ *    engine telemetry hook (`onGuardAssign`, engine.ts) fires straight from
+ *    ai.ts's chooseGuards with whether its `mustSurvive` branch was active
+ *    at the moment each guard was assigned, so guardDiesForNothing splits
+ *    into guardDiesForNothingForced (a correct chump-block to survive
+ *    lethal — not a lapse) and guardDiesForNothingDiscretionary (a real
+ *    defender-side blunder) instead of conflating the two.
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -222,7 +231,22 @@ function las(leaderId: string, text: string) {
 // DEFENDER assigning a guard that accomplishes nothing (dies, attacker
 // lives) when a lethal-necessity check wasn't in play — a clean signal for
 // a bad chump-block heuristic.
-const guardOutcomes = { guardWins: 0, mutualTrade: 0, guardDiesForNothing: 0, guardSurvivesNoKill: 0 };
+// v6.5: split guardDiesForNothing by whether ai.ts's chooseGuards had its
+// `mustSurvive` branch active at the moment of assignment (fed live via the
+// engine's onGuardAssign telemetry hook, not re-derived) — the v6.4 doc's
+// carry-forward #5: a forced chump-block that dies for nothing to survive
+// lethal is correct play, not a lapse, and was inflating the flat number.
+const guardOutcomes = {
+  guardWins: 0,
+  mutualTrade: 0,
+  guardDiesForNothing: 0,
+  guardDiesForNothingForced: 0,
+  guardDiesForNothingDiscretionary: 0,
+  guardSurvivesNoKill: 0,
+};
+// v6.5: (attackerIid|guardIid) -> mustSurvive, fed by telemetry.onGuardAssign,
+// reset each game.
+let guardMustSurvive: Record<string, boolean> = {};
 const colorStats: Record<string, { games: number; wins: number }> = {};
 for (const c of COLORS) colorStats[c] = { games: 0, wins: 0 };
 
@@ -347,6 +371,10 @@ const lapses = {
   // v6.4: a defender-assigned guard died without killing (or even scratching
   // meaningfully — see guardOutcomes for the full breakdown) its attacker.
   guardDiesForNothing: 0,
+  // v6.5: the mustSurvive-aware split of the above — only the discretionary
+  // half (mustSurvive was false at assignment) is a genuine CPU lapse; the
+  // forced half is a correct chump-block to survive lethal.
+  guardDiesForNothingDiscretionary: 0,
 };
 
 // v6.3: per-leader idle-leader breakdown (global lapses.idleLeader stays the
@@ -395,6 +423,12 @@ telemetry.onKeywordProc = (kw, amount) => {
   if (!telemetryEnabled) return;
   if (kwStats[kw]) kwStats[kw].activations += amount;
   if (TELEMETRY_KEYWORDS.has(kw)) gameKwActivations[kw] = (gameKwActivations[kw] ?? 0) + amount;
+};
+// v6.5: ground-truth mustSurvive flag per guard assignment, straight from
+// ai.ts's chooseGuards — no re-derivation/approximation in the harness.
+telemetry.onGuardAssign = (attackerIid, guardIid, mustSurvive) => {
+  if (!telemetryEnabled) return;
+  guardMustSurvive[`${attackerIid}|${guardIid}`] = mustSurvive;
 };
 telemetry.onEssenceCleared = (state) => {
   if (!telemetryEnabled) return;
@@ -625,6 +659,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     mulled.P2 = true;
   }
   gameKwActivations = {};
+  guardMustSurvive = {};
 
   // v6.3: keptColorDeadHand — handIsKeepable (ai.ts) only checks a cheap
   // (cost<=2) card AND a Unit exist in the hand, not whether either is
@@ -864,6 +899,18 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
           else if (attackerAlive && !guardAlive) {
             guardOutcomes.guardDiesForNothing++;
             lapses.guardDiesForNothing++;
+            // v6.5: mustSurvive true at assignment = forced chump to survive
+            // lethal (correct play, not a lapse); false = a discretionary
+            // block that gained nothing (a genuine lapse). Default to
+            // "forced" on a missing flag (should not happen — every real
+            // assignment goes through the telemetry hook) rather than
+            // inflating the discretionary/lapse count on a gap.
+            const forced = guardMustSurvive[`${attackerIid}|${guardIid}`] ?? true;
+            if (forced) guardOutcomes.guardDiesForNothingForced++;
+            else {
+              guardOutcomes.guardDiesForNothingDiscretionary++;
+              lapses.guardDiesForNothingDiscretionary++;
+            }
           } else guardOutcomes.guardSurvivesNoKill++;
         }
       }
@@ -1548,7 +1595,7 @@ const poolCoverage = (() => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.4',
+    version: 'v6.5',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1719,13 +1766,29 @@ const report = {
       ),
     ]),
   ),
-  guardTradeQuality: {
-    guardWinsPct: pct(guardOutcomes.guardWins, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
-    mutualTradePct: pct(guardOutcomes.mutualTrade, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
-    guardDiesForNothingPct: pct(guardOutcomes.guardDiesForNothing, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
-    guardSurvivesNoKillPct: pct(guardOutcomes.guardSurvivesNoKill, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
-    totalGuards: Object.values(guardOutcomes).reduce((a, b) => a + b, 0),
-  },
+  guardTradeQuality: (() => {
+    // v6.5: totalGuards sums only the four mutually-exclusive top-level
+    // outcomes — guardDiesForNothingForced/Discretionary are a breakdown OF
+    // guardDiesForNothing, not additional guards, so they're excluded here
+    // to avoid double-counting.
+    const total =
+      guardOutcomes.guardWins +
+      guardOutcomes.mutualTrade +
+      guardOutcomes.guardDiesForNothing +
+      guardOutcomes.guardSurvivesNoKill;
+    return {
+      guardWinsPct: pct(guardOutcomes.guardWins, total),
+      mutualTradePct: pct(guardOutcomes.mutualTrade, total),
+      guardDiesForNothingPct: pct(guardOutcomes.guardDiesForNothing, total),
+      // v6.5: mustSurvive-aware split of guardDiesForNothing (% of ALL
+      // guards, same denominator, so the two sub-percentages sum to
+      // guardDiesForNothingPct above).
+      guardDiesForNothingForcedPct: pct(guardOutcomes.guardDiesForNothingForced, total),
+      guardDiesForNothingDiscretionaryPct: pct(guardOutcomes.guardDiesForNothingDiscretionary, total),
+      guardSurvivesNoKillPct: pct(guardOutcomes.guardSurvivesNoKill, total),
+      totalGuards: total,
+    };
+  })(),
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');

@@ -35,6 +35,7 @@ import {
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
+  telemetry,
   unitHasKw,
   wellspringChoices,
 } from './engine';
@@ -588,7 +589,10 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       if (legal.length >= 2 && (mustSurvive || scored[0].kills)) {
         const pair = scored.slice(0, 2).map((s) => s.g.iid);
         assignments[attacker.iid] = pair;
-        pair.forEach((iid) => used.add(iid));
+        pair.forEach((iid) => {
+          used.add(iid);
+          telemetry.onGuardAssign?.(attacker.iid, iid, mustSurvive);
+        });
       }
       continue;
     }
@@ -596,6 +600,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     if (mustSurvive || best.kills || best.survives) {
       assignments[attacker.iid] = [best.g.iid];
       used.add(best.g.iid);
+      telemetry.onGuardAssign?.(attacker.iid, best.g.iid, mustSurvive);
     }
   }
   // Facing lethal after profitable blocks: chump-guard everything we can,
@@ -614,7 +619,10 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
           .slice(0, 2)
           .map((g) => g.iid);
         assignments[attacker.iid] = pair;
-        pair.forEach((iid) => used.add(iid));
+        pair.forEach((iid) => {
+          used.add(iid);
+          telemetry.onGuardAssign?.(attacker.iid, iid, true);
+        });
       } else {
         // Cheapest body soaks the hit.
         const chump = legal.sort(
@@ -623,6 +631,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         )[0];
         assignments[attacker.iid] = [chump.iid];
         used.add(chump.iid);
+        telemetry.onGuardAssign?.(attacker.iid, chump.iid, true);
       }
     }
   }
@@ -640,6 +649,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       const extra = legal.sort((x, y) => remainingGrit(state, y) - remainingGrit(state, x))[0];
       assignments[a.iid].push(extra.iid);
       used.add(extra.iid);
+      telemetry.onGuardAssign?.(a.iid, extra.iid, true);
       added = true;
       break;
     }

@@ -87,14 +87,12 @@ const COST_ADJUST: Record<string, number> = {
   ribvault_cathedral: +1, // +15.8 residual, n=161
   fissure_gas_bunker: +1, // +15.2 residual, n=517 (Sacred Sanctum)
   gearbone_sentinel: +1, // +15.0 residual, n=136
-  jawbone_span: +1, // +13.9 residual, n=206 (Bountiful Sanctum)
   volcanic_nanite_core: +1, // +12.8 residual, n=219
   glowing_manta: -1, // -4.4 residual, n=509
   marble_reef_shark: -1, // -3.9 residual, n=120
   sunken_archive: -1, // -3.8 residual, n=890
   // v6.2 second verification pass (after the above landed): re-ran the full
   // 18k-game suite and caught these newly-surfaced |z|>=2 outliers too.
-  ruthless_succession: -1, // -6.0 residual, z=-2.35, n=379
   kinetic_siphon_swarm: +1, // +11.3 residual, z=2.01, n=329
   // v6.3 pass (18,048-game run, harness v6.3): repeat offenders from v6.2
   // still outside |z|>=1.5 the same direction — second point stacked.
@@ -105,9 +103,7 @@ const COST_ADJUST: Record<string, number> = {
   // still +12.0 residual at z=2.33, n=223 — repeat overperformer, second
   // +1 stacked.
   porcelain_lobster: -2, // v6.2 -1 (was -5.8). v6.3: still -3.7, z=-1.87, n=943.
-  ashen_circle_rite: -2, // v6.2 -1 (was -3.7). v6.3: still -3.1, z=-1.71, n=3583.
   sonic_shatter: -2, // v6.2 -1 (was -7.2). v6.3: still -2.4, z=-1.53, n=2416.
-  celestial_attunement: -2, // v6.2 -1 (was -4.2). v6.3: still -2.4, z=-1.53, n=682.
   // v6.3 new first-time flags (|z|>=1.5, 18,048-game run — see v6.4 block
   // below for glass_shrimp/abyssal_pathway/towering_tsunami/secret_lair/
   // helix_swarm, which repeated and got a second stacked point that pass):
@@ -139,9 +135,7 @@ const COST_ADJUST: Record<string, number> = {
   // v6.4 pass (5,952-game run, harness v6.4): repeat offenders from v6.3
   // still outside |z|>=1.5 the same direction — second point stacked.
   abyssal_pathway: +2, // v6.3 +1 (was +10.6). v6.4: still +10.6, z=1.84, n=490.
-  glass_shrimp: +2, // v6.3 +1 (was +11.5). v6.4: still +9.6, z=1.59, n=132.
   secret_lair: -2, // v6.3 -1 (was -3.0). v6.4: still -3.8, z=-1.73, n=346.
-  helix_swarm: -2, // v6.3 -1 (was -2.7). v6.4: still -3.1, z=-1.55, n=256.
   towering_tsunami: -2, // v6.3 -1 (was -5.3). v6.4: WORSE at -8.8, z=-2.97,
   // n=281 — the cost cut alone hasn't fixed it; second point stacked per
   // the standing repeat-offender rule (see carry-forward if a third pass
@@ -155,7 +149,6 @@ const COST_ADJUST: Record<string, number> = {
   // shatterline: v6.3 +1 (was +6.8/+7.8 both seeds) reverted — now -3.5
   // residual, z=-1.65, n=220 (overshot into underperforming). Entry removed.
   // v6.4 new first-time flags (|z|>=1.5, 5,952-game run):
-  magma_conduit_network: +1, // +16.6 residual, z=3.33, n=104
   kinetix_blacksite_cavern: +1, // +12.5 residual, z=2.31, n=442
   deceptive_angler: +1, // +11.5 residual, z=2.06, n=283
   skydark_locust_host: +1, // +11.4 residual, z=2.04, n=136
@@ -169,11 +162,55 @@ const COST_ADJUST: Record<string, number> = {
   // carrier the v6.3 doc explicitly left untouched at +56.6% played win —
   // now shows up as a genuine standalone cost outlier on its own numbers)
   zen_decay: -1, // -4.5 residual, z=-1.9, n=95
+  // v6.5: sovereign_spires_of_arrak_zul left UNCHANGED at v6.4's -1 — the
+  // v6.5 primary run (deckSeed=1337, matching this doc's usual pass) read
+  // -8.1 (z=-3.00, worse), but a second deckSeed=42 verification run read
+  // the OPPOSITE sign (+13.5, z=1.65) — contradictory between runs, so this
+  // is noise at this sample size, not a confirmed repeat offender. Carried
+  // forward as a watch item instead of stacked; see BALANCE_SIM_FINDINGS.
   sovereign_spires_of_arrak_zul: -1, // -4.0 residual, z=-1.78, n=568
   floating_jellyfish: -1, // -3.2 residual, z=-1.58, n=277
-  the_mirrored_trench: -1, // -3.1 residual, z=-1.55, n=154
-  clockwork_nautilus: -1, // -3.0 residual, z=-1.53, n=994 (cost 7 already —
-  // a decrease is fine, only cost INCREASES clip at the ceiling)
+  // v6.5: repeat offenders, confirmed across the primary + deckSeed=42
+  // verification run, second point stacked.
+  the_mirrored_trench: -2, // v6.4 -1 (was -3.1). v6.5: -3.7/-6.2 both runs.
+  ashen_circle_rite: -3, // v6.3 -2 (was -3.1). v6.5: -3.6/-5.7 both runs.
+  ruthless_succession: -2, // v6.2 -1 (was -6.0). v6.5: -2.8/-5.2 both runs
+  // (much improved from the original -6.0, but still outside |z|>=1.5).
+  clockwork_nautilus: -2, // v6.4 -1 (was -3.0). v6.5: still -4.0, z=-1.89,
+  // n=982 (primary run only) — cost 7 already, a decrease is fine, only
+  // cost INCREASES clip at the ceiling.
+  // v6.5 repeat offenders (primary run only, existing adjustment insufficient):
+  magma_conduit_network: +2, // v6.4 +1 (was +16.6). v6.5: still +19.1,
+  // z=4.37, n=115 — got WORSE after the first cost bump, second point
+  // stacked.
+  nanite_culture_lab: +2, // v6.2 +1 (was +15.8; had read healthy in v6.3/
+  // v6.4). v6.5: +11.2 residual, z=2.23, n=350 — resurfaced, second point
+  // stacked.
+  jawbone_span: +2, // v6.2 +1 (was +13.9; had read healthy since). v6.5:
+  // +10.6 residual, z=2.07, n=278 — resurfaced, second point stacked.
+  glass_shrimp: +3, // v6.4 +2 (was +9.6). v6.5: still +9.5, z=1.77, n=205 —
+  // residual essentially unchanged after the last cost bump; third point
+  // stacked.
+  celestial_attunement: -3, // v6.3 -2 (was -2.4). v6.5: still -3.5, z=-1.76,
+  // n=445 — third point stacked.
+  helix_swarm: -3, // v6.4 -2 (was -3.1). v6.5: still -4.3, z=-1.97, n=328 —
+  // third point stacked.
+  // v6.5: towering_tsunami's COST_ADJUST is left at v6.4's -2, UNCHANGED —
+  // the card is an Event already printing at the cost-1 FLOOR (adjustFor is
+  // clamped to [1,7] in eventBuild), so a third cost cut would be a no-op;
+  // it still reads -8.6 residual (z=-3.14, n=299) this pass. Events have no
+  // STAT_ADJUST-equivalent stat budget to buff instead (that mechanism only
+  // exists for Units) — fixing this needs an engine change (a per-Event
+  // effect-magnitude adjustment table), not a number in this table. Carried
+  // forward unactioned; see BALANCE_SIM_FINDINGS.
+  // v6.5 new first-time flags (|z|>=1.5, primary run unless noted):
+  black_coral_thicket: +1, // +10.4 residual, z=2.01, n=337
+  cracked_wastes: +1, // +10.2 residual, z=1.96, n=1189
+  ribcage_titan: +1, // +9.8 residual, z=1.85, n=655
+  kunoichi_of_the_magma_rings: +1, // +9.4/+15.1 residual BOTH runs
+  // (z=1.74/1.93) — confirmed twice in the same pass.
+  phosphor_lich: +1, // +8.8 residual, z=1.58, n=649
+  mermaid_statue: -1, // -3.0 residual, z=-1.62, n=442
 };
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
 
@@ -186,8 +223,10 @@ const STAT_ADJUST: Record<string, number> = {
   // STILL +10.3 residual (z=1.87, n=544) after the first -2 — repeat
   // overperformer, third point stacked (-3). v6.4: STILL +10.6 residual
   // (z=1.84, n=139) after that — fourth point stacked.
-  wingbone_horror: -2, // v6.4: +10.3 residual, z=1.77, n=336, cost 7 already
+  wingbone_horror: -3, // v6.4: +10.3 residual, z=1.77, n=336, cost 7 already
   // (COST_ADJUST would clip to nothing at the ceiling) — trim stat budget.
+  // v6.5: STILL +8.5 residual (z=1.50, n=336) after that — third point
+  // stacked.
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
