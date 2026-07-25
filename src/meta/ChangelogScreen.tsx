@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Starter Decks Update (v6.4)',
+    date: 'July 2026',
+    items: [
+      'New: the Starter Box now offers a choice — pick your own Leader for a randomized legal deck (as before), or pick one of three ready-to-play prebuilt decks (Aggro / Midrange / Control). The prebuilt decks are Common/Uncommon-heavy with just a handful of Rares, no Super-Rare-or-above cards, and every card is non-foil — a faster, simpler way into your first match.',
+      'Card fix: Location cards no longer print a redundant essence-type pip next to the rarity marker — the essence type is already shown in the card\'s rules text, so the extra icon was just visual clutter.',
+      'Match fix: hitting SKIP during the CPU\'s brief "thinking" pause right at the start of its turn used to do nothing — the match could get stuck there with no way to move forward. SKIP now works at that moment too.',
+      'CPU fix: when deciding whether an all-in attack was truly lethal, the CPU used to assume any guard only soaks up 1-2 damage no matter how tough it actually was — so it could occasionally swing in thinking it had lethal against a beefy blocker when it didn\'t. It now accounts for the guard\'s real toughness.',
+      'Another round of card cost/stat adjustments from this update\'s balance testing: eleven newly-flagged cards tuned for the first time, five repeat offenders got a second nudge, and two cards from last update\'s adjustments overshot and were reverted back to their original cost.',
+    ],
+  },
+  {
     version: 'Second Look Update (v6.3)',
     date: 'July 2026',
     items: [

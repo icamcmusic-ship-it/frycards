@@ -884,6 +884,11 @@ export function GameV4({
   const floatIdRef = useRef(0);
   const resultSent = useRef(false);
   const cpuTimeoutRef = useRef<number | null>(null);
+  // Separate from cpuTimeoutRef (which paces the beat-by-beat narration):
+  // this is the initial "thinking" delay before the CPU's turn is even
+  // computed. Kept distinct so SKIP during that delay can fast-forward into
+  // resolveCpuTurn instead of just cancelling it outright (see skipCpuBeats).
+  const cpuThinkTimeoutRef = useRef<number | null>(null);
   const bannerTimeoutRef = useRef<number | null>(null);
   const phaseTimeoutRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<number | null>(null);
@@ -904,6 +909,7 @@ export function GameV4({
   useEffect(
     () => () => {
       if (cpuTimeoutRef.current !== null) window.clearTimeout(cpuTimeoutRef.current);
+      if (cpuThinkTimeoutRef.current !== null) window.clearTimeout(cpuThinkTimeoutRef.current);
       if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
       if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
       if (flashTimeoutRef.current !== null) window.clearTimeout(flashTimeoutRef.current);
@@ -1402,6 +1408,17 @@ export function GameV4({
   };
 
   const skipCpuBeats = () => {
+    // Clicked during the initial "thinking" delay, before the CPU's turn has
+    // even been computed yet: cpuTimeoutRef (the beat-ticker) is idle, so
+    // stopCpuTimer()+tickCpuBeat() below would have nothing to do and the
+    // match would hang in stage 'cpu' forever with no further way to
+    // progress. Fast-forward past the delay by resolving right now instead.
+    if (cpuThinkTimeoutRef.current !== null) {
+      window.clearTimeout(cpuThinkTimeoutRef.current);
+      cpuThinkTimeoutRef.current = null;
+      resolveCpuTurn();
+      return;
+    }
     stopCpuTimer();
     cpuBeatIdxRef.current = cpuBeatsRef.current.length;
     tickCpuBeat();
@@ -1462,7 +1479,10 @@ export function GameV4({
   const runCpuTurn = () => {
     setStage('cpu');
     setCpuBeat(null);
-    cpuTimeoutRef.current = window.setTimeout(resolveCpuTurn, CPU_PACE.THINK_MS);
+    cpuThinkTimeoutRef.current = window.setTimeout(() => {
+      cpuThinkTimeoutRef.current = null;
+      resolveCpuTurn();
+    }, CPU_PACE.THINK_MS);
   };
 
   /** After the human's guard step + reaction window resolve the clash, the

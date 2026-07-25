@@ -463,20 +463,34 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   // vitality") ignored guards entirely and fed both the venomous-suicide
   // and took-guardable-lethal lapse counters with doomed all-ins.
   const sorted = [...candidates].sort((a, b) => effMight(state, b) - effMight(state, a));
-  let guardsLeft = defenders.length;
+  // Pool of not-yet-assigned defenders, consumed as guards get assigned below
+  // (mirrors chooseGuards' unguardedDamage, which sums actual remaining grit
+  // rather than guard count).
+  const guardPool = [...defenders];
   let throughDamage = 0;
   for (const u of sorted) {
     const m = effMight(state, u);
-    const eligible = defenders.filter((g) => canBlock(u, g));
+    const eligible = guardPool.filter((g) => canBlock(u, g));
     // Swarmproof needs 2+ eligible guards — with fewer it's unguardable.
     const swarm = unitHasKw(u, 'Swarmproof');
     const needed = swarm ? 2 : 1;
     const guardable = eligible.length >= needed;
-    if (!guardable || guardsLeft < needed) {
+    if (!guardable) {
       throughDamage += m;
     } else {
-      guardsLeft -= needed;
-      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - needed); // chump spill
+      // Assume the toughest eligible defenders block (worst case for the
+      // attacker), then spill past their actual remaining grit — using guard
+      // *count* here previously grossly overestimated Overrun spill (e.g.
+      // treating a single grit-6 guard as absorbing only 1 damage) and could
+      // false-flag a non-lethal all-in as lethal.
+      const used = eligible
+        .sort((a, b) => remainingGrit(state, b) - remainingGrit(state, a))
+        .slice(0, needed);
+      for (const g of used) guardPool.splice(guardPool.indexOf(g), 1);
+      if (unitHasKw(u, 'Overrun')) {
+        const absorbed = used.reduce((s, g) => s + Math.max(1, remainingGrit(state, g)), 0);
+        throughDamage += Math.max(0, m - absorbed);
+      }
     }
   }
   if (throughDamage >= opp.vitality) return candidates.map((u) => u.iid);

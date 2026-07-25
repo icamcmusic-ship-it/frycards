@@ -546,18 +546,29 @@ function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
   // defender fully absorbs one attacker (biggest first; Overrun still spills
   // past the guard's remaining grit)?
   const sorted = [...candidates].sort((a, b) => effMight(state, b) - effMight(state, a));
-  let guardsLeft = defenders.length;
+  // v6.4: pool of not-yet-assigned defenders, consumed as guards get
+  // assigned below (mirrors ai.ts's chooseAttackers fix — guard *count* was
+  // grossly overestimating Overrun spill by ignoring the guard's actual
+  // remaining grit; kept in lockstep with ai.ts since this function's whole
+  // purpose is mirroring its real policy).
+  const guardPool = [...defenders];
   let throughDamage = 0;
   for (const u of sorted) {
     const m = effMight(state, u);
-    const eligible = defenders.filter((g) => canBlock(u, g));
+    const eligible = guardPool.filter((g) => canBlock(u, g));
     const needed = unitHasKw(u, 'Swarmproof') ? 2 : 1;
     const guardable = eligible.length >= needed;
-    if (!guardable || guardsLeft < needed) {
+    if (!guardable) {
       throughDamage += m;
     } else {
-      guardsLeft -= needed;
-      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - needed);
+      const used = eligible
+        .sort((a, b) => remainingGrit(state, b) - remainingGrit(state, a))
+        .slice(0, needed);
+      for (const g of used) guardPool.splice(guardPool.indexOf(g), 1);
+      if (unitHasKw(u, 'Overrun')) {
+        const absorbed = used.reduce((s, g) => s + Math.max(1, remainingGrit(state, g)), 0);
+        throughDamage += Math.max(0, m - absorbed);
+      }
     }
   }
   if (throughDamage >= opp.vitality) return new Set(candidates.map((u) => u.iid));

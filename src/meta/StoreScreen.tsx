@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -756,6 +756,8 @@ function StarterChoiceModal({
   onPickPrebuilt: () => void;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -764,9 +766,22 @@ function StarterChoiceModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Move focus into the dialog on open and restore it to whatever triggered
+  // it on close — LeaderPicker and StarterDeckPicker (the two screens this
+  // choice leads into) both do this; this modal sits in front of them and
+  // was missing it, leaving a keyboard user's focus stuck on the (now
+  // hidden-behind-overlay) OPEN button.
+  useEffect(() => {
+    const prevFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => prevFocused?.focus?.();
+  }, []);
+
   return (
     <div
-      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

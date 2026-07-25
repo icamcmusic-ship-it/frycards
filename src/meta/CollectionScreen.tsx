@@ -30,6 +30,48 @@ export function spareSplit(o: { q: number; f: number } | undefined, locked: numb
   return { normal: spareTotal - spareFoil, foil: spareFoil };
 }
 
+/** Runs the actual sell loop for "QUICKSELL ALL <rarity>", outside the
+ * component so its running-total accumulation across `await`s isn't subject
+ * to the React Compiler's mutability analysis (which only instruments
+ * components/hooks). `onProgress` is called after each successful sale with
+ * the running card count so the caller can drive a live progress bar. */
+async function runBulkQuicksell(
+  targetRarity: string,
+  owned: Map<string, { q: number; f: number }>,
+  lockedByDecks: Map<string, number>,
+  serializedByCard: Map<string, unknown[]>,
+  onProgress: (cardsSoFar: number) => void,
+): Promise<{ credits: number; cards: number; error: string | null }> {
+  let totalCredits = 0;
+  let totalCards = 0;
+  for (const c of POOL_V4) {
+    if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
+    const o = owned.get(c.id);
+    if (!o) continue;
+    const locked = lockedByDecks.get(c.id) || 0;
+    const { normal: spareNormalRaw, foil: spareFoil } = spareSplit(o, locked);
+    const reserved = serializedByCard.get(c.id)?.length || 0;
+    const spareNormal = Math.max(0, spareNormalRaw - reserved);
+    if (spareNormal + spareFoil <= 0) continue;
+    for (const [foil, qty] of [
+      [false, spareNormal],
+      [true, spareFoil],
+    ] as const) {
+      if (qty <= 0) continue;
+      const { data, error } = await quicksellCards(c.id, qty, foil);
+      if (error) {
+        return { credits: totalCredits, cards: totalCards, error };
+      }
+      if (data) {
+        totalCredits += data.total;
+        totalCards += data.sold;
+        onProgress(totalCards);
+      }
+    }
+  }
+  return { credits: totalCredits, cards: totalCards, error: null };
+}
+
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const {
     profile,
@@ -157,47 +199,30 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     setBulkBusy(true);
     setBulkError('');
     setBulkNotice('');
-    let totalCredits = 0;
-    let totalCards = 0;
     setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
     try {
-      for (const c of POOL_V4) {
-        if (c.type === 'Leader' || (c.rarity || 'Common') !== targetRarity) continue;
-        const o = owned.get(c.id);
-        if (!o) continue;
-        const locked = lockedByDecks.get(c.id) || 0;
-        const { normal: spareNormalRaw, foil: spareFoil } = spareSplit(o, locked);
-        const reserved = serializedByCard.get(c.id)?.length || 0;
-        const spareNormal = Math.max(0, spareNormalRaw - reserved);
-        if (spareNormal + spareFoil <= 0) continue;
-        for (const [foil, qty] of [
-          [false, spareNormal],
-          [true, spareFoil],
-        ] as const) {
-          if (qty <= 0) continue;
-          const { data, error } = await quicksellCards(c.id, qty, foil);
-          if (error) {
-            // Cards from earlier iterations may already have sold (and the
-            // credits already paid out) before this one failed — say so
-            // instead of reporting a bare error that implies nothing happened.
-            setBulkError(
-              totalCards > 0
-                ? `Sold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)} before an error occurred: ${error}`
-                : error,
-            );
-            return;
-          }
-          if (data) {
-            totalCredits += data.total;
-            totalCards += data.sold;
-            setBulkProgress((p) => (p ? { ...p, done: totalCards } : p));
-          }
-        }
+      const { credits, cards, error } = await runBulkQuicksell(
+        targetRarity,
+        owned,
+        lockedByDecks,
+        serializedByCard,
+        (cardsSoFar) => setBulkProgress((p) => (p ? { ...p, done: cardsSoFar } : p)),
+      );
+      if (error) {
+        // Cards from earlier iterations may already have sold (and the
+        // credits already paid out) before this one failed — say so
+        // instead of reporting a bare error that implies nothing happened.
+        setBulkError(
+          cards > 0
+            ? `Sold ${cards} card${cards === 1 ? '' : 's'} for ${fmtCredits(credits)} before an error occurred: ${error}`
+            : error,
+        );
+        return;
       }
       setBulkNotice(
-        totalCards === 0
+        cards === 0
           ? `No spare ${targetRarity} cards to sell.`
-          : `Quicksold ${totalCards} ${targetRarity} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
+          : `Quicksold ${cards} ${targetRarity} card${cards === 1 ? '' : 's'} for ${fmtCredits(credits)}.`,
       );
     } catch {
       setBulkError('Something went wrong — check your connection and try again.');
