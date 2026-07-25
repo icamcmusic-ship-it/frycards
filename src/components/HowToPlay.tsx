@@ -28,7 +28,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Setup',
-        'Both players draw a 7-card opening hand; the second player draws an 8th card to offset going second. The first player skips the Deal on their very first Dawn.',
+        'Both players draw a 7-card opening hand. To offset going second, the second player may play TWO basic Wellsprings on their opening turn — the second one arrives exhausted, so it powers their next turn. The first player skips the Deal on their very first Dawn.',
       ],
       [
         'Mulligan',

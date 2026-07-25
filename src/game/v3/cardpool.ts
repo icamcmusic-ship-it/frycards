@@ -56,163 +56,157 @@ const RARITY_TIER: Record<string, number> = {
 /** Per-card hash seed: id + type + rarity, per the spec. */
 const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Common'}`;
 
-/** Per-card total-cost adjustments from sim outliers (residuals confirmed
- * across at least two independent runs before a card is listed).
- * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v6.1.md):
- * repeat overperformers +1, repeat underperformers -1. */
+/**
+ * Per-card total-cost adjustments derived from sim outliers.
+ *
+ * v6.6 RESET. Every entry here is a single point, in the direction the sims
+ * measured. The multi-point stacks this table carried through v6.2-v6.5 were
+ * compensating for a lever that did not work: COST_ADJUST fed the same cost
+ * figure that Units/Events/Charms derive their stat budget and effect
+ * magnitude from, so an adjustment moved a card's power in lockstep with its
+ * price and barely changed its win rate (see naturalTotalFor below for the
+ * full mechanism and the evidence). Adjustments were therefore stacked to two
+ * and three points chasing a number that could not move, printing cards like
+ * a cost-1 1/1 (helix_swarm, after three "buffs") and a cost-5 1/1
+ * (clockwork_nautilus, after two).
+ *
+ * With the lever fixed — COST_ADJUST now changes price only — those stacks
+ * would over-apply, so each is reset to one point and re-derived from the
+ * v6.6 runs. `sunken_archive` is dropped entirely: its v6.2 -1 has since
+ * overshot into a +17.6 residual (the single card driving the Sacred keyword
+ * flag across three passes).
+ *
+ * Locations are the exception to the reset and keep their earned stacks:
+ * mapLocation never derived any power from cost (its passive, its trigger
+ * magnitude and its Bountiful yield are all fixed), so COST_ADJUST was
+ * already a clean price-only lever there and those points were real.
+ *
+ * Entries are added only for outliers whose Wilson 95% interval excludes
+ * their own in-deck baseline (`costAbilityOutliersSignificant` in the
+ * harness) — the v6.2-v6.5 z-score list was blind to sample size, which is
+ * what let three small-n cards overshoot into the opposite sign.
+ */
 const COST_ADJUST: Record<string, number> = {
-  heart_coral: +1, // v5.1: +21.7pt residual Sanctum
-  needle_seamstress: +1, // v5.1: 78% played win at cost 3
-  merfolk_ritual: +1, // v5.1: 74% played win Worn charm
-  pufferfish_lantern: +1, // v5.1: 77% played win at cost 2
-  clawblade_greatsword: +1, // v5.1: +15.4pt residual Worn charm
-  slate_scaled_serpent: +2, // v5.3: +8.9/+12.5, then v6.1 +6.8/+7.8 STILL
-  // positive after the first +1 (4th consecutive positive pass) — v6.2:
-  // +9.9 residual at n=1952 on an 18k-game run. Second +1 stacked.
-  worm_brain_host: +1, // v5.3: +8.7/+7.2 both seeds
-  smokeveil_striketeam: +1, // v5.3: +6.5/+11.2 both seeds (and v5.2)
-  crowned_manatee: +1, // v5.3: +8.0/+6.3 both seeds (and v5.2)
-  constellation_crabs: +1, // v5.3: +7.6 seed 777 + both v5.2 seeds
-  nebula_clutch: +1, // v5.3: +9.7 seed 1337 + both v5.2 seeds
-  submerged_starfall: -1, // v5.3: -9.5 + v5.2 seed-1337 -8.7
-  nanite_purge_protocol: -1, // v5.3: negative both seeds + v5.2 seed 777
-  coral_collapse: -2, // v5.3/v5.2: -4.2. v6.2: STILL -4.0 residual at n=1892
-  // after the first -1 — repeat underperformer, second -1 stacked.
-  tectonic_rift: -2, // v5.3/v5.2: -4.4. v6.2: STILL -3.3 residual at n=2195
-  // after the first -1 (also carries Surge, whose own weight dropped this
-  // pass) — repeat underperformer, second -1 stacked.
-  consuming_ash_cloud: -1, // v5.3: 13.8% absolute played win, -5.2 residual
-  research_fleet: -1, // v5.3: 65%/74% dead-in-hand two passes running
-  // v6.2 pass (18,048-game run, docs/BALANCE_SIM_FINDINGS_v6.2.md):
-  ribvault_cathedral: +1, // +15.8 residual, n=161
-  fissure_gas_bunker: +1, // +15.2 residual, n=517 (Sacred Sanctum)
-  gearbone_sentinel: +1, // +15.0 residual, n=136
-  volcanic_nanite_core: +1, // +12.8 residual, n=219
-  glowing_manta: -1, // -4.4 residual, n=509
-  marble_reef_shark: -1, // -3.9 residual, n=120
-  sunken_archive: -1, // -3.8 residual, n=890
-  // v6.2 second verification pass (after the above landed): re-ran the full
-  // 18k-game suite and caught these newly-surfaced |z|>=2 outliers too.
-  kinetic_siphon_swarm: +1, // +11.3 residual, z=2.01, n=329
-  // v6.3 pass (18,048-game run, harness v6.3): repeat offenders from v6.2
-  // still outside |z|>=1.5 the same direction — second point stacked.
-  sand_portal: +2, // v6.2 +1 (was +21.4). v6.3: still +14.0, z=2.86, n=347.
-  glass_kelp_forest: +2, // v6.2 +1 (was +21.1). v6.3: still +12.3, z=2.41, n=478.
-  resonant_shuriken: +2, // v6.2 +1 (was +13.9). v6.3: still +15.5, z=3.27, n=794.
-  chalice_of_quicksilver: +2, // v6.2 +1 (was +15.2, z=3.0, n=198). v6.3:
-  // still +12.0 residual at z=2.33, n=223 — repeat overperformer, second
-  // +1 stacked.
-  porcelain_lobster: -2, // v6.2 -1 (was -5.8). v6.3: still -3.7, z=-1.87, n=943.
-  sonic_shatter: -2, // v6.2 -1 (was -7.2). v6.3: still -2.4, z=-1.53, n=2416.
-  // v6.3 new first-time flags (|z|>=1.5, 18,048-game run — see v6.4 block
-  // below for glass_shrimp/abyssal_pathway/towering_tsunami/secret_lair/
-  // helix_swarm, which repeated and got a second stacked point that pass):
-  amber_sphere: +1, // +10.5 residual, n=189
-  neon_moray: +1, // +10.3 residual, n=911
-  haunted_submarine: +1, // +10.2 residual, n=777
-  shinobi_operations_base: +1, // +10.0 residual, n=367
-  kraken_s_monolith: +1, // +10.0 residual, n=321
-  scallop_map: +1, // +9.5 residual, n=862
-  urnbearer_of_blight: +1, // +9.5 residual, n=410
-  ashhound_pack: +1, // +9.2 residual, n=165
-  blood_moon_descent: -1, // -4.5 residual, n=1072
-  cavernous_watcher: -1, // -4.5 residual, n=349
-  obsidian_scalpel: -1, // -3.0 residual, n=884
-  silver_chimera: -1, // -2.9 residual, n=1332
-  bubble_harvest: -1, // -2.6 residual, n=1251
-  // v6.3 Resonant per-card fix (carry-forward from v6.2's Resonant keyword
-  // cut): the new v6.3 by-cost-band keyword report splits Resonant's three
-  // carriers cleanly — dissolving_persona (cost 4, the 3-4 band) actually
-  // reads +56.6% win rate, while the two cost-5 carriers (bioluminescent_tide,
-  // flash_freeze, the 5+ band) read 12.3% — the opposite of the v6.2 doc's
-  // guess that dissolving_persona's single-target Banish was the drag. Fix
-  // at the card level per the carry-forward rather than cutting the shared
-  // Resonant weight again (which would only further overpay
-  // dissolving_persona while doing nothing for the two actually-underpriced
-  // cost-5 cards).
+  // --- nerfs: cost up, power unchanged ---
+  abyssal_pathway: +2,
+  amber_sphere: +1,
+  ashhound_pack: +1,
+  black_coral_thicket: +1,
+  caldera_harvest_works: +1,
+  chalice_of_quicksilver: +1,
+  clawblade_greatsword: +1,
+  constellation_crabs: +1,
+  cracked_wastes: +1,
+  crowned_manatee: +1,
+  deceptive_angler: +1,
+  dissolving_persona: +1,
+  fissure_gas_bunker: +1,
+  gearbone_sentinel: +1,
+  glass_kelp_forest: +2,
+  glass_shrimp: +1,
+  haunted_submarine: +1,
+  heart_coral: +1,
+  jawbone_span: +2,
+  kinetic_anchor_monolith: +1,
+  kinetic_siphon_swarm: +1,
+  kinetix_blacksite_cavern: +1,
+  kraken_s_monolith: +1,
+  kunoichi_of_the_magma_rings: +1,
+  magma_conduit_network: +2,
+  merfolk_ritual: +1,
+  nanite_culture_lab: +2,
+  nebula_clutch: +1,
+  needle_seamstress: +1,
+  neon_moray: +1,
+  phosphor_lich: +1,
+  pufferfish_lantern: +1,
+  resonant_shuriken: +1,
+  ribcage_titan: +1,
+  ribvault_cathedral: +1,
+  sand_portal: +2,
+  scallop_map: +1,
+  shattered_horizon_protagonist: +1,
+  shinobi_operations_base: +1,
+  skydark_locust_host: +1,
+  slate_scaled_serpent: +1,
+  smokeveil_striketeam: +1,
+  submerged_temple: +1,
+  thornfang_vine: +1,
+  urnbearer_of_blight: +1,
+  violet_haze_kunoichi: +1,
+  volcanic_nanite_core: +1,
+  worm_brain_host: +1,
+  // v6.6: the sole remaining driver of the Sacred keyword flag. Sacred has
+  // been outside the +-10 band for four consecutive passes; the new per-card
+  // carrier breakdown pins it on two cards, and reverting sunken_archive's
+  // overshot v6.2 cut took that one to a flat +0.0 residual. Skull Cathedral
+  // is what is left, confirmed positive in BOTH cohorts this pass
+  // (+6.6 / +12.6) — a per-card price rise, not another blanket weight cut.
+  skull_cathedral: +1,
+  // --- buffs: cost down, power unchanged ---
+  ashen_circle_rite: -1,
   bioluminescent_tide: -1,
+  blood_moon_descent: -1,
+  bubble_harvest: -1,
+  cavernous_watcher: -1,
+  celestial_attunement: -1,
+  clockwork_nautilus: -1,
+  consuming_ash_cloud: -1,
+  coral_collapse: -1,
   flash_freeze: -1,
-  // v6.4 pass (5,952-game run, harness v6.4): repeat offenders from v6.3
-  // still outside |z|>=1.5 the same direction — second point stacked.
-  abyssal_pathway: +2, // v6.3 +1 (was +10.6). v6.4: still +10.6, z=1.84, n=490.
-  secret_lair: -2, // v6.3 -1 (was -3.0). v6.4: still -3.8, z=-1.73, n=346.
-  towering_tsunami: -2, // v6.3 -1 (was -5.3). v6.4: WORSE at -8.8, z=-2.97,
-  // n=281 — the cost cut alone hasn't fixed it; second point stacked per
-  // the standing repeat-offender rule (see carry-forward if a third pass
-  // still reads negative — may need a STAT_ADJUST buff instead of a further
-  // cost cut).
-  // v6.4 overshoot reverts: the v6.3 adjustment flipped the card's residual
-  // to the OPPOSITE sign this pass — reverted to 0 rather than stacked
-  // further in the same direction.
-  // heart_of_the_thermal_grid: v6.3 -1 (was -7.4) reverted — now +13.1
-  // residual, z=2.46, n=174 (overshot into overperforming). Entry removed.
-  // shatterline: v6.3 +1 (was +6.8/+7.8 both seeds) reverted — now -3.5
-  // residual, z=-1.65, n=220 (overshot into underperforming). Entry removed.
-  // v6.4 new first-time flags (|z|>=1.5, 5,952-game run):
-  kinetix_blacksite_cavern: +1, // +12.5 residual, z=2.31, n=442
-  deceptive_angler: +1, // +11.5 residual, z=2.06, n=283
-  skydark_locust_host: +1, // +11.4 residual, z=2.04, n=136
-  shattered_horizon_protagonist: +1, // +10.9 residual, z=1.92, n=134
-  violet_haze_kunoichi: +1, // +10.6 residual, z=1.84, n=211
-  caldera_harvest_works: +1, // +10.5 residual, z=1.82, n=563
-  submerged_temple: +1, // +10.4 residual, z=1.79, n=122
-  thornfang_vine: +1, // +10.1 residual, z=1.72, n=1358
-  kinetic_anchor_monolith: +1, // +10.0 residual, z=1.69, n=624
-  dissolving_persona: +1, // +9.7 residual, z=1.62, n=377 (the Resonant
-  // carrier the v6.3 doc explicitly left untouched at +56.6% played win —
-  // now shows up as a genuine standalone cost outlier on its own numbers)
-  zen_decay: -1, // -4.5 residual, z=-1.9, n=95
-  // v6.5: sovereign_spires_of_arrak_zul left UNCHANGED at v6.4's -1 — the
-  // v6.5 primary run (deckSeed=1337, matching this doc's usual pass) read
-  // -8.1 (z=-3.00, worse), but a second deckSeed=42 verification run read
-  // the OPPOSITE sign (+13.5, z=1.65) — contradictory between runs, so this
-  // is noise at this sample size, not a confirmed repeat offender. Carried
-  // forward as a watch item instead of stacked; see BALANCE_SIM_FINDINGS.
-  sovereign_spires_of_arrak_zul: -1, // -4.0 residual, z=-1.78, n=568
-  floating_jellyfish: -1, // -3.2 residual, z=-1.58, n=277
-  // v6.5: repeat offenders, confirmed across the primary + deckSeed=42
-  // verification run, second point stacked.
-  the_mirrored_trench: -2, // v6.4 -1 (was -3.1). v6.5: -3.7/-6.2 both runs.
-  ashen_circle_rite: -3, // v6.3 -2 (was -3.1). v6.5: -3.6/-5.7 both runs.
-  ruthless_succession: -2, // v6.2 -1 (was -6.0). v6.5: -2.8/-5.2 both runs
-  // (much improved from the original -6.0, but still outside |z|>=1.5).
-  clockwork_nautilus: -2, // v6.4 -1 (was -3.0). v6.5: still -4.0, z=-1.89,
-  // n=982 (primary run only) — cost 7 already, a decrease is fine, only
-  // cost INCREASES clip at the ceiling.
-  // v6.5 repeat offenders (primary run only, existing adjustment insufficient):
-  magma_conduit_network: +2, // v6.4 +1 (was +16.6). v6.5: still +19.1,
-  // z=4.37, n=115 — got WORSE after the first cost bump, second point
-  // stacked.
-  nanite_culture_lab: +2, // v6.2 +1 (was +15.8; had read healthy in v6.3/
-  // v6.4). v6.5: +11.2 residual, z=2.23, n=350 — resurfaced, second point
-  // stacked.
-  jawbone_span: +2, // v6.2 +1 (was +13.9; had read healthy since). v6.5:
-  // +10.6 residual, z=2.07, n=278 — resurfaced, second point stacked.
-  glass_shrimp: +3, // v6.4 +2 (was +9.6). v6.5: still +9.5, z=1.77, n=205 —
-  // residual essentially unchanged after the last cost bump; third point
-  // stacked.
-  celestial_attunement: -3, // v6.3 -2 (was -2.4). v6.5: still -3.5, z=-1.76,
-  // n=445 — third point stacked.
-  helix_swarm: -3, // v6.4 -2 (was -3.1). v6.5: still -4.3, z=-1.97, n=328 —
-  // third point stacked.
-  // v6.5: towering_tsunami's COST_ADJUST is left at v6.4's -2, UNCHANGED —
-  // the card is an Event already printing at the cost-1 FLOOR (adjustFor is
-  // clamped to [1,7] in eventBuild), so a third cost cut would be a no-op;
-  // it still reads -8.6 residual (z=-3.14, n=299) this pass. Events have no
-  // STAT_ADJUST-equivalent stat budget to buff instead (that mechanism only
-  // exists for Units) — fixing this needs an engine change (a per-Event
-  // effect-magnitude adjustment table), not a number in this table. Carried
-  // forward unactioned; see BALANCE_SIM_FINDINGS.
-  // v6.5 new first-time flags (|z|>=1.5, primary run unless noted):
-  black_coral_thicket: +1, // +10.4 residual, z=2.01, n=337
-  cracked_wastes: +1, // +10.2 residual, z=1.96, n=1189
-  ribcage_titan: +1, // +9.8 residual, z=1.85, n=655
-  kunoichi_of_the_magma_rings: +1, // +9.4/+15.1 residual BOTH runs
-  // (z=1.74/1.93) — confirmed twice in the same pass.
-  phosphor_lich: +1, // +8.8 residual, z=1.58, n=649
-  mermaid_statue: -1, // -3.0 residual, z=-1.62, n=442
+  floating_jellyfish: -1,
+  glowing_manta: -1,
+  helix_swarm: -1,
+  marble_reef_shark: -1,
+  mermaid_statue: -1,
+  nanite_purge_protocol: -1,
+  obsidian_scalpel: -1,
+  porcelain_lobster: -1,
+  research_fleet: -1,
+  ruthless_succession: -1,
+  secret_lair: -2,
+  silver_chimera: -1,
+  sonic_shatter: -1,
+  sovereign_spires_of_arrak_zul: -1,
+  submerged_starfall: -1,
+  tectonic_rift: -1,
+  the_mirrored_trench: -2,
+  towering_tsunami: -1,
+  zen_decay: -1,
 };
+
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
+
+/**
+ * v6.6 — COST_ADJUST is a PRICE-ONLY lever.
+ *
+ * Units derive their stat budget from their cost (`statBase` in mapUnit),
+ * Events derive their effect magnitude from it (`eventEffect`'s `v`), and
+ * Charms derive their bond stats from it. Until v6.6 the adjusted cost fed
+ * those derivations, so a COST_ADJUST moved the card's POWER in lockstep
+ * with its price and was close to balance-neutral in both directions:
+ *
+ *   -1 cost on an underperformer  ->  cheaper, but weaker: not a buff
+ *   +1 cost on an overperformer   ->  pricier, but stronger: not a nerf
+ *
+ * That is why the v6.2-v6.5 findings docs kept recording adjustments that
+ * "didn't take" and had to be stacked to two and three points — and why
+ * three of them (heart_of_the_thermal_grid, shatterline,
+ * sovereign_spires_of_arrak_zul) overshot into the opposite sign instead.
+ * The stacked results speak for themselves at the extremes: helix_swarm
+ * (three cuts, intended as a buff) printed as a cost-1 **1/1**, and
+ * clockwork_nautilus (two cuts) as a cost-5 **1/1** carrying two keywords,
+ * while glass_shrimp (three raises, intended as a nerf) GAINED stats each
+ * time and its residual never moved.
+ *
+ * `naturalTotalFor` returns the cost the card would print at with no
+ * adjustment, and every stat/magnitude derivation now uses it. COST_ADJUST
+ * therefore changes only what the card costs, making it monotonic: a cut is
+ * always a buff, a raise is always a nerf.
+ */
+function naturalTotalFor(base: number, kwAdj: number, lo = 1, hi = 7): number {
+  return Math.max(lo, Math.min(hi, base + kwAdj));
+}
 
 /** v5.3: per-card STAT-budget adjustments, for overperformers already at the
  * cost cap of 7 where a COST_ADJUST would be clipped to nothing. */
@@ -404,13 +398,15 @@ function mapUnit(c: CardTemplate): CardDef {
   const kwAdj = keywordCostAdj(keywords);
   const total = Math.max(1, Math.min(7, base + kwAdj + adjustFor(c.id)));
   const cost = buildCost(seed, colors, total, rt);
-  const t = totalCost(cost);
 
-  // Stats: might+grit ≈ 2*(total MINUS the keyword surcharge) + spread.
-  // The keyword surcharge must not feed the stat budget — otherwise keywords
-  // are free stats (the exact skew the v5.0 sims found: Quickstrike carriers
-  // at 80% win). Ember/Gale lean might, Root/Light lean grit.
-  const statBase = Math.max(1, t - Math.max(0, kwAdj));
+  // Stats: might+grit ≈ 2*(natural total MINUS the keyword surcharge) +
+  // spread. The keyword surcharge must not feed the stat budget — otherwise
+  // keywords are free stats (the exact skew the v5.0 sims found: Quickstrike
+  // carriers at 80% win). Ember/Gale lean might, Root/Light lean grit.
+  // v6.6: derived from the NATURAL (pre-COST_ADJUST) cost so a balance cut
+  // lowers only the price, never the body — see naturalTotalFor.
+  const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  const statBase = Math.max(1, naturalT - Math.max(0, kwAdj));
   const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1) + statAdjustFor(c.id));
   const primary = colors[0];
   const mightShare =
@@ -444,9 +440,10 @@ function mapUnit(c: CardTemplate): CardDef {
   }
 
   // ~25% of units carry an on-enter effect or a triggered ability, themed by
-  // primary color, scaled to cost.
+  // primary color, scaled to the card's NATURAL cost (v6.6: like the stat
+  // budget above, so a COST_ADJUST changes price only — see naturalTotalFor).
   if (roll(seed, 'unit-fx', 4) === 0) {
-    const v = Math.max(1, Math.min(4, Math.ceil(t / 2)));
+    const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2)));
     const fx = themedEffect(seed, primary, v);
     const when = pick(seed, 17, ['enters', 'enters', 'dies', 'atDawn', 'atDusk'] as const);
     if (when === 'enters') {
@@ -505,9 +502,14 @@ function mapEvent(c: CardTemplate): CardDef {
   const keywords: string[] =
     kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
   const kwAdj = keywordCostAdj(keywords);
-  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
+  const base = baseTotal(seed, rt);
+  const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
-  const t = Math.max(1, totalCost(cost) - kwAdj);
+  // v6.6: effect magnitude scales off the NATURAL (pre-COST_ADJUST) cost, so
+  // a balance cut makes the Event cheaper without shrinking its effect (and a
+  // raise makes it pricier without growing it) — see naturalTotalFor.
+  const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  const t = Math.max(1, naturalT - kwAdj);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
   const fx = eventEffect(seed, colors[0], t, subtype === 'Slow');
   const def: CardDef = {
@@ -542,10 +544,14 @@ function mapCharm(c: CardTemplate): CardDef {
   const charmKws: string[] =
     kwRoll < 12 ? ['Runic'] : kwRoll < 24 && subtype === 'Bound' ? ['Soulbound'] : [];
   const kwAdj = keywordCostAdj(charmKws);
-  const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
+  const base = baseTotal(seed, rt);
+  const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
-  // Bond stats scale from the pre-surcharge total (keywords are never free stats).
-  const t = Math.max(1, totalCost(cost) - kwAdj);
+  // Bond stats scale from the pre-surcharge total (keywords are never free
+  // stats). v6.6: and from the NATURAL (pre-COST_ADJUST) cost, so a balance
+  // cut lowers only the price, never the bond — see naturalTotalFor.
+  const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  const t = Math.max(1, naturalT - kwAdj);
 
   const statBudget = Math.max(1, t + 1 - (subtype === 'Worn' ? 1 : 0));
   const mShare = roll(seed, 'ch-split', 3); // 0 mighty, 1 even, 2 gritty

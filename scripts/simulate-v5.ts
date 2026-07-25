@@ -124,6 +124,44 @@
  *    distinct from the existing attacker-side venomousSuicide and the
  *    missed-profitable-block guardDivergence check.
  *
+ * v6.6 additions (docs/BALANCE_SIM_FINDINGS_v6.5.md carry-forward items):
+ *  - GROUND-TRUTH attack-decision capture (`onAttackDecision`, carry-forward
+ *    #7): the shadow attacker set is now computed from the live state at the
+ *    exact moment ai.ts's chooseAttackers returns, not from a pre-Main1
+ *    snapshot. The four-pass 21% "attack divergence" number could never
+ *    distinguish a real CPU disagreement from Main-I board changes between
+ *    the snapshot and the Clash; this removes the ambiguity. Both numbers are
+ *    reported side by side (`attack` = ground truth, `attackSnapshot` = the
+ *    legacy pre-Main1 measurement) so the gap between them IS the timing
+ *    daylight, quantified.
+ *  - Wilson 95% score intervals on every card residual, and a
+ *    significance-gated outlier list (`costAbilityOutliersSignificant`): the
+ *    v6.2-v6.5 z-score list weighted an n=95 card exactly like an n=2,400
+ *    card, which is the most likely cause of cards flip-flopping sign between
+ *    passes (sovereign_spires_of_arrak_zul, heart_of_the_thermal_grid,
+ *    shatterline all overshot and had to be reverted). Only outliers whose CI
+ *    excludes their own deck baseline are action candidates now.
+ *  - Per-card keyword carrier detail (`keywordCarrierDetail`): for every
+ *    keyword, each individual carrier's played win rate / residual / n, so a
+ *    flagged keyword (Sacred, v6.5 carry-forward #3) can be actioned per-card
+ *    instead of via a blanket weight cut.
+ *  - Event effect-magnitude table (`eventEffectProfile`): per-Event action,
+ *    printed magnitude, cost and residual — the missing data for the
+ *    per-Event magnitude lever v6.5 carry-forward #5 (towering_tsunami)
+ *    called for.
+ *  - Printed-budget audit (`printedBudgetOutliers`): stat total vs cost
+ *    linear fit per Unit, a cost-vs-ability signal derived from the PRINTED
+ *    card rather than from win rate — catches formula-level cost/stat
+ *    mismatches that a win-rate residual can't separate from deck context.
+ *  - First-player-advantage diagnosis (`firstPlayerDiagnosis`, carry-forward
+ *    #1): P1 edge split by game length, by who invoked their Leader first,
+ *    and the per-turn mean vitality differential — locates WHERE in the game
+ *    the edge accrues instead of restating that it exists.
+ *  - Five new CPU reasoning-lapse counters: reservationWasted (the reaction
+ *    hold that never cashed in — reactionPlays reads ~0 despite the whole
+ *    reservation machinery), charmOnDoomedUnit, leaderShatterBlunder,
+ *    wellspringMisplay, removalOnNonThreat.
+ *
  * v6.5 additions:
  *  - mustSurvive-aware guard-trade split (v6.4 carry-forward #5): a new
  *    engine telemetry hook (`onGuardAssign`, engine.ts) fires straight from
@@ -156,6 +194,7 @@ import {
   canPayCost,
   essenceTotal,
   unitHasKw,
+  wellspringChoices,
   telemetry,
 } from '../src/game/v3/engine';
 import { LEADER_COLORS, KEYWORDS_OF_COLOR } from '../src/game/v3/colors';
@@ -274,8 +313,15 @@ function ts(tier: number) {
 // are simplifications of the real optimum) — they're a signal for a human
 // pass over the game log, same caveat as v5.1's tookGuardableLethal metric.
 const cpuDecisions = {
-  attackDivergence: 0, // shadow attacker set != actual attacker set
+  // v6.6: GROUND TRUTH — shadow set computed from the live state at the exact
+  // moment ai.ts's chooseAttackers returns (telemetry.onAttackDecision).
+  attackDivergence: 0,
   attackOpportunities: 0,
+  // v6.6: the legacy pre-Main1-snapshot measurement, kept alongside so the
+  // gap between the two IS the snapshot/timing daylight the last four passes
+  // could only speculate about.
+  attackSnapshotDivergence: 0,
+  attackSnapshotOpportunities: 0,
   guardDivergence: 0, // shadow guard assignment leaves different residual damage
   guardOpportunities: 0,
   targetSuboptimal: 0, // removal aimed at a live enemy when a bigger one was legal
@@ -375,6 +421,30 @@ const lapses = {
   // half (mustSurvive was false at assignment) is a genuine CPU lapse; the
   // forced half is a correct chump-block to survive lethal.
   guardDiesForNothingDiscretionary: 0,
+  // --- v6.6 new reasoning-lapse categories -------------------------------
+  /** A reaction card + the locations to pay for it were reserved through a
+   * whole turn (skipping development) and the reaction window never cashed
+   * it in — the reservation cost a turn of tempo for nothing. */
+  reservationWasted: 0,
+  /** Reservations made at all, the denominator for the above. */
+  reservationsMade: 0,
+  /** A Charm was bonded to a unit that left the field the same turn — the
+   * Charm's essence bought nothing (Soulbound charms excluded: they come
+   * back to hand, so this is not a loss for them). */
+  charmOnDoomedUnit: 0,
+  /** A minus Leader ability was activated that shattered the CPU's own
+   * Leader while the board held no Might-6+ threat — the ai.ts guard for
+   * this exists but only weights it, so it can still fire on marginal
+   * value. */
+  leaderShatterBlunder: 0,
+  /** The Wellspring color chosen unlocked nothing in hand, while another
+   * legal choice would have made a currently-uncastable hand card castable
+   * this turn. */
+  wellspringMisplay: 0,
+  /** Removal spent on an enemy unit whose Might was 0-1 (no real threat)
+   * while the CPU had no lethal on board — burning a removal card on a
+   * non-threat. */
+  removalOnNonThreat: 0,
 };
 
 // v6.3: per-leader idle-leader breakdown (global lapses.idleLeader stays the
@@ -430,6 +500,24 @@ telemetry.onGuardAssign = (attackerIid, guardIid, mustSurvive) => {
   if (!telemetryEnabled) return;
   guardMustSurvive[`${attackerIid}|${guardIid}`] = mustSurvive;
 };
+// v6.6: ground-truth attack decision — the shadow heuristic is evaluated
+// against the live state ai.ts itself decided from, at that exact moment.
+telemetry.onAttackDecision = (state, pid, chosen) => {
+  if (!telemetryEnabled) return;
+  attackDecisionSeen = true;
+  cpuDecisions.attackOpportunities++;
+  const shadow = shadowAttackers(state, pid);
+  const actual = new Set(chosen);
+  const same = actual.size === shadow.size && [...actual].every((i) => shadow.has(i));
+  if (!same) cpuDecisions.attackDivergence++;
+};
+// v6.6: reaction-window reservations, keyed per game so a card re-reserved
+// across several turns counts once.
+let gameReservations: Set<string> = new Set();
+telemetry.onReservation = (_pid, cardIid) => {
+  if (!telemetryEnabled) return;
+  gameReservations.add(cardIid);
+};
 telemetry.onEssenceCleared = (state) => {
   if (!telemetryEnabled) return;
   const stage = essenceFloatByStage[stageOf(state.turn)];
@@ -456,6 +544,34 @@ telemetry.onEssenceCleared = (state) => {
     }
   }
 };
+
+// --- v6.6: per-card keyword carrier detail ---------------------------------
+// The v6.5 doc's Sacred carry-forward asked for a per-CARD look inside a
+// flagged keyword rather than another blanket weight cut. kwStats only ever
+// aggregated across a keyword's carriers, so there was no way to see which
+// carriers actually drive the number. cardStats already holds everything
+// needed per card — this just indexes the cards by keyword at report time.
+
+// --- v6.6: first-player-advantage diagnosis --------------------------------
+// Six passes have restated that P1 wins ~60% without locating WHERE the edge
+// accrues. Three cuts that can each be acted on differently:
+//  - by game length: an edge concentrated in short games is a raw tempo/
+//    on-the-play problem; one that persists into long games is structural.
+//  - by who invoked their Leader first: isolates the Leader-curve race from
+//    the raw extra turn.
+//  - the per-turn mean vitality differential (P1 - P2): shows the turn the
+//    gap opens, and whether P2's extra opening card ever closes it.
+const fpDiagnosis = {
+  byLength: {} as Record<string, { games: number; p1Wins: number }>,
+  leaderFirst: { p1First: 0, p1FirstP1Wins: 0, p2First: 0, p2FirstP1Wins: 0, tie: 0, tieP1Wins: 0 },
+  vitDiffByTurn: {} as Record<number, { sum: number; n: number }>,
+};
+const lengthBucket = (t: number) => (t <= 10 ? '<=10' : t <= 20 ? '11-20' : t <= 30 ? '21-30' : '>30');
+
+// --- v6.6: ground-truth attack-decision capture ----------------------------
+// Fed by telemetry.onAttackDecision straight out of ai.ts's chooseAttackers,
+// so the shadow comparison runs against the SAME state the CPU decided from.
+let attackDecisionSeen = false;
 
 const invariants: string[] = [];
 function checkInvariants(state: GameState, game: number, turn: number): void {
@@ -502,6 +618,24 @@ function deckColorSupply(deck: DeckDef): Set<string> {
     if (d?.produces) out.add(d.produces);
   }
   return out;
+}
+
+/** v6.6: how many hand cards a player's location row can satisfy the COLORED
+ * pips of, optionally with one extra hypothetical location added. Generic
+ * essence is deliberately ignored — this measures colour access (what the
+ * Wellspring choice actually controls), not affordability. */
+function colorSatisfiableCount(
+  state: GameState,
+  pid: PlayerId,
+  extra?: string,
+): number {
+  const p = state.players[pid];
+  const have: Record<string, number> = {};
+  for (const l of p.locations) have[l.produces] = (have[l.produces] ?? 0) + 1;
+  if (extra) have[extra] = (have[extra] ?? 0) + 1;
+  return p.hand.filter((c) =>
+    Object.entries(c.def.cost?.pips ?? {}).every(([col, n]) => (have[col] ?? 0) >= (n ?? 0)),
+  ).length;
 }
 
 function unguardableLethal(state: GameState, pid: PlayerId): boolean {
@@ -660,6 +794,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   }
   gameKwActivations = {};
   guardMustSurvive = {};
+  gameReservations = new Set();
+  // v6.6: reserved cards that actually got cashed in during a reaction window.
+  const reservationsCashed = new Set<string>();
 
   // v6.3: keptColorDeadHand — handIsKeepable (ai.ts) only checks a cheap
   // (cost<=2) card AND a Unit exist in the hand, not whether either is
@@ -702,6 +839,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   let turns = 0;
   let logCursor = 0;
   let firstClashTurn = 0;
+  // v6.6: which seat invoked its Leader first this game ('tie' if the same
+  // turn boundary saw both).
+  let leaderFirst: PlayerId | 'tie' | null = null;
   // Turn-8 vitality snapshot for the comeback metric.
   let vitAt8: Record<PlayerId, number> | null = null;
   while (!state.winner && turns < MAX_TURNS) {
@@ -747,6 +887,21 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     const preLocations = p.locations.length + (p.wellspringPlayedThisTurn ? 0 : 1);
     const preHandIds = new Set(p.hand.map((c) => c.iid));
     const preOppDeck = state.players[opponentOf(pid)].deck.length;
+
+    // --- v6.6 pre-turn snapshots for the new lapse counters ---------------
+    // Wellspring: what each legal colour choice would unlock, measured
+    // BEFORE the turn's plays change the hand.
+    const wellspringBaseline = colorSatisfiableCount(state, pid);
+    const wellspringGain: Record<string, number> = {};
+    if (!p.wellspringPlayedThisTurn) {
+      for (const t of wellspringChoices(state, pid)) {
+        wellspringGain[t] = colorSatisfiableCount(state, pid, t) - wellspringBaseline;
+      }
+    }
+    const preLeaderShattered = p.leader.shattered;
+    const preOppBigThreat = state.players[opponentOf(pid)].field.some(
+      (u) => effMight(state, u) >= 6,
+    );
 
     const events = playTurn(state, pid);
     curveStats.totalTurns++;
@@ -799,6 +954,38 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       }
     }
 
+    // --- v6.6 new reasoning-lapse detection ------------------------------
+    // Reservation cash-in: the reserved card actually resolved in a reaction
+    // window (any invoke carrying `by`).
+    for (const ev of events) {
+      if (ev.kind === 'invoke' && ev.by) reservationsCashed.add(ev.iid);
+    }
+    // Wellspring misplay: the colour played unlocked nothing while another
+    // legal choice would have unlocked at least one hand card.
+    const wsEv = events.find((e) => e.kind === 'wellspring') as
+      | { essence: string }
+      | undefined;
+    if (wsEv) {
+      const chosenGain = wellspringGain[wsEv.essence] ?? 0;
+      const bestGain = Math.max(0, ...Object.values(wellspringGain));
+      if (chosenGain === 0 && bestGain > 0) lapses.wellspringMisplay++;
+    }
+    // Leader shatter blunder: the CPU spent its Leader out of the game this
+    // turn with no Might-6+ threat on the board to justify it.
+    if (!preLeaderShattered && p.leader.shattered && !preOppBigThreat) {
+      lapses.leaderShatterBlunder++;
+    }
+    // Charm on a doomed unit: a Charm invoked this turn that is bonded to
+    // nothing by end of turn (its unit left the field). Soulbound charms
+    // return to hand, so they lose nothing and are excluded.
+    for (const ev of events) {
+      if (ev.kind !== 'invoke' || ev.by) continue;
+      const def = POOL_BY_ID[ev.iid.split('#')[0]];
+      if (def?.type !== 'Charm' || def.keywords?.includes('Soulbound')) continue;
+      const stillBonded = p.field.some((u) => u.charms.some((ch) => ch.iid === ev.iid));
+      if (!stillBonded) lapses.charmOnDoomedUnit++;
+    }
+
     // v5.3: erode = the opponent's deck shrink during the acting player's
     // turn, net of any draws their own reaction-window Ambush units made
     // (the opponent never Deals otherwise on this turn).
@@ -821,13 +1008,16 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     const attackEv = events.find((e) => e.kind === 'attack') as
       | { iids: string[] }
       | undefined;
+    // v6.6: the LEGACY pre-Main1-snapshot measurement, retained only so the
+    // gap against the ground-truth number (fed by telemetry.onAttackDecision
+    // above) quantifies the snapshot/timing daylight directly.
     if (preShadowAttackers) {
-      cpuDecisions.attackOpportunities++;
+      cpuDecisions.attackSnapshotOpportunities++;
       const actual = new Set(attackEv?.iids ?? []);
       const same =
         actual.size === preShadowAttackers.size &&
         [...actual].every((i) => preShadowAttackers.has(i));
-      if (!same) cpuDecisions.attackDivergence++;
+      if (!same) cpuDecisions.attackSnapshotDivergence++;
     }
 
     const guardEv = events.find((e) => e.kind === 'guard') as
@@ -942,6 +1132,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       const legalMaxMight = legalMights.length ? Math.max(...legalMights) : 0;
       const chosenMight = preOppBiggestByIid.get(ev.targetIid) ?? -1;
       if (chosenMight >= 0 && chosenMight < legalMaxMight) cpuDecisions.targetSuboptimal++;
+      // v6.6: removal burned on a non-threat — the whole enemy board topped
+      // out at Might 1, so no removal-worthy target existed at all and the
+      // card would have been better held. (Face-damage `anyTarget` effects
+      // are excluded: sending those at the enemy player is a real line.)
+      if (chosenMight >= 0 && legalMaxMight <= 1 && def.onInvoke?.target !== 'anyTarget') {
+        lapses.removalOnNonThreat++;
+      }
     }
 
     // Reaction-window opportunity = a clash happened this turn (the defender
@@ -960,6 +1157,21 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     }
     if (turns === 8 && !vitAt8) {
       vitAt8 = { P1: state.players.P1.vitality, P2: state.players.P2.vitality };
+    }
+    // v6.6: per-turn mean vitality differential (P1 - P2) — locates the turn
+    // the first-player gap actually opens.
+    {
+      const d = (fpDiagnosis.vitDiffByTurn[turns] ??= { sum: 0, n: 0 });
+      d.sum += state.players.P1.vitality - state.players.P2.vitality;
+      d.n++;
+    }
+    // v6.6: which seat got its Leader down first (recorded once).
+    if (leaderFirst === null) {
+      const p1In = state.players.P1.leader.invoked || state.players.P1.leader.shattered;
+      const p2In = state.players.P2.leader.invoked || state.players.P2.leader.shattered;
+      if (p1In && p2In) leaderFirst = 'tie';
+      else if (p1In) leaderFirst = 'P1';
+      else if (p2In) leaderFirst = 'P2';
     }
 
     // --- v5.2 essence-curve efficiency ---
@@ -1088,6 +1300,30 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   mech.turnsTotal += turns;
   mech.gameLengths.push(turns);
   const winner = state.winner;
+
+  // v6.6: reaction-window reservations that never cashed in. Each reserved
+  // card counts once per game regardless of how many turns it was held.
+  lapses.reservationsMade += gameReservations.size;
+  for (const iid of gameReservations) {
+    if (!reservationsCashed.has(iid)) lapses.reservationWasted++;
+  }
+
+  // v6.6: first-player-advantage diagnosis cuts.
+  if (winner) {
+    const lb = (fpDiagnosis.byLength[lengthBucket(turns)] ??= { games: 0, p1Wins: 0 });
+    lb.games++;
+    if (winner === 'P1') lb.p1Wins++;
+    if (leaderFirst === 'P1') {
+      fpDiagnosis.leaderFirst.p1First++;
+      if (winner === 'P1') fpDiagnosis.leaderFirst.p1FirstP1Wins++;
+    } else if (leaderFirst === 'P2') {
+      fpDiagnosis.leaderFirst.p2First++;
+      if (winner === 'P1') fpDiagnosis.leaderFirst.p2FirstP1Wins++;
+    } else if (leaderFirst === 'tie') {
+      fpDiagnosis.leaderFirst.tie++;
+      if (winner === 'P1') fpDiagnosis.leaderFirst.tieP1Wins++;
+    }
+  }
   if (winner === 'P1') mech.p1Wins++;
   if (winner) {
     const loser = state.players[opponentOf(winner)];
@@ -1458,6 +1694,136 @@ const costAbilityOutliers = [...cardReportWithZ]
   .filter((c) => Math.abs(c.zScore) >= 1.5)
   .sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore));
 
+// v6.6: SIGNIFICANCE-GATED outlier list. The z-score above is computed over
+// the residual distribution and is completely blind to sample size — an n=95
+// card and an n=2,400 card with the same residual get the same z. That is
+// almost certainly what produced the three overshoot reverts the v6.4/v6.5
+// docs record (heart_of_the_thermal_grid, shatterline, and the
+// sign-flipping sovereign_spires_of_arrak_zul): small-n noise was being
+// actioned as signal. This list additionally requires the card's played
+// win-rate Wilson 95% score interval to EXCLUDE its own in-deck baseline, so
+// only differences the sample can actually support become buff/nerf
+// candidates.
+function wilson(wins: number, n: number): [number, number] {
+  if (n === 0) return [0, 100];
+  const z = 1.96;
+  const p = wins / n;
+  const d = 1 + (z * z) / n;
+  const centre = p + (z * z) / (2 * n);
+  const half = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return [(100 * (centre - half)) / d, (100 * (centre + half)) / d];
+}
+const cardWilson: Record<string, { lo: number; hi: number }> = {};
+for (const c of cardReport) {
+  const s = cardStats[c.id];
+  const [lo, hi] = wilson(s.playedWins, s.playedGames);
+  cardWilson[c.id] = { lo: +lo.toFixed(1), hi: +hi.toFixed(1) };
+}
+const costAbilityOutliersSignificant = costAbilityOutliers
+  .map((c) => ({ ...c, ci95: cardWilson[c.id] }))
+  .filter((c) => c.ci95 && (c.ci95.lo > c.deckWin || c.ci95.hi < c.deckWin));
+
+// v6.6: PRINTED-budget audit — a cost-vs-ability signal read off the printed
+// card rather than off win rate. cardpool.ts derives a Unit's stat budget
+// from its cost minus the keyword surcharge, so stat total should track cost
+// nearly linearly; a Unit far off that line is a formula-level cost/ability
+// mismatch (usually a keyword-surcharge interaction), which a win-rate
+// residual cannot separate from deck context. Fitted by least squares over
+// every Unit in the pool, not just the ones this run sampled.
+const printedBudgetOutliers = (() => {
+  const units = POOL_V4.filter((c: CardDef) => c.type === 'Unit');
+  const pts = units.map((c) => ({
+    c,
+    x: totalCost(c.cost),
+    y: (c.might ?? 0) + (c.grit ?? 0),
+  }));
+  const n = pts.length || 1;
+  const mx = pts.reduce((s, p) => s + p.x, 0) / n;
+  const my = pts.reduce((s, p) => s + p.y, 0) / n;
+  const cov = pts.reduce((s, p) => s + (p.x - mx) * (p.y - my), 0);
+  const varx = pts.reduce((s, p) => s + (p.x - mx) ** 2, 0) || 1;
+  const slope = cov / varx;
+  const intercept = my - slope * mx;
+  const resid = pts.map((p) => ({ ...p, r: p.y - (slope * p.x + intercept) }));
+  const sd =
+    Math.sqrt(resid.reduce((s, p) => s + p.r ** 2, 0) / Math.max(1, resid.length)) || 1;
+  return {
+    fit: { slope: +slope.toFixed(2), intercept: +intercept.toFixed(2), sd: +sd.toFixed(2) },
+    outliers: resid
+      .filter((p) => Math.abs(p.r) / sd >= 2)
+      .sort((a, b) => Math.abs(b.r) - Math.abs(a.r))
+      .slice(0, 25)
+      .map((p) => ({
+        id: p.c.id,
+        name: p.c.name,
+        cost: p.x,
+        statTotal: p.y,
+        keywords: p.c.keywords ?? [],
+        budgetResidual: +p.r.toFixed(1),
+        z: +(p.r / sd).toFixed(2),
+      })),
+  };
+})();
+
+// v6.6: per-Event effect-magnitude profile — the data the v6.5 carry-forward
+// #5 (towering_tsunami, floor-clamped at cost 1 with no lever left in
+// cardpool.ts) asked for. Pairs each Event's printed action/magnitude with
+// its measured residual so a per-Event magnitude table can be scoped from
+// real numbers rather than guessed at.
+const eventEffectProfile = cardReport
+  .filter((c) => c.type === 'Event')
+  .map((c) => {
+    const def = POOL_BY_ID[c.id];
+    return {
+      id: c.id,
+      name: c.name,
+      subtype: c.subtype,
+      cost: c.cost,
+      action: def?.onInvoke?.action,
+      magnitude: def?.onInvoke?.value ?? null,
+      target: def?.onInvoke?.target,
+      residual: c.residual,
+      playedGames: c.playedGames,
+      ci95: cardWilson[c.id],
+    };
+  })
+  .sort((a, b) => a.residual - b.residual);
+
+// v6.6: per-card detail inside each keyword. The v6.5 Sacred carry-forward
+// explicitly asked for a per-card look instead of another blanket weight
+// cut; kwStats only ever aggregated across carriers.
+// NOTE: built from the FULL pool, not from `cardReport` — cardReport applies
+// a playedGames >= 20 cutoff, and a keyword's carriers are often exactly the
+// low-sample cards that cutoff drops, so filtering through it can show every
+// listed carrier sitting at ~0 residual while the keyword's own aggregate is
+// far outside the band. Every carrier is listed here with its n so a reader
+// can weigh it.
+const keywordCarrierDetail = Object.fromEntries(
+  KEYWORDS.map((kw) => [
+    kw,
+    POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw))
+      .map((def: CardDef) => {
+        const s = cardStats[def.id];
+        const playedWin = pct(s?.playedWins ?? 0, s?.playedGames ?? 0);
+        const deckWin = pct(s?.inDeckWins ?? 0, s?.inDeckGames ?? 0);
+        const [lo, hi] = wilson(s?.playedWins ?? 0, s?.playedGames ?? 0);
+        return {
+          id: def.id,
+          name: def.name,
+          type: def.type,
+          cost: totalCost(def.cost),
+          playedWin,
+          deckWin,
+          residual: +(playedWin - deckWin).toFixed(1),
+          playedGames: s?.playedGames ?? 0,
+          ci95: { lo: +lo.toFixed(1), hi: +hi.toFixed(1) },
+        };
+      })
+      .filter((c) => c.playedGames > 0)
+      .sort((a, b) => b.residual - a.residual),
+  ]).filter(([, rows]) => (rows as unknown[]).length > 0),
+);
+
 const costBands: Record<string, { games: number; wins: number; n: number }> = {};
 for (const c of cardReport) {
   const band = String(c.cost);
@@ -1520,9 +1886,21 @@ const tierReport = Object.entries(tierStats)
 
 // v5.2: CPU decision-quality taxonomy summary.
 const cpuDecisionReport = {
+  // v6.6: ground truth — shadow evaluated on the live state ai.ts decided
+  // from, via telemetry.onAttackDecision.
   attack: {
     divergenceRate: pct(cpuDecisions.attackDivergence, cpuDecisions.attackOpportunities),
     opportunities: cpuDecisions.attackOpportunities,
+  },
+  // v6.6: the legacy pre-Main1-snapshot number. The gap between this and
+  // `attack` above is the snapshot/timing daylight, now measured rather than
+  // assumed.
+  attackSnapshot: {
+    divergenceRate: pct(
+      cpuDecisions.attackSnapshotDivergence,
+      cpuDecisions.attackSnapshotOpportunities,
+    ),
+    opportunities: cpuDecisions.attackSnapshotOpportunities,
   },
   guard: {
     divergenceRate: pct(cpuDecisions.guardDivergence, cpuDecisions.guardOpportunities),
@@ -1595,7 +1973,7 @@ const poolCoverage = (() => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.5',
+    version: 'v6.6',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1766,6 +2144,47 @@ const report = {
       ),
     ]),
   ),
+  // v6.6 additions.
+  costAbilityOutliersSignificant,
+  printedBudgetOutliers,
+  eventEffectProfile,
+  keywordCarrierDetail,
+  reservationEfficiency: {
+    reservationsMade: lapses.reservationsMade,
+    wasted: lapses.reservationWasted,
+    wastedPct: pct(lapses.reservationWasted, lapses.reservationsMade),
+    reactionPlays: mech.reactionPlays,
+  },
+  firstPlayerDiagnosis: {
+    byGameLength: Object.fromEntries(
+      Object.entries(fpDiagnosis.byLength).map(([b, s]) => [
+        b,
+        { p1WinPct: pct(s.p1Wins, s.games), games: s.games },
+      ]),
+    ),
+    byLeaderFirst: {
+      p1InvokedFirst: {
+        p1WinPct: pct(fpDiagnosis.leaderFirst.p1FirstP1Wins, fpDiagnosis.leaderFirst.p1First),
+        games: fpDiagnosis.leaderFirst.p1First,
+      },
+      p2InvokedFirst: {
+        p1WinPct: pct(fpDiagnosis.leaderFirst.p2FirstP1Wins, fpDiagnosis.leaderFirst.p2First),
+        games: fpDiagnosis.leaderFirst.p2First,
+      },
+      sameTurn: {
+        p1WinPct: pct(fpDiagnosis.leaderFirst.tieP1Wins, fpDiagnosis.leaderFirst.tie),
+        games: fpDiagnosis.leaderFirst.tie,
+      },
+    },
+    // Mean (P1 vitality - P2 vitality) at the end of each turn number, for
+    // the first 20 turns — shows the turn the gap opens.
+    vitalityDiffByTurn: Object.fromEntries(
+      Object.entries(fpDiagnosis.vitDiffByTurn)
+        .filter(([t]) => Number(t) <= 20)
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([t, s]) => [t, +(s.sum / Math.max(1, s.n)).toFixed(2)]),
+    ),
+  },
   guardTradeQuality: (() => {
     // v6.5: totalGuards sums only the four mutually-exclusive top-level
     // outcomes — guardDiesForNothingForced/Discretionary are a breakdown OF
@@ -1824,6 +2243,17 @@ console.log('\nLeader idle-ability rate (v6.3):', JSON.stringify(report.leaderId
 console.log('\nKept color-dead hands (v6.3):', lapses.keptColorDeadHand);
 console.log('\nLeader ability usage (v6.4):', JSON.stringify(report.leaderAbilityUsage, null, 2));
 console.log('\nGuard-trade quality (v6.4):', JSON.stringify(report.guardTradeQuality, null, 2));
+console.log('\nReservation efficiency (v6.6):', JSON.stringify(report.reservationEfficiency, null, 2));
+console.log('\nFirst-player diagnosis (v6.6):', JSON.stringify(report.firstPlayerDiagnosis, null, 2));
+console.log('\nPrinted-budget fit (v6.6):', JSON.stringify(report.printedBudgetOutliers.fit, null, 2));
+for (const p of report.printedBudgetOutliers.outliers)
+  console.log(`  ${p.name} cost ${p.cost} stats ${p.statTotal} budgetResidual ${p.budgetResidual} z=${p.z} [${p.keywords.join(',')}]`);
+console.log('\nCost/ability outliers, SIGNIFICANCE-GATED (v6.6, |z|>=1.5 AND Wilson CI excludes deck baseline):');
+for (const c of report.costAbilityOutliersSignificant)
+  console.log(`  ${c.name} (${c.type}, cost ${c.cost}) residual ${c.residual} z=${c.zScore} n=${c.playedGames} played ${c.playedWin}% CI[${c.ci95.lo},${c.ci95.hi}] vs deck ${c.deckWin}%`);
+console.log('\nWorst Events by residual (v6.6 effect-magnitude profile):');
+for (const e of report.eventEffectProfile.slice(0, 12))
+  console.log(`  ${e.name} (${e.subtype}, cost ${e.cost}) ${e.action}${e.magnitude !== null ? ' ' + e.magnitude : ''} -> ${e.target} residual ${e.residual} n=${e.playedGames}`);
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');
