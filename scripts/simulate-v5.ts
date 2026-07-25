@@ -1413,3 +1413,11 @@ console.log('\nDeadest in hand:');
 for (const c of report.deadestInHand)
   console.log(`  ${c.name} cost ${c.cost} deadRate ${c.deadInHandRate}%`);
 console.log(`\nReport written: ${outPath}`);
+
+// Fail CI (or any caller) on engine correctness canaries — a sim run with
+// invariant violations means the engine did something illegal, not just
+// "balance looks off".
+if (invariants.length > 0) {
+  console.error(`\n${invariants.length} invariant violation(s) — failing.`);
+  process.exit(1);
+}
