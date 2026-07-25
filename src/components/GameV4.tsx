@@ -1681,7 +1681,16 @@ export function GameV4({
           : 'NEXT ▸';
 
   const showPhaseButton =
-    stage === 'play' && (!g.clash || g.clash.step === 'done') && g.phase !== 'Dawn' && g.phase !== 'Dusk';
+    stage === 'play' &&
+    (!g.clash || g.clash.step === 'done') &&
+    g.phase !== 'Dawn' &&
+    g.phase !== 'Dusk' &&
+    // The shed picker is a full-screen overlay opened BY this button, but the
+    // button sits in the top bar above it and stayed live — clicking it again
+    // just re-entered the shed flow, so the overlay never blocked its own
+    // opener. Hide it while the picker is up; the picker has its own
+    // SHED & END TURN and BACK.
+    shedPick === null;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -2333,14 +2342,18 @@ export function GameV4({
                     );
                     setShedPick(byCost.slice(0, Math.max(0, need)).map((c) => c.iid));
                   }}
-                  aria-label="Auto-select cards to shed"
+                  // The accessible name must CONTAIN the visible label (WCAG
+                  // 2.5.3): an aria-label of "Auto-select cards to shed"
+                  // replaced it outright, so voice control could not act on
+                  // the word a player actually sees.
+                  aria-label="Suggest — auto-select cards to shed"
                   className="btn-pop text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-1.5 ink-border-sm"
                 >
                   ✦ SUGGEST
                 </button>
                 <button
                   onClick={() => setShedPick(null)}
-                  aria-label="Cancel shedding"
+                  aria-label="Back — cancel shedding"
                   className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
                 >
                   ✕ BACK

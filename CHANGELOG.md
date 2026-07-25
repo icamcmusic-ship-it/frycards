@@ -50,6 +50,26 @@ version of this history also powers the in-app Changelog screen
   instead of up to 20 silent seconds on a slow connection; the in-match
   Wellspring control shows the remaining allowance instead of always
   claiming "one per turn"; two stale eslint-disable directives removed.
+- **Shed-picker modal fix**: the full-screen shed overlay is opened by the
+  top-bar phase button, which sat *above* the overlay and stayed live — so
+  the modal never blocked its own opener and clicking it just re-entered the
+  shed flow. The phase button is now hidden while the picker is up.
+- **Two invisible in-match affordances surfaced**: the attacker's own
+  reaction window (opened by the engine, used by the CPU, but the hint bar
+  only ever said "RESOLVE CLASH"), and the reason CONFIRM GUARDS is
+  disabled — it is `disabled`, so clicking cannot surface the reason and the
+  only explanation was a `title` tooltip that shows nothing on touch. Both
+  now appear in the hint bar.
+- **Accessibility (WCAG 2.5.3 Label in Name)**: the shed picker's SUGGEST and
+  BACK buttons carried aria-labels that *replaced* their visible text
+  ("Auto-select cards to shed", "Cancel shedding"), so their accessible names
+  contained none of the words a player can see and voice control could not
+  target them. An audit across every `aria-label` in `src/` found exactly
+  these two; both now include the visible label.
+- **Verified end-to-end in a browser**: guest boot, every reachable menu
+  screen, and a full CPU match played to a result (coin flip, mulligan,
+  Main I → Clash → Main II, shed, human guard assignment, clash resolution,
+  game over) with zero console/page errors.
 - **Sim harness (v6.6)**: ground-truth attack-decision capture via a new
   `onAttackDecision` telemetry hook (resolves the four-pass "21% attack
   divergence" carry-forward — real divergence is **0.1%**, the rest was

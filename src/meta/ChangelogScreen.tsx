@@ -24,6 +24,9 @@ export const ENTRIES: ChangelogEntry[] = [
       'CPU fix: it stops holding a card and its essence back for a surprise play when you have nothing on board that could attack — a reaction window that was never going to open, in exchange for a wasted development turn.',
       'Slow connections no longer stare at a blank loading screen. Boot allows each request up to 20 seconds; the splash now tells you it is connecting, says so more plainly if your network looks slow, and offers a RETRY button rather than making you wait it out.',
       'The in-match Wellspring control now shows how many you have left this turn, instead of a tooltip that always claimed "one per turn".',
+      'The end-of-turn shed picker no longer leaves the END TURN button live in the bar above it — clicking it again just re-entered the shed you were already in.',
+      'Two more in-match prompts made visible: the hint bar now tells you that you can answer the guards with Quick Events and Ambush units during your OWN clash before resolving, and if a guard assignment is illegal it says why in the hint bar instead of only in a hover tooltip you could never see on a touchscreen.',
+      'Accessibility: the shed picker\'s SUGGEST and BACK buttons were announced to screen readers and voice control under completely different names than the ones printed on them, so saying "click suggest" did nothing. Their spoken names now include the visible label.',
     ],
   },
   {
