@@ -14,7 +14,8 @@
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
     "fetch:cards": "tsx scripts/fetch-cards.ts",
-    "db:backfill": "tsx scripts/backfill-cards-db.ts"
+    "db:backfill": "tsx scripts/backfill-cards-db.ts",
+    "sim": "tsx scripts/simulate-v5.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
