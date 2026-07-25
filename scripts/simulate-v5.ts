@@ -97,6 +97,22 @@
  *    distribution (costAbilityOutliers), flagging |z| >= 1.5 cards regardless
  *    of how wide a given run's spread is.
  *
+ * v6.3 additions:
+ *  - Keyword dead-weight rate: of games where a keyword with real activation
+ *    telemetry was carried onto the field/played, what % never actually
+ *    fired (a discount candidate distinct from a low carrier win rate).
+ *  - keptColorDeadHand lapse: ai.ts's handIsKeepable only checks a cheap
+ *    (cost<=2) card AND a Unit exist in the opening hand, not whether either
+ *    is castable under the deck's own producible colors — this flags hands
+ *    kept by that rule that are still functionally dead on color.
+ *  - Per-Leader idle-ability rate (leaderIdleAbility): splits the existing
+ *    global idleLeader lapse by which Leader kit had a free resolve-builder
+ *    available and unused, so a kit-specific CPU gap doesn't hide in the
+ *    all-Leaders average.
+ *  - Essence float by game stage (essenceFloatByStage): the active player's
+ *    end-of-phase floated essence bucketed into early/mid/late turns, to
+ *    tell whether float is an opening-curve artifact or a late-game leak.
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -291,7 +307,49 @@ const lapses = {
   wastedEssenceWithPlay: 0, // phase ended with essence that could pay for a card in hand
   idleLeader: 0, // leader invoked but ability unused on a turn it had a legal use
   colorCloggedGames: 0, // game ended with >=3 hand cards never castable vs deck colors
+  // v6.3: opening hand kept (per handIsKeepable's cheap+unit rule) even though
+  // its only qualifying cheap/unit card(s) are off-color for the deck's own
+  // producible colors — handIsKeepable (ai.ts) checks cost/type but not color,
+  // so a "keepable" hand can still be functionally dead this game.
+  keptColorDeadHand: 0,
 };
+
+// v6.3: per-leader idle-leader breakdown (global lapses.idleLeader stays the
+// headline number; this splits it by which Leader kit had the free-builder
+// available and unused, since some Leaders lean on their ability far more
+// than others).
+const leaderIdleStats: Record<string, { opportunities: number; idle: number }> = {};
+function lis(id: string) {
+  return (leaderIdleStats[id] ??= { opportunities: 0, idle: 0 });
+}
+
+// v6.3: keyword "dead weight" rate — carrier games where a keyword with real
+// telemetry (Siphon/Hardened/Soulbound/Venomous/Regenerate/Sacred/Resolute/
+// Bountiful/Surge/Resonant/Runic/Quickstrike/Overrun/Ambush) never actually
+// fired despite being on the battlefield/played that game. Passive always-on
+// keywords with no discrete "activation" (Aerial, Warded, Unbreakable, Alert,
+// Swarmproof, Skywatch, Immobile, Commander) are excluded — they have no
+// telemetry hook and "never activated" wouldn't mean anything for them.
+const TELEMETRY_KEYWORDS = new Set([
+  'Siphon', 'Hardened', 'Soulbound', 'Venomous', 'Regenerate', 'Sacred',
+  'Resolute', 'Bountiful', 'Surge', 'Resonant', 'Runic', 'Quickstrike',
+  'Overrun', 'Ambush',
+]);
+const kwDeadWeight: Record<string, { carrierGames: number; neverActivatedGames: number }> = {};
+for (const kw of TELEMETRY_KEYWORDS) kwDeadWeight[kw] = { carrierGames: 0, neverActivatedGames: 0 };
+let gameKwActivations: Record<string, number> = {};
+
+// v6.3: wasted essence bucketed by game phase (early/mid/late turns) — is
+// float concentrated in the opening curve (still learning the hand) or does
+// it persist into the late game (a real CPU curve-efficiency gap)?
+const essenceFloatByStage = {
+  early: { total: 0, turns: 0 }, // turns 1-6
+  mid: { total: 0, turns: 0 }, // turns 7-14
+  late: { total: 0, turns: 0 }, // turns 15+
+};
+function stageOf(turn: number): keyof typeof essenceFloatByStage {
+  return turn <= 6 ? 'early' : turn <= 14 ? 'mid' : 'late';
+}
 
 // --- v5.3: engine telemetry hooks ------------------------------------------
 // Real keyword activation counts + real wasted-essence measurement, fed by
@@ -301,9 +359,13 @@ let telemetryEnabled = false;
 telemetry.onKeywordProc = (kw, amount) => {
   if (!telemetryEnabled) return;
   if (kwStats[kw]) kwStats[kw].activations += amount;
+  if (TELEMETRY_KEYWORDS.has(kw)) gameKwActivations[kw] = (gameKwActivations[kw] ?? 0) + amount;
 };
 telemetry.onEssenceCleared = (state) => {
   if (!telemetryEnabled) return;
+  const stage = essenceFloatByStage[stageOf(state.turn)];
+  stage.turns++;
+  stage.total += essenceTotal(state.players[state.active].essence);
   for (const pid of ['P1', 'P2'] as PlayerId[]) {
     const p = state.players[pid];
     const tot = essenceTotal(p.essence);
@@ -516,6 +578,25 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     mech.mulligans++;
     mulled.P2 = true;
   }
+  gameKwActivations = {};
+
+  // v6.3: keptColorDeadHand — handIsKeepable (ai.ts) only checks a cheap
+  // (cost<=2) card AND a Unit exist in the hand, not whether either is
+  // actually castable under this deck's own producible colors. A hand kept
+  // by that rule can still be functionally dead if its only qualifying
+  // cheap card and/or Unit is off-color.
+  const decksByPid: Record<PlayerId, DeckDef> = { P1: deckA, P2: deckB };
+  for (const pid of ['P1', 'P2'] as PlayerId[]) {
+    if (mulled[pid]) continue;
+    const supply = deckColorSupply(decksByPid[pid]);
+    const castable = (c: { def: CardDef }) =>
+      Object.keys(c.def.cost?.pips ?? {}).every((col) => supply.has(col));
+    const hand = state.players[pid].hand;
+    const hasCastableCheap = hand.some((c) => totalCost(c.def.cost) <= 2 && castable(c));
+    const hasCastableUnit = hand.some((c) => c.def.type === 'Unit' && castable(c));
+    if (!hasCastableCheap || !hasCastableUnit) lapses.keptColorDeadHand++;
+  }
+
   telemetryEnabled = true;
 
   // v6.1: opening-hand curve quality (post-mulligan hand).
@@ -546,7 +627,21 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     const p = state.players[pid];
     const preHand = new Set(p.hand.map((c) => c.iid));
     const preVit = state.players[opponentOf(pid)].vitality;
-    const preLeaderResolve = p.leader.resolve;
+    // v6.3: whether a free +resolve builder was LEGALLY available this turn,
+    // snapshot pre-turn (activateLeaderAbility has no cost/cap beyond
+    // "once per turn, invoked, not shattered" for a resolveDelta>0 ability —
+    // so this is always true given those three static conditions, independent
+    // of what the player/CPU actually does this turn). Computing it this way
+    // (rather than inferring "opportunity" from the post-turn resolve delta,
+    // as the original idleLeader lapse's condition effectively did) avoids a
+    // tautology: resolve-unchanged-after-the-turn ALREADY implies no ability
+    // (plus or minus) was used at all — every turn matching that post-hoc
+    // check is definitionally "idle", so a per-leader breakdown gated the
+    // same way could only ever read 100%.
+    const hadPlusAbilityOpportunity =
+      p.leader.invoked &&
+      !p.leader.shattered &&
+      (p.leader.def.leaderAbilities ?? []).some((a) => a.resolveDelta > 0);
     const hadLethal = state.phase === 'Main1' ? false : false;
 
     // Lethal check on a snapshot BEFORE the AI acts (Clash comes after Main1,
@@ -607,7 +702,14 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       // v5.3: Ambush activation = a UNIT invoked during the reaction window.
       if (ev.kind === 'invoke' && ev.by) {
         const def = POOL_BY_ID[ev.iid.split('#')[0]];
-        if (def?.keywords?.includes('Ambush')) kwStats['Ambush'].activations++;
+        if (def?.keywords?.includes('Ambush')) {
+          kwStats['Ambush'].activations++;
+          // v6.3: this is a direct harness-side increment (not routed through
+          // telemetry.onKeywordProc like every other keyword), so it needs
+          // its own gameKwActivations bump or keywordDeadWeight sees a false
+          // 100% never-activated rate for Ambush every run.
+          gameKwActivations['Ambush'] = (gameKwActivations['Ambush'] ?? 0) + 1;
+        }
       }
     }
 
@@ -757,14 +859,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     curveStats.essenceFloatedEstimate += Math.max(0, preLocations - cardsPlayedThisTurn.size);
 
     // --- lapse: idle leader (invoked, unused ability, resolve unchanged) ---
-    if (
-      !usedAbility &&
-      p.leader.invoked &&
-      !p.leader.shattered &&
-      p.leader.resolve === preLeaderResolve &&
-      (p.leader.def.leaderAbilities ?? []).some((a) => a.resolveDelta > 0)
-    ) {
-      lapses.idleLeader++; // a free +resolve builder was always legal
+    if (hadPlusAbilityOpportunity) {
+      const li = lis(decksByPid[pid].leaderId);
+      li.opportunities++;
+      if (!usedAbility) {
+        lapses.idleLeader++; // a free +resolve builder was always legal
+        li.idle++;
+      }
     }
 
     // --- log-based telemetry (engine log is append-only) ---
@@ -981,6 +1082,17 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     for (const kw of kwSeen) {
       kwStats[kw].carrierGames++;
       if (won) kwStats[kw].carrierWins++;
+    }
+
+    // v6.3: dead-weight rate — this player carried the keyword but it never
+    // fired all game (gameKwActivations is shared across both players; a real
+    // activation by either side still means the keyword did SOMETHING this
+    // game, matching how carrierGames itself is already counted per-player
+    // independent of who triggered it).
+    for (const kw of kwSeen) {
+      if (!TELEMETRY_KEYWORDS.has(kw)) continue;
+      kwDeadWeight[kw].carrierGames++;
+      if (!gameKwActivations[kw]) kwDeadWeight[kw].neverActivatedGames++;
     }
 
     // v5.3: keyword carrier stats by carrier cost band (counted once per
@@ -1359,7 +1471,7 @@ const poolCoverage = (() => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.2',
+    version: 'v6.3',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1500,6 +1612,24 @@ const report = {
       ),
     ]),
   ),
+  // v6.3 additions.
+  keywordDeadWeight: Object.fromEntries(
+    Object.entries(kwDeadWeight)
+      .filter(([, s]) => s.carrierGames > 0)
+      .map(([kw, s]) => [kw, { neverActivatedPct: pct(s.neverActivatedGames, s.carrierGames), carrierGames: s.carrierGames }]),
+  ),
+  essenceFloatByStage: Object.fromEntries(
+    Object.entries(essenceFloatByStage).map(([stage, s]) => [
+      stage,
+      { avgFloat: +(s.total / Math.max(1, s.turns)).toFixed(2), turns: s.turns },
+    ]),
+  ),
+  leaderIdleAbility: Object.fromEntries(
+    Object.entries(leaderIdleStats).map(([id, s]) => [
+      POOL_BY_ID[id]?.name ?? id,
+      { idlePct: pct(s.idle, s.opportunities), opportunities: s.opportunities },
+    ]),
+  ),
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -1529,6 +1659,10 @@ console.log(`\nPool coverage (v6.1): ${report.poolCoverage.deckedPct}% decked, $
 console.log('\nCost/ability outliers (v6.2, |z|>=1.5):');
 for (const c of report.costAbilityOutliers) console.log(`  ${c.name} (${c.type}, cost ${c.cost}) residual ${c.residual} z=${c.zScore} n=${c.playedGames}`);
 console.log('\nLeader-pair pinned suite (v6.2):', JSON.stringify(report.leaderPairSuite, null, 2));
+console.log('\nKeyword dead-weight (v6.3):', JSON.stringify(report.keywordDeadWeight, null, 2));
+console.log('\nEssence float by game stage (v6.3):', JSON.stringify(report.essenceFloatByStage, null, 2));
+console.log('\nLeader idle-ability rate (v6.3):', JSON.stringify(report.leaderIdleAbility, null, 2));
+console.log('\nKept color-dead hands (v6.3):', lapses.keptColorDeadHand);
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');

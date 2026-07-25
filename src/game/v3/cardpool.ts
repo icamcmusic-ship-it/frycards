@@ -85,27 +85,62 @@ const COST_ADJUST: Record<string, number> = {
   consuming_ash_cloud: -1, // v5.3: 13.8% absolute played win, -5.2 residual
   research_fleet: -1, // v5.3: 65%/74% dead-in-hand two passes running
   // v6.2 pass (18,048-game run, docs/BALANCE_SIM_FINDINGS_v6.2.md):
-  sand_portal: +1, // +21.4 residual, n=414 — cheapest Sanctum, clearly underpriced
-  glass_kelp_forest: +1, // +21.1 residual, n=394
   ribvault_cathedral: +1, // +15.8 residual, n=161
   fissure_gas_bunker: +1, // +15.2 residual, n=517 (Sacred Sanctum)
   gearbone_sentinel: +1, // +15.0 residual, n=136
   jawbone_span: +1, // +13.9 residual, n=206 (Bountiful Sanctum)
-  resonant_shuriken: +1, // +13.9 residual, n=653
   volcanic_nanite_core: +1, // +12.8 residual, n=219
-  sonic_shatter: -1, // -7.2 residual, n=489
-  porcelain_lobster: -1, // -5.8 residual, n=924
   glowing_manta: -1, // -4.4 residual, n=509
-  celestial_attunement: -1, // -4.2 residual, n=1257
   marble_reef_shark: -1, // -3.9 residual, n=120
   sunken_archive: -1, // -3.8 residual, n=890
-  ashen_circle_rite: -1, // -3.7 residual, n=3930 (large sample)
   // v6.2 second verification pass (after the above landed): re-ran the full
   // 18k-game suite and caught these newly-surfaced |z|>=2 outliers too.
-  chalice_of_quicksilver: +1, // +15.2 residual, z=3.0, n=198
   heart_of_the_thermal_grid: -1, // -7.4 residual, z=-2.71, n=409
   ruthless_succession: -1, // -6.0 residual, z=-2.35, n=379
   kinetic_siphon_swarm: +1, // +11.3 residual, z=2.01, n=329
+  // v6.3 pass (18,048-game run, harness v6.3): repeat offenders from v6.2
+  // still outside |z|>=1.5 the same direction — second point stacked.
+  sand_portal: +2, // v6.2 +1 (was +21.4). v6.3: still +14.0, z=2.86, n=347.
+  glass_kelp_forest: +2, // v6.2 +1 (was +21.1). v6.3: still +12.3, z=2.41, n=478.
+  resonant_shuriken: +2, // v6.2 +1 (was +13.9). v6.3: still +15.5, z=3.27, n=794.
+  chalice_of_quicksilver: +2, // v6.2 +1 (was +15.2, z=3.0, n=198). v6.3:
+  // still +12.0 residual at z=2.33, n=223 — repeat overperformer, second
+  // +1 stacked.
+  porcelain_lobster: -2, // v6.2 -1 (was -5.8). v6.3: still -3.7, z=-1.87, n=943.
+  ashen_circle_rite: -2, // v6.2 -1 (was -3.7). v6.3: still -3.1, z=-1.71, n=3583.
+  sonic_shatter: -2, // v6.2 -1 (was -7.2). v6.3: still -2.4, z=-1.53, n=2416.
+  celestial_attunement: -2, // v6.2 -1 (was -4.2). v6.3: still -2.4, z=-1.53, n=682.
+  // v6.3 new first-time flags (|z|>=1.5, 18,048-game run):
+  glass_shrimp: +1, // +11.5 residual, n=827
+  abyssal_pathway: +1, // +10.6 residual, n=490
+  amber_sphere: +1, // +10.5 residual, n=189
+  neon_moray: +1, // +10.3 residual, n=911
+  haunted_submarine: +1, // +10.2 residual, n=777
+  shinobi_operations_base: +1, // +10.0 residual, n=367
+  kraken_s_monolith: +1, // +10.0 residual, n=321
+  scallop_map: +1, // +9.5 residual, n=862
+  urnbearer_of_blight: +1, // +9.5 residual, n=410
+  ashhound_pack: +1, // +9.2 residual, n=165
+  towering_tsunami: -1, // -5.3 residual, n=974
+  blood_moon_descent: -1, // -4.5 residual, n=1072
+  cavernous_watcher: -1, // -4.5 residual, n=349
+  obsidian_scalpel: -1, // -3.0 residual, n=884
+  secret_lair: -1, // -3.0 residual, n=705
+  silver_chimera: -1, // -2.9 residual, n=1332
+  helix_swarm: -1, // -2.7 residual, n=481
+  bubble_harvest: -1, // -2.6 residual, n=1251
+  // v6.3 Resonant per-card fix (carry-forward from v6.2's Resonant keyword
+  // cut): the new v6.3 by-cost-band keyword report splits Resonant's three
+  // carriers cleanly — dissolving_persona (cost 4, the 3-4 band) actually
+  // reads +56.6% win rate, while the two cost-5 carriers (bioluminescent_tide,
+  // flash_freeze, the 5+ band) read 12.3% — the opposite of the v6.2 doc's
+  // guess that dissolving_persona's single-target Banish was the drag. Fix
+  // at the card level per the carry-forward rather than cutting the shared
+  // Resonant weight again (which would only further overpay
+  // dissolving_persona while doing nothing for the two actually-underpriced
+  // cost-5 cards).
+  bioluminescent_tide: -1,
+  flash_freeze: -1,
 };
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
 
@@ -113,8 +148,10 @@ const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
  * cost cap of 7 where a COST_ADJUST would be clipped to nothing. */
 const STAT_ADJUST: Record<string, number> = {
   nanite_division_marshal: -2, // +8.5/+13.7 residual both seeds at cost 7
-  familiar_in_the_dark: -2, // v6.2: +13.2 residual at cost 7 (COST_ADJUST
-  // clips to nothing at the ceiling) — trim the stat budget instead.
+  familiar_in_the_dark: -3, // v6.2: +13.2 residual at cost 7 (COST_ADJUST
+  // clips to nothing at the ceiling) — trim the stat budget instead. v6.3:
+  // STILL +10.3 residual (z=1.87, n=544) after the first -2 — repeat
+  // overperformer, third point stacked.
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
@@ -631,6 +668,21 @@ const LEADER_KEYWORD_STRIP: Record<string, string[]> = {
   avatar_of_the_abyss: ['Commander'], // v6.2: 67.0% -> 70.3% win rate, repeat offender
 };
 
+/** v6.3: Leader-kit minus-ability resolve-cost override — the next lever
+ * flagged in the v6.2 carry-forward once a Leader has no keyword left to
+ * strip. Avatar of the Abyss's Commander strip (above) brought its
+ * random-cohort win rate back to 67.8% (its pre-v6.1-flag level, unchanged),
+ * but the v6.3 deckSeed-pinned leaderPairSuite still has it clearly on top
+ * (77.4% average across all six pinned opposing Leaders) — its -2 Shatter is
+ * simply cheaper than every other color's minus ability of equal power
+ * (Void's -2 Banish is the only other removal at that price, and Ember/Tide/
+ * Gale/Light minus abilities all cost only -1 for a smaller effect). Bump its
+ * Resolve cost -2 -> -3, matching the "trim ability cost efficiency" lever
+ * named in the v6.2 doc rather than a further keyword strip. */
+const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
+  avatar_of_the_abyss: -3,
+};
+
 function mapLeader(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
@@ -650,6 +702,11 @@ function mapLeader(c: CardTemplate): CardDef {
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = leaderMinusAbility(seed, identity[0]);
+  const minusOverride = LEADER_MINUS_RESOLVE_OVERRIDE[c.id];
+  if (minusOverride !== undefined) {
+    minus.text = minus.text.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);
+    minus.resolveDelta = minusOverride;
+  }
   const plus = leaderPlusAbility(seed, identity[1] ?? identity[0]);
   const def: CardDef = {
     id: c.id,

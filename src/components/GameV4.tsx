@@ -297,6 +297,22 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
   };
 }
 
+/** Focus management for this component's inline modal overlays (confirm
+ * dialog, mulligan, game-over) — same fix as Card3DInspector/
+ * CardInspectorModal (v4.24): move focus into the dialog while `active`,
+ * and restore it to whatever triggered it on close, so a keyboard user can't
+ * Tab through to the (only visually) obscured board underneath. */
+function useDialogFocus(active: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!active) return;
+    const prevFocused = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    return () => prevFocused?.focus?.();
+  }, [active]);
+  return ref;
+}
+
 /** `title=` tooltips never appear on touch devices — this wraps a badge so
  * tapping it also reveals the same text in a small popover. */
 function Tip({
@@ -1600,6 +1616,10 @@ export function GameV4({
     return null;
   })();
 
+  const confirmDialogRef = useDialogFocus(!!confirmDialog);
+  const mulliganDialogRef = useDialogFocus(stage === 'mulligan');
+  const gameOverDialogRef = useDialogFocus(stage === 'over' && !!g.winner);
+
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
 
@@ -2387,10 +2407,12 @@ export function GameV4({
       {confirmDialog && (
         <div className="absolute inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
           <div
+            ref={confirmDialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Confirm"
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center outline-none"
           >
             <div className="text-[12px] font-bold mb-3">{confirmDialog.text}</div>
             <div className="flex gap-2 justify-center">
@@ -2419,10 +2441,12 @@ export function GameV4({
       {stage === 'mulligan' && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-center justify-center p-4 overflow-y-auto">
           <div
+            ref={mulliganDialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Mulligan"
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto outline-none"
           >
             <div className="heading-font text-3xl mb-1">
               {mulliganCount > 0 ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
@@ -2471,10 +2495,12 @@ export function GameV4({
       {stage === 'over' && g.winner && (
         <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/90 flex items-center justify-center">
           <div
+            ref={gameOverDialogRef}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Match result"
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center outline-none"
           >
             <div className="heading-font text-3xl mb-2">
               {g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}

@@ -1,11 +1,58 @@
 # Changelog
 
 Product-level changes to FryCards (formerly "Shifting Multiverse TCG").
-Rules-specific changes are also tracked in the Change Log section of
-`docs/RULEBOOK.md`. A condensed version of this history also powers the
-in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
+`docs/RULEBOOK.md` always reflects the CURRENT rules only (no changelog of
+its own) — this file is the history of how it got there. A condensed
+version of this history also powers the in-app Changelog screen
+(`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
+
+### v6.3 — Resonant per-card fix, Avatar of the Abyss second nerf, bug hunt
+
+- **Avatar of the Abyss gets a second nerf**: last update's Commander strip
+  brought it down but a dedicated head-to-head test against every other
+  Leader still had it clearly on top. Its -2 Shatter Ability now costs -3
+  Resolve instead. Random-match win rate down from 67.8% to 63.2%; the
+  isolated head-to-head average down from 77.4% to 70.3% — real progress,
+  still the one to watch.
+- **Resonant fixed at the card level instead of another blanket price cut**:
+  last update's guess about which of Resonant's three cards was dragging the
+  keyword down turned out to be backwards once tested with a bigger sample —
+  Dissolving Persona is actually fine; Bioluminescent Tide and Flash Freeze
+  (both cost 5) were the actual underperformers. Both now cost 1 less.
+- **Card cost/stat adjustments**: eight repeat over/underperformers from
+  last update that hadn't fully settled got a second nudge, ten newly-
+  flagged cards cost more, eight cost less, and Familiar in the Dark
+  (already at the cost ceiling) had its stats trimmed again. Full list in
+  `docs/BALANCE_SIM_FINDINGS_v6.3.md`.
+- **Bug-hunt pass**: the Battle Pass's claim button used a check that
+  treated tier 0 as "nothing in progress" (0 is falsy), so a fast double-tap
+  on the very first tier could fire two claims at once before the button
+  disabled — same class of bug as an earlier "0 treated as no value" fix
+  elsewhere in this game, now closed here too. The Collection screen's color
+  filter used to skip Leader cards entirely, so a Leader whose real color
+  didn't match the filter you picked still showed up; Leaders are now
+  filtered by their actual color identity like every other card. Several
+  Supabase data-fetch failures (Store items/packs, your shop and its
+  listings, Social's friends/trades/leaderboard/search) were being silently
+  swallowed into an empty screen instead of triggering the RETRY screens
+  that were already built for exactly this — a real network hiccup now
+  looks like a network hiccup, not "you have nothing here." Keyboard focus
+  now moves into the Concede, mulligan, and game-over dialogs when they open
+  (and back to what you were doing when they close) instead of leaving
+  keyboard nav free to tab through the live board underneath; How To Play's
+  collapsible sections now tell screen readers whether they're open or
+  closed. Accessible labels added to the Starter Box dialog.
+- **Sim harness**: fixed an Ambush activation-tracking bug in the harness's
+  own new dead-weight counter (Ambush was reading a false 100% "never
+  activates" every run — a harness bug, not a CPU one) and a tautology in
+  the new per-Leader idle-ability breakdown that would have always read
+  100% regardless of actual CPU behavior; real numbers now show a healthy
+  0-0.3% idle rate across every Leader. Full pool parity re-verified
+  292/292 against live Supabase. Full details:
+  `docs/BALANCE_SIM_FINDINGS_v6.3.md` (v6.2 findings doc removed; only the
+  latest sim-run JSON is kept).
 
 ### v6.2 — Leader nerf, keyword re-tune, CPU false-alarm fixes
 

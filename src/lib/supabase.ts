@@ -217,13 +217,23 @@ export async function fetchShopItems(): Promise<ShopItem[]> {
     .select('*')
     .order('item_type')
     .order('cost_credits');
-  if (error) console.error('fetchShopItems failed:', error.message);
+  if (error) {
+    console.error('fetchShopItems failed:', error.message);
+    // Thrown (not []) — these two are only ever awaited from MetaContext's
+    // boot effect, which already treats a rejection as bootError+retry.
+    // Swallowing into [] made a real query failure indistinguishable from a
+    // genuinely empty store and booted the player straight into it.
+    throw error;
+  }
   return (data as ShopItem[]) || [];
 }
 
 export async function fetchPackTypes(): Promise<PackType[]> {
   const { data, error } = await supabase.from('pack_types').select('*');
-  if (error) console.error('fetchPackTypes failed:', error.message);
+  if (error) {
+    console.error('fetchPackTypes failed:', error.message);
+    throw error;
+  }
   const packs = (data as PackType[]) || [];
   // cheapest first, by whichever currency the pack sells for
   return packs.sort(
@@ -650,14 +660,23 @@ export interface Friendship {
 
 export async function fetchFriendships(): Promise<Friendship[]> {
   const { data, error } = await supabase.from('friendships').select('*').order('created_at');
-  if (error) console.error('fetchFriendships failed:', error.message);
+  if (error) {
+    // Throw instead of returning [] — callers (SocialScreen.reload) catch
+    // this to show an error+retry state; silently returning an empty array
+    // made a broken query indistinguishable from genuinely having no friends.
+    console.error('fetchFriendships failed:', error.message);
+    throw error;
+  }
   return (data as Friendship[]) || [];
 }
 
 export async function fetchPublicProfiles(ids: string[]): Promise<PublicProfile[]> {
   if (ids.length === 0) return [];
   const { data, error } = await supabase.rpc('get_public_profiles', { p_ids: ids });
-  if (error) console.error('fetchPublicProfiles failed:', error.message);
+  if (error) {
+    console.error('fetchPublicProfiles failed:', error.message);
+    throw error;
+  }
   return (data as PublicProfile[]) || [];
 }
 
@@ -697,15 +716,23 @@ export interface CardsLeaderboardEntry {
 /** Top players by total owned cards (quantity + foil_quantity, summed across every card). */
 export async function fetchCardsLeaderboard(limit = 50): Promise<CardsLeaderboardEntry[]> {
   const { data, error } = await supabase.rpc('get_cards_leaderboard', { p_limit: limit });
-  if (error) console.error('fetchCardsLeaderboard failed:', error.message);
+  if (error) {
+    // Throw instead of returning [] — SocialScreen's leaderboard tab catches
+    // this to show an error+retry state; silently returning an empty array
+    // made a broken query indistinguishable from a genuinely empty board.
+    console.error('fetchCardsLeaderboard failed:', error.message);
+    throw error;
+  }
   return (data as CardsLeaderboardEntry[]) || [];
 }
 
 export async function searchPlayers(query: string): Promise<PublicProfile[]> {
   const { data, error } = await supabase.rpc('search_players', { p_query: query });
-  if (error) console.error('searchPlayers failed:', error.message);
-  if (error || !data) return [];
-  return data as PublicProfile[];
+  if (error) {
+    console.error('searchPlayers failed:', error.message);
+    throw error;
+  }
+  return (data as PublicProfile[]) || [];
 }
 
 export async function sendFriendRequest(username: string): Promise<string | null> {
@@ -747,7 +774,10 @@ export async function fetchTrades(): Promise<Trade[]> {
     .select('*')
     .order('created_at', { ascending: false })
     .limit(50);
-  if (error) console.error('fetchTrades failed:', error.message);
+  if (error) {
+    console.error('fetchTrades failed:', error.message);
+    throw error;
+  }
   return (data as Trade[]) || [];
 }
 
@@ -1175,7 +1205,14 @@ export async function fetchMyShop(ownerId: string): Promise<PlayerShop | null> {
     .select('*')
     .eq('owner', ownerId)
     .maybeSingle();
-  if (error) console.error('fetchMyShop failed:', error.message);
+  if (error) {
+    // Throw instead of returning null — MyShopTab's reload() catches this to
+    // show an error+retry state; silently returning null made a broken query
+    // indistinguishable from "you haven't opened a shop yet" and could send
+    // a player back through OPEN SHOP (and its setup fee) on a mere network hiccup.
+    console.error('fetchMyShop failed:', error.message);
+    throw error;
+  }
   return (data as PlayerShop) || null;
 }
 
@@ -1185,7 +1222,10 @@ export async function fetchShopSlots(ownerId: string): Promise<ShopSlot[]> {
     .select('*')
     .eq('owner', ownerId)
     .order('slot_index');
-  if (error) console.error('fetchShopSlots failed:', error.message);
+  if (error) {
+    console.error('fetchShopSlots failed:', error.message);
+    throw error;
+  }
   return (data as ShopSlot[]) || [];
 }
 
@@ -1195,7 +1235,10 @@ export async function fetchShopListings(ownerId: string): Promise<ShopListing[]>
     .select('*')
     .eq('owner', ownerId)
     .order('created_at', { ascending: false });
-  if (error) console.error('fetchShopListings failed:', error.message);
+  if (error) {
+    console.error('fetchShopListings failed:', error.message);
+    throw error;
+  }
   return (data as ShopListing[]) || [];
 }
 
@@ -1205,15 +1248,23 @@ export async function fetchMysteryTemplates(ownerId: string): Promise<MysteryTem
     .select('*')
     .eq('owner', ownerId)
     .order('created_at', { ascending: false });
-  if (error) console.error('fetchMysteryTemplates failed:', error.message);
+  if (error) {
+    console.error('fetchMysteryTemplates failed:', error.message);
+    throw error;
+  }
   return (data as MysteryTemplate[]) || [];
 }
 
 export async function fetchShopPublic(ownerId: string): Promise<ShopPublic | null> {
   const { data, error } = await supabase.rpc('get_shop_public', { p_owner: ownerId });
-  if (error) console.error('fetchShopPublic failed:', error.message);
-  if (error || !data) return null;
-  return data as ShopPublic;
+  if (error) {
+    // Throw instead of swallowing — StorefrontView's reload() catches this to
+    // show an error+retry state; only a genuinely missing shop (no error, no
+    // data) should fall through to "This shop couldn't be found."
+    console.error('fetchShopPublic failed:', error.message);
+    throw error;
+  }
+  return (data as ShopPublic) || null;
 }
 
 export async function browseShops(
@@ -1221,9 +1272,11 @@ export async function browseShops(
   limit = 30,
 ): Promise<BrowseShopEntry[]> {
   const { data, error } = await supabase.rpc('browse_shops', { p_sort: sort, p_limit: limit });
-  if (error) console.error('browseShops failed:', error.message);
-  if (error || !data) return [];
-  return data as BrowseShopEntry[];
+  if (error) {
+    console.error('browseShops failed:', error.message);
+    throw error;
+  }
+  return (data as BrowseShopEntry[]) || [];
 }
 
 export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryLiveStats> {
@@ -1241,7 +1294,10 @@ export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase
     .or(`buyer.eq.${userId},owner.eq.${userId}`)
     .order('created_at', { ascending: false })
     .limit(100);
-  if (error) console.error('fetchMyShopPurchases failed:', error.message);
+  if (error) {
+    console.error('fetchMyShopPurchases failed:', error.message);
+    throw error;
+  }
   return (data as ShopPurchase[]) || [];
 }
 
@@ -1370,7 +1426,10 @@ export interface ShopBuyerRating {
 /** Ratings the caller has already left, keyed for quick per-purchase lookup. */
 export async function fetchMyBuyerRatings(userId: string): Promise<ShopBuyerRating[]> {
   const { data, error } = await supabase.from('shop_buyer_ratings').select('*').eq('buyer', userId);
-  if (error) console.error('fetchMyBuyerRatings failed:', error.message);
+  if (error) {
+    console.error('fetchMyBuyerRatings failed:', error.message);
+    throw error;
+  }
   return (data as ShopBuyerRating[]) || [];
 }
 
