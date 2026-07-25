@@ -174,3 +174,30 @@ carry-forward next step — see below.
    ambiguous whether this is real CPU headroom or permanent
    heuristic/timing daylight (Main I board changes between the shadow
    snapshot and the real Clash).
+
+## Post-pass fix (landed after this sim run, not yet re-verified)
+
+A CPU correctness bug was found and fixed in `ai.ts`'s `chooseAttackers`
+(and mirrored in this harness's `shadowAttackers`) after this run's data was
+captured: the all-in lethal estimator computed Overrun spill damage as
+`Might - guardCount` (1 or 2) instead of `Might - guard's actual remaining
+Grit`, so it drastically overestimated spill against tough blockers (a
+single Grit-6 guard was treated as absorbing only 1 damage) and could
+misjudge a non-lethal Overrun all-in as lethal. Fixed to use real remaining
+Grit. **Every attack-related number in this doc (attack divergence,
+guard-trade quality, venomousSuicide, tookGuardableLethal) was measured
+against the OLD, buggy estimator** — re-run before trusting deltas against
+them next pass.
+
+Two related precision gaps were found and reported but deliberately left
+unfixed this pass (both in `ai.ts`):
+7. `reserveLocationsForCost` reserves against a reaction-hold card's printed
+   cost rather than its Surge-discounted `effectiveCost`, over-reserving by
+   one location's worth of essence for a Surge card. Conservative (doesn't
+   break anything), but a tuning-flavored change — left for a dedicated pass.
+8. `chooseAttackers`'s guard-availability check approximates opponent
+   blocking capacity with simple pool consumption rather than true bipartite
+   matching against `canBlock` (Aerial/Skywatch eligibility) — in mixed
+   Aerial/non-Aerial board states with only one Aerial-capable defender, it
+   can undercount how contested that defender actually is. A real fix needs
+   a small matching algorithm, not a one-line change.
