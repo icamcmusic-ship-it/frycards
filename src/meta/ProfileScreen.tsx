@@ -427,7 +427,12 @@ function CreatorTools() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           />
-          <PopButton color="black" onClick={handleSearch} disabled={searching}>
+          <PopButton
+            color="black"
+            onClick={handleSearch}
+            disabled={searching}
+            ariaLabel="Search players"
+          >
             <Search className="w-4 h-4" />
           </PopButton>
         </div>

@@ -305,6 +305,7 @@ function CardStackPicker({
                 </span>
                 <button
                   onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                  aria-label={`Remove ${def?.name || it.card_id} from selection`}
                   className="text-[var(--c-red)]"
                 >
                   <X className="w-3 h-3" />
@@ -491,6 +492,7 @@ function ReportModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
+      aria-label="Report listing"
     >
       <div
         className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
@@ -646,7 +648,12 @@ function MysteryListingCard({
             <PopButton color="red" disabled={busy || credits < listing.price} onClick={onBuy}>
               BUY PACK ▸
             </PopButton>
-            <button onClick={onReport} className="text-[var(--c-steel)] hover:text-[var(--c-red)]">
+            <button
+              onClick={onReport}
+              aria-label="Report listing"
+              title="Report listing"
+              className="text-[var(--c-steel)] hover:text-[var(--c-red)]"
+            >
               <Flag className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -831,6 +838,8 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
               </PopButton>
               <button
                 onClick={() => setReportTarget(l.id)}
+                aria-label="Report listing"
+                title="Report listing"
                 className="text-[var(--c-steel)] hover:text-[var(--c-red)]"
               >
                 <Flag className="w-3.5 h-3.5" />
@@ -1101,7 +1110,7 @@ function MyShopTab() {
           <PopButton
             color="red"
             disabled={busy}
-            onClick={() => run(() => reopenShop(), 'Shop reopened!')}
+            onClick={() => run(() => reopenShop(), 'Shop reopened!', true)}
           >
             REOPEN SHOP
           </PopButton>
@@ -1145,7 +1154,7 @@ function MyShopTab() {
                 'Close your shop? Half of remaining slot collateral is refunded; the rest is a sink.',
               )
             )
-              run(() => closeShop().then((r) => r.error), 'Shop closed.');
+              run(() => closeShop().then((r) => r.error), 'Shop closed.', true);
           }}
         >
           CLOSE SHOP
@@ -1174,7 +1183,7 @@ function MyShopTab() {
         color="yellow"
         disabled={busy || atMaxSlots || (profile?.credits || 0) < nextSlotCost}
         title={atMaxSlots ? `Shops cap out at ${SHOP_MAX_SLOTS} slots` : undefined}
-        onClick={() => run(() => buyShopSlot().then((r) => r.error), 'Slot purchased!')}
+        onClick={() => run(() => buyShopSlot().then((r) => r.error), 'Slot purchased!', true)}
       >
         {atMaxSlots ? (
           `MAX SLOTS (${SHOP_MAX_SLOTS})`
@@ -1296,7 +1305,7 @@ function MyShopTab() {
                   disabled={busy}
                   onClick={() => {
                     if (!confirm('Cancel this listing? Your cards will be returned.')) return;
-                    run(() => cancelShopListing(l.id));
+                    run(() => cancelShopListing(l.id), undefined, true);
                   }}
                 >
                   CANCEL
@@ -1341,7 +1350,8 @@ function MyShopTab() {
                     <button
                       key={n}
                       disabled={busy}
-                      onClick={() => run(() => rateShopPurchase(p.id, n))}
+                      onClick={() => run(() => rateShopPurchase(p.id, n), undefined, true)}
+                      aria-label={`Rate ${n} star${n === 1 ? '' : 's'}`}
                       className={cn(
                         'w-4 h-4',
                         existing && existing.rating >= n

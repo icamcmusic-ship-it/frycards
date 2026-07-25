@@ -3,8 +3,8 @@
  *
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
  * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
- * verified by scripts/fetch-cards.ts, and re-verified live for v5.2 — see
- * docs/BALANCE_SIM_FINDINGS_v6.1.md) and reports:
+ * verified by scripts/fetch-cards.ts, and re-verified live for v6.2 — see
+ * docs/BALANCE_SIM_FINDINGS_v6.2.md) and reports:
  *
  *  - match outcomes: win rates by Leader, color, first/second player,
  *    win condition (vitality vs deck-out), game length distribution
@@ -78,17 +78,37 @@
  *  - Opening-hand curve quality: win rate by post-mulligan average cost.
  *  - Win-margin histogram (winner's remaining vitality buckets).
  *
+ * v6.2 additions (carry-forward items from docs/BALANCE_SIM_FINDINGS_v6.1.md,
+ * now superseded by docs/BALANCE_SIM_FINDINGS_v6.2.md):
+ *  - Shadow attack heuristic rewritten to MIRROR ai.ts's actual chooseAttackers
+ *    policy (all-in-when-lethal-survives-guarding, favorable trades, safe-vs-
+ *    all, Swarmproof/Aerial awareness) instead of a strict kills-and-survives
+ *    rule — the v6.1 40.1% "divergence" number was mostly the shadow model
+ *    disagreeing with intentional v6.1 policy changes it was never updated
+ *    for, not real CPU error.
+ *  - venomousSuicide split into venomousSuicideDeliberate (a mutual trade, or
+ *    part of a winning all-in) vs venomousSuicideBlunder (attacker died, the
+ *    Venomous guard is unscathed — no value at all).
+ *  - deckSeed-pinned per-Leader-pair suite (leaderPairSuite): one fixed,
+ *    seeded deck per Leader, every ordered pair played both seats, isolating
+ *    the Leader-kit signal from random-archetype cohort noise before any
+ *    Leader-kit balance changes.
+ *  - Cost-vs-ability outliers: z-score over the played/deck win-rate residual
+ *    distribution (costAbilityOutliers), flagging |z| >= 1.5 cards regardless
+ *    of how wide a given run's spread is.
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { totalCost, CardDef, LEADER_HP, MAX_HAND } from '../src/game/v3/cards';
+import { totalCost, CardDef, LEADER_HP } from '../src/game/v3/cards';
 import { COLORS } from '../src/game/v3/colors';
 import { KEYWORDS } from '../src/game/v3/keywords';
 import {
   GameState,
   PlayerId,
+  UnitInst,
   createGame,
   mulberry32,
   opponentOf,
@@ -99,10 +119,11 @@ import {
   findUnit,
   canPayCost,
   essenceTotal,
+  unitHasKw,
   telemetry,
 } from '../src/game/v3/engine';
-import { LEADER_COLORS } from '../src/game/v3/colors';
-import { POOL_BY_ID, POOL_V4 } from '../src/game/v3/cardpool';
+import { LEADER_COLORS, KEYWORDS_OF_COLOR } from '../src/game/v3/colors';
+import { POOL_BY_ID, POOL_V4, POOL_LEADERS } from '../src/game/v3/cardpool';
 import { buildDeck, randomArchetype } from '../src/game/v3/decks';
 import { playTurn, maybeMulliganPlayer } from '../src/game/v3/ai';
 import type { DeckDef } from '../src/game/v3/engine';
@@ -260,6 +281,13 @@ const lapses = {
   missedLethal: 0, // had unguardable lethal available, didn't take it, game continued
   tookGuardableLethal: 0, // defender died to clash while holding unused ready guards
   venomousSuicide: 0, // attacked a board with a ready Venomous guard and lost the unit
+  // v6.2 (carry-forward #3): split venomousSuicide into a MUTUAL trade (the
+  // attacker also killed the Venomous guard — a deliberate trade, even if a
+  // costly one) or the attack was part of a successful all-in lethal swing
+  // (deliberate regardless of the individual trade) vs a genuine blunder
+  // (the attacker died and the guard walked away with nothing to show for it).
+  venomousSuicideDeliberate: 0,
+  venomousSuicideBlunder: 0,
   wastedEssenceWithPlay: 0, // phase ended with essence that could pay for a card in hand
   idleLeader: 0, // leader invoked but ability unused on a turn it had a legal use
   colorCloggedGames: 0, // game ended with >=3 hand cards never castable vs deck colors
@@ -302,8 +330,17 @@ const invariants: string[] = [];
 function checkInvariants(state: GameState, game: number, turn: number): void {
   for (const pid of ['P1', 'P2'] as PlayerId[]) {
     const p = state.players[pid];
-    if (p.hand.length > MAX_HAND && state.phase === 'Dawn')
-      invariants.push(`g${game}t${turn}: ${pid} hand ${p.hand.length} > ${MAX_HAND} after Dusk`);
+    // v6.2: the old `hand.length > MAX_HAND && phase === 'Dawn'` check is
+    // NOT a reliable invariant and has been removed. Dusk unconditionally
+    // sheds to <=MAX_HAND (engine.ts runDusk's `while` loop — covered
+    // directly by engine.test.ts's "dusk sheds down to MAX_HAND"), but
+    // state.phase only reads 'Dawn' externally in the rare case a game ends
+    // mid-runDawn, and by then this player's own Dawn draw AND any atDawn
+    // trigger effects (a Tide Sanctum can draw several) have already legally
+    // stacked the hand past MAX_HAND — there is no fixed ceiling to check
+    // against without re-deriving how many draw triggers fired. Both
+    // thresholds tried this pass (`> MAX_HAND`, then `> MAX_HAND + 1`) fired
+    // on entirely legal hands and were removed as false positives.
     if (p.vitality > LEADER_HP + 20)
       invariants.push(`g${game}t${turn}: ${pid} vitality ${p.vitality} runaway`);
     for (const u of p.field) {
@@ -360,14 +397,28 @@ function archetypeOf(deck: DeckDef): string {
   return deck.leaderId;
 }
 
-/** Shadow (lookahead) heuristic: which ready attackers would deal EITHER
- * unguardable free damage OR a favorable/kill trade, independent of ai.ts's
- * actual chooseAttackers implementation. Used only to flag divergence — not
- * a claim that this heuristic is more correct. */
+/** Damage `raw` actually marks on `target` (Hardened shaves 1 per packet). */
+function shadowPacketDamage(target: UnitInst, raw: number): number {
+  return target.def.keywords?.includes('Hardened') ? Math.max(0, raw - 1) : raw;
+}
+
+/**
+ * v6.2: shadow (lookahead) heuristic re-derived to MIRROR ai.ts's actual
+ * chooseAttackers policy (free damage, all-in-when-lethal-survives-guarding,
+ * favorable trades, safe-vs-all, Swarmproof/Aerial awareness) instead of the
+ * old strict kills-and-survives-only rule. The v6.1 pass shipped an attack
+ * policy with more nuance than the shadow model (free attacks, favorable
+ * trades, all-in math with guard absorption) and never updated the shadow
+ * heuristic to match, so its 40.1% "divergence" rate was mostly the shadow
+ * model being stricter than the real (intentional) policy — noise, not
+ * signal. This version replicates the real policy's branches so a residual
+ * divergence again means something. Used only to flag divergence — not a
+ * claim this is more "correct" than ai.ts, just that it now measures the
+ * same thing ai.ts intends to do. */
 function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
+  const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
-  const ready = opp.field.filter((u) => !u.exhausted);
-  const out = new Set<string>();
+  const defenders = opp.field.filter((u) => !u.exhausted);
   // Replicates legalAttackers()'s field-state criteria without its phase
   // gate (this snapshot is taken pre-Main1, before state.phase === 'Clash').
   const candidates = state.players[pid].field.filter(
@@ -376,22 +427,60 @@ function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
       !u.def.keywords?.includes('Immobile') &&
       (!u.enteredThisTurn || u.def.keywords?.includes('Reckless')),
   );
+  const firstStriker = (x: UnitInst) =>
+    unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
+  const canBlock = (a: UnitInst, g: UnitInst) =>
+    !unitHasKw(a, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch');
+  const attackerKills = (a: UnitInst, g: UnitInst) => {
+    const hit = shadowPacketDamage(g, effMight(state, a));
+    return (
+      hit >= remainingGrit(state, g) ||
+      (unitHasKw(a, 'Venomous') && hit > 0 && !unitHasKw(g, 'Unbreakable'))
+    );
+  };
+  const attackerSurvives = (a: UnitInst, g: UnitInst) => {
+    if (unitHasKw(a, 'Unbreakable')) return true;
+    const hit = shadowPacketDamage(a, effMight(state, g));
+    const dies = hit >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && hit > 0);
+    if (!dies) return true;
+    return firstStriker(a) && !firstStriker(g) && attackerKills(a, g);
+  };
+  // All-in check: does total damage clear vitality assuming each ready
+  // defender fully absorbs one attacker (biggest first; Overrun still spills
+  // past the guard's remaining grit)?
+  const sorted = [...candidates].sort((a, b) => effMight(state, b) - effMight(state, a));
+  let guardsLeft = defenders.length;
+  let throughDamage = 0;
+  for (const u of sorted) {
+    const m = effMight(state, u);
+    const eligible = defenders.filter((g) => canBlock(u, g));
+    const needed = unitHasKw(u, 'Swarmproof') ? 2 : 1;
+    const guardable = eligible.length >= needed;
+    if (!guardable || guardsLeft < needed) {
+      throughDamage += m;
+    } else {
+      guardsLeft -= needed;
+      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - needed);
+    }
+  }
+  if (throughDamage >= opp.vitality) return new Set(candidates.map((u) => u.iid));
+  const out = new Set<string>();
   for (const u of candidates) {
     const m = effMight(state, u);
     if (m <= 0) continue;
-    const possibleGuards = ready.filter((g) => {
-      if (u.def.keywords?.includes('Aerial'))
-        return g.def.keywords?.includes('Aerial') || g.def.keywords?.includes('Skywatch');
-      return true;
-    });
-    if (possibleGuards.length === 0) {
+    const possibleGuards = defenders.filter((g) => canBlock(u, g));
+    if (possibleGuards.length === 0 || (unitHasKw(u, 'Swarmproof') && possibleGuards.length < 2)) {
       out.add(u.iid);
       continue;
     }
     const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
-    const kills = m >= remainingGrit(state, worst) || u.def.keywords?.includes('Venomous');
-    const survives = effMight(state, worst) < remainingGrit(state, u) || u.def.keywords?.includes('Unbreakable');
-    if (kills && survives) out.add(u.iid);
+    const kills = attackerKills(u, worst);
+    const survives = attackerSurvives(u, worst);
+    const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
+    const notBehind = me.field.length >= opp.field.length;
+    const favorableTrade =
+      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
+    if ((kills && survives) || safeVsAll || favorableTrade) out.add(u.iid);
   }
   return out;
 }
@@ -477,9 +566,6 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     for (const u of state.players[opponentOf(pid)].field) {
       if (!u.def.keywords?.includes('Warded')) preOppBiggestByIid.set(u.iid, effMight(state, u));
     }
-    const preOppMaxMight = preOppBiggestByIid.size
-      ? Math.max(...preOppBiggestByIid.values())
-      : 0;
     const preLocations = p.locations.length + (p.wellspringPlayedThisTurn ? 0 : 1);
     const preHandIds = new Set(p.hand.map((c) => c.iid));
     const preOppDeck = state.players[opponentOf(pid)].deck.length;
@@ -588,14 +674,26 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     // AFTER attacks, so this only flags attacks into a board that already
     // showed a ready Venomous unit — i.e. the attacker had the information.)
     if (guardEv) {
+      // v6.2: whether this turn's attack ended in a win (all-in lethal that
+      // connected) makes ANY suicide along the way deliberate — the CPU
+      // correctly traded a unit for the win.
+      const wonThisTurn = !!state.winner && state.winner === pid;
       for (const [attackerIid, guardIids] of Object.entries(guardEv.assignments)) {
         if (guardIids.length === 0) continue;
         const aDef = POOL_BY_ID[attackerIid.split('#')[0]];
         if (!aDef || aDef.keywords?.includes('Unbreakable')) continue;
-        const venomGuard = guardIids.some((g) =>
-          POOL_BY_ID[g.split('#')[0]]?.keywords?.includes('Venomous'),
+        const venomGuardIid = guardIids.find(
+          (g) => POOL_BY_ID[g.split('#')[0]]?.keywords?.includes('Venomous'),
         );
-        if (venomGuard && !findUnit(state, attackerIid)) lapses.venomousSuicide++;
+        if (!venomGuardIid || findUnit(state, attackerIid)) continue;
+        lapses.venomousSuicide++;
+        // Deliberate trade = the attacker also killed the Venomous guard (a
+        // mutual kill, even if costly) OR the swing was part of a winning
+        // all-in. Genuine blunder = the attacker died and the guard is still
+        // standing — nothing was gained for the loss.
+        const guardDied = !findUnit(state, venomGuardIid);
+        if (wonThisTurn || guardDied) lapses.venomousSuicideDeliberate++;
+        else lapses.venomousSuicideBlunder++;
       }
     }
 
@@ -611,8 +709,20 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
             (def.onInvoke.target === 'enemyUnit' || def.onInvoke.target === 'anyTarget')));
       if (!isRemovalLike || !ev.targetIid) continue;
       cpuDecisions.targetOpportunities++;
+      // v6.2 fix: Shatter can never legally target an Unbreakable unit (the
+      // engine no-ops it, and autoTarget/ai.ts's chooseTarget both correctly
+      // exclude Unbreakable from consideration for shatter effects). The old
+      // check compared against preOppMaxMight, which includes Unbreakable
+      // units regardless of the effect — so a correct shatter-around-the-
+      // Unbreakable-wall pick was flagged as "suboptimal" every time. Exclude
+      // Unbreakable from the legal-target pool for shatter specifically.
+      const isShatter = def.onInvoke?.action === 'shatter';
+      const legalMights = [...preOppBiggestByIid.entries()]
+        .filter(([iid]) => !isShatter || !POOL_BY_ID[iid.split('#')[0]]?.keywords?.includes('Unbreakable'))
+        .map(([, m]) => m);
+      const legalMaxMight = legalMights.length ? Math.max(...legalMights) : 0;
       const chosenMight = preOppBiggestByIid.get(ev.targetIid) ?? -1;
-      if (chosenMight >= 0 && chosenMight < preOppMaxMight) cpuDecisions.targetSuboptimal++;
+      if (chosenMight >= 0 && chosenMight < legalMaxMight) cpuDecisions.targetSuboptimal++;
     }
 
     // Reaction-window opportunity = a clash happened this turn (the defender
@@ -682,7 +792,20 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       const lateArrivals = new Set(
         events.filter((e) => e.kind === 'invoke' && e.by).map((e) => (e as { iid: string }).iid),
       );
-      const ready = loser.field.filter((u) => !u.exhausted && !lateArrivals.has(u.iid));
+      // v6.2 fix: declareGuards() never exhausts a guarding unit (only
+      // attacking does, sans Alert), so a unit that already guarded THIS
+      // clash and survived is still `!exhausted` — it was NOT a spare,
+      // unused guard. The old `ready` filter counted every already-used
+      // guard as "available and unused," which inflated tookGuardableLethal
+      // with false positives (the CPU's actual chooseGuards output already
+      // used those units; there was nothing extra left to assign). Exclude
+      // anyone who appears in ANY attacker's declared guard list.
+      const alreadyGuarded = new Set(
+        Object.values((events.find((e) => e.kind === 'guard') as { assignments?: Record<string, string[]> } | undefined)?.assignments ?? {}).flat(),
+      );
+      const ready = loser.field.filter(
+        (u) => !u.exhausted && !lateArrivals.has(u.iid) && !alreadyGuarded.has(u.iid),
+      );
       // Only a lapse if an UNGUARDED attacker existed that a ready unit could
       // legally have guarded (Aerial rule respected).
       const clash = state.clash;
@@ -988,6 +1111,66 @@ const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0, firstSeatWins: 
 }
 
 // ---------------------------------------------------------------------------
+// v6.2 (carry-forward #5): deckSeed-pinned per-Leader-pair suite. The
+// existing leaderMatchup matrix mixes in every random deck's own archetype
+// noise (curve, effect leanings) on top of the Leader kit signal — a real
+// confound before touching Leader-specific balance. This suite instead
+// builds exactly ONE deterministic, seeded deck per Leader (same deck every
+// run for a given DECK_SEED) and plays every ordered pair of Leaders under
+// both seats, so the only things that vary between cells are the Leader kit
+// and the game's random seed. Kept in its own report section, isolated from
+// the main tournament and leaderMatchup accumulators.
+// ---------------------------------------------------------------------------
+function strHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function pinnedDeckForLeader(leaderId: string): DeckDef {
+  const identity = LEADER_COLORS[leaderId] ?? [];
+  const themePool = identity.flatMap((c) => KEYWORDS_OF_COLOR[c]);
+  const keywords = [...new Set(themePool)];
+  const effects = ['damage', 'shatter', 'draw', 'buff'];
+  return buildDeck({
+    label: `${POOL_BY_ID[leaderId]?.name ?? leaderId} — Pinned`,
+    leaderId,
+    keywords,
+    effects,
+    units: 34,
+    spells: 21,
+    sanctums: 5,
+    seed: (strHash(leaderId) ^ DECK_SEED) >>> 0,
+  });
+}
+const LEADER_PAIR_SEAT_GAMES = 12; // per ordered pair, per seat orientation
+const leaderPairSuite: Record<string, Record<string, { games: number; wins: number }>> = {};
+{
+  const leaderIds = POOL_LEADERS.map((l) => l.id);
+  const pinnedDecks: Record<string, DeckDef> = {};
+  for (const lid of leaderIds) pinnedDecks[lid] = pinnedDeckForLeader(lid);
+  const pairRng = mulberry32((DECK_SEED ^ 0x1ead9f) >>> 0);
+  for (const a of leaderIds) {
+    for (const b of leaderIds) {
+      if (a === b) continue;
+      const cell = ((leaderPairSuite[a] ??= {})[b] ??= { games: 0, wins: 0 });
+      for (let g = 0; g < LEADER_PAIR_SEAT_GAMES; g++) {
+        const seed1 = Math.floor(pairRng() * 1e9) + 1;
+        const w1 = seatSwapGame(pinnedDecks[a], pinnedDecks[b], seed1);
+        cell.games++;
+        if (w1 === 'P1') cell.wins++;
+        const seed2 = Math.floor(pairRng() * 1e9) + 1;
+        const w2 = seatSwapGame(pinnedDecks[b], pinnedDecks[a], seed2);
+        cell.games++;
+        if (w2 === 'P2') cell.wins++;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 const pct = (a: number, b: number) => (b > 0 ? +((100 * a) / b).toFixed(1) : 0);
@@ -1016,6 +1199,28 @@ const cardReport = Object.entries(cardStats)
   });
 
 const byResidual = [...cardReport].sort((a, b) => b.residual - a.residual);
+
+// v6.2: cost-vs-ability outliers as a z-score over the residual distribution
+// (residual = played-win-rate minus in-deck-baseline win-rate, the practical
+// proxy for "is this card's ability/stat budget over- or under-paying its
+// printed cost" since cardpool.ts derives stats FROM cost deterministically
+// — a formula-level cost/stat mismatch shows up here as a play-rate/win-rate
+// anomaly, not as a printed-cost discrepancy). Normalizing to z lets outliers
+// be flagged independent of how wide this run's residual spread happens to
+// be, complementing the raw topOverperformers/topUnderperformers lists.
+const residualMean =
+  cardReport.reduce((s, c) => s + c.residual, 0) / Math.max(1, cardReport.length);
+const residualVariance =
+  cardReport.reduce((s, c) => s + (c.residual - residualMean) ** 2, 0) /
+  Math.max(1, cardReport.length);
+const residualStd = Math.sqrt(residualVariance) || 1;
+const cardReportWithZ = cardReport.map((c) => ({
+  ...c,
+  zScore: +((c.residual - residualMean) / residualStd).toFixed(2),
+}));
+const costAbilityOutliers = [...cardReportWithZ]
+  .filter((c) => Math.abs(c.zScore) >= 1.5)
+  .sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore));
 
 const costBands: Record<string, { games: number; wins: number; n: number }> = {};
 for (const c of cardReport) {
@@ -1154,7 +1359,7 @@ const poolCoverage = (() => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.1',
+    version: 'v6.2',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1282,6 +1487,19 @@ const report = {
   ),
   winMarginHistogram: winMargin,
   poolCoverage,
+  // v6.2 additions.
+  costAbilityOutliers,
+  leaderPairSuite: Object.fromEntries(
+    Object.entries(leaderPairSuite).map(([a, row]) => [
+      POOL_BY_ID[a]?.name ?? a,
+      Object.fromEntries(
+        Object.entries(row).map(([b, s]) => [
+          POOL_BY_ID[b]?.name ?? b,
+          { winPct: pct(s.wins, s.games), games: s.games },
+        ]),
+      ),
+    ]),
+  ),
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -1308,6 +1526,9 @@ console.log('\nCard types (v6.1):', JSON.stringify(report.cardTypes, null, 2));
 console.log('\nOpening-hand curve (v6.1):', JSON.stringify(report.openingCurve, null, 2));
 console.log('\nWin-margin histogram (v6.1):', JSON.stringify(report.winMarginHistogram, null, 2));
 console.log(`\nPool coverage (v6.1): ${report.poolCoverage.deckedPct}% decked, ${report.poolCoverage.playedPct}% played of ${report.poolCoverage.poolNonLeader} non-Leader cards; never decked: ${report.poolCoverage.neverDecked.length}, decked-never-played: ${report.poolCoverage.deckedButNeverPlayed.length}`);
+console.log('\nCost/ability outliers (v6.2, |z|>=1.5):');
+for (const c of report.costAbilityOutliers) console.log(`  ${c.name} (${c.type}, cost ${c.cost}) residual ${c.residual} z=${c.zScore} n=${c.playedGames}`);
+console.log('\nLeader-pair pinned suite (v6.2):', JSON.stringify(report.leaderPairSuite, null, 2));
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');

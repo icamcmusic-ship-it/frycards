@@ -631,7 +631,14 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
           <PopButton
             color="steel"
-            onClick={() => setLeaderId(null)}
+            onClick={() => {
+              // A color filter left over from the old Leader's identity can
+              // silently zero out the pool under the new one (the selector
+              // itself may not even render if the new identity is
+              // single-color, leaving no way to see or clear it).
+              setColorFilter('All');
+              setLeaderId(null);
+            }}
             title="Pick a different Leader — keeps the current card list"
           >
             CHANGE LEADER

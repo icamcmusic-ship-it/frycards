@@ -66,7 +66,9 @@ const COST_ADJUST: Record<string, number> = {
   merfolk_ritual: +1, // v5.1: 74% played win Worn charm
   pufferfish_lantern: +1, // v5.1: 77% played win at cost 2
   clawblade_greatsword: +1, // v5.1: +15.4pt residual Worn charm
-  slate_scaled_serpent: +1, // v5.3: +8.9/+12.5 residual, 3rd consecutive pass
+  slate_scaled_serpent: +2, // v5.3: +8.9/+12.5, then v6.1 +6.8/+7.8 STILL
+  // positive after the first +1 (4th consecutive positive pass) — v6.2:
+  // +9.9 residual at n=1952 on an 18k-game run. Second +1 stacked.
   worm_brain_host: +1, // v5.3: +8.7/+7.2 both seeds
   smokeveil_striketeam: +1, // v5.3: +6.5/+11.2 both seeds (and v5.2)
   crowned_manatee: +1, // v5.3: +8.0/+6.3 both seeds (and v5.2)
@@ -75,10 +77,35 @@ const COST_ADJUST: Record<string, number> = {
   shatterline: +1, // v5.3: +6.8/+7.8 both seeds
   submerged_starfall: -1, // v5.3: -9.5 + v5.2 seed-1337 -8.7
   nanite_purge_protocol: -1, // v5.3: negative both seeds + v5.2 seed 777
-  coral_collapse: -1, // v5.3: -4.2 + v5.2 negative list
-  tectonic_rift: -1, // v5.3: -4.4 + v5.2 negative list
+  coral_collapse: -2, // v5.3/v5.2: -4.2. v6.2: STILL -4.0 residual at n=1892
+  // after the first -1 — repeat underperformer, second -1 stacked.
+  tectonic_rift: -2, // v5.3/v5.2: -4.4. v6.2: STILL -3.3 residual at n=2195
+  // after the first -1 (also carries Surge, whose own weight dropped this
+  // pass) — repeat underperformer, second -1 stacked.
   consuming_ash_cloud: -1, // v5.3: 13.8% absolute played win, -5.2 residual
   research_fleet: -1, // v5.3: 65%/74% dead-in-hand two passes running
+  // v6.2 pass (18,048-game run, docs/BALANCE_SIM_FINDINGS_v6.2.md):
+  sand_portal: +1, // +21.4 residual, n=414 — cheapest Sanctum, clearly underpriced
+  glass_kelp_forest: +1, // +21.1 residual, n=394
+  ribvault_cathedral: +1, // +15.8 residual, n=161
+  fissure_gas_bunker: +1, // +15.2 residual, n=517 (Sacred Sanctum)
+  gearbone_sentinel: +1, // +15.0 residual, n=136
+  jawbone_span: +1, // +13.9 residual, n=206 (Bountiful Sanctum)
+  resonant_shuriken: +1, // +13.9 residual, n=653
+  volcanic_nanite_core: +1, // +12.8 residual, n=219
+  sonic_shatter: -1, // -7.2 residual, n=489
+  porcelain_lobster: -1, // -5.8 residual, n=924
+  glowing_manta: -1, // -4.4 residual, n=509
+  celestial_attunement: -1, // -4.2 residual, n=1257
+  marble_reef_shark: -1, // -3.9 residual, n=120
+  sunken_archive: -1, // -3.8 residual, n=890
+  ashen_circle_rite: -1, // -3.7 residual, n=3930 (large sample)
+  // v6.2 second verification pass (after the above landed): re-ran the full
+  // 18k-game suite and caught these newly-surfaced |z|>=2 outliers too.
+  chalice_of_quicksilver: +1, // +15.2 residual, z=3.0, n=198
+  heart_of_the_thermal_grid: -1, // -7.4 residual, z=-2.71, n=409
+  ruthless_succession: -1, // -6.0 residual, z=-2.35, n=379
+  kinetic_siphon_swarm: +1, // +11.3 residual, z=2.01, n=329
 };
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
 
@@ -86,6 +113,8 @@ const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
  * cost cap of 7 where a COST_ADJUST would be clipped to nothing. */
 const STAT_ADJUST: Record<string, number> = {
   nanite_division_marshal: -2, // +8.5/+13.7 residual both seeds at cost 7
+  familiar_in_the_dark: -2, // v6.2: +13.2 residual at cost 7 (COST_ADJUST
+  // clips to nothing at the ceiling) — trim the stat budget instead.
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
@@ -584,6 +613,24 @@ function leaderPlusAbility(seed: string, color: Color): LeaderAbility {
   }
 }
 
+/** v6.2: Leader kit overrides for repeat-offender outliers. mapLeader's
+ * output is otherwise fully procedural (hash-derived), with no per-Leader
+ * manual lever — this is the Leader-kit equivalent of COST_ADJUST/
+ * STAT_ADJUST for regular cards. Avatar of the Abyss stacked max Resolve
+ * (Mythic rarity, 6), an unconditional -2 Shatter (better than most other
+ * colors' minus abilities), AND the Commander keyword's global +1 Might aura
+ * — flagged as an outlier in the v6.1 findings doc (67.0% win rate, "watch")
+ * and CONFIRMED as a Leader-kit-level problem (not cohort luck) by the v6.2
+ * deckSeed-pinned leaderPairSuite: it beat every other pinned Leader deck
+ * (58.3%-100%) and led the random-cohort matchup table at 70.3%. Per the
+ * v4.24 precedent (strip a keyword from a repeat-offender once stat/cost
+ * trims have nowhere left to go — a Leader has no stat/cost budget to trim),
+ * its Commander keyword is stripped here.
+ */
+const LEADER_KEYWORD_STRIP: Record<string, string[]> = {
+  avatar_of_the_abyss: ['Commander'], // v6.2: 67.0% -> 70.3% win rate, repeat offender
+};
+
 function mapLeader(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
@@ -595,7 +642,10 @@ function mapLeader(c: CardTemplate): CardDef {
   // fielded), Resolute (Resolve regen at Dawn), or neither. Surcharges come
   // from KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ldr-kw6', 6);
-  const leaderKws: string[] = kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : [];
+  const stripped = new Set(LEADER_KEYWORD_STRIP[c.id] ?? []);
+  const leaderKws: string[] = (
+    kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []
+  ).filter((kw) => !stripped.has(kw));
   const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));

@@ -825,7 +825,14 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
     .eq('status', 'active')
     .order('ends_at')
     .limit(200);
-  if (error) console.error('fetchMarketListings failed:', error.message);
+  if (error) {
+    console.error('fetchMarketListings failed:', error.message);
+    // Throw instead of returning [] — callers (MarketplaceScreen.reload)
+    // catch this to show an error+retry state; silently returning an empty
+    // array made a broken query indistinguishable from a genuinely empty
+    // market.
+    throw error;
+  }
   return (data as MarketListing[]) || [];
 }
 
@@ -836,7 +843,10 @@ export async function fetchMyMarketActivity(userId: string): Promise<MarketListi
     .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
     .order('created_at', { ascending: false })
     .limit(50);
-  if (error) console.error('fetchMyMarketActivity failed:', error.message);
+  if (error) {
+    console.error('fetchMyMarketActivity failed:', error.message);
+    throw error;
+  }
   return (data as MarketListing[]) || [];
 }
 
@@ -1464,9 +1474,14 @@ export async function fetchMySerializedCards(userId: string): Promise<OwnedSeria
   if (error) console.error('fetchMySerializedCards (cards) failed:', error.message);
   if (supplyError) console.error('fetchMySerializedCards (supply) failed:', supplyError.message);
   const capByRarity = new Map((supply || []).map((s) => [s.rarity, s.cap as number]));
+  // NaN (rendered as "?" — see CollectionScreen/NewsCenterScreen) when the
+  // supply query itself failed: defaulting to 0 here used to make an owned
+  // Serialized card's print run look sold-out ("#N of 0") instead of just
+  // unknown, which is a scary and misleading thing to show over a card the
+  // player actually owns.
   return ((data as Omit<OwnedSerializedCard, 'cap'>[]) || []).map((r) => ({
     ...r,
-    cap: capByRarity.get(r.rarity) ?? 0,
+    cap: capByRarity.get(r.rarity) ?? (supplyError ? NaN : 0),
   }));
 }
 

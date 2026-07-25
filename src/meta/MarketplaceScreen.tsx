@@ -362,11 +362,13 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <input
                 className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
                 placeholder="Search listings…"
+                aria-label="Search listings"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
               <select
                 className={select}
+                aria-label="Filter by rarity"
                 value={rarityFilter}
                 onChange={(e) => setRarityFilter(e.target.value)}
               >
@@ -445,6 +447,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 type="number"
                 value={bidAmount}
                 min={0}
+                aria-label="Bid amount"
                 onChange={(e) => setBidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                 className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
               />
@@ -585,6 +588,7 @@ function SellForm({
       <input
         className={cn(select, 'w-56 mb-2 placeholder:text-[var(--c-steel)]/50')}
         placeholder="Search your collection…"
+        aria-label="Search your collection"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />

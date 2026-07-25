@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { POOL_LEADERS } from '../game/v3/cardpool';
 import { LEADER_COLORS } from '../game/v3/colors';
 import { COLOR_PIP } from './colors';
@@ -34,6 +34,11 @@ export function LeaderPicker({
     (l) => RARITIES.indexOf(l.rarity || 'Common') <= STARTER_MAX_RARITY_IDX,
   );
   const dialogRef = useRef<HTMLDivElement>(null);
+  // The parent's `busy` prop only flips true after onPick's async claim call
+  // actually starts — a fast double-click on a tile (or two different tiles)
+  // before that re-render lands could fire onPick twice. This local latch
+  // closes that window without waiting on the parent.
+  const [pickStarted, setPickStarted] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,6 +47,13 @@ export function LeaderPicker({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [busy, onClose]);
+
+  // If the claim fails, the parent drops `busy` back to false but this
+  // dialog stays open for a retry — release the local latch so the tiles
+  // become clickable again instead of being stuck disabled forever.
+  useEffect(() => {
+    if (!busy) setPickStarted(false);
+  }, [busy]);
 
   // Move focus into the dialog on open and restore it to whatever triggered
   // the Starter Box on close — otherwise a keyboard user opening this stays
@@ -69,7 +81,7 @@ export function LeaderPicker({
               later.
             </div>
           </div>
-          <PopButton color="yellow" onClick={onClose} disabled={busy}>
+          <PopButton color="yellow" onClick={onClose} disabled={busy} ariaLabel="Close Starter Box">
             ✕
           </PopButton>
         </div>
@@ -84,8 +96,11 @@ export function LeaderPicker({
               {starterLeaders.map((leader) => (
                 <button
                   key={leader.id}
-                  disabled={busy}
-                  onClick={() => onPick(leader.id)}
+                  disabled={busy || pickStarted}
+                  onClick={() => {
+                    setPickStarted(true);
+                    onPick(leader.id);
+                  }}
                   className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm flex flex-col overflow-hidden text-left hover:-translate-y-0.5 hover:shadow-hard-black transition-transform disabled:opacity-50 disabled:cursor-wait"
                 >
                   <div className="relative aspect-[3/4] overflow-hidden ink-border-sm m-2 bg-[var(--c-steel)]">

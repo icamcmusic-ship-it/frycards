@@ -168,3 +168,16 @@ test('assignment is deterministic: rebuilding yields a deep-equal pool', () => {
   const second = JSON.parse(JSON.stringify(POOL_V4));
   expect(second).toEqual(first);
 });
+
+// v6.2: Leader-kit manual override (the Leader-kit equivalent of
+// COST_ADJUST/STAT_ADJUST for regular cards — see cardpool.ts's
+// LEADER_KEYWORD_STRIP). Avatar of the Abyss was a confirmed repeat-offender
+// outlier (docs/BALANCE_SIM_FINDINGS_v6.2.md) stacking max Resolve, an
+// unconditional -2 Shatter, and Commander's global +1 Might in one kit;
+// Commander was stripped from its kit specifically.
+test('v6.2: Avatar of the Abyss lost its Commander keyword (repeat-offender Leader nerf)', () => {
+  const abyss = POOL_BY_ID['avatar_of_the_abyss'];
+  expect(abyss).toBeTruthy();
+  expect(abyss.type).toBe('Leader');
+  expect(abyss.keywords ?? []).not.toContain('Commander');
+});

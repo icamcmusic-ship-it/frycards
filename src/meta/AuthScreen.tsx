@@ -127,6 +127,7 @@ export function AuthScreen() {
           <div className="flex gap-2 mb-1">
             <PopButton
               color={mode === 'signin' ? 'black' : 'yellow'}
+              disabled={busy}
               onClick={() => {
                 setMode('signin');
                 setError('');
@@ -138,6 +139,7 @@ export function AuthScreen() {
             </PopButton>
             <PopButton
               color={mode === 'signup' ? 'black' : 'yellow'}
+              disabled={busy}
               onClick={() => {
                 setMode('signup');
                 setError('');
@@ -181,7 +183,6 @@ export function AuthScreen() {
               onClick={() => setShowPassword((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-steel)] hover:text-[var(--c-ink)]"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
-              tabIndex={-1}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -225,7 +226,8 @@ export function AuthScreen() {
         <div className="text-center mt-4">
           <button
             onClick={() => setGuest(true)}
-            className="btn-pop px-6 py-2 bg-[var(--c-steel)] text-[var(--c-paper)] heading-font text-xs ink-border-sm shadow-hard-black-xs"
+            disabled={busy}
+            className="btn-pop px-6 py-2 bg-[var(--c-steel)] text-[var(--c-paper)] heading-font text-xs ink-border-sm shadow-hard-black-xs disabled:opacity-50"
           >
             PLAY AS GUEST (NO SAVING)
           </button>

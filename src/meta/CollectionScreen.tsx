@@ -554,7 +554,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             { label: 'Set', value: inspect.def.set || '—' },
             { label: 'Type', value: inspect.def.type },
             ...(inspect.serial
-              ? [{ label: 'Serial', value: `#${inspect.serial.number}/${inspect.serial.cap}` }]
+              ? [
+                  {
+                    label: 'Serial',
+                    value: `#${inspect.serial.number}/${Number.isNaN(inspect.serial.cap) ? '?' : inspect.serial.cap}`,
+                  },
+                ]
               : []),
             { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },

@@ -20,7 +20,31 @@ import {
   OwnedSerializedCard,
 } from '../lib/supabase';
 import { preloadImages } from '../lib/preload';
-import { withTimeout } from '../lib/utils';
+
+/** Unlike `withTimeout` (which resolves to a fallback value so callers can
+ * treat "timed out" and "succeeded with this value" identically), a timeout
+ * here must NOT look like a normal result: resolving getSession() to
+ * `{session: null}` after a stall is indistinguishable from a real logout,
+ * and resolving the store catalogs to `[]` is indistinguishable from a
+ * genuinely empty Store — both used to silently strand the player instead
+ * of surfacing the bootError + retry path that already exists for exactly
+ * this. This rejects instead, so the caller's own .catch() handles a stall
+ * the same way it already handles a network failure. */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timed out')), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 
 export interface MetaState {
   session: Session | null;
@@ -103,9 +127,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     // proxy) never resolves the getSession() promise at all — without a
     // bound here, `loading` would stay stuck true forever and the player
     // would be stranded on the splash screen with no retry affordance.
-    withTimeout(supabase.auth.getSession(), 20_000, { data: { session: null } } as Awaited<
-      ReturnType<typeof supabase.auth.getSession>
-    >)
+    withDeadline(supabase.auth.getSession(), 20_000)
       .then(({ data }) => {
         if (cancelled) return;
         setSession(data.session);
@@ -137,10 +159,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // image up front so the Store never shows art popping in mid-browse.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      withTimeout(fetchShopItems(), 20_000, [] as ShopItem[]),
-      withTimeout(fetchPackTypes(), 20_000, [] as PackType[]),
-    ])
+    Promise.all([withDeadline(fetchShopItems(), 20_000), withDeadline(fetchPackTypes(), 20_000)])
       .then(([items, packs]) => {
         if (cancelled) return;
         setShopItems(items);

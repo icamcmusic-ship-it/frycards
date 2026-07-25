@@ -137,25 +137,35 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
 // hardcoded per-mapper surcharges are gone), with values informed by the
 // 2208-game sim: Resonant up (carriers +20.7 win-rate delta), Bountiful
 // down (-24), Sacred kept cheap (-14.6), Runic/Soulbound/Resolute at 1.
+// v6.2 (docs/BALANCE_SIM_FINDINGS_v6.2.md, 18,048-game run — the first pass
+// with a real sample for the two keywords v6.1 flagged as too small-n to
+// touch): Resonant's tiny 84-game v6.1 read (+7.1) FLIPS hard at n=1088
+// (-14.5 archetype-normalized delta) — the double-resolution is not worth
+// its +3 surcharge once the sample is big enough to trust; cut to +2.
+// Doublestrike's 147-game v6.1 read (+12.8) holds up at n=1384 (+9.2) — bump
+// 3->4. Reckless (+7.5, n=5726) and Regenerate (-7.9, n=2287) both cleared
+// the ±7 action threshold for the first time this pass. Surge repeats a
+// negative read for a second consecutive pass (v6.1 -5.9 at n=1036, v6.2
+// -4.8 at n=7764) — a repeat-offender cut to 0, matching Siphon/Skywatch.
 export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 3,
   Overrun: 3,
   Quickstrike: 4,
-  Doublestrike: 3,
+  Doublestrike: 4,
   Venomous: 3,
   Siphon: 0,
   Alert: 2,
-  Reckless: 1,
+  Reckless: 2,
   Swarmproof: 1,
   Skywatch: 0,
   Warded: -1,
   Unbreakable: 7,
   Ambush: 1,
   Immobile: -2,
-  Regenerate: 3,
+  Regenerate: 2,
   Hardened: 3,
-  Surge: 1,
-  Resonant: 3,
+  Surge: 0,
+  Resonant: 2,
   Runic: 1,
   Soulbound: 1,
   Bountiful: 1,

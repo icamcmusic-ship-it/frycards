@@ -391,6 +391,9 @@ function targetPhrase(target: Effect['target']): string {
 /** One-line rules sentence for an Effect, in Fry Cards terms. */
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
+  // Only fall back to 1 when no value was printed at all — `value: 0` is a
+  // legitimate (if unusual) effect value and must render as 0, not 1.
+  const vOr1 = eff.value === undefined ? 1 : eff.value;
   switch (eff.action) {
     case 'damage':
       return `Deal ${v} damage to ${targetPhrase(eff.target)}`;
@@ -399,7 +402,7 @@ export function describeEffect(eff: Effect): string {
         ? `Gain ${v} Vitality`
         : `Heal ${v} from ${targetPhrase(eff.target)}`;
     case 'draw':
-      return `Deal ${v || 1} card${(v || 1) === 1 ? '' : 's'} (draw)`;
+      return `Deal ${vOr1} card${vOr1 === 1 ? '' : 's'} (draw)`;
     case 'buff': {
       const isAll = eff.target === 'allFriendlyUnits';
       const subject =
@@ -411,7 +414,7 @@ export function describeEffect(eff: Effect): string {
     case 'banish':
       return `Banish ${targetPhrase(eff.target)}`;
     case 'erode':
-      return `Erode ${v || 1} (mill the enemy deck)`;
+      return `Erode ${vOr1} (mill the enemy deck)`;
     case 'recover':
       return `Recover ${targetPhrase(eff.target) || 'a friendly permanent'}`;
   }
@@ -475,6 +478,13 @@ export function costSummary(def: CardDef): string | null {
   }
   if (def.cost.generic > 0 || parts.length === 0) parts.push(`${def.cost.generic} generic`);
   return `Essence Cost: ${parts.join(' + ')} (total ${totalCost(def.cost)})`;
+}
+
+/** A Serialized print's total run (`serial.cap`) is NaN when the supply
+ * table failed to load (see fetchMySerializedCards) — render that as "?"
+ * rather than a literal "NaN", which would look like a rendering bug. */
+function capText(cap: number): string | number {
+  return Number.isNaN(cap) ? '?' : cap;
 }
 
 /** Scales a font size down as text grows past a soft length target, so long
@@ -710,12 +720,23 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const autoCloseRef = useRef<number | null>(null);
+  const autoOpenRef = useRef<number | null>(null);
   const text = textOverride ?? KEYWORD_GLOSSARY[kw];
 
   const clearAutoClose = () => {
     if (autoCloseRef.current !== null) {
       window.clearTimeout(autoCloseRef.current);
       autoCloseRef.current = null;
+    }
+  };
+
+  /** Cancels the staggered auto-introduce open, if it hasn't fired yet — a
+   * player who manually opens/closes the popover before its slot comes up
+   * shouldn't have it pop back open on its own afterwards. */
+  const clearAutoOpen = () => {
+    if (autoOpenRef.current !== null) {
+      window.clearTimeout(autoOpenRef.current);
+      autoOpenRef.current = null;
     }
   };
 
@@ -736,6 +757,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   const open = (e: React.MouseEvent) => {
     e.stopPropagation();
     clearAutoClose();
+    clearAutoOpen();
     if (pos) {
       setPos(null);
       return;
@@ -745,6 +767,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
 
   const close = () => {
     clearAutoClose();
+    clearAutoOpen();
     setPos(null);
   };
 
@@ -754,7 +777,8 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
     const now = Date.now();
     const showAt = Math.max(now, nextAutoIntroSlot);
     nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
-    const openTimeout = window.setTimeout(() => {
+    autoOpenRef.current = window.setTimeout(() => {
+      autoOpenRef.current = null;
       const next = computePos();
       if (!next) return;
       setPos(next);
@@ -764,7 +788,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
       }, AUTO_INTRO_VISIBLE_MS);
     }, showAt - now);
     return () => {
-      window.clearTimeout(openTimeout);
+      clearAutoOpen();
       clearAutoClose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1479,7 +1503,7 @@ function MicroCard({
   const isFoil = foil && !serial;
   const mythic = isMythic(def.rarity) && !serial;
   const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
-  const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const label = `${def.name}, ${def.type}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const TypeIcon = TYPE_ICON[def.type];
   const nameFontPx = fitFontSize(def.name, 7.5, 5.5, 12);
   const cardColorsForFace = cardColors(def);
@@ -1548,9 +1572,9 @@ function MicroCard({
           {serial && (
             <span
               className="serial-plate text-[5px] font-black px-0.5 rounded-full tracking-wide"
-              title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+              title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
             >
-              #{serial.number}/{serial.cap}
+              #{serial.number}/{capText(serial.cap)}
             </span>
           )}
           {isFoil && (
@@ -1766,7 +1790,7 @@ export function CardFace({
   const stats = def.type === 'Unit' ? `, ${def.might} might, ${def.grit} grit` : '';
   // Serialized prints can never be foil (see quicksell_cards/grant_pack_contents).
   const isFoil = foil && !serial;
-  const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${serial.cap}` : ''}`;
+  const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
   // The card's visible fill/background tracks its color identity; rarity
   // keeps the border/glow/corner-gem treatment (rarityBorder/rarityGlow).
@@ -2038,9 +2062,9 @@ export function CardFace({
               'serial-plate absolute top-1 left-1 font-black rounded-full tracking-wide',
               cfg.foilBadge,
             )}
-            title={`Serialized print — #${serial.number} of ${serial.cap} ever made`}
+            title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
           >
-            #{serial.number}/{serial.cap}
+            #{serial.number}/{capText(serial.cap)}
           </span>
         )}
         {(foilCount || 0) > 0 && (
