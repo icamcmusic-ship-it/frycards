@@ -741,12 +741,7 @@ function runDawn(state: GameState): void {
   }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
   const L = p.leader;
-  if (
-    L.invoked &&
-    !L.shattered &&
-    hasKw(L.def, 'Resolute') &&
-    L.resolve < (L.def.resolve ?? 0)
-  ) {
+  if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
     L.resolve += 1;
     telemetry.onKeywordProc?.('Resolute', 1);
   }
@@ -928,7 +923,11 @@ export function invokeCard(
     bondTarget = iid ? findUnit(state, iid) : undefined;
     if (!bondTarget || bondTarget.owner !== pid) return false;
   }
-  if (def.onInvoke && opts.targetIid !== undefined && SINGLE_TARGETS.includes(def.onInvoke.target)) {
+  if (
+    def.onInvoke &&
+    opts.targetIid !== undefined &&
+    SINGLE_TARGETS.includes(def.onInvoke.target)
+  ) {
     if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
   }
 
@@ -1091,9 +1090,7 @@ export function legalAttackers(state: GameState, pid: PlayerId): UnitInst[] {
   if (state.active !== pid || state.phase !== 'Clash' || state.clash) return [];
   return state.players[pid].field.filter(
     (u) =>
-      !u.exhausted &&
-      !unitHasKw(u, 'Immobile') &&
-      (!u.enteredThisTurn || unitHasKw(u, 'Reckless')),
+      !u.exhausted && !unitHasKw(u, 'Immobile') && (!u.enteredThisTurn || unitHasKw(u, 'Reckless')),
   );
 }
 
@@ -1198,8 +1195,7 @@ export function resolveClash(state: GameState): boolean {
     }
     stateBasedChecks(state);
     if (step === 'first' && packets.length > 0) {
-      const died =
-        preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
+      const died = preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
       if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
     }
   }

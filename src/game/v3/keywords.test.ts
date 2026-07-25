@@ -18,15 +18,31 @@ import { KEYWORDS_OF_COLOR } from './colors';
 
 const EXPECTED = [
   // 14 rulebook Unit keywords
-  'Aerial', 'Overrun', 'Quickstrike', 'Doublestrike', 'Venomous', 'Siphon',
-  'Alert', 'Reckless', 'Swarmproof', 'Skywatch', 'Warded', 'Unbreakable',
-  'Ambush', 'Immobile',
+  'Aerial',
+  'Overrun',
+  'Quickstrike',
+  'Doublestrike',
+  'Venomous',
+  'Siphon',
+  'Alert',
+  'Reckless',
+  'Swarmproof',
+  'Skywatch',
+  'Warded',
+  'Unbreakable',
+  'Ambush',
+  'Immobile',
   // v6.0 type keywords: 2 per card type
-  'Regenerate', 'Hardened', // Unit
-  'Surge', 'Resonant', // Event
-  'Runic', 'Soulbound', // Charm
-  'Bountiful', 'Sacred', // Location
-  'Commander', 'Resolute', // Leader
+  'Regenerate',
+  'Hardened', // Unit
+  'Surge',
+  'Resonant', // Event
+  'Runic',
+  'Soulbound', // Charm
+  'Bountiful',
+  'Sacred', // Location
+  'Commander',
+  'Resolute', // Leader
 ];
 
 describe('keyword set', () => {

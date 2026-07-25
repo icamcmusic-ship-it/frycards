@@ -80,8 +80,7 @@ function DailyLoginPanel() {
   const streakContinues = lastClaim === yesterday;
   // A lapsed streak also shows as 0 (not the stale pre-lapse count) until
   // the next claim starts a new one.
-  const streak =
-    claimed?.streak ?? (claimable && !streakContinues ? 0 : profile.login_streak);
+  const streak = claimed?.streak ?? (claimable && !streakContinues ? 0 : profile.login_streak);
   const projectedStreak = claimable ? (streakContinues ? streak + 1 : 1) : streak;
   const cycleDay = ((Math.max(1, projectedStreak) - 1) % 7) + 1;
 

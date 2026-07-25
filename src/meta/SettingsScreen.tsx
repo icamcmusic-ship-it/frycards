@@ -28,7 +28,7 @@ export function SettingsScreen({
       if (err) setError(err);
       else refreshProfile();
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusy(false);
     }

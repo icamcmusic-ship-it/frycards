@@ -144,8 +144,7 @@ export function Card3DInspector({
   // top of CardFace's always-on inspector treatment (see premium-boost):
   // Ultra-Rare a gold-leaf glint that sweeps with the tilt angle, Mythic a
   // molten ember glow that pools under the pointer.
-  const premium =
-    def.rarity === 'Ultra-Rare' ? 'ultra' : def.rarity === 'Mythic' ? 'mythic' : null;
+  const premium = def.rarity === 'Ultra-Rare' ? 'ultra' : def.rarity === 'Mythic' ? 'mythic' : null;
 
   return (
     <div

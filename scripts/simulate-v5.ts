@@ -136,9 +136,17 @@ interface CardStat {
 const cardStats: Record<string, CardStat> = {};
 function cs(id: string): CardStat {
   return (cardStats[id] ??= {
-    inDeckGames: 0, inDeckWins: 0, playedGames: 0, playedWins: 0,
-    drawnGames: 0, drawnWins: 0, timesPlayed: 0, timesDrawn: 0, timesDeadInHand: 0,
-    firstPlayTurnSum: 0, firstPlayGames: 0,
+    inDeckGames: 0,
+    inDeckWins: 0,
+    playedGames: 0,
+    playedWins: 0,
+    drawnGames: 0,
+    drawnWins: 0,
+    timesPlayed: 0,
+    timesDrawn: 0,
+    timesDeadInHand: 0,
+    firstPlayTurnSum: 0,
+    firstPlayGames: 0,
   });
 }
 
@@ -149,11 +157,18 @@ const mullOutcome = { mullGames: 0, mullWins: 0, keepGames: 0, keepWins: 0 };
 const comeback = { measured: 0, comebackWins: 0 }; // winner behind on vitality at the turn-8 snapshot
 let essenceSpentTotal = 0; // sum of printed totals of every invoked card
 
-interface KwStat { carrierGames: number; carrierWins: number; activations: number }
+interface KwStat {
+  carrierGames: number;
+  carrierWins: number;
+  activations: number;
+}
 const kwStats: Record<string, KwStat> = {};
 for (const kw of KEYWORDS) kwStats[kw] = { carrierGames: 0, carrierWins: 0, activations: 0 };
 
-const leaderStats: Record<string, { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }> = {};
+const leaderStats: Record<
+  string,
+  { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }
+> = {};
 const colorStats: Record<string, { games: number; wins: number }> = {};
 for (const c of COLORS) colorStats[c] = { games: 0, wins: 0 };
 
@@ -168,7 +183,10 @@ const kwArchetypeStats: Record<string, Record<string, { games: number; wins: num
 for (const kw of KEYWORDS) kwArchetypeStats[kw] = {};
 
 // --- v5.2: per-cost-tier win rates ------------------------------------------
-const tierStats: Record<string, { playedGames: number; playedWins: number; deckGames: number; deckWins: number }> = {};
+const tierStats: Record<
+  string,
+  { playedGames: number; playedWins: number; deckGames: number; deckWins: number }
+> = {};
 function ts(tier: number) {
   const k = String(tier);
   return (tierStats[k] ??= { playedGames: 0, playedWins: 0, deckGames: 0, deckWins: 0 });
@@ -188,7 +206,6 @@ const cpuDecisions = {
   targetSuboptimal: 0, // removal aimed at a live enemy when a bigger one was legal
   targetOpportunities: 0,
   reactionWindowOpportunities: 0, // clashes where the defender had an open reaction window
-
 };
 
 // --- v5.2: essence-curve efficiency -----------------------------------------
@@ -210,7 +227,11 @@ type CostBand = '1-2' | '3-4' | '5+';
 const bandOf = (t: number): CostBand => (t <= 2 ? '1-2' : t <= 4 ? '3-4' : '5+');
 const kwBandStats: Record<string, Record<CostBand, { games: number; wins: number }>> = {};
 for (const kw of KEYWORDS)
-  kwBandStats[kw] = { '1-2': { games: 0, wins: 0 }, '3-4': { games: 0, wins: 0 }, '5+': { games: 0, wins: 0 } };
+  kwBandStats[kw] = {
+    '1-2': { games: 0, wins: 0 },
+    '3-4': { games: 0, wins: 0 },
+    '5+': { games: 0, wins: 0 },
+  };
 
 // --- v6.1: leader-vs-leader matchup matrix ---------------------------------
 const leaderMatchup: Record<string, Record<string, { games: number; wins: number }>> = {};
@@ -390,7 +411,8 @@ function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
     }
     const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
     const kills = m >= remainingGrit(state, worst) || u.def.keywords?.includes('Venomous');
-    const survives = effMight(state, worst) < remainingGrit(state, u) || u.def.keywords?.includes('Unbreakable');
+    const survives =
+      effMight(state, worst) < remainingGrit(state, u) || u.def.keywords?.includes('Unbreakable');
     if (kills && survives) out.add(u.iid);
   }
   return out;
@@ -470,16 +492,17 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     // shrinks the acting player's own ready-attacker set before Clash, so
     // this is a reasonable proxy for the state legalAttackers() saw). ---
     const preHasReadyAttacker = p.field.some(
-      (u) => !u.exhausted && !u.def.keywords?.includes('Immobile') && (!u.enteredThisTurn || u.def.keywords?.includes('Reckless')),
+      (u) =>
+        !u.exhausted &&
+        !u.def.keywords?.includes('Immobile') &&
+        (!u.enteredThisTurn || u.def.keywords?.includes('Reckless')),
     );
     const preShadowAttackers = preHasReadyAttacker ? shadowAttackers(state, pid) : null;
     const preOppBiggestByIid = new Map<string, number>();
     for (const u of state.players[opponentOf(pid)].field) {
       if (!u.def.keywords?.includes('Warded')) preOppBiggestByIid.set(u.iid, effMight(state, u));
     }
-    const preOppMaxMight = preOppBiggestByIid.size
-      ? Math.max(...preOppBiggestByIid.values())
-      : 0;
+    const preOppMaxMight = preOppBiggestByIid.size ? Math.max(...preOppBiggestByIid.values()) : 0;
     const preLocations = p.locations.length + (p.wellspringPlayedThisTurn ? 0 : 1);
     const preHandIds = new Set(p.hand.map((c) => c.iid));
     const preOppDeck = state.players[opponentOf(pid)].deck.length;
@@ -544,9 +567,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     if (couldLethal && !state.winner) lapses.missedLethal++;
 
     // --- v5.2 CPU decision-quality taxonomy -----------------------------
-    const attackEv = events.find((e) => e.kind === 'attack') as
-      | { iids: string[] }
-      | undefined;
+    const attackEv = events.find((e) => e.kind === 'attack') as { iids: string[] } | undefined;
     if (preShadowAttackers) {
       cpuDecisions.attackOpportunities++;
       const actual = new Set(attackEv?.iids ?? []);
@@ -557,8 +578,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     }
 
     const guardEv = events.find((e) => e.kind === 'guard') as
-      | { assignments: Record<string, string[]> }
-      | undefined;
+      { assignments: Record<string, string[]> } | undefined;
     if (guardEv) {
       const defender = opponentOf(pid);
       const defField = state.players[defender].field;
@@ -622,8 +642,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
     // --- v6.0 board / clash / comeback sampling -------------------------
     boardMetrics.turnSamples++;
-    boardMetrics.unitsOnBoardSum +=
-      state.players.P1.field.length + state.players.P2.field.length;
+    boardMetrics.unitsOnBoardSum += state.players.P1.field.length + state.players.P2.field.length;
     if (attackEv && attackEv.iids.length > 0) {
       clashMetrics.clashes++;
       clashMetrics.attackersSum += attackEv.iids.length;
@@ -701,8 +720,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         // Use the DECLARED guard assignments (the post-clash clash.guards map
         // drops guards that died absorbing the hit).
         const guardEv = [...events].reverse().find((e) => e.kind === 'guard') as
-          | { assignments: Record<string, string[]> }
-          | undefined;
+          { assignments: Record<string, string[]> } | undefined;
         const declaredGuards = guardEv?.assignments ?? clash.guards;
         for (const aIid of clash.attackers) {
           const { face, a } = threat(aIid);
@@ -719,7 +737,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
           const need = swarm ? 2 : 1;
           const eligibleIdx: number[] = [];
           pool.forEach((g, idx) => {
-            if (!aerial || g.def.keywords?.includes('Aerial') || g.def.keywords?.includes('Skywatch'))
+            if (
+              !aerial ||
+              g.def.keywords?.includes('Aerial') ||
+              g.def.keywords?.includes('Skywatch')
+            )
               eligibleIdx.push(idx);
           });
           if (eligibleIdx.length >= need) {
@@ -759,10 +781,16 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     if (wv > 0) winMargin[marginBucket(wv)] = (winMargin[marginBucket(wv)] ?? 0) + 1;
     const winDeck = winner === 'P1' ? deckA : deckB;
     const loseDeck = winner === 'P1' ? deckB : deckA;
-    const lm = ((leaderMatchup[winDeck.leaderId] ??= {})[loseDeck.leaderId] ??= { games: 0, wins: 0 });
+    const lm = ((leaderMatchup[winDeck.leaderId] ??= {})[loseDeck.leaderId] ??= {
+      games: 0,
+      wins: 0,
+    });
     lm.games++;
     lm.wins++;
-    const lmRev = ((leaderMatchup[loseDeck.leaderId] ??= {})[winDeck.leaderId] ??= { games: 0, wins: 0 });
+    const lmRev = ((leaderMatchup[loseDeck.leaderId] ??= {})[winDeck.leaderId] ??= {
+      games: 0,
+      wins: 0,
+    });
     lmRev.games++;
     mech.winnerVitalitySum += state.players[winner].vitality;
     mech.loserDeckRemainingSum += state.players[opponentOf(winner)].deck.length;
@@ -911,7 +939,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
     // Leader stats.
     const ls = (leaderStats[deck.leaderId] ??= {
-      games: 0, wins: 0, invoked: 0, shattered: 0, abilityUses: 0,
+      games: 0,
+      wins: 0,
+      invoked: 0,
+      shattered: 0,
+      abilityUses: 0,
     });
     ls.games++;
     if (won) ls.wins++;
@@ -933,7 +965,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 // ---------------------------------------------------------------------------
 // Run the tournament
 // ---------------------------------------------------------------------------
-console.log(`Fry Cards v5 sim: pool=${POOL_V4.length} cards, decks=${NUM_DECKS}, games/pairing=${GAMES_PER_PAIRING}, seed=${SEED}, deckSeed=${DECK_SEED}`);
+console.log(
+  `Fry Cards v5 sim: pool=${POOL_V4.length} cards, decks=${NUM_DECKS}, games/pairing=${GAMES_PER_PAIRING}, seed=${SEED}, deckSeed=${DECK_SEED}`,
+);
 const rootRng = mulberry32(DECK_SEED);
 const decks: DeckDef[] = [];
 for (let i = 0; i < NUM_DECKS; i++) decks.push(buildDeck(randomArchetype(rootRng)));
@@ -957,7 +991,13 @@ for (let i = 0; i < decks.length; i++) {
 // counters (not folded into card/keyword/leader stats) so it can't skew
 // those cohorts.
 // ---------------------------------------------------------------------------
-const seatSwap = { pairs: 0, deckAWinsAsP1: 0, deckAWinsAsP2: 0, firstSeatWins: 0, decidedGames: 0 };
+const seatSwap = {
+  pairs: 0,
+  deckAWinsAsP1: 0,
+  deckAWinsAsP2: 0,
+  firstSeatWins: 0,
+  decidedGames: 0,
+};
 {
   const swapRng = mulberry32(SEED ^ 0x5eed5eed);
   const SEAT_SWAP_PAIRS = Math.min(200, decks.length * (decks.length - 1));
@@ -1092,7 +1132,9 @@ const cpuDecisionReport = {
     opportunities: cpuDecisions.targetOpportunities,
   },
   reactionWindow: {
-    playsPerOpportunity: +(mech.reactionPlays / Math.max(1, cpuDecisions.reactionWindowOpportunities)).toFixed(2),
+    playsPerOpportunity: +(
+      mech.reactionPlays / Math.max(1, cpuDecisions.reactionWindowOpportunities)
+    ).toFixed(2),
     opportunities: cpuDecisions.reactionWindowOpportunities,
   },
 };
@@ -1101,7 +1143,9 @@ const cpuDecisionReport = {
 const curveReport = {
   heldPlayableCardTurnPct: pct(curveStats.heldPlayableCardTurns, curveStats.totalTurns),
   totalTurns: curveStats.totalTurns,
-  avgEssenceFloatedPerTurn: +(curveStats.essenceFloatedEstimate / Math.max(1, curveStats.totalTurns)).toFixed(2),
+  avgEssenceFloatedPerTurn: +(
+    curveStats.essenceFloatedEstimate / Math.max(1, curveStats.totalTurns)
+  ).toFixed(2),
 };
 
 // v5.2: paired-seed seat-swap first-player-advantage measurement.
@@ -1115,7 +1159,11 @@ const seatSwapReport = {
 // v5.2 carry-forward: re-read the five v5.1 +1-cost-adjusted cards regardless
 // of the >=20-played-games cutoff so they always show up in the report.
 const WATCHLIST_IDS = [
-  'heart_coral', 'needle_seamstress', 'merfolk_ritual', 'pufferfish_lantern', 'clawblade_greatsword',
+  'heart_coral',
+  'needle_seamstress',
+  'merfolk_ritual',
+  'pufferfish_lantern',
+  'clawblade_greatsword',
 ];
 const watchlistReport = WATCHLIST_IDS.map((id) => {
   const s = cs(id);
@@ -1135,17 +1183,19 @@ const watchlistReport = WATCHLIST_IDS.map((id) => {
 // deck cohort actually exercised (never-decked / decked-but-never-played).
 const poolCoverage = (() => {
   const nonLeader = POOL_V4.filter((c: CardDef) => c.type !== 'Leader');
-  const neverDecked = nonLeader.filter((c: CardDef) => !(cardStats[c.id]?.inDeckGames ?? 0)).map((c: CardDef) => c.id);
-  const neverPlayed = nonLeader.filter(
-    (c: CardDef) => (cardStats[c.id]?.inDeckGames ?? 0) > 0 && !(cardStats[c.id]?.timesPlayed ?? 0),
-  ).map((c: CardDef) => c.id);
+  const neverDecked = nonLeader
+    .filter((c: CardDef) => !(cardStats[c.id]?.inDeckGames ?? 0))
+    .map((c: CardDef) => c.id);
+  const neverPlayed = nonLeader
+    .filter(
+      (c: CardDef) =>
+        (cardStats[c.id]?.inDeckGames ?? 0) > 0 && !(cardStats[c.id]?.timesPlayed ?? 0),
+    )
+    .map((c: CardDef) => c.id);
   return {
     poolNonLeader: nonLeader.length,
     deckedPct: pct(nonLeader.length - neverDecked.length, nonLeader.length),
-    playedPct: pct(
-      nonLeader.length - neverDecked.length - neverPlayed.length,
-      nonLeader.length,
-    ),
+    playedPct: pct(nonLeader.length - neverDecked.length - neverPlayed.length, nonLeader.length),
     neverDecked,
     deckedButNeverPlayed: neverPlayed,
   };
@@ -1189,19 +1239,29 @@ const report = {
     erodePerGame: +(mech.totalErode / mech.games).toFixed(2),
     wastedEssencePerGame: +(mech.wastedEssenceTotal / mech.games).toFixed(2),
     mulliganRatePct: pct(mech.mulligans, mech.games * 2),
-    avgWinnerVitality: +(mech.winnerVitalitySum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
-    avgLoserDeckRemaining: +(mech.loserDeckRemainingSum / Math.max(1, mech.games - mech.turnLimitDraws)).toFixed(1),
+    avgWinnerVitality: +(
+      mech.winnerVitalitySum / Math.max(1, mech.games - mech.turnLimitDraws)
+    ).toFixed(1),
+    avgLoserDeckRemaining: +(
+      mech.loserDeckRemainingSum / Math.max(1, mech.games - mech.turnLimitDraws)
+    ).toFixed(1),
     essenceSpentPerGame: +(essenceSpentTotal / Math.max(1, mech.games)).toFixed(1),
   },
   // v6.0: board/clash texture, mulligan outcomes, comeback rate.
   boardMetrics: {
-    avgUnitsOnBoard: +(boardMetrics.unitsOnBoardSum / Math.max(1, boardMetrics.turnSamples)).toFixed(2),
+    avgUnitsOnBoard: +(
+      boardMetrics.unitsOnBoardSum / Math.max(1, boardMetrics.turnSamples)
+    ).toFixed(2),
     turnSamples: boardMetrics.turnSamples,
   },
   clashMetrics: {
     clashesPerGame: +(clashMetrics.clashes / Math.max(1, mech.games)).toFixed(2),
-    avgAttackersPerClash: +(clashMetrics.attackersSum / Math.max(1, clashMetrics.clashes)).toFixed(2),
-    avgFirstClashTurn: +(clashMetrics.firstClashTurnSum / Math.max(1, clashMetrics.gamesWithClash)).toFixed(1),
+    avgAttackersPerClash: +(clashMetrics.attackersSum / Math.max(1, clashMetrics.clashes)).toFixed(
+      2,
+    ),
+    avgFirstClashTurn: +(
+      clashMetrics.firstClashTurnSum / Math.max(1, clashMetrics.gamesWithClash)
+    ).toFixed(1),
     gamesWithClashPct: pct(clashMetrics.gamesWithClash, mech.games),
   },
   mulliganOutcome: {
@@ -1220,7 +1280,10 @@ const report = {
       Object.fromEntries(
         COLORS.filter((b) => colorMatchup[a][b].games > 0).map((b) => [
           b,
-          { winPct: pct(colorMatchup[a][b].wins, colorMatchup[a][b].games), games: colorMatchup[a][b].games },
+          {
+            winPct: pct(colorMatchup[a][b].wins, colorMatchup[a][b].games),
+            games: colorMatchup[a][b].games,
+          },
         ]),
       ),
     ]),
@@ -1241,18 +1304,27 @@ const report = {
     ]),
   ),
   colors: Object.fromEntries(
-    Object.entries(colorStats).map(([c, s]) => [c, { winPct: pct(s.wins, s.games), games: s.games }]),
+    Object.entries(colorStats).map(([c, s]) => [
+      c,
+      { winPct: pct(s.wins, s.games), games: s.games },
+    ]),
   ),
   keywords: kwReport,
   costBands: Object.fromEntries(
-    Object.entries(costBands).map(([b, s]) => [b, { cards: s.n, playedWinPct: pct(s.wins, s.games) }]),
+    Object.entries(costBands).map(([b, s]) => [
+      b,
+      { cards: s.n, playedWinPct: pct(s.wins, s.games) },
+    ]),
   ),
   topOverperformers: byResidual.slice(0, 15),
   topUnderperformers: byResidual.slice(-15).reverse(),
   deadestInHand: [...cardReport].sort((a, b) => b.deadInHandRate - a.deadInHandRate).slice(0, 15),
   baselineWin: overallWin,
   archetypes: Object.fromEntries(
-    Object.entries(archetypeStats).map(([id, s]) => [id, { name: POOL_BY_ID[id]?.name, winPct: pct(s.wins, s.games), games: s.games }]),
+    Object.entries(archetypeStats).map(([id, s]) => [
+      id,
+      { name: POOL_BY_ID[id]?.name, winPct: pct(s.wins, s.games), games: s.games },
+    ]),
   ),
   costTiers: tierReport,
   cpuDecisionTaxonomy: cpuDecisionReport,
@@ -1274,11 +1346,17 @@ const report = {
   cardTypes: Object.fromEntries(
     Object.entries(typeStats).map(([t, s]) => [
       t,
-      { playsPerGame: +(s.plays / Math.max(1, mech.games)).toFixed(2), playedGameWinPct: pct(s.playedWins, s.playedGames) },
+      {
+        playsPerGame: +(s.plays / Math.max(1, mech.games)).toFixed(2),
+        playedGameWinPct: pct(s.playedWins, s.playedGames),
+      },
     ]),
   ),
   openingCurve: Object.fromEntries(
-    Object.entries(openingCurve).map(([b, s]) => [b, { winPct: pct(s.wins, s.games), games: s.games }]),
+    Object.entries(openingCurve).map(([b, s]) => [
+      b,
+      { winPct: pct(s.wins, s.games), games: s.games },
+    ]),
   ),
   winMarginHistogram: winMargin,
   poolCoverage,
@@ -1289,7 +1367,18 @@ fs.mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, `v5-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
 fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
 
-console.log(JSON.stringify({ outcomes: report.outcomes, mechanics: report.mechanics, lapses: report.lapses, invariantCount: invariants.length }, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      outcomes: report.outcomes,
+      mechanics: report.mechanics,
+      lapses: report.lapses,
+      invariantCount: invariants.length,
+    },
+    null,
+    2,
+  ),
+);
 console.log('\nLeaders:', JSON.stringify(report.leaders, null, 2));
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
@@ -1307,11 +1396,20 @@ console.log('\nLeader matchups (v6.1):', JSON.stringify(report.leaderMatchups, n
 console.log('\nCard types (v6.1):', JSON.stringify(report.cardTypes, null, 2));
 console.log('\nOpening-hand curve (v6.1):', JSON.stringify(report.openingCurve, null, 2));
 console.log('\nWin-margin histogram (v6.1):', JSON.stringify(report.winMarginHistogram, null, 2));
-console.log(`\nPool coverage (v6.1): ${report.poolCoverage.deckedPct}% decked, ${report.poolCoverage.playedPct}% played of ${report.poolCoverage.poolNonLeader} non-Leader cards; never decked: ${report.poolCoverage.neverDecked.length}, decked-never-played: ${report.poolCoverage.deckedButNeverPlayed.length}`);
+console.log(
+  `\nPool coverage (v6.1): ${report.poolCoverage.deckedPct}% decked, ${report.poolCoverage.playedPct}% played of ${report.poolCoverage.poolNonLeader} non-Leader cards; never decked: ${report.poolCoverage.neverDecked.length}, decked-never-played: ${report.poolCoverage.deckedButNeverPlayed.length}`,
+);
 console.log('\nTop overperformers:');
-for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
+for (const c of report.topOverperformers)
+  console.log(
+    `  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`,
+  );
 console.log('\nTop underperformers:');
-for (const c of report.topUnderperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual ${c.residual} [${c.keywords.join(',')}]`);
+for (const c of report.topUnderperformers)
+  console.log(
+    `  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual ${c.residual} [${c.keywords.join(',')}]`,
+  );
 console.log('\nDeadest in hand:');
-for (const c of report.deadestInHand) console.log(`  ${c.name} cost ${c.cost} deadRate ${c.deadInHandRate}%`);
+for (const c of report.deadestInHand)
+  console.log(`  ${c.name} cost ${c.cost} deadRate ${c.deadInHandRate}%`);
 console.log(`\nReport written: ${outPath}`);

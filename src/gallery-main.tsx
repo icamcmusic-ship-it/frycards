@@ -10,20 +10,22 @@ function pickBy(pred: (c: CardDef) => boolean): CardDef | undefined {
   return POOL_V4.find(pred);
 }
 
-const samples: CardDef[] = ([
-  pickBy((c) => c.type === 'Unit' && (c.keywords?.length ?? 0) >= 2 && !!c.onInvoke),
-  pickBy((c) => c.type === 'Unit' && c.keywords?.includes('Regenerate') === true),
-  pickBy((c) => c.type === 'Event' && c.keywords?.includes('Resonant') === true),
-  pickBy((c) => c.type === 'Event' && c.keywords?.includes('Surge') === true),
-  pickBy((c) => c.type === 'Charm' && c.keywords?.includes('Soulbound') === true),
-  pickBy((c) => c.type === 'Charm' && c.subtype === 'Worn' && !!c.bond?.grants),
-  pickBy((c) => c.type === 'Location' && c.keywords?.includes('Bountiful') === true),
-  pickBy((c) => c.type === 'Location' && c.keywords?.includes('Sacred') === true),
-  pickBy((c) => c.type === 'Leader' && c.keywords?.includes('Commander') === true),
-  pickBy((c) => c.rarity === 'Full-Art'),
-  pickBy((c) => c.rarity === 'Mythic'),
-  pickBy((c) => c.rarity === 'Ultra-Rare' && c.type === 'Unit'),
-] as (CardDef | undefined)[]).filter((c): c is CardDef => !!c);
+const samples: CardDef[] = (
+  [
+    pickBy((c) => c.type === 'Unit' && (c.keywords?.length ?? 0) >= 2 && !!c.onInvoke),
+    pickBy((c) => c.type === 'Unit' && c.keywords?.includes('Regenerate') === true),
+    pickBy((c) => c.type === 'Event' && c.keywords?.includes('Resonant') === true),
+    pickBy((c) => c.type === 'Event' && c.keywords?.includes('Surge') === true),
+    pickBy((c) => c.type === 'Charm' && c.keywords?.includes('Soulbound') === true),
+    pickBy((c) => c.type === 'Charm' && c.subtype === 'Worn' && !!c.bond?.grants),
+    pickBy((c) => c.type === 'Location' && c.keywords?.includes('Bountiful') === true),
+    pickBy((c) => c.type === 'Location' && c.keywords?.includes('Sacred') === true),
+    pickBy((c) => c.type === 'Leader' && c.keywords?.includes('Commander') === true),
+    pickBy((c) => c.rarity === 'Full-Art'),
+    pickBy((c) => c.rarity === 'Mythic'),
+    pickBy((c) => c.rarity === 'Ultra-Rare' && c.type === 'Unit'),
+  ] as (CardDef | undefined)[]
+).filter((c): c is CardDef => !!c);
 
 function Gallery() {
   return (

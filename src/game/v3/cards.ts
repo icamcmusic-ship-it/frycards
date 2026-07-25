@@ -163,8 +163,16 @@ export const CARDS_V3: CardDef[] = [
     cost: cost(1, { Ember: 2 }),
     resolve: 4,
     leaderAbilities: [
-      { resolveDelta: -1, effect: { action: 'damage', value: 2, target: 'anyTarget' }, text: '-1: 2 damage to any target.' },
-      { resolveDelta: 1, effect: { action: 'buff', value: 1, target: 'friendlyUnit' }, text: '+1: a friendly unit gets +1/+1.' },
+      {
+        resolveDelta: -1,
+        effect: { action: 'damage', value: 2, target: 'anyTarget' },
+        text: '-1: 2 damage to any target.',
+      },
+      {
+        resolveDelta: 1,
+        effect: { action: 'buff', value: 1, target: 'friendlyUnit' },
+        text: '+1: a friendly unit gets +1/+1.',
+      },
     ],
     text: 'Leader — Resolve 4.',
   },
@@ -175,8 +183,16 @@ export const CARDS_V3: CardDef[] = [
     cost: cost(2, { Root: 2 }),
     resolve: 5,
     leaderAbilities: [
-      { resolveDelta: -1, effect: { action: 'heal', value: 3, target: 'friendlyAny' }, text: '-1: heal 3.' },
-      { resolveDelta: 1, effect: { action: 'draw', value: 1, target: 'none' }, text: '+1: Deal a card.' },
+      {
+        resolveDelta: -1,
+        effect: { action: 'heal', value: 3, target: 'friendlyAny' },
+        text: '-1: heal 3.',
+      },
+      {
+        resolveDelta: 1,
+        effect: { action: 'draw', value: 1, target: 'none' },
+        text: '+1: Deal a card.',
+      },
     ],
     text: 'Leader — Resolve 5.',
   },
@@ -188,7 +204,9 @@ export const CARDS_V3: CardDef[] = [
   }),
   U('root_guardian', 'Root Guardian', cost(2, { Root: 1 }), 2, 5, { keywords: ['Skywatch'] }),
   U('gale_harrier', 'Gale Harrier', cost(1, { Gale: 1 }), 2, 2, { keywords: ['Aerial'] }),
-  U('lightbound_healer', 'Lightbound Healer', cost(1, { Light: 1 }), 2, 3, { keywords: ['Siphon'] }),
+  U('lightbound_healer', 'Lightbound Healer', cost(1, { Light: 1 }), 2, 3, {
+    keywords: ['Siphon'],
+  }),
   U('shadow_asp', 'Shadow Asp', cost(1, { Shadow: 1 }), 1, 1, { keywords: ['Venomous'] }),
   U('void_maw', 'Void Maw', cost(4, { Void: 2 }), 6, 6, { keywords: ['Unbreakable', 'Immobile'] }),
   U('war_titan', 'War Titan', cost(5, { Root: 1 }), 7, 7, { keywords: ['Overrun'] }),

@@ -33,4 +33,6 @@ if (templates.length === 0) {
 }
 
 fs.writeFileSync(outPath, JSON.stringify(templates, null, 2) + '\n');
-console.log(`Wrote ${templates.length} live card templates to ${path.relative(process.cwd(), outPath)}`);
+console.log(
+  `Wrote ${templates.length} live card templates to ${path.relative(process.cwd(), outPath)}`,
+);

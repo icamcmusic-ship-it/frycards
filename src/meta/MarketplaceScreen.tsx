@@ -59,8 +59,15 @@ function defFor(cardId: string): CardDef {
 }
 
 export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
-  const { session, profile, collection, decks, serializedCards, refreshProfile, refreshCollection } =
-    useMeta();
+  const {
+    session,
+    profile,
+    collection,
+    decks,
+    serializedCards,
+    refreshProfile,
+    refreshCollection,
+  } = useMeta();
   const userId = session?.user?.id;
   const [tab, setTab] = useState<Tab>('browse');
   const [listings, setListings] = useState<MarketListing[]>([]);

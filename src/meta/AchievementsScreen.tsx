@@ -100,7 +100,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       // claim attempt on the same achievement.
       await reload();
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }
@@ -122,7 +122,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       // Awaited — same double-claim race as handleClaimAchievement above.
       await reload();
     } catch {
-      setError("Something went wrong — check your connection and try again.");
+      setError('Something went wrong — check your connection and try again.');
     } finally {
       setBusyId(null);
     }

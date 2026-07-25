@@ -225,7 +225,8 @@ function packetDamage(target: UnitInst, raw: number): number {
 function isRemoval(eff?: Effect): boolean {
   return (
     !!eff &&
-    (eff.action === 'shatter' || eff.action === 'banish' ||
+    (eff.action === 'shatter' ||
+      eff.action === 'banish' ||
       (eff.action === 'damage' && (eff.target === 'enemyUnit' || eff.target === 'anyTarget')))
   );
 }
@@ -332,7 +333,11 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (!reservedIid) tapAllLocations(state, pid);
 
   // Invoke the Leader once affordable (its abilities are recurring value).
-  if (!p.leader.invoked && !p.leader.shattered && canAffordPotential(state, pid, p.leader.def.cost)) {
+  if (
+    !p.leader.invoked &&
+    !p.leader.shattered &&
+    canAffordPotential(state, pid, p.leader.def.cost)
+  ) {
     tapForCost(state, pid, p.leader.def.cost);
     if (canInvokeLeader(state, pid) && invokeLeader(state, pid))
       observe?.({ kind: 'leaderInvoke', name: p.leader.def.name });
@@ -380,7 +385,13 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
         if (invokeCard(state, pid, reserved.iid, { targetIid })) {
-          observe?.({ kind: 'invoke', name: reserved.def.name, iid: reserved.iid, targetIid, targetName });
+          observe?.({
+            kind: 'invoke',
+            name: reserved.def.name,
+            iid: reserved.iid,
+            targetIid,
+            targetName,
+          });
         }
       }
     }
@@ -408,7 +419,8 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     if (isRemoval(eff)) v = opp.field.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
-    else if (eff.action === 'heal') v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
+    else if (eff.action === 'heal')
+      v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
     else v = 2;
     // Never shatter our own Leader for marginal value — only a genuinely
     // scary board (a Might-6+ unit to answer) can justify going to zero.
@@ -438,8 +450,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const opp = state.players[opponentOf(pid)];
   const candidates = legalAttackers(state, pid);
   const defenders = opp.field.filter((u) => !u.exhausted);
-  const firstStriker = (x: UnitInst) =>
-    unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
+  const firstStriker = (x: UnitInst) => unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
   const canBlock = (a: UnitInst, g: UnitInst) =>
     !unitHasKw(a, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch');
   const attackerKills = (a: UnitInst, g: UnitInst) => {
@@ -500,8 +511,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const survives = attackerSurvives(u, worst);
     const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
     const notBehind = me.field.length >= opp.field.length;
-    const favorableTrade =
-      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
+    const favorableTrade = kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
   return picked;
@@ -605,7 +615,9 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         // Cheapest body soaks the hit.
         const chump = legal.sort(
           (a, b) =>
-            effMight(state, a) + remainingGrit(state, a) - (effMight(state, b) + remainingGrit(state, b)),
+            effMight(state, a) +
+            remainingGrit(state, a) -
+            (effMight(state, b) + remainingGrit(state, b)),
         )[0];
         assignments[attacker.iid] = [chump.iid];
         used.add(chump.iid);
@@ -659,7 +671,9 @@ export function reactionPlays(
     progress = false;
     const options = p.hand
       .filter((c) => canInvoke(state, defender, c.iid))
-      .sort((a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def));
+      .sort(
+        (a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def),
+      );
     for (const c of options) {
       const quickRemoval =
         c.def.type === 'Event' && c.def.subtype === 'Quick' && isRemoval(c.def.onInvoke);

@@ -52,10 +52,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
       ],
       ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
-      [
-        'Dusk',
-        '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.',
-      ],
+      ['Dusk', '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.'],
     ],
   },
   {
@@ -139,10 +136,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     // keywords are labeled with the type they appear on.
     body: KEYWORDS.map(
       (kw) =>
-        [
-          KEYWORD_TYPES[kw] === 'Unit' ? kw : `${kw} (${KEYWORD_TYPES[kw]})`,
-          KEYWORD_TEXT[kw],
-        ] as [string, string],
+        [KEYWORD_TYPES[kw] === 'Unit' ? kw : `${kw} (${KEYWORD_TYPES[kw]})`, KEYWORD_TEXT[kw]] as [
+          string,
+          string,
+        ],
     ),
   },
   {
@@ -199,7 +196,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Serialized',
-        "The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.",
+        'The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.',
       ],
       [
         'No pity, no guarantees',

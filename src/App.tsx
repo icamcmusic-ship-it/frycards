@@ -117,8 +117,8 @@ function PlayScreen({
         </div>
         {guest ? (
           <p className="text-[11px] font-bold text-[var(--c-steel)]">
-            Create an account to build and save your own decks in the Deck Builder (60+ cards, max
-            4 copies each).
+            Create an account to build and save your own decks in the Deck Builder (60+ cards, max 4
+            copies each).
           </p>
         ) : (
           <>

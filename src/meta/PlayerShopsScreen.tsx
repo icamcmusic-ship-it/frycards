@@ -760,7 +760,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                   .map((c) => `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}`)
                   .join(', ');
                 setNotice(
-                  names ? `Pack opened! You pulled: ${names}` : 'Pack opened! Check your Collection.',
+                  names
+                    ? `Pack opened! You pulled: ${names}`
+                    : 'Pack opened! Check your Collection.',
                 );
               }
               return e;
