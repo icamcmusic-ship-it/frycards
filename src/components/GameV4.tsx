@@ -1619,13 +1619,25 @@ export function GameV4({
       return 'Pick a highlighted target for the effect (✕ or Esc to cancel).';
     }
     if (stage === 'cpuGuard') {
+      // CONFIRM GUARDS is `disabled` while an assignment is illegal, so
+      // clicking it can't surface the reason and the `title` tooltip needs a
+      // hover — invisible on touch. Put it in the hint bar instead.
+      if (guardStep && guardProblem) return `⚠ ${guardProblem}`;
       if (guardStep)
         return 'Select an attacker line, then click your units to guard it (multiple guards OK). Unguarded attackers hit your Vitality.';
       return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
     }
     if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
     if (stage === 'play') {
-      if (g.clash) return 'Guards are set — RESOLVE CLASH to deal damage.';
+      // The attacker's own reaction window is easy to miss: the rulebook
+      // opens it to EITHER player, the engine and the CPU both use it, but
+      // the old hint only mentioned resolving — so a player never learned
+      // they could answer the guards before damage.
+      if (g.clash) {
+        return inMyReaction
+          ? 'Guards are set — invoke Quick Events / Ambush units to answer them, then RESOLVE CLASH.'
+          : 'Guards are set — RESOLVE CLASH to deal damage.';
+      }
       switch (g.phase) {
         case 'Main1':
         case 'Main2':
