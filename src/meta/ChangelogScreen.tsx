@@ -19,6 +19,7 @@ export const ENTRIES: ChangelogEntry[] = [
       'Card fix: Location cards no longer print a redundant essence-type pip next to the rarity marker — the essence type is already shown in the card\'s rules text, so the extra icon was just visual clutter.',
       'Match fix: hitting SKIP during the CPU\'s brief "thinking" pause right at the start of its turn used to do nothing — the match could get stuck there with no way to move forward. SKIP now works at that moment too.',
       'CPU fix: when deciding whether an all-in attack was truly lethal, the CPU used to assume any guard only soaks up 1-2 damage no matter how tough it actually was — so it could occasionally swing in thinking it had lethal against a beefy blocker when it didn\'t. It now accounts for the guard\'s real toughness.',
+      'Fix: a Store data hiccup on boot could strand players — including guests — on a dead-end "Couldn\'t reach the server" screen before Play As Guest was ever reachable. That data is optional for booting and no longer blocks the app.',
       'Another round of card cost/stat adjustments from this update\'s balance testing: eleven newly-flagged cards tuned for the first time, five repeat offenders got a second nudge, and two cards from last update\'s adjustments overshot and were reverted back to their original cost.',
     ],
   },

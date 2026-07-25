@@ -48,6 +48,20 @@ version of this history also powers the in-app Changelog screen
   guards were assigned. It now uses the guard's actual remaining Grit. The
   sim harness's shadow model was updated to match, so next balance pass's
   attack-decision numbers reflect this fix rather than the old bug.
+- **Guest/offline boot fix**: a failure fetching the Store's public catalog
+  data (shop items/pack types — used only to pre-warm the Store screen) used
+  to trip the same fatal "Couldn't reach the server" boot screen as an
+  actual auth failure, before `AuthScreen` (and its PLAY AS GUEST button)
+  was ever reached — so a real network hiccup on that one non-essential
+  endpoint could strand a player, including one who only wanted to play a
+  local guest match, on a dead-end retry loop. That fetch failing now just
+  leaves the Store's catalogs empty (it already has its own "nothing on the
+  shelf" empty state) instead of blocking the whole app from booting.
+- **Accessibility/markup fix**: the Dusk "choose what to shed" picker
+  rendered a card's own Essence Cost info button inside the card's own
+  "Shed this card" button — nested interactive buttons are invalid HTML and
+  confused screen readers about which control a click/Enter actually
+  activated. The outer shed control is no longer a nested `<button>`.
 - **Reliability fix**: the Collection screen's "QUICKSELL ALL [rarity]" bulk
   sell action had a code pattern our lint tooling couldn't verify as safe
   (a running total mutated across several `await`s inside the component);

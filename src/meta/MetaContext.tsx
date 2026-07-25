@@ -156,7 +156,16 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   }, [bootAttempt]);
 
   // Static store data (public, no auth needed) — preload every pack/cosmetic
-  // image up front so the Store never shows art popping in mid-browse.
+  // image up front so the Store never shows art popping in mid-browse. A
+  // failure here must NOT block boot: this is Store-only display data (the
+  // Store screen already has its own empty/RETRY handling for an empty
+  // `packTypes`/`shopItems`), not something AuthScreen or guest play needs.
+  // It used to set the same blocking `bootError` as the session check above,
+  // so a network hiccup reaching just this non-essential endpoint (while
+  // auth itself was fine, or even entirely offline where guest play should
+  // still work) permanently stranded every player — including guests — on
+  // the boot-error screen before AuthScreen's PLAY AS GUEST button was ever
+  // reachable.
   useEffect(() => {
     let cancelled = false;
     Promise.all([withDeadline(fetchShopItems(), 20_000), withDeadline(fetchPackTypes(), 20_000)])
@@ -166,13 +175,12 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         setPackTypes(packs);
         return preloadImages([...items.map((i) => i.image_url), ...packs.map((p) => p.image_url)]);
       })
-      .then(() => {
-        if (!cancelled) setAssetsLoading(false);
-      })
       .catch(() => {
-        if (cancelled) return;
-        setBootError("Couldn't reach the server. Check your connection and try again.");
-        setAssetsLoading(false);
+        // Leave shopItems/packTypes at their default `[]` — the Store screen
+        // already renders a "nothing on the shelf" empty state for that.
+      })
+      .finally(() => {
+        if (!cancelled) setAssetsLoading(false);
       });
     return () => {
       cancelled = true;

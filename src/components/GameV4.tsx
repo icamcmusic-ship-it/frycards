@@ -2303,23 +2303,41 @@ export function GameV4({
             <div className="flex flex-wrap gap-2 justify-center">
               {me.hand.map((c) => {
                 const sel = shedPick.includes(c.iid);
+                // A <div role="button">, not a <button>: CardFace renders its
+                // own interactive Essence Cost info button internally, and a
+                // <button> can't legally contain another <button> (invalid
+                // HTML — React warns of a hydration error, and it's also a
+                // real a11y bug since nested buttons confuse screen readers
+                // about which control activates on a click/Enter). Same
+                // pattern already used for the hand's preview cards above.
+                const toggle = () =>
+                  setShedPick((s) =>
+                    s === null
+                      ? s
+                      : sel
+                        ? s.filter((x) => x !== c.iid)
+                        : s.length < me.hand.length - MAX_HAND
+                          ? [...s, c.iid]
+                          : s,
+                  );
                 return (
-                  <button
+                  <div
                     key={c.iid}
-                    onClick={() =>
-                      setShedPick((s) =>
-                        s === null
-                          ? s
-                          : sel
-                            ? s.filter((x) => x !== c.iid)
-                            : s.length < me.hand.length - MAX_HAND
-                              ? [...s, c.iid]
-                              : s,
-                      )
-                    }
+                    role="button"
+                    tabIndex={0}
+                    onClick={toggle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggle();
+                      }
+                    }}
                     aria-pressed={sel}
                     aria-label={`${sel ? 'Keep' : 'Shed'} ${c.def.name}`}
-                    className={cn('relative rounded-[3px]', sel && 'ring-4 ring-[var(--c-red)]')}
+                    className={cn(
+                      'relative rounded-[3px] outline-none cursor-pointer',
+                      sel && 'ring-4 ring-[var(--c-red)]',
+                    )}
                   >
                     <CardFace def={c.def} size="compact" dimmed={sel} />
                     {sel && (
@@ -2327,7 +2345,7 @@ export function GameV4({
                         SHED
                       </span>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
