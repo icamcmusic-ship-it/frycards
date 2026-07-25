@@ -9,7 +9,7 @@ import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { fmtCredits, quicksellPrice } from './economy';
-import { cardColors, Color, COLORS } from '../game/v3/colors';
+import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
 
 const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
@@ -215,8 +215,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (ownedOnly && total === 0) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
-    if (color !== 'All' && c.type !== 'Leader') {
-      const cc = cardColors(c);
+    if (color !== 'All') {
+      // Leaders carry no essence pips of their own (cardColors would always
+      // read them as colorless) — their real identity lives in LEADER_COLORS,
+      // same lookup DeckBuilderScreen uses. Falling back to cardColors keeps
+      // any Leader missing from that map from vanishing under every filter.
+      const cc = c.type === 'Leader' ? LEADER_COLORS[c.id] || cardColors(c) : cardColors(c);
       if (color === 'Colorless' ? cc.length > 0 : !cc.includes(color as Color)) return false;
     }
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;

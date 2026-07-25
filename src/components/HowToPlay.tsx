@@ -315,6 +315,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
             <button
               onClick={() => setOpen(open === i ? -1 : i)}
+              aria-expanded={open === i}
               className="w-full text-left px-4 py-2 heading-font text-sm flex justify-between items-center bg-[var(--c-steel)] text-[var(--c-paper)] hover:bg-[var(--c-ink)]"
             >
               <span>{sec.title}</span>

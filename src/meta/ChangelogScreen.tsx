@@ -12,6 +12,19 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Second Look Update (v6.3)',
+    date: 'July 2026',
+    items: [
+      "Avatar of the Abyss gets a second nerf: last update's Commander removal helped, but it was still the clear top Leader in a dedicated head-to-head test. Its removal Ability now costs 1 more Resolve to use.",
+      "Resonant Event fix: last update's guess about which Resonant card was underperforming turned out to be backwards once we tested it properly — Dissolving Persona is fine; Bioluminescent Tide and Flash Freeze were the real problem. Both now cost 1 less.",
+      'Another round of card cost adjustments: ten newly-flagged cards cost more, eight cost less, eight repeat offenders from last update got a second nudge, and Familiar in the Dark (already at the cost ceiling) had its stats trimmed again.',
+      "Battle Pass fix: claiming your very first reward tier super fast could sometimes let a double-tap fire two claims at once — a boundary case (\"tier zero\") the button's busy-check missed.",
+      'Collection fix: filtering by color used to skip Leader cards entirely, so a Leader that didn\'t actually match your chosen color could still show up in the results.',
+      "Reliability fix: a handful of screens (Store, your Player Shop, Social's friends/trades/leaderboard/search) were showing an empty/blank state on a real connection hiccup instead of the RETRY button they already have — that button now actually shows up when it should.",
+      'Accessibility: the Concede, mulligan, and game-over dialogs now trap keyboard focus properly (and hand it back when you close them) instead of letting Tab reach the board underneath; How To Play\'s collapsible sections now announce open/closed to screen readers; the Starter Box dialog gained a proper label.',
+    ],
+  },
+  {
     version: 'Leader Check Update (v6.2)',
     date: 'July 2026',
     items: [

@@ -71,7 +71,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
   const itemById = useMemo(() => new Map(shopItems.map((s) => [s.id, s])), [shopItems]);
 
   const handleClaim = async (tier: BattlePassTier) => {
-    if (!season || busyTier) return;
+    if (!season || busyTier !== null) return;
     setError('');
     setNotice('');
     setBusyTier(tier.tier);

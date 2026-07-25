@@ -71,6 +71,7 @@ export function LeaderPicker({
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       role="dialog"
       aria-modal="true"
+      aria-label="Starter Box — pick your Leader"
     >
       <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0">
