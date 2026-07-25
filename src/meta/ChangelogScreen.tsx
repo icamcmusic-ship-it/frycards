@@ -12,6 +12,21 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Coin Flip Update (v6.6)',
+    date: 'July 2026',
+    items: [
+      'Who goes first is now a coin flip. Until now you were ALWAYS the first player, in every single match — the turn order was hardcoded. It is decided per match now, and the match header tells you whether you are ON THE PLAY or ON THE DRAW.',
+      'Going second is compensated differently. The second player used to draw an 8th opening card; testing measured that card as worth well under a percentage point, while the first player was winning around 60% of games. The advantage turned out to be about tempo, not cards: it was concentrated in fast games and disappeared entirely in long ones. So both players now open on 7 cards, and whoever is on the draw plays TWO basic Wellsprings on their opening turn instead — the second one arrives exhausted, so it powers your next turn. First-player win rate moved from 60% to 47%.',
+      'Card balance got a real fix at the source. Cost adjustments were quietly self-defeating: a card\'s Might/Grit (and an Event\'s effect size) were calculated FROM its cost, so making a weak card cheaper also made it weaker, and making a strong card pricier also made it stronger. Cards were being adjusted two and three times with nothing to show for it — Helix Swarm had been "buffed" three times into a 1/1 for 1, and Clockwork Nautilus was a 1/1 for 5 with two keywords. Cost now changes the price only: a cut is a genuine buff, a raise is a genuine nerf. Every over-stacked adjustment was reset and re-derived, so a lot of previously mangled cards now print sensible bodies.',
+      'Sunken Archive reverted to its original cost — an old adjustment had overshot badly and turned it into one of the strongest cards in the game. Skull Cathedral costs 1 more.',
+      'CPU fix: it now picks its Wellspring colors to actually unlock cards stuck in its hand. It was choosing purely on which color its hand demanded most, which could not tell that a color was already covered — so on roughly one turn in six it laid down a Wellspring that unlocked nothing while a different choice would have freed a stranded card.',
+      'CPU fix: it no longer piles every Charm onto its biggest attacker — the exact unit you most want to remove and most profitably block. It now favors durable bodies and spreads Charms out, so one removal spell cannot two-for-one it.',
+      'CPU fix: it stops holding a card and its essence back for a surprise play when you have nothing on board that could attack — a reaction window that was never going to open, in exchange for a wasted development turn.',
+      'Slow connections no longer stare at a blank loading screen. Boot allows each request up to 20 seconds; the splash now tells you it is connecting, says so more plainly if your network looks slow, and offers a RETRY button rather than making you wait it out.',
+      'The in-match Wellspring control now shows how many you have left this turn, instead of a tooltip that always claimed "one per turn".',
+    ],
+  },
+  {
     version: 'Starter Decks Update (v6.4)',
     date: 'July 2026',
     items: [

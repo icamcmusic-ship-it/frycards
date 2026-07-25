@@ -115,7 +115,7 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
  * Immobile is a drawback and discounts. */
 // v5.1: weights are now a PURE cost surcharge (the stat budget no longer
 // grows with them), tuned over two full sim passes to land carriers near 50%.
-// v5.3 (docs/BALANCE_SIM_FINDINGS_v6.1.md, two seeds + matched-deck run,
+// v5.3 balance pass (two seeds + matched-deck run,
 // then post-change verification pairs): Unbreakable stays 7 — the 9 (and
 // effectively-identical 8) trials cratered its carriers, and the original
 // +16.5 read turned out to be mostly the OLD dead-reaction-window meta:
@@ -137,7 +137,7 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
 // hardcoded per-mapper surcharges are gone), with values informed by the
 // 2208-game sim: Resonant up (carriers +20.7 win-rate delta), Bountiful
 // down (-24), Sacred kept cheap (-14.6), Runic/Soulbound/Resolute at 1.
-// v6.2 (docs/BALANCE_SIM_FINDINGS_v6.2.md, 18,048-game run — the first pass
+// v6.2 balance pass (18,048-game run — the first pass
 // with a real sample for the two keywords v6.1 flagged as too small-n to
 // touch): Resonant's tiny 84-game v6.1 read (+7.1) FLIPS hard at n=1088
 // (-14.5 archetype-normalized delta) — the double-resolution is not worth

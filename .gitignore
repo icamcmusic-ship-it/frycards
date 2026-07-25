@@ -7,13 +7,12 @@ coverage/
 .env*
 !.env.example
 
-# Local export of `select jsonb_agg(template) from public.cards;` used by
-# scripts/simulate-live.ts / analyze-costs.ts — a point-in-time snapshot,
-# not source data.
+# Live catalog snapshot written by `npm run fetch:cards` — a point-in-time
+# export of public.cards, not source data.
 scripts/live-cards.json
 
 # Raw per-run balance-sim JSON dumps (large, regeneratable via `npm run
-# sim:v4`/`sim:live`). Findings get written up in docs/BALANCE_SIM_FINDINGS_*.md;
-# scripts/diff-sim-runs.ts only ever needs the most recent couple of runs,
-# which stay on disk locally after a run but don't need to live in git.
+# sim:v4`). Findings get written up in docs/BALANCE_SIM_FINDINGS_*.md; only
+# the latest run or two are ever needed, and they stay on disk locally after
+# a run rather than living in git.
 docs/sim-runs/

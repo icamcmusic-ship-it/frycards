@@ -4,7 +4,7 @@
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
  * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
  * verified by scripts/fetch-cards.ts, and re-verified live for v6.2 — see
- * docs/BALANCE_SIM_FINDINGS_v6.2.md) and reports:
+ * v6.2 balance pass) and reports:
  *
  *  - match outcomes: win rates by Leader, color, first/second player,
  *    win condition (vitality vs deck-out), game length distribution
@@ -20,7 +20,7 @@
  *    color-clogged hands
  *  - invariant violations (engine correctness canaries)
  *
- * v5.2 additions (docs/BALANCE_SIM_FINDINGS_v6.1.md carry-forward items):
+ * v5.2 additions (v6.1 balance-pass carry-forward items):
  *  - archetype-normalized keyword deltas: carrier win rate residual computed
  *    against each game's own Leader-archetype baseline (8 Leaders = 8
  *    cohorts), not the flat 50% global baseline, to strip cohort noise.
@@ -78,8 +78,7 @@
  *  - Opening-hand curve quality: win rate by post-mulligan average cost.
  *  - Win-margin histogram (winner's remaining vitality buckets).
  *
- * v6.2 additions (carry-forward items from docs/BALANCE_SIM_FINDINGS_v6.1.md,
- * now superseded by docs/BALANCE_SIM_FINDINGS_v6.2.md):
+ * v6.2 additions (carry-forward items from the v6.1 balance pass):
  *  - Shadow attack heuristic rewritten to MIRROR ai.ts's actual chooseAttackers
  *    policy (all-in-when-lethal-survives-guarding, favorable trades, safe-vs-
  *    all, Swarmproof/Aerial awareness) instead of a strict kills-and-survives
@@ -124,7 +123,7 @@
  *    distinct from the existing attacker-side venomousSuicide and the
  *    missed-profitable-block guardDivergence check.
  *
- * v6.6 additions (docs/BALANCE_SIM_FINDINGS_v6.5.md carry-forward items):
+ * v6.6 additions (v6.5 balance-pass carry-forward items):
  *  - GROUND-TRUTH attack-decision capture (`onAttackDecision`, carry-forward
  *    #7): the shadow attacker set is now computed from the live state at the
  *    exact moment ai.ts's chooseAttackers returns, not from a pre-Main1
