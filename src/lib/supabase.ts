@@ -636,6 +636,28 @@ export async function claimStarterBox(leaderId: string): Promise<{
   };
 }
 
+/** One of the three fixed Starter Box prebuilt decks (see StarterDeckPicker). */
+export type StarterDeckKey = 'aggro' | 'midrange' | 'control';
+
+/**
+ * Alternate Starter Box claim: grants one of three fixed prebuilt 60-card
+ * decks (Common/Uncommon-heavy with a small handful of Rares, no
+ * Super-Rare-or-above, all non-foil) instead of picking a Leader for a
+ * randomized legal deck. Consumes the same one-time Starter Box grant as
+ * `claimStarterBox` — see `claim_starter_deck` (SECURITY DEFINER) for the
+ * server-side logic.
+ */
+export async function claimStarterDeck(deckKey: StarterDeckKey): Promise<{
+  data: (OpenPackResult & { leader_id: string; deck_saved: boolean }) | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('claim_starter_deck', { p_deck_key: deckKey });
+  return {
+    data: (data as OpenPackResult & { leader_id: string; deck_saved: boolean }) || null,
+    error: rpcError(error),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Friends & trading
 // ---------------------------------------------------------------------------

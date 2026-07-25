@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "frycards",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,7 +14,8 @@
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
     "fetch:cards": "tsx scripts/fetch-cards.ts",
-    "db:backfill": "tsx scripts/backfill-cards-db.ts"
+    "db:backfill": "tsx scripts/backfill-cards-db.ts",
+    "sim:v4": "tsx scripts/simulate-v5.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

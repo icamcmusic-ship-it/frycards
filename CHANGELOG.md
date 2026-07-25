@@ -8,6 +8,72 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v6.4 — Prebuilt starter decks, location card pip cleanup, balance pass
+
+- **New: prebuilt starter decks.** New accounts opening the Starter Box now
+  choose between picking their own Leader (a randomized legal deck, as
+  before) or one of three ready-to-play prebuilt decks — Aggro (Legendary
+  Diver), Midrange (Mer-King), Control (Ruin-Walker Overseer). Prebuilt
+  decks are Common/Uncommon-heavy with a small handful of Rares, no
+  Super-Rare-or-above cards, and are granted entirely non-foil. Implemented
+  server-side as a new `claim_starter_deck` RPC alongside the existing
+  `claim_starter_box`, consuming the same one-time Starter Box grant.
+- **Location card fix**: removed the produced-essence pip that sat in the
+  type line next to the rarity chip — redundant with the "Exhaust: add one
+  [type] essence" line already printed in the card's rules text.
+- **Card cost/stat adjustments** (5,952-game sim pass): eleven newly-flagged
+  cards adjusted for the first time, five repeat offenders from last update
+  got a second stacked point, and two cards from last update's adjustments
+  (Heart of the Thermal Grid, Shatterline) overshot into the opposite
+  direction and were reverted back to their original cost. Full list in
+  `docs/BALANCE_SIM_FINDINGS_v6.4.md`.
+- **Sim harness**: added per-Leader-ability usage/value tracking (splits the
+  existing per-Leader ability-use count by which of a Leader's two abilities
+  actually gets picked) and guard-trade quality tracking (of every guard
+  block the CPU assigns, whether it kills the attacker, trades with it, or
+  dies for nothing). Full pool parity re-verified 292/292 against live
+  Supabase.
+- **Match-hang fix**: hitting SKIP during the CPU's brief "thinking" pause
+  (before its turn had even started resolving) did nothing — the skip
+  handler only knew how to fast-forward the beat-by-beat animation timer,
+  which wasn't running yet at that point, so the match could sit stuck on
+  the CPU's turn indefinitely. SKIP now also fast-forwards that initial
+  delay straight into resolving the turn.
+- **CPU lethal-check fix**: the CPU's "is my all-in swing actually lethal"
+  math assumed an Overrun attacker's spill damage past a guard was always
+  `Might - 1` (or `- 2` for a Swarmproof pair), regardless of how tough that
+  guard actually was — so it wildly overestimated spill against a
+  high-Grit blocker (treating a 6-Grit wall as absorbing just 1 damage) and
+  could talk itself into an all-in attack that wasn't really lethal once
+  guards were assigned. It now uses the guard's actual remaining Grit. The
+  sim harness's shadow model was updated to match, so next balance pass's
+  attack-decision numbers reflect this fix rather than the old bug.
+- **Guest/offline boot fix**: a failure fetching the Store's public catalog
+  data (shop items/pack types — used only to pre-warm the Store screen) used
+  to trip the same fatal "Couldn't reach the server" boot screen as an
+  actual auth failure, before `AuthScreen` (and its PLAY AS GUEST button)
+  was ever reached — so a real network hiccup on that one non-essential
+  endpoint could strand a player, including one who only wanted to play a
+  local guest match, on a dead-end retry loop. That fetch failing now just
+  leaves the Store's catalogs empty (it already has its own "nothing on the
+  shelf" empty state) instead of blocking the whole app from booting.
+- **Accessibility/markup fix**: the Dusk "choose what to shed" picker
+  rendered a card's own Essence Cost info button inside the card's own
+  "Shed this card" button — nested interactive buttons are invalid HTML and
+  confused screen readers about which control a click/Enter actually
+  activated. The outer shed control is no longer a nested `<button>`.
+- **Reliability fix**: the Collection screen's "QUICKSELL ALL [rarity]" bulk
+  sell action had a code pattern our lint tooling couldn't verify as safe
+  (a running total mutated across several `await`s inside the component);
+  moved the sell loop into a standalone helper function with the same
+  behavior so it's both verifiably correct and passes CI again.
+- **Docs cleanup**: removed the superseded v6.3 findings doc (only the
+  latest sim findings doc is kept in-repo); fixed stale README references
+  (a leftover "30-card decks" line from before the 60-card rulebook-alignment
+  update, the already-retired prebuilt-archetype-decks mention, a dead link
+  to a deleted findings doc); fixed a broken CI step that referenced an
+  `npm run sim:v4` script which didn't actually exist in `package.json`.
+
 ### v6.3 — Resonant per-card fix, Avatar of the Abyss second nerf, bug hunt
 
 - **Avatar of the Abyss gets a second nerf**: last update's Commander strip
