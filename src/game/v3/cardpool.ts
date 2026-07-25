@@ -74,7 +74,6 @@ const COST_ADJUST: Record<string, number> = {
   crowned_manatee: +1, // v5.3: +8.0/+6.3 both seeds (and v5.2)
   constellation_crabs: +1, // v5.3: +7.6 seed 777 + both v5.2 seeds
   nebula_clutch: +1, // v5.3: +9.7 seed 1337 + both v5.2 seeds
-  shatterline: +1, // v5.3: +6.8/+7.8 both seeds
   submerged_starfall: -1, // v5.3: -9.5 + v5.2 seed-1337 -8.7
   nanite_purge_protocol: -1, // v5.3: negative both seeds + v5.2 seed 777
   coral_collapse: -2, // v5.3/v5.2: -4.2. v6.2: STILL -4.0 residual at n=1892
@@ -95,7 +94,6 @@ const COST_ADJUST: Record<string, number> = {
   sunken_archive: -1, // -3.8 residual, n=890
   // v6.2 second verification pass (after the above landed): re-ran the full
   // 18k-game suite and caught these newly-surfaced |z|>=2 outliers too.
-  heart_of_the_thermal_grid: -1, // -7.4 residual, z=-2.71, n=409
   ruthless_succession: -1, // -6.0 residual, z=-2.35, n=379
   kinetic_siphon_swarm: +1, // +11.3 residual, z=2.01, n=329
   // v6.3 pass (18,048-game run, harness v6.3): repeat offenders from v6.2
@@ -110,9 +108,9 @@ const COST_ADJUST: Record<string, number> = {
   ashen_circle_rite: -2, // v6.2 -1 (was -3.7). v6.3: still -3.1, z=-1.71, n=3583.
   sonic_shatter: -2, // v6.2 -1 (was -7.2). v6.3: still -2.4, z=-1.53, n=2416.
   celestial_attunement: -2, // v6.2 -1 (was -4.2). v6.3: still -2.4, z=-1.53, n=682.
-  // v6.3 new first-time flags (|z|>=1.5, 18,048-game run):
-  glass_shrimp: +1, // +11.5 residual, n=827
-  abyssal_pathway: +1, // +10.6 residual, n=490
+  // v6.3 new first-time flags (|z|>=1.5, 18,048-game run — see v6.4 block
+  // below for glass_shrimp/abyssal_pathway/towering_tsunami/secret_lair/
+  // helix_swarm, which repeated and got a second stacked point that pass):
   amber_sphere: +1, // +10.5 residual, n=189
   neon_moray: +1, // +10.3 residual, n=911
   haunted_submarine: +1, // +10.2 residual, n=777
@@ -121,13 +119,10 @@ const COST_ADJUST: Record<string, number> = {
   scallop_map: +1, // +9.5 residual, n=862
   urnbearer_of_blight: +1, // +9.5 residual, n=410
   ashhound_pack: +1, // +9.2 residual, n=165
-  towering_tsunami: -1, // -5.3 residual, n=974
   blood_moon_descent: -1, // -4.5 residual, n=1072
   cavernous_watcher: -1, // -4.5 residual, n=349
   obsidian_scalpel: -1, // -3.0 residual, n=884
-  secret_lair: -1, // -3.0 residual, n=705
   silver_chimera: -1, // -2.9 residual, n=1332
-  helix_swarm: -1, // -2.7 residual, n=481
   bubble_harvest: -1, // -2.6 residual, n=1251
   // v6.3 Resonant per-card fix (carry-forward from v6.2's Resonant keyword
   // cut): the new v6.3 by-cost-band keyword report splits Resonant's three
@@ -141,6 +136,44 @@ const COST_ADJUST: Record<string, number> = {
   // cost-5 cards).
   bioluminescent_tide: -1,
   flash_freeze: -1,
+  // v6.4 pass (5,952-game run, harness v6.4): repeat offenders from v6.3
+  // still outside |z|>=1.5 the same direction — second point stacked.
+  abyssal_pathway: +2, // v6.3 +1 (was +10.6). v6.4: still +10.6, z=1.84, n=490.
+  glass_shrimp: +2, // v6.3 +1 (was +11.5). v6.4: still +9.6, z=1.59, n=132.
+  secret_lair: -2, // v6.3 -1 (was -3.0). v6.4: still -3.8, z=-1.73, n=346.
+  helix_swarm: -2, // v6.3 -1 (was -2.7). v6.4: still -3.1, z=-1.55, n=256.
+  towering_tsunami: -2, // v6.3 -1 (was -5.3). v6.4: WORSE at -8.8, z=-2.97,
+  // n=281 — the cost cut alone hasn't fixed it; second point stacked per
+  // the standing repeat-offender rule (see carry-forward if a third pass
+  // still reads negative — may need a STAT_ADJUST buff instead of a further
+  // cost cut).
+  // v6.4 overshoot reverts: the v6.3 adjustment flipped the card's residual
+  // to the OPPOSITE sign this pass — reverted to 0 rather than stacked
+  // further in the same direction.
+  // heart_of_the_thermal_grid: v6.3 -1 (was -7.4) reverted — now +13.1
+  // residual, z=2.46, n=174 (overshot into overperforming). Entry removed.
+  // shatterline: v6.3 +1 (was +6.8/+7.8 both seeds) reverted — now -3.5
+  // residual, z=-1.65, n=220 (overshot into underperforming). Entry removed.
+  // v6.4 new first-time flags (|z|>=1.5, 5,952-game run):
+  magma_conduit_network: +1, // +16.6 residual, z=3.33, n=104
+  kinetix_blacksite_cavern: +1, // +12.5 residual, z=2.31, n=442
+  deceptive_angler: +1, // +11.5 residual, z=2.06, n=283
+  skydark_locust_host: +1, // +11.4 residual, z=2.04, n=136
+  shattered_horizon_protagonist: +1, // +10.9 residual, z=1.92, n=134
+  violet_haze_kunoichi: +1, // +10.6 residual, z=1.84, n=211
+  caldera_harvest_works: +1, // +10.5 residual, z=1.82, n=563
+  submerged_temple: +1, // +10.4 residual, z=1.79, n=122
+  thornfang_vine: +1, // +10.1 residual, z=1.72, n=1358
+  kinetic_anchor_monolith: +1, // +10.0 residual, z=1.69, n=624
+  dissolving_persona: +1, // +9.7 residual, z=1.62, n=377 (the Resonant
+  // carrier the v6.3 doc explicitly left untouched at +56.6% played win —
+  // now shows up as a genuine standalone cost outlier on its own numbers)
+  zen_decay: -1, // -4.5 residual, z=-1.9, n=95
+  sovereign_spires_of_arrak_zul: -1, // -4.0 residual, z=-1.78, n=568
+  floating_jellyfish: -1, // -3.2 residual, z=-1.58, n=277
+  the_mirrored_trench: -1, // -3.1 residual, z=-1.55, n=154
+  clockwork_nautilus: -1, // -3.0 residual, z=-1.53, n=994 (cost 7 already —
+  // a decrease is fine, only cost INCREASES clip at the ceiling)
 };
 const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
 
@@ -148,10 +181,13 @@ const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
  * cost cap of 7 where a COST_ADJUST would be clipped to nothing. */
 const STAT_ADJUST: Record<string, number> = {
   nanite_division_marshal: -2, // +8.5/+13.7 residual both seeds at cost 7
-  familiar_in_the_dark: -3, // v6.2: +13.2 residual at cost 7 (COST_ADJUST
+  familiar_in_the_dark: -4, // v6.2: +13.2 residual at cost 7 (COST_ADJUST
   // clips to nothing at the ceiling) — trim the stat budget instead. v6.3:
   // STILL +10.3 residual (z=1.87, n=544) after the first -2 — repeat
-  // overperformer, third point stacked.
+  // overperformer, third point stacked (-3). v6.4: STILL +10.6 residual
+  // (z=1.84, n=139) after that — fourth point stacked.
+  wingbone_horror: -2, // v6.4: +10.3 residual, z=1.77, n=336, cost 7 already
+  // (COST_ADJUST would clip to nothing at the ceiling) — trim stat budget.
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 

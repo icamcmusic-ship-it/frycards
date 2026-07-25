@@ -2117,29 +2117,6 @@ export function CardFace({
               {typeLineText(def)}
               {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
             </span>
-            {def.type === 'Location' && def.produces && (
-              <span
-                aria-label={`Produces ${def.produces} essence`}
-                title={`Exhaust: add one ${def.produces} essence`}
-                className={cn(
-                  'flex items-center justify-center rounded-full font-mono font-black leading-none shrink-0',
-                  fullArt ? 'border border-white/80' : 'border border-[var(--c-ink)]',
-                )}
-                style={{
-                  width: PIP_SIZE[size].d - 4,
-                  height: PIP_SIZE[size].d - 4,
-                  fontSize: PIP_SIZE[size].f - 2,
-                  backgroundColor: COLOR_PIP[def.produces].bg,
-                  color: COLOR_PIP[def.produces].fg,
-                }}
-              >
-                <EssenceIcon
-                  type={def.produces}
-                  color={COLOR_PIP[def.produces].fg}
-                  size={PIP_SIZE[size].d - 8}
-                />
-              </span>
-            )}
           </span>
           {/* MTG format: at the full tier the type line's right slot carries
               the rarity marker (set-symbol position) and stats live in the

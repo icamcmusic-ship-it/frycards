@@ -113,6 +113,17 @@
  *    end-of-phase floated essence bucketed into early/mid/late turns, to
  *    tell whether float is an opening-curve artifact or a late-game leak.
  *
+ * v6.4 additions:
+ *  - Per-Leader-ability usage/value (leaderAbilityUsage): splits the existing
+ *    flat abilityUsesPerGame by WHICH of a Leader's two abilities actually
+ *    got picked and its win rate when used, keyed by the ability's own rules
+ *    text — surfaces a kit where one ability is close to dead weight.
+ *  - Guard-trade quality (guardTradeQuality / lapses.guardDiesForNothing): of
+ *    every guard block actually assigned, whether it killed the attacker,
+ *    traded with it, or died for nothing — a defender-side lapse signal
+ *    distinct from the existing attacker-side venomousSuicide and the
+ *    missed-profitable-block guardDivergence check.
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -191,6 +202,27 @@ const kwStats: Record<string, KwStat> = {};
 for (const kw of KEYWORDS) kwStats[kw] = { carrierGames: 0, carrierWins: 0, activations: 0 };
 
 const leaderStats: Record<string, { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }> = {};
+
+// v6.4: per-Leader-ability usage/value — the existing abilityUsesPerGame is a
+// single number per Leader summing BOTH abilities together, which hides a
+// kit where one ability (e.g. the Resolve-builder) is chosen every game and
+// the other (the Resolve-spender) is picked so rarely it's effectively dead
+// weight. Keyed by the ability's own rules text (unique per Leader+ability,
+// already carried on the leaderAbility event) so no engine change is needed.
+const leaderAbilityStats: Record<string, Record<string, { uses: number; gamesWithUse: number; wins: number }>> = {};
+function las(leaderId: string, text: string) {
+  const m = (leaderAbilityStats[leaderId] ??= {});
+  return (m[text] ??= { uses: 0, gamesWithUse: 0, wins: 0 });
+}
+
+// v6.4: guard-trade quality — of every guard block actually assigned, did it
+// kill the attacker, trade with it, or just die for nothing? A new lapse
+// category distinct from the existing guardDivergence (missed profitable
+// block) and venomousSuicide (attacker-side blunder): this is the
+// DEFENDER assigning a guard that accomplishes nothing (dies, attacker
+// lives) when a lethal-necessity check wasn't in play — a clean signal for
+// a bad chump-block heuristic.
+const guardOutcomes = { guardWins: 0, mutualTrade: 0, guardDiesForNothing: 0, guardSurvivesNoKill: 0 };
 const colorStats: Record<string, { games: number; wins: number }> = {};
 for (const c of COLORS) colorStats[c] = { games: 0, wins: 0 };
 
@@ -312,6 +344,9 @@ const lapses = {
   // producible colors — handIsKeepable (ai.ts) checks cost/type but not color,
   // so a "keepable" hand can still be functionally dead this game.
   keptColorDeadHand: 0,
+  // v6.4: a defender-assigned guard died without killing (or even scratching
+  // meaningfully — see guardOutcomes for the full breakdown) its attacker.
+  guardDiesForNothing: 0,
 };
 
 // v6.3: per-leader idle-leader breakdown (global lapses.idleLeader stays the
@@ -609,6 +644,8 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
   const played: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
   const drawn: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
+  // v6.4: leader-ability texts each player actually used this game.
+  const abilityTextsUsed: Record<PlayerId, Set<string>> = { P1: new Set(), P2: new Set() };
   const perGame = {
     erodeStart: { P1: state.players.P1.deck.length, P2: state.players.P2.deck.length },
     leaderAbilityUses: { P1: 0, P2: 0 },
@@ -697,6 +734,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         mech.leaderAbilityUses++;
         usedAbility = true;
         perGame.leaderAbilityUses[pid]++;
+        const text = ev.text ?? ev.name;
+        las(decksByPid[pid].leaderId, text).uses++;
+        abilityTextsUsed[pid].add(text);
       }
       if (ev.kind === 'rebond') mech.rebonds++;
       // v5.3: Ambush activation = a UNIT invoked during the reaction window.
@@ -796,6 +836,25 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
         const guardDied = !findUnit(state, venomGuardIid);
         if (wonThisTurn || guardDied) lapses.venomousSuicideDeliberate++;
         else lapses.venomousSuicideBlunder++;
+      }
+    }
+
+    // v6.4: guard-trade quality — for every guard actually assigned, did it
+    // kill the attacker, trade with it, or die for nothing? Independent of
+    // the venomous-suicide check above (which is attacker-side and Venomous-
+    // specific), this is a defender-side signal on the guard's own value.
+    if (guardEv) {
+      for (const [attackerIid, guardIids] of Object.entries(guardEv.assignments)) {
+        const attackerAlive = !!findUnit(state, attackerIid);
+        for (const guardIid of guardIids) {
+          const guardAlive = !!findUnit(state, guardIid);
+          if (!attackerAlive && guardAlive) guardOutcomes.guardWins++;
+          else if (!attackerAlive && !guardAlive) guardOutcomes.mutualTrade++;
+          else if (attackerAlive && !guardAlive) {
+            guardOutcomes.guardDiesForNothing++;
+            lapses.guardDiesForNothing++;
+          } else guardOutcomes.guardSurvivesNoKill++;
+        }
       }
     }
 
@@ -1032,6 +1091,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       Object.keys(c.def.cost?.pips ?? {}).some((col) => !supply.has(col)),
     );
     if (clogged.length >= 3) lapses.colorCloggedGames++;
+
+    // v6.4: per-Leader-ability usage outcome.
+    for (const text of abilityTextsUsed[pid]) {
+      const s = las(deck.leaderId, text);
+      s.gamesWithUse++;
+      if (won) s.wins++;
+    }
 
     // Card stats.
     const inDeck = new Set(deck.cards);
@@ -1471,7 +1537,7 @@ const poolCoverage = (() => {
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.3',
+    version: 'v6.4',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -1630,6 +1696,25 @@ const report = {
       { idlePct: pct(s.idle, s.opportunities), opportunities: s.opportunities },
     ]),
   ),
+  // v6.4 additions.
+  leaderAbilityUsage: Object.fromEntries(
+    Object.entries(leaderAbilityStats).map(([id, abilities]) => [
+      POOL_BY_ID[id]?.name ?? id,
+      Object.fromEntries(
+        Object.entries(abilities).map(([text, s]) => [
+          text,
+          { uses: s.uses, winPct: pct(s.wins, s.gamesWithUse), gamesWithUse: s.gamesWithUse },
+        ]),
+      ),
+    ]),
+  ),
+  guardTradeQuality: {
+    guardWinsPct: pct(guardOutcomes.guardWins, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
+    mutualTradePct: pct(guardOutcomes.mutualTrade, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
+    guardDiesForNothingPct: pct(guardOutcomes.guardDiesForNothing, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
+    guardSurvivesNoKillPct: pct(guardOutcomes.guardSurvivesNoKill, Object.values(guardOutcomes).reduce((a, b) => a + b, 0)),
+    totalGuards: Object.values(guardOutcomes).reduce((a, b) => a + b, 0),
+  },
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -1663,6 +1748,8 @@ console.log('\nKeyword dead-weight (v6.3):', JSON.stringify(report.keywordDeadWe
 console.log('\nEssence float by game stage (v6.3):', JSON.stringify(report.essenceFloatByStage, null, 2));
 console.log('\nLeader idle-ability rate (v6.3):', JSON.stringify(report.leaderIdleAbility, null, 2));
 console.log('\nKept color-dead hands (v6.3):', lapses.keptColorDeadHand);
+console.log('\nLeader ability usage (v6.4):', JSON.stringify(report.leaderAbilityUsage, null, 2));
+console.log('\nGuard-trade quality (v6.4):', JSON.stringify(report.guardTradeQuality, null, 2));
 console.log('\nTop overperformers:');
 for (const c of report.topOverperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual +${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nTop underperformers:');

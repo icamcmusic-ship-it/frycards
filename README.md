@@ -9,7 +9,7 @@ decks, open packs and grow a collection.
 
 ## The Game (v5, one paragraph)
 
-Two players duel with 30-card decks of Units, Charms, Events and Locations,
+Two players duel with 60+-card decks of Units, Charms, Events and Locations,
 each led by a Leader with **Resolve**-fueled abilities and 20 starting
 **Vitality**. Locations exhaust for **Essence** of one of seven types (Ember,
 Tide, Root, Gale, Light, Shadow, Void); a card's Essence Cost is paid with
@@ -59,17 +59,19 @@ There are 8 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
 Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruinwalker
 Overseer and Sovereign of the Dying Star — each with a fixed two-color
 Essence identity, Resolve, and two Leader abilities (a Resolve-spending
-ability and a small Resolve-building one). Prebuilt archetype decks plus a
-randomized-deck generator live in `src/game/v3/decks.ts`; players build their
-own 30-card decks (max 3 copies per card, tighter caps at higher rarity) in
-the Deck Builder, backed by the `decks` table.
+ability and a small Resolve-building one). A randomized-deck generator lives
+in `src/game/v3/decks.ts` (used for guest play and the Starter Box); players
+build their own 60+-card decks (max 4 copies per card, tighter caps at
+higher rarity) in the Deck Builder, backed by the `decks` table.
 
 ## Meta-game
 
-Accounts (Supabase auth), profiles with gold/gems, a one-time free starter
-deck per account, card packs with rarity-slot configs (all opened
-server-side via SECURITY DEFINER RPCs), foils, cosmetics (card backs,
-banners, avatars), a collection browser and match rewards.
+Accounts (Supabase auth), profiles with gold/gems, a one-time Starter Box
+claim per account (pick a Leader, get a full legal 60-card deck), a choice
+of three prebuilt starter decks in the shop for new accounts, card packs
+with rarity-slot configs (all opened server-side via SECURITY DEFINER
+RPCs), foils, cosmetics (card backs, banners, avatars), a collection
+browser and match rewards.
 
 ## Engine & Balance
 
@@ -78,9 +80,9 @@ CPU opponent is `src/game/v3/ai.ts`, and `scripts/simulate-v5.ts` runs
 CPU-vs-CPU playtests across randomized archetype matchups with invariant
 checks (no runaway Vitality, hand-limit/duplicate-iid checks, deck
 conservation) plus CPU decision-quality and keyword/cost-tier balance
-telemetry. See [`docs/BALANCE_SIM_FINDINGS_v6.2.md`](docs/BALANCE_SIM_FINDINGS_v6.2.md)
-for the latest sim pass and what changed and why; `docs/ROADMAP.md` tracks
-forward-looking work.
+telemetry. See the latest `docs/BALANCE_SIM_FINDINGS_v*.md` for the most recent sim
+pass and what changed and why; `docs/ROADMAP.md` tracks forward-looking
+work.
 
 The game was converted to this essence-based ruleset from an earlier
 dice-placement prototype (see `CHANGELOG.md` for history); the shipped,

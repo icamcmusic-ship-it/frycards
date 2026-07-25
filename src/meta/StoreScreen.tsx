@@ -10,6 +10,8 @@ import {
   buyAndOpenPacks,
   openInventoryPacks,
   claimStarterBox,
+  claimStarterDeck,
+  StarterDeckKey,
   getDailyBounties,
   sellBountyCard,
   buyBountyCard,
@@ -27,6 +29,7 @@ import { fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
 import { packOdds, expectedRarities, sortedWeights } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
+import { StarterDeckPicker } from './StarterDeckPicker';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
@@ -84,8 +87,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     pulls: PackPull[];
   } | null>(null);
   const [oddsPack, setOddsPack] = useState<PackType | null>(null);
-  // Starter Box flow: pick a Leader first, then the RPC opens the box.
+  // Starter Box flow: pick how to open it first (own Leader vs. a prebuilt
+  // deck), then that choice's RPC opens the box.
+  const [choosingStarterFor, setChoosingStarterFor] = useState<PackType | null>(null);
   const [pickingLeaderFor, setPickingLeaderFor] = useState<PackType | null>(null);
+  const [pickingStarterDeckFor, setPickingStarterDeckFor] = useState<PackType | null>(null);
   const [claimingStarter, setClaimingStarter] = useState(false);
 
   const ownedCosmetics = useMemo(() => new Set(cosmetics.map((c) => c.shop_item_id)), [cosmetics]);
@@ -281,6 +287,31 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setPickingLeaderFor(null);
+      setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
+      refreshProfile();
+      refreshCollection();
+      refreshInventory();
+      refreshDecks();
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
+    } finally {
+      setClaimingStarter(false);
+    }
+  };
+
+  const handlePickStarterDeck = async (deckKey: StarterDeckKey) => {
+    if (claimingStarter || !pickingStarterDeckFor) return;
+    const pack = pickingStarterDeckFor;
+    setClaimingStarter(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data, error } = await claimStarterDeck(deckKey);
+      if (error || !data) {
+        setError(error || 'Starter Box claim failed.');
+        return;
+      }
+      setPickingStarterDeckFor(null);
       setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
       refreshProfile();
       refreshCollection();
@@ -491,7 +522,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       disabled={!!busyId}
                       onClick={() =>
                         pack.acquisition === 'starter_grant'
-                          ? setPickingLeaderFor(pack)
+                          ? setChoosingStarterFor(pack)
                           : handleOpenFromInventory(pack)
                       }
                     >
@@ -667,13 +698,36 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       {/* Transparent pack odds */}
       {oddsPack && <PackOddsModal pack={oddsPack} onClose={() => setOddsPack(null)} />}
 
-      {/* Starter Box — pick a Leader before the box actually opens */}
+      {/* Starter Box — choose how to open it: own Leader (randomized legal
+          deck) or one of three ready-to-play prebuilt decks. */}
+      {choosingStarterFor && (
+        <StarterChoiceModal
+          onPickLeader={() => {
+            setPickingLeaderFor(choosingStarterFor);
+            setChoosingStarterFor(null);
+          }}
+          onPickPrebuilt={() => {
+            setPickingStarterDeckFor(choosingStarterFor);
+            setChoosingStarterFor(null);
+          }}
+          onClose={() => setChoosingStarterFor(null)}
+        />
+      )}
       {pickingLeaderFor && (
         <LeaderPicker
           busy={claimingStarter}
           onPick={handlePickStarterLeader}
           onClose={() => {
             if (!claimingStarter) setPickingLeaderFor(null);
+          }}
+        />
+      )}
+      {pickingStarterDeckFor && (
+        <StarterDeckPicker
+          busy={claimingStarter}
+          onPick={handlePickStarterDeck}
+          onClose={() => {
+            if (!claimingStarter) setPickingStarterDeckFor(null);
           }}
         />
       )}
@@ -687,6 +741,73 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
           onDone={() => setOpening(null)}
         />
       )}
+    </div>
+  );
+}
+
+/** First step of opening the Starter Box: pick your own Leader (a
+ * randomized legal deck) or one of three ready-to-play prebuilt decks. */
+function StarterChoiceModal({
+  onPickLeader,
+  onPickPrebuilt,
+  onClose,
+}: {
+  onPickLeader: () => void;
+  onPickPrebuilt: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Starter Box — how do you want to open it?"
+    >
+      <div
+        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)]">
+          <div className="heading-font text-sm text-[var(--c-yellow)]">STARTER BOX</div>
+          <PopButton color="yellow" onClick={onClose} ariaLabel="Close Starter Box">
+            ✕
+          </PopButton>
+        </div>
+        <div className="p-4 flex flex-col gap-3">
+          <p className="text-[10px] font-bold text-[var(--c-steel)]">
+            How do you want to start? Both options are one-time and give you a full legal deck.
+          </p>
+          <button
+            onClick={onPickPrebuilt}
+            className="text-left p-3 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/30 transition-colors"
+          >
+            <div className="heading-font text-xs">READY-TO-PLAY DECK</div>
+            <p className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+              Pick from 3 prebuilt starter decks (Aggro / Midrange / Control) — Common/Uncommon
+              only, plus a handful of Rares. The fastest way into your first match.
+            </p>
+          </button>
+          <button
+            onClick={onPickLeader}
+            className="text-left p-3 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/30 transition-colors"
+          >
+            <div className="heading-font text-xs">PICK YOUR OWN LEADER</div>
+            <p className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+              Choose any Rare-or-below Leader and get a randomized legal 60-card deck across the
+              full collectible pool.
+            </p>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
