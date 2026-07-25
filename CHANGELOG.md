@@ -7,6 +7,63 @@ in-app Changelog screen (`src/meta/ChangelogScreen.tsx`).
 
 ## Unreleased
 
+### v6.2 — Leader nerf, keyword re-tune, CPU false-alarm fixes
+
+- **Avatar of the Abyss loses its Commander keyword**: two consecutive
+  balance passes flagged it as the top Leader outlier (67.0% then 70.3% win
+  rate) — it was stacking max Resolve, an unconditional -2 Shatter, and
+  Commander's global +1 Might aura in one kit. A dedicated per-Leader-pair
+  test suite confirmed the Leader kit itself (not just lucky decks) was the
+  problem, so Commander comes off — the same "strip a keyword from a repeat
+  offender" fix used on regular cards before.
+- **Keyword re-tune** (bigger sim samples this pass, including for two
+  keywords the last pass didn't have enough data on): Resonant Events cost 1
+  less (3→2 — the previous sample was too small and had it backwards),
+  Doublestrike 1 more (3→4), Reckless 1 more (1→2), Regenerate 1 less
+  (3→2), Surge to free (1→0, a second straight pass underperforming).
+- **Card cost/stat adjustments**: two repeat overperformers from last pass
+  that hadn't fully settled got a second bump (Slate-Scaled Serpent,
+  further +1; Coral Collapse and Tectonic Rift, further -1); fourteen newly
+  flagged cards were adjusted for the first time (ten costed up, four costed
+  down; see `docs/BALANCE_SIM_FINDINGS_v6.2.md` for the full list), and
+  Familiar in the Dark (already at the cost ceiling) had its stats trimmed
+  instead.
+- **CPU false-alarm fixes in our own balance tooling**: three of the CPU
+  "reasoning lapse" counters our balance sims track turned out to be
+  measuring the wrong thing rather than real CPU mistakes — a "died while
+  holding spare guards" counter was counting guards that had ALREADY blocked
+  this turn as spare (16.9% of games → a real 3.0%), a "bad removal target"
+  counter was flagging every correct "shatter around an Unbreakable wall" as
+  a mistake (4.2% → 2.8%), and a "should have attacked differently" counter
+  was comparing the CPU against an outdated attack model instead of its
+  actual (intentionally more aggressive) policy (40.1% → 21.8%). No CPU
+  behavior changed — only the numbers we use to judge it got more honest.
+- **Sim harness**: `venomousSuicide` now splits into deliberate trades vs
+  genuine blunders (most turned out deliberate), and a new deckSeed-pinned
+  per-Leader-pair test suite isolates Leader-kit balance from random-deck
+  luck for future passes. Full details: `docs/BALANCE_SIM_FINDINGS_v6.2.md`
+  (v6.1 findings doc removed; only the latest sim-run JSON is kept).
+- **Bug-hunt / QoL pass**: the Deck Builder's CHANGE LEADER button could
+  leave a color filter from the OLD Leader's identity in place — under a
+  single-color new Leader the filter selector itself may not even render,
+  silently zeroing the visible card pool with no way to see or clear the
+  stuck filter; it now resets on Leader change. The Starter Box Leader
+  picker could fire two claims from one fast double-click (or two different
+  tiles) before the parent's busy-state re-render landed — tiles now latch
+  disabled the instant one is picked, and un-latch again if the claim fails
+  so a retry isn't stuck forever. A card-text rendering bug meant an effect
+  explicitly printed as "0" (Deal a card, Erode) rendered as "1" instead,
+  because the text builder treated `value: 0` the same as "no value
+  printed" (falsy-checked instead of `undefined`-checked). A card's
+  auto-introduced keyword popover could pop back open on its own after a
+  player manually closed it, if its staggered auto-open timer hadn't fired
+  yet when they closed it. Player Shops' REOPEN SHOP / CLOSE SHOP / buy-slot
+  actions were silently resetting the in-progress "add listing" panel on the
+  same screen, inconsistent with every other action button here. Accessible
+  labels added to the in-match Wellspring buttons (icon-only, tooltip-only
+  before), the Starter Box close button, and the player-profile close
+  button.
+
 ### v6.1 — Clash & Coverage: rulebook combat fixes, sharper CPU, full-pool decks
 
 - **Overrun spill fixed (engine)**: a guarded attacker whose guards all died

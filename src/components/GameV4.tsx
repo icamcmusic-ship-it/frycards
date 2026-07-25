@@ -1943,6 +1943,7 @@ export function GameV4({
                     key={t}
                     onClick={() => tryWellspring(t)}
                     title={`Play a ${t} Wellspring (one per turn, free)`}
+                    aria-label={`Play a ${t} Wellspring`}
                     className="btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70"
                     style={{
                       width: 16,

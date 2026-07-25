@@ -391,6 +391,9 @@ function targetPhrase(target: Effect['target']): string {
 /** One-line rules sentence for an Effect, in Fry Cards terms. */
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
+  // Only fall back to 1 when no value was printed at all — `value: 0` is a
+  // legitimate (if unusual) effect value and must render as 0, not 1.
+  const vOr1 = eff.value === undefined ? 1 : eff.value;
   switch (eff.action) {
     case 'damage':
       return `Deal ${v} damage to ${targetPhrase(eff.target)}`;
@@ -399,7 +402,7 @@ export function describeEffect(eff: Effect): string {
         ? `Gain ${v} Vitality`
         : `Heal ${v} from ${targetPhrase(eff.target)}`;
     case 'draw':
-      return `Deal ${v || 1} card${(v || 1) === 1 ? '' : 's'} (draw)`;
+      return `Deal ${vOr1} card${vOr1 === 1 ? '' : 's'} (draw)`;
     case 'buff': {
       const isAll = eff.target === 'allFriendlyUnits';
       const subject =
@@ -411,7 +414,7 @@ export function describeEffect(eff: Effect): string {
     case 'banish':
       return `Banish ${targetPhrase(eff.target)}`;
     case 'erode':
-      return `Erode ${v || 1} (mill the enemy deck)`;
+      return `Erode ${vOr1} (mill the enemy deck)`;
     case 'recover':
       return `Recover ${targetPhrase(eff.target) || 'a friendly permanent'}`;
   }
@@ -710,12 +713,23 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const autoCloseRef = useRef<number | null>(null);
+  const autoOpenRef = useRef<number | null>(null);
   const text = textOverride ?? KEYWORD_GLOSSARY[kw];
 
   const clearAutoClose = () => {
     if (autoCloseRef.current !== null) {
       window.clearTimeout(autoCloseRef.current);
       autoCloseRef.current = null;
+    }
+  };
+
+  /** Cancels the staggered auto-introduce open, if it hasn't fired yet — a
+   * player who manually opens/closes the popover before its slot comes up
+   * shouldn't have it pop back open on its own afterwards. */
+  const clearAutoOpen = () => {
+    if (autoOpenRef.current !== null) {
+      window.clearTimeout(autoOpenRef.current);
+      autoOpenRef.current = null;
     }
   };
 
@@ -736,6 +750,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   const open = (e: React.MouseEvent) => {
     e.stopPropagation();
     clearAutoClose();
+    clearAutoOpen();
     if (pos) {
       setPos(null);
       return;
@@ -745,6 +760,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
 
   const close = () => {
     clearAutoClose();
+    clearAutoOpen();
     setPos(null);
   };
 
@@ -754,7 +770,8 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
     const now = Date.now();
     const showAt = Math.max(now, nextAutoIntroSlot);
     nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
-    const openTimeout = window.setTimeout(() => {
+    autoOpenRef.current = window.setTimeout(() => {
+      autoOpenRef.current = null;
       const next = computePos();
       if (!next) return;
       setPos(next);
@@ -764,7 +781,7 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
       }, AUTO_INTRO_VISIBLE_MS);
     }, showAt - now);
     return () => {
-      window.clearTimeout(openTimeout);
+      clearAutoOpen();
       clearAutoClose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

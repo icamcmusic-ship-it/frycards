@@ -170,6 +170,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 onClick={onClose}
                 className="absolute top-2 right-2"
                 title="Close profile"
+                ariaLabel="Close profile"
               >
                 ✕
               </PopButton>

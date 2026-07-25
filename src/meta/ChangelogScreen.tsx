@@ -12,6 +12,21 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Leader Check Update (v6.2)',
+    date: 'July 2026',
+    items: [
+      "Avatar of the Abyss loses its Commander keyword: two updates in a row flagged it as the strongest Leader by a wide margin (it was stacking max Resolve, a repeatable hard-removal Ability, AND a free +1 Might to your whole board), and a dedicated head-to-head test against every other Leader confirmed the kit itself was the problem, not just lucky decks. Should feel noticeably less dominant.",
+      'Keyword re-tune with bigger test samples: Resonant Events cost less (the small sample last update had it backwards), Doublestrike costs a bit more, Reckless costs a bit more, Regenerate costs less, and Surge is free again.',
+      'Another round of card cost adjustments: fourteen newly-flagged cards tuned for the first time, plus a second nudge for three repeat offenders from last update that hadn\'t fully settled.',
+      'Deck Builder fix: hitting CHANGE LEADER could leave your old color filter stuck in place, invisibly hiding your entire card pool if the new Leader only has one color (the filter dropdown itself might not even show up to let you clear it). Changing Leader now clears the filter.',
+      "Starter Box fix: a fast double-click on a Leader tile could fire two claim requests at once. Tiles now lock the instant you pick one, and unlock again if the claim fails so you can retry.",
+      'Card-text fix: an effect explicitly printed as "0" (a card that Deals 0 cards, or Erodes 0) was showing "1" instead — a rendering bug treated "no value" and "value of zero" as the same thing. A keyword\'s auto-introduced popup could also pop back open right after you closed it.',
+      'Player Shops fix: reopening or closing your shop (or buying a slot) could silently reset an in-progress "add listing" panel elsewhere on the same screen.',
+      'Quality of life: proper screen-reader labels added to the in-match Wellspring buttons, the Starter Box close button, and the player-profile close button.',
+      'Under the hood: our own balance-testing tools had three CPU "mistake counters" that were actually miscounting — the CPU wasn\'t making the mistakes we thought, our tools were misreading correct plays as errors. Fixed so future balance passes are reading real signal.',
+    ],
+  },
+  {
     version: 'Clash & Coverage Update (v6.1)',
     date: 'July 2026',
     items: [
