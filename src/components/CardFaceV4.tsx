@@ -2036,46 +2036,57 @@ export function CardFace({
             {def.rarity}
           </span>
         )}
-        {badge && (
-          <span
-            className={cn(
-              'absolute top-1 left-1 bg-[var(--c-red)] text-white font-black px-1 rounded-full',
-              cfg.artBadge,
+        {/* v6.5: badge/foil/serial/count/foilCount are stacked in ONE
+            top-left column (same technique as MicroCard's corner stack)
+            instead of four independently-positioned absolute badges. They
+            used to double up at literal top-1/left-1 (badge vs isFoil vs
+            serial) AND, on Full-Art prints, the bottom corners collided
+            head-on with the Full-Art-only color swatches/stat plate
+            (bottom-1 left-1 vs bottom-1.5 left-1.5, bottom-1 right-1 vs
+            bottom-1 right-1) — silently hiding owned-count/foil-count under
+            the Full-Art decoration. Stacking them all here leaves both
+            bottom corners free for those Full-Art-only elements. */}
+        {(badge || isFoil || serial || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
+          <div className="absolute z-10 top-1 left-1 flex flex-col items-start gap-0.5">
+            {badge && (
+              <span
+                className={cn(
+                  'bg-[var(--c-red)] text-white font-black px-1 rounded-full',
+                  cfg.artBadge,
+                )}
+              >
+                {badge}
+              </span>
             )}
-          >
-            {badge}
-          </span>
-        )}
-        {isFoil && (
-          <span
-            className={cn(
-              'absolute top-1 left-1 bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
-              cfg.foilBadge,
+            {isFoil && (
+              <span
+                className={cn(
+                  'bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
+                  cfg.foilBadge,
+                )}
+              >
+                ✦ FOIL
+              </span>
             )}
-          >
-            ✦ FOIL
-          </span>
-        )}
-        {serial && (
-          <span
-            className={cn(
-              'serial-plate absolute top-1 left-1 font-black rounded-full tracking-wide',
-              cfg.foilBadge,
+            {serial && (
+              <span
+                className={cn('serial-plate font-black rounded-full tracking-wide', cfg.foilBadge)}
+                title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
+              >
+                #{serial.number}/{capText(serial.cap)}
+              </span>
             )}
-            title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
-          >
-            #{serial.number}/{capText(serial.cap)}
-          </span>
-        )}
-        {(foilCount || 0) > 0 && (
-          <span className="absolute bottom-1 right-1 bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
-            ✦ {foilCount}
-          </span>
-        )}
-        {count !== undefined && count > 0 && (
-          <span className="absolute bottom-1 left-1 bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
-            ×{count}
-          </span>
+            {count !== undefined && count > 0 && (
+              <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
+                ×{count}
+              </span>
+            )}
+            {(foilCount || 0) > 0 && (
+              <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
+                ✦ {foilCount}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
