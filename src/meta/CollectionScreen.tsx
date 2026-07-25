@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, ProgressBar, CardMarketValuePanel, Credits } from './ui';
 import { cn } from '../lib/utils';
@@ -151,14 +151,16 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [bulkNotice, setBulkNotice] = useState('');
   const [bulkError, setBulkError] = useState('');
+  // A plain closure-captured accumulator mutated across await points reads
+  // as a render value to the React Compiler lint rule; a ref sidesteps it.
+  const bulkTotals = useRef({ credits: 0, cards: 0 });
 
   const bulkQuicksell = async (targetRarity: string) => {
     if (bulkBusy) return;
     setBulkBusy(true);
     setBulkError('');
     setBulkNotice('');
-    let totalCredits = 0;
-    let totalCards = 0;
+    bulkTotals.current = { credits: 0, cards: 0 };
     setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
     try {
       for (const c of POOL_V4) {
@@ -180,25 +182,32 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             // Cards from earlier iterations may already have sold (and the
             // credits already paid out) before this one failed — say so
             // instead of reporting a bare error that implies nothing happened.
+            const { credits, cards } = bulkTotals.current;
             setBulkError(
-              totalCards > 0
-                ? `Sold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)} before an error occurred: ${error}`
+              cards > 0
+                ? `Sold ${cards} card${cards === 1 ? '' : 's'} for ${fmtCredits(credits)} before an error occurred: ${error}`
                 : error,
             );
             return;
           }
           if (data) {
-            totalCredits += data.total;
-            totalCards += data.sold;
-            setBulkProgress((p) => (p ? { ...p, done: totalCards } : p));
+            bulkTotals.current = {
+              credits: bulkTotals.current.credits + data.total,
+              cards: bulkTotals.current.cards + data.sold,
+            };
+            const done = bulkTotals.current.cards;
+            setBulkProgress((p) => (p ? { ...p, done } : p));
           }
         }
       }
-      setBulkNotice(
-        totalCards === 0
-          ? `No spare ${targetRarity} cards to sell.`
-          : `Quicksold ${totalCards} ${targetRarity} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}.`,
-      );
+      {
+        const { credits, cards } = bulkTotals.current;
+        setBulkNotice(
+          cards === 0
+            ? `No spare ${targetRarity} cards to sell.`
+            : `Quicksold ${cards} ${targetRarity} card${cards === 1 ? '' : 's'} for ${fmtCredits(credits)}.`,
+        );
+      }
     } catch {
       setBulkError('Something went wrong — check your connection and try again.');
     } finally {
