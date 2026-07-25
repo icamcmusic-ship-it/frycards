@@ -90,8 +90,13 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   card** (rulebook §3). **[digital]** the editor caps decks at 100 cards,
   and premium rarities carry stricter economy caps: Super-Rare / Full-Art /
   Ultra-Rare up to 2, Mythic 1.
-- Opening hand: **7 cards**. **[digital]** the second player draws an 8th
-  card to offset the measured first-mover advantage.
+- Opening hand: **7 cards** for both players. **[digital]** the second player
+  instead offsets the first-mover advantage on their opening turn, when they
+  may play **two** basic Wellsprings — the second one enters **exhausted**,
+  so it ramps them into turn 2 rather than handing them a turn-1 swing.
+  (Sims located the first-mover edge as a *tempo* lead that decays in long
+  games, so the previous 8th-card compensation was on the wrong axis and
+  measured worth under a point.)
 - **Mulligan** (rulebook §3): before the first turn you may shuffle your
   hand back into your deck and draw **one card fewer** — repeatable
   (7 → 6 → 5 → …). **[digital]** the CPU mulls once on a hand with no
@@ -103,7 +108,8 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
    heal; Sacred Locations and Resolute Leaders tick; "at Dawn" triggers;
    Deal one card (the first player skips this on turn 1).
 2. **Main Phase I** — Invoke Units, Charms, Events, Sanctums, or your
-   Leader; play one basic Wellspring (once per turn).
+   Leader; play one basic Wellspring (once per turn — the second player gets
+   two on their opening turn, see §3).
 3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
    defender assigns guards → clash damage, simultaneous unless
    Quickstrike/Doublestrike changes the timing.

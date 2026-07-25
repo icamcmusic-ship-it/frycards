@@ -1,7 +1,7 @@
 # FryCards — Monochrome & Pop
 
 A digital implementation of the **FryCards** essence-based trading card game
-(Rulebook v5.1 — see [`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full
+(Rulebook v6.x — see [`docs/RULEBOOK.md`](docs/RULEBOOK.md) for the full
 Rules Bible), built with React + Vite + TypeScript in the **Monochrome & Pop**
 visual identity (stark comic standard: ink borders, flat offset shadows,
 Montserrat 900 headings). Play a full match against a CPU opponent, build
@@ -15,7 +15,9 @@ each led by a Leader with **Resolve**-fueled abilities and 20 starting
 Tide, Root, Gale, Light, Shadow, Void); a card's Essence Cost is paid with
 colored pips of matching Essence plus a generic amount from anything. Each
 turn runs Dawn (untap, draw) → Main Phase I → Clash → Main Phase II → Dusk
-(discard to 7). In Clash, attackers are declared, the defender assigns
+(shed to 7). Who takes the first turn is a coin flip; the player on the draw
+plays a second (exhausted) Wellspring on their opening turn to offset it. In
+Clash, attackers are declared, the defender assigns
 Guards, and a reaction window lets Quick Events and Ambush units respond
 before damage resolves. Keywords include Aerial, Overrun, Quickstrike,
 Doublestrike, Venomous, Siphon, Alert, Reckless, Swarmproof, Skywatch,
@@ -56,7 +58,7 @@ Mythic. Rarity shapes pack odds and gently scales a card's stat/cost budget;
 it carries no other rules weight.
 
 There are 8 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
-Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruinwalker
+Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruin-Walker
 Overseer and Sovereign of the Dying Star — each with a fixed two-color
 Essence identity, Resolve, and two Leader abilities (a Resolve-spending
 ability and a small Resolve-building one). A randomized-deck generator lives

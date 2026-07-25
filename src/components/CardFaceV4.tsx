@@ -2409,7 +2409,6 @@ export function CardInspectorModal({
     const prevFocused = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     return () => prevFocused?.focus?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

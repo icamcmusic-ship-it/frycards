@@ -105,10 +105,29 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
   }
   const have: Partial<Record<EssenceType, number>> = {};
   for (const l of p.locations) have[l.produces] = (have[l.produces] ?? 0) + 1;
+  // How many hand cards this location row can satisfy the COLORED pips of,
+  // optionally counting one more source of `extra`.
+  const satisfiable = (extra?: EssenceType): number => {
+    const pool: Partial<Record<EssenceType, number>> = { ...have };
+    if (extra) pool[extra] = (pool[extra] ?? 0) + 1;
+    return p.hand.filter((c) =>
+      Object.entries(c.def.cost?.pips ?? {}).every(
+        ([col, n]) => (pool[col as EssenceType] ?? 0) >= (n ?? 0),
+      ),
+    ).length;
+  };
+  const baseline = satisfiable();
   let best = choices[0];
   let bestScore = -Infinity;
   for (const t of choices) {
-    const s = (demand[t] ?? 0) - (have[t] ?? 0) * 0.5;
+    // Raw pip demand still breaks ties, but UNLOCKING a card that is
+    // currently uncastable on colour dominates it: the v6.6 sims measured
+    // 21,126 turns (~17% of all turns) where the colour played unlocked
+    // nothing while another legal choice would have freed a stuck hand card.
+    // Demand alone can't see this — a hand of three Ember cards keeps
+    // demanding Ember long after one Ember source already covers them all.
+    const unlocked = satisfiable(t) - baseline;
+    const s = unlocked * 10 + (demand[t] ?? 0) - (have[t] ?? 0) * 0.5;
     if (s > bestScore) {
       bestScore = s;
       best = t;
@@ -231,11 +250,30 @@ function isRemoval(eff?: Effect): boolean {
   );
 }
 
-/** Re-bond loose Worn Charms onto the biggest friendly unit when affordable. */
+/**
+ * Best friendly unit to hang a Charm on. Picking the biggest Might (the old
+ * rule) puts every Charm on the unit the opponent most wants to remove and
+ * most profitably blocks: the v6.6 sims measured 2,769 Charms bonded to a
+ * unit that left the field the same turn, buying nothing. Durability is
+ * weighted above raw Might, and a body already carrying Charms is
+ * de-prioritised so a single removal spell can't two-for-one (or worse).
+ */
+function bestBondTarget(state: GameState, pid: PlayerId): UnitInst | undefined {
+  const p = state.players[pid];
+  return [...p.field]
+    .map((u) => ({
+      u,
+      score: remainingGrit(state, u) * 2 + effMight(state, u) - u.charms.length * 3,
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.u;
+}
+
+/** Re-bond loose Worn Charms onto the sturdiest friendly unit when affordable. */
 function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
   if (p.wornCharms.length === 0 || p.field.length === 0) return;
-  const target = [...p.field].sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+  const target = bestBondTarget(state, pid);
+  if (!target) return;
   for (const charm of [...p.wornCharms]) {
     const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
     // Only tap once the re-bond is sure to go through — a failed attempt
@@ -295,9 +333,12 @@ function isReactionCandidate(def: CardDef): boolean {
 function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
   // Play a Wellspring (once per turn) then float all essence.
-  if (!p.wellspringPlayedThisTurn) {
+  // Loop rather than fire once: the second player's opening turn carries a
+  // two-Wellspring allowance (engine `wellspringAllowance`).
+  while (!p.wellspringPlayedThisTurn) {
     const t = chooseWellspring(state, pid);
-    if (t && playWellspring(state, pid, t)) observe?.({ kind: 'wellspring', essence: t });
+    if (!t || !playWellspring(state, pid, t)) break;
+    observe?.({ kind: 'wellspring', essence: t });
   }
 
   // Only hold essence back for the reaction window if the hand actually
@@ -307,7 +348,15 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   // location a later, unsorted card needed, leaving it falsely unaffordable
   // even though total essence was sufficient.
   const reserveCandidates = p.hand.filter((c) => isReactionCandidate(c.def));
-  const holdForReaction = reserveCandidates.length > 0;
+  // A reaction window only ever opens if the opponent actually clashes, which
+  // needs a unit of theirs that can attack. Holding a card AND the locations
+  // to pay for it across a whole turn against an empty enemy board just skips
+  // a development turn: the v6.6 sims measured 26.5% of all reservations
+  // expiring uncashed.
+  const oppCanAttack = state.players[opponentOf(pid)].field.some(
+    (u) => !unitHasKw(u, 'Immobile') && effMight(state, u) > 0,
+  );
+  const holdForReaction = reserveCandidates.length > 0 && oppCanAttack;
   // Reserve just the single best reaction card from this turn's own main
   // phase — Quick Events/Ambush units are legal in the caster's own main
   // phase too, and would otherwise always get spent there first, leaving
@@ -328,6 +377,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (reservedIid) {
     const rc = p.hand.find((c) => c.iid === reservedIid);
     if (!rc || !reserveLocationsForCost(state, pid, rc.def.cost)) reservedIid = undefined;
+    else telemetry.onReservation?.(pid, rc.iid, totalCost(rc.def.cost));
   }
 
   if (!reservedIid) tapAllLocations(state, pid);
@@ -357,9 +407,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
       if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
       const bondTargetIid =
-        c.def.type === 'Charm'
-          ? [...p.field].sort((x, y) => effMight(state, y) - effMight(state, x))[0]?.iid
-          : undefined;
+        c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
         observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
@@ -494,7 +542,11 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
       }
     }
   }
-  if (throughDamage >= opp.vitality) return candidates.map((u) => u.iid);
+  if (throughDamage >= opp.vitality) {
+    const allIn = candidates.map((u) => u.iid);
+    telemetry.onAttackDecision?.(state, pid, allIn);
+    return allIn;
+  }
   const picked: string[] = [];
   for (const u of candidates) {
     const m = effMight(state, u);
@@ -519,6 +571,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
       kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
+  telemetry.onAttackDecision?.(state, pid, picked);
   return picked;
 }
 

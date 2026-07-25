@@ -8,6 +8,80 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v6.6 — Randomised turn order, tempo-based first-mover compensation, cost-lever fix
+
+- **Turn order is now a per-match coin flip.** The human seat is hardcoded to
+  `P1` and turn order was hardcoded to start there, so the player was
+  permanently on the play in **every** match. `createGame` takes a
+  `firstPlayer`, `GameState` records it, and the turn-1 Deal skip, the
+  turn-counter rollover and the Wellspring allowance all key off it instead
+  of the literal `'P1'`. The match header shows ON THE PLAY / ON THE DRAW.
+- **First-mover compensation swapped from cards to tempo.** Six consecutive
+  balance passes measured P1 at ~59-63% despite the second player's 8th
+  opening card. The v6.6 harness located the edge: concentrated in short
+  games (76.5% at <=10 turns, 64.6% at 11-20) and gone by turn 21+ (51.8%) —
+  a tempo lead, not a card-advantage one, and the 8th card measured worth
+  under a point. Both players now open on 7 cards; whoever is on the draw
+  plays **two** basic Wellsprings on their opening turn, the second entering
+  exhausted. **P1 win rate 60.2% -> 47.2%; seat-swap 48.1%.**
+- **`COST_ADJUST` is now a price-only lever.** Units derived their stat
+  budget from cost, Events their effect magnitude, Charms their bond stats —
+  so a cost adjustment moved a card's power in lockstep with its price and
+  was close to balance-neutral in both directions. This is why the table had
+  accumulated two- and three-point stacks that never moved a residual, and
+  why three cards overshot into the opposite sign. It had printed
+  `helix_swarm` (three "buffs") as a cost-1 **1/1** and `clockwork_nautilus`
+  (two) as a cost-5 **1/1** with two keywords, while `glass_shrimp` gained
+  stats from each of its three "nerfs". Stats and magnitudes now derive from
+  the card's natural pre-adjustment cost. The table was reset to single
+  points and re-derived; Locations kept their stacks (`mapLocation` never
+  derived power from cost, so the lever was already clean there).
+- **Card changes**: `sunken_archive`'s v6.2 cut reverted (it had overshot to
+  a +17.6 residual and was the single driver of the four-pass Sacred keyword
+  flag; now reads -0.2). `skull_cathedral` +1, the one outlier that cleared
+  both the significance gate and two-cohort confirmation.
+- **CPU fixes**: Wellspring choice now weights unlocking a colour-stuck hand
+  card above raw pip demand (21,126 misplaced Wellsprings per run -> **0**);
+  Charms bond to the sturdiest body rather than the biggest Might and skip
+  bodies already carrying Charms (-14% Charms lost on a unit that died the
+  same turn); reaction-window holds only happen when the opponent actually
+  has a unit that can attack.
+- **UI/QoL**: the boot splash explains itself and offers a manual retry
+  instead of up to 20 silent seconds on a slow connection; the in-match
+  Wellspring control shows the remaining allowance instead of always
+  claiming "one per turn"; two stale eslint-disable directives removed.
+- **Shed-picker modal fix**: the full-screen shed overlay is opened by the
+  top-bar phase button, which sat *above* the overlay and stayed live — so
+  the modal never blocked its own opener and clicking it just re-entered the
+  shed flow. The phase button is now hidden while the picker is up.
+- **Two invisible in-match affordances surfaced**: the attacker's own
+  reaction window (opened by the engine, used by the CPU, but the hint bar
+  only ever said "RESOLVE CLASH"), and the reason CONFIRM GUARDS is
+  disabled — it is `disabled`, so clicking cannot surface the reason and the
+  only explanation was a `title` tooltip that shows nothing on touch. Both
+  now appear in the hint bar.
+- **Accessibility (WCAG 2.5.3 Label in Name)**: the shed picker's SUGGEST and
+  BACK buttons carried aria-labels that *replaced* their visible text
+  ("Auto-select cards to shed", "Cancel shedding"), so their accessible names
+  contained none of the words a player can see and voice control could not
+  target them. An audit across every `aria-label` in `src/` found exactly
+  these two; both now include the visible label.
+- **Verified end-to-end in a browser**: guest boot, every reachable menu
+  screen, and a full CPU match played to a result (coin flip, mulligan,
+  Main I → Clash → Main II, shed, human guard assignment, clash resolution,
+  game over) with zero console/page errors.
+- **Sim harness (v6.6)**: ground-truth attack-decision capture via a new
+  `onAttackDecision` telemetry hook (resolves the four-pass "21% attack
+  divergence" carry-forward — real divergence is **0.1%**, the rest was
+  snapshot/timing daylight); Wilson 95% intervals on every card residual
+  plus a significance-gated outlier list (the old z-score list was blind to
+  sample size, the likely cause of the overshoots); per-card keyword carrier
+  detail built from the full pool; Event effect-magnitude profile;
+  printed-budget stat-vs-cost audit; first-player-advantage diagnosis; and
+  five new CPU reasoning-lapse counters. Full pool parity re-verified
+  292/292 against live Supabase. Findings in
+  `docs/BALANCE_SIM_FINDINGS_v6.6.md`.
+
 ### v6.4 — Prebuilt starter decks, location card pip cleanup, balance pass
 
 - **New: prebuilt starter decks.** New accounts opening the Starter Box now
@@ -26,7 +100,7 @@ version of this history also powers the in-app Changelog screen
   got a second stacked point, and two cards from last update's adjustments
   (Heart of the Thermal Grid, Shatterline) overshot into the opposite
   direction and were reverted back to their original cost. Full list in
-  `docs/BALANCE_SIM_FINDINGS_v6.4.md`.
+  that pass's findings doc (since removed — only the latest sim doc is kept).
 - **Sim harness**: added per-Leader-ability usage/value tracking (splits the
   existing per-Leader ability-use count by which of a Leader's two abilities
   actually gets picked) and guard-trade quality tracking (of every guard
@@ -91,7 +165,7 @@ version of this history also powers the in-app Changelog screen
   last update that hadn't fully settled got a second nudge, ten newly-
   flagged cards cost more, eight cost less, and Familiar in the Dark
   (already at the cost ceiling) had its stats trimmed again. Full list in
-  `docs/BALANCE_SIM_FINDINGS_v6.3.md`.
+  that pass's findings doc (since removed) .
 - **Bug-hunt pass**: the Battle Pass's claim button used a check that
   treated tier 0 as "nothing in progress" (0 is falsy), so a fast double-tap
   on the very first tier could fire two claims at once before the button
@@ -117,8 +191,7 @@ version of this history also powers the in-app Changelog screen
   100% regardless of actual CPU behavior; real numbers now show a healthy
   0-0.3% idle rate across every Leader. Full pool parity re-verified
   292/292 against live Supabase. Full details:
-  `docs/BALANCE_SIM_FINDINGS_v6.3.md` (v6.2 findings doc removed; only the
-  latest sim-run JSON is kept).
+  that pass's findings doc (since removed) latest sim-run JSON is kept).
 
 ### v6.2 — Leader nerf, keyword re-tune, CPU false-alarm fixes
 
@@ -138,7 +211,7 @@ version of this history also powers the in-app Changelog screen
   that hadn't fully settled got a second bump (Slate-Scaled Serpent,
   further +1; Coral Collapse and Tectonic Rift, further -1); fourteen newly
   flagged cards were adjusted for the first time (ten costed up, four costed
-  down; see `docs/BALANCE_SIM_FINDINGS_v6.2.md` for the full list), and
+  down; see that pass's findings doc (since removed)  for the full list), and
   Familiar in the Dark (already at the cost ceiling) had its stats trimmed
   instead.
 - **CPU false-alarm fixes in our own balance tooling**: three of the CPU
@@ -154,7 +227,7 @@ version of this history also powers the in-app Changelog screen
 - **Sim harness**: `venomousSuicide` now splits into deliberate trades vs
   genuine blunders (most turned out deliberate), and a new deckSeed-pinned
   per-Leader-pair test suite isolates Leader-kit balance from random-deck
-  luck for future passes. Full details: `docs/BALANCE_SIM_FINDINGS_v6.2.md`
+  luck for future passes. Full details: that pass's findings doc (since removed) 
   (v6.1 findings doc removed; only the latest sim-run JSON is kept).
 - **Bug-hunt / QoL pass**: the Deck Builder's CHANGE LEADER button could
   leave a color filter from the OLD Leader's identity in place — under a
@@ -221,8 +294,7 @@ version of this history also powers the in-app Changelog screen
   stats, per-card play rate, full-pool coverage report, opening-hand curve
   quality, win-margin histogram; fixed the seat-swap first-player metric
   (old one measured deck A's overall win rate, i.e. nothing). Findings:
-  `docs/BALANCE_SIM_FINDINGS_v6.1.md` (v5.3 findings doc removed; only the
-  latest sim-run JSON is kept).
+  that pass's findings doc (since removed) latest sim-run JSON is kept).
 - **Docs cleanup**: retired `docs/RIFTBOUND_SPEC.md` and scrubbed the
   internal codename from code comments; `scripts/backfill-riftbound-db.ts`
   renamed to `backfill-cards-db.ts`.
@@ -319,7 +391,7 @@ version of this history also powers the in-app Changelog screen
   all-Warded enemy board) can no longer be invoked into a fizzle that wastes
   the card and essence — the client blocks it with an explanation. Units and
   Charms still play for their body/bond value and just lose the rider.
-- **Balance** (from the v5.3 sim pass, `docs/BALANCE_SIM_FINDINGS_v6.1.md`):
+- **Balance** (from the v5.3 sim pass, that pass's findings doc (since removed) ):
   keyword weights — Venomous 2→3, Aerial 2→3, Quickstrike 3→4, Siphon 2→0
   (reversing v5.2's backwards read), Swarmproof 2→1, Warded 0→-1 (now a
   small discount), Unbreakable kept at 7 after trials at 8-9 showed its old

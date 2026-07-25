@@ -95,7 +95,12 @@ export interface PlayerState {
   leader: LeaderZone;
   /** Essence pool — empties at the end of every phase. */
   essence: Partial<Record<EssenceType, number>>;
+  /** True once this player has used up their Wellspring allowance for the
+   * turn (see `wellspringAllowance`). */
   wellspringPlayedThisTurn: boolean;
+  /** Wellsprings actually played this turn — normally 0 or 1, but the second
+   * player gets two on their opening turn (see `wellspringAllowance`). */
+  wellspringsPlayedThisTurn: number;
   /** True once this player has invoked any card this turn (Surge discount).
    * Reset for both players at each Dawn. */
   invokedCardThisTurn: boolean;
@@ -120,6 +125,13 @@ export interface GameState {
   phase: Phase;
   /** Turn counter: 1 = first player's first turn. */
   turn: number;
+  /** Which seat took the first turn. Not always P1: the UI randomises this
+   * per match so the human isn't permanently on the play (and so the
+   * second-player compensation applies to whichever side actually goes
+   * second). Everything that used to key off the literal 'P1' — the turn-1
+   * Deal skip, the turn counter rollover, the Wellspring allowance — keys
+   * off this instead. */
+  firstPlayer: PlayerId;
   winner: PlayerId | null;
   clash: ClashState | null;
   log: string[];
@@ -278,6 +290,8 @@ export interface GameOptions {
   shuffle?: boolean;
   /** Default STARTING_HAND. */
   handSize?: number;
+  /** Which seat takes the first turn. Defaults to 'P1'. */
+  firstPlayer?: PlayerId;
 }
 
 function shuffleArr<T>(arr: T[], rng: Rng): void {
@@ -323,12 +337,15 @@ export function createGame(
       },
       essence: {},
       wellspringPlayedThisTurn: false,
+      wellspringsPlayedThisTurn: 0,
       invokedCardThisTurn: false,
     };
   };
+  const firstPlayer = opts.firstPlayer ?? 'P1';
   const state: GameState = {
     players: { P1: mk('P1', deckP1), P2: mk('P2', deckP2) },
-    active: 'P1',
+    active: firstPlayer,
+    firstPlayer,
     phase: 'Dawn',
     turn: 1,
     winner: null,
@@ -339,9 +356,12 @@ export function createGame(
   const handSize = opts.handSize ?? STARTING_HAND;
   for (const p of [state.players.P1, state.players.P2]) {
     if (opts.shuffle !== false) shuffleArr(p.deck, rng);
-    // Second player draws one extra card to offset the first-mover advantage
-    // (v5.1: sims measured 55.8% P1 win rate without it).
-    const n = handSize + (p.id === 'P2' && handSize > 0 ? 1 : 0);
+    // v6.6: both players open on the same hand size. The second player's
+    // first-mover compensation is now an extra opening Wellspring
+    // (`wellspringAllowance`) rather than an 8th card — see the rationale
+    // there: the measured P1 edge is a tempo lead, and the extra card was
+    // compensating on the wrong axis.
+    const n = handSize;
     // Route through dealCards so an undersized deck triggers the rulebook's
     // empty-deck loss instead of silently dealing a short hand.
     dealCards(state, p.id, n);
@@ -510,6 +530,16 @@ export interface EngineTelemetry {
    * assigned only to survive is not the same CPU-quality signal as a
    * discretionary guard that dies for nothing. */
   onGuardAssign?: (attackerIid: string, guardIid: string, mustSurvive: boolean) => void;
+  /** Fired by `chooseAttackers` (ai.ts) at the exact moment it returns, with
+   * the live state it actually decided from and the attacker set it picked.
+   * The harness's pre-Main1 snapshot could never distinguish a real CPU
+   * disagreement from Main-I board changes between the snapshot and the
+   * Clash; this hook removes that ambiguity entirely. */
+  onAttackDecision?: (state: GameState, pid: PlayerId, chosen: string[]) => void;
+  /** Fired when the CPU reserves a hand card + locations for the opponent's
+   * reaction window (`reserved` true), and again at end of turn with whether
+   * the reservation was ever cashed in. */
+  onReservation?: (pid: PlayerId, cardIid: string, cost: number) => void;
 }
 /** Mutable hook registry — the sim harness assigns, the UI leaves empty. */
 export const telemetry: EngineTelemetry = {};
@@ -735,6 +765,7 @@ function runDawn(state: GameState): void {
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
   p.wellspringPlayedThisTurn = false;
+  p.wellspringsPlayedThisTurn = 0;
   // v6.0 Surge tracking resets for both players at every turn boundary.
   state.players.P1.invokedCardThisTurn = false;
   state.players.P2.invokedCardThisTurn = false;
@@ -758,7 +789,7 @@ function runDawn(state: GameState): void {
   }
   runTriggers(state, state.active, 'atDawn');
   // Deal 1 (first player skips on turn 1).
-  if (!(state.turn === 1 && state.active === 'P1')) dealCards(state, state.active, 1);
+  if (!(state.turn === 1 && state.active === state.firstPlayer)) dealCards(state, state.active, 1);
   if (!state.winner) state.phase = 'Main1';
 }
 
@@ -774,7 +805,7 @@ function runDusk(state: GameState): void {
     state.log.push(`${p.id} sheds ${c.def.name}.`);
   }
   state.active = opponentOf(state.active);
-  if (state.active === 'P1') state.turn++;
+  if (state.active === state.firstPlayer) state.turn++;
   clearEssence(state);
   if (!state.winner) runDawn(state);
 }
@@ -828,14 +859,40 @@ export function wellspringChoices(state: GameState, pid: PlayerId): EssenceType[
   return identity ?? [...COLORS];
 }
 
-/** Play one basic Wellspring (auto-supplied) — once per turn, own main phase,
- * type must be inside the Leader's identity. */
+/**
+ * Wellsprings this player may play this turn: one, except the second player
+ * on their own opening turn, who gets two.
+ *
+ * **[digital]** first-mover compensation. Six consecutive balance passes
+ * measured P1 at ~59-63% despite P2's extra opening card, and the v6.6
+ * harness finally located the edge: it is concentrated in SHORT games (76.5%
+ * P1 at <=10 turns, 64.6% at 11-20) and washes out entirely by turn 21+
+ * (51.8%). That is the signature of a tempo/race lead, not a card-advantage
+ * one — so an extra card was compensating on the wrong axis. The extra
+ * opening Wellspring pays P2 back in tempo, on the axis the edge actually
+ * accrues on.
+ */
+export function wellspringAllowance(state: GameState, pid: PlayerId): number {
+  return pid !== state.firstPlayer && state.turn === 1 ? 2 : 1;
+}
+
+/** Play one basic Wellspring (auto-supplied) — own main phase, within this
+ * turn's allowance, type must be inside the Leader's identity. */
 export function playWellspring(state: GameState, pid: PlayerId, type: EssenceType): boolean {
   const p = state.players[pid];
   if (state.winner || !inOwnMain(state, pid) || p.wellspringPlayedThisTurn) return false;
   if (!wellspringChoices(state, pid).includes(type)) return false;
-  p.locations.push({ iid: nextIid(`wellspring_${type}`), produces: type, exhausted: false });
-  p.wellspringPlayedThisTurn = true;
+  // The second player's bonus opening Wellspring enters EXHAUSTED: it ramps
+  // them into turn 2 rather than handing them a turn-1 tempo swing. A ready
+  // one measured far too strong (P1 41.9%, a 19-point overcorrection).
+  p.locations.push({
+    iid: nextIid(`wellspring_${type}`),
+    produces: type,
+    exhausted: p.wellspringsPlayedThisTurn > 0,
+  });
+  p.wellspringsPlayedThisTurn++;
+  p.wellspringPlayedThisTurn =
+    p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid);
   state.log.push(`${pid} plays a ${type} Wellspring.`);
   return true;
 }

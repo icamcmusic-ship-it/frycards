@@ -87,7 +87,6 @@ export function Card3DInspector({
     const prevFocused = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     return () => prevFocused?.focus?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Enlarged size: ~2x the normal full card, clamped so the whole card (plus
