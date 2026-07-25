@@ -1,13 +1,13 @@
 /**
- * Riftbound v5.0 card pool, built from the universal card catalog (live
+ * Fry Cards v5.0 card pool, built from the universal card catalog (live
  * Supabase `cards` table, or the bundled fallback in `generated-cards.ts`).
  *
  * Each card's CORE IDENTITY is untouched — name, image URL, flavor text,
- * rarity, set. Every card is assigned its Riftbound mechanics (Essence Cost,
+ * rarity, set. Every card is assigned its v5 mechanics (Essence Cost,
  * Might/Grit, subtype, keywords, effects, Leader Resolve + abilities)
  * deterministically from a hash of its id plus its type and rarity, so the
  * whole set is playable under the rulebook and the assignment is identical
- * on every client. See docs/RIFTBOUND_SPEC.md.
+ * on every client.
  *
  * MUST NOT import engine.ts (spec contract).
  */
@@ -58,7 +58,7 @@ const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Co
 
 /** Per-card total-cost adjustments from sim outliers (residuals confirmed
  * across at least two independent runs before a card is listed).
- * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v5.3.md):
+ * v5.1 pass: first five entries. v5.3 pass (BALANCE_SIM_FINDINGS_v6.1.md):
  * repeat overperformers +1, repeat underperformers -1. */
 const COST_ADJUST: Record<string, number> = {
   heart_coral: +1, // v5.1: +21.7pt residual Sanctum
@@ -356,14 +356,14 @@ function mapEvent(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  // v6.0 Event keywords: ~12% Surge (conditional discount, +1 printed cost),
-  // ~8% Resonant (double resolution, rare+ only, +2 printed cost — its
-  // effect is scaled from the PRE-surcharge total so it doesn't double a
-  // full-cost effect for free).
+  // v6.0 Event keywords: ~12% Surge (conditional discount), ~8% Resonant
+  // (double resolution, rare+ only). Surcharges come from KEYWORD_COST via
+  // keywordCostAdj — the effect is scaled from the PRE-surcharge total so it
+  // doesn't double a full-cost effect for free.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const keywords: string[] =
     kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
-  const kwAdj = keywords.includes('Resonant') ? 2 : keywords.includes('Surge') ? 1 : 0;
+  const kwAdj = keywordCostAdj(keywords);
   const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
   const t = Math.max(1, totalCost(cost) - kwAdj);
@@ -394,12 +394,13 @@ function mapCharm(c: CardTemplate): CardDef {
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
   const subtype: CharmSubtype = roll(seed, 'ch-sub', 100) < 60 ? 'Bound' : 'Worn';
-  // v6.0 Charm keywords: ~12% Runic (bond cantrip, +1 printed cost); ~12%
-  // of BOUND charms Soulbound (returns to hand when its unit dies, +1).
+  // v6.0 Charm keywords: ~12% Runic (bond cantrip); ~12% of BOUND charms
+  // Soulbound (returns to hand when its unit dies). Surcharges come from
+  // KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ch-kw2', 100);
   const charmKws: string[] =
     kwRoll < 12 ? ['Runic'] : kwRoll < 24 && subtype === 'Bound' ? ['Soulbound'] : [];
-  const kwAdj = charmKws.length > 0 ? 1 : 0;
+  const kwAdj = keywordCostAdj(charmKws);
   const total = Math.max(1, Math.min(7, baseTotal(seed, rt) + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
   // Bond stats scale from the pre-surcharge total (keywords are never free stats).
@@ -460,10 +461,11 @@ function mapLocation(c: CardTemplate): CardDef {
   // Sanctums are always mono-colored: their produced type IS their identity.
   const produces = pick(seed, 3, COLORS);
   // v6.0 Location keywords: ~12% Bountiful (taps for 2 essence — replaces
-  // any other ability, +2 printed cost), ~14% Sacred (Dawn lifegain, +1).
+  // any other ability), ~14% Sacred (Dawn lifegain). Surcharges come from
+  // KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'loc-kw2', 100);
   const locKws: string[] = kwRoll < 12 ? ['Bountiful'] : kwRoll < 26 ? ['Sacred'] : [];
-  const kwAdj = locKws.includes('Bountiful') ? 2 : locKws.includes('Sacred') ? 1 : 0;
+  const kwAdj = keywordCostAdj(locKws);
   // Base total keeps the pre-v6 1..4 clamp so keyword-free Sanctums price
   // identically; the keyword surcharge stacks on top (ceiling 6).
   const total = Math.min(
@@ -506,7 +508,7 @@ function mapLocation(c: CardTemplate): CardDef {
 
 // ---------------------------------------------------------------------------
 // Leader mapping — identities from LEADER_COLORS; cost 3-4 total (+1 for
-// Commander, so 3-5) with one pip of each identity color, Resolve 3-6 by
+// Commander/Resolute, so 3-5) with one pip of each identity color, Resolve 3-6 by
 // rarity, and two abilities (a minus spender themed to the first color, and
 // a small plus builder).
 // ---------------------------------------------------------------------------
@@ -590,10 +592,11 @@ function mapLeader(c: CardTemplate): CardDef {
   for (const col of identity) pips[col] = (pips[col] ?? 0) + 1;
   const pipSum = Object.values(pips).reduce((a, b) => a + (b ?? 0), 0);
   // v6.0 Leader keywords: each Leader rolls Commander (+1 Might aura while
-  // fielded, +1 essence cost), Resolute (Resolve regen at Dawn), or neither.
+  // fielded), Resolute (Resolve regen at Dawn), or neither. Surcharges come
+  // from KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ldr-kw6', 6);
   const leaderKws: string[] = kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : [];
-  const total = 3 + roll(seed, 'ldr-cost', 2) + (leaderKws.includes('Commander') ? 1 : 0); // 3-5
+  const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = leaderMinusAbility(seed, identity[0]);

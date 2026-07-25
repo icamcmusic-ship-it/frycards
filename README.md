@@ -78,12 +78,11 @@ CPU opponent is `src/game/v3/ai.ts`, and `scripts/simulate-v5.ts` runs
 CPU-vs-CPU playtests across randomized archetype matchups with invariant
 checks (no runaway Vitality, hand-limit/duplicate-iid checks, deck
 conservation) plus CPU decision-quality and keyword/cost-tier balance
-telemetry. See [`docs/BALANCE_SIM_FINDINGS_v5.3.md`](docs/BALANCE_SIM_FINDINGS_v5.3.md)
+telemetry. See [`docs/BALANCE_SIM_FINDINGS_v6.1.md`](docs/BALANCE_SIM_FINDINGS_v6.1.md)
 for the latest sim pass and what changed and why; `docs/ROADMAP.md` tracks
 forward-looking work.
 
 The game was converted to this essence-based ruleset from an earlier
-dice-placement prototype (internally codenamed "Riftbound" during that
-conversion — see `docs/RIFTBOUND_SPEC.md` for the implementation contract
-and `CHANGELOG.md` for history); the shipped, player-facing name has always
-been **Fry Cards**.
+dice-placement prototype (see `CHANGELOG.md` for history); the shipped,
+player-facing name has always been **Fry Cards**, and `docs/RULEBOOK.md`
+is the canonical rules reference.

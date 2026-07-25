@@ -1,11 +1,11 @@
 /**
- * Riftbound v5.0 game engine (essence-based TCG rules).
+ * Fry Cards v5.0 game engine (essence-based TCG rules).
  *
  * Turn: Dawn (recover, atDawn triggers, Deal 1) -> Main I -> Clash -> Main II
  * -> Dusk (atDusk triggers, Shed to MAX_HAND, pass). Essence is produced by
  * exhausting Locations and the pool empties at the end of every phase.
  * Replaces the v4.x dice-placement engine (dice, rolls, combos, Cast Slots)
- * entirely. See docs/RIFTBOUND_SPEC.md.
+ * entirely.
  */
 import { CardDef, Effect, EssenceCost, LEADER_HP, MAX_HAND, hasKw } from './cards';
 import { COLORS, EssenceType, LEADER_COLORS } from './colors';
@@ -342,10 +342,9 @@ export function createGame(
     // Second player draws one extra card to offset the first-mover advantage
     // (v5.1: sims measured 55.8% P1 win rate without it).
     const n = handSize + (p.id === 'P2' && handSize > 0 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const c = p.deck.pop();
-      if (c) p.hand.push(c);
-    }
+    // Route through dealCards so an undersized deck triggers the rulebook's
+    // empty-deck loss instead of silently dealing a short hand.
+    dealCards(state, p.id, n);
   }
   runDawn(state); // first player's Dawn (skips the Deal on turn 1)
   return state;
@@ -359,6 +358,11 @@ export function createGame(
  */
 export function mulliganHand(state: GameState, pid: PlayerId): boolean {
   const p = state.players[pid];
+  // Only legal before the first turn's actions: turn 1, no clash yet, still
+  // in Dawn/Main1, and this player hasn't invoked anything.
+  if (state.winner || state.turn !== 1 || state.clash) return false;
+  if (state.phase !== 'Dawn' && state.phase !== 'Main1') return false;
+  if (p.invokedCardThisTurn || p.leader.invoked) return false;
   const n = p.hand.length - 1;
   if (n < 0) return false;
   p.deck.push(...p.hand);
@@ -367,10 +371,7 @@ export function mulliganHand(state: GameState, pid: PlayerId): boolean {
     const j = Math.floor(state.rng() * (i + 1));
     [p.deck[i], p.deck[j]] = [p.deck[j], p.deck[i]];
   }
-  for (let i = 0; i < n; i++) {
-    const c = p.deck.pop();
-    if (c) p.hand.push(c);
-  }
+  dealCards(state, pid, n);
   state.log.push(`${pid} mulligans to ${n}.`);
   return true;
 }
@@ -667,7 +668,9 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   if (dest === 'void') p.voidPile.push(inst);
   else p.ashPile.push(inst);
   state.log.push(`${u.def.name} ${dest === 'void' ? 'was banished' : 'was shattered'}.`);
-  if (dest === 'ash') runTriggers(state, u.owner, 'dies', u);
+  // Rulebook "when ... leaves the field" has no ash/void distinction: 'dies'
+  // triggers fire on banish too.
+  runTriggers(state, u.owner, 'dies', u);
 }
 
 /** Shatter a unit (Unbreakable prevents it). Returns true if it was shattered. */
@@ -804,8 +807,10 @@ function inOwnMain(state: GameState, pid: PlayerId): boolean {
   );
 }
 
-function reactionOpenFor(state: GameState, pid: PlayerId): boolean {
-  return state.clash?.step === 'reaction' && pid !== state.active;
+function reactionOpenFor(state: GameState, _pid: PlayerId): boolean {
+  // Rulebook: the guard-step reaction window is open to EITHER player — the
+  // engine only validates legality; turn order is the callers' concern.
+  return state.clash?.step === 'reaction';
 }
 
 // ---------------------------------------------------------------------------
@@ -839,7 +844,7 @@ export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: s
   if (!loc || loc.exhausted) return false;
   loc.exhausted = true;
   // v6.0 Bountiful Sanctums produce 2 essence per exhaust.
-  const amount = loc.def && hasKw(loc.def, 'Bountiful') ? 2 : 1;
+  const amount = locationYield(loc);
   if (amount === 2) telemetry.onKeywordProc?.('Bountiful', 1);
   p.essence[loc.produces] = (p.essence[loc.produces] ?? 0) + amount;
   return true;
@@ -1178,9 +1183,12 @@ export function resolveClash(state: GameState): boolean {
       .map(([a]) => a),
   );
   const dealtBy = new Set<string>();
+  // Damage each attacker has assigned to its guards across BOTH sub-steps —
+  // Overrun only ever spills (Might - total guard absorption) to the face.
+  const absorbed = new Map<string, number>();
   for (const step of ['first', 'normal'] as const) {
     if (state.winner || !state.clash) break;
-    const packets = collectStepWithHistory(state, step, everGuarded);
+    const packets = collectStepWithHistory(state, step, everGuarded, absorbed);
     const preFieldCount =
       step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;
     for (const pkt of packets) {
@@ -1208,6 +1216,7 @@ function collectStepWithHistory(
   state: GameState,
   step: 'first' | 'normal',
   everGuarded: Set<string>,
+  absorbed: Map<string, number>,
 ): DamagePacket[] {
   const clash = state.clash!;
   const defenderId = opponentOf(state.active);
@@ -1226,11 +1235,17 @@ function collectStepWithHistory(
     if (!participates(attacker, step)) continue;
     let might = effMight(state, attacker);
     if (guards.length === 0) {
-      // Never guarded: hits the defender. Guards all dead already: Overrun only.
-      if (!everGuarded.has(attackerIid) || unitHasKw(attacker, 'Overrun')) {
+      if (!everGuarded.has(attackerIid)) {
+        // Never guarded: hits the defender for full Might.
         packets.push({ source: attacker, targetPlayer: defenderId, amount: might });
-        if (everGuarded.has(attackerIid) && might > 0)
-          telemetry.onKeywordProc?.('Overrun', might);
+      } else if (unitHasKw(attacker, 'Overrun')) {
+        // Guards all dead already: Overrun spills only the EXCESS past what
+        // was already assigned to guards; non-Overrun deals no face damage.
+        const spill = Math.max(0, might - (absorbed.get(attackerIid) ?? 0));
+        if (spill > 0) {
+          packets.push({ source: attacker, targetPlayer: defenderId, amount: spill });
+          telemetry.onKeywordProc?.('Overrun', spill);
+        }
       }
       continue;
     }
@@ -1240,6 +1255,7 @@ function collectStepWithHistory(
       const need = venom ? 1 : Math.max(1, remainingGrit(state, g));
       const dealt = Math.min(might, need);
       packets.push({ source: attacker, targetUnit: g, amount: dealt });
+      absorbed.set(attackerIid, (absorbed.get(attackerIid) ?? 0) + dealt);
       might -= dealt;
     }
     if (might > 0 && unitHasKw(attacker, 'Overrun')) {

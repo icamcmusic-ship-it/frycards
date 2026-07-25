@@ -265,6 +265,11 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         // Ignore — local cleanup below still runs.
       }
     }
+    // Clear local state immediately rather than waiting on onAuthStateChange —
+    // if that callback never fires (e.g. the server sign-out failed), the UI
+    // would otherwise stay "signed in" against a dead session.
+    setSession(null);
+    setProfile(null);
     setGuest(false);
   }, []);
 

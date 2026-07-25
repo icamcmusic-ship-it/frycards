@@ -285,7 +285,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
 // Editor
 // ---------------------------------------------------------------------------
 const TYPE_FILTERS = ['All', 'Unit', 'Charm', 'Event', 'Location'];
-// Total-essence-cost buckets (Riftbound v5.0); everything 7+ shares a bucket.
+// Total-essence-cost buckets (Fry Cards v5.0); everything 7+ shares a bucket.
 const COST_FILTERS = ['All', '0', '1', '2', '3', '4', '5', '6', '7+'];
 const COST_BUCKETS = ['0', '1', '2', '3', '4', '5', '6', '7+'];
 
@@ -533,7 +533,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return (
       <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
         <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
-          <PopButton onClick={onDone} color="yellow">
+          {/* Routed through handleBack, not onDone directly — reaching this
+              step with a dirty draft (e.g. CHANGE LEADER on an edited deck,
+              or a just-imported code) must still get the discard confirm. */}
+          <PopButton onClick={handleBack} color="yellow">
             &lt; BACK
           </PopButton>
           <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR LEADER</h1>
@@ -626,6 +629,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-48"
           />
           <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
+          <PopButton
+            color="steel"
+            onClick={() => setLeaderId(null)}
+            title="Pick a different Leader — keeps the current card list"
+          >
+            CHANGE LEADER
+          </PopButton>
           {colorIdentity && (
             <span className="flex items-center gap-1 shrink-0" title="Color identity — only cards in these colors are legal in this deck">
               {colorIdentity.map((c) => (

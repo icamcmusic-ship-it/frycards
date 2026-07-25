@@ -1,5 +1,5 @@
 /**
- * Riftbound v6.0 keyword table sanity: the legal set, UI text, cost weights,
+ * Fry Cards v6.0 keyword table sanity: the legal set, UI text, cost weights,
  * and per-type vocabulary all stay in lockstep, and the color theming table
  * only references real keywords.
  */

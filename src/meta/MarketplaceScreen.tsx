@@ -116,12 +116,13 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [bidFor]);
 
-  // Ticks once a minute so auction countdowns ("Xh Ym left") and "ended"
+  // Ticks every 10s so auction countdowns ("Xh Ym left") and "ended"
   // states advance on their own instead of freezing at whatever "now" was
-  // when the screen mounted, mirroring StoreScreen's daily-pack countdown.
+  // when the screen mounted — a full minute between ticks left up to 60s
+  // where an already-ended auction still showed live BID/BUY buttons.
   const [, setTick] = useState(0);
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 60_000);
+    const id = window.setInterval(() => setTick((t) => t + 1), 10_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -267,7 +268,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     // Already the top bidder: bidding again would only refund
                     // your own hold and re-hold a larger amount against
                     // yourself for no competitive gain. Disable and say so.
-                    disabled={busy || !profile || highBidder}
+                    disabled={busy || !profile || highBidder || timedOut}
                     title={highBidder ? "You're already the top bidder" : undefined}
                     onClick={() => {
                       setBidAmount(minBidFor(l));
@@ -281,7 +282,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   <PopButton
                     color="yellow"
                     disabled={
-                      busy || !profile || profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
+                      busy ||
+                      !profile ||
+                      timedOut ||
+                      profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
                     }
                     onClick={() => {
                       const price = isAuction ? (l.buyout ?? 0) : l.price;
@@ -537,7 +541,7 @@ function SellForm({
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
-    [collection, locked, search],
+    [collection, locked, serializedReserved, search],
   );
 
   // Look the selected card up in the full collection, not the search-filtered

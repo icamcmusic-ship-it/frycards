@@ -4,7 +4,7 @@
  * and reads identically no matter where it's shown. Real trading-card
  * proportions: 2.5" × 3.5" (5:7).
  *
- * Riftbound conversion: the dice-era Cast Slot cost UI (threshold die,
+ * Essence-engine conversion: the dice-era Cast Slot cost UI (threshold die,
  * exact/sum kinds, combo-pattern gates) is replaced by an ESSENCE COST row
  * of colored pips + a generic numeral; ATK/HP gems are now Might/Grit;
  * the type line prints "Type — Subtype"; Leaders show Resolve and their
@@ -344,7 +344,7 @@ const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> =
 };
 
 /** v5.0 glossary backing every clickable term on a card face: the full
- * Riftbound keyword set (KEYWORD_TEXT) plus the subtype/frame terms a card
+ * Fry Cards keyword set (KEYWORD_TEXT) plus the subtype/frame terms a card
  * can print (Quick, Slow, Bound, Worn, Sanctum, Re-bond, Resolve, …). */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   ...KEYWORD_TEXT,
@@ -388,7 +388,7 @@ function targetPhrase(target: Effect['target']): string {
   }
 }
 
-/** One-line rules sentence for an Effect, in Riftbound terms. */
+/** One-line rules sentence for an Effect, in Fry Cards terms. */
 export function describeEffect(eff: Effect): string {
   const v = eff.value ?? '';
   switch (eff.action) {

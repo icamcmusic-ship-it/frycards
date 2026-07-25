@@ -36,6 +36,27 @@ test('caps the aggregate copy count across repeated entries for the same id', ()
   expect(ok).toEqual({ leaderId: 'lead_1', cardIds: ['unit_a', 'unit_a', 'unit_a', 'unit_a'] });
 });
 
+test('rejects a Leader id in the deck body', () => {
+  expect(decodeDeckCode('FRY1:lead_1:unit_a,lead_1', db)).toHaveProperty('error');
+});
+
+test('rejects codes whose body exceeds DECK_MAX total cards', () => {
+  // 26 distinct ids at 4 copies each = 104 > DECK_MAX (100). Every entry is
+  // individually legal — only the aggregate deck size is not.
+  const big = new Map(db);
+  const entries: string[] = [];
+  for (let i = 0; i < 26; i++) {
+    const id = `bulk_${i}`;
+    big.set(id, { id, type: 'Unit' } as CardTemplate);
+    entries.push(`${id}*4`);
+  }
+  expect(decodeDeckCode(`FRY1:lead_1:${entries.join(',')}`, big)).toHaveProperty('error');
+  // Exactly DECK_MAX (25 × 4 = 100) still decodes fine.
+  const ok = decodeDeckCode(`FRY1:lead_1:${entries.slice(0, 25).join(',')}`, big);
+  expect(ok).toHaveProperty('cardIds');
+  expect((ok as { cardIds: string[] }).cardIds).toHaveLength(100);
+});
+
 test('tolerates surrounding whitespace', () => {
   const res = decodeDeckCode('  FRY1:lead_1:unit_a \n', db);
   expect(res).toEqual({ leaderId: 'lead_1', cardIds: ['unit_a'] });

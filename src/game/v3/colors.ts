@@ -1,11 +1,11 @@
 /**
- * Riftbound v5.0 Essence Types — the game's seven colors.
+ * Fry Cards v5.0 Essence Types — the game's seven colors.
  *
  * Unlike the old v4.x system (colors derived from keywords), a card's color
  * identity is now printed directly on the card: it is the set of colored
  * pips in its Essence Cost (`CardDef.cost.pips`). A card whose cost has no
  * colored pips is colorless and legal in every deck. See
- * docs/RIFTBOUND_SPEC.md and docs/COLOR_IDENTITY.md.
+ * docs/RULEBOOK.md.
  */
 import type { CardDef } from './cards';
 

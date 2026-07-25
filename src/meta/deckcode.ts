@@ -7,7 +7,7 @@
  * field, so this works for both the legacy CardTemplate pool and the v4.2
  * CardDef pool.
  */
-import { maxCopiesForRarity } from '../game/v3/decks';
+import { DECK_MAX, maxCopiesForRarity } from '../game/v3/decks';
 
 const PREFIX = 'FRY1';
 
@@ -40,6 +40,10 @@ export function decodeDeckCode(
     const n = nStr ? parseInt(nStr, 10) : 1;
     const card = db.get(id);
     if (!card) return { error: `Unknown card id: ${id}` };
+    // The Leader lives in its own slot before the body — a Leader id smuggled
+    // into the card list would import a deck the builder can never save.
+    if (card.type === 'Leader')
+      return { error: `Leader card in the deck body: ${id} (Leaders go in the leader slot).` };
     // Enforce the per-rarity copy caps (Mythic 1, Super-Rare/Full-Art/
     // Ultra-Rare 2, else the rulebook's 4), not just the flat MAX_COPIES —
     // an imported code could previously smuggle in an illegal 2x Mythic.
@@ -54,6 +58,10 @@ export function decodeDeckCode(
       return { error: `Too many total copies of ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).` };
     totals.set(id, total);
     for (let i = 0; i < n; i++) cardIds.push(id);
+    // Cap the whole deck, not just per-card copies — a concatenated code
+    // could otherwise import an illegal 100+ card list.
+    if (cardIds.length > DECK_MAX)
+      return { error: `Too many cards in the deck (max ${DECK_MAX}).` };
   }
   return { leaderId, cardIds };
 }

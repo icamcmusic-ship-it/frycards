@@ -353,7 +353,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <MetaHeader title="FRYCARDS STORE" onBack={onBack} />
+      <MetaHeader title="FRY CARDS STORE" onBack={onBack} />
 
       <div className="p-5 max-w-6xl mx-auto">
         <div className="flex gap-2 flex-wrap mb-4">
@@ -1018,6 +1018,8 @@ function BountiesTab({
 }) {
   const [bounties, setBounties] = useState<BountyCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   const load = async () => {
     const { data, error } = await getDailyBounties();
@@ -1028,17 +1030,27 @@ function BountiesTab({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getDailyBounties().then(({ data, error }) => {
-      if (cancelled) return;
-      if (error) setError(error);
-      else setBounties(data || []);
-      setLoading(false);
-    });
+    setLoadErr(null);
+    // A rejected fetch (network failure) used to skip setLoading(false)
+    // entirely — the tab stayed on "Loading today's bounties…" forever with
+    // no error and no way to retry short of leaving the Store.
+    getDailyBounties()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setLoadErr(error);
+        else setBounties(data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadErr("Couldn't load today's bounties. Check your connection.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   const soldToday = bounties.filter((b) => b.already_sold).length;
 
@@ -1090,6 +1102,20 @@ function BountiesTab({
     return (
       <div className="text-center font-bold text-[var(--c-steel)] py-10">
         Loading today's bounties…
+      </div>
+    );
+  }
+
+  if (loadErr) {
+    return (
+      <div className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] px-4 py-3 flex items-center justify-between gap-3">
+        <span className="text-[12px] font-bold text-[var(--c-red)]">{loadErr}</span>
+        <button
+          onClick={() => setAttempt((n) => n + 1)}
+          className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
+        >
+          RETRY
+        </button>
       </div>
     );
   }

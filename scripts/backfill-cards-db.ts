@@ -1,10 +1,10 @@
 /**
- * Emits SQL that backfills the Riftbound columns on public.cards
+ * Emits SQL that backfills the mechanics columns on public.cards
  * (essence_cost, essence_types, might, grit, card_subtype, resolve,
  * rules_text) from the deterministic client card pool, so the database rows
  * carry the same mechanics every client derives.
  *
- * Usage: npx tsx scripts/backfill-riftbound-db.ts > riftbound-backfill.sql
+ * Usage: npx tsx scripts/backfill-cards-db.ts > cards-backfill.sql
  */
 import { POOL_V4 } from '../src/game/v3/cardpool';
 import { cardColors } from '../src/game/v3/colors';

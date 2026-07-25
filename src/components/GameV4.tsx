@@ -1,5 +1,5 @@
 /**
- * Riftbound v5.0 match UI (Rulebook v5.0, docs/RULEBOOK.md).
+ * Fry Cards v5.0 match UI (Rulebook v5.0, docs/RULEBOOK.md).
  *
  * Human (P1) plays interactively through the engine's public actions; the
  * CPU (P2) plays whole turns through the same AI used by the headless
@@ -1035,11 +1035,13 @@ export function GameV4({
         setPreviewPinned(false);
       } else if (pending) setPending(null);
       else if (showAsh) setShowAsh(false);
+      else if (shedPick !== null && shedPick.length > 0) setShedPick([]);
+      else if (logExpanded) setLogExpanded(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel]);
+  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded]);
 
   // ---- essence & invoking -------------------------------------------------
   const inMyMain =
@@ -1047,8 +1049,10 @@ export function GameV4({
     g.active === HUMAN &&
     (g.phase === 'Main1' || g.phase === 'Main2') &&
     !g.clash;
-  /** The human's reaction window: guarding step resolved, damage not yet. */
-  const inMyReaction = g.clash?.step === 'reaction' && g.active === CPU;
+  /** The human's reaction window: guarding step resolved, damage not yet.
+   * Rulebook §5: the window belongs to EITHER player — you can respond with
+   * Quick Events / Ambush units in your own Clash too, before resolving. */
+  const inMyReaction = g.clash?.step === 'reaction';
   const canTapNow = inMyMain || inMyReaction;
 
   /** Why can't this hand card be invoked right now? (undefined = it can) */
@@ -1140,7 +1144,8 @@ export function GameV4({
 
   const leaderInvokeWhy = ((): string | undefined => {
     const L = me.leader;
-    if (L.invoked || L.shattered) return undefined;
+    if (L.invoked) return 'Your Leader is already on the field';
+    if (L.shattered) return 'Your Leader is shattered';
     if (!inMyMain) return 'Invoke your Leader during your own main phases';
     if (!canAfford(me, L.def.cost)) return 'Not enough essence (even tapping every Location)';
     return undefined;
@@ -1413,7 +1418,15 @@ export function GameV4({
         },
       });
     } catch (e) {
-      if (e !== CLASH_PAUSE) throw e;
+      if (e !== CLASH_PAUSE) {
+        // An engine exception out of this timer callback would escape React
+        // entirely (white screen, match unrecoverable) — recover to the
+        // human's turn instead and leave the details in the console.
+        console.error('CPU turn crashed:', e);
+        say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
+        beginHumanTurn();
+        return;
+      }
       paused = true;
     }
     bump();
@@ -1440,8 +1453,15 @@ export function GameV4({
    * CPU finishes its turn (Main II, Dusk) and play passes back. */
   const continueCpuAfterClash = () => {
     const logStart = g.log.length;
-    endPhase(g); // Clash → Main II (clash must be 'done')
-    playTurn(g, CPU); // Main II plays, then Dusk → the human's Dawn
+    try {
+      endPhase(g); // Clash → Main II (clash must be 'done')
+      playTurn(g, CPU); // Main II plays, then Dusk → the human's Dawn
+    } catch (e) {
+      console.error('CPU post-clash crashed:', e);
+      say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
+      beginHumanTurn();
+      return;
+    }
     bump();
     setStage('cpu');
     narrate(g.log.slice(logStart), () => {
@@ -2214,13 +2234,30 @@ export function GameV4({
                 SHED TO {MAX_HAND} — pick {me.hand.length - MAX_HAND} card
                 {me.hand.length - MAX_HAND === 1 ? '' : 's'} to discard
               </span>
-              <button
-                onClick={() => setShedPick(null)}
-                aria-label="Cancel shedding"
-                className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
-              >
-                ✕ BACK
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => {
+                    // Sensible cuts: shed the highest-cost cards first (the
+                    // ones least likely to be castable soon).
+                    const need = me.hand.length - MAX_HAND;
+                    const byCost = [...me.hand].sort(
+                      (a, b) => totalCost(b.def.cost) - totalCost(a.def.cost),
+                    );
+                    setShedPick(byCost.slice(0, Math.max(0, need)).map((c) => c.iid));
+                  }}
+                  aria-label="Auto-select cards to shed"
+                  className="btn-pop text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-1.5 ink-border-sm"
+                >
+                  ✦ SUGGEST
+                </button>
+                <button
+                  onClick={() => setShedPick(null)}
+                  aria-label="Cancel shedding"
+                  className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
+                >
+                  ✕ BACK
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
               {me.hand.map((c) => {
@@ -2415,12 +2452,13 @@ export function GameV4({
               >
                 ✓ KEEP THIS HAND
               </button>
-              {me.hand.length > 0 && (
+              {me.hand.length > 1 && (
                 <button
                   onClick={doMulligan}
                   className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"
                 >
                   ↻ MULLIGAN — draw {me.hand.length - 1}
+                  {me.hand.length <= 4 ? ' (risky!)' : ''}
                 </button>
               )}
             </div>

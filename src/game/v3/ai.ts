@@ -1,11 +1,11 @@
 /**
- * Riftbound v5.0 CPU opponent. Plays a full turn through the engine's public
+ * Fry Cards v5.0 CPU opponent. Plays a full turn through the engine's public
  * actions at main-phase speed: play a Wellspring, develop by curve, use
  * removal on the biggest threat, invoke/use the Leader when useful, attack
  * when profitable, and (as defender) guard to survive lethal. Returns a
  * CpuTurnEvent log the UI replays as animations.
  */
-import { CardDef, Effect, EssenceCost, LEADER_HP, totalCost } from './cards';
+import { CardDef, Effect, EssenceCost, LEADER_HP, hasKw, totalCost } from './cards';
 import { EssenceType } from './colors';
 import {
   GameState,
@@ -96,6 +96,12 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
       demand[t as EssenceType] = (demand[t as EssenceType] ?? 0) + (n ?? 0);
     }
   }
+  // The Leader still has to be paid for too — count its pips until invoked.
+  if (!p.leader.invoked && !p.leader.shattered) {
+    for (const [t, n] of Object.entries(p.leader.def.cost?.pips ?? {})) {
+      demand[t as EssenceType] = (demand[t as EssenceType] ?? 0) + (n ?? 0);
+    }
+  }
   const have: Partial<Record<EssenceType, number>> = {};
   for (const l of p.locations) have[l.produces] = (have[l.produces] ?? 0) + 1;
   let best = choices[0];
@@ -113,7 +119,9 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
 /** Location iids being held untapped for the opponent-turn reaction window.
  * Locations only recover at their owner's own Dawn, so essence for a
  * reaction play must come from locations deliberately left untapped through
- * the caster's whole turn — reserving just the card (v5.2) was not enough. */
+ * the caster's whole turn — reserving just the card (v5.2) was not enough.
+ * Fully cleared at the start of every playTurn (reservations only matter
+ * within the reserving player's own turn), so nothing leaks across games. */
 const reservedLocations = new Set<string>();
 
 function tapAllLocations(state: GameState, pid: PlayerId): void {
@@ -228,7 +236,11 @@ function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObse
   if (p.wornCharms.length === 0 || p.field.length === 0) return;
   const target = [...p.field].sort((a, b) => effMight(state, b) - effMight(state, a))[0];
   for (const charm of [...p.wornCharms]) {
-    tapForCost(state, pid, { generic: charm.def.rebondCost ?? 0, pips: {} });
+    const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
+    // Only tap once the re-bond is sure to go through — a failed attempt
+    // after tapping would strand the essence.
+    if (!canAffordPotential(state, pid, cost)) continue;
+    if (!tapForCost(state, pid, cost)) continue;
     if (rebondCharm(state, pid, charm.iid, target.iid)) {
       observe?.({ kind: 'rebond', name: charm.def.name, targetIid: target.iid });
     }
@@ -238,14 +250,20 @@ function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObse
 /** Value of invoking this card right now. */
 function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   const opp = state.players[opponentOf(pid)];
-  let v = totalCost(def.cost) * 10; // develop by curve: biggest affordable first
+  // Effective cost (not printed) so Surge discounts are seen by the curve.
+  let v = totalCost(effectiveCost(state, pid, def)) * 10; // biggest affordable first
   if (def.type === 'Unit') v += 5;
   if (isRemoval(def.onInvoke)) {
-    const biggest = opp.field.filter((u) => !unitHasKw(u, 'Warded'))[0];
+    const isShatter = def.onInvoke?.action === 'shatter';
+    const biggest = [...opp.field]
+      .filter((u) => !unitHasKw(u, 'Warded') && !(isShatter && unitHasKw(u, 'Unbreakable')))
+      .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
     // Removal wants a live target; anyTarget damage can still go face.
     if (biggest) v += 20;
     else v += def.onInvoke?.target === 'anyTarget' ? -5 : -100;
   }
+  if (def.type === 'Event' && hasKw(def, 'Resonant')) v += 4; // double value
+  if (def.type === 'Location' && hasKw(def, 'Bountiful')) v += 3; // ramp
   if (def.onInvoke?.target === 'allEnemyUnits' && opp.field.length < 2) v -= 60;
   if (def.type === 'Charm' && state.players[pid].field.length === 0) v -= 200;
   return v;
@@ -392,8 +410,12 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
     else if (eff.action === 'heal') v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
     else v = 2;
-    // Don't shatter our own Leader for marginal value.
-    if (L.resolve + ab.resolveDelta <= 0) v -= 6;
+    // Never shatter our own Leader for marginal value — only a genuinely
+    // scary board (a Might-6+ unit to answer) can justify going to zero.
+    if (L.resolve + ab.resolveDelta <= 0) {
+      const bigThreat = opp.field.some((u) => effMight(state, u) >= 6);
+      v -= bigThreat && isRemoval(eff) ? 6 : 20;
+    }
     if (ab.resolveDelta > 0) v += 1; // building resolve is free value
     if (v > bestVal) {
       bestVal = v;
@@ -412,9 +434,29 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
 /** Pick profitable attackers: always attack when unguardable damage helps;
  * otherwise attack with units that win or force bad trades. */
 function chooseAttackers(state: GameState, pid: PlayerId): string[] {
+  const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
   const candidates = legalAttackers(state, pid);
   const defenders = opp.field.filter((u) => !u.exhausted);
+  const firstStriker = (x: UnitInst) =>
+    unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
+  const canBlock = (a: UnitInst, g: UnitInst) =>
+    !unitHasKw(a, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch');
+  const attackerKills = (a: UnitInst, g: UnitInst) => {
+    const hit = packetDamage(g, effMight(state, a));
+    return (
+      hit >= remainingGrit(state, g) ||
+      (unitHasKw(a, 'Venomous') && hit > 0 && !unitHasKw(g, 'Unbreakable'))
+    );
+  };
+  const attackerSurvives = (a: UnitInst, g: UnitInst) => {
+    if (unitHasKw(a, 'Unbreakable')) return true;
+    const hit = packetDamage(a, effMight(state, g));
+    const dies = hit >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && hit > 0);
+    if (!dies) return true;
+    // Quickstrike pre-kill: a dead guard never strikes back.
+    return firstStriker(a) && !firstStriker(g) && attackerKills(a, g);
+  };
   // All-in only when lethal survives worst-case guarding: assume each ready
   // defender fully absorbs one attacker (biggest first; Overrun still
   // spills past the guard's remaining grit). The old check ("total might >=
@@ -425,15 +467,16 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   let throughDamage = 0;
   for (const u of sorted) {
     const m = effMight(state, u);
-    const guardable = defenders.some(
-      (g) =>
-        !unitHasKw(u, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch'),
-    );
-    if (!guardable || guardsLeft <= 0) {
+    const eligible = defenders.filter((g) => canBlock(u, g));
+    // Swarmproof needs 2+ eligible guards — with fewer it's unguardable.
+    const swarm = unitHasKw(u, 'Swarmproof');
+    const needed = swarm ? 2 : 1;
+    const guardable = eligible.length >= needed;
+    if (!guardable || guardsLeft < needed) {
       throughDamage += m;
     } else {
-      guardsLeft--;
-      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - 1); // chump spill
+      guardsLeft -= needed;
+      if (unitHasKw(u, 'Overrun')) throughDamage += Math.max(0, m - needed); // chump spill
     }
   }
   if (throughDamage >= opp.vitality) return candidates.map((u) => u.iid);
@@ -441,36 +484,25 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   for (const u of candidates) {
     const m = effMight(state, u);
     if (m <= 0) continue;
-    const possibleGuards = defenders.filter((g) => {
-      if (unitHasKw(u, 'Aerial') && !unitHasKw(g, 'Aerial') && !unitHasKw(g, 'Skywatch'))
-        return false;
-      return true;
-    });
-    if (possibleGuards.length === 0) {
+    const possibleGuards = defenders.filter((g) => canBlock(u, g));
+    // Swarmproof: fewer than 2 eligible guards means effectively unguardable.
+    if (possibleGuards.length === 0 || (unitHasKw(u, 'Swarmproof') && possibleGuards.length < 2)) {
       picked.push(u.iid); // free face damage
       continue;
     }
-    // Attack if a typical guard trade favors us (we kill and survive, or
-    // Quickstrike/Venomous makes the trade cheap).
+    // Attack if a typical guard trade favors us: we kill the biggest realistic
+    // blocker and survive it, or NO eligible guard can profitably block (the
+    // attacker survives every realistic block even without killing), or the
+    // trade is favorable (we kill a strictly more expensive unit even if we
+    // die) while not behind on board.
     const worst = possibleGuards.sort((a, b) => effMight(state, b) - effMight(state, a))[0];
-    const hitOnWorst = packetDamage(worst, effMight(state, u));
-    const qsKills =
-      (unitHasKw(u, 'Quickstrike') || unitHasKw(u, 'Doublestrike')) &&
-      (hitOnWorst >= remainingGrit(state, worst) ||
-        (unitHasKw(u, 'Venomous') && hitOnWorst > 0));
-    const kills =
-      hitOnWorst >= remainingGrit(state, worst) ||
-      (unitHasKw(u, 'Venomous') && hitOnWorst > 0);
-    // A ready Venomous guard makes any contact lethal — only Unbreakable or a
-    // Quickstrike pre-kill survives the exchange.
-    const venomGuard = possibleGuards.some((g) => unitHasKw(g, 'Venomous'));
-    const survives =
-      (venomGuard
-        ? unitHasKw(u, 'Unbreakable') || qsKills
-        : packetDamage(u, effMight(state, worst)) < remainingGrit(state, u) ||
-          unitHasKw(u, 'Quickstrike') ||
-          unitHasKw(u, 'Unbreakable'));
-    if (kills && survives) picked.push(u.iid);
+    const kills = attackerKills(u, worst);
+    const survives = attackerSurvives(u, worst);
+    const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
+    const notBehind = me.field.length >= opp.field.length;
+    const favorableTrade =
+      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
+    if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
   return picked;
 }
@@ -511,15 +543,26 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     const swarm = unitHasKw(attacker, 'Swarmproof');
     const mustSurvive = unguardedDamage() >= me.vitality;
     // Profitable single block: guard kills attacker or survives the hit.
+    const aFirst = unitHasKw(attacker, 'Quickstrike') || unitHasKw(attacker, 'Doublestrike');
     const scored = legal
       .map((g) => {
+        const gFirst = unitHasKw(g, 'Quickstrike') || unitHasKw(g, 'Doublestrike');
         const hitOnAttacker = packetDamage(attacker, effMight(state, g));
-        const kills =
+        const hitOnGuard = packetDamage(g, effMight(state, attacker));
+        // Venomous attacker: any contact kills the guard unless Unbreakable.
+        const guardDies =
+          !unitHasKw(g, 'Unbreakable') &&
+          (hitOnGuard >= remainingGrit(state, g) ||
+            (unitHasKw(attacker, 'Venomous') && hitOnGuard > 0));
+        let kills =
           hitOnAttacker >= remainingGrit(state, attacker) ||
           (unitHasKw(g, 'Venomous') && hitOnAttacker > 0);
-        const survives =
-          packetDamage(g, effMight(state, attacker)) < remainingGrit(state, g) ||
-          unitHasKw(g, 'Unbreakable');
+        // A Quickstrike attacker pre-kills a slower guard: it never strikes.
+        if (kills && aFirst && !gFirst && guardDies) kills = false;
+        let survives = !guardDies;
+        // A Quickstrike guard that pre-kills the attacker takes nothing back.
+        if (!survives && gFirst && !aFirst && kills && !unitHasKw(attacker, 'Unbreakable'))
+          survives = true;
         let v = 0;
         if (kills) v += 3;
         if (survives) v += 2;
@@ -601,11 +644,15 @@ export function reactionPlays(
   defender: PlayerId,
   observe?: CpuTurnObserver,
 ): number {
-  if (state.clash?.step !== 'reaction' || state.active === defender) return 0;
+  if (state.clash?.step !== 'reaction') return 0;
   const p = state.players[defender];
   let plays = 0;
-  // The reaction window is what the reserved locations were saved for.
-  for (const l of p.locations) reservedLocations.delete(l.iid);
+  // The reaction window is what the reserved locations were saved for — but
+  // only the non-active player's hold ends here; the active player's own
+  // reservations are for the OPPONENT's next clash.
+  if (state.active !== defender) {
+    for (const l of p.locations) reservedLocations.delete(l.iid);
+  }
   tapAllLocations(state, defender);
   let progress = true;
   while (progress && !state.winner) {
@@ -614,12 +661,13 @@ export function reactionPlays(
       .filter((c) => canInvoke(state, defender, c.iid))
       .sort((a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def));
     for (const c of options) {
-      const quickRemoval = c.def.type === 'Event' && isRemoval(c.def.onInvoke);
-      const ambushUnit = c.def.type === 'Unit';
+      const quickRemoval =
+        c.def.type === 'Event' && c.def.subtype === 'Quick' && isRemoval(c.def.onInvoke);
+      const ambushUnit = c.def.type === 'Unit' && hasKw(c.def, 'Ambush');
       if (!quickRemoval && !ambushUnit) continue;
       // Point removal at the biggest live attacker (fall back to autoTarget).
       let targetIid: string | undefined;
-      if (quickRemoval && state.clash) {
+      if (quickRemoval && state.clash && state.active !== defender) {
         const isShatter = c.def.onInvoke?.action === 'shatter';
         const attackers = state.clash.attackers
           .map((iid) => findUnit(state, iid))
@@ -671,6 +719,9 @@ export function playTurn(
   const events: CpuTurnEvent[] = [];
   const observe: CpuTurnObserver = (ev) => events.push(ev);
   if (state.winner || state.active !== pid) return events;
+  // Stale reservations (previous turns, previous games — iids never repeat)
+  // must not constrain this turn's tapping.
+  reservedLocations.clear();
 
   // Main I
   if (state.phase === 'Main1') {
@@ -693,6 +744,9 @@ export function playTurn(
       // CPU-vs-CPU (sims): the defending CPU uses its reaction window unless
       // the UI is driving the defender (it passes chooseGuardsFor).
       if (!opts.chooseGuardsFor) reactionPlays(state, defender, observe);
+      // Rulebook: the window is open to either player — the active CPU gets
+      // a pass too (Quick Events / Ambush units after guards are known).
+      reactionPlays(state, pid, observe);
       if (resolveClash(state)) observe({ kind: 'clash' });
     }
     if (!state.winner && endPhase(state)) observe({ kind: 'phase', phase: state.phase });

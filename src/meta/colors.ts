@@ -1,5 +1,5 @@
 /**
- * Visual palette for the Riftbound v5.0 Essence Type system (the game's
+ * Visual palette for the Fry Cards v5.0 Essence Type system (the game's
  * seven colors: Ember, Tide, Root, Gale, Light, Shadow, Void). Mirrors
  * `rarity.ts`'s structure exactly (a fixed hex ladder + Tailwind chip/text
  * variants) — color, like rarity, is a signal players learn to recognize and

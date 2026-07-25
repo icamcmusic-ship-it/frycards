@@ -10,7 +10,21 @@ interface ChangelogEntry {
 // Condensed, user-facing view of CHANGELOG.md — trimmed to the highlights
 // players actually care about (new features, balance headlines), not every
 // internal playtest data point tracked in the full file.
-const ENTRIES: ChangelogEntry[] = [
+export const ENTRIES: ChangelogEntry[] = [
+  {
+    version: 'Clash & Coverage Update (v6.1)',
+    date: 'July 2026',
+    items: [
+      "Overrun now works exactly as written: a guarded attacker whose guards die early (say, to your Quickstrike blocker) no longer slams its FULL damage into your face — only Overrun attackers spill through, and only the EXCESS past what the guards absorbed. This was quietly the biggest source of \"where did all that damage come from?\" moments in the game.",
+      'The clash reaction window now belongs to BOTH players, as the rulebook says: you can answer with Quick Events and Ambush units during your OWN clash too — declare attackers, see the guards, then spring a surprise before damage resolves. The CPU does the same on its side.',
+      "A sharper CPU across the board: it now respects Venomous and Quickstrike when choosing blocks (no more feeding its best unit to a 1/1 Venomous), knows a Swarmproof attacker can't be stopped by a lone guard, makes free attacks and favorable trades instead of only all-or-nothing swings, stops shattering its own Leader for one measly removal, plans its Wellspring colors around its Leader's cost, and prizes Resonant Events and Bountiful Sanctums like it should.",
+      'Random and quick-match decks now draw on nearly the WHOLE card pool — deck generation reached only about half the catalog before; you should see far more variety across opponents and random decks.',
+      'Keyword pricing now comes from one honest table: Resonant Events cost 1 more (they were winning far too often), Bountiful Locations cost 1 less (they were winning far too little), and Resolute Leaders cost 1 more.',
+      'Rules tightening: the mulligan is now correctly locked to the very start of the game (the engine would previously accept one mid-match), "when this dies" abilities now fire when a unit is banished to The Void too — not just when it goes to the ash-pile — and running out of cards during setup now properly loses the game.',
+      'Crash safety: if anything unexpected breaks mid-match the game now recovers and hands you the turn (with a full-app safety net behind it) instead of white-screening your match away.',
+      'Quality of life: the end-of-turn shed picker has its promised SUGGEST button, Escape now also closes the shed picker and battle log, mulligans warn you when a small hand gets risky, this changelog shows dates, the News Center headline always matches the newest update, the Bounty Shop and Social screens show a RETRY button instead of hanging or pretending to be empty, auction countdowns tick every 10 seconds and ended auctions disable their buttons immediately, imported deck codes are fully validated (size and no Leaders in the main deck), the sell list can no longer offer a just-pulled Serialized print, bulk quicksell shows live progress, the Deck Builder gained a CHANGE LEADER button, and the game finally writes its own name one way everywhere: FRY CARDS.',
+    ],
+  },
   {
     version: 'Rulebook Update (v6.0)',
     items: [
@@ -303,6 +317,9 @@ export function ChangelogScreen({ onBack }: { onBack: () => void }) {
           >
             <div className="flex items-center justify-between px-4 py-2 bg-[var(--c-steel)]">
               <span className="heading-font text-sm text-[var(--c-yellow)]">{entry.version}</span>
+              {entry.date && (
+                <span className="text-[10px] font-bold text-[var(--c-paper)]/60">{entry.date}</span>
+              )}
             </div>
             <ul className="px-5 py-3 flex flex-col gap-1.5 list-disc">
               {entry.items.map((item, i) => (
