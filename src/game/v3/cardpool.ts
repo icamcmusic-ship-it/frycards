@@ -88,6 +88,10 @@ const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Co
  */
 const COST_ADJUST: Record<string, number> = {
   // --- nerfs: cost up, power unchanged ---
+  // v6.7: the only cost-ability outlier this pass to clear BOTH gates — the
+  // Wilson-CI-excludes-baseline bar AND reproduces with the same sign in
+  // both cohorts (+7.7 residual, n=508, cohort A; +15.8, n=491, cohort B).
+  boneplate_sentinel: +1,
   abyssal_pathway: +2,
   amber_sphere: +1,
   ashhound_pack: +1,
@@ -406,7 +410,18 @@ function mapUnit(c: CardTemplate): CardDef {
   // v6.6: derived from the NATURAL (pre-COST_ADJUST) cost so a balance cut
   // lowers only the price, never the body — see naturalTotalFor.
   const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
-  const statBase = Math.max(1, naturalT - Math.max(0, kwAdj));
+  // v6.7 fix: statBase used to be `naturalT - max(0, kwAdj)`, which is only
+  // equal to `base` when `base + kwAdj` doesn't hit naturalTotalFor's 1..7
+  // clamp. On a two-keyword card whose surcharge pushes base+kwAdj PAST 7,
+  // the clamp already caps the price (the card can't actually charge for the
+  // full surcharge), but this line still subtracted the FULL kwAdj from the
+  // clamped total — docking stats a second time for a surcharge the printed
+  // cost never collected. That is what the v6.6 printedBudgetOutliers audit
+  // flagged on 8 double-keyword Units (e.g. Iron-Scaled Snail, Topographic
+  // Behemoth): a cost-7 card with the stat total of a cost-4/5 card. Off the
+  // clamp the two expressions are identical (naturalT - kwAdj = base), so
+  // this is a no-op there and only removes the double penalty at the ceiling.
+  const statBase = Math.max(1, base);
   const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1) + statAdjustFor(c.id));
   const primary = colors[0];
   const mightShare =
@@ -747,6 +762,23 @@ function leaderPlusAbility(seed: string, color: Color): LeaderAbility {
  */
 const LEADER_KEYWORD_STRIP: Record<string, string[]> = {
   avatar_of_the_abyss: ['Commander'], // v6.2: 67.0% -> 70.3% win rate, repeat offender
+  // v6.7: Crimson Vector Commander has read as the #2 (and in some cohorts
+  // #1) Leader every pass since v6.1 without ever getting a dedicated look —
+  // the 3rd carry-forward pass on this item (v6.6 doc carry-forward #1). Its
+  // kit is a cheap, efficient -1: 2-damage-anyTarget removal/reach ability
+  // (Resolve 6, only 4 total cost to invoke) PLUS the same Commander
+  // keyword (global +1 Might to every friendly unit while the Leader is
+  // fielded) that was the first lever pulled on Avatar of the Abyss. The
+  // v6.6/v6.7 leaderKitDiagnostics split confirms these are two DIFFERENT
+  // engines, not one: Avatar's win rate climbs with game length (52% at
+  // <=10 turns to 69-79% at 21+, an attrition kit built around its
+  // repeatable -3 Shatter), while Crimson's is the mirror image (82-92% at
+  // <=10 turns collapsing to 20-22% at 21+ turns) — a tempo/aggro kit where
+  // a permanently buffed board plus cheap reach snowballs early and falls
+  // off once the game goes long. Since the SAME aura keyword is implicated
+  // and the same lever already proved effective on Avatar, strip Commander
+  // here too rather than reach for an untested lever on the first pass.
+  crimson_vector_commander: ['Commander'],
 };
 
 /** v6.3: Leader-kit minus-ability resolve-cost override — the next lever
