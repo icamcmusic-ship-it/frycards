@@ -48,8 +48,8 @@ const RARITY_TIER: Record<string, number> = {
   Uncommon: 1,
   Rare: 2,
   'Super-Rare': 3,
-  'Full-Art': 4,
-  'Ultra-Rare': 5,
+  'Ultra-Rare': 4,
+  'Full-Art': 5,
   Mythic: 6,
 };
 

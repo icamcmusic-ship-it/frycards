@@ -88,8 +88,8 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   from an empty deck. Vitality can never rise above 20.
 - Decks are **at least 60 cards** with **no more than 4 copies of any
   card** (rulebook §3). **[digital]** the editor caps decks at 100 cards,
-  and premium rarities carry stricter economy caps: Super-Rare / Full-Art /
-  Ultra-Rare up to 2, Mythic 1.
+  and premium rarities carry stricter economy caps: Super-Rare / Ultra-Rare /
+  Full-Art up to 2, Mythic 1.
 - Opening hand: **7 cards** for both players. **[digital]** the second player
   instead offsets the first-mover advantage on their opening turn, when they
   may play **two** basic Wellsprings — the second one enters **exhausted**,

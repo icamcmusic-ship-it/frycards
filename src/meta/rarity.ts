@@ -8,17 +8,41 @@ export const ALL_SET_NAMES: string[] = ['Volume #1'];
 /**
  * Global rarity color code — fixed across every theme, since rarity is a
  * collection/economy signal players learn to recognize, not app chrome.
- * Gray -> Green -> Blue -> Purple -> Teal -> Gold -> Red, low to high.
+ * Gray -> Green -> Blue -> Purple -> Gold -> Teal -> Red, low to high.
+ *
+ * v6.8: Full-Art moved back ABOVE Ultra-Rare — it is now the second-rarest
+ * tier, behind Mythic only. Prices, shard costs, pack odds, serialized supply
+ * and the deterministic stat budget all follow this order.
  */
 export const RARITY_ORDER: string[] = [
   'Common',
   'Uncommon',
   'Rare',
   'Super-Rare',
-  'Full-Art',
   'Ultra-Rare',
+  'Full-Art',
   'Mythic',
 ];
+
+/** Position on the ladder, 0-indexed (Common 0 … Mythic 6). */
+export function rarityTier(rarity?: string): number {
+  return Math.max(0, RARITY_ORDER.indexOf(rarity || 'Common'));
+}
+
+/** Short marker printed in the card template's type-line slot. */
+export const RARITY_ABBR: Record<string, string> = {
+  Common: 'C',
+  Uncommon: 'U',
+  Rare: 'R',
+  'Super-Rare': 'SR',
+  'Ultra-Rare': 'UR',
+  'Full-Art': 'FA',
+  Mythic: 'MY',
+};
+
+export function rarityAbbr(rarity?: string): string {
+  return RARITY_ABBR[rarity || 'Common'] || RARITY_ABBR.Common;
+}
 
 export const RARITY_HEX: Record<string, string> = {
   Common: '#9CA3AF',
@@ -114,4 +138,32 @@ export function rarityAnimated(rarity?: string): boolean {
 
 export function isMythic(rarity?: string): boolean {
   return rarity === 'Mythic';
+}
+
+// ---------------------------------------------------------------------------
+// v6.8 card-template predicates — the "Gold Foil" template set (see
+// CardFaceV4.tsx). Full-Art and Mythic print edge-to-edge art with the card
+// text floating over it; everything else keeps the framed 4:3 art box.
+// ---------------------------------------------------------------------------
+
+/** Full-bleed template: art fills the whole card footprint. */
+export function rarityBleeds(rarity?: string): boolean {
+  return rarity === 'Full-Art' || rarity === 'Mythic';
+}
+
+/** Super-Rare and up — the framed template's animated art treatments
+ * (rarity ghost tint + diagonal foil sweep). */
+export function raritySuperPlus(rarity?: string): boolean {
+  return rarityTier(rarity) >= rarityTier('Super-Rare');
+}
+
+/** Ultra-Rare and up — the diagonal corner ribbon over the art box. */
+export function rarityUltraPlus(rarity?: string): boolean {
+  return rarityTier(rarity) >= rarityTier('Ultra-Rare');
+}
+
+/** Thickness (px) of the template's rarity rule under the art box — the
+ * ladder read as a physical weight of ink. */
+export function rarityRuleWeight(rarity?: string): number {
+  return 1 + rarityTier(rarity);
 }

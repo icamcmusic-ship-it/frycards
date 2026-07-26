@@ -52,8 +52,8 @@ const RARITY_ORDER = [
   'Uncommon',
   'Rare',
   'Super-Rare',
-  'Full-Art',
   'Ultra-Rare',
+  'Full-Art',
   'Mythic',
 ];
 
