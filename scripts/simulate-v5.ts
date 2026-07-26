@@ -170,6 +170,27 @@
  *    lethal — not a lapse) and guardDiesForNothingDiscretionary (a real
  *    defender-side blunder) instead of conflating the two.
  *
+ * v6.7 additions (v6.6 balance-pass carry-forward items):
+ *  - Leader-kit diagnostics (`leaderKitDiagnostics`), carry-forward #1: for
+ *    every Leader, the average turn of its FIRST invoke, its win rate split
+ *    by game-length bucket (<=10 / 11-20 / 21-30 / >30, reusing the
+ *    first-player-advantage bucketing), and its resolve-efficiency (win rate
+ *    when its ability was used at least once that game vs when it was
+ *    invoked but never used it) — targeted at explaining WHY Avatar of the
+ *    Abyss and Crimson Vector Commander have topped the Leader spread every
+ *    pass since v6.1, not just restating that they do.
+ *  - Reaction-window content audit (`reactionWindowContent`), carry-forward
+ *    #2: a static (pool-derived, not per-run) count of which cards are
+ *    legal in the reaction window at all (Quick removal Events + Ambush
+ *    units) and which of those additionally pass ai.ts's isReactionCandidate
+ *    filter (cost<=3), broken down per-Leader by that Leader's own producible
+ *    colors — quantifies exactly which archetypes are starved of reaction
+ *    plays instead of restating the flat 26/292 -> 6 pool-wide numbers.
+ *  - Printed-budget double-keyword-surcharge fix verification: the outlier
+ *    list (`printedBudgetOutliers`) is unchanged in shape, but the underlying
+ *    formula bug it was flagging (see cardpool.ts mapUnit) is fixed this
+ *    pass, so the list should clear.
+ *
  * Usage: npx tsx scripts/simulate-v5.ts [gamesPerPairing] [numDecks] [seed] [deckSeed]
  * Output: JSON report to docs/sim-runs/ + console summary.
  */
@@ -248,6 +269,36 @@ const kwStats: Record<string, KwStat> = {};
 for (const kw of KEYWORDS) kwStats[kw] = { carrierGames: 0, carrierWins: 0, activations: 0 };
 
 const leaderStats: Record<string, { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }> = {};
+
+// v6.7 (carry-forward #1): per-Leader kit diagnostics — turn of first
+// invoke, win rate by game-length bucket, and resolve-efficiency (used its
+// ability at least once this game vs invoked-but-never-used) — aimed
+// specifically at explaining WHY Avatar of the Abyss / Crimson Vector
+// Commander have topped every Leader spread since v6.1 rather than just
+// re-measuring that they do.
+const leaderKitStats: Record<
+  string,
+  {
+    firstInvokeTurnSum: number;
+    firstInvokeGames: number;
+    byLength: Record<string, { games: number; wins: number }>;
+    usedAbilityGames: number;
+    usedAbilityWins: number;
+    invokedNoAbilityGames: number;
+    invokedNoAbilityWins: number;
+  }
+> = {};
+function lks(id: string) {
+  return (leaderKitStats[id] ??= {
+    firstInvokeTurnSum: 0,
+    firstInvokeGames: 0,
+    byLength: {},
+    usedAbilityGames: 0,
+    usedAbilityWins: 0,
+    invokedNoAbilityGames: 0,
+    invokedNoAbilityWins: 0,
+  });
+}
 
 // v6.4: per-Leader-ability usage/value — the existing abilityUsesPerGame is a
 // single number per Leader summing BOTH abilities together, which hides a
@@ -836,6 +887,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   let leaderFirst: PlayerId | 'tie' | null = null;
   // Turn-8 vitality snapshot for the comeback metric.
   let vitAt8: Record<PlayerId, number> | null = null;
+  // v6.7: turn each seat's Leader was first invoked, keyed by seat (not
+  // Leader id — resolved to a Leader id at end-of-game via decksByPid).
+  const firstInvokeTurn: Record<PlayerId, number | null> = { P1: null, P2: null };
   while (!state.winner && turns < MAX_TURNS) {
     turns++;
     const pid = state.active;
@@ -1164,6 +1218,14 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (p1In && p2In) leaderFirst = 'tie';
       else if (p1In) leaderFirst = 'P1';
       else if (p2In) leaderFirst = 'P2';
+    }
+    // v6.7: per-seat first-invoke turn (independent of which seat was
+    // "first" overall — every Leader kit gets its own average).
+    for (const spid of ['P1', 'P2'] as PlayerId[]) {
+      if (firstInvokeTurn[spid] === null) {
+        const L = state.players[spid].leader;
+        if (L.invoked || L.shattered) firstInvokeTurn[spid] = turns;
+      }
     }
 
     // --- v5.2 essence-curve efficiency ---
@@ -1508,6 +1570,25 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       mech.leaderShatters++;
     }
     ls.abilityUses += perGame.leaderAbilityUses[pid];
+
+    // v6.7: per-Leader-kit diagnostics (carry-forward #1).
+    if (winner) {
+      const lk = lks(deck.leaderId);
+      if (firstInvokeTurn[pid] !== null) {
+        lk.firstInvokeTurnSum += firstInvokeTurn[pid]!;
+        lk.firstInvokeGames++;
+      }
+      const lb = (lk.byLength[lengthBucket(turns)] ??= { games: 0, wins: 0 });
+      lb.games++;
+      if (won) lb.wins++;
+      if ((p.leader.invoked || p.leader.shattered) && perGame.leaderAbilityUses[pid] > 0) {
+        lk.usedAbilityGames++;
+        if (won) lk.usedAbilityWins++;
+      } else if (p.leader.invoked || p.leader.shattered) {
+        lk.invokedNoAbilityGames++;
+        if (won) lk.invokedNoAbilityWins++;
+      }
+    }
 
     // Color stats (leader identity).
     for (const col of Object.keys(POOL_BY_ID[deck.leaderId]?.cost?.pips ?? {})) {
@@ -1962,10 +2043,55 @@ const poolCoverage = (() => {
   };
 })();
 
+// v6.7 (carry-forward #2): reaction-window content audit. Static over the
+// pool (not per-run) — quantifies exactly which Leaders' own producible
+// colors are starved of reaction-legal cards, instead of only restating the
+// pool-wide 26/292 -> 6 numbers every pass since v6.5.
+function isRemovalLikeOnInvoke(def: CardDef): boolean {
+  const eff = def.onInvoke;
+  return (
+    !!eff &&
+    (eff.action === 'shatter' ||
+      eff.action === 'banish' ||
+      (eff.action === 'damage' && (eff.target === 'enemyUnit' || eff.target === 'anyTarget')))
+  );
+}
+const reactionWindowContent = (() => {
+  const legalInWindow = POOL_V4.filter(
+    (c: CardDef) =>
+      (c.type === 'Event' && c.subtype === 'Quick' && isRemovalLikeOnInvoke(c)) ||
+      (c.type === 'Unit' && !!c.keywords?.includes('Ambush')),
+  );
+  // Mirrors ai.ts's isReactionCandidate: legal in window AND total cost <= 3.
+  const aiCandidates = legalInWindow.filter((c: CardDef) => totalCost(c.cost) <= 3);
+  const byLeader = Object.fromEntries(
+    POOL_LEADERS.map((l: CardDef) => {
+      const cols = new Set(LEADER_COLORS[l.id] ?? []);
+      const inColor = (c: CardDef) => {
+        const pips = Object.keys(c.cost?.pips ?? {});
+        return pips.length === 0 || pips.every((p) => cols.has(p as never));
+      };
+      return [
+        l.name ?? l.id,
+        {
+          legalInWindow: legalInWindow.filter(inColor).length,
+          aiCandidates: aiCandidates.filter(inColor).length,
+        },
+      ];
+    }),
+  );
+  return {
+    poolSize: POOL_V4.length,
+    legalInWindow: legalInWindow.length,
+    aiCandidates: aiCandidates.length,
+    byLeader,
+  };
+})();
+
 const overallWin = 50;
 const report = {
   meta: {
-    version: 'v6.6',
+    version: 'v6.7',
     seed: SEED,
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
@@ -2200,6 +2326,24 @@ const report = {
       totalGuards: total,
     };
   })(),
+  // v6.7 additions.
+  leaderKitDiagnostics: Object.fromEntries(
+    Object.entries(leaderKitStats).map(([id, s]) => [
+      POOL_BY_ID[id]?.name ?? id,
+      {
+        avgFirstInvokeTurn:
+          s.firstInvokeGames > 0 ? +(s.firstInvokeTurnSum / s.firstInvokeGames).toFixed(1) : null,
+        winRateByLength: Object.fromEntries(
+          Object.entries(s.byLength).map(([b, x]) => [b, { winPct: pct(x.wins, x.games), games: x.games }]),
+        ),
+        usedAbilityWinPct: pct(s.usedAbilityWins, s.usedAbilityGames),
+        usedAbilityGames: s.usedAbilityGames,
+        invokedNoAbilityWinPct: pct(s.invokedNoAbilityWins, s.invokedNoAbilityGames),
+        invokedNoAbilityGames: s.invokedNoAbilityGames,
+      },
+    ]),
+  ),
+  reactionWindowContent,
 };
 
 const outDir = path.join(process.cwd(), 'docs', 'sim-runs');
@@ -2252,4 +2396,6 @@ console.log('\nTop underperformers:');
 for (const c of report.topUnderperformers) console.log(`  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual ${c.residual} [${c.keywords.join(',')}]`);
 console.log('\nDeadest in hand:');
 for (const c of report.deadestInHand) console.log(`  ${c.name} cost ${c.cost} deadRate ${c.deadInHandRate}%`);
+console.log('\nLeader-kit diagnostics (v6.7):', JSON.stringify(report.leaderKitDiagnostics, null, 2));
+console.log('\nReaction-window content audit (v6.7):', JSON.stringify(report.reactionWindowContent, null, 2));
 console.log(`\nReport written: ${outPath}`);
