@@ -20,7 +20,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck',
-        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1.',
+        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Mythic exactly 1.',
       ],
       [
         'Color legality',
@@ -183,23 +183,27 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     body: [
       [
         'The ladder',
-        'Common < Uncommon < Rare < Super-Rare < Full-Art < Ultra-Rare < Mythic, low to high. Full-Art sits just below Ultra-Rare — a step up from Super-Rare, not quite as scarce as Ultra-Rare or Mythic.',
+        'Common < Uncommon < Rare < Super-Rare < Ultra-Rare < Full-Art < Mythic, low to high. Full-Art now sits ABOVE Ultra-Rare — the second-rarest tier there is, behind Mythic only.',
       ],
       [
         'Copy caps',
-        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Full-Art/Ultra-Rare: up to 2. Mythic: exactly 1.',
+        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Ultra-Rare/Full-Art: up to 2. Mythic: exactly 1.',
       ],
       [
         'Full-Art',
-        'A visually distinct print tier whose art fills the entire card edge-to-edge (some are short looping video clips) — not stronger than other cards at the same power level, just a rarer, flashier version. Priced and capped between Super-Rare and Ultra-Rare in every system.',
+        'A visually distinct print tier whose still art fills the entire card edge-to-edge — not stronger than other cards at the same power level, just a rarer, flashier version. Priced, dropped and capped above Ultra-Rare in every system; only Mythic is rarer.',
+      ],
+      [
+        'Mythic',
+        'The top of the ladder and the only tier whose art moves: every Mythic is a short looping video clip printed full-bleed behind a glowing gold inner frame. One copy per deck.',
       ],
       [
         'Foil',
-        'A separate, independent shine some pulls get regardless of rarity (per-pack foil chance). Foil sells for 2.5x the normal quicksell price.',
+        'A separate, independent shine some pulls get regardless of rarity (per-pack foil chance) — a STATIC prismatic foil stamp, deliberately distinct from the animated treatments the premium rarities carry. Foil sells for 2.5x the normal quicksell price.',
       ],
       [
         'Serialized',
-        "The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Full-Art, Ultra-Rare and Mythic cards can come out Serialized, from a fixed server-wide supply — 150 Full-Art, 100 Ultra-Rare and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.",
+        "The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Ultra-Rare, Full-Art and Mythic cards can come out Serialized, from a fixed server-wide supply — 100 Ultra-Rare, 75 Full-Art and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.",
       ],
       [
         'No pity, no guarantees',

@@ -74,7 +74,7 @@ import {
   reportListing,
 } from '../lib/supabase';
 
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Full-Art', 'Ultra-Rare', 'Mythic'];
+const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
 
 function defFor(cardId: string): CardDef {
   return (

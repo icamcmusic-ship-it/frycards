@@ -28,10 +28,14 @@ import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect, EssenceCost, totalCost } from '../game/v3/cards';
 import { cn } from '../lib/utils';
 import {
-  rarityChip,
   rarityBorder,
   rarityGlow,
   rarityAnimated,
+  rarityAbbr,
+  rarityBleeds,
+  raritySuperPlus,
+  rarityUltraPlus,
+  rarityRuleWeight,
   isMythic,
   RARITY_HEX,
 } from '../meta/rarity';
@@ -42,7 +46,6 @@ import {
   GENERIC_PIP,
   COLOR_LETTER,
   colorBg,
-  colorHexPrimary,
 } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
@@ -200,7 +203,106 @@ const PREMIUM_CSS = `
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 }
 
+/* ---- v6.8 "Gold Foil" template set ----
+   The shared print language every rarity now uses: an ink masthead, a boxed
+   4:3 art window, a rarity rule whose weight IS the ladder, and a dashed
+   flavor divider. Super-Rare and up animate inside the art window; Ultra-Rare
+   adds a diagonal ribbon; Full-Art and Mythic drop the frame for full-bleed
+   art (Mythic's is a looping video). Foil prints swap every animated layer
+   for a STATIC prismatic foil stamp. */
+@keyframes fc-foil-diag {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  55%, 100% { transform: translateX(230%) skewX(-18deg); }
+}
+@keyframes fc-ghost {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(1.2px, 0.8px); }
+}
+@keyframes fc-spark {
+  0% { background-position: 0 110%, 40% 130%; opacity: 0.35; }
+  50% { opacity: 0.85; }
+  100% { background-position: 0 -20%, 40% -50%; opacity: 0.35; }
+}
+@keyframes fc-scan {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+.fc-art-ghost {
+  mix-blend-mode: multiply;
+  opacity: 0.25;
+  animation: fc-ghost 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.fc-art-sweep {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 224, 150, 0.6) 45%,
+    rgba(255, 240, 200, 0.85) 50%, rgba(255, 224, 150, 0.6) 55%, transparent 100%);
+  mix-blend-mode: overlay;
+  animation: fc-foil-diag 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.fc-ribbon {
+  background: linear-gradient(110deg, #8a6d1f, #ffe9a3, #d4af37);
+  color: #3b2a06;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+/* Mythic full-bleed extras: drifting scanlines behind a failed/absent video,
+   rising embers over it, and a glowing gold inner frame. */
+.fc-my-scan {
+  background: repeating-linear-gradient(60deg, #241008, #241008 10px, #150a05 10px, #150a05 20px);
+  animation: fc-scan 3s linear infinite;
+  pointer-events: none;
+}
+.fc-my-spark {
+  background-image:
+    radial-gradient(circle 1.5px at 20% 85%, rgba(255, 179, 0, 0.9) 40%, transparent 65%),
+    radial-gradient(circle 2px at 70% 55%, rgba(225, 29, 46, 0.8) 40%, transparent 65%);
+  background-size: 100% 55%, 100% 70%;
+  background-repeat: repeat-y;
+  animation: fc-spark 4.5s linear infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.fc-my-frame {
+  border: 2px solid #d4af37;
+  box-shadow: 0 0 12px 2px rgba(212, 175, 55, 0.6);
+  pointer-events: none;
+}
+/* Static prismatic foil stamp — no motion anywhere, deliberately distinct
+   from the animated sweep the non-foil premium rarities use. */
+.fc-foil-band {
+  background: linear-gradient(135deg, #ffb6ea, #ffe29a, #a8f0d1, #9ec9ff, #c9a8ff, #ffb6ea);
+  color: #1a1a1a;
+}
+.fc-foil-body {
+  background: linear-gradient(135deg, #ffe6f7, #fff3c9, #d9f7e8, #d7ecff, #ecdcff, #ffe6f7);
+}
+.fc-foil-wash {
+  background: linear-gradient(135deg, rgba(255, 182, 234, 0.3), rgba(255, 226, 154, 0.25),
+    rgba(168, 240, 209, 0.25), rgba(158, 201, 255, 0.3));
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.fc-foil-ring {
+  padding: 3px;
+  background: linear-gradient(135deg, #ffb6ea, #ffe29a, #a8f0d1, #9ec9ff, #c9a8ff);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .fc-art-ghost,
+  .fc-art-sweep,
+  .fc-my-scan,
+  .fc-my-spark { animation: none; }
   .ur-filigree .ur-trace,
   .ur-filigree .ur-trace2,
   .ur-aurora,
@@ -1249,6 +1351,22 @@ const TIER: Record<
   },
 };
 
+/** Ultra-Rare corner-ribbon geometry per tier — the diagonal gold band the
+ * design strikes across the art window's top-left corner. */
+/** Approximate masthead height per tier — what the full-bleed template's
+ * badge column has to clear. */
+const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard: 21, full: 26 };
+
+/** Bottom padding the text box reserves for the corner stat plate. */
+const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 0, compact: 0, standard: 0, full: 16 };
+
+const RIBBON: Record<CardSize, { top: number; left: number; font: number; padX: number }> = {
+  micro: { top: 4, left: -16, font: 5, padX: 16 },
+  compact: { top: 5, left: -18, font: 5.5, padX: 20 },
+  standard: { top: 6, left: -22, font: 6.5, padX: 26 },
+  full: { top: 9, left: -32, font: 8, padX: 38 },
+};
+
 /** A chip printed in the rules box — keywords, Charm bond/Re-bond, Location
  * passive/produce — each with its glossary/explainer popover text. */
 export interface FaceChip {
@@ -1380,6 +1498,58 @@ function FittedChips({
   );
 }
 
+/** Rules text that MEASURES itself: it starts at the tier's line budget and
+ * sheds one clamped line at a time until the paragraph genuinely fits the
+ * text box, so a long ability can never be cut off mid-line. */
+function FittedRules({
+  text,
+  fontPx,
+  maxLines,
+  onArt,
+  className,
+  small,
+}: {
+  text: string;
+  fontPx: number;
+  maxLines: number;
+  onArt: boolean;
+  className?: string;
+  small: boolean;
+}) {
+  const [lines, setLines] = useState(maxLines);
+  const ref = useRef<HTMLParagraphElement>(null);
+  const resetKey = `${text}|${fontPx}|${maxLines}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
+    setLines(maxLines);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const box = el?.parentElement;
+    if (el && box && box.scrollHeight > box.clientHeight + 1) {
+      setLines((l) => (l > 1 ? l - 1 : l));
+    }
+  });
+  return (
+    <p
+      ref={ref}
+      className={cn('leading-snug break-words font-semibold', className)}
+      style={{
+        fontSize: fontPx,
+        display: '-webkit-box',
+        WebkitBoxOrient: 'vertical',
+        WebkitLineClamp: lines,
+        overflow: 'hidden',
+        textShadow: onArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+      }}
+    >
+      {renderKeywordText(text, small)}
+    </p>
+  );
+}
+
 /** v4.26 lowest-priority element on the card: flavor text renders at up to
  * `maxLines` clamped lines, then MEASURES its wrapper — whenever the clamped
  * paragraph still doesn't fit the leftover space it sheds one line at a time
@@ -1387,12 +1557,13 @@ function FittedChips({
 function FittedFlavor({
   text,
   fontPx,
-  fullArt,
+  onArt,
   setClassName,
 }: {
   text: string;
   fontPx: number;
-  fullArt: boolean;
+  /** Rendered over artwork (full-bleed template) — lighter divider + shadow. */
+  onArt: boolean;
   setClassName: string;
 }) {
   const MAX_LINES = 4;
@@ -1416,8 +1587,10 @@ function FittedFlavor({
     <div
       ref={ref}
       className={cn(
-        'mt-1 pt-1 border-t min-h-0 overflow-hidden',
-        fullArt ? 'border-white/20' : 'border-[var(--c-ink)]/15',
+        // Pinned to the bottom of the text box under a dashed rule, per the
+        // template's flavor divider.
+        'mt-auto pt-1 border-t border-dashed min-h-0 overflow-hidden',
+        onArt ? 'border-white/30' : 'border-[var(--c-ink)]/40',
       )}
     >
       <p
@@ -1428,7 +1601,7 @@ function FittedFlavor({
           WebkitBoxOrient: 'vertical',
           WebkitLineClamp: lines,
           overflow: 'hidden',
-          textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
+          textShadow: onArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
         }}
       >
         {text}
@@ -1792,9 +1965,8 @@ export function CardFace({
   const isFoil = foil && !serial;
   const label = `${def.name}, ${typeLineText(def)}${stats}${isFoil ? ', foil' : ''}${serial ? `, Serialized #${serial.number} of ${capText(serial.cap)}` : ''}`;
   const rarityHex = RARITY_HEX[def.rarity || 'Common'] || RARITY_HEX.Common;
-  // The card's visible fill/background tracks its color identity; rarity
-  // keeps the border/glow/corner-gem treatment (rarityBorder/rarityGlow).
-  const colorFillHex = colorHexPrimary(cardColorsForFace);
+  // The card's visible fill/background tracks its color identity; rarity is
+  // printed by the rule bar, abbreviation plate and premium frame layers.
   const nameFontPx = fitFontSize(def.name, cfg.nameFont.base, cfg.nameFont.min, cfg.nameFont.soft);
   const rules = rulesText(def);
   const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 110);
@@ -1802,11 +1974,19 @@ export function CardFace({
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
   const bg = colorBg(cardColorsForFace);
   const TypeIcon = TYPE_ICON[def.type];
-  // Full-Art: the uploaded image fills the entire card footprint edge to
-  // edge; every normal piece of card text floats on top of it in
-  // semi-transparent panels so the art itself is the whole card.
-  const fullArt = def.rarity === 'Full-Art' && !serial;
+  // v6.8 template split. Full-Art (still image) and Mythic (looping video)
+  // print FULL-BLEED — the art fills the whole card footprint and every piece
+  // of card text floats over it. Every other rarity keeps the framed template:
+  // ink masthead, boxed 4:3 art window, rarity rule, text box.
+  const bleed = rarityBleeds(def.rarity);
+  const mythicArt = isMythic(def.rarity);
   const ultra = def.rarity === 'Ultra-Rare' && !serial;
+  // Framed premium art treatments — the rarity ghost tint + diagonal sweep
+  // (Super-Rare and up) and the corner ribbon (Ultra-Rare and up). A foil
+  // print replaces both with its static prismatic stamp; a full-bleed rarity
+  // has no art window to animate inside.
+  const artFx = raritySuperPlus(def.rarity) && !bleed && !isFoil && !serial && !dimmed;
+  const ribbon = rarityUltraPlus(def.rarity) && !bleed;
 
   // MTG-format stat plate content — Might/Grit (Resolve for Leaders) shown
   // in the bottom-right corner like a P/T box. Live-match values render
@@ -1824,7 +2004,7 @@ export function CardFace({
             tier={size}
             tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
             emboss={mythic}
-            onArt={fullArt}
+            onArt
           />
           <StatChip
             icon={Shield}
@@ -1841,7 +2021,7 @@ export function CardFace({
                   : '#22C55E'
             }
             emboss={mythic}
-            onArt={fullArt}
+            onArt
           />
         </>
       ) : (
@@ -1853,7 +2033,7 @@ export function CardFace({
             tier={size}
             tint="var(--c-red)"
             emboss={mythic}
-            onArt={fullArt}
+            onArt
           />
           <StatChip
             icon={Shield}
@@ -1862,7 +2042,7 @@ export function CardFace({
             tier={size}
             tint="#22C55E"
             emboss={mythic}
-            onArt={fullArt}
+            onArt
           />
         </>
       )
@@ -1874,9 +2054,150 @@ export function CardFace({
         tier={size}
         tint="#7C3AED"
         emboss={mythic}
-        onArt={fullArt}
+        onArt
       />
     ) : null;
+
+  // Text that sits over artwork (full-bleed template) needs a shadow to stay
+  // legible on any image.
+  const overArt: React.CSSProperties | undefined = bleed
+    ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' }
+    : undefined;
+  const rib = RIBBON[size];
+
+  /** Type line + rarity marker — "Type — Subtype" on the left, the short
+   * rarity abbreviation stamped on an ink plate on the right (the design's
+   * set-symbol slot). */
+  const typeLine = (
+    <div className={cn('relative z-10 flex items-center justify-between gap-1 shrink-0 px-1.5', cfg.typeLine)}>
+      <span
+        className={cn('font-bold uppercase tracking-wide truncate', bleed ? 'text-white/85' : 'text-[var(--c-ink)]')}
+        style={overArt}
+      >
+        {typeLineText(def)}
+        {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
+      </span>
+      {def.rarity && (
+        <span
+          className={cn('font-mono font-black rounded-[2px] leading-none shrink-0', cfg.rarityChip)}
+          style={{ backgroundColor: 'var(--c-ink)', color: rarityHex }}
+          title={def.rarity}
+        >
+          {rarityAbbr(def.rarity)}
+        </span>
+      )}
+    </div>
+  );
+
+  /** Rules + Leader abilities + flavor — identical content in both templates,
+   * inked on paper in the framed one and white-on-scrim in the bleed one. */
+  const textContent = (
+    <>
+      {chips.length > 0 && (
+        <FittedChips def={def} size={size} chips={chips} introduceKeywords={introduceKeywords} />
+      )}
+      {cfg.showRules && rules && (
+        <FittedRules
+          text={rules}
+          fontPx={fitFontSize(rules, cfg.rulesFont, cfg.rulesFont - 2, 90)}
+          maxLines={cfg.rulesLines}
+          onArt={bleed}
+          className={chips.length > 0 ? 'mt-1' : undefined}
+          small={size !== 'full'}
+        />
+      )}
+      {cfg.showRules && def.type === 'Leader' && (def.leaderAbilities?.length ?? 0) > 0 && (
+        <div className="flex flex-col gap-0.5 mt-1">
+          {def.leaderAbilities!.map((ab, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-1 leading-snug break-words"
+              style={{ fontSize: cfg.rulesFont, ...overArt }}
+            >
+              <span
+                className="shrink-0 font-mono font-black rounded-full px-1 border"
+                style={{
+                  fontSize: Math.max(6, cfg.rulesFont - 1),
+                  color: bleed ? '#C4B5FD' : '#7C3AED',
+                  borderColor: 'color-mix(in srgb, #7C3AED 45%, transparent)',
+                  backgroundColor: 'color-mix(in srgb, #7C3AED 12%, transparent)',
+                }}
+                title="Resolve cost"
+              >
+                {ab.resolveDelta > 0 ? `+${ab.resolveDelta}` : ab.resolveDelta}
+              </span>
+              <span className="font-semibold min-w-0">
+                {renderKeywordText(ab.text ?? describeEffect(ab.effect), size !== 'full')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {cfg.showFlavor && def.flavor && (
+        <FittedFlavor text={def.flavor} fontPx={flavorFontPx} onArt={bleed} setClassName={set.className} />
+      )}
+    </>
+  );
+
+  /** Might/Grit (Resolve) plate — anchored to the card's bottom-right corner
+   * in both templates, on an ink plate the design carries at every rarity. */
+  const statPlate = statChips && (
+    <div
+      className={cn(
+        'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px] bg-[var(--c-ink)]',
+        'bottom-1 right-1',
+      )}
+      title={
+        def.type === 'Unit'
+          ? live
+            ? `Might/Grit — printed ${def.might}/${def.grit}`
+            : `Might ${def.might} / Grit ${def.grit}`
+          : `Resolve ${def.resolve}`
+      }
+    >
+      {statChips}
+    </div>
+  );
+
+  /** Owned-count / foil / serial / caller badges, stacked in one column so
+   * they can never overlap each other or the corner decorations. */
+  const badgeStack = (badge || isFoil || serial || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
+    <div
+      // Framed: inside the art window's top-left corner. Full-bleed: clear of
+      // the masthead, which spans the card's own top-left corner.
+      className="absolute z-30 left-1 flex flex-col items-start gap-0.5"
+      style={{ top: bleed ? MASTHEAD_H[size] + 4 : 4 }}
+    >
+      {badge && (
+        <span className={cn('bg-[var(--c-red)] text-white font-black px-1 rounded-full', cfg.artBadge)}>
+          {badge}
+        </span>
+      )}
+      {isFoil && (
+        <span className={cn('fc-foil-band font-black rounded-full border border-[var(--c-ink)]/40', cfg.foilBadge)}>
+          ✦ FOIL
+        </span>
+      )}
+      {serial && (
+        <span
+          className={cn('serial-plate font-black rounded-full tracking-wide', cfg.foilBadge)}
+          title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
+        >
+          #{serial.number}/{capText(serial.cap)}
+        </span>
+      )}
+      {count !== undefined && count > 0 && (
+        <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
+          ×{count}
+        </span>
+      )}
+      {(foilCount || 0) > 0 && (
+        <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
+          ✦ {foilCount}
+        </span>
+      )}
+    </div>
+  );
 
   return (
     // A plain <div role="button"> rather than a <button>: the footer can
@@ -1899,12 +2220,16 @@ export function CardFace({
           onClick();
         }
       }}
-      style={{ width: w, height: h, backgroundImage: bg }}
+      style={{ width: w, height: h, backgroundImage: bleed || isFoil ? undefined : bg }}
       className={cn(
         'relative flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)] text-left shrink-0 transition-transform overflow-hidden',
         cfg.outerBorder,
         cfg.rounded,
-        rarityBorder(def.rarity),
+        // The design's frame is a single ink hairline at every rarity — the
+        // ladder is read from the rarity rule under the art and the abbr
+        // plate, not from a colored border.
+        'border-[var(--c-ink)]',
+        isFoil && !bleed && 'fc-foil-body',
         onClick && 'btn-pop cursor-pointer',
         dimmed && 'opacity-45 saturate-50',
         highlight && 'ring-4 ring-[var(--c-yellow)] -translate-y-1',
@@ -1917,65 +2242,52 @@ export function CardFace({
               : ultra
                 ? 'ultra-frame'
                 : cfg.showGlow && rarityGlow(def.rarity)),
-        // Mythic already animates its own box-shadow pulse (mythic-frame) —
-        // stacking foil-glow's competing box-shadow keyframes causes visible
-        // stutter, so a mythic foil gets only the frame.
-        isFoil && !dimmed && !mythic && 'foil-glow',
         (ultra || mythic) && !dimmed && 'premium-card',
       )}
     >
-      {/* Corner gem — a small decorative flourish marking Rare+ prints. */}
-      {cfg.showCornerGem && def.rarity && def.rarity !== 'Common' && def.rarity !== 'Uncommon' && (
-        <span
-          aria-hidden
-          className="absolute top-0 left-0 w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-[var(--c-ink)] z-10"
-          style={{ backgroundColor: rarityHex }}
-        />
+      {/* ---- Full-bleed art layer (Full-Art still image / Mythic video) ---- */}
+      {bleed && (
+        <div className="absolute inset-0 z-0 bg-[#111]">
+          {/* Mythic's scanline bed shows through wherever the looping video
+              hasn't painted yet (or failed to load). */}
+          {mythicArt && !dimmed && <div aria-hidden className="fc-my-scan absolute inset-0" />}
+          <div className="absolute inset-0">
+            <CardArt def={def} cover />
+          </div>
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: [
+                'radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%)',
+                'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.08) 16%, rgba(0,0,0,0.02) 38%, rgba(0,0,0,0.15) 52%, rgba(0,0,0,0.62) 66%, rgba(0,0,0,0.96) 100%)',
+              ].join(', '),
+            }}
+          />
+          {mythicArt && !dimmed && <div aria-hidden className="fc-my-spark absolute inset-0" />}
+          {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
+        </div>
       )}
 
-      {/* Header: name + ESSENCE COST row (where the dice-era cost badge
-          lived). Mythic prints a distinct gold-on-red name banner; Full-Art
-          drops the boxed panel entirely — name/pips float directly on the
-          full-bleed art with a text-shadow/scrim for legibility. */}
+      {/* ---- Masthead: name + essence cost ----
+          A solid ink banner on the framed template, the same banner at 90%
+          opacity over the art on the bleed one, and a static prismatic band
+          (black title, no motion) on a foil print. */}
       <div
         className={cn(
-          'relative flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0 z-10',
+          'relative z-20 flex items-center justify-between gap-1 pl-1.5 pr-1 shrink-0',
           cfg.headerPy,
-          !fullArt && 'border-b-2',
-          mythic
-            ? 'mythic-bg border-[#7A1420]'
-            : ultra
-              ? 'ultra-banner border-[#8a6d1f]'
-              : fullArt
-                ? 'bg-gradient-to-b from-black/60 via-black/25 to-transparent'
-                : 'border-[var(--c-ink)]/15',
+          isFoil ? 'fc-foil-band' : bleed ? 'bg-[var(--c-ink)]/90' : 'bg-[var(--c-ink)]',
         )}
-        style={
-          mythic || fullArt || ultra
-            ? undefined
-            : { backgroundColor: `color-mix(in srgb, ${colorFillHex} 45%, var(--c-paper))` }
-        }
       >
         <span
           className={cn(
-            'flex items-center gap-1 min-w-0 heading-font leading-tight',
-            mythic ? 'text-[var(--c-yellow)]' : ultra ? 'text-[#241a04]' : fullArt && 'text-white',
+            'flex items-center gap-1 min-w-0 heading-font uppercase leading-tight tracking-[0.03em]',
+            isFoil ? 'text-[#1A1A1A]' : 'text-[var(--c-paper)]',
           )}
-          style={
-            fullArt
-              ? { textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.5)' }
-              : undefined
-          }
           title={def.name}
         >
-          <TypeIcon
-            className={cn(
-              'shrink-0 opacity-70',
-              cfg.typeIconSize,
-              mythic && 'opacity-90',
-              fullArt && 'opacity-95 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]',
-            )}
-          />
+          <TypeIcon className={cn('shrink-0 opacity-80', cfg.typeIconSize)} />
           {/* Hard two-line clamp on top of the auto-shrink. */}
           <span className="break-words line-clamp-2" style={{ fontSize: nameFontPx }}>
             {def.name}
@@ -1987,337 +2299,131 @@ export function CardFace({
             className="shrink-0"
             title={costSummary(def) || undefined}
           >
-            <EssenceCostRow cost={def.cost} type={def.type} size={size} onArt={fullArt} />
+            <EssenceCostRow cost={def.cost} type={def.type} size={size} onArt={!isFoil} />
           </CostInfoButton>
         )}
       </div>
 
-      {/* Art — Full-Art fills the entire card footprint edge-to-edge behind
-          every other layer. Every other rarity keeps the classic fixed 4:3
-          boxed art so the full uploaded image always shows, never cropped. */}
-      <div
-        className={cn(
-          'relative overflow-hidden',
-          fullArt
-            ? 'absolute inset-0 z-0 rounded-none border-0'
-            : cn(
-                'w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 rounded-[2px]',
-                cfg.artBorder,
-                'border-[var(--c-ink)]',
-              ),
-        )}
-        style={!fullArt && cfg.artRing ? { boxShadow: `inset 0 0 0 2px ${rarityHex}` } : undefined}
-      >
-        <CardArt def={def} cover={fullArt} />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={
-            fullArt
-              ? {
-                  background: [
-                    'radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%)',
-                    'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.08) 16%, rgba(0,0,0,0.02) 38%, rgba(0,0,0,0.15) 52%, rgba(0,0,0,0.62) 66%, rgba(0,0,0,0.96) 100%)',
-                  ].join(', '),
-                }
-              : { boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }
-          }
-        />
-        {/* Small tiers keep the rarity chip on the art (their type line's
-            right slot carries the stats instead); the full tier prints
-            rarity on the type line, MTG set-symbol position. */}
-        {def.rarity && !fullArt && size !== 'full' && (
-          <span
+      {/* ---- Framed template: art window, rarity rule, type line, text box ---- */}
+      {!bleed && (
+        <>
+          <div
             className={cn(
-              'absolute top-1 right-1 font-black rounded-full leading-tight',
-              cfg.rarityChip,
-              rarityChip(def.rarity),
+              'relative overflow-hidden w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 border border-[var(--c-ink)]',
             )}
           >
-            {def.rarity}
-          </span>
-        )}
-        {/* v6.5: badge/foil/serial/count/foilCount are stacked in ONE
-            top-left column (same technique as MicroCard's corner stack)
-            instead of four independently-positioned absolute badges. They
-            used to double up at literal top-1/left-1 (badge vs isFoil vs
-            serial) AND, on Full-Art prints, the bottom corners collided
-            head-on with the Full-Art-only color swatches/stat plate
-            (bottom-1 left-1 vs bottom-1.5 left-1.5, bottom-1 right-1 vs
-            bottom-1 right-1) — silently hiding owned-count/foil-count under
-            the Full-Art decoration. Stacking them all here leaves both
-            bottom corners free for those Full-Art-only elements. */}
-        {(badge || isFoil || serial || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
-          <div className="absolute z-10 top-1 left-1 flex flex-col items-start gap-0.5">
-            {badge && (
+            <CardArt def={def} />
+            <div
+              aria-hidden
+              className="absolute inset-0 pointer-events-none"
+              style={{ boxShadow: 'inset 0 -18px 22px -14px rgba(0,0,0,0.55)' }}
+            />
+            {/* Super-Rare and up: the rarity's own color ghosts over the art
+                and a gold sweep travels diagonally across it. */}
+            {artFx && (
+              <>
+                <div
+                  aria-hidden
+                  className="fc-art-ghost absolute inset-0"
+                  style={{ backgroundColor: rarityHex }}
+                />
+                <div aria-hidden className="fc-art-sweep" />
+              </>
+            )}
+            {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
+            {/* Ultra-Rare and up: a struck gold ribbon across the art's
+                top-left corner. */}
+            {ribbon && (
               <span
-                className={cn(
-                  'bg-[var(--c-red)] text-white font-black px-1 rounded-full',
-                  cfg.artBadge,
-                )}
+                aria-hidden
+                className="fc-ribbon absolute z-20 heading-font"
+                style={{
+                  top: rib.top,
+                  left: rib.left,
+                  transform: 'rotate(-38deg)',
+                  fontSize: rib.font,
+                  padding: `2px ${rib.padX}px`,
+                }}
               >
-                {badge}
+                ULTRA
               </span>
             )}
-            {isFoil && (
-              <span
-                className={cn(
-                  'bg-gradient-to-r from-[var(--c-yellow)] via-[#E879F9] to-[var(--c-yellow)] text-[var(--c-ink)] font-black rounded-full',
-                  cfg.foilBadge,
-                )}
-              >
-                ✦ FOIL
-              </span>
-            )}
-            {serial && (
-              <span
-                className={cn('serial-plate font-black rounded-full tracking-wide', cfg.foilBadge)}
-                title={`Serialized print — #${serial.number} of ${capText(serial.cap)} ever made`}
-              >
-                #{serial.number}/{capText(serial.cap)}
-              </span>
-            )}
-            {count !== undefined && count > 0 && (
-              <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] text-[8px] font-black px-1 rounded-full">
-                ×{count}
-              </span>
-            )}
-            {(foilCount || 0) > 0 && (
-              <span className="bg-[var(--c-yellow)] text-[var(--c-ink)] text-[8px] font-black px-1 rounded-full">
-                ✦ {foilCount}
-              </span>
-            )}
+            {badgeStack}
           </div>
-        )}
-      </div>
 
-      {/* Full-Art pins the type-line + text-box group to the bottom edge as
-          one block; `display: contents` makes the wrapper invisible to
-          layout for every other rarity. */}
-      <div className={fullArt ? 'relative flex flex-col flex-1 min-h-0 justify-end' : 'contents'}>
-        {/* Full-art legibility: a backdrop-blur "frosted" panel behind the
-            whole bottom text region, fading in from transparent. */}
-        {fullArt && (
+          {/* Rarity rule — the ladder printed as a weight of ink. */}
           <div
             aria-hidden
-            className="absolute inset-x-0 bottom-0 h-[56%] pointer-events-none backdrop-blur-[3px] bg-black/25"
-            style={{
-              WebkitMaskImage:
-                'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,1) 40%)',
-              maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,1) 40%)',
-            }}
+            className="mx-1.5 mt-1 shrink-0"
+            style={
+              isFoil
+                ? {
+                    height: rarityRuleWeight(def.rarity),
+                    backgroundImage:
+                      'linear-gradient(90deg,#ffb6ea,#ffe29a,#a8f0d1,#9ec9ff,#c9a8ff)',
+                  }
+                : { height: rarityRuleWeight(def.rarity), backgroundColor: rarityHex }
+            }
           />
-        )}
-        {/* Type line — "Type — Subtype" (+ produced-essence pip for
-            Locations) with the Might/Grit gems (Resolve for Leaders) on the
-            right, in the same slots the old ATK/HP chips used. */}
-        <div
-          className={cn(
-            'relative z-10 flex items-center justify-between shrink-0',
-            cfg.typeLine,
-            'px-1.5',
-          )}
-        >
-          <span className="flex items-center gap-1 min-w-0">
-            <span
+
+          {typeLine}
+
+          <div
+            className={cn(
+              'relative z-10 flex flex-col flex-1 min-h-0 overflow-hidden mx-1.5 mt-0.5 mb-0.5 border-t border-[var(--c-ink)]',
+              cfg.textBoxPad,
+            )}
+            // Reserve the bottom-right corner for the stat plate.
+            style={{ paddingBottom: PLATE_CLEARANCE[size] }}
+          >
+            {textContent}
+            <div className="flex-1 shrink-[2]" />
+          </div>
+        </>
+      )}
+
+      {/* ---- Full-bleed template: everything rides the bottom scrim ---- */}
+      {bleed && (
+        <>
+          {badgeStack}
+          <div className="flex-1 min-h-0" />
+          <div
+            className="relative z-20 flex flex-col shrink-0 pt-4 pb-1"
+            style={{
+              background:
+                'linear-gradient(0deg, rgba(20,15,10,0.94), rgba(20,15,10,0.5) 70%, transparent)',
+            }}
+          >
+            {typeLine}
+            <div
               className={cn(
-                'font-bold uppercase truncate',
-                fullArt ? 'text-white/85' : 'text-[var(--c-steel)]',
+                'relative z-10 flex flex-col min-h-0 overflow-hidden text-white mx-1.5',
+                cfg.textBoxPad,
               )}
-              style={fullArt ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' } : undefined}
+              style={{ paddingBottom: PLATE_CLEARANCE[size] }}
             >
-              {typeLineText(def)}
-              {cfg.showSetSuffix && def.set ? ` · ${def.set}` : ''}
-            </span>
-          </span>
-          {/* MTG format: at the full tier the type line's right slot carries
-              the rarity marker (set-symbol position) and stats live in the
-              bottom stat plate. The shorter tiers put the stats here instead
-              (their text box can't spare a plate row) with rarity on the art. */}
-          {size === 'full' || fullArt ? (
-            def.rarity && (
-              <span
-                className={cn(
-                  'font-black rounded-full leading-tight shrink-0',
-                  cfg.rarityChip,
-                  rarityChip(def.rarity),
-                )}
-              >
-                {def.rarity}
-              </span>
-            )
-          ) : (
-            statChips && <span className="flex items-center gap-1 shrink-0">{statChips}</span>
-          )}
-        </div>
-
-        {/* Text box — keyword chips + rules text + Leader abilities +
-            flavor on a subtly shaded, bordered panel. Full-Art drops the
-            boxed panel so it reads as the same unbroken bottom scrim as the
-            type line above it. */}
-        <div
-          className={cn(
-            'relative z-10 flex flex-col overflow-hidden',
-            fullArt ? 'shrink min-h-0' : 'flex-1 min-h-0',
-            cfg.textBoxPad,
-            fullArt
-              ? 'text-white'
-              : cn(
-                  'mx-1.5 mt-1 mb-1 rounded-[3px] border',
-                  mythic ? 'border-[#7A1420]/40' : 'border-[var(--c-ink)]/15',
-                ),
-          )}
-          style={
-            fullArt
-              ? undefined
-              : {
-                  backgroundColor: mythic
-                    ? 'color-mix(in srgb, #7A1420 8%, var(--c-paper))'
-                    : `color-mix(in srgb, ${colorFillHex} 8%, var(--c-paper))`,
-                }
-          }
-        >
-          {chips.length > 0 && (
-            <FittedChips
-              def={def}
-              size={size}
-              chips={chips}
-              introduceKeywords={introduceKeywords}
-            />
-          )}
-
-          {/* Rules text — card.text (or the generated lines from its
-              structured mechanics), with every recognized keyword mention
-              clickable. Hard line-clamped so it can never run off frame. */}
-          {cfg.showRules && rules && (
-            <p
-              className={cn('leading-snug break-words font-semibold', chips.length > 0 && 'mt-1')}
-              style={{
-                // Long ability text auto-shrinks (down to -2px) before the
-                // line clamp is ever allowed to bite.
-                fontSize: fitFontSize(rules, cfg.rulesFont, cfg.rulesFont - 2, 90),
-                display: '-webkit-box',
-                WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: cfg.rulesLines,
-                overflow: 'hidden',
-                textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
-              }}
-            >
-              {renderKeywordText(rules, size !== 'full')}
-            </p>
-          )}
-
-          {/* Leader abilities — the two Resolve-costed ability lines,
-              each prefixed by its Resolve delta. */}
-          {cfg.showRules && def.type === 'Leader' && (def.leaderAbilities?.length ?? 0) > 0 && (
-            <div className={cn('flex flex-col gap-0.5', 'mt-1')}>
-              {def.leaderAbilities!.map((ab, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'flex items-start gap-1 leading-snug break-words',
-                    fullArt ? 'text-white' : undefined,
-                  )}
-                  style={{
-                    fontSize: cfg.rulesFont,
-                    textShadow: fullArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
-                  }}
-                >
-                  <span
-                    className="shrink-0 font-mono font-black rounded-full px-1 border"
-                    style={{
-                      fontSize: Math.max(6, cfg.rulesFont - 1),
-                      color: '#7C3AED',
-                      borderColor: 'color-mix(in srgb, #7C3AED 45%, transparent)',
-                      backgroundColor: 'color-mix(in srgb, #7C3AED 12%, transparent)',
-                    }}
-                    title="Resolve cost"
-                  >
-                    {ab.resolveDelta > 0 ? `+${ab.resolveDelta}` : ab.resolveDelta}
-                  </span>
-                  <span className="font-semibold min-w-0">
-                    {renderKeywordText(ab.text ?? describeEffect(ab.effect), size !== 'full')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {cfg.showFlavor && def.flavor && (
-            <FittedFlavor
-              text={def.flavor}
-              fontPx={flavorFontPx}
-              fullArt={fullArt}
-              setClassName={set.className}
-            />
-          )}
-
-          {!fullArt && <div className="flex-1 shrink-[2]" />}
-        </div>
-
-        {/* Framed full-tier cards: the stat plate is a real flow row pinned
-            under the text box (bottom-right, MTG P/T position) so it can
-            never cover rules text. */}
-        {!fullArt && size === 'full' && statChips && (
-          <div className="relative z-10 flex justify-end shrink-0 px-1.5 pb-1 -mt-0.5">
-            <div className="flex items-center gap-0.5 rounded-[3px] px-0.5 py-[1px] bg-[var(--c-paper)] border border-[var(--c-ink)]/40 shadow-hard-black-xs">
-              {statChips}
+              {textContent}
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Set/print bar — the thin colored strip at the very bottom edge
-          (MTG collector-line position). The old color-dot footer band is
-          gone: color identity is already printed in the cost pips. */}
-      {def.set && !fullArt && (
+      {/* Set/print bar — the thin colored strip at the very bottom edge. */}
+      {def.set && !bleed && (
         <div className={cn('relative z-10 h-[3px] w-full shrink-0', set.bar)} title={def.set} />
       )}
-      {/* Full-Art: the stat plate floats over the art's bottom-right corner
-          on a dark backing (there is no frame to sit on). */}
-      {fullArt && statChips && (
-        <div
-          className="absolute z-30 bottom-1 right-1 flex items-center gap-0.5 rounded-[3px] px-0.5 py-[1px] bg-black/55 backdrop-blur-[2px]"
-          title={
-            def.type === 'Unit'
-              ? live
-                ? `Might/Grit — printed ${def.might}/${def.grit}`
-                : `Might ${def.might} / Grit ${def.grit}`
-              : `Resolve ${def.resolve}`
-          }
-        >
-          {statChips}
-        </div>
-      )}
-      {/* Full-Art: floating color swatch dots, bottom-LEFT (the stat plate
-          owns the bottom-right corner). */}
-      {fullArt && cardColorsForFace.length > 0 && (
-        <div
-          className="absolute z-20 bottom-1.5 left-1.5 flex gap-1"
-          title={`Color: ${cardColorsForFace.join('/')}`}
-        >
-          {cardColorsForFace.map((c) => (
-            <span
-              key={c}
-              aria-hidden
-              className="w-2.5 h-2.5 rounded-full border-[1.5px] border-white/80 flex items-center justify-center"
-              style={{
-                backgroundColor: COLOR_PIP[c].bg,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,0,0,0.35)',
-              }}
-            >
-              <EssenceIcon type={c} color={COLOR_PIP[c].fg} size={6} />
-            </span>
-          ))}
-        </div>
-      )}
+
+      {statPlate}
       {footer}
 
-      {serial && !dimmed && (
-        <div className="serialized-sheen absolute inset-0 pointer-events-none" />
-      )}
-      {isFoil && foilEffect && (
-        <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
-      )}
+      {/* Mythic's glowing gold inner frame sits above every art layer. */}
+      {mythicArt && !dimmed && <div aria-hidden className="fc-my-frame absolute inset-[3px] z-20" />}
+      {/* A foil print is a STATIC prismatic stamp: a shining border ring, no
+          motion of any kind (that is what separates it from the animated
+          premium rarities). */}
+      {isFoil && !dimmed && <div aria-hidden className="fc-foil-ring absolute inset-0 z-30" />}
+
+      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
       {!isFoil && !serial && animatedFx && !dimmed && (
         <div
           className={cn(
@@ -2329,28 +2435,34 @@ export function CardFace({
         />
       )}
       {/* Ultra-Rare "Gilded Relic": twinkling gold-dust layer + engraved
-          gold corner brackets, over the animated gold-leaf name banner. */}
+          gold corner brackets. */}
       {ultra && !dimmed && (
         <>
-          <div
-            aria-hidden
-            className="ultra-sparkle pointer-events-none"
-            style={edgeRingMaskStyle(size)}
-          />
+          <div aria-hidden className="ultra-sparkle pointer-events-none" style={edgeRingMaskStyle(size)} />
           {size === 'full' ? (
             <>
               <UltraFiligree size={size} />
               <div
                 aria-hidden
                 className="ur-aurora absolute z-10"
-                style={{ top: -OUTER_BORDER_PX[size], right: -OUTER_BORDER_PX[size], bottom: -OUTER_BORDER_PX[size], left: -OUTER_BORDER_PX[size] }}
+                style={{
+                  top: -OUTER_BORDER_PX[size],
+                  right: -OUTER_BORDER_PX[size],
+                  bottom: -OUTER_BORDER_PX[size],
+                  left: -OUTER_BORDER_PX[size],
+                }}
               />
             </>
           ) : (
             <div
               aria-hidden
               className="absolute pointer-events-none z-20"
-              style={{ top: -OUTER_BORDER_PX[size], right: -OUTER_BORDER_PX[size], bottom: -OUTER_BORDER_PX[size], left: -OUTER_BORDER_PX[size] }}
+              style={{
+                top: -OUTER_BORDER_PX[size],
+                right: -OUTER_BORDER_PX[size],
+                bottom: -OUTER_BORDER_PX[size],
+                left: -OUTER_BORDER_PX[size],
+              }}
             >
               <span className="absolute top-0.5 left-0.5 w-3 h-3 border-t-2 border-l-2 border-[#d4af37] rounded-tl-[3px]" />
               <span className="absolute top-0.5 right-0.5 w-3 h-3 border-t-2 border-r-2 border-[#d4af37] rounded-tr-[3px]" />
@@ -2366,7 +2478,6 @@ export function CardFace({
           <div aria-hidden className="mythic-embers absolute inset-0 pointer-events-none" />
           {size === 'full' && (
             <>
-              <div aria-hidden className={cn('my-void absolute inset-0 z-20', cfg.rounded)} />
               <MythicCrest />
               <div aria-hidden className="my-stars absolute inset-0 z-10" />
               <div aria-hidden className="my-corona absolute inset-0 z-10" />

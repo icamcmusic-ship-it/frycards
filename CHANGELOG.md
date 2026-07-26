@@ -8,6 +8,45 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v6.8 — New card template set, video cards to Mythic, Full-Art above Ultra-Rare
+
+- **New card template** (`src/components/CardFaceV4.tsx`), implementing the
+  "Card Template Options" design sheet. One print language at every rarity:
+  a solid ink masthead (name + the existing essence-cost pips), a boxed 4:3
+  art window, a **rarity rule** under the art whose thickness is the ladder
+  position (1px Common … 7px Mythic), a type line stamped with the short
+  rarity marker (C/U/R/SR/UR/FA/MY) instead of the spelled-out chip, a dashed
+  flavor divider, and the Might/Grit (Resolve) plate anchored to the card's
+  bottom-right corner at every tier. Rarity-specific layers: Super-Rare+ ghost
+  the rarity color over the art with a diagonal gold sweep; Ultra-Rare+ add a
+  struck gold corner ribbon; Full-Art and Mythic go full-bleed (Mythic over a
+  scanline bed, with rising embers and a glowing gold inner frame); foil
+  prints are a **static** prismatic stamp (masthead band, border ring, body
+  wash, plain black title) with no motion at all.
+- **Text fitting**: rules text now measures itself and sheds clamped lines
+  until it fits its box (`FittedRules`, same technique as `FittedFlavor`), so
+  a long ability can no longer be cut off mid-line; flavor is pinned to the
+  bottom of the text box under a dashed rule.
+- **Every video card is now Mythic.** The Mythic template *is* the looping
+  video print, so Astral Shoal, Chrysalis of the Departed, Faye's True Face
+  and Void Mother moved Full-Art -> Mythic (Supabase `cards` + the bundled
+  `src/game/generated-cards.ts` fallback). Mythic 6 -> 10 cards,
+  Full-Art 30 -> 26.
+- **Full-Art moved above Ultra-Rare** on the whole ladder: `RARITY_ORDER`,
+  `packodds`/`PackOpening`/marketplace/shop orderings, the deterministic
+  stat-budget tier in `cardpool.ts`, the `Rarity` unions, quicksell price
+  (500 -> 1000, above Ultra-Rare's 800 — client `economy.ts` and the
+  `card_sell_price` SQL function), the `rarity_tier` SQL function, serialized
+  supply (`serialized_supply.cap` for Full-Art 150 -> 75, below Ultra-Rare's
+  100), and every `pack_types.slot_config` weight (Full-Art's and
+  Ultra-Rare's weights swap in each slot, leaving each slot's total
+  probability mass unchanged; the one slot that offered Full-Art without
+  Ultra-Rare now offers Ultra-Rare there instead). Deck copy caps are
+  unchanged (Super-Rare/Ultra-Rare/Full-Art 2, Mythic 1).
+- **Dev gallery** (`/gallery.html`) rebuilt to mirror the design sheet's
+  coverage: every card type at every rarity, both full-bleed rarities,
+  serialized prints and a foil-print row, at all four card sizes.
+
 ### v6.6 — Randomised turn order, tempo-based first-mover compensation, cost-lever fix
 
 - **Turn order is now a per-match coin flip.** The human seat is hardcoded to

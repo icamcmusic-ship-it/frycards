@@ -156,7 +156,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Unit",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/Astral%20Shoal%3AThey%20do%20not%20swim%20in%20water%2C%20but%20in%20the%20cold%2C%20silent%20currents%20between%20stars.%20To%20them%2C%20our%20worlds%20are%20but%20stones%20at%20the%20bottom%20of%20the%20stream.mp4",
     "flavor": "They do not swim in water, but in the cold, silent currents between stars. To them, our worlds are but stones at the bottom of the stream.",
-    "rarity": "Full-Art"
+    "rarity": "Mythic"
   },
   {
     "id": "avatar_of_the_abyss",
@@ -453,7 +453,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Charm",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/Chrysalis%20of%20the%20Departed%3AA%20quiet%20exit%2C%20leaving%20nothing%20behind%20but%20the%20gentle%2C%20silent%20flutter%20of%20paper%20wings.mp4",
     "flavor": "A quiet exit, leaving nothing behind but the gentle, silent flutter of paper wings.",
-    "rarity": "Full-Art"
+    "rarity": "Mythic"
   },
   {
     "id": "cinder_mite",
@@ -759,7 +759,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Unit",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/frybandit_httpss.mj.runhIx_-nP9crY_Moths_coming_out_of_face_-_43daf590-12ef-41fd-ae36-78b5a4271fc8_1.mp4",
     "flavor": "To look upon her directly is to understand that some masks are grown, not worn.",
-    "rarity": "Full-Art"
+    "rarity": "Mythic"
   },
   {
     "id": "femur_catapult",
@@ -2532,7 +2532,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Unit",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Full%20Arts%20Collection%201/Void%20Mother%3AShe%20was%20told%20she%20held%20the%20future%20of%20humanity%20in%20her%20hands.mp4",
     "flavor": "She was told she held the future of humanity in her hands.",
-    "rarity": "Full-Art"
+    "rarity": "Mythic"
   },
   {
     "id": "volcanic_crab",

@@ -378,8 +378,8 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   'Uncommon',
                   'Rare',
                   'Super-Rare',
-                  'Full-Art',
                   'Ultra-Rare',
+                  'Full-Art',
                   'Mythic',
                 ].map((r) => (
                   <option key={r}>{r}</option>

@@ -26,8 +26,8 @@ const RARITY_ORDER = [
   'Uncommon',
   'Rare',
   'Super-Rare',
-  'Full-Art',
   'Ultra-Rare',
+  'Full-Art',
   'Mythic',
 ];
 const rarityRank = (r: string) => Math.max(0, RARITY_ORDER.indexOf(r));

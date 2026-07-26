@@ -53,9 +53,12 @@ Resolve/abilities) are assigned **deterministically client-side** by
 card's id plus its type and rarity — identical on every client, and rebalance
 ships as a code change, not a data migration.
 
-**Rarities:** Common, Uncommon, Rare, Super-Rare, Full-Art, Ultra-Rare,
-Mythic. Rarity shapes pack odds and gently scales a card's stat/cost budget;
-it carries no other rules weight.
+**Rarities:** Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Full-Art,
+Mythic (v6.8: Full-Art sits ABOVE Ultra-Rare — second-rarest, behind Mythic
+only). Rarity shapes pack odds and gently scales a card's stat/cost budget;
+it carries no other rules weight. Full-Art prints edge-to-edge still art and
+Mythic prints edge-to-edge looping video; everything else uses the framed
+template (see `src/components/CardFaceV4.tsx`).
 
 There are 8 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
 Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruin-Walker
