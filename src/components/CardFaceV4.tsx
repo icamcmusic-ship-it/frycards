@@ -1357,8 +1357,13 @@ const TIER: Record<
  * badge column has to clear. */
 const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard: 21, full: 26 };
 
-/** Bottom padding the text box reserves for the corner stat plate. */
-const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 0, compact: 0, standard: 0, full: 16 };
+/** Bottom padding the text box reserves for the corner stat plate — sized to
+ * that tier's StatChip height (see the `textClass`/`iconClass` picks in
+ * StatChip) so flavor text can never render underneath it. Cards with no
+ * stat plate (Locations, Charms, Events) don't need the clearance, but
+ * reserving it unconditionally keeps every card's text box the same height
+ * within a tier. */
+const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 8, compact: 11, standard: 14, full: 18 };
 
 const RIBBON: Record<CardSize, { top: number; left: number; font: number; padX: number }> = {
   micro: { top: 4, left: -16, font: 5, padX: 16 },
