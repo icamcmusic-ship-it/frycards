@@ -16,3 +16,6 @@ scripts/live-cards.json
 # the latest run or two are ever needed, and they stay on disk locally after
 # a run rather than living in git.
 docs/sim-runs/
+
+# Claude Code internal state (agent worktrees, local session data).
+.claude/
