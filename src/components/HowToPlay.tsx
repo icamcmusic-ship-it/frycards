@@ -52,10 +52,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
       ],
       ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
-      [
-        'Dusk',
-        '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.',
-      ],
+      ['Dusk', '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.'],
     ],
   },
   {
@@ -204,7 +201,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Serialized',
-        "The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Ultra-Rare, Full-Art and Mythic cards can come out Serialized, from a fixed server-wide supply — 100 Ultra-Rare, 75 Full-Art and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.",
+        'The rarest possible pull: a numbered print with its own rotating prismatic frame. Only Ultra-Rare, Full-Art and Mythic cards can come out Serialized, from a fixed server-wide supply — 100 Ultra-Rare, 75 Full-Art and 50 Mythic total, ever. About a 1-in-100 chance per pack. Serialized copies can never be foil and can never be quicksold.',
       ],
       [
         'No pity, no guarantees',
@@ -340,32 +337,32 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                       {term}
                     </div>
                   ) : (
-                  <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
-                    <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
-                      {sec.title.includes('Essence Identity') && (
-                        <span
-                          className="inline-flex items-center justify-center rounded-full font-mono font-black shrink-0"
-                          style={{
-                            width: 14,
-                            height: 14,
-                            fontSize: 8,
-                            backgroundColor: COLOR_PIP[term as (typeof COLORS)[number]]?.bg,
-                            color: COLOR_PIP[term as (typeof COLORS)[number]]?.fg,
-                          }}
-                        >
-                          <EssenceIcon
-                            type={term as (typeof COLORS)[number]}
-                            color={COLOR_PIP[term as (typeof COLORS)[number]]?.fg}
-                            size={8}
-                          />
-                        </span>
-                      )}
-                      {term}
-                    </dt>
-                    <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
-                      {desc}
-                    </dd>
-                  </div>
+                    <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
+                      <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
+                        {sec.title.includes('Essence Identity') && (
+                          <span
+                            className="inline-flex items-center justify-center rounded-full font-mono font-black shrink-0"
+                            style={{
+                              width: 14,
+                              height: 14,
+                              fontSize: 8,
+                              backgroundColor: COLOR_PIP[term as (typeof COLORS)[number]]?.bg,
+                              color: COLOR_PIP[term as (typeof COLORS)[number]]?.fg,
+                            }}
+                          >
+                            <EssenceIcon
+                              type={term as (typeof COLORS)[number]}
+                              color={COLOR_PIP[term as (typeof COLORS)[number]]?.fg}
+                              size={8}
+                            />
+                          </span>
+                        )}
+                        {term}
+                      </dt>
+                      <dd className="text-[12px] font-medium text-[var(--c-ink)]/90 leading-snug">
+                        {desc}
+                      </dd>
+                    </div>
                   ),
                 )}
                 {sec.title === '9 · Rarity System' && (

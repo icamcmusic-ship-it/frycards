@@ -56,7 +56,11 @@ const LEADER: CardDef = {
   cost: { generic: 1, pips: {} },
   resolve: 3,
   leaderAbilities: [
-    { resolveDelta: -1, effect: { action: 'damage', value: 2, target: 'anyTarget' }, text: '-1: 2 dmg' },
+    {
+      resolveDelta: -1,
+      effect: { action: 'damage', value: 2, target: 'anyTarget' },
+      text: '-1: 2 dmg',
+    },
     { resolveDelta: 1, effect: { action: 'draw', value: 1, target: 'none' }, text: '+1: deal 1' },
   ],
 };
@@ -80,7 +84,15 @@ function toHand(state: GameState, pid: 'P1' | 'P2', def: CardDef): string {
 
 /** Give a player enough colorless essence to pay anything in these tests. */
 function fund(state: GameState, pid: 'P1' | 'P2', n = 9): void {
-  state.players[pid].essence = { Ember: n, Tide: n, Root: n, Gale: n, Light: n, Shadow: n, Void: n };
+  state.players[pid].essence = {
+    Ember: n,
+    Tide: n,
+    Root: n,
+    Gale: n,
+    Light: n,
+    Shadow: n,
+    Void: n,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +347,17 @@ describe('essence cannot be conjured', () => {
     const s = game();
     const mine = summonUnit(s, 'P1', VANILLA);
     const enemy = summonUnit(s, 'P2', VANILLA);
-    const charm = { iid: 'worn#1', def: { id: 'w', name: 'w', type: 'Charm' as const, subtype: 'Worn' as const, rebondCost: 1, bond: { might: 3 } } };
+    const charm = {
+      iid: 'worn#1',
+      def: {
+        id: 'w',
+        name: 'w',
+        type: 'Charm' as const,
+        subtype: 'Worn' as const,
+        rebondCost: 1,
+        bond: { might: 3 },
+      },
+    };
     s.players.P1.wornCharms.push(charm);
     fund(s, 'P1');
     expect(rebondCharm(s, 'P1', charm.iid, enemy.iid)).toBe(false);
@@ -346,7 +368,11 @@ describe('essence cannot be conjured', () => {
   test('a pip cost cannot be paid with the wrong essence type', () => {
     const s = game();
     s.players.P1.essence = { Tide: 5 };
-    const unit = toHand(s, 'P1', U('embery', 2, 2, [], { cost: { generic: 0, pips: { Ember: 1 } } }));
+    const unit = toHand(
+      s,
+      'P1',
+      U('embery', 2, 2, [], { cost: { generic: 0, pips: { Ember: 1 } } }),
+    );
     expect(canInvoke(s, 'P1', unit)).toBe(false);
   });
 
@@ -502,20 +528,36 @@ describe('turn-boundary triggers', () => {
     const s = game({ deck: [VANILLA.id, VANILLA.id, VANILLA.id, VANILLA.id] });
     // P1 controls a self-damaging Dawn trigger plus a fragile body that the
     // sweep kills; the fragile body must not still resolve its own trigger.
-    summonUnit(s, 'P1', U('sweeper', 1, 5, [], {
-      triggers: [{ when: 'atDawn', effect: { action: 'damage', value: 9, target: 'allEnemyUnits' } }],
-    }));
-    const doomed = summonUnit(s, 'P2', U('doomed', 1, 1, [], {
-      triggers: [{ when: 'atDawn', effect: { action: 'draw', value: 1, target: 'none' } }],
-    }));
+    summonUnit(
+      s,
+      'P1',
+      U('sweeper', 1, 5, [], {
+        triggers: [
+          { when: 'atDawn', effect: { action: 'damage', value: 9, target: 'allEnemyUnits' } },
+        ],
+      }),
+    );
+    const doomed = summonUnit(
+      s,
+      'P2',
+      U('doomed', 1, 1, [], {
+        triggers: [{ when: 'atDawn', effect: { action: 'draw', value: 1, target: 'none' } }],
+      }),
+    );
     // Hand P2 the Dawn: P1 ends their turn.
     s.phase = 'Main2';
     endPhase(s);
     expect(findUnit(s, doomed.iid)).toBeDefined(); // P2's own sweeper hasn't run
     // Now give P2 a sweeper of their own and pass back.
-    summonUnit(s, 'P2', U('sweeper2', 1, 5, [], {
-      triggers: [{ when: 'atDawn', effect: { action: 'damage', value: 9, target: 'allEnemyUnits' } }],
-    }));
+    summonUnit(
+      s,
+      'P2',
+      U('sweeper2', 1, 5, [], {
+        triggers: [
+          { when: 'atDawn', effect: { action: 'damage', value: 9, target: 'allEnemyUnits' } },
+        ],
+      }),
+    );
     const handBefore = s.players.P2.hand.length;
     s.phase = 'Main2';
     endPhase(s); // P1's Dawn

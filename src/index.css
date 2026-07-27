@@ -413,15 +413,7 @@ h4,
    plus a twinkling gold-dust layer over the whole face. Distinct at a glance
    from both Super-Rare (static purple tint) and Mythic (red/ember inferno). */
 .ultra-banner {
-  background: linear-gradient(
-    110deg,
-    #8a6d1f,
-    #d4af37,
-    #ffe9a3,
-    #f3cf5d,
-    #d4af37,
-    #8a6d1f
-  );
+  background: linear-gradient(110deg, #8a6d1f, #d4af37, #ffe9a3, #f3cf5d, #d4af37, #8a6d1f);
   background-size: 250% 100%;
   animation: mythic-bg-kf 7s ease-in-out infinite;
 }

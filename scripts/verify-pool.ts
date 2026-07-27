@@ -96,7 +96,9 @@ for (const id of bundled.keys()) {
   if (!live.has(id)) problems.push(`${id}: bundled-only — no longer in the live catalog`);
 }
 
-console.log(`Live catalog: ${rows.length} cards. Bundled catalog: ${GENERATED_CARDS.length} cards.`);
+console.log(
+  `Live catalog: ${rows.length} cards. Bundled catalog: ${GENERATED_CARDS.length} cards.`,
+);
 if (problems.length === 0) {
   console.log('Pool parity OK — template, rarity column and bundled catalog all agree.');
   process.exit(0);

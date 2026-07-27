@@ -41,12 +41,7 @@ import {
 } from '../meta/rarity';
 import { cardColors, COLORS, Color } from '../game/v3/colors';
 import { KEYWORD_TEXT } from '../game/v3/keywords';
-import {
-  COLOR_PIP,
-  GENERIC_PIP,
-  COLOR_LETTER,
-  colorBg,
-} from '../meta/colors';
+import { COLOR_PIP, GENERIC_PIP, COLOR_LETTER, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
 export function kwList(def: CardDef): string[] {
@@ -399,7 +394,15 @@ function MythicCrest() {
       <path d="M 100 140 L 91 140 L 100 133 Z" fill="url(#myVoid)" opacity="0.9" />
       {/* eclipse disc + corona ring, top center */}
       <circle cx="50" cy="2.4" r="2" fill="#0b0b18" stroke="url(#myVoid)" strokeWidth="0.6" />
-      <circle cx="50" cy="2.4" r="3.4" fill="none" stroke="#7b2ff7" strokeWidth="0.35" opacity="0.8" />
+      <circle
+        cx="50"
+        cy="2.4"
+        r="3.4"
+        fill="none"
+        stroke="#7b2ff7"
+        strokeWidth="0.35"
+        opacity="0.8"
+      />
       {/* corona flares flanking the disc */}
       <path d="M 44.5 2.4 L 46.5 1.6 L 46.5 3.2 Z" fill="url(#myVoid)" opacity="0.85" />
       <path d="M 55.5 2.4 L 53.5 1.6 L 53.5 3.2 Z" fill="url(#myVoid)" opacity="0.85" />
@@ -450,14 +453,18 @@ const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> =
  * can print (Quick, Slow, Bound, Worn, Sanctum, Re-bond, Resolve, …). */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   ...KEYWORD_TEXT,
-  Quick: 'Quick Event — may be invoked in any priority window, including during the opponent’s turn or a Clash.',
+  Quick:
+    'Quick Event — may be invoked in any priority window, including during the opponent’s turn or a Clash.',
   Slow: 'Slow Event — may only be invoked during your own main phase.',
   Bound: 'Bound Charm — bonds to a unit and is shattered along with it.',
   Worn: 'Worn Charm — survives its bonded unit; pay its Re-bond cost to bond it to another unit.',
   Sanctum: 'Sanctum Location — exhaust it for 1 essence of its type; it also carries an ability.',
-  Wellspring: 'Basic Location — exhausts for 1 essence of its type. Supplied automatically; takes no deck slots.',
-  Resolve: 'A Leader’s loyalty. Leader abilities spend or build Resolve; at 0 Resolve the Leader is shattered.',
-  Essence: 'Mana — produced by exhausting Locations. Colored pips must be paid with matching essence; generic with anything.',
+  Wellspring:
+    'Basic Location — exhausts for 1 essence of its type. Supplied automatically; takes no deck slots.',
+  Resolve:
+    'A Leader’s loyalty. Leader abilities spend or build Resolve; at 0 Resolve the Leader is shattered.',
+  Essence:
+    'Mana — produced by exhausting Locations. Colored pips must be paid with matching essence; generic with anything.',
   Shatter: 'Destroy — the card goes to the Ash-pile.',
   Banish: 'Remove from the game — the card goes to The Void.',
   Erode: 'Mill — cards from the top of a deck go to the Ash-pile.',
@@ -508,7 +515,11 @@ export function describeEffect(eff: Effect): string {
     case 'buff': {
       const isAll = eff.target === 'allFriendlyUnits';
       const subject =
-        eff.target === 'self' ? 'This card' : isAll ? 'ALL friendly units' : 'a target friendly unit';
+        eff.target === 'self'
+          ? 'This card'
+          : isAll
+            ? 'ALL friendly units'
+            : 'a target friendly unit';
       return `${subject} ${isAll ? 'get' : 'gets'} +${v}/+${v}`;
     }
     case 'shatter':
@@ -546,9 +557,7 @@ export function cardRuleLines(def: CardDef): string[] {
   if (def.produces) bits.push(`Exhaust: add one ${def.produces} essence`);
   if (def.locPassive)
     bits.push(
-      def.locPassive === 'MIGHT_ALL'
-        ? 'Your units get +1 Might'
-        : 'Your units get +1 Grit',
+      def.locPassive === 'MIGHT_ALL' ? 'Your units get +1 Might' : 'Your units get +1 Grit',
     );
   if (def.bond) {
     const stats = `+${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`;
@@ -999,7 +1008,13 @@ export function KeywordChip({
         <span className="truncate">{label ?? kw}</span>
       </button>
       {pos && popText && (
-        <KeywordPopover kw={label ?? kw} text={popText} pos={pos} close={close} triggerRef={btnRef} />
+        <KeywordPopover
+          kw={label ?? kw}
+          text={popText}
+          pos={pos}
+          close={close}
+          triggerRef={btnRef}
+        />
       )}
     </span>
   );
@@ -1024,7 +1039,9 @@ function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boole
       >
         {kw}
       </button>
-      {pos && text && <KeywordPopover kw={kw} text={text} pos={pos} close={close} triggerRef={btnRef} />}
+      {pos && text && (
+        <KeywordPopover kw={kw} text={text} pos={pos} close={close} triggerRef={btnRef} />
+      )}
     </span>
   );
 }
@@ -1643,7 +1660,11 @@ function rulesText(def: CardDef): string {
   // No structured mechanics at all (authored/dev cards): fall back to the
   // printed text — but only when no chip/pip already tells the story.
   const chipCovered =
-    def.keywords?.length || def.bond || def.rebondCost !== undefined || def.locPassive || def.produces;
+    def.keywords?.length ||
+    def.bond ||
+    def.rebondCost !== undefined ||
+    def.locPassive ||
+    def.produces;
   if (!chipCovered && def.text) return def.text;
   return '';
 }
@@ -1740,7 +1761,11 @@ function MicroCard({
         <EssenceCostRow cost={def.cost} type={def.type} size="micro" onArt />
       </div>
       {/* Corner status badges (count / foil / serial / caller badge) */}
-      {(badge || serial || isFoil || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
+      {(badge ||
+        serial ||
+        isFoil ||
+        (count !== undefined && count > 0) ||
+        (foilCount || 0) > 0) && (
         <div className="absolute z-20 top-[26px] left-0.5 flex flex-col items-start gap-0.5">
           {badge && (
             <span className="bg-[var(--c-red)] text-white text-[5.5px] font-black px-1 rounded-full">
@@ -1843,8 +1868,22 @@ function MicroCard({
               </span>
             ) : (
               <span className="flex items-center gap-0.5 shrink-0">
-                <StatChip icon={Swords} label="Might" value={def.might} tier="micro" tint="#F87171" onArt />
-                <StatChip icon={Shield} label="Grit" value={def.grit} tier="micro" tint="#4ADE80" onArt />
+                <StatChip
+                  icon={Swords}
+                  label="Might"
+                  value={def.might}
+                  tier="micro"
+                  tint="#F87171"
+                  onArt
+                />
+                <StatChip
+                  icon={Shield}
+                  label="Grit"
+                  value={def.grit}
+                  tier="micro"
+                  tint="#4ADE80"
+                  onArt
+                />
               </span>
             ))}
           {def.type === 'Leader' && (
@@ -1862,7 +1901,9 @@ function MicroCard({
         </div>
       </div>
       {footer}
-      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
+      {serial && !dimmed && (
+        <div className="serialized-sheen absolute inset-0 pointer-events-none" />
+      )}
       {isFoil && foilEffect && (
         <div className="foil-shimmer absolute inset-0 pointer-events-none opacity-60" />
       )}
@@ -2074,9 +2115,17 @@ export function CardFace({
    * rarity abbreviation stamped on an ink plate on the right (the design's
    * set-symbol slot). */
   const typeLine = (
-    <div className={cn('relative z-10 flex items-center justify-between gap-1 shrink-0 px-1.5', cfg.typeLine)}>
+    <div
+      className={cn(
+        'relative z-10 flex items-center justify-between gap-1 shrink-0 px-1.5',
+        cfg.typeLine,
+      )}
+    >
       <span
-        className={cn('font-bold uppercase tracking-wide truncate', bleed ? 'text-white/85' : 'text-[var(--c-ink)]')}
+        className={cn(
+          'font-bold uppercase tracking-wide truncate',
+          bleed ? 'text-white/85' : 'text-[var(--c-ink)]',
+        )}
         style={overArt}
       >
         {typeLineText(def)}
@@ -2139,7 +2188,12 @@ export function CardFace({
         </div>
       )}
       {cfg.showFlavor && def.flavor && (
-        <FittedFlavor text={def.flavor} fontPx={flavorFontPx} onArt={bleed} setClassName={set.className} />
+        <FittedFlavor
+          text={def.flavor}
+          fontPx={flavorFontPx}
+          onArt={bleed}
+          setClassName={set.className}
+        />
       )}
     </>
   );
@@ -2166,7 +2220,11 @@ export function CardFace({
 
   /** Owned-count / foil / serial / caller badges, stacked in one column so
    * they can never overlap each other or the corner decorations. */
-  const badgeStack = (badge || isFoil || serial || (count !== undefined && count > 0) || (foilCount || 0) > 0) && (
+  const badgeStack = (badge ||
+    isFoil ||
+    serial ||
+    (count !== undefined && count > 0) ||
+    (foilCount || 0) > 0) && (
     <div
       // Framed: inside the art window's top-left corner. Full-bleed: clear of
       // the masthead, which spans the card's own top-left corner.
@@ -2174,12 +2232,19 @@ export function CardFace({
       style={{ top: bleed ? MASTHEAD_H[size] + 4 : 4 }}
     >
       {badge && (
-        <span className={cn('bg-[var(--c-red)] text-white font-black px-1 rounded-full', cfg.artBadge)}>
+        <span
+          className={cn('bg-[var(--c-red)] text-white font-black px-1 rounded-full', cfg.artBadge)}
+        >
           {badge}
         </span>
       )}
       {isFoil && (
-        <span className={cn('fc-foil-band font-black rounded-full border border-[var(--c-ink)]/40', cfg.foilBadge)}>
+        <span
+          className={cn(
+            'fc-foil-band font-black rounded-full border border-[var(--c-ink)]/40',
+            cfg.foilBadge,
+          )}
+        >
           ✦ FOIL
         </span>
       )}
@@ -2422,13 +2487,17 @@ export function CardFace({
       {footer}
 
       {/* Mythic's glowing gold inner frame sits above every art layer. */}
-      {mythicArt && !dimmed && <div aria-hidden className="fc-my-frame absolute inset-[3px] z-20" />}
+      {mythicArt && !dimmed && (
+        <div aria-hidden className="fc-my-frame absolute inset-[3px] z-20" />
+      )}
       {/* A foil print is a STATIC prismatic stamp: a shining border ring, no
           motion of any kind (that is what separates it from the animated
           premium rarities). */}
       {isFoil && !dimmed && <div aria-hidden className="fc-foil-ring absolute inset-0 z-30" />}
 
-      {serial && !dimmed && <div className="serialized-sheen absolute inset-0 pointer-events-none" />}
+      {serial && !dimmed && (
+        <div className="serialized-sheen absolute inset-0 pointer-events-none" />
+      )}
       {!isFoil && !serial && animatedFx && !dimmed && (
         <div
           className={cn(
@@ -2443,7 +2512,11 @@ export function CardFace({
           gold corner brackets. */}
       {ultra && !dimmed && (
         <>
-          <div aria-hidden className="ultra-sparkle pointer-events-none" style={edgeRingMaskStyle(size)} />
+          <div
+            aria-hidden
+            className="ultra-sparkle pointer-events-none"
+            style={edgeRingMaskStyle(size)}
+          />
           {size === 'full' ? (
             <>
               <UltraFiligree size={size} />

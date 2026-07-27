@@ -245,7 +245,8 @@ function packetDamage(target: UnitInst, raw: number): number {
 function isRemoval(eff?: Effect): boolean {
   return (
     !!eff &&
-    (eff.action === 'shatter' || eff.action === 'banish' ||
+    (eff.action === 'shatter' ||
+      eff.action === 'banish' ||
       (eff.action === 'damage' && (eff.target === 'enemyUnit' || eff.target === 'anyTarget')))
   );
 }
@@ -396,7 +397,11 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (!reservedIid) tapAllLocations(state, pid);
 
   // Invoke the Leader once affordable (its abilities are recurring value).
-  if (!p.leader.invoked && !p.leader.shattered && canAffordPotential(state, pid, p.leader.def.cost)) {
+  if (
+    !p.leader.invoked &&
+    !p.leader.shattered &&
+    canAffordPotential(state, pid, p.leader.def.cost)
+  ) {
     tapForCost(state, pid, p.leader.def.cost);
     if (canInvokeLeader(state, pid) && invokeLeader(state, pid))
       observe?.({ kind: 'leaderInvoke', name: p.leader.def.name });
@@ -419,8 +424,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
       if (!tapForCost(state, pid, effectiveCost(state, pid, c.def))) continue;
       if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
-      const bondTargetIid =
-        c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
+      const bondTargetIid = c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
         observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
@@ -442,7 +446,13 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
         if (invokeCard(state, pid, reserved.iid, { targetIid })) {
-          observe?.({ kind: 'invoke', name: reserved.def.name, iid: reserved.iid, targetIid, targetName });
+          observe?.({
+            kind: 'invoke',
+            name: reserved.def.name,
+            iid: reserved.iid,
+            targetIid,
+            targetName,
+          });
         }
       }
     }
@@ -470,7 +480,8 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     if (isRemoval(eff)) v = opp.field.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
-    else if (eff.action === 'heal') v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
+    else if (eff.action === 'heal')
+      v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
     // v6.9: exhaust is worth real value against a READY board (it denies an
     // attack or a guard) and literally nothing against a tapped-out one.
     else if (eff.action === 'exhaust')
@@ -505,8 +516,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const opp = state.players[opponentOf(pid)];
   const candidates = legalAttackers(state, pid);
   const defenders = opp.field.filter((u) => !u.exhausted);
-  const firstStriker = (x: UnitInst) =>
-    unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
+  const firstStriker = (x: UnitInst) => unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
   // Mirrors engine `legalGuardsFor` — Aerial needs an Aerial/Skywatch catcher,
   // and v6.9 Nimble can only be caught by a strictly smaller body.
   const canBlock = (a: UnitInst, g: UnitInst) => {
@@ -591,8 +601,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const survives = attackerSurvives(u, worst);
     const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
     const notBehind = me.field.length >= opp.field.length;
-    const favorableTrade =
-      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
+    const favorableTrade = kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
   telemetry.onAttackDecision?.(state, pid, picked);
@@ -704,7 +713,9 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         // Cheapest body soaks the hit.
         const chump = legal.sort(
           (a, b) =>
-            effMight(state, a) + remainingGrit(state, a) - (effMight(state, b) + remainingGrit(state, b)),
+            effMight(state, a) +
+            remainingGrit(state, a) -
+            (effMight(state, b) + remainingGrit(state, b)),
         )[0];
         assignments[attacker.iid] = [chump.iid];
         used.add(chump.iid);
@@ -760,7 +771,9 @@ export function reactionPlays(
     progress = false;
     const options = p.hand
       .filter((c) => canInvoke(state, defender, c.iid))
-      .sort((a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def));
+      .sort(
+        (a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def),
+      );
     for (const c of options) {
       const quickRemoval =
         c.def.type === 'Event' && c.def.subtype === 'Quick' && isRemoval(c.def.onInvoke);

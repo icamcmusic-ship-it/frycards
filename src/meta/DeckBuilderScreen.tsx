@@ -644,7 +644,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             CHANGE LEADER
           </PopButton>
           {colorIdentity && (
-            <span className="flex items-center gap-1 shrink-0" title="Color identity — only cards in these colors are legal in this deck">
+            <span
+              className="flex items-center gap-1 shrink-0"
+              title="Color identity — only cards in these colors are legal in this deck"
+            >
               {colorIdentity.map((c) => (
                 <span
                   key={c}
