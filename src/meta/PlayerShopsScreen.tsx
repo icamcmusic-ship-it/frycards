@@ -412,21 +412,35 @@ function QuickAddBar({
   /** Copies of each (card, foil) already staged in `items`. */
   const staged = useMemo(() => {
     const m = new Map<string, number>();
-    for (const i of items) m.set(`${i.card_id}:${i.foil}`, (m.get(`${i.card_id}:${i.foil}`) || 0) + i.quantity);
+    for (const i of items)
+      m.set(`${i.card_id}:${i.foil}`, (m.get(`${i.card_id}:${i.foil}`) || 0) + i.quantity);
     return m;
   }, [items]);
 
   /** Every (card, foil) line with spare copies left to stage, cheapest first. */
   const available = useMemo(() => {
-    const out: { card_id: string; foil: boolean; rarity: string; free: number; value: number }[] = [];
+    const out: { card_id: string; foil: boolean; rarity: string; free: number; value: number }[] =
+      [];
     for (const c of inv ?? []) {
       const n = c.spare_normal - (staged.get(`${c.card_id}:false`) || 0);
       if (n > 0)
-        out.push({ card_id: c.card_id, foil: false, rarity: c.rarity, free: n, value: c.value_normal });
+        out.push({
+          card_id: c.card_id,
+          foil: false,
+          rarity: c.rarity,
+          free: n,
+          value: c.value_normal,
+        });
       if (includeFoils) {
         const f = c.spare_foil - (staged.get(`${c.card_id}:true`) || 0);
         if (f > 0)
-          out.push({ card_id: c.card_id, foil: true, rarity: c.rarity, free: f, value: c.value_foil });
+          out.push({
+            card_id: c.card_id,
+            foil: true,
+            rarity: c.rarity,
+            free: f,
+            value: c.value_foil,
+          });
       }
     }
     return out.sort((a, b) => a.value - b.value);
@@ -993,7 +1007,9 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                   )}
                   {s.top_rarity_tier != null && s.top_rarity_tier > 0 && (
                     <RarityPill
-                      rarity={RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, s.top_rarity_tier - 1)]}
+                      rarity={
+                        RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, s.top_rarity_tier - 1)]
+                      }
                       title="Highest rarity currently in stock"
                     >
                       {RARITY_ORDER[Math.min(RARITY_ORDER.length - 1, s.top_rarity_tier - 1)]} IN
@@ -1376,7 +1392,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                   .map((c) => `${defFor(c.card_id).name}${c.foil ? ' ✦' : ''}`)
                   .join(', ');
                 setNotice(
-                  names ? `Pack opened! You pulled: ${names}` : 'Pack opened! Check your Collection.',
+                  names
+                    ? `Pack opened! You pulled: ${names}`
+                    : 'Pack opened! Check your Collection.',
                 );
               }
               return e;
@@ -2239,9 +2257,7 @@ function ShopCustomizePanel({
           />
           <label className="block text-xs font-bold mb-1">
             Tagline{' '}
-            <span className="text-[var(--c-steel)] font-normal">
-              ({120 - tagline.length} left)
-            </span>
+            <span className="text-[var(--c-steel)] font-normal">({120 - tagline.length} left)</span>
           </label>
           <input
             className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
@@ -2282,12 +2298,7 @@ function OpenShopPanel({
   busy: boolean;
   error: string;
   credits: number;
-  onOpen: (
-    name: string,
-    banner: string | null,
-    tagline: string | null,
-    accent: ShopAccent,
-  ) => void;
+  onOpen: (name: string, banner: string | null, tagline: string | null, accent: ShopAccent) => void;
 }) {
   const [name, setName] = useState('');
   const [banner, setBanner] = useState('');
@@ -2544,7 +2555,10 @@ function PoolRequirements({
         >
           {multipleOk ? '✓' : '✕'} Pool size must be an exact multiple of {packSize}
           {!multipleOk && poolSize > 0 && (
-            <> — add {packSize - (poolSize % packSize)} more, or remove {poolSize % packSize}</>
+            <>
+              {' '}
+              — add {packSize - (poolSize % packSize)} more, or remove {poolSize % packSize}
+            </>
           )}
         </div>
         {rows.map((r, i) => {
@@ -2840,7 +2854,10 @@ function MysteryBuilderPanel({
                     value={g.count}
                     onChange={(e) => {
                       const next = [...guarantees];
-                      next[i] = { ...g, count: Math.max(1, Math.min(tSize, Number(e.target.value) || 1)) };
+                      next[i] = {
+                        ...g,
+                        count: Math.max(1, Math.min(tSize, Number(e.target.value) || 1)),
+                      };
                       setGuarantees(next);
                     }}
                     className="w-14 px-1 py-0.5 ink-border-sm text-[10px] font-bold"
@@ -2869,8 +2886,7 @@ function MysteryBuilderPanel({
               busy ||
               !tName.trim() ||
               guaranteedTotal > tSize ||
-              (tMode === 'simple' &&
-                !RARITIES.some((r) => (weights[r] ?? 0) > 0)) ||
+              (tMode === 'simple' && !RARITIES.some((r) => (weights[r] ?? 0) > 0)) ||
               (tMode === 'advanced' && slotSpecs.some((s) => s.mode === 'exact' && !s.card_id))
             }
             onClick={() =>

@@ -387,7 +387,12 @@ function HoverPreview({
   return createPortal(
     <div
       className="fixed z-[9990] pointer-events-none drop-shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
-      style={{ top: pos.top, left: pos.left, transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
+      style={{
+        top: pos.top,
+        left: pos.left,
+        transform: `scale(${HOVER_PREVIEW_SCALE})`,
+        transformOrigin: 'top left',
+      }}
     >
       {children}
     </div>,
@@ -398,14 +403,22 @@ function HoverPreview({
 // ---------------------------------------------------------------------------
 // Essence pips — the floating pool, rendered as colored circles.
 // ---------------------------------------------------------------------------
-function EssencePips({ pool, size = 16 }: { pool: Partial<Record<EssenceType, number>>; size?: number }) {
+function EssencePips({
+  pool,
+  size = 16,
+}: {
+  pool: Partial<Record<EssenceType, number>>;
+  size?: number;
+}) {
   const pips: { key: string; c: EssenceType }[] = [];
   for (const c of COLORS) {
     const n = pool[c] ?? 0;
     for (let i = 0; i < n; i++) pips.push({ key: `${c}${i}`, c });
   }
   if (pips.length === 0) {
-    return <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no essence floating</span>;
+    return (
+      <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no essence floating</span>
+    );
   }
   return (
     <span className="flex items-center gap-[3px] flex-wrap">
@@ -714,11 +727,7 @@ function ResolveDots({ resolve, max, mine }: { resolve: number; max: number; min
           className="w-[7px] h-[7px] rounded-full border border-[var(--c-ink)]"
           style={{
             backgroundColor:
-              i < resolve
-                ? mine
-                  ? 'var(--c-yellow)'
-                  : 'var(--c-red)'
-                : 'rgba(255,255,255,0.25)',
+              i < resolve ? (mine ? 'var(--c-yellow)' : 'var(--c-red)') : 'rgba(255,255,255,0.25)',
           }}
         />
       ))}
@@ -891,9 +900,7 @@ function LocationsLane({
         />
       ))}
       {locations.length === 0 && (
-        <span className="text-[8px] font-bold text-[var(--c-paper)]/30 shrink-0">
-          none in play
-        </span>
+        <span className="text-[8px] font-bold text-[var(--c-paper)]/30 shrink-0">none in play</span>
       )}
       {children}
     </div>
@@ -1086,18 +1093,38 @@ export function GameV4({
         seen.set(u.iid, u.damage);
         const prev = damageMemoRef.current.get(u.iid);
         if (prev !== undefined && u.damage > prev) {
-          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: u.damage - prev, kind: 'dmg' });
+          fresh.push({
+            id: ++floatIdRef.current,
+            iid: u.iid,
+            amount: u.damage - prev,
+            kind: 'dmg',
+          });
         } else if (prev !== undefined && u.damage < prev) {
-          fresh.push({ id: ++floatIdRef.current, iid: u.iid, amount: prev - u.damage, kind: 'heal' });
+          fresh.push({
+            id: ++floatIdRef.current,
+            iid: u.iid,
+            amount: prev - u.damage,
+            kind: 'heal',
+          });
         }
       }
       const vitKey = `vit:${pid}`;
       seen.set(vitKey, p.vitality);
       const prevVit = damageMemoRef.current.get(vitKey);
       if (prevVit !== undefined && p.vitality < prevVit) {
-        fresh.push({ id: ++floatIdRef.current, iid: vitKey, amount: prevVit - p.vitality, kind: 'dmg' });
+        fresh.push({
+          id: ++floatIdRef.current,
+          iid: vitKey,
+          amount: prevVit - p.vitality,
+          kind: 'dmg',
+        });
       } else if (prevVit !== undefined && p.vitality > prevVit) {
-        fresh.push({ id: ++floatIdRef.current, iid: vitKey, amount: p.vitality - prevVit, kind: 'heal' });
+        fresh.push({
+          id: ++floatIdRef.current,
+          iid: vitKey,
+          amount: p.vitality - prevVit,
+          kind: 'heal',
+        });
       }
     }
     damageMemoRef.current = seen;
@@ -1496,17 +1523,16 @@ export function GameV4({
       (v: string[]) => v.length > 0,
     ).length;
     const guardMsg =
-      guarded > 0 ? `${cpuLabel} assigns ${guarded} guard line(s).` : `${cpuLabel} lets it through!`;
+      guarded > 0
+        ? `${cpuLabel} assigns ${guarded} guard line(s).`
+        : `${cpuLabel} lets it through!`;
     say(reactions.length > 0 ? `${guardMsg} Reaction: ${reactions.join(', ')}!` : guardMsg);
     checkWinner();
   };
 
   const resolveMyClash = () => {
     if (!g.clash) return;
-    const participants = [
-      ...g.clash.attackers,
-      ...Object.values(g.clash.guards).flat(),
-    ];
+    const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
     if (resolveClash(g)) {
       flashUnits(participants);
       bump();
@@ -1809,10 +1835,7 @@ export function GameV4({
 
   /** Wellsprings the player may still place this turn (2 on the opening turn
    * when on the draw — see engine `wellspringAllowance`). */
-  const wellspringsLeft = Math.max(
-    0,
-    wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn,
-  );
+  const wellspringsLeft = Math.max(0, wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn);
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
@@ -2055,9 +2078,7 @@ export function GameV4({
               flash={flashIids.has(u.iid)}
               floats={floatsFor(u.iid)}
               guardNote={
-                attacking
-                  ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING`
-                  : undefined
+                attacking ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING` : undefined
               }
               onClick={
                 targetable

@@ -8,6 +8,125 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.0 — Board redesign, player-shop audit, Supabase hardening
+
+#### Match board — the "Tactile Lane" layout
+
+The side-panel-plus-row board is replaced by a full-width lane stack:
+phase stepper, opponent lane, opponent Locations, opponent field, clash
+divider, player field, player Locations, player lane, hand dock.
+
+- The **phase stepper** (Dawn → Main I → Clash → Main II → Dusk) is always on
+  screen instead of squeezed into the top bar.
+- Each player gets a **status lane**: Leader thumbnail (still the shared
+  CardFace template at its `micro` tier), Resolve as countable dots rather
+  than a bare number, and a Vitality heart plate. The player's lane also
+  carries their floating Essence pool and their Leader ability buttons inline.
+  A red/yellow wash marks whose lane is whose.
+- **Locations get their own lane** on each side — every Wellspring and Sanctum
+  is a visible board object rather than a footnote in a status bar. The
+  Wellspring picker and worn Charms ride along on the player's lane.
+- The **clash divider** carries the single primary action for the current step
+  (declare attack / resolve clash / confirm guards / advance phase / skip the
+  CPU). Those buttons no longer also live in the top bar, so there is exactly
+  one place to look for "what do I do now".
+- The **battle log** moved into a collapsible drawer toggled from the divider,
+  returning the vertical space the old midline strip took from both fields.
+- Card rendering is unchanged throughout: board units, hand cards, Leaders,
+  the ash-pile drawer and every overlay still render through `CardFaceV4`.
+- Adds `board-preview.html` (dev-only, same pattern as `gallery.html`) that
+  mounts the board against locally generated decks so the layout can be
+  exercised without a session.
+
+#### Engine — soak and hostile-input fuzzing
+
+New `src/game/v3/fuzz.test.ts`, complementing the hand-built cases in
+`edgecases.test.ts`:
+
+- 200 complete seeded AI-vs-AI matches over randomized real-catalog decks,
+  with hard invariants (no instance in two zones at once, no dead unit left
+  standing, no negative damage, no runaway vitality or essence, guard maps
+  only ever referencing real attackers, every game terminating) re-checked
+  after every single turn.
+- Malformed, prototype-shaped and out-of-turn arguments thrown at every
+  public engine action, asserting both that the call is refused and that the
+  state fingerprint is unchanged.
+
+That second suite found one real hole: **`activateLeaderAbility` accepted a
+stringified index.** Array indexing coerces, so passing `'0'` reached a real
+ability and spent Resolve on it, unlike every other public action which
+validates its identifiers. It now requires a non-negative integer.
+
+#### Player shops
+
+Backend (all enforced server-side in SECURITY DEFINER RPCs):
+
+- **Closing a shop refunded its collateral in full, eventually.** `close_shop`
+  paid back half the *current* collateral and left the remainder on the row,
+  so close → reopen → close → … converged on a 100% refund while every slot
+  stayed purchased. The un-refunded half is now burned, which is what the
+  rule always claimed.
+- **Serialized prints could be escrowed into listings and pools.** Only the
+  client reserved them; `assert_cards_available` now does too, so a
+  hand-rolled RPC call can no longer list a serialized copy.
+- **Mystery packs could advertise odds their pool could never pay out.** A
+  "simple" pack could promise 10% Rare over a pool of thirty Commons.
+  Templates now support explicit **rarity guarantees** ("N cards of rarity X
+  or better in every pack"), checked cumulatively so overlapping floors can't
+  be satisfied twice by the same card, and simple-mode weights must be backed
+  by a proportional share of the pool.
+- **Mystery listings could become permanently unbuyable.** The draw picked a
+  uniformly random pool row for every non-exact slot, so an open slot could
+  eat the copy an exact slot needed and the remaining packs raised "Pool
+  exhausted" forever with the seller's cards stuck in escrow. The draw is now
+  reserve-aware: exact slots, then rarity floors (strictest first, each
+  taking the lowest qualifying card), then open slots. A sold-out mystery
+  listing also frees its slot, which it never did.
+- Shop maintenance now charges every occupied slot; mystery listings had been
+  renting space for free.
+
+Front end:
+
+- **Buyers can see the whole pool.** A mystery listing now opens its full
+  submitted contents, what is left of each entry, per-rarity pull odds and the
+  pack's guarantees — previously a price and a single blended EV number were
+  all a buyer had to go on.
+- **Setting up a shop is far less clicking.** Bulk "add every spare Uncommon"
+  actions and a "fill to N packs" autofill build pools from the server's own
+  view of what is listable (deck locks and serialized prints already netted
+  out), and a live requirements checklist shows exactly which rule a pool is
+  short on, and by how much, while it is being built.
+- **Storefronts are somebody's shop.** Taglines, an accent colour and a banner
+  with a live preview; the directory and storefront headers are built from
+  them, and both now show real stock (listing counts, cheapest price, highest
+  rarity in stock, repeat buyers).
+- **Listings look like what they are.** Card listings take a rarity-tinted
+  frame from the best card they contain and call out how the price compares
+  to the server's reference value; mystery listings show a sell-through bar
+  and their pack size.
+
+#### Supabase
+
+- **Every SECURITY DEFINER RPC was callable by the `anon` role**, including
+  `admin_grant_currency`. `anon` and `PUBLIC` are revoked across the board and
+  `authenticated` is granted explicitly, with matching default privileges for
+  anything added later. Internal helpers (escrow returns, maintenance
+  settlement, rating recompute, pool validation) are no longer part of the
+  REST surface at all — they run as the owner from inside other functions.
+- Indexed the one unindexed foreign key in the schema
+  (`player_bounty_activity.card_id`).
+- **Realtime was publishing two immutable catalogs and nothing that moves.**
+  The publication now carries shops, listings, purchases, market listings,
+  trades, friendships, news, serialized supply, and the caller's own
+  collection and inventory — all RLS-scoped, so a row only ever reaches a
+  client already allowed to read it. Currency, collection, storefronts, the
+  marketplace, friend requests, trade offers and the news feed now update in
+  place instead of waiting for a navigation.
+
+Still outstanding: **leaked-password protection is off** in Auth settings.
+That is a project auth setting rather than schema, so it has to be switched on
+from the Supabase dashboard (Authentication → Policies → Password strength).
+
 ### v6.9 — A keyword per Essence Type, the blocked-is-blocked fix, catalog resync
 
 Full balance analysis in `docs/BALANCE_SIM_FINDINGS_v6.9.md` (which

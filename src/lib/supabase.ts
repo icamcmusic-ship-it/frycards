@@ -529,10 +529,7 @@ export interface PlayerAchievement {
 export async function fetchAchievements(
   userId: string,
 ): Promise<{ all: Achievement[]; mine: PlayerAchievement[] }> {
-  const [
-    { data: all, error: allError },
-    { data: mine, error: mineError },
-  ] = await Promise.all([
+  const [{ data: all, error: allError }, { data: mine, error: mineError }] = await Promise.all([
     supabase.from('achievements').select('*').order('sort'),
     supabase
       .from('player_achievements')

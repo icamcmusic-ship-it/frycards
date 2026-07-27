@@ -291,10 +291,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     if (!userId) return;
     let profileTimer: number | undefined;
     let collectionTimer: number | undefined;
-    const debounced = (
-      ref: 'profile' | 'collection',
-      fn: () => void,
-    ): (() => void) => {
+    const debounced = (ref: 'profile' | 'collection', fn: () => void): (() => void) => {
       return () => {
         if (ref === 'profile') {
           window.clearTimeout(profileTimer);
