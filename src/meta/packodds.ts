@@ -13,6 +13,7 @@
  *    server-side `roll_slot_rarity` function.
  */
 import { PackSlot, PackType } from '../lib/supabase';
+import { rarityTier } from './rarity';
 
 export const LEGACY_SLOT_WEIGHTS: Record<string, Record<string, number>> = {
   foundation: { Common: 1 },
@@ -47,26 +48,15 @@ export interface SlotOdds {
   /** rarity -> probability (sums to ~1) */
   weights: Record<string, number>;
   foilChance: number; // 0..1, 1 = guaranteed foil
-  dupeProtected: boolean;
   /** 'Leader' for the Leader Pack's Leader-only slot. */
   cardType: string | null;
 }
 
-const RARITY_ORDER = [
-  'Common',
-  'Uncommon',
-  'Rare',
-  'Super-Rare',
-  'Ultra-Rare',
-  'Full-Art',
-  'Alt-Art',
-  'Mythic',
-];
-
+/** Sorted low-to-high on the shared ladder in rarity.ts. This file used to
+ * keep its own copy of the order; PackOpening.tsx kept a third, and that one
+ * had silently drifted (no 'Alt-Art'). One ladder, imported. */
 export function sortedWeights(weights: Record<string, number>): [string, number][] {
-  return Object.entries(weights).sort(
-    (a, b) => RARITY_ORDER.indexOf(a[0]) - RARITY_ORDER.indexOf(b[0]),
-  );
+  return Object.entries(weights).sort((a, b) => rarityTier(a[0]) - rarityTier(b[0]));
 }
 
 function prettySlotName(raw: string): string {
@@ -79,7 +69,10 @@ function prettySlotName(raw: string): string {
 export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
   const rawType = slot.type ?? slot.slot_type ?? 'foundation';
   const isLegacy = slot.type != null;
-  const guaranteedFoil = rawType.startsWith('foil_') || rawType === 'prismatic';
+  // Mirrors grant_pack_contents' own foil test: a `foil_*` prefixed slot, the
+  // v7.2 `foil` slot (the booster's guaranteed-foil card) or `prismatic`.
+  const guaranteedFoil =
+    rawType.startsWith('foil_') || rawType === 'foil' || rawType === 'prismatic';
 
   let weights: Record<string, number>;
   if (slot.rarity_weights) {
@@ -98,9 +91,28 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
     count: isLegacy ? 1 : (slot.count ?? 1),
     weights,
     foilChance,
-    dupeProtected: slot.dupe_protected ?? false,
     cardType: slot.card_type ?? null,
   };
+}
+
+/**
+ * Chance of at least one foil ANYWHERE in the pack.
+ *
+ * The `foil_chance` column is a PER-SLOT probability, which is why a pack
+ * advertising "4%" used to produce a foil in ~21% of opens (six independent
+ * rolls). v7.2 states the number players actually care about — per pack —
+ * and the server-side per-slot rate is set so this lands on ~8%. Slots that
+ * are guaranteed foil are excluded: they are called out separately rather
+ * than collapsing the whole figure to 100%.
+ */
+export function packFoilChance(pack: PackType): { bonus: number; guaranteed: number } {
+  let missAll = 1;
+  let guaranteed = 0;
+  for (const row of packOdds(pack)) {
+    if (row.foilChance >= 1) guaranteed += row.count;
+    else missAll *= Math.pow(1 - row.foilChance, row.count);
+  }
+  return { bonus: 1 - missAll, guaranteed };
 }
 
 /** Collapse identical adjacent legacy slots so the modal reads "×4 FOUNDATION"

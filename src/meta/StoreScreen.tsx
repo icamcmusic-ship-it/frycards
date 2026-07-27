@@ -27,7 +27,7 @@ import { RARITY_CHIP, ALL_SET_NAMES } from './rarity';
 import { SafeImage } from './SafeImage';
 import { fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
-import { packOdds, expectedRarities, sortedWeights } from './packodds';
+import { packOdds, expectedRarities, sortedWeights, packFoilChance } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { StarterDeckPicker } from './StarterDeckPicker';
 import { CardFace } from '../components/CardFaceV4';
@@ -69,6 +69,19 @@ const DAILY_PACK_COOLDOWN_MS = 20 * 60 * 60 * 1000; // mirror of claim_daily_pac
  * buy_and_open_packs / open_inventory_packs (see lib/supabase.ts). Was a
  * bare `24` inline with no explanation of where the number came from. */
 const BULK_OPEN_CAP = 24;
+
+/** Soft ceiling on how many CARDS one reveal may contain. The server cap is
+ * counted in packs, which stopped being a useful proxy in v7.2: a booster went
+ * to 8 cards and a box to 49, so the old flat 24 meant a single "OPEN ALL"
+ * could hand PackOpening 1,176 pulls to flip through one at a time. */
+const BULK_REVEAL_CARD_BUDGET = 250;
+
+/** Packs of this type that fit in one reveal, at least 1 and never above the
+ * server's own limit. */
+function bulkCapFor(pack: PackType): number {
+  const per = Math.max(1, pack.card_count || 1);
+  return Math.max(1, Math.min(BULK_OPEN_CAP, Math.floor(BULK_REVEAL_CARD_BUDGET / per)));
+}
 
 export function StoreScreen({ onBack }: { onBack: () => void }) {
   const {
@@ -210,7 +223,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
   const handleOpenAllFromInventory = async (pack: PackType, count: number) => {
     if (!profile || busyId) return;
-    const n = Math.min(count, BULK_OPEN_CAP);
+    const n = Math.min(count, bulkCapFor(pack));
     setError('');
     setNotice('');
     setBusyId('openall:' + pack.id);
@@ -539,15 +552,15 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         color="black"
                         disabled={!!busyId}
                         title={
-                          entry.quantity > BULK_OPEN_CAP
-                            ? `Opens ${BULK_OPEN_CAP} at a time (server limit) — run it again for the rest`
+                          entry.quantity > bulkCapFor(pack)
+                            ? `Opens ${bulkCapFor(pack)} at a time so one reveal stays readable — run it again for the rest`
                             : undefined
                         }
                         onClick={() => handleOpenAllFromInventory(pack, entry.quantity)}
                       >
                         {busyId === 'openall:' + pack.id
                           ? 'OPENING…'
-                          : `OPEN ALL ×${Math.min(entry.quantity, BULK_OPEN_CAP)}`}
+                          : `OPEN ALL ×${Math.min(entry.quantity, bulkCapFor(pack))}`}
                       </PopButton>
                     )}
                     {pack.acquisition !== 'starter_grant' && (
@@ -837,6 +850,7 @@ function StarterChoiceModal({
 function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void }) {
   const rows = packOdds(pack);
   const expected = expectedRarities(pack);
+  const foilOdds = packFoilChance(pack);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -861,7 +875,8 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
           <div>
             <div className="heading-font text-sm text-[var(--c-yellow)]">{pack.name}</div>
             <div className="text-[9px] font-bold text-[var(--c-paper)]/70">
-              DROP ODDS · {pack.card_count} CARDS PER PACK
+              DROP ODDS · {pack.card_count} CARDS PER{' '}
+              {pack.pack_tier === 'booster_box' ? 'BOX' : 'PACK'}
             </div>
           </div>
           <PopButton color="yellow" onClick={onClose}>
@@ -879,6 +894,27 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             Includes: {packSetsLine(pack)}
           </div>
 
+          {/* Foil odds stated PER PACK. The underlying `foil_chance` is a
+              per-slot roll, so quoting it raw understated the real rate by
+              several times over — this is the number a player can act on. */}
+          {(foilOdds.guaranteed > 0 || foilOdds.bonus > 0) && (
+            <div className="ink-border-sm p-2.5 mb-3 bg-[var(--c-ink)] text-[var(--c-paper)]">
+              <div className="heading-font text-[11px] text-[var(--c-yellow)] mb-1">FOILS ✦</div>
+              {foilOdds.guaranteed > 0 && (
+                <div className="text-[10px] font-bold">
+                  {foilOdds.guaranteed} guaranteed foil{foilOdds.guaranteed === 1 ? '' : 's'} in
+                  every {pack.pack_tier === 'booster_box' ? 'box' : 'pack'}.
+                </div>
+              )}
+              {foilOdds.bonus > 0 && (
+                <div className="text-[10px] font-bold text-[var(--c-paper)]/75">
+                  Plus a {(foilOdds.bonus * 100).toFixed(1).replace(/\.0$/, '')}% chance of an extra
+                  foil turning up in any other slot.
+                </div>
+              )}
+            </div>
+          )}
+
           {rows.map((row, i) => (
             <div key={i} className="mb-3 ink-border-sm p-2.5 bg-[var(--c-paper)]">
               <div className="flex items-center justify-between mb-1.5">
@@ -892,7 +928,6 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                     : row.foilChance > 0
                       ? `FOIL ${(row.foilChance * 100).toFixed(1).replace(/\.0$/, '')}%`
                       : ''}
-                  {row.dupeProtected ? ' · DUPE-PROTECTED' : ''}
                 </span>
               </div>
               {sortedWeights(row.weights).map(([rarity, p]) => (
@@ -1086,25 +1121,29 @@ function PackTile({
           </div>
         )}
       </div>
-      {/* Mass opening: buy-and-open 5 or 10 copies in one rip. */}
+      {/* Mass opening: buy-and-open several copies in one rip. The offered
+          multiples are clamped to what one reveal can hold, so a 49-card box
+          offers ×5 rather than a ×10 that would deal out 490 cards. */}
       {pack.price_credits != null && pack.price_credits > 0 && (
         <div className="mx-3 mb-1.5 flex gap-1.5">
-          {[5, 10].map((n) => (
-            <button
-              key={n}
-              disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
-              onClick={() => onBuyBulk(pack, n, 'credits')}
-              className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {busyId === 'bulk:' + pack.id + ':' + n ? (
-                'OPENING…'
-              ) : (
-                <>
-                  OPEN ×{n} (<Credits amount={pack.price_credits! * n} />)
-                </>
-              )}
-            </button>
-          ))}
+          {[5, 10]
+            .filter((n) => n <= bulkCapFor(pack))
+            .map((n) => (
+              <button
+                key={n}
+                disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
+                onClick={() => onBuyBulk(pack, n, 'credits')}
+                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {busyId === 'bulk:' + pack.id + ':' + n ? (
+                  'OPENING…'
+                ) : (
+                  <>
+                    OPEN ×{n} (<Credits amount={pack.price_credits! * n} />)
+                  </>
+                )}
+              </button>
+            ))}
         </div>
       )}
       <div className="mx-3 mb-3 flex gap-1.5">

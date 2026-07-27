@@ -54,11 +54,18 @@ card's id plus its type and rarity — identical on every client, and rebalance
 ships as a code change, not a data migration.
 
 **Rarities:** Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Full-Art,
-Mythic (v6.8: Full-Art sits ABOVE Ultra-Rare — second-rarest, behind Mythic
-only). Rarity shapes pack odds and gently scales a card's stat/cost budget;
-it carries no other rules weight. Full-Art prints edge-to-edge still art and
-Mythic prints edge-to-edge looping video; everything else uses the framed
-template (see `src/components/CardFaceV4.tsx`).
+Alt-Art, Mythic — low to high (v6.8 moved Full-Art ABOVE Ultra-Rare; v7.0
+added Alt-Art between Full-Art and Mythic). Rarity shapes pack odds and
+gently scales a card's stat/cost budget; it carries no other rules weight.
+Full-Art, Alt-Art and Mythic print edge-to-edge art (Mythic's is looping
+video, Alt-Art's carries the "Prism Ink" holo wash); everything else uses the
+framed template (see `src/components/CardFaceV4.tsx`).
+
+Rarity is **also an input to the mechanics hash** (`seedOf` is
+`id|type|rarity`), so re-tiering a card reprints it — a rarity change is a
+balance change, not just an economy one. `npm run verify:pool` diffs
+`cards.rarity`, `cards.template` and the bundled `generated-cards.ts` and
+exits non-zero on any drift between them; run it after any rarity edit.
 
 There are 8 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
 Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruin-Walker
@@ -75,7 +82,9 @@ Accounts (Supabase auth), profiles with gold/gems, a one-time Starter Box
 claim per account (pick a Leader, get a full legal 60-card deck), a choice
 of three prebuilt starter decks in the shop for new accounts, card packs
 with rarity-slot configs (all opened server-side via SECURITY DEFINER
-RPCs), foils, cosmetics (card backs, banners, avatars), a collection
+RPCs), foils — the 8-card booster carries one guaranteed foil slot plus a
+~8%-per-pack chance of another, and the 49-card box guarantees a foil
+Super-Rare-or-better topper — cosmetics (card backs, banners, avatars), a collection
 browser and match rewards.
 
 ## Engine & Balance

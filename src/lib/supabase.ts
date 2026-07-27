@@ -135,7 +135,6 @@ export interface PackSlot {
   guaranteed_min_rarity?: string;
   foil_chance_override?: number;
   foil_eligible?: boolean;
-  dupe_protected?: boolean;
   /** Restrict this slot to a card type — 'Leader' powers the Leader Pack. */
   card_type?: string;
 }
