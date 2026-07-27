@@ -17,6 +17,7 @@ import {
   fetchDecks,
   fetchInventory,
   fetchMySerializedCards,
+  subscribeTable,
   OwnedSerializedCard,
 } from '../lib/supabase';
 import { preloadImages } from '../lib/preload';
@@ -279,6 +280,45 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [userId, bootAttempt]);
+
+  // Currency, collection and unopened packs all move server-side without a
+  // local action: a shop sale credits the seller, a trade lands cards, an
+  // admin grant arrives. Every screen used to depend on somebody remembering
+  // to call refreshProfile()/refreshCollection() after the fact. Subscribe to
+  // the caller's own rows instead — RLS already scopes these to `userId`, and
+  // the filter keeps the socket quiet.
+  useEffect(() => {
+    if (!userId) return;
+    let profileTimer: number | undefined;
+    let collectionTimer: number | undefined;
+    const debounced = (ref: 'profile' | 'collection', fn: () => void): (() => void) => {
+      return () => {
+        if (ref === 'profile') {
+          window.clearTimeout(profileTimer);
+          profileTimer = window.setTimeout(fn, 350);
+        } else {
+          window.clearTimeout(collectionTimer);
+          collectionTimer = window.setTimeout(fn, 350);
+        }
+      };
+    };
+    const offProfile = subscribeTable('profiles', debounced('profile', refreshProfile), {
+      filter: `id=eq.${userId}`,
+    });
+    const offCards = subscribeTable('player_cards', debounced('collection', refreshCollection), {
+      filter: `user_id=eq.${userId}`,
+    });
+    const offInv = subscribeTable('player_inventory', debounced('collection', refreshInventory), {
+      filter: `user_id=eq.${userId}`,
+    });
+    return () => {
+      window.clearTimeout(profileTimer);
+      window.clearTimeout(collectionTimer);
+      offProfile();
+      offCards();
+      offInv();
+    };
+  }, [userId, refreshProfile, refreshCollection, refreshInventory]);
 
   const signOut = useCallback(async () => {
     try {

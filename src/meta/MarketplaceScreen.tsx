@@ -12,6 +12,7 @@ import {
   MarketListing,
   PublicProfile,
   MARKET_FEE,
+  subscribeTable,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
@@ -59,8 +60,15 @@ function defFor(cardId: string): CardDef {
 }
 
 export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
-  const { session, profile, collection, decks, serializedCards, refreshProfile, refreshCollection } =
-    useMeta();
+  const {
+    session,
+    profile,
+    collection,
+    decks,
+    serializedCards,
+    refreshProfile,
+    refreshCollection,
+  } = useMeta();
   const userId = session?.user?.id;
   const [tab, setTab] = useState<Tab>('browse');
   const [listings, setListings] = useState<MarketListing[]>([]);
@@ -105,6 +113,20 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     (async () => {
       await reload();
     })();
+  }, [reload]);
+
+  // Bids, buyouts and expiries land from other players. The 10s tick below
+  // only re-renders countdowns off local state — without this the listing rows
+  // themselves (current bid, sold, cancelled) stayed frozen until a manual
+  // action forced a reload.
+  useEffect(() => {
+    let timer: number | undefined;
+    return subscribeTable('market_listings', () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void reload();
+      }, 400);
+    });
   }, [reload]);
 
   useEffect(() => {

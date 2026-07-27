@@ -20,6 +20,7 @@ import {
   TradeCardItem,
   PlayerCard,
   CardsLeaderboardEntry,
+  subscribeTable,
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
@@ -177,6 +178,27 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       cancelled = true;
     };
   }, [reload, loadAttempt]);
+
+  // Friend requests and trade offers arrive from the other side of the
+  // relationship, so nothing local triggers a refresh. RLS on both tables is
+  // already "either party only", so these subscriptions can't leak anyone
+  // else's requests.
+  useEffect(() => {
+    let timer: number | undefined;
+    const bump = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void reload();
+      }, 400);
+    };
+    const offFriends = subscribeTable('friendships', bump);
+    const offTrades = subscribeTable('trades', bump);
+    return () => {
+      window.clearTimeout(timer);
+      offFriends();
+      offTrades();
+    };
+  }, [reload]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';
 

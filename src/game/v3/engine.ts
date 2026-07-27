@@ -854,12 +854,7 @@ function runDawn(state: GameState): void {
   }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
   const L = p.leader;
-  if (
-    L.invoked &&
-    !L.shattered &&
-    hasKw(L.def, 'Resolute') &&
-    L.resolve < (L.def.resolve ?? 0)
-  ) {
+  if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
     L.resolve += 1;
     telemetry.onKeywordProc?.('Resolute', 1);
   }
@@ -978,8 +973,7 @@ export function playWellspring(state: GameState, pid: PlayerId, type: EssenceTyp
     exhausted: p.wellspringsPlayedThisTurn > 0,
   });
   p.wellspringsPlayedThisTurn++;
-  p.wellspringPlayedThisTurn =
-    p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid);
+  p.wellspringPlayedThisTurn = p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid);
   state.log.push(`${pid} plays a ${type} Wellspring.`);
   return true;
 }
@@ -1078,7 +1072,11 @@ export function invokeCard(
     bondTarget = iid ? findUnit(state, iid) : undefined;
     if (!bondTarget || bondTarget.owner !== pid) return false;
   }
-  if (def.onInvoke && opts.targetIid !== undefined && SINGLE_TARGETS.includes(def.onInvoke.target)) {
+  if (
+    def.onInvoke &&
+    opts.targetIid !== undefined &&
+    SINGLE_TARGETS.includes(def.onInvoke.target)
+  ) {
     if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
   }
 
@@ -1219,6 +1217,11 @@ export function activateLeaderAbility(
   const L = p.leader;
   if (state.winner || !inOwnMain(state, pid)) return false;
   if (!L.invoked || L.shattered || L.abilityUsedThisTurn) return false;
+  // Array indexing coerces, so a caller passing the string '0' (or any other
+  // stringified index) reached a real ability and spent Resolve on it. Every
+  // other public action validates its identifiers; this one has to as well —
+  // it is reachable from anything holding a GameState, not just the typed UI.
+  if (!Number.isInteger(abilityIndex) || abilityIndex < 0) return false;
   const ability = L.def.leaderAbilities?.[abilityIndex];
   if (!ability) return false;
   if (ability.resolveDelta < 0 && L.resolve + ability.resolveDelta < 0) return false;
@@ -1241,9 +1244,7 @@ export function legalAttackers(state: GameState, pid: PlayerId): UnitInst[] {
   if (state.active !== pid || state.phase !== 'Clash' || state.clash) return [];
   return state.players[pid].field.filter(
     (u) =>
-      !u.exhausted &&
-      !unitHasKw(u, 'Immobile') &&
-      (!u.enteredThisTurn || unitHasKw(u, 'Reckless')),
+      !u.exhausted && !unitHasKw(u, 'Immobile') && (!u.enteredThisTurn || unitHasKw(u, 'Reckless')),
   );
 }
 
@@ -1362,8 +1363,7 @@ export function resolveClash(state: GameState): boolean {
     }
     stateBasedChecks(state);
     if (step === 'first' && packets.length > 0) {
-      const died =
-        preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
+      const died = preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
       if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
     }
   }
