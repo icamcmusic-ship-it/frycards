@@ -146,7 +146,11 @@ export interface PackType {
   description: string | null;
   card_count: number;
   guaranteed_rarity: string | null;
+  /** Square-ish shop-shelf icon. */
   image_url: string | null;
+  /** Tall pack/box artwork the opening animation tears open. Null falls back
+   * to `image_url`. */
+  open_image_url: string | null;
   foil_chance: number;
   has_foil_slot: boolean;
   price_credits: number | null;
