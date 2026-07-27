@@ -57,12 +57,71 @@ stringified index.** Array indexing coerces, so passing `'0'` reached a real
 ability and spent Resolve on it, unlike every other public action which
 validates its identifiers. It now requires a non-negative integer.
 
+#### Pack opening — the tear goes through the art
+
+The tear-off strip used to be a grey foil bar bolted _above_ the pack, with
+the artwork starting underneath it. It is now a clipped copy of the top of
+the artwork itself, overlaid on the pack, and the rip cuts the art along a
+serrated line: the strip flies off carrying its slice of the render and the
+pack body keeps the torn paper edge where it came away.
+
+- Packs carry two images now. `pack_types.open_image_url` (new column) holds
+  the tall vertical pack/box render the tear animation uses; `image_url`
+  stays the shop-shelf icon. Both are wired to the `Shop Packs/Boxes` assets
+  in storage — box render + box icon for the Booster Box, pack render + pack
+  icon for the Booster Pack, Daily Free Pack and Season Pass Reward Pack.
+  Rows without an `open_image_url` fall back to `image_url` as before.
+- The `Other files` storage bucket (which holds only that shop-pack art) is
+  public now, like `Card Images`, so the store and the opening animation both
+  render without a session.
+- The opening frame sizes itself to the artwork's own aspect ratio instead of
+  cropping everything into a fixed 77:96 box, and is height-driven so a tall
+  box render can't run off the bottom of the viewport. Shop tiles switched to
+  `object-contain` so a portrait product render isn't centre-cropped.
+
+#### Engine — chaos-monkey fuzzing
+
+New `src/game/v3/chaos.test.ts`, a third fuzzing angle alongside the AI soak
+and hostile-input suites: both seats are driven by **random legal actions**
+rather than sensible ones — random Wellspring colours, random taps, random
+invokes with random (often nonsensical) targets and bond targets, random
+attacker sets, random guard assignments, reaction-window plays by either
+side — with the hard invariants re-checked after every single action.
+
+That reaches board states the CPU never builds on purpose. 500 such games
+(60 in the committed suite, for runtime) turned up no invariant violation and
+no non-terminating match, and a 3,000-match AI soak on top of the standing
+200 was likewise clean.
+
+#### Economy — three real holes found in the market RPCs
+
+- **`buy_listing` swallowed the buyer's own standing bid.** A player who was
+  the high bidder on an auction and then hit Buy Now had their escrowed bid
+  refunded to _"the current bidder, if it isn't you"_ — i.e. never. They paid
+  the buyout on top of a bid that was gone for good. The refund now fires for
+  every outstanding bid, including their own.
+- **Bids could sail past the buyout.** Nothing capped a bid at the buyout
+  price, so once a bid exceeded it, anyone could still Buy Now for _less_ than
+  the standing bid: the high bidder got refunded and the seller was paid the
+  smaller number. `place_bid` now refuses a bid at or above the buyout, and
+  the bid modal says so and disables the button.
+- **Deck locks were summed across decks.** `quicksell_cards` and
+  `assert_cards_available` counted every occurrence of a card across _all_ of
+  a player's decks, but decks share the same physical copies — three copies
+  run in two decks read as six locked, making them permanently unsellable,
+  unlistable and untradeable. The lock is now the largest single deck's
+  requirement. No live collection had tripped it yet.
+
+Noted, not changed: `record_match_result` is guarded only by a 5-second
+throttle, so a scripted client can farm ~100 credits and 60 XP every 5
+seconds. Tightening that is an economy decision, not a bug fix.
+
 #### Player shops
 
 Backend (all enforced server-side in SECURITY DEFINER RPCs):
 
 - **Closing a shop refunded its collateral in full, eventually.** `close_shop`
-  paid back half the *current* collateral and left the remainder on the row,
+  paid back half the _current_ collateral and left the remainder on the row,
   so close → reopen → close → … converged on a 100% refund while every slot
   stayed purchased. The un-refunded half is now burned, which is what the
   rule always claimed.
@@ -160,7 +219,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
 - **Blocked is blocked.** `resolveClash` derived "was this attacker guarded?"
   at resolution time, from a map `stateBasedChecks` had already pruned dead
   guards out of — so an attacker whose only blocker left the field mid-clash
-  read as *never guarded* and hit the defending player for full Might. That
+  read as _never guarded_ and hit the defending player for full Might. That
   was directly exploitable: attack, let the opponent block with their biggest
   body, then kill your own blocker with a Quick Event in the reaction window
   and the attack landed unblocked. Now snapshotted at `declareGuards` time
@@ -181,7 +240,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   enemy unit) and **weaken** (-X/-X, permanent) — woven into each colour's
   ability vocabulary.
 - Gated behind dedicated salted rolls (`newkw`, `newkw2`, `newfx-*`) that
-  *substitute* rather than append, so only 59 of 292 cards re-print and just
+  _substitute_ rather than append, so only 59 of 292 cards re-print and just
   4 of 86 tuned cards were touched — appending to `KEYWORDS_OF_COLOR` would
   have re-rolled the entire pool and invalidated every per-card adjustment.
 - `boneplate_sentinel`'s v6.7 `+1` retired: it was earned as "a Venomous
@@ -191,10 +250,10 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
 
 - **Leader nerfs**: `avatar_of_the_abyss` minus resolve -3 → -4 (first in
   both cohorts a third pass running, at 10.2/9.0 ability activations per game
-  with a win rate that *climbs* with game length); `crimson_vector_commander`
+  with a win rate that _climbs_ with game length); `crimson_vector_commander`
   -1 → -2 (v6.7's named next lever, coming due after its watch pass).
 - **Leader buffs** via the new `LEADER_PLUS_ABILITY_OVERRIDE` — the first
-  lever this project has had for the *bottom* of the spread.
+  lever this project has had for the _bottom_ of the spread.
   `ethereal_sea_witch` and `ruinwalker_overseer` both finished last in both
   cohorts with kits that could not interact with the board at all (one only
   drew and gained life; the other's two abilities were the same buff at two
@@ -203,7 +262,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   37.0 points to 31.6; cohort B's from 50.9 to 39.8.
 - **Keywords**: Doublestrike 4 → 5 (third confirming pass); Resonant 2 → 0
   (three-pass repeat offender, now resolved at -4.3/+1.1).
-- **Cards**: `galleon_shipwreck` +1 (a cost-1 Sanctum that ramped *and* swept
+- **Cards**: `galleon_shipwreck` +1 (a cost-1 Sanctum that ramped _and_ swept
   every enemy unit each Dusk), `resonant_shuriken` +1 → +2, `abyssal_pathway`
   +2 → +3; `spectral_leviathan` and `kunoichi_of_the_magma_rings` stat-trimmed
   — both print at the cost cap, where `COST_ADJUST` is provably inert (a `+2`
@@ -240,7 +299,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   until it fits its box (`FittedRules`, same technique as `FittedFlavor`), so
   a long ability can no longer be cut off mid-line; flavor is pinned to the
   bottom of the text box under a dashed rule.
-- **Every video card is now Mythic.** The Mythic template *is* the looping
+- **Every video card is now Mythic.** The Mythic template _is_ the looping
   video print, so Astral Shoal, Chrysalis of the Departed, Faye's True Face
   and Void Mother moved Full-Art -> Mythic (Supabase `cards` + the bundled
   `src/game/generated-cards.ts` fallback). Mythic 6 -> 10 cards,
@@ -303,7 +362,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   Wellspring control shows the remaining allowance instead of always
   claiming "one per turn"; two stale eslint-disable directives removed.
 - **Shed-picker modal fix**: the full-screen shed overlay is opened by the
-  top-bar phase button, which sat *above* the overlay and stayed live — so
+  top-bar phase button, which sat _above_ the overlay and stayed live — so
   the modal never blocked its own opener and clicking it just re-entered the
   shed flow. The phase button is now hidden while the picker is up.
 - **Two invisible in-match affordances surfaced**: the attacker's own
@@ -313,7 +372,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   only explanation was a `title` tooltip that shows nothing on touch. Both
   now appear in the hint bar.
 - **Accessibility (WCAG 2.5.3 Label in Name)**: the shed picker's SUGGEST and
-  BACK buttons carried aria-labels that *replaced* their visible text
+  BACK buttons carried aria-labels that _replaced_ their visible text
   ("Auto-select cards to shed", "Cancel shedding"), so their accessible names
   contained none of the words a player can see and voice control could not
   target them. An audit across every `aria-label` in `src/` found exactly
@@ -463,7 +522,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   that hadn't fully settled got a second bump (Slate-Scaled Serpent,
   further +1; Coral Collapse and Tectonic Rift, further -1); fourteen newly
   flagged cards were adjusted for the first time (ten costed up, four costed
-  down; see that pass's findings doc (since removed)  for the full list), and
+  down; see that pass's findings doc (since removed) for the full list), and
   Familiar in the Dark (already at the cost ceiling) had its stats trimmed
   instead.
 - **CPU false-alarm fixes in our own balance tooling**: three of the CPU
@@ -479,7 +538,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
 - **Sim harness**: `venomousSuicide` now splits into deliberate trades vs
   genuine blunders (most turned out deliberate), and a new deckSeed-pinned
   per-Leader-pair test suite isolates Leader-kit balance from random-deck
-  luck for future passes. Full details: that pass's findings doc (since removed) 
+  luck for future passes. Full details: that pass's findings doc (since removed)
   (v6.1 findings doc removed; only the latest sim-run JSON is kept).
 - **Bug-hunt / QoL pass**: the Deck Builder's CHANGE LEADER button could
   leave a color filter from the OLD Leader's identity in place — under a
@@ -580,8 +639,8 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
     Vitality at its controller's Dawn).
   - Leader **Commander** (+1 Might aura while fielded) and **Resolute**
     (regains 1 Resolve at Dawn, up to the printed value).
-  All ten feed the sim's keyword telemetry; new engine tests cover each
-  (`keywords-v6.test.ts`).
+    All ten feed the sim's keyword telemetry; new engine tests cover each
+    (`keywords-v6.test.ts`).
 - **MTG-format card template rework** (`CardFaceV4`): name+cost top line,
   art (ratios untouched: regular 4:3 box, Full-Art full-bleed), a type line
   whose right slot carries the rarity marker at full size (stats there at
@@ -617,7 +676,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   - Meta screens: Serialized prints are reserved out of the Marketplace
     sell form, trade composer, and Player Shop listing picker (server
     always rejected them; the UI offered them anyway); a grouped pack-haul
-    summary dropped the *whole group* containing the best pull instead of
+    summary dropped the _whole group_ containing the best pull instead of
     just the spotlighted copy; Profile's cosmetic locker treated
     `cost_vouchers = 0` as "free" and showed unowned paid cosmetics as
     equippable.
@@ -628,7 +687,7 @@ supersedes and replaces the v6.6 and v6.7 findings docs).
   taught the CPU to hold a Quick Event / Ambush unit back — but locations
   only recover at their owner's own Dawn, so a CPU that tapped everything
   during its turn still had no essence when the window opened. The CPU now
-  reserves the *locations* to pay for its held reaction card through its
+  reserves the _locations_ to pay for its held reaction card through its
   whole turn (capped at cost 3 so it never skips a development turn holding
   a bomb). Sim-verified: reaction plays went from 150/237 per 2,208-game
   suite to **3,038/3,624 (~20-25x)**, zero invariant violations.
@@ -795,8 +854,8 @@ rulebook: an essence-based TCG. See `docs/RULEBOOK.md` (v5.0) and
 
 - **Sim harness — two new capture dimensions** (`scripts/simulate-v4.ts`):
   - **Clock speed**: per-archetype average closing round conditioned on
-    *winning* (`archWinRoundsSum`, `clockSpeed` in the JSON dump). The
-    existing `archTotalRounds` averages over wins *and* losses, so an aggro
+    _winning_ (`archWinRoundsSum`, `clockSpeed` in the JSON dump). The
+    existing `archTotalRounds` averages over wins _and_ losses, so an aggro
     deck that closes fast and a control deck that grinds could read the same
     number; conditioning on the win exposes the aggro↔control speed axis
     directly (this pass: 7.0 rounds for Diver Straight-Combo up to 16.9 for
@@ -860,7 +919,7 @@ rulebook: an essence-based TCG. See `docs/RULEBOOK.md` (v5.0) and
   value-less bind. Now renders "Bind + Sap X" on card faces, ability pills,
   and CPU narration.
 - **Trade builder over-offer** (`SocialScreen.tsx`): deck-locked copies were
-  capped against the *combined* spare total for each variant independently,
+  capped against the _combined_ spare total for each variant independently,
   so a card with locked copies could offer more normal AND foil than existed
   (a trade `createTrade` then rejected server-side). Now uses the shared
   `spareSplit()` (normal-first, foil-spillover), same as Collection/Market.
@@ -1111,7 +1170,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.25.md`.
   that one click made the whole 5-step tutorial silently replay from step
   1 on every future match; every keyword/cost-info popover in the game
   dismissing itself via a full-viewport invisible backdrop that ate the
-  *next* click too, so tapping a different keyword chip while one popover
+  _next_ click too, so tapping a different keyword chip while one popover
   was open just closed it instead of opening the one you meant to; a
   bounty card's SELL button staying clickable after you'd bought it back
   (the "OWNED — CAN'T SELL BACK" text right next to it was correct, the
@@ -1124,7 +1183,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.25.md`.
   more); a shared error-message helper whose regex could eat legitimate
   text out of any server error that happened to contain its own colon;
   several missing confirm dialogs (decline friend request) and `role=
-  "dialog"` labels (Trade Composer, four in-game overlays); a card-art
+"dialog"` labels (Trade Composer, four in-game overlays); a card-art
   broken-image state that could latch permanently onto the wrong card in
   a reused component slot; and 15+ more (full list in the codebase — see
   the individual file diffs). Accessibility: focus-on-open/restore-on-close
@@ -1552,7 +1611,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   outcome for a roster that has converged over v4.5–v4.10. Two long-open
   priority items are **closed by proving what they are**: (1) Mer-King's
   chronically weak Avenge Swarm (36–43%) is **not a card-balance bug** — the
-  deck-swap isolation the v4.10 doc asked for shows the *identical* Avenge
+  deck-swap isolation the v4.10 doc asked for shows the _identical_ Avenge
   list winning 46.9% under Shinobi and **59.8% under Diver**, and stripping
   the deck's own mend package (while keeping Mer-King) gains +12.9pt; it's a
   Leader-kit-fit problem (Mer-King's sustain kit fights a sacrifice-swarm
@@ -1576,11 +1635,11 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   from "situation never arises" — closing priority item 4. A **cost-vs-value
   RESIDUAL table** that fixes the offset artifact in v4.10's win%÷difficulty
   ratio (win% is centered on ~50%, not 0) by comparing each card only against
-  other cards *at the same cost band* — it cleanly re-confirms the exact-cost
+  other cards _at the same cost band_ — it cleanly re-confirms the exact-cost
   wall bodies (Flickering Sea Pens / Cavernous Watcher at +30pt over their
   band). A **keyword-health table** pairing each keyword's win% with pool
   prevalence and measured cast activity — which immediately surfaced that
-  Crescendo, the bottom keyword every pass, exists on a *single* card. And an
+  Crescendo, the bottom keyword every pass, exists on a _single_ card. And an
   **`avengeCap` buff-direction ablation arm** plus a `crescendoBase` tuning
   dial so both open questions are ablatable instead of hardcoded.
 - **Feature-and-bug hunt / QoL**: a full review of the engine (`engine.ts`),
@@ -1709,7 +1768,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
 
 - **Rule removed — Momentum**: the dedicated on/off A/B the findings docs
   kept asking for finally ran (6,768 decisive games per arm): leader spread
-  was slightly *better* without it, games ran a full round shorter, and the
+  was slightly _better_ without it, games ran a full round shorter, and the
   weakest roster deck gained +9pt. Four rounds of stacked riders never made
   the trigger correlate with winning. Every turn is exactly five dice again.
 - **Balance (details in `docs/BALANCE_SIM_FINDINGS_v4.8.md`)**: Leader
@@ -1748,7 +1807,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   ablation harness (`scripts/simulate-ablation.ts`, one engine dial per arm
   via `SIM_TUNING`) proved that NO labeled keyword powers the durability
   decks that topped three straight sims — a `tollCap 3→1` arm measured
-  *identically to baseline to the decimal*, and removing Avenge outright
+  _identically to baseline to the decimal_, and removing Avenge outright
   moved its 92% flagship deck under 3pt. The real engine was §9's
   instant deck-out loss: **24% of all games** ended on it, silently
   punishing every card-draw effect and crowning unit-hoarding attrition
@@ -2076,7 +2135,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   `track_stat` hook wired into match results, pack openings, purchases,
   quicksells, friendships, trades and market sales — with a one-time backfill
   for existing accounts.
-- **Pack inventory** (Store ▸ MY PACKS): packs can now be bought *without*
+- **Pack inventory** (Store ▸ MY PACKS): packs can now be bought _without_
   opening (“BUY & SAVE FOR LATER”) and stored; battle pass and achievement
   reward packs land here too. Open them any time with the usual reveal.
 - **Card marketplace & auctions** (`MarketplaceScreen`): player-to-player
@@ -2132,7 +2191,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   applied universally, not just "chase" slots), so foils can drop for any
   card in any pack.
 - **Deck card consumption**: new server-authoritative `save_deck` RPC checks
-  that a card copy isn't already reserved by one of the player's *other*
+  that a card copy isn't already reserved by one of the player's _other_
   decks before letting it be added to this one (max 3 copies/deck, can't
   exceed total owned across all decks combined). Deleting a deck needs no
   special "unconsume" step — availability is always computed live from
@@ -2397,7 +2456,7 @@ Full writeup: `docs/BALANCE_SIM_FINDINGS_v4.16.md`.
   — effectively dead even with Echo. Recommend reserving those gates for a tiny
   trophy count and capping regular-play gates at Full House / Large Straight.
 - Leader/archetype win rates still span ~19–80%; the spread is driven by deck
-  *construction quality* (aggressive/tempo shells beat reactive shells in a fast
+  _construction quality_ (aggressive/tempo shells beat reactive shells in a fast
   ~6-round meta), not single-card power. Flagged for a deeper tuning pass.
 
 ### Added (Rulebook v3.0 — dice-placement overhaul)
