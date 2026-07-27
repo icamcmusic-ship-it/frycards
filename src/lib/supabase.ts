@@ -217,7 +217,7 @@ export interface PackPull {
   serialized?: boolean;
   /** This copy's number, e.g. 7 of 150 — only set when `serialized` is true. */
   serial_number?: number;
-  /** Total supply for this pull's rarity tier (150/100/50 for Full-Art/Ultra-Rare/Mythic). */
+  /** Total supply for this pull's rarity tier (75/100/50 for Full-Art/Ultra-Rare/Mythic — see the `serialized_supply` table, the source of truth). */
   serial_cap?: number;
 }
 

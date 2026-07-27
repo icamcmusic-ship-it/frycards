@@ -37,6 +37,7 @@ import {
   rarityUltraPlus,
   rarityRuleWeight,
   isMythic,
+  isAltArt,
   RARITY_HEX,
 } from '../meta/rarity';
 import { cardColors, COLORS, Color } from '../game/v3/colors';
@@ -198,6 +199,38 @@ const PREMIUM_CSS = `
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 }
 
+/* ---- Alt-Art "Prism Ink" (v7.0) ----
+   A hand-picked alternate printing's premium template: the always-on
+   .aa-holo hue-shifting wash (index.css) plus a hover-gated iridescent
+   bloom, matching the Aurora Vault / Void Eclipse hover-reveal pattern.
+   Kept visually distinct from Ultra-Rare (teal/violet aurora) and Mythic
+   (cosmic void) by leaning into pink/fuchsia. */
+@keyframes aa-corona-kf {
+  0%, 100% { opacity: 0; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+.aa-corona {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  background:
+    radial-gradient(45% 30% at 50% 10%, rgba(236, 72, 153, 0.55) 0%, transparent 70%),
+    radial-gradient(60% 35% at 50% 96%, rgba(139, 92, 246, 0.45) 0%, transparent 72%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.premium-card:hover .aa-corona,
+.premium-boost .aa-corona { opacity: 1; animation: aa-corona-kf 3.6s ease-in-out infinite; }
+/* Embossed stat gem — Alt-Art's faceted look for Might/Grit chips. */
+.aa-gem {
+  background-image: linear-gradient(160deg, rgba(255,255,255,0.4) 0%, rgba(236,72,153,0.15) 45%, rgba(20,6,20,0.35) 100%) !important;
+  box-shadow:
+    inset 0 1px 1px rgba(236, 72, 153, 0.7),
+    inset 0 -1px 2px rgba(60, 10, 50, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  border-color: #ec4899 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
 /* ---- v6.8 "Gold Foil" template set ----
    The shared print language every rarity now uses: an ink masthead, a boxed
    4:3 art window, a rarity rule whose weight IS the ladder, and a dashed
@@ -304,11 +337,14 @@ const PREMIUM_CSS = `
   .my-void,
   .my-crest,
   .my-stars,
-  .my-corona { animation: none; }
+  .my-corona,
+  .aa-corona { animation: none; }
   .premium-card:hover .ur-aurora,
   .premium-boost .ur-aurora,
   .premium-card:hover .my-corona,
-  .premium-boost .my-corona { opacity: 0.25; }
+  .premium-boost .my-corona,
+  .premium-card:hover .aa-corona,
+  .premium-boost .aa-corona { opacity: 0.25; }
 }
 `;
 
@@ -732,8 +768,9 @@ function StatChip({
   printed?: number;
   tier: CardSize;
   tint: string;
-  /** v4.7 Mythic-exclusive: embossed faceted "stat gem" treatment. */
-  emboss?: boolean;
+  /** v4.7 embossed faceted "stat gem" treatment — Mythic's amethyst facet or
+   * (v7.0) Alt-Art's pink/fuchsia facet. */
+  emboss?: 'mythic' | 'altArt' | false;
   /** Chip sits directly over artwork (Full-Art bottom panel, micro board
    * cards) — solid dark backing + text shadow so numbers read over ANY art. */
   onArt?: boolean;
@@ -760,7 +797,8 @@ function StatChip({
       aria-label={`${label} ${value ?? ''}`}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full font-mono font-black border',
-        emboss && 'my-gem',
+        emboss === 'mythic' && 'my-gem',
+        emboss === 'altArt' && 'aa-gem',
         textClass,
       )}
       style={
@@ -2017,13 +2055,14 @@ export function CardFace({
   const rules = rulesText(def);
   const flavorFontPx = fitFontSize(def.flavor || '', 9, 6.5, 110);
   const mythic = isMythic(def.rarity) && !serial;
+  const altArt = isAltArt(def.rarity) && !serial;
   const animatedFx = (rarityAnimated(def.rarity) || mythic) && !serial;
   const bg = colorBg(cardColorsForFace);
   const TypeIcon = TYPE_ICON[def.type];
-  // v6.8 template split. Full-Art (still image) and Mythic (looping video)
-  // print FULL-BLEED — the art fills the whole card footprint and every piece
-  // of card text floats over it. Every other rarity keeps the framed template:
-  // ink masthead, boxed 4:3 art window, rarity rule, text box.
+  // v6.8 template split. Full-Art/Alt-Art (still image) and Mythic (looping
+  // video) print FULL-BLEED — the art fills the whole card footprint and
+  // every piece of card text floats over it. Every other rarity keeps the
+  // framed template: ink masthead, boxed 4:3 art window, rarity rule, text box.
   const bleed = rarityBleeds(def.rarity);
   const mythicArt = isMythic(def.rarity);
   const ultra = def.rarity === 'Ultra-Rare' && !serial;
@@ -2049,7 +2088,7 @@ export function CardFace({
             printed={def.might}
             tier={size}
             tint={live.atk > (def.might ?? 0) ? '#16A34A' : 'var(--c-red)'}
-            emboss={mythic}
+            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
             onArt
           />
           <StatChip
@@ -2066,7 +2105,7 @@ export function CardFace({
                   ? '#16A34A'
                   : '#22C55E'
             }
-            emboss={mythic}
+            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
             onArt
           />
         </>
@@ -2078,7 +2117,7 @@ export function CardFace({
             value={def.might}
             tier={size}
             tint="var(--c-red)"
-            emboss={mythic}
+            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
             onArt
           />
           <StatChip
@@ -2087,7 +2126,7 @@ export function CardFace({
             value={def.grit}
             tier={size}
             tint="#22C55E"
-            emboss={mythic}
+            emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
             onArt
           />
         </>
@@ -2099,7 +2138,7 @@ export function CardFace({
         value={def.resolve}
         tier={size}
         tint="#7C3AED"
-        emboss={mythic}
+        emboss={mythic ? 'mythic' : altArt ? 'altArt' : false}
         onArt
       />
     ) : null;
@@ -2309,13 +2348,15 @@ export function CardFace({
             ? 'serialized-frame'
             : mythic
               ? 'mythic-frame'
-              : ultra
-                ? 'ultra-frame'
-                : cfg.showGlow && rarityGlow(def.rarity)),
-        (ultra || mythic) && !dimmed && 'premium-card',
+              : altArt
+                ? 'aa-frame'
+                : ultra
+                  ? 'ultra-frame'
+                  : cfg.showGlow && rarityGlow(def.rarity)),
+        (ultra || mythic || altArt) && !dimmed && 'premium-card',
       )}
     >
-      {/* ---- Full-bleed art layer (Full-Art still image / Mythic video) ---- */}
+      {/* ---- Full-bleed art layer (Full-Art/Alt-Art still image / Mythic video) ---- */}
       {bleed && (
         <div className="absolute inset-0 z-0 bg-[#111]">
           {/* Mythic's scanline bed shows through wherever the looping video
@@ -2336,6 +2377,10 @@ export function CardFace({
           />
           {mythicArt && !dimmed && <div aria-hidden className="fc-my-spark absolute inset-0" />}
           {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
+          {/* Alt-Art "Prism Ink": a slow hue-shifting holographic wash over
+              the full-bleed art — always on, not hover-gated, so it reads at
+              a glance in a collection grid. */}
+          {altArt && !dimmed && <div aria-hidden className="aa-holo absolute inset-0" />}
         </div>
       )}
 
@@ -2562,6 +2607,11 @@ export function CardFace({
             </>
           )}
         </>
+      )}
+      {/* Alt-Art "Prism Ink" hover-gated bloom (the base .aa-holo wash is
+          rendered inside the full-bleed art layer above, always on). */}
+      {altArt && !dimmed && size === 'full' && (
+        <div aria-hidden className="aa-corona absolute inset-0 z-10" />
       )}
     </div>
   );

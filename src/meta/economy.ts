@@ -30,6 +30,7 @@ export const QUICKSELL_PRICES: Record<Rarity, number> = {
   'Super-Rare': 300,
   'Ultra-Rare': 800,
   'Full-Art': 1000,
+  'Alt-Art': 1800,
   Mythic: 3000,
 };
 
