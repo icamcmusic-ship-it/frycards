@@ -250,6 +250,13 @@ function isRemoval(eff?: Effect): boolean {
   );
 }
 
+/** v6.9: effects that need an enemy unit on the board to do anything at all.
+ * Not removal (they neither kill nor reliably kill), but invoking one into an
+ * empty enemy board is a strictly wasted card — the curve must see that. */
+function needsEnemyUnit(eff?: Effect): boolean {
+  return !!eff && (eff.action === 'exhaust' || eff.action === 'weaken');
+}
+
 /**
  * Best friendly unit to hang a Charm on. Picking the biggest Might (the old
  * rule) puts every Charm on the unit the opponent most wants to remove and
@@ -300,6 +307,12 @@ function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
     // Removal wants a live target; anyTarget damage can still go face.
     if (biggest) v += 20;
     else v += def.onInvoke?.target === 'anyTarget' ? -5 : -100;
+  }
+  if (needsEnemyUnit(def.onInvoke)) {
+    const live = opp.field.filter((u) => !unitHasKw(u, 'Warded'));
+    // Worth a real premium against a developed board (exhausting or shrinking
+    // the biggest body swings a whole clash), worthless into an empty one.
+    v += live.length > 0 ? 12 : -100;
   }
   if (def.type === 'Event' && hasKw(def, 'Resonant')) v += 4; // double value
   if (def.type === 'Location' && hasKw(def, 'Bountiful')) v += 3; // ramp
@@ -458,6 +471,11 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
     else if (eff.action === 'heal') v = p.vitality < LEADER_HP || p.field.some((u) => u.damage > 0) ? 4 : 0;
+    // v6.9: exhaust is worth real value against a READY board (it denies an
+    // attack or a guard) and literally nothing against a tapped-out one.
+    else if (eff.action === 'exhaust')
+      v = opp.field.some((u) => !u.exhausted && !unitHasKw(u, 'Warded')) ? 6 : 0;
+    else if (eff.action === 'weaken') v = opp.field.length > 0 ? 5 : 0;
     else v = 2;
     // Never shatter our own Leader for marginal value — only a genuinely
     // scary board (a Might-6+ unit to answer) can justify going to zero.
@@ -489,8 +507,14 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const defenders = opp.field.filter((u) => !u.exhausted);
   const firstStriker = (x: UnitInst) =>
     unitHasKw(x, 'Quickstrike') || unitHasKw(x, 'Doublestrike');
-  const canBlock = (a: UnitInst, g: UnitInst) =>
-    !unitHasKw(a, 'Aerial') || unitHasKw(g, 'Aerial') || unitHasKw(g, 'Skywatch');
+  // Mirrors engine `legalGuardsFor` — Aerial needs an Aerial/Skywatch catcher,
+  // and v6.9 Nimble can only be caught by a strictly smaller body.
+  const canBlock = (a: UnitInst, g: UnitInst) => {
+    if (unitHasKw(a, 'Aerial') && !unitHasKw(g, 'Aerial') && !unitHasKw(g, 'Skywatch'))
+      return false;
+    if (unitHasKw(a, 'Nimble') && effMight(state, g) >= effMight(state, a)) return false;
+    return true;
+  };
   const attackerKills = (a: UnitInst, g: UnitInst) => {
     const hit = packetDamage(g, effMight(state, a));
     return (

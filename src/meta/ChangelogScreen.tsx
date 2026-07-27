@@ -12,6 +12,21 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'New Keywords Update (v6.9)',
+    date: 'July 2026',
+    items: [
+      'Every Essence Type gained a brand-new keyword. Ember has WILDFIRE (when this unit dies, deal 2 damage to the enemy player), Tide has TIDECALLER (whenever this unit deals clash damage, Deal a card), Root has THRIVING (at your Dawn, this unit gets +1/+1 permanently), Gale has NIMBLE (can only be guarded by units with less Might), Light has RADIANT (at your Dawn, restore 1 Vitality), Shadow has WITHERING (clash damage this deals to a unit permanently reduces that unit\'s Grit by 1), and Void has ENTROPIC (at your Dusk, the enemy erodes 1). Cards across the pool have been reprinted carrying them, and Charms can grant them too.',
+      'Two new ability types appear on cards: EXHAUST taps an enemy unit so it can neither attack nor guard until its controller\'s next Dawn, and WEAKEN gives an enemy unit -X/-X permanently. Weaken and Withering are not damage — healing will not undo them, and a unit reduced to 0 Grit is shattered.',
+      'Rules fix — blocked is blocked. Killing a blocker after guards were set no longer lets the attack through as though it had never been guarded. That was exploitable: attack, let a big body block, then remove your own blocker with a Quick Event and the attacker hit for full damage anyway. Now only Overrun spills past dead guards, and only the excess.',
+      'Ethereal Sea Witch and Ruin-Walker Overseer, the two weakest Leaders in the game by a wide margin, both got real buffs. Neither kit could interact with the board at all — the Sea Witch only drew cards and gained life, and the Overseer\'s two abilities were the same buff at two sizes. The Sea Witch\'s +1 is now "Exhaust a target enemy unit" and the Overseer\'s +1 is now "A target enemy unit gets -1/-1".',
+      'Avatar of the Abyss and Crimson Vector Commander, the two strongest Leaders, were both toned down. The Avatar\'s Shatter now costs 3 Resolve instead of 2 (it was firing ten times a game and winning longer and longer games), and the Commander\'s 2-damage reach now costs 2 Resolve instead of 1 (it was winning close to 90% of short games).',
+      'Doublestrike costs more to print and Resonant costs less: Doublestrike has been over-performing for four straight balance passes, and Resonant\'s double-resolution has never once been worth its surcharge, so it now carries none.',
+      'Card fixes: Galleon Shipwreck (a 1-cost Location that also swept every enemy unit each turn), Resonant Shuriken and Abyssal Pathway all cost more. Spectral Leviathan and Kunoichi of the Magma Rings were trimmed down.',
+      'Ten cards had the wrong rarity on the server. Absolute Eruption, Apex Nanite Shinobi, Astral Shoal, Avatar of the Abyss, Chrysalis of the Departed, Crimson Vector Commander, Faye\'s True Face, Spectral Leviathan, Submerged Starfall and Void Mother are all correctly MYTHIC everywhere now. If you own any of them, they sell, drop and cap as Mythic — Void Mother and Chrysalis of the Departed quicksell for 3,000 credits instead of 1,000. Four of them were also being dealt the wrong stats, cost and keywords in matches; they now print as intended.',
+      'The rulebook\'s keyword list is grouped by card type instead of one long alphabetical run, and illegal guard assignments now name the exact rule that blocked them (exhausted, Aerial, or Nimble) rather than guessing at it.',
+    ],
+  },
+  {
     version: 'Card Template Update (v6.8)',
     date: 'July 2026',
     items: [

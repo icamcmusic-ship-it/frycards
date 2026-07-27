@@ -23,7 +23,13 @@ import type {
 import { totalCost } from './cards';
 import type { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
-import { COLORS, KEYWORDS_OF_COLOR, LEADER_COLORS, Color } from './colors';
+import {
+  COLORS,
+  KEYWORDS_OF_COLOR,
+  LEADER_COLORS,
+  NEW_KEYWORD_OF_COLOR,
+  Color,
+} from './colors';
 import { KEYWORD_COST, KEYWORD_TEXT, Keyword, isKeyword } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -91,8 +97,17 @@ const COST_ADJUST: Record<string, number> = {
   // v6.7: the only cost-ability outlier this pass to clear BOTH gates — the
   // Wilson-CI-excludes-baseline bar AND reproduces with the same sign in
   // both cohorts (+7.7 residual, n=508, cohort A; +15.8, n=491, cohort B).
-  boneplate_sentinel: +1,
-  abyssal_pathway: +2,
+  // v6.9: `boneplate_sentinel`'s v6.7 +1 is RETIRED, not carried. That nerf
+  // was earned specifically as "a Venomous cost-5 Unit"; the v6.9 keyword
+  // pass re-printed the card as a Withering cost-5 Unit, so the property the
+  // adjustment was measured against is gone. Left un-adjusted for the next
+  // pass to re-derive from the card as it now prints.
+  // v6.9: +2 -> +3. Reproduces as an overperformer in both cohorts
+  // (+13.1 n=87 / +11.0 n=385) — a Sanctum that ramps AND pings every Dusk.
+  abyssal_pathway: +3,
+  // v6.9 new: a cost-1 Sanctum that ramps AND sweeps every enemy unit for 1
+  // at Dusk. Both cohorts (+14.4 n=206 / +12.8 n=470).
+  galleon_shipwreck: +1,
   amber_sphere: +1,
   ashhound_pack: +1,
   black_coral_thicket: +1,
@@ -115,6 +130,10 @@ const COST_ADJUST: Record<string, number> = {
   kinetic_siphon_swarm: +1,
   kinetix_blacksite_cavern: +1,
   kraken_s_monolith: +1,
+  // v6.9: this entry is INERT and kept only as a signpost. The card prints at
+  // total cost 7 (base 6 + Reckless surcharge 1), so mapUnit's 1..7 clamp
+  // swallows any raise — a +2 trial re-ran byte-identical (+9.7 / +10.5, the
+  // same residuals as +1). Actioned through STAT_ADJUST instead; see there.
   kunoichi_of_the_magma_rings: +1,
   magma_conduit_network: +2,
   merfolk_ritual: +1,
@@ -124,7 +143,10 @@ const COST_ADJUST: Record<string, number> = {
   neon_moray: +1,
   phosphor_lich: +1,
   pufferfish_lantern: +1,
-  resonant_shuriken: +1,
+  // v6.9: +1 -> +2. The pool's strongest per-cost Charm and an outlier in
+  // both cohorts (+16.5 n=232 / +17.3 n=357) — a cost-2 Worn Charm granting
+  // +1/+0 AND Aerial, re-bondable for 1.
+  resonant_shuriken: +2,
   ribcage_titan: +1,
   ribvault_cathedral: +1,
   sand_portal: +2,
@@ -221,6 +243,15 @@ const STAT_ADJUST: Record<string, number> = {
   // STILL +10.3 residual (z=1.87, n=544) after the first -2 — repeat
   // overperformer, third point stacked (-3). v6.4: STILL +10.6 residual
   // (z=1.84, n=139) after that — fourth point stacked.
+  // v6.9: +9.7 (n=563) / +10.2 (n=507) — reproduces in both cohorts. Printed
+  // at the cost cap of 7 (a 2/7 Unbreakable + Immobile wall), so COST_ADJUST
+  // clips to nothing; trim the stat budget instead, same as the three below.
+  spectral_leviathan: -2,
+  // v6.9: +9.7 (n=154) / +10.5 (n=159), reproducing in both cohorts. A 6/4
+  // Reckless body with a 3-damage any-target death trigger, printed at the
+  // cost cap of 7 — so COST_ADJUST is provably a no-op here (verified by
+  // re-run) and the stat budget is the only live lever.
+  kunoichi_of_the_magma_rings: -2,
   wingbone_horror: -3, // v6.4: +10.3 residual, z=1.77, n=336, cost 7 already
   // (COST_ADJUST would clip to nothing at the ceiling) — trim stat budget.
   // v6.5: STILL +8.5 residual (z=1.50, n=336) after that — third point
@@ -289,8 +320,47 @@ function buildCost(seed: string, colors: Color[], total: number, rt: number): Es
 // Gale recover/draw, Light heal, Shadow small damage/erode, Void
 // banish/erode). `v` is the scaled magnitude for the card's cost.
 // ---------------------------------------------------------------------------
+/**
+ * v6.9 new-generation ability branch. Each Essence Type gained one fresh
+ * effect shape on top of its legacy theme; this rolls whether a given card
+ * takes it. Kept as its OWN salted roll (rather than widening each colour's
+ * existing 2-way roll) so the legacy branches keep the exact indices they
+ * had — only the ~1-in-3 of cards that opt in re-print, instead of the whole
+ * pool re-rolling and invalidating every per-card balance adjustment.
+ */
+function takesNewAbility(seed: string, salt: string): boolean {
+  return roll(seed, `newfx-${salt}`, 3) === 0;
+}
+
+/** The v6.9 ability added to each Essence Type's vocabulary. */
+function newThemedEffect(color: Color | undefined, v: number): Effect | undefined {
+  const val = Math.max(1, v);
+  switch (color) {
+    case 'Ember': // sweeping fire, not just a single bolt
+      return { action: 'damage', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'allEnemyUnits' };
+    case 'Tide': // tempo denial
+      return { action: 'exhaust', target: 'enemyUnit' };
+    case 'Root': // mass regrowth
+      return { action: 'heal', value: val, target: 'allFriendlyUnits' };
+    case 'Gale': // gust one blocker out of the way
+      return { action: 'exhaust', target: 'enemyUnit' };
+    case 'Light': // a blessing over the whole board
+      return { action: 'heal', value: Math.max(1, Math.ceil(val / 2)), target: 'allFriendlyUnits' };
+    case 'Shadow': // attrition rather than removal
+      return { action: 'weaken', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' };
+    case 'Void': // unmake it a piece at a time
+      return { action: 'weaken', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' };
+    default:
+      return undefined;
+  }
+}
+
 function themedEffect(seed: string, color: Color | undefined, v: number): Effect {
   const val = Math.max(1, v);
+  if (takesNewAbility(seed, 'themed')) {
+    const nu = newThemedEffect(color, val);
+    if (nu) return nu;
+  }
   switch (color) {
     case 'Ember':
       return { action: 'damage', value: val, target: 'anyTarget' };
@@ -330,7 +400,14 @@ function effectText(e: Effect): string {
       return `deal ${v} damage to a target enemy unit`;
     case 'heal':
       if (e.target === 'friendlyPlayer') return `restore ${v} Vitality`;
+      if (e.target === 'allFriendlyUnits') return `heal ${v} from each of your units`;
       return `heal ${v} from a friendly unit or yourself`;
+    case 'exhaust':
+      if (e.target === 'allEnemyUnits') return 'exhaust each enemy unit';
+      return 'exhaust a target enemy unit';
+    case 'weaken':
+      if (e.target === 'allEnemyUnits') return `each enemy unit gets -${v}/-${v}`;
+      return `a target enemy unit gets -${v}/-${v}`;
     case 'draw':
       return v === 1 ? 'Deal a card' : `Deal ${v} cards`;
     case 'buff':
@@ -389,6 +466,23 @@ function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
       colors[1] ? KEYWORDS_OF_COLOR[colors[1]] : primaryList
     ).filter((kw) => legal(kw) && !out.includes(kw));
     if (secondList.length) out.push(pick(seed, 13, secondList) as string);
+  }
+  // v6.9: roughly a quarter of keyword-carrying units swap their PRIMARY
+  // keyword for their colour's new-generation one (NEW_KEYWORD_OF_COLOR).
+  // A swap, not an addition — an extra keyword would hand those cards a free
+  // power bump on top of the new text. Rolled on its own salt so the legacy
+  // picks above keep their exact indices and the rest of the pool re-prints
+  // identically; the cost surcharge re-derives from KEYWORD_COST either way.
+  if (out.length && colors[0] && roll(seed, 'newkw', 100) < 30) {
+    const fresh = NEW_KEYWORD_OF_COLOR[colors[0]];
+    if (fresh && !out.includes(fresh)) out[0] = fresh;
+  }
+  // Two-colour cards roll the same substitution for their SECOND keyword
+  // against their SECOND colour, so a gold card can carry new-generation text
+  // from either half of its identity.
+  if (out.length >= 2 && colors[1] && roll(seed, 'newkw2', 100) < 30) {
+    const fresh = NEW_KEYWORD_OF_COLOR[colors[1]];
+    if (fresh && !out.includes(fresh)) out[1] = fresh;
   }
   return out;
 }
@@ -479,6 +573,10 @@ function mapUnit(c: CardTemplate): CardDef {
 function eventEffect(seed: string, color: Color | undefined, t: number, slow: boolean): Effect {
   // Slow events get roughly +1 value for the same cost.
   const v = Math.max(1, Math.min(7, Math.ceil(t * 0.9) + (slow ? 1 : 0)));
+  if (takesNewAbility(seed, 'event')) {
+    const nu = newThemedEffect(color, v);
+    if (nu) return nu;
+  }
   switch (color) {
     case 'Void':
       if (t >= 3) return { action: 'banish', target: 'enemyUnit' };
@@ -584,7 +682,11 @@ function mapCharm(c: CardTemplate): CardDef {
       (kw) => (!PREMIUM.has(kw) || rt >= 4) && kw !== 'Immobile',
     );
     if (list.length) {
-      const kw = pick(seed, 21, list) as string;
+      // v6.9: same substitution rule as pickUnitKeywords — a share of Charms
+      // now grant their colour's new-generation keyword instead of a legacy one.
+      const fresh = colors[0] ? NEW_KEYWORD_OF_COLOR[colors[0]] : undefined;
+      const kw =
+        fresh && roll(seed, 'ch-newkw', 100) < 26 ? fresh : (pick(seed, 21, list) as string);
       bond.grants = [kw];
       grantText = ` and ${kw}`;
     }
@@ -793,7 +895,70 @@ const LEADER_KEYWORD_STRIP: Record<string, string[]> = {
  * Resolve cost -2 -> -3, matching the "trim ability cost efficiency" lever
  * named in the v6.2 doc rather than a further keyword strip. */
 const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
-  avatar_of_the_abyss: -3,
+  // v6.9: -3 -> -4. Avatar has now topped the Leader spread in BOTH cohorts
+  // for three consecutive passes (65.5% / 76.1% here) and the kit
+  // diagnostics finally isolate the mechanism the v6.7 carry-forward asked
+  // for: it is not a tempo spike (its win rate CLIMBS with game length in
+  // both cohorts, to 72.6% and 87.1% past turn 30) but sheer volume — 10.2
+  // and 9.0 ability activations per game, the most of any Leader by a clear
+  // margin, on an unconditional Shatter. Resolve 6 against a -3 bought two
+  // full removals per tank with the +1 builder refilling it; at -4 it buys
+  // one, and rebuilding to a second costs four turns of not removing
+  // anything. Same lever as v6.3, one point, price-only.
+  avatar_of_the_abyss: -4,
+  // v6.9: Crimson Vector Commander is the v6.7 carry-forward #2 coming due.
+  // That doc applied the Commander strip, said cohort B still read it on top,
+  // and named the exact next lever ("the same minus-ability resolve-cost bump
+  // used on Avatar in v6.3") to be pulled after one watch pass. This is that
+  // pass, and it now finishes FIRST in both cohorts (62.6% / 76.5%), with B
+  // having climbed since. The kit diagnostics are unchanged and unambiguous:
+  // 87.9-88.6% at <=10 turns collapsing to 23-30% past turn 30 — a tempo
+  // spike, driven by an Ember `-1: 2 damage to any target` that Resolve 6
+  // pays for six times over. At -2 it gets three, which is still the most
+  // reach of any kit but no longer an every-turn faucet.
+  crimson_vector_commander: -2,
+};
+
+/**
+ * v6.9: Leader PLUS-ability override — the buff-side counterpart to the two
+ * nerf levers above, added because the Leader spread has a bottom as well as
+ * a top and nothing existed to act on it.
+ *
+ * Ethereal Sea Witch has finished LAST in both cohorts of this pass (35.2%
+ * and 25.2%, the widest deficit any Leader has posted) and has never been
+ * actioned. The diagnostics rule out misplay: it invokes early (turn 4.6/4.7,
+ * the cheapest kit in the game) and activates an ability 8.6-8.9 times per
+ * game, more than any Leader except Avatar — it is using its kit constantly
+ * and still losing. The cause is structural. Its Tide/Light identity rolls
+ * `-1: Deal a card` and `+1: Restore 2 Vitality`: the only kit in the pool
+ * with NO board interaction whatsoever, in a game where 92-94% of wins come
+ * from reducing Vitality. Drawing and gaining 2 life cannot answer a board.
+ *
+ * The fix gives it interaction without taking anything away: the plus
+ * ability (the dead half — 2 Vitality a turn is close to irrelevant at these
+ * win rates) becomes a v6.9 `exhaust`, which is Tide's own tempo-denial
+ * identity and, on a resolve-BUILDING ability, is a soft answer rather than
+ * removal — the exhausted unit recovers at its controller's next Dawn.
+ */
+const LEADER_PLUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
+  ethereal_sea_witch: {
+    resolveDelta: 1,
+    effect: { action: 'exhaust', target: 'enemyUnit' },
+    text: '+1: Exhaust a target enemy unit.',
+  },
+  // Ruin-Walker Overseer is the same structural failure with a different
+  // shape, also below baseline in both cohorts (43.1% / 31.5%) and also
+  // never actioned. Its Root/Void roll produced `-2: A friendly unit gets
+  // +2/+2` AND `+1: A friendly unit gets +1/+1` — a kit whose two abilities
+  // are the SAME effect at two sizes, so there is nothing to choose between
+  // them and no answer to anything the opponent does. The plus side takes
+  // the Void half of its identity instead, as v6.9 `weaken`: still a small
+  // resolve-building effect, but one that touches the board.
+  ruinwalker_overseer: {
+    resolveDelta: 1,
+    effect: { action: 'weaken', value: 1, target: 'enemyUnit' },
+    text: '+1: A target enemy unit gets -1/-1.',
+  },
 };
 
 function mapLeader(c: CardTemplate): CardDef {
@@ -820,7 +985,9 @@ function mapLeader(c: CardTemplate): CardDef {
     minus.text = minus.text.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);
     minus.resolveDelta = minusOverride;
   }
-  const plus = leaderPlusAbility(seed, identity[1] ?? identity[0]);
+  const plus = LEADER_PLUS_ABILITY_OVERRIDE[c.id]
+    ? { ...LEADER_PLUS_ABILITY_OVERRIDE[c.id] }
+    : leaderPlusAbility(seed, identity[1] ?? identity[0]);
   const def: CardDef = {
     id: c.id,
     name: c.name,

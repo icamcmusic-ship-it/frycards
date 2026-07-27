@@ -8,6 +8,100 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v6.9 — A keyword per Essence Type, the blocked-is-blocked fix, catalog resync
+
+Full balance analysis in `docs/BALANCE_SIM_FINDINGS_v6.9.md` (which
+supersedes and replaces the v6.6 and v6.7 findings docs).
+
+#### Catalog integrity (found first, because it invalidated everything else)
+
+- **The v6.8 rarity migration was half-applied, and nothing was checking.**
+  `public.cards.template` was updated for six cards and `public.cards.rarity`
+  for a different four, leaving the client, the server economy and the
+  bundled sim catalog disagreeing about ten cards. Because mechanics are
+  hashed from `id|type|rarity`, four cards (`astral_shoal`,
+  `chrysalis_of_the_departed`, `fayes_true_face`, `void_mother`) were dealt
+  **entirely different costs, stats and keywords in live matches than in
+  every balance sim**, and six more — including three of the eight Leaders —
+  were priced, dropped and copy-capped a full tier too cheap by every server
+  RPC. All ten resynced to Mythic in both places; live and bundled digests
+  now match exactly (292/292). No inventory migration was needed
+  (`player_cards` caches no rarity), and the `decks` table was empty so no
+  saved deck violated the tightened Mythic 1-copy cap.
+- **`scripts/verify-pool.ts` / `npm run verify:pool`** — new drift guard that
+  diffs template vs rarity column vs bundled catalog and exits non-zero.
+  The previous "parity check" compared the bundled catalog against itself and
+  could never have caught this.
+- `scripts/backfill-cards-db.ts` output applied for the 69 rows whose printed
+  mechanics changed, so the denormalized `essence_cost` / `might` / `grit` /
+  `keywords` / `rules_text` columns match the new printings.
+
+#### Engine
+
+- **Blocked is blocked.** `resolveClash` derived "was this attacker guarded?"
+  at resolution time, from a map `stateBasedChecks` had already pruned dead
+  guards out of — so an attacker whose only blocker left the field mid-clash
+  read as *never guarded* and hit the defending player for full Might. That
+  was directly exploitable: attack, let the opponent block with their biggest
+  body, then kill your own blocker with a Quick Event in the reaction window
+  and the attack landed unblocked. Now snapshotted at `declareGuards` time
+  (`ClashState.guardedOnce`); only Overrun spills, and only the excess past
+  what its guards actually absorbed. Rulebook §6 states it explicitly.
+- `runDusk` clears a stale clash object, which would otherwise freeze the
+  next player's combat outright (`declareAttackers` refuses while `clash` is
+  set).
+- New `src/game/v3/edgecases.test.ts` (48 adversarial tests) covering hostile
+  guard assignments, phase desync, cost evasion, targeting, turn-boundary
+  triggers and win conditions.
+
+#### New content — one keyword per Essence Type
+
+- **Wildfire** (Ember), **Tidecaller** (Tide), **Thriving** (Root),
+  **Nimble** (Gale), **Radiant** (Light), **Withering** (Shadow),
+  **Entropic** (Void), plus two new effect actions — **exhaust** (tap an
+  enemy unit) and **weaken** (-X/-X, permanent) — woven into each colour's
+  ability vocabulary.
+- Gated behind dedicated salted rolls (`newkw`, `newkw2`, `newfx-*`) that
+  *substitute* rather than append, so only 59 of 292 cards re-print and just
+  4 of 86 tuned cards were touched — appending to `KEYWORDS_OF_COLOR` would
+  have re-rolled the entire pool and invalidated every per-card adjustment.
+- `boneplate_sentinel`'s v6.7 `+1` retired: it was earned as "a Venomous
+  cost-5 Unit" and the card no longer has Venomous.
+
+#### Balance (two cohorts, 5,952 games each, 0 invariant violations)
+
+- **Leader nerfs**: `avatar_of_the_abyss` minus resolve -3 → -4 (first in
+  both cohorts a third pass running, at 10.2/9.0 ability activations per game
+  with a win rate that *climbs* with game length); `crimson_vector_commander`
+  -1 → -2 (v6.7's named next lever, coming due after its watch pass).
+- **Leader buffs** via the new `LEADER_PLUS_ABILITY_OVERRIDE` — the first
+  lever this project has had for the *bottom* of the spread.
+  `ethereal_sea_witch` and `ruinwalker_overseer` both finished last in both
+  cohorts with kits that could not interact with the board at all (one only
+  drew and gained life; the other's two abilities were the same buff at two
+  sizes). Their plus abilities become `+1: Exhaust a target enemy unit` and
+  `+1: A target enemy unit gets -1/-1`. Cohort A's Leader spread narrows from
+  37.0 points to 31.6; cohort B's from 50.9 to 39.8.
+- **Keywords**: Doublestrike 4 → 5 (third confirming pass); Resonant 2 → 0
+  (three-pass repeat offender, now resolved at -4.3/+1.1).
+- **Cards**: `galleon_shipwreck` +1 (a cost-1 Sanctum that ramped *and* swept
+  every enemy unit each Dusk), `resonant_shuriken` +1 → +2, `abyssal_pathway`
+  +2 → +3; `spectral_leviathan` and `kunoichi_of_the_magma_rings` stat-trimmed
+  — both print at the cost cap, where `COST_ADJUST` is provably inert (a `+2`
+  trial on the latter re-ran byte-identical to `+1`).
+- **CPU**: `wastedEssenceWithPlay` fell 3x (2,689/3,353 → 902/998), not from
+  a heuristic fix but from giving the new actions a priority opinion
+  (`needsEnemyUnit`, and `exhaust`/`weaken` valuations in `runLeaderAbility`)
+  — effects the curve had no opinion about scored the default and sat in hand
+  behind essence that then expired.
+
+#### UI
+
+- The rulebook's keyword list is grouped by card type instead of one flat
+  31-entry alphabetical run.
+- An illegal guard assignment names the specific rule that blocked it
+  (exhausted / Aerial / Nimble) instead of listing every rule it might be.
+
 ### v6.8 — New card template set, video cards to Mythic, Full-Art above Ultra-Rare
 
 - **New card template** (`src/components/CardFaceV4.tsx`), implementing the

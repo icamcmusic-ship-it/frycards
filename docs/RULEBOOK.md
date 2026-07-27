@@ -44,6 +44,23 @@ Unit keywords (rulebook §1):
 | Regenerate | At Dawn, heal all damage marked on this unit |
 | Hardened | Damage dealt to this unit is reduced by 1 |
 
+**v6.9:** one new Unit keyword per Essence Type:
+
+| Keyword (Essence Type) | Meaning |
+|---|---|
+| Wildfire (Ember) | When this unit dies, deal 2 damage to the enemy player |
+| Tidecaller (Tide) | Whenever this unit deals clash damage, Deal a card |
+| Thriving (Root) | At your Dawn, this unit gets +1/+1 permanently |
+| Nimble (Gale) | Can only be guarded by units with strictly less Might |
+| Radiant (Light) | At your Dawn, restore 1 Vitality |
+| Withering (Shadow) | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
+| Entropic (Void) | At your Dusk, the enemy erodes 1 |
+
+Wildfire and Withering fire on banish as well as shatter, and a Charm that
+grants either still grants it at the moment its bearer leaves the field.
+Withering's Grit loss is permanent: unlike marked damage, healing does not
+restore it, and a unit withered to 0 Grit is shattered by the state checks.
+
 **v6.0:** every other card type has its own keyword pair:
 
 | Keyword (type) | Meaning |
@@ -134,7 +151,14 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   Reckless) may attack. Attacking exhausts the unit unless it has Alert.
 - Unguarded attackers deal their Might to the defender's Vitality.
 - Swarmproof attackers must be guarded by 2+ units or not at all. Aerial
-  attackers can only be guarded by Aerial or Skywatch units.
+  attackers can only be guarded by Aerial or Skywatch units. Nimble
+  attackers can only be guarded by a unit with strictly less Might.
+- **Blocked is blocked.** Once an attacker has been assigned at least one
+  guard, it deals no damage to the defending player even if every one of its
+  guards leaves the field before damage resolves — whether they died to
+  first-strike damage or were removed during the reaction window, by either
+  player. Only Overrun spills, and only the excess past whatever its guards
+  actually absorbed.
 - Venomous damage is lethal regardless of amount; Overrun sends excess
   damage past shattered guards through to the defending player; Siphon
   converts damage dealt into Vitality; Hardened shaves 1 off every damage
@@ -148,6 +172,19 @@ shatters a unit (Unbreakable survives); illegally bonded Charms unbond.
 When a unit leaves the field, its Bound Charms go to the Ash-pile, Worn
 Charms stay on the field unbonded, and Soulbound Charms return to their
 owner's hand.
+
+**Effect vocabulary.** Card and Leader abilities are written from a fixed
+set of actions: *deal damage*, *heal*, *Deal* (draw), *buff* (+X/+X),
+*shatter*, *banish*, *erode* (mill), *recover* (ready a friendly unit), and
+as of v6.9 *exhaust* and *weaken*.
+
+- **Exhaust** taps a target enemy unit. It cannot attack on its controller's
+  turn or guard on yours until it recovers at their next Dawn. Exhausting an
+  already-exhausted unit does nothing.
+- **Weaken** gives a target enemy unit -X/-X permanently. Derived Might and
+  Grit never fall below 0, and a unit weakened to 0 Grit is shattered by the
+  state-based checks above. Like Withering, this is not damage: healing does
+  not undo it.
 
 ## 8. Essence Identity (the seven colors)
 

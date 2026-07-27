@@ -29,4 +29,7 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   deterministic resolution order; a real priority system would unlock
   instant-speed, interaction-heavy card designs.
 - **Unprinted keywords** (Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate,
-  Exhume) — implement when cards using them are printed.
+  Exhume) — implement when cards using them are printed. (v6.9 printed a
+  different new generation instead: one keyword per Essence Type — Wildfire,
+  Tidecaller, Thriving, Nimble, Radiant, Withering, Entropic — plus the
+  `exhaust` and `weaken` effect actions. See `docs/RULEBOOK.md`.)
