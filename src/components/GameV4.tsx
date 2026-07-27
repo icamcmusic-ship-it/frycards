@@ -659,12 +659,82 @@ function AbilityPill({
 }
 
 // ---------------------------------------------------------------------------
-// Leader zone panel — Vitality plate + the Leader card with Resolve badge,
-// invoke button and Resolve-ability pills (human side only).
+// "Tactile Lane" board furniture — the redesigned match layout stacks the two
+// players' zones as full-width lanes (bar → locations → field) meeting at a
+// clash divider, instead of the old side-panel-plus-row arrangement. The card
+// templates themselves are untouched: units, hand cards and the Leader
+// thumbnails all still render through CardFace.
 // ---------------------------------------------------------------------------
-function LeaderZonePanel({
+
+/** Always-visible Dawn → Main I → Clash → Main II → Dusk progress bar. */
+function PhaseStepper({
+  phase,
+  yours,
+}: {
+  phase: GameState['phase'];
+  /** Highlight in the player's yellow vs the opponent's red. */
+  yours: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-1 py-1 bg-[var(--c-paper)]/8 border-b border-[var(--c-paper)]/10 shrink-0">
+      {PHASE_ORDER.map((ph, i) => (
+        <React.Fragment key={ph}>
+          {i > 0 && <span className="text-[8px] text-[var(--c-paper)]/25">›</span>}
+          <span
+            className={cn(
+              'heading-font text-[9px] px-2 py-0.5 rounded-[2px] tracking-wide',
+              phase === ph
+                ? yours
+                  ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                  : 'bg-[var(--c-red)] text-white'
+                : 'bg-[var(--c-paper)]/12 text-[var(--c-paper)]/45',
+            )}
+          >
+            {PHASE_LABEL[ph]}
+          </span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** Leader Resolve as filled dots rather than a bare number — the resource is
+ * spent and regained in ones, so a countable row reads faster than digits. */
+function ResolveDots({ resolve, max, mine }: { resolve: number; max: number; mine: boolean }) {
+  const total = Math.max(1, Math.min(10, Math.max(max, resolve)));
+  return (
+    <span
+      className="flex gap-[3px] items-center"
+      title={`Resolve ${resolve}${max > resolve ? ` of ${max}` : ''}`}
+      aria-label={`Resolve ${resolve} of ${total}`}
+    >
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className="w-[7px] h-[7px] rounded-full border border-[var(--c-ink)]"
+          style={{
+            backgroundColor:
+              i < resolve
+                ? mine
+                  ? 'var(--c-yellow)'
+                  : 'var(--c-red)'
+                : 'rgba(255,255,255,0.25)',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * A player's status lane: Leader thumbnail (the real card template at its
+ * smallest tier), name, Resolve dots, a Vitality plate, and — on the human's
+ * side — the floating Essence pool and the Leader's ability buttons.
+ */
+function LeaderLane({
   p,
   isHuman,
+  label,
   vitTargetable,
   onVitClick,
   onInvoke,
@@ -674,30 +744,50 @@ function LeaderZonePanel({
   onInspect,
   floats,
   flash,
+  right,
 }: {
-  key?: React.Key;
   p: PlayerState;
   isHuman: boolean;
-  /** The player's Vitality is a legal target for the pending effect. */
+  label: string;
   vitTargetable?: boolean;
   onVitClick?: () => void;
   onInvoke?: () => void;
-  /** Reason the INVOKE LEADER button is disabled (undefined = usable). */
   invokeWhy?: string;
   onAbility?: (idx: number) => void;
   abilityWhy?: (idx: number) => string | undefined;
   onInspect?: () => void;
   floats?: DmgFloat[];
   flash?: boolean;
+  /** Extra content pinned to the right end of the lane (piles, log toggle). */
+  right?: React.ReactNode;
 }) {
   const L = p.leader;
-  const badge = L.shattered
-    ? 'SHATTERED'
-    : L.invoked
-      ? `RESOLVE ${L.resolve}`
-      : `IN LEADER ZONE`;
+  const maxResolve = L.def.resolve ?? L.resolve;
   return (
-    <div className={cn('shrink-0 relative w-[140px] flex flex-col gap-0.5', flash && 'gv4-attack-flash')}>
+    <div
+      className={cn(
+        'flex items-center gap-2 px-2 py-1 shrink-0 flex-wrap',
+        isHuman
+          ? 'bg-[var(--c-yellow)]/12 border-t border-[var(--c-yellow)]/25'
+          : 'bg-[var(--c-red)]/12 border-b border-[var(--c-red)]/25',
+        flash && 'gv4-attack-flash',
+      )}
+    >
+      <div className={cn('shrink-0 relative', L.shattered && 'grayscale opacity-60')}>
+        <CardFace
+          def={L.def}
+          size="micro"
+          badge={L.shattered ? 'SHATTERED' : L.invoked ? 'INVOKED' : 'LEADER ZONE'}
+          introduceKeywords
+          onClick={onInspect}
+        />
+      </div>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="heading-font text-[11px] text-[var(--c-paper)] truncate max-w-[260px]">
+          {label}
+        </span>
+        <ResolveDots resolve={L.resolve} max={maxResolve} mine={isHuman} />
+      </div>
       <div
         role={onVitClick ? 'button' : undefined}
         tabIndex={onVitClick ? 0 : undefined}
@@ -711,31 +801,29 @@ function LeaderZonePanel({
         }}
         title={`${isHuman ? 'Your' : "Opponent's"} Vitality — win by reducing the opponent's to 0`}
         className={cn(
-          'relative flex items-center justify-between px-2 py-1 ink-border-sm heading-font',
-          isHuman ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]' : 'bg-[var(--c-red)] text-white',
+          'relative flex items-center gap-1 px-2 py-0.5 ink-border-sm heading-font bg-[var(--c-paper)] text-[var(--c-red)] shrink-0',
           vitTargetable && 'ring-4 ring-[var(--c-red)] cursor-pointer',
         )}
       >
-        <span className="text-[9px]">VITALITY</span>
-        <span className="text-xl leading-none">{Math.max(0, p.vitality)}</span>
+        <span className="text-[13px] leading-none">♥</span>
+        <span className="text-lg leading-none">{Math.max(0, p.vitality)}</span>
         <FloatLayer floats={floats} />
       </div>
-      <div className={cn('relative', L.shattered && 'grayscale opacity-60')}>
-        <CardFace
-          def={L.def}
-          size="standard"
-          badge={badge}
-          introduceKeywords
-          onClick={onInspect}
-        />
-      </div>
+
+      {isHuman && (
+        <span className="flex items-center gap-1 shrink-0">
+          <span className="heading-font text-[7px] text-[var(--c-paper)]/55">ESSENCE</span>
+          <EssencePips pool={p.essence} size={15} />
+        </span>
+      )}
+
       {isHuman && !L.invoked && !L.shattered && (
         <button
           onClick={onInvoke}
           disabled={!!invokeWhy}
           title={invokeWhy}
           className={cn(
-            'heading-font text-[9px] px-2 py-1 ink-border-sm',
+            'heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
             invokeWhy
               ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60 cursor-not-allowed'
               : 'btn-pop bg-[var(--c-red)] text-white',
@@ -744,21 +832,70 @@ function LeaderZonePanel({
           ⚜ INVOKE LEADER
         </button>
       )}
-      {L.invoked &&
-        !L.shattered &&
-        (L.def.leaderAbilities ?? []).map((ab, i) => (
-          <AbilityPill
-            key={i}
-            label={`${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}:`}
-            desc={ab.text ?? describeEffect(ab.effect)}
-            usable={isHuman && !abilityWhy?.(i)}
-            used={L.abilityUsedThisTurn}
-            why={
-              isHuman ? abilityWhy?.(i) : 'Opponent Leader ability — shown for information'
-            }
-            onClick={isHuman && onAbility ? () => onAbility(i) : undefined}
-          />
-        ))}
+      {L.invoked && !L.shattered && (
+        <span className="flex items-center gap-1 flex-wrap min-w-0">
+          {(L.def.leaderAbilities ?? []).map((ab, i) => (
+            <span key={i} className="max-w-[260px]">
+              <AbilityPill
+                label={`${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}:`}
+                desc={ab.text ?? describeEffect(ab.effect)}
+                usable={isHuman && !abilityWhy?.(i)}
+                used={L.abilityUsedThisTurn}
+                why={isHuman ? abilityWhy?.(i) : 'Opponent Leader ability — shown for information'}
+                onClick={isHuman && onAbility ? () => onAbility(i) : undefined}
+              />
+            </span>
+          ))}
+        </span>
+      )}
+      {right && <span className="ml-auto flex items-center gap-1.5 shrink-0">{right}</span>}
+    </div>
+  );
+}
+
+/** One player's Locations, on their own lane so Wellsprings and Sanctums are
+ * visible board objects rather than a footnote in a status bar. */
+function LocationsLane({
+  locations,
+  tappable,
+  onTap,
+  onInspect,
+  mine,
+  children,
+}: {
+  locations: LocationInst[];
+  tappable: boolean;
+  onTap?: (l: LocationInst) => void;
+  onInspect?: (l: LocationInst) => void;
+  mine: boolean;
+  /** Trailing controls (the "+ WELLSPRING" picker on the human's lane). */
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5 px-2 py-1 shrink-0 overflow-x-auto',
+        mine ? 'bg-[var(--c-ink)]/45' : 'bg-[var(--c-ink)]/45',
+      )}
+    >
+      <span className="heading-font text-[7px] text-[var(--c-paper)]/40 tracking-[1px] shrink-0">
+        LOCATIONS
+      </span>
+      {locations.map((l) => (
+        <LocationTile
+          key={l.iid}
+          loc={l}
+          tappable={tappable}
+          onTap={onTap ? () => onTap(l) : undefined}
+          onInspect={l.def && onInspect ? () => onInspect(l) : undefined}
+        />
+      ))}
+      {locations.length === 0 && (
+        <span className="text-[8px] font-bold text-[var(--c-paper)]/30 shrink-0">
+          none in play
+        </span>
+      )}
+      {children}
     </div>
   );
 }
@@ -1747,90 +1884,19 @@ export function GameV4({
         >
           {g.firstPlayer === HUMAN ? 'ON THE PLAY' : 'ON THE DRAW'}
         </span>
-        {/* Phase tracker: Dawn → Main I → Clash → Main II → Dusk */}
-        <div className="flex items-center gap-0.5">
-          {PHASE_ORDER.map((ph) => (
-            <span
-              key={ph}
-              className={cn(
-                'heading-font text-[8px] px-1.5 py-0.5 ink-border-sm',
-                g.phase === ph
-                  ? g.active === HUMAN
-                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                    : 'bg-[var(--c-red)] text-white'
-                  : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/50',
-              )}
-            >
-              {PHASE_LABEL[ph]}
-            </span>
-          ))}
-        </div>
+        {/* The phase tracker moved out of this bar into its own full-width
+            stepper below — see PhaseStepper. */}
         <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate hidden sm:inline">
           {humanLabel} vs {cpuLabel}
         </span>
-        <div className="ml-auto flex items-center gap-1">
-          {stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 && (
-            <button
-              onClick={declareMyAttack}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
-            >
-              ⚔ DECLARE ATTACK ({atkSel.size})
-            </button>
-          )}
-          {stage === 'play' && g.clash && g.clash.step !== 'done' && (
-            <button
-              onClick={resolveMyClash}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
-            >
-              💥 RESOLVE CLASH
-            </button>
-          )}
-          {showPhaseButton && (
-            <button
-              onClick={advanceMyPhase}
-              className={cn(
-                'btn-pop heading-font text-[10px] px-2 py-0.5 ink-border-sm',
-                g.phase === 'Main2'
-                  ? 'bg-[var(--c-red)] text-white'
-                  : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-              )}
-            >
-              {phaseButtonLabel}
-            </button>
-          )}
-          {stage === 'cpu' && (
-            <button
-              onClick={skipCpuBeats}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
-            >
-              SKIP ▸▸
-            </button>
-          )}
-          {guardStep && (
-            <button
-              onClick={confirmGuards}
-              disabled={!!guardProblem}
-              title={guardProblem ?? undefined}
-              className={cn(
-                'heading-font text-[10px] px-2 py-0.5 ink-border-sm',
-                guardProblem
-                  ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
-                  : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
-              )}
-            >
-              🛡 CONFIRM GUARDS
-            </button>
-          )}
-          {reactionStep && (
-            <button
-              onClick={resolveCpuClash}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm animate-pulse"
-            >
-              💥 RESOLVE CLASH
-            </button>
-          )}
-        </div>
+        {/* Every turn action (declare attack, resolve clash, confirm
+            guards, advance phase, skip the CPU) now lives on the clash
+            divider in the middle of the board, where the player is already
+            looking — see the CLASH DIVIDER block below. */}
       </div>
+
+      {/* Phase stepper — always-visible turn progress (board redesign #1) */}
+      <PhaseStepper phase={g.phase} yours={g.active === HUMAN} />
 
       {/* Contextual hint bar */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
@@ -1933,261 +1999,299 @@ export function GameV4({
         </div>
       )}
 
-      {/* Enemy row */}
+      {/* ================= OPPONENT LANE ================= */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-2 pb-1.5 items-start bg-[var(--c-ink)]/25 min-h-0 overflow-y-auto">
-        <LeaderZonePanel
-          p={foe}
-          isHuman={false}
-          vitTargetable={!!pending && isPendingTarget(CPU)}
-          onVitClick={pending && isPendingTarget(CPU) ? () => resolvePendingOn(CPU) : undefined}
-          onInspect={() => setInspect(foe.leader.def)}
-          floats={floatsFor(`vit:${CPU}`)}
-          flash={flashIids.has(`vit:${CPU}`)}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex gap-1.5 items-center text-[8px] font-bold text-[var(--c-paper)]/70 mb-0.5 flex-wrap">
-            <span>
-              {cpuLabel} · hand {foe.hand.length} · deck {foe.deck.length} ·{' '}
-              <button
-                onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
-                className="underline decoration-dotted hover:text-[var(--c-paper)]"
-                title="Inspect the opponent's ash-pile and void"
-              >
-                ash {foe.ashPile.length}
-                {foe.voidPile.length > 0 && <> · void {foe.voidPile.length}</>}
-              </button>
+      <LeaderLane
+        p={foe}
+        isHuman={false}
+        label={cpuLabel}
+        vitTargetable={!!pending && isPendingTarget(CPU)}
+        onVitClick={pending && isPendingTarget(CPU) ? () => resolvePendingOn(CPU) : undefined}
+        onInspect={() => setInspect(foe.leader.def)}
+        floats={floatsFor(`vit:${CPU}`)}
+        flash={flashIids.has(`vit:${CPU}`)}
+        right={
+          <>
+            {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={13} />}
+            <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
+              hand {foe.hand.length} · deck {foe.deck.length}
             </span>
-            <span className="flex gap-0.5 items-center">
-              {foe.locations.map((l) => (
-                <LocationTile
-                  key={l.iid}
-                  loc={l}
-                  tappable={false}
-                  onInspect={l.def ? () => setInspect(l.def!) : undefined}
-                />
-              ))}
-              {foe.locations.length === 0 && <span className="opacity-50">no Locations</span>}
+            <button
+              onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
+              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              title="Inspect the opponent's ash-pile and void"
+            >
+              ASH {foe.ashPile.length}
+              {foe.voidPile.length > 0 ? ` · VOID ${foe.voidPile.length}` : ''}
+            </button>
+          </>
+        }
+      />
+      <LocationsLane
+        locations={foe.locations}
+        tappable={false}
+        mine={false}
+        onInspect={(l) => setInspect(l.def!)}
+      />
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+        {foe.field.length === 0 && (
+          <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
+              Empty Field
             </span>
-            {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={12} />}
           </div>
-          <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
-            {foe.field.length === 0 && (
-              <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
-                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-                  Empty Field
-                </span>
-              </div>
-            )}
-            {foe.field.map((u) => {
-              const targetable = !!pending && isPendingTarget(u.iid);
-              const attacking = cpuAttackerIids.includes(u.iid) || g.clash?.attackers.includes(u.iid);
-              const focusLine = guardStep && guardFocus === u.iid;
-              return (
-                <BoardUnit
-                  key={u.iid}
-                  g={g}
-                  u={u}
-                  highlight={targetable || !!focusLine}
-                  isAttacker={!!attacking}
-                  flash={flashIids.has(u.iid)}
-                  floats={floatsFor(u.iid)}
-                  guardNote={
-                    attacking
-                      ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING`
-                      : undefined
-                  }
-                  onClick={
-                    targetable
-                      ? () => resolvePendingOn(u.iid)
-                      : guardStep && cpuAttackerIids.includes(u.iid)
-                        ? () => setGuardFocus(u.iid)
-                        : () => setInspect(u.def)
-                  }
-                />
-              );
-            })}
-          </div>
-        </div>
+        )}
+        {foe.field.map((u) => {
+          const targetable = !!pending && isPendingTarget(u.iid);
+          const attacking = cpuAttackerIids.includes(u.iid) || g.clash?.attackers.includes(u.iid);
+          const focusLine = guardStep && guardFocus === u.iid;
+          return (
+            <BoardUnit
+              key={u.iid}
+              g={g}
+              u={u}
+              highlight={targetable || !!focusLine}
+              isAttacker={!!attacking}
+              flash={flashIids.has(u.iid)}
+              floats={floatsFor(u.iid)}
+              guardNote={
+                attacking
+                  ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING`
+                  : undefined
+              }
+              onClick={
+                targetable
+                  ? () => resolvePendingOn(u.iid)
+                  : guardStep && cpuAttackerIids.includes(u.iid)
+                    ? () => setGuardFocus(u.iid)
+                    : () => setInspect(u.def)
+              }
+            />
+          );
+        })}
       </div>
 
-      {/* Midline: essence pool + log + piles */}
-      <div className="flex flex-wrap items-center gap-3 px-2 py-2 my-1 bg-[var(--c-ink)]/40 border-y-2 border-[var(--c-yellow)]/40 shadow-[0_2px_10px_rgba(0,0,0,0.35)]">
-        <div className="flex flex-col gap-1 shrink-0 max-w-[46vw]">
-          <div className="flex items-center gap-1.5">
-            <span className="heading-font text-[8px] text-[var(--c-paper)]/70">ESSENCE</span>
-            <EssencePips pool={me.essence} />
-            <Tip
-              text="Your floating essence — produced by exhausting Locations, spent on Essence Costs, and emptied at the end of every phase. Invoking auto-taps Locations for you."
-              className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1"
-            >
-              ?
-            </Tip>
-          </div>
-          <div className="flex items-center gap-1 flex-wrap">
-            {me.locations.map((l) => (
-              <LocationTile
-                key={l.iid}
-                loc={l}
-                tappable={canTapNow}
-                onTap={() => tryTapLocation(l)}
-                onInspect={l.def ? () => setInspect(l.def!) : undefined}
-              />
-            ))}
-            {inMyMain && !me.wellspringPlayedThisTurn && (
-              <span className="flex items-center gap-0.5 bg-[var(--c-ink)] ink-border-sm px-1 py-0.5">
-                <span className="text-[7px] font-black text-[var(--c-yellow)]">
-                  {/* On the draw, the opening turn carries two — say so, or a
-                      player has no way to know the second one is available. */}
-                  {wellspringsLeft > 1 ? `+ WELLSPRING ×${wellspringsLeft}` : '+ WELLSPRING'}
-                </span>
-                {wellspringChoices(g, HUMAN).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => tryWellspring(t)}
-                    title={
-                      wellspringsLeft > 1
-                        ? `Play a ${t} Wellspring — ${wellspringsLeft} left this turn (you are on the draw; the second arrives exhausted)`
-                        : `Play a ${t} Wellspring (free)`
-                    }
-                    aria-label={`Play a ${t} Wellspring`}
-                    className="btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70"
-                    style={{
-                      width: 16,
-                      height: 16,
-                      fontSize: 9,
-                      backgroundColor: COLOR_PIP[t].bg,
-                      color: COLOR_PIP[t].fg,
-                    }}
-                  >
-                    <EssenceIcon type={t} color={COLOR_PIP[t].fg} size={10} />
-                  </button>
-                ))}
-              </span>
+      {/* ================= CLASH DIVIDER =================
+          The one loud action on the whole board. Everything else stays
+          ink-on-paper so whatever sits here always reads as the primary move. */}
+      <div className="relative shrink-0 flex items-center justify-center gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35">
+        {stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 ? (
+          <button
+            onClick={declareMyAttack}
+            className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+          >
+            ⚔ DECLARE ATTACK ({atkSel.size})
+          </button>
+        ) : stage === 'play' && g.clash && g.clash.step !== 'done' ? (
+          <button
+            onClick={resolveMyClash}
+            className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+          >
+            💥 RESOLVE CLASH
+          </button>
+        ) : guardStep ? (
+          <button
+            onClick={confirmGuards}
+            disabled={!!guardProblem}
+            title={guardProblem ?? undefined}
+            className={cn(
+              'heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
+              guardProblem
+                ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
+                : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
             )}
-            {me.locations.length === 0 && !inMyMain && (
-              <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no Locations yet</span>
+          >
+            🛡 CONFIRM GUARDS
+          </button>
+        ) : reactionStep ? (
+          <button
+            onClick={resolveCpuClash}
+            className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+          >
+            💥 RESOLVE CLASH
+          </button>
+        ) : showPhaseButton ? (
+          <button
+            onClick={advanceMyPhase}
+            className={cn(
+              'btn-pop heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
+              g.phase === 'Main2'
+                ? 'bg-[var(--c-red)] text-white'
+                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
             )}
-          </div>
-          {me.wornCharms.length > 0 && (
-            <div className="flex items-center gap-1 flex-wrap">
-              <span className="heading-font text-[7px] text-[var(--c-paper)]/60">WORN CHARMS</span>
-              {me.wornCharms.map((c) => (
-                <button
-                  key={c.iid}
-                  onClick={() => tryRebond(c.iid)}
-                  title={`Re-bond ${c.def.name} to a friendly unit for ${c.def.rebondCost ?? 0} essence`}
-                  className="btn-pop text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm"
-                >
-                  💠 {c.def.name} · RE-BOND {c.def.rebondCost ?? 0}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div
-          className={cn(
-            'flex-1 min-w-[140px] overflow-y-auto bg-[var(--c-ink)] rounded-sm ink-border-sm px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight',
-            logExpanded ? 'max-h-[220px]' : 'max-h-[58px]',
-          )}
+          >
+            {phaseButtonLabel}
+          </button>
+        ) : stage === 'cpu' ? (
+          <button
+            onClick={skipCpuBeats}
+            className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
+          >
+            SKIP ▸▸
+          </button>
+        ) : (
+          <span className="heading-font text-[9px] text-[var(--c-paper)]/35 tracking-[2px] py-2">
+            — CLASH LINE —
+          </span>
+        )}
+        {/* Battle log lives on the divider so it never competes with either
+            player's lane for vertical space. */}
+        <button
+          onClick={() => setLogExpanded((e) => !e)}
+          className="absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+          title={logExpanded ? 'Hide the Battle Log' : 'Show the Battle Log'}
         >
-          <div className="flex items-center justify-between text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
-            <span>Battle Log</span>
-            <button
-              onClick={() => setLogExpanded((e) => !e)}
-              className="text-[8px] px-1 text-[var(--c-yellow)]/80 hover:text-[var(--c-yellow)]"
-              title={logExpanded ? 'Collapse the Battle Log' : 'Expand the Battle Log'}
-            >
-              {logExpanded ? '▾ LESS' : '▴ MORE'}
-            </button>
+          {logExpanded ? '▾ LOG' : '▴ LOG'}
+        </button>
+      </div>
+
+      {logExpanded && (
+        <div className="shrink-0 max-h-[132px] overflow-y-auto bg-[var(--c-ink)] border-b-2 border-[var(--c-yellow)]/30 px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+          <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
+            Battle Log
           </div>
-          {g.log.slice(logExpanded ? -160 : -40).map((l, i, arr) => (
+          {g.log.slice(-160).map((l, i, arr) => (
             <div key={g.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
           ))}
         </div>
-        <div className="flex flex-col gap-0.5 text-right shrink-0">
-          <button
-            onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
-            className="btn-pop text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
-          >
-            ASH-PILE {me.ashPile.length}
-          </button>
-          <span className="text-[8px] font-bold text-[var(--c-paper)]/50">
-            deck {me.deck.length}
-            {me.voidPile.length > 0 && <> · void {me.voidPile.length}</>}
-          </span>
-        </div>
+      )}
+
+      {/* ================= PLAYER LANE ================= */}
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+        {me.field.length === 0 && (
+          <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
+            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
+              Empty Field
+            </span>
+          </div>
+        )}
+        {me.field.map((u) => {
+          const targetable = !!pending && isPendingTarget(u.iid);
+          const canAtt =
+            stage === 'play' &&
+            g.phase === 'Clash' &&
+            !g.clash &&
+            myAttackers.some((x) => x.iid === u.iid);
+          const guardAssigned = guardOf(u.iid);
+          const isDeclaredGuard =
+            !!g.clash &&
+            g.clash.step !== 'guards' &&
+            Object.values(g.clash.guards).some((gs: string[]) => gs.includes(u.iid));
+          const canGuardNow =
+            guardStep && !!guardFocus && legalGuardsFor(g, guardFocus).some((x) => x.iid === u.iid);
+          return (
+            <BoardUnit
+              key={u.iid}
+              g={g}
+              u={u}
+              isAttacker={atkSel.has(u.iid) || (!!g.clash && g.clash.attackers.includes(u.iid))}
+              isGuard={!!guardAssigned || isDeclaredGuard}
+              highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
+              flash={flashIids.has(u.iid)}
+              floats={floatsFor(u.iid)}
+              guardNote={
+                guardAssigned
+                  ? `guards #${(g.clash?.attackers.indexOf(guardAssigned) ?? 0) + 1}`
+                  : undefined
+              }
+              onClick={
+                targetable
+                  ? () => resolvePendingOn(u.iid)
+                  : guardStep
+                    ? () => toggleGuard(u.iid)
+                    : canAtt || atkSel.has(u.iid)
+                      ? () => toggleAttacker(u.iid)
+                      : () => setInspect(u.def)
+              }
+            />
+          );
+        })}
       </div>
 
-      {/* My row */}
-      <div className="h-[3px] w-full bg-[var(--c-yellow)]/70 shrink-0" />
-      <div className="flex gap-2 px-2 pt-1.5 pb-1 items-start flex-1 min-h-0 overflow-y-auto bg-[var(--c-ink)]/25">
-        <LeaderZonePanel
-          p={me}
-          isHuman
-          vitTargetable={!!pending && isPendingTarget(HUMAN)}
-          onVitClick={pending && isPendingTarget(HUMAN) ? () => resolvePendingOn(HUMAN) : undefined}
-          onInvoke={tryInvokeLeader}
-          invokeWhy={leaderInvokeWhy}
-          onAbility={tryLeaderAbility}
-          abilityWhy={leaderAbilityWhy}
-          onInspect={() => setInspect(me.leader.def)}
-          floats={floatsFor(`vit:${HUMAN}`)}
-          flash={flashIids.has(`vit:${HUMAN}`)}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex gap-1 items-start overflow-x-auto pb-1 min-h-[70px]">
-            {me.field.length === 0 && (
-              <div className="w-full h-[64px] border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
-                <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-                  Empty Field
-                </span>
-              </div>
-            )}
-            {me.field.map((u) => {
-              const targetable = !!pending && isPendingTarget(u.iid);
-              const canAtt =
-                stage === 'play' &&
-                g.phase === 'Clash' &&
-                !g.clash &&
-                myAttackers.some((x) => x.iid === u.iid);
-              const guardAssigned = guardOf(u.iid);
-              const isDeclaredGuard =
-                !!g.clash &&
-                g.clash.step !== 'guards' &&
-                Object.values(g.clash.guards).some((gs: string[]) => gs.includes(u.iid));
-              const canGuardNow =
-                guardStep && !!guardFocus && legalGuardsFor(g, guardFocus).some((x) => x.iid === u.iid);
-              return (
-                <BoardUnit
-                  key={u.iid}
-                  g={g}
-                  u={u}
-                  isAttacker={atkSel.has(u.iid) || (!!g.clash && g.clash.attackers.includes(u.iid))}
-                  isGuard={!!guardAssigned || isDeclaredGuard}
-                  highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
-                  flash={flashIids.has(u.iid)}
-                  floats={floatsFor(u.iid)}
-                  guardNote={
-                    guardAssigned
-                      ? `guards #${(g.clash?.attackers.indexOf(guardAssigned) ?? 0) + 1}`
-                      : undefined
-                  }
-                  onClick={
-                    targetable
-                      ? () => resolvePendingOn(u.iid)
-                      : guardStep
-                        ? () => toggleGuard(u.iid)
-                        : canAtt || atkSel.has(u.iid)
-                          ? () => toggleAttacker(u.iid)
-                          : () => setInspect(u.def)
-                  }
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <LocationsLane
+        locations={me.locations}
+        tappable={canTapNow}
+        mine
+        onTap={(l) => tryTapLocation(l)}
+        onInspect={(l) => setInspect(l.def!)}
+      >
+        {inMyMain && !me.wellspringPlayedThisTurn && (
+          <span className="flex items-center gap-0.5 bg-[var(--c-ink)] ink-border-sm px-1 py-0.5 shrink-0">
+            <span className="text-[7px] font-black text-[var(--c-yellow)]">
+              {/* On the draw, the opening turn carries two — say so, or a
+                  player has no way to know the second one is available. */}
+              {wellspringsLeft > 1 ? `+ WELLSPRING ×${wellspringsLeft}` : '+ WELLSPRING'}
+            </span>
+            {wellspringChoices(g, HUMAN).map((t) => (
+              <button
+                key={t}
+                onClick={() => tryWellspring(t)}
+                title={
+                  wellspringsLeft > 1
+                    ? `Play a ${t} Wellspring — ${wellspringsLeft} left this turn (you are on the draw; the second arrives exhausted)`
+                    : `Play a ${t} Wellspring (free)`
+                }
+                aria-label={`Play a ${t} Wellspring`}
+                className="btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70"
+                style={{
+                  width: 16,
+                  height: 16,
+                  fontSize: 9,
+                  backgroundColor: COLOR_PIP[t].bg,
+                  color: COLOR_PIP[t].fg,
+                }}
+              >
+                <EssenceIcon type={t} color={COLOR_PIP[t].fg} size={10} />
+              </button>
+            ))}
+          </span>
+        )}
+        {me.wornCharms.map((c) => (
+          <button
+            key={c.iid}
+            onClick={() => tryRebond(c.iid)}
+            title={`Re-bond ${c.def.name} to a friendly unit for ${c.def.rebondCost ?? 0} essence`}
+            className="btn-pop text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm shrink-0"
+          >
+            💠 {c.def.name} · RE-BOND {c.def.rebondCost ?? 0}
+          </button>
+        ))}
+        <Tip
+          text="Locations produce your Essence — exhaust one to add a pip. Invoking auto-taps whatever the cost needs. The pool empties at the end of every phase."
+          className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
+        >
+          ?
+        </Tip>
+      </LocationsLane>
+
+      <LeaderLane
+        p={me}
+        isHuman
+        label={humanLabel}
+        vitTargetable={!!pending && isPendingTarget(HUMAN)}
+        onVitClick={pending && isPendingTarget(HUMAN) ? () => resolvePendingOn(HUMAN) : undefined}
+        onInvoke={tryInvokeLeader}
+        invokeWhy={leaderInvokeWhy}
+        onAbility={tryLeaderAbility}
+        abilityWhy={leaderAbilityWhy}
+        onInspect={() => setInspect(me.leader.def)}
+        floats={floatsFor(`vit:${HUMAN}`)}
+        flash={flashIids.has(`vit:${HUMAN}`)}
+        right={
+          <>
+            <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
+              deck {me.deck.length}
+              {me.voidPile.length > 0 ? ` · void ${me.voidPile.length}` : ''}
+            </span>
+            <button
+              onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
+              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+            >
+              ASH-PILE {me.ashPile.length}
+            </button>
+          </>
+        }
+      />
 
       {/* Hand dock — fan of cards along the very bottom; hover/click a card
           to open the enlarged preview above it and INVOKE from the preview. */}
@@ -2261,7 +2365,7 @@ export function GameV4({
             {inMyReaction || reactionStep ? ' · REACTION: Quick & Ambush only' : ''}
           </span>
         </div>
-        <div className="relative h-[100px] overflow-hidden" style={{ perspective: 800 }}>
+        <div className="relative h-[118px] overflow-hidden" style={{ perspective: 800 }}>
           {me.hand.length === 0 && (
             <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
               — empty hand —
@@ -2312,8 +2416,8 @@ export function GameV4({
                     style={{
                       transformOrigin: 'bottom center',
                       transform: isFocused
-                        ? `translateY(-72px) rotate(0deg) scale(1.04)`
-                        : `translateY(${84 + arcDrop}px) rotate(${angle}deg)`,
+                        ? `translateY(-84px) rotate(0deg) scale(1.04)`
+                        : `translateY(${70 + arcDrop}px) rotate(${angle}deg)`,
                     }}
                   >
                     <CardFace
