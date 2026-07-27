@@ -12,6 +12,16 @@ version of this history also powers the in-app Changelog screen
 
 #### Card art
 
+- **Full-Art/Mythic video art was never actually preloaded.** The boot-time
+  `preloadImages()` gate fed every card's art URL to `new Image()` — for the
+  `.mp4` art that Full-Art and Mythic cards print, the browser fails to
+  decode a video through an `<img>` tag and fires `onerror` immediately, so
+  it was counted as "loaded" without a real network request ever going out.
+  Those cards' art still stalled and popped in the first time they rendered
+  in game, exactly what the preload gate exists to prevent. `loadOne` now
+  detects video URLs and preloads them through a `<video preload="auto">`
+  element instead, resolving once `canplaythrough` fires.
+
 - **Every card's art was blank in game.** The `Card Images` storage bucket had
   been reorganised — `SET 1` → `Volume 1`, `Set 2` → `Volume 1 pt2`,
   `Set 3` → `VOlume 1 pt3`, `Full Arts Collection 1` → `Volume 1 full arts` —
