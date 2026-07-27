@@ -16,6 +16,8 @@
     "fetch:cards": "tsx scripts/fetch-cards.ts",
     "verify:pool": "tsx scripts/verify-pool.ts",
     "db:backfill": "tsx scripts/backfill-cards-db.ts",
+    "db:sync": "tsx scripts/sync-cards-db.ts",
+    "audit:blank": "tsx scripts/audit-blank.ts",
     "sim:v4": "tsx scripts/simulate-v5.ts"
   },
   "dependencies": {

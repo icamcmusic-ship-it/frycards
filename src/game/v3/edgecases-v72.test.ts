@@ -363,7 +363,10 @@ describe('v7.2 Leader kits', () => {
     // "fix" Mer-King on a theory the data does not support.
     const interactive = new Set(['damage', 'shatter', 'banish', 'weaken', 'exhaust', 'erode']);
     const leaders = Object.values(POOL_BY_ID).filter((d) => d.type === 'Leader');
-    expect(leaders.length).toBe(8);
+    // 9 since v7.3, when Void Mother was reassigned Unit -> Leader. Its
+    // LEADER_COLORS pair is written ['Void', 'Shadow'], so its minus half is
+    // Void's Banish and it is interactive by construction.
+    expect(leaders.length).toBe(9);
     const noAnswer = leaders
       .filter((l) => !(l.leaderAbilities ?? []).some((a) => interactive.has(a.effect.action)))
       .map((l) => l.id);

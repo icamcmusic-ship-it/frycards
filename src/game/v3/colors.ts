@@ -80,6 +80,12 @@ export const LEADER_COLORS: Record<string, Color[]> = {
   apex_nanite_shinobi: ['Gale', 'Shadow'],
   ruinwalker_overseer: ['Root', 'Void'],
   sovereign_of_the_dying_star: ['Ember', 'Void'],
+  // v7.3: Void Mother was reassigned Unit -> Leader. Without an entry here
+  // mapLeader falls back to two hash-picked colours, which can roll the same
+  // colour twice (a mono-pip identity no other Leader has). Void first so its
+  // minus ability is the Void `Banish` its art and name promise; Shadow
+  // second for the plus half.
+  void_mother: ['Void', 'Shadow'],
 };
 
 /** Deck legality: every colored pip on the card must be inside the Leader's

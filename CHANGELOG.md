@@ -8,6 +8,72 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.3 — Card art restored, catalog edits, five new cards
+
+#### Card art
+
+- **Every card's art was blank in game.** The `Card Images` storage bucket had
+  been reorganised — `SET 1` → `Volume 1`, `Set 2` → `Volume 1 pt2`,
+  `Set 3` → `VOlume 1 pt3`, `Full Arts Collection 1` → `Volume 1 full arts` —
+  but every `image` URL in the catalog still pointed at the old folder names,
+  so all 292 arts 404'd and `CardArt` fell back to its "NO IMAGE" plate. The
+  file names themselves never changed, so the fix is a folder remap, applied
+  to both the live `public.cards` catalog and the bundled fallback in
+  `generated-cards.ts`. All 297 URLs are now verified against
+  `storage.objects` — zero unresolved.
+- **`npm run db:sync`** (`scripts/sync-cards-db.ts`) replaces the old
+  backfill for catalog changes. `db:backfill` only rewrote the mechanics
+  columns of rows that already existed, so it could not add a card, rename
+  one, or move it between types — which is why the two catalogs were able to
+  drift apart in the first place.
+
+#### Catalog
+
+- **19 cards revised**: renames and new flavor for Apex Nanite Shinobi
+  (→ Kuro, the Unseen), Crimson Vector Commander (→ Sentinel of the Nether
+  Pit), Chrono-Tide (→ Sunken Ruin), Nanite Division Marshal (→ Vanguard
+  Shock Troopers), Volcanic Nanite Core (→ Orbital Annihilation), Admiral
+  Iron-Claw (→ Abyssal Melter), Hollow Suit (→ Constellation Devourer),
+  Sandstorm Effigy (→ Stormcloud Wyrm), Tattooed Sovereign (→ Crystalline
+  Arbiter), Blind Colossus (→ Glyph-Carved Kraken), Heart of the Thermal Grid
+  (→ Vector Highway) and Neon Phantom Assassin (→ Cipher Agent), plus rarity
+  moves on Spectral Leviathan, Submerged Starfall, Sovereign of the Dying
+  Star, Ethereal Sea Witch and Seabed Mandala. Six cards changed TYPE (Blind
+  Allegiance and Volcanic Nanite Core → Event, Chrono-Tide → Location,
+  Sandstorm Effigy → Unit, Void Mother → Leader); each re-derives a full,
+  type-appropriate kit from `cardpool.ts` automatically.
+- **Five new cards** in `VOlume 1 pt3`: Blossom-Veiled Refuge (Location,
+  Super-Rare), Cruel Effervescence (Event, Mythic), Blight-Snarler (Unit,
+  Mythic), Curse of the Ruby Tide (Event, Mythic) and Stag of the Cosmic Pyre
+  (Unit, Mythic). Catalog is 292 → 297 cards.
+- **Void Mother is the ninth Leader**, identity Void/Shadow (`colors.ts`), so
+  its minus half is the Void `Banish` its art promises rather than a
+  hash-picked pair that could roll the same colour twice.
+
+#### Rules text
+
+- **A Unit at Rare or above always prints an ability now.** Vanilla bodies are
+  a legitimate part of the curve, but only at Common/Uncommon: 37 cards rolled
+  zero keywords AND lost `mapUnit`'s 1-in-4 effect roll, printing a bare stat
+  line with no rules text at all — including Rare, Super-Rare and Full-Art
+  pulls. Rare+ Units now force the effect roll they would otherwise have lost,
+  at the same magnitude (it already scales off natural cost). 37 → 29 vanilla
+  Units, all of them Common or Uncommon. Every non-Unit type already carried a
+  mechanic by construction; `npm run audit:blank` pins this.
+- **`LEGAL_PAIRS` is deduplicated by unordered pair.** `pick` indexes with
+  `% arr.length`, so this list's LENGTH is an input to every two-colour card's
+  colour, cost, stat, keyword and effect roll — and its length was just the
+  number of Leaders. Adding the ninth Leader therefore re-rolled 50+ unrelated
+  cards and would have invalidated every per-card `COST_ADJUST`/`STAT_ADJUST`
+  entry in the file. Draft legality is unordered (Void/Shadow is the same
+  playable pair as Avatar of the Abyss's Shadow/Void), so a Leader re-using an
+  existing pair now adds nothing and the pool re-prints identically.
+- **Fuzz soak invariant exempts Unbreakable.** `stateBasedChecks` deliberately
+  keeps an Unbreakable unit on the field with lethal damage still marked, so
+  its remaining Grit legitimately sits at or below zero; the soak's
+  "nothing dead may be left standing" assertion had no such exemption and
+  only escaped notice because no deck it built had ever fielded a carrier.
+
 ### v7.2 — Pack rework, Leader-kit lever, balance pass
 
 #### Packs & economy
