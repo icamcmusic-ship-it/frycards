@@ -306,9 +306,25 @@ const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 // exact bug the v4.16 pool audit found (28/284 cards illegal for every
 // Leader). Enforced at assignment time by picking pairs from this list.
 // ---------------------------------------------------------------------------
-const LEGAL_PAIRS: [Color, Color][] = Object.values(LEADER_COLORS).map(
-  (p) => [p[0], p[1]] as [Color, Color],
-);
+//
+// v7.3: deduplicated by UNORDERED pair. `pick` indexes with `% arr.length`, so
+// this list's LENGTH is an input to every two-colour card's colour roll — and
+// its length was simply the number of Leaders. Adding the ninth Leader (Void
+// Mother, ['Void', 'Shadow']) therefore re-rolled the colours, cost, stats,
+// keywords and effect of every two-colour card in the pool: 50+ cards
+// reprinted from a catalog edit that had nothing to do with them, invalidating
+// every per-card COST_ADJUST/STAT_ADJUST entry in this file at a stroke.
+// Draft legality is an unordered property — Void/Shadow is the same playable
+// pair as Avatar of the Abyss's Shadow/Void — so a Leader that re-uses an
+// existing pair now adds nothing here and the pool re-prints identically.
+const LEGAL_PAIRS: [Color, Color][] = [];
+for (const p of Object.values(LEADER_COLORS)) {
+  const pair = [p[0], p[1]] as [Color, Color];
+  const has = LEGAL_PAIRS.some(
+    (q) => (q[0] === pair[0] && q[1] === pair[1]) || (q[0] === pair[1] && q[1] === pair[0]),
+  );
+  if (!has) LEGAL_PAIRS.push(pair);
+}
 
 /** Colors for a non-Leader card: [] colorless (~8%), 2 on-pair colors
  * (~15%, more at high rarity), else 1 color. */
@@ -627,7 +643,17 @@ function mapUnit(c: CardTemplate): CardDef {
   // ~25% of units carry an on-enter effect or a triggered ability, themed by
   // primary color, scaled to the card's NATURAL cost (v6.6: like the stat
   // budget above, so a COST_ADJUST changes price only — see naturalTotalFor).
-  if (roll(seed, 'unit-fx', 4) === 0) {
+  //
+  // v7.3: a Unit at Rare or above ALWAYS gets one. Vanilla bodies are a
+  // legitimate part of the curve, but only at Common/Uncommon — a card the
+  // player opened as a Rare, Super-Rare, Ultra-Rare, Full-Art, Alt-Art or
+  // Mythic pull that rolled zero keywords AND lost the 1-in-4 effect roll
+  // printed as a blank stat line with no rules text at all (37 such cards in
+  // the v7.2 pool, including Full-Art pulls). The effect magnitude already
+  // scales off the natural cost, so the forced roll prints the same size
+  // effect the card would have got had the 1-in-4 landed.
+  const forceFx = rt >= 2 && keywords.length === 0;
+  if (forceFx || roll(seed, 'unit-fx', 4) === 0) {
     const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2)));
     const fx = themedEffect(seed, primary, v);
     const when = pick(seed, 17, ['enters', 'enters', 'dies', 'atDawn', 'atDusk'] as const);

@@ -21,7 +21,7 @@ test('catalog sanity: pool is non-empty and has Leaders', () => {
   expect(Object.keys(POOL_BY_ID).length).toBe(POOL_V4.length);
 });
 
-test('the 8 canonical leader ids are in the pool as Leaders', () => {
+test('every canonical leader id is in the pool as a Leader', () => {
   for (const id of Object.keys(LEADER_COLORS)) {
     const def = POOL_BY_ID[id];
     expect(def, `missing leader ${id}`).toBeTruthy();
@@ -179,4 +179,36 @@ test('v6.2: Avatar of the Abyss lost its Commander keyword (repeat-offender Lead
   expect(abyss).toBeTruthy();
   expect(abyss.type).toBe('Leader');
   expect(abyss.keywords ?? []).not.toContain('Commander');
+});
+
+// v7.3: a Unit at Rare or above always prints an ability. A vanilla body is a
+// legitimate part of the curve, but only at Common/Uncommon — before this,
+// 37 cards rolled zero keywords AND lost mapUnit's 1-in-4 effect roll and
+// printed a bare stat line with no rules text at all, Full-Art pulls included.
+test('v7.3: no Rare-or-better card prints an empty rules box', () => {
+  const vanillaOk = new Set(['Common', 'Uncommon']);
+  const blank = POOL_V4.filter((c) => !vanillaOk.has(c.rarity || 'Common') && !c.text?.trim()).map(
+    (c) => `${c.id} (${c.type}/${c.rarity})`,
+  );
+  expect(blank).toEqual([]);
+});
+
+// Every non-Unit type carries a mechanic by construction at EVERY rarity —
+// Events an onInvoke, Charms a bond, Locations a Sanctum tap, Leaders their
+// two abilities. Only Units may be vanilla.
+test('v7.3: every non-Unit card carries a mechanic at any rarity', () => {
+  const empty = POOL_V4.filter((c) => {
+    if (c.type === 'Unit') return false;
+    const hasMech =
+      !!c.onInvoke ||
+      !!c.triggers?.length ||
+      !!c.leaderAbilities?.length ||
+      !!c.locPassive ||
+      !!c.produces ||
+      !!c.bond?.might ||
+      !!c.bond?.grit ||
+      !!c.bond?.grants;
+    return !hasMech || !c.text?.trim();
+  }).map((c) => `${c.id} (${c.type})`);
+  expect(empty).toEqual([]);
 });

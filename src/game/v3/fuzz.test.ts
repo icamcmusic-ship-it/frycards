@@ -33,6 +33,7 @@ import {
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
+  unitHasKw,
 } from './engine';
 import { playTurn, maybeMulliganPlayer } from './ai';
 import { buildDeck, randomArchetype } from './decks';
@@ -80,11 +81,18 @@ function checkInvariants(g: GameState, where: string): void {
       expect(u.owner, `${where}: unit ${u.def.name} sits in the wrong field`).toBe(pid);
       expect(u.damage, `${where}: negative damage on ${u.def.name}`).toBeGreaterThanOrEqual(0);
       // stateBasedChecks runs after every action; nothing dead may be left
-      // standing once control returns to a caller.
-      expect(
-        remainingGrit(g, u),
-        `${where}: dead unit ${u.def.name} still on the field`,
-      ).toBeGreaterThan(0);
+      // standing once control returns to a caller. Unbreakable is the one
+      // documented exception — stateBasedChecks explicitly keeps such a unit
+      // on the field with its damage still marked ("Can't be shattered or
+      // dealt lethal damage"), so its remaining Grit legitimately sits at or
+      // below zero. No deck this soak built before v7.3 happened to field an
+      // Unbreakable carrier, which is why the exemption was never needed here.
+      if (!unitHasKw(u, 'Unbreakable')) {
+        expect(
+          remainingGrit(g, u),
+          `${where}: dead unit ${u.def.name} still on the field`,
+        ).toBeGreaterThan(0);
+      }
       for (const c of u.charms) note(c.iid, `${pid}.charms(${u.def.name})`);
     }
     for (const c of p.hand) note(c.iid, `${pid}.hand`);
