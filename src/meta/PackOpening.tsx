@@ -74,6 +74,30 @@ function CardBackFace() {
   );
 }
 
+/**
+ * How much of the pack art the tear-off strip covers, measured from the top.
+ * The strip is a clipped copy of the artwork itself, so the rip reads as the
+ * real top of the pack coming away rather than a grey bar bolted above it.
+ */
+const TEAR_FRAC = 0.15;
+
+/**
+ * Serrated edge, as a clip-path polygon, running along a horizontal line at
+ * `atPct` of the element's height. `side: 'below'` keeps everything under the
+ * line (the pack body once the strip is gone); `'above'` keeps the strip.
+ */
+function serratedPolygon(atPct: number, side: 'above' | 'below', teeth = 26): string {
+  const amp = 1.6; // tooth depth, in % of element height
+  const zig = Array.from({ length: teeth + 1 }, (_, i) => {
+    const x = (i / teeth) * 100;
+    const y = atPct + (i % 2 === 0 ? -amp : amp);
+    return `${x.toFixed(2)}% ${y.toFixed(2)}%`;
+  });
+  return side === 'below'
+    ? `polygon(${zig.join(', ')}, 100% 100%, 0 100%)`
+    : `polygon(0 0, 100% 0, ${zig.slice().reverse().join(', ')})`;
+}
+
 /** Foil scraps + confetti burst spawned when the pack tears open. */
 function FoilScraps({ count = 22 }: { count?: number }) {
   // Deterministic per-index jitter (render must stay pure — no Math.random).
@@ -100,8 +124,9 @@ function FoilScraps({ count = 22 }: { count?: number }) {
       {scraps.map((s, i) => (
         <span
           key={i}
-          className="absolute top-[12%] block"
+          className="absolute block"
           style={{
+            top: `${TEAR_FRAC * 100}%`,
             left: `${s.left}%`,
             width: s.size,
             height: s.size * 0.6,
@@ -258,6 +283,15 @@ function TearStage({
   const dragging = useRef<{ startX: number; startProgress: number } | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const tornRef = useRef(false);
+  // The vertical pack/box renders aren't all the same shape (a booster pack is
+  // much narrower than a box), and the strip is positioned as a percentage of
+  // the pack's height — so size the frame to the art rather than cropping the
+  // art to a guessed frame. The default is a placeholder until it loads.
+  const [aspectRatio, setAspectRatio] = useState('77 / 96');
+  const onArtLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+    if (w > 0 && h > 0) setAspectRatio(`${w} / ${h}`);
+  };
   const tearTimer = useRef<number | null>(null);
 
   // Defense-in-depth: nothing unmounts this stage before the timer fires
@@ -314,7 +348,13 @@ function TearStage({
       <div
         className={cn('relative select-none touch-none po-anim')}
         style={{
-          width: 'min(420px, 86vw)',
+          // Height-driven so a tall box render can't run off the bottom of the
+          // viewport; width follows the art's own ratio (clamped on narrow
+          // phones, where the pack is the widest thing on screen).
+          height: 'min(58vh, 460px)',
+          width: 'auto',
+          maxWidth: '86vw',
+          aspectRatio,
           animation: shaking
             ? `po-shake ${Math.max(0.12, 0.3 - progress * 0.18)}s linear infinite`
             : torn && !reducedMotion
@@ -322,7 +362,46 @@ function TearStage({
               : undefined,
         }}
       >
-        {/* The tear-off foil strip */}
+        {/* The pack body — full artwork. Once the strip is gone the top slice
+            is clipped away along a serrated line, so the rip cuts through the
+            art itself instead of leaving a bar sitting above it. */}
+        <div
+          className="absolute inset-0 po-anim"
+          style={{
+            animation:
+              torn && !reducedMotion ? 'po-pack-drop 0.9s ease-in 0.35s forwards' : undefined,
+          }}
+        >
+          <div
+            className="absolute inset-0 ink-border-md shadow-hard-yellow overflow-hidden bg-[var(--c-ink)]"
+            style={{
+              clipPath: torn ? serratedPolygon(TEAR_FRAC * 100, 'below') : undefined,
+            }}
+          >
+            <SafeImage
+              src={packImageUrl}
+              alt={packName}
+              className="w-full h-full object-cover"
+              fallbackText={packName}
+              eager
+              onLoad={onArtLoad}
+            />
+          </div>
+          {/* torn paper edge left behind where the strip came away */}
+          {torn && (
+            <div
+              className="absolute inset-x-0 bg-[#E5E7EB]"
+              style={{
+                top: `${TEAR_FRAC * 100 - 1.6}%`,
+                height: '3.4%',
+                clipPath: serratedPolygon(50, 'below', 26),
+              }}
+            />
+          )}
+        </div>
+
+        {/* The tear-off strip: a clipped copy of the top of the artwork, so it
+            reads as the actual top of the pack peeling off. */}
         <div
           ref={stripRef}
           onPointerDown={onPointerDown}
@@ -330,27 +409,48 @@ function TearStage({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           className={cn(
-            'relative h-16 ink-border-md overflow-hidden po-anim z-10',
+            'absolute inset-x-0 top-0 overflow-hidden po-anim z-10 ink-border-md',
             !torn && 'cursor-grab active:cursor-grabbing',
           )}
           style={{
-            background:
-              'repeating-linear-gradient(115deg, #C9CED6 0px, #F3F4F6 10px, #AEB6C2 20px, #E5E7EB 30px)',
+            height: `${TEAR_FRAC * 100}%`,
             transform: torn
               ? undefined
               : `translateX(${progress * 14}px) rotate(${progress * 2}deg)`,
+            transformOrigin: 'left center',
             animation:
               torn && !reducedMotion
                 ? 'po-strip-fly 0.8s cubic-bezier(.4,-0.1,.7,.4) forwards'
                 : undefined,
             opacity: torn && reducedMotion ? 0 : undefined,
-            // serrated bottom edge
-            clipPath:
-              'polygon(0 0, 100% 0, 100% 88%, 96% 100%, 92% 88%, 88% 100%, 84% 88%, 80% 100%, 76% 88%, 72% 100%, 68% 88%, 64% 100%, 60% 88%, 56% 100%, 52% 88%, 48% 100%, 44% 88%, 40% 100%, 36% 88%, 32% 100%, 28% 88%, 24% 100%, 20% 88%, 16% 100%, 12% 88%, 8% 100%, 4% 88%, 0 100%)',
+            clipPath: serratedPolygon(100 - 6, 'above'),
           }}
         >
+          {/* the same artwork, sized to the whole pack, so only its top band
+              shows through this clipped window — a 1:1 continuation of the
+              body art underneath */}
+          <div
+            className="absolute top-0 left-0 w-full pointer-events-none"
+            style={{ height: `${100 / TEAR_FRAC}%` }}
+          >
+            <SafeImage
+              src={packImageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              fallbackClassName="bg-[var(--c-steel)]"
+              eager
+            />
+          </div>
+          {/* foil sheen over the art so the strip still reads as tear-off foil */}
+          <div
+            className="absolute inset-0 pointer-events-none mix-blend-overlay opacity-50"
+            style={{
+              background:
+                'repeating-linear-gradient(115deg, rgba(201,206,214,0.9) 0px, rgba(243,244,246,0.9) 10px, rgba(174,182,194,0.9) 20px, rgba(229,231,235,0.9) 30px)',
+            }}
+          />
           <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-            <span className="heading-font text-[11px] text-[var(--c-ink)] tracking-widest">
+            <span className="heading-font text-[11px] text-[var(--c-ink)] tracking-widest bg-[var(--c-yellow)]/90 px-2 py-0.5 ink-border-sm">
               {progress > 0.03 ? 'KEEP RIPPING ▸▸' : '◂ TEAR HERE ▸'}
             </span>
           </div>
@@ -359,34 +459,6 @@ function TearStage({
             className="absolute inset-y-0 left-0 bg-[var(--c-ink)]/25 pointer-events-none"
             style={{ width: `${progress * 100}%` }}
           />
-        </div>
-
-        {/* The pack body */}
-        <div
-          className="relative ink-border-md shadow-hard-yellow overflow-hidden bg-[var(--c-ink)] po-anim"
-          style={{
-            aspectRatio: '77 / 96',
-            marginTop: -2,
-            animation:
-              torn && !reducedMotion ? 'po-pack-drop 0.9s ease-in 0.35s forwards' : undefined,
-          }}
-        >
-          <SafeImage
-            src={packImageUrl}
-            alt={packName}
-            className="w-full h-full object-cover"
-            fallbackText={packName}
-          />
-          {/* serrated raw edge left behind at the top once torn */}
-          {torn && (
-            <div
-              className="absolute top-0 inset-x-0 h-3 bg-[#E5E7EB] border-b-2 border-[var(--c-ink)]"
-              style={{
-                clipPath:
-                  'polygon(0 0, 100% 0, 100% 40%, 96% 100%, 92% 40%, 88% 100%, 84% 40%, 80% 100%, 76% 40%, 72% 100%, 68% 40%, 64% 100%, 60% 40%, 56% 100%, 52% 40%, 48% 100%, 44% 40%, 40% 100%, 36% 40%, 32% 100%, 28% 40%, 24% 100%, 20% 40%, 16% 100%, 12% 40%, 8% 100%, 4% 40%, 0 100%)',
-              }}
-            />
-          )}
         </div>
 
         {torn && !reducedMotion && <FoilScraps />}

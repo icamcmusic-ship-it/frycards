@@ -57,6 +57,12 @@ function packSetsLine(pack: PackType): string {
   ).join(', ');
 }
 
+/** Artwork the pack-opening animation tears open: the tall "vertical" pack /
+ * box render when the row has one, otherwise the square shop icon. */
+function packOpenArt(pack: PackType): string | null {
+  return pack.open_image_url || pack.image_url;
+}
+
 const DAILY_PACK_COOLDOWN_MS = 20 * 60 * 60 * 1000; // mirror of claim_daily_pack
 
 /** Max packs opened in one bulk call — mirror of the server-side cap in
@@ -162,7 +168,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
+      setOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
     } catch {
@@ -190,7 +196,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       }
       setOpening({
         packName: `${pack.name} ×${data.packs_opened}`,
-        packImageUrl: pack.image_url,
+        packImageUrl: packOpenArt(pack),
         pulls: data.cards,
       });
       refreshProfile();
@@ -216,7 +222,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       }
       setOpening({
         packName: `${pack.name} ×${data.packs_opened}`,
-        packImageUrl: pack.image_url,
+        packImageUrl: packOpenArt(pack),
         pulls: data.cards,
       });
       refreshProfile();
@@ -263,7 +269,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({ packName: pack.name, packImageUrl: pack.image_url, pulls: data.cards });
+      setOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
       refreshInventory();
@@ -287,7 +293,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setPickingLeaderFor(null);
-      setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
+      setOpening({ packName: 'Starter Box', packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
       refreshInventory();
@@ -312,7 +318,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setPickingStarterDeckFor(null);
-      setOpening({ packName: 'Starter Box', packImageUrl: pack.image_url, pulls: data.cards });
+      setOpening({ packName: 'Starter Box', packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
       refreshInventory();
@@ -337,7 +343,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       }
       setOpening({
         packName: dailyPack.name,
-        packImageUrl: dailyPack.image_url,
+        packImageUrl: packOpenArt(dailyPack),
         pulls: data.cards,
       });
       refreshProfile();
@@ -417,11 +423,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         {tab === 'packs' && profile && dailyPack && (
           <div className="mb-6 flex items-center justify-between gap-3 bg-[var(--c-paper)] ink-border-md shadow-hard-black p-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0">
+              <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0 bg-[var(--c-ink)]">
                 <SafeImage
                   src={dailyPack.image_url}
                   alt={dailyPack.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   fallbackText={dailyPack.name}
                 />
               </div>
@@ -504,11 +510,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       ×{entry.quantity}
                     </span>
                   </div>
-                  <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative">
+                  <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
                     <SafeImage
                       src={pack.image_url}
                       alt={pack.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                       fallbackText={pack.name}
                     />
                     <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
@@ -968,11 +974,11 @@ function PackTile({
           {(pack.pack_tier || 'standard').replace(/_/g, ' ')}
         </span>
       </div>
-      <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative">
+      <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
         <SafeImage
           src={pack.image_url}
           alt={pack.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
           fallbackText={pack.name}
         />
         <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">

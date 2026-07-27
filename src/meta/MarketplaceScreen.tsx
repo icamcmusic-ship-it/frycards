@@ -338,6 +338,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   };
 
   const minBid = bidFor ? minBidFor(bidFor) : 0;
+  // A bid at or above the buyout is refused server-side: it would let a later
+  // buyer take the card for LESS than the standing bid. Buy Now is the move.
+  const maxBid = bidFor?.buyout != null ? bidFor.buyout - 1 : null;
+  const bidOverBuyout = maxBid != null && bidAmount > maxBid;
+  const buyoutBlocksBidding = maxBid != null && minBid > maxBid;
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
@@ -462,6 +467,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 ? `Current bid ${fmtCredits(bidFor.current_bid)} — minimum raise 5%.`
                 : `Starting bid ${fmtCredits(bidFor.price)}.`}{' '}
               Credits are held while you're the top bidder and refunded if outbid.
+              {maxBid != null &&
+                (buyoutBlocksBidding
+                  ? ` Bidding is closed — the next raise would meet the ${fmtCredits(bidFor.buyout!)} buyout, so use BUY instead.`
+                  : ` Bids must stay under the ${fmtCredits(bidFor.buyout!)} buyout.`)}
             </div>
             <div className="flex items-center gap-2 mb-3">
               <Coins className="w-4 h-4" />
@@ -483,8 +492,21 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </PopButton>
               <PopButton
                 color="red"
-                disabled={busy || !profile || profile.credits < bidAmount || bidAmount < minBid}
-                title={bidAmount < minBid ? `Minimum bid is ${fmtCredits(minBid)}` : undefined}
+                disabled={
+                  busy ||
+                  !profile ||
+                  profile.credits < bidAmount ||
+                  bidAmount < minBid ||
+                  bidOverBuyout ||
+                  buyoutBlocksBidding
+                }
+                title={
+                  bidAmount < minBid
+                    ? `Minimum bid is ${fmtCredits(minBid)}`
+                    : bidOverBuyout || buyoutBlocksBidding
+                      ? `Bids must stay under the ${fmtCredits(bidFor.buyout!)} buyout — use BUY`
+                      : undefined
+                }
                 onClick={() => {
                   const l = bidFor;
                   setBidFor(null);

@@ -13,12 +13,18 @@ export function SafeImage({
   className,
   fallbackClassName,
   fallbackText,
+  eager,
+  onLoad,
 }: {
   src: string | null | undefined;
   alt?: string;
   className?: string;
   fallbackClassName?: string;
   fallbackText?: string;
+  /** Skip lazy loading — for art that is the focus of the screen the moment
+   * it mounts (the pack-opening tear animation). */
+  eager?: boolean;
+  onLoad?: (e: React.SyntheticEvent<HTMLImageElement>) => void;
 }) {
   const [broken, setBroken] = useState(false);
   // Reset the broken flag whenever the source changes — otherwise a
@@ -50,7 +56,8 @@ export function SafeImage({
       alt={alt ?? ''}
       className={className}
       draggable={false}
-      loading="lazy"
+      loading={eager ? 'eager' : 'lazy'}
+      onLoad={onLoad}
       onError={() => setBroken(true)}
     />
   );
