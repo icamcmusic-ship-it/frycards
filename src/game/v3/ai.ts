@@ -268,11 +268,33 @@ function needsEnemyUnit(eff?: Effect): boolean {
  */
 function bestBondTarget(state: GameState, pid: PlayerId): UnitInst | undefined {
   const p = state.players[pid];
+  const opp = state.players[opponentOf(pid)];
+  // v7.2: durability alone was not enough. `charmOnDoomedUnit` sat at
+  // ~2,200-2,350 a cohort for five passes — the largest CPU lapse counter on
+  // the board and the only one never targeted — because "sturdiest body" and
+  // "body that survives the turn" are different questions. The sturdiest body
+  // is also the one `chooseAttackers` sends into the biggest clash, and the
+  // one every removal spell in the opponent's deck is pointed at.
+  //
+  // So the score now asks whether the enemy board can actually kill it: a
+  // unit whose remaining Grit is inside the reach of the biggest ready enemy
+  // body is a bad place to spend a card, however big it is. Venomous makes
+  // any hit lethal, so a Venomous defender puts every non-Unbreakable target
+  // at risk regardless of Grit.
+  const enemyReach = Math.max(
+    0,
+    ...opp.field.filter((u) => !u.exhausted).map((u) => effMight(state, u)),
+  );
+  const enemyVenom = opp.field.some((u) => !u.exhausted && unitHasKw(u, 'Venomous'));
   return [...p.field]
-    .map((u) => ({
-      u,
-      score: remainingGrit(state, u) * 2 + effMight(state, u) - u.charms.length * 3,
-    }))
+    .map((u) => {
+      const grit = remainingGrit(state, u);
+      const safe = unitHasKw(u, 'Unbreakable') || (grit > enemyReach && !(enemyVenom && grit > 0));
+      return {
+        u,
+        score: grit * 2 + effMight(state, u) - u.charms.length * 3 + (safe ? 6 : 0),
+      };
+    })
     .sort((a, b) => b.score - a.score)[0]?.u;
 }
 
@@ -601,7 +623,15 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const survives = attackerSurvives(u, worst);
     const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
     const notBehind = me.field.length >= opp.field.length;
-    const favorableTrade = kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost);
+    // v7.2: a unit that dies in a "favorable" trade takes its bonded Charms
+    // with it, so the trade is only favorable if it beats the unit AND the
+    // cards stapled to it. Soulbound Charms return to hand and cost nothing.
+    // This is the other half of the charmOnDoomedUnit fix in bestBondTarget:
+    // that one stops the CPU hanging a Charm on a body the enemy can kill,
+    // this one stops it throwing a charmed body away itself.
+    const charmTax = u.charms.filter((ch) => !hasKw(ch.def, 'Soulbound')).length;
+    const favorableTrade =
+      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost) + charmTax;
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
   telemetry.onAttackDecision?.(state, pid, picked);

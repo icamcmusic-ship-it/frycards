@@ -174,9 +174,14 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 3,
   Overrun: 3,
   Quickstrike: 4,
-  // v6.9: THIRD consecutive pass reading positive in both cohorts
-  // (+6.5/+12.4 in v6.7, +7.6/+7.9 here at n=353/1075). v6.7 said one more
-  // confirming pass before actioning — this is it. 4 -> 5.
+  // v7.2: the v6.9 carry-forward asked for a second point here. NOT actioned,
+  // and the item is closed rather than carried: the signal does not survive
+  // being looked at. Doublestrike has only TWO carriers in the whole pool, and
+  // their absolute win rate is 49.9% (n=337) / 44.4% (n=1062) — BELOW even in
+  // both cohorts. The +6.9 / +6.2 archetype-normalized delta that flagged it
+  // for five passes is measuring how badly those two cards' Leader cohorts do,
+  // not the keyword. Nerfing a keyword whose carriers are already losing would
+  // be chasing a cohort artifact. Stays at 5.
   Doublestrike: 5,
   Venomous: 3,
   Siphon: 0,
@@ -214,6 +219,30 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Runic: 1,
   Soulbound: 1,
   Bountiful: 1,
+  // Sacred stays at 1, and the v7.2 pass is the one that finally explains
+  // why it has been flagged for six passes without a weight change ever being
+  // the answer.
+  //
+  // The 1 -> 3 raise was tried and REVERTED on its own evidence. It did move
+  // the printed cost of all seven carriers by a full point (verified card by
+  // card), and it changed nothing that mattered: the archetype-normalized
+  // delta went +24.4 / +17.3 -> +25.0 / +26.9 and carriers still won 71.7% /
+  // 72.2% outright. What it did do was cut Sacred carrier games from 425/985
+  // to 234/604 — and the surviving number was, in both cohorts, EXACTLY
+  // `stone_bubbles`' own play count. The other six Sacred Locations had simply
+  // been priced out of every deck.
+  //
+  // So the keyword never had a seven-card problem. It had a one-card problem,
+  // which is what the v6.6 doc suspected and priced individually. Actioned
+  // that way instead (see `stone_bubbles` in cardpool.ts's COST_ADJUST), and
+  // the blanket weight left alone rather than shipping a nerf that provably
+  // moves no win rate while deleting six cards from the draftable pool.
+  //
+  // Worth recording for the next weight change of ANY keyword: `keywordCostAdj`
+  // is `Math.round(w / 2)`, so this table's effective resolution is TWO. A
+  // 1 -> 2 or 3 -> 4 step is a byte-for-byte no-op on every single-keyword
+  // carrier. That is the same trap the v6.9 doc hit on Resonant ("at weight 1
+  // the surcharge still rounds up to a full point") without naming the rule.
   Sacred: 1,
   Commander: 2,
   Resolute: 1,

@@ -12,6 +12,18 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Medium term
 
+- **Ramp-matched baseline for Location residuals** — the balance harness
+  scores a card's win rate conditional on having played it, which is
+  structurally biased upward for Locations (a pricier Location is only played
+  in games with more ramp). Every two-cohort outlier in the v7.2 pass is a
+  Location, and several already carry +2/+3 cost stacks chasing it. Blocks any
+  further Location pricing. See `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3.
+- **Colour-aware Leader minus abilities** — `mapLeader` takes the minus from
+  `identity[0]` and the plus from `identity[1]`, so which colour supplies a
+  Leader's answer is decided by array order in `LEADER_COLORS`. v7.2 patched
+  the three worst cases by hand via `LEADER_MINUS_ABILITY_OVERRIDE`; the
+  systemic fix is to let the kit draw from whichever half is interactive,
+  which re-rolls all eight Leaders and needs its own pass.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the

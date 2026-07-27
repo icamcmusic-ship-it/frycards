@@ -155,6 +155,45 @@ const COST_ADJUST: Record<string, number> = {
   slate_scaled_serpent: +1,
   smokeveil_striketeam: +1,
   submerged_temple: +1,
+  // v7.2 new: the only overperformer to clear the significance gate in BOTH
+  // cohorts this pass (+9.6 n=208 / +8.9 n=314).
+  submerged_statue: +1,
+  // `stone_bubbles` is deliberately NOT priced, and the four trials that led
+  // there are the most useful thing this pass found.
+  //
+  // It is the dominant Sacred carrier, it clears the significance gate in
+  // both cohorts, and cost cannot touch it. Every attempt moved the number
+  // the WRONG way:
+  //
+  //   Sacred 1 -> 3 (+1 cost on all 7 carriers)  delta +24.4/+17.3 -> +25.0/+26.9
+  //   stone_bubbles +1 (cost 2 -> 3)             still gated, +12.3, win 70.1%
+  //   stone_bubbles +2 (cost 2 -> 4)             cohort A +30.9 (win 77.2%),
+  //                                              cohort B +7.9 (win 60.7%)
+  //
+  // Three points of cost, and the delta never once fell in both cohorts — it
+  // rose in A every single time, and the one trial that did move B moved A
+  // 23 points the other way. Nothing here reproduces, which is precisely what
+  // the two-cohort gate exists to refuse.
+  //
+  // The wrong-way drift in A is the signature of a SELECTION EFFECT in the
+  // metric, not an underpriced card. A Location is ramp: it only ever
+  // gets played in games where the essence to play it existed, and a MORE
+  // expensive Location is only played in games where MORE ramp existed —
+  // which are games the player was already winning. So "win rate conditional
+  // on having played it" rises with price by construction, and the harness's
+  // archetype-normalized delta inherits that. Pricing Locations against this
+  // number will always read as under-nerfing and will always invite another
+  // point, which is how `abyssal_pathway` reached +3 and `sand_portal`,
+  // `glass_kelp_forest`, `jawbone_span`, `magma_conduit_network` and
+  // `nanite_culture_lab` all reached +2.
+  //
+  // Left at its natural cost. The next lever is a HARNESS fix — measure
+  // Locations against a ramp-matched baseline (e.g. residual vs other cards
+  // played on the same turn number, or vs the same locations-in-play count)
+  // — not another point of cost. See docs/BALANCE_SIM_FINDINGS_v7.2.md.
+  // v7.2 new: gated in both cohorts (+9.8 n=162 / +10.9 n=900), and cohort B's
+  // sample is the largest of any outlier in either list this pass.
+  dr_aries_chief_biogeneticist: +1,
   thornfang_vine: +1,
   urnbearer_of_blight: +1,
   violet_haze_kunoichi: +1,
@@ -168,7 +207,11 @@ const COST_ADJUST: Record<string, number> = {
   // (+6.6 / +12.6) — a per-card price rise, not another blanket weight cut.
   skull_cathedral: +1,
   // --- buffs: cost down, power unchanged ---
-  ashen_circle_rite: -1,
+  // v7.2: -1 -> -2. The only UNDERperformer to clear the significance gate in
+  // both cohorts (-3.8 n=1153 / -3.6 n=1826) — and at those sample sizes the
+  // two most-played cards in either outlier list, so the small magnitude is
+  // well measured rather than noisy.
+  ashen_circle_rite: -2,
   bioluminescent_tide: -1,
   blood_moon_descent: -1,
   bubble_harvest: -1,
@@ -1003,6 +1046,94 @@ const LEADER_PLUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
   },
 };
 
+/**
+ * v7.2: Leader MINUS-ability override — the effect-side counterpart to
+ * LEADER_MINUS_RESOLVE_OVERRIDE (which only ever changed the price) and to
+ * LEADER_PLUS_ABILITY_OVERRIDE (which only ever reached the plus half).
+ *
+ * The reason it is needed is structural, and worth stating plainly because it
+ * explains most of the Leader spread this project has been chasing since
+ * v6.1. `mapLeader` derives the minus ability from `identity[0]` and the plus
+ * ability from `identity[1]` — and those are not rolled. They are the literal
+ * array order in `LEADER_COLORS`, hand-written in colors.ts. So which of a
+ * Leader's two colours it gets its ANSWER from is decided by which one
+ * happens to be written first:
+ *
+ *   avatar_of_the_abyss  ['Shadow', 'Void']  -> minus = Shadow  `Shatter`
+ *   apex_nanite_shinobi  ['Gale',  'Shadow'] -> minus = Gale    `Recover`
+ *   ethereal_sea_witch   ['Tide',  'Light']  -> minus = Tide    `Deal a card`
+ *   ruinwalker_overseer  ['Root',  'Void']   -> minus = Root    `+2/+2`
+ *
+ * Avatar — first in both cohorts for four consecutive passes — is the one
+ * whose first colour is Shadow. Apex, Ethereal and Ruin-Walker are the three
+ * whose first colour yields a minus ability that does not touch the enemy
+ * board at all, and they are the bottom three in both cohorts. Apex's
+ * `-1: Recover a friendly unit` is the clearest case: the CPU declines to use
+ * it almost entirely (179 uses across 2,604 games in cohort A) and loses 79%
+ * of the games where it does, while its Shadow half — the best minus ability
+ * in the game — is unreachable because it is written second.
+ *
+ * The systemic fix (let the kit take its minus from whichever half is
+ * interactive) would re-roll all eight Leaders at once and invalidate every
+ * per-Leader adjustment in this file. This lever instead hands the two
+ * Leaders that finished bottom in BOTH cohorts an ability drawn from their
+ * OWN other colour — what a colour-aware roll would have produced — and
+ * leaves the balanced Leaders untouched.
+ */
+const LEADER_MINUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
+  // Apex Nanite Shinobi (Gale/Shadow): 30.6% (A) / 38.2% (B), last in both.
+  // Deliberately NOT given Shadow's `-2: Shatter` — that is Avatar's kit, and
+  // at Resolve 5 it would buy two unconditional removals a tank, which is
+  // strictly better than the Leader that has topped the spread for four
+  // passes. Takes Shadow's Withering flavour instead: a permanent shrink is
+  // real board interaction and a soft answer, repeatable at -1, but it never
+  // kills a big body outright.
+  // Apex took three trials to land, and the two failures are the useful part
+  // of the record: `-1: -2/-2` OVERSHOT to 61.6% (A) / 55.6% (B), last place
+  // to FIRST in A, because a permanent shrink five times a tank is removal on
+  // anything the deck plays. Dropping the effect to `-1: -1/-1` then
+  // UNDERSHOT and split the cohorts (39.0% / 34.0%) — too small to answer
+  // anything. The size was never the problem; the frequency was. Shipped at
+  // the original -2/-2 with the price doubled, so Resolve 5 buys two shrinks a
+  // tank instead of five.
+  apex_nanite_shinobi: {
+    resolveDelta: -2,
+    effect: { action: 'weaken', value: 2, target: 'enemyUnit' },
+    text: '-2: A target enemy unit gets -2/-2.',
+  },
+  // Ruin-Walker Overseer is the third Leader with the identity[0] problem and
+  // the last one still below baseline in both cohorts (41.1% / 38.0%). v6.9
+  // gave its PLUS half a Void `weaken`, which moved it but left the kit with
+  // no actual answer: its minus is still Root's `-2: A friendly unit gets
+  // +2/+2`, so both halves point at its own board. Takes its own Void half's
+  // Banish — the ability `mapLeader` would already have given it had its
+  // colour pair been written the other way round.
+  // Priced at -3, not the -2 the Void table prints. At -2 it overshot as hard
+  // as Apex did (46.4% -> 68.2% in A, first by nine points), for the reason
+  // Avatar's minus ability has now been repriced twice: unconditional removal
+  // that a full Resolve tank buys TWICE is the strongest kit shape in the
+  // game, whichever way it is worded. At -3 a Resolve-4 tank buys one, and
+  // the +1 half needs three turns to fund the next.
+  ruinwalker_overseer: {
+    resolveDelta: -3,
+    effect: { action: 'banish', target: 'enemyUnit' },
+    text: '-3: Banish a target enemy unit.',
+  },
+  // Ethereal Sea Witch (Tide/Light): 40.4% / 34.6%, still bottom-two in both
+  // after v6.9's plus-ability buff moved it +4.2 / +6.9. Carry-forward #5
+  // asked for one settling pass before a second point; this is that pass and
+  // the deficit did not close, so the second point is due. Its remaining dead
+  // half is the minus (`-1: Deal a card`, 40.1% across 1,375 games). Bounded
+  // deliberately against Legendary Diver's healthy `-1: Deal 2 damage to ANY
+  // target` (54.7% / 59.5%) by dropping the face-reach half: unit-only, so it
+  // answers a board without ever closing a game out of nowhere.
+  ethereal_sea_witch: {
+    resolveDelta: -1,
+    effect: { action: 'damage', value: 2, target: 'enemyUnit' },
+    text: '-1: Deal 2 damage to a target enemy unit.',
+  },
+};
+
 function mapLeader(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
@@ -1021,7 +1152,9 @@ function mapLeader(c: CardTemplate): CardDef {
   const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
-  const minus = leaderMinusAbility(seed, identity[0]);
+  const minus = LEADER_MINUS_ABILITY_OVERRIDE[c.id]
+    ? { ...LEADER_MINUS_ABILITY_OVERRIDE[c.id] }
+    : leaderMinusAbility(seed, identity[0]);
   const minusOverride = LEADER_MINUS_RESOLVE_OVERRIDE[c.id];
   if (minusOverride !== undefined) {
     minus.text = minus.text.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);

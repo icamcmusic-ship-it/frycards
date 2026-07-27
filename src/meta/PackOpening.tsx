@@ -6,11 +6,11 @@ import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
 import { PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
-import { RARITY_CHIP, RARITY_HEX, rarityGlow } from './rarity';
+import { RARITY_CHIP, RARITY_HEX, rarityGlow, rarityTier } from './rarity';
 import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
 import { useMeta } from './MetaContext';
-import { fmtCredits } from './economy';
+import { fmtCredits, quicksellPrice } from './economy';
 
 /**
  * Full-screen pack-opening experience:
@@ -21,16 +21,11 @@ import { fmtCredits } from './economy';
  *                       best-pull spotlight, then ADD TO COLLECTION.
  */
 
-const RARITY_ORDER = [
-  'Common',
-  'Uncommon',
-  'Rare',
-  'Super-Rare',
-  'Ultra-Rare',
-  'Full-Art',
-  'Mythic',
-];
-const rarityRank = (r: string) => Math.max(0, RARITY_ORDER.indexOf(r));
+// Ranking comes from rarity.ts's RARITY_ORDER, not a local copy. The local
+// copy this file used to keep had drifted: it was missing 'Alt-Art'
+// entirely, so `indexOf` returned -1 and every Alt-Art pull was clamped to
+// rank 0 — sorted, spotlighted and glowed as if it were a Common.
+const rarityRank = (r: string) => rarityTier(r);
 const isRarePlus = (r: string) => rarityRank(r) >= rarityRank('Rare');
 
 /** Resolve a pack pull to its v4.2 card definition (with a minimal fallback). */
@@ -657,7 +652,7 @@ function RevealStage({
             )}
           >
             {current.converted_to_credits
-              ? `DUPLICATE PROTECTED — ${(current.rarity || 'COMMON').toUpperCase()} → CREDITS`
+              ? `OVER COPY CAP — ${(current.rarity || 'COMMON').toUpperCase()} → CREDITS`
               : `${(current.rarity || 'COMMON').toUpperCase()}${current.foil ? ' · FOIL ✦' : ''}${
                   current.serialized
                     ? ` · SERIALIZED #${current.serial_number}/${current.serial_cap}`
@@ -718,31 +713,18 @@ function SummaryStage({
     return [...m.entries()].sort((a, b) => rarityRank(b[0]) - rarityRank(a[0]));
   }, [pulls]);
 
-  // Big hauls (bulk opens, boxes) collapse identical pulls into one compact
-  // card with a ×N count instead of a wall of 30+ full-size cards.
-  const grouped = pulls.length > 12;
-  const groups = useMemo(() => {
-    const m = new Map<string, { pull: PackPull; count: number; indices: number[] }>();
-    pulls.forEach((p, i) => {
-      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
-      const g = m.get(key) || { pull: p, count: 0, indices: [] };
-      g.count += 1;
-      g.indices.push(i);
-      m.set(key, g);
-    });
-    return [...m.values()].sort(
-      (a, b) =>
-        rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
-        Number(b.pull.foil) - Number(a.pull.foil) ||
-        (a.pull.name || '').localeCompare(b.pull.name || ''),
-    );
-  }, [pulls]);
-
   const creditsGained = pulls.reduce(
     (s, p) => s + (p.converted_to_credits ? p.credit_value : 0),
     0,
   );
   const convertedCount = pulls.filter((p) => p.converted_to_credits).length;
+  const foilCount = pulls.filter((p) => p.foil).length;
+  // Quicksell value of everything the player actually KEPT. Over-cap pulls are
+  // excluded because they were already paid out as credits above.
+  const haulValue = pulls.reduce(
+    (s, p) => s + (p.converted_to_credits ? 0 : quicksellPrice(p.rarity, p.foil)),
+    0,
+  );
 
   // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
   const bestIndex = useMemo(() => {
@@ -757,6 +739,30 @@ function SummaryStage({
     });
     return best;
   }, [pulls]);
+
+  // One layout for every haul size. The old summary branched into two
+  // near-duplicate render paths at 12 cards (a wall of full-size cards below,
+  // a spotlight + compact grid above) which had drifted apart — different
+  // sold/converted badges, different best-pull markup, different sort. The
+  // spotlight is always shown and the rest always collapses identical pulls,
+  // so a 5-card pack and a 49-card box read the same way.
+  const groups = useMemo(() => {
+    const m = new Map<string, { pull: PackPull; count: number; indices: number[] }>();
+    pulls.forEach((p, i) => {
+      if (i === bestIndex) return; // the spotlight already shows this copy
+      const key = `${p.card_id}:${p.foil}:${p.serialized ? `s${p.serial_number}` : ''}:${p.converted_to_credits}`;
+      const g = m.get(key) || { pull: p, count: 0, indices: [] };
+      g.count += 1;
+      g.indices.push(i);
+      m.set(key, g);
+    });
+    return [...m.values()].sort(
+      (a, b) =>
+        rarityRank(b.pull.rarity) - rarityRank(a.pull.rarity) ||
+        Number(b.pull.foil) - Number(a.pull.foil) ||
+        (a.pull.name || '').localeCompare(b.pull.name || ''),
+    );
+  }, [pulls, bestIndex]);
 
   // Quicksell straight from the haul — mostly for the common/uncommon
   // clutter a big box tends to dump, without a separate trip to Collection.
@@ -785,6 +791,10 @@ function SummaryStage({
         !pulls[i].converted_to_credits &&
         (pulls[i].rarity === 'Common' || pulls[i].rarity === 'Uncommon'),
     );
+  const clutterValue = clutterIndices.reduce(
+    (s, i) => s + quicksellPrice(pulls[i].rarity, pulls[i].foil),
+    0,
+  );
 
   const quicksellClutter = async () => {
     if (sellBusy || clutterIndices.length === 0) return;
@@ -796,24 +806,24 @@ function SummaryStage({
     setSellError('');
     setSellNotice('');
     // group by (card_id, foil) so identical pulls sell in one RPC call each
-    const groups = new Map<
+    const sellGroups = new Map<
       string,
       { cardId: string; foil: boolean; qty: number; indices: number[] }
     >();
     for (const i of clutterIndices) {
       const p = pulls[i];
       const key = `${p.card_id}:${p.foil}`;
-      const g = groups.get(key) || { cardId: p.card_id, foil: p.foil, qty: 0, indices: [] };
+      const g = sellGroups.get(key) || { cardId: p.card_id, foil: p.foil, qty: 0, indices: [] };
       g.qty += 1;
       g.indices.push(i);
-      groups.set(key, g);
+      sellGroups.set(key, g);
     }
     let totalCredits = 0;
     let totalCards = 0;
     let shortfall = false;
     const newlySold = new Set<number>();
     try {
-      for (const g of groups.values()) {
+      for (const g of sellGroups.values()) {
         const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
         if (!mountedRef.current) return;
         if (error) {
@@ -863,178 +873,109 @@ function SummaryStage({
     );
   }
 
+  const best = pulls[bestIndex];
+
   return (
-    <div className="relative flex flex-col items-center max-h-full w-full">
-      <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center">
+    <div className="relative flex flex-col items-center w-full max-w-5xl max-h-full">
+      <h2 className="heading-font text-2xl text-[var(--c-yellow)] text-center">
         {packName.toUpperCase()}
       </h2>
-      <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-4">
-        Your haul — {pulls.length} card{pulls.length === 1 ? '' : 's'}
-      </p>
 
-      <div className="flex flex-wrap justify-center gap-2 mb-5">
+      {/* Headline numbers, read left to right: how much, how shiny, how much
+          it's worth. Previously the only summary was a row of rarity chips
+          plus a paragraph of small print. */}
+      <div className="flex flex-wrap justify-center gap-2 mt-3 mb-4">
+        <StatTile label="CARDS" value={String(pulls.length)} />
+        {foilCount > 0 && <StatTile label="FOILS ✦" value={String(foilCount)} accent="yellow" />}
+        <StatTile
+          label="TOP PULL"
+          value={(best.rarity || 'Common').toUpperCase()}
+          rarity={best.rarity}
+        />
+        <StatTile label="HAUL VALUE" value={fmtCredits(haulValue)} />
+        {creditsGained > 0 && (
+          <StatTile label="OVER CAP → ✦" value={fmtCredits(creditsGained)} accent="cyan" />
+        )}
+      </div>
+
+      {/* Spotlight */}
+      <div className="relative mb-4 shrink-0">
+        <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+          <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
+        </div>
+        <div
+          className={cn('po-anim', !best.converted_to_credits && rarityGlow(best.rarity))}
+          style={{ animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out' }}
+        >
+          <CardFace
+            def={pullToDef(best)}
+            size="full"
+            foil={best.foil}
+            dimmed={best.converted_to_credits}
+            serial={
+              best.serialized ? { number: best.serial_number!, cap: best.serial_cap! } : undefined
+            }
+          />
+        </div>
+      </div>
+
+      {/* Rarity breakdown */}
+      <div className="flex flex-wrap justify-center gap-1.5 mb-3">
         {rarityCounts.map(([r, n]) => (
           <span
             key={r}
             className={cn(
-              'text-[10px] font-black px-2 py-1 ink-border-sm',
+              'text-[10px] font-black px-2 py-0.5 ink-border-sm',
               RARITY_CHIP[r] || RARITY_CHIP.Common,
             )}
           >
             {(r || 'Common').toUpperCase()} ×{n}
           </span>
         ))}
-        {creditsGained > 0 && (
-          <span className="text-[10px] font-black px-2 py-1 ink-border-sm bg-[var(--c-ink)] text-[#67E8F9]">
-            +{fmtCredits(creditsGained)} CREDITS
-          </span>
-        )}
       </div>
 
-      {grouped && (
-        <div className="flex flex-col items-center mb-5">
-          {/* Best-pull spotlight, full size, above the compact haul grid. */}
-          <div className="relative mb-2">
-            <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-              <Sparkles className="w-3 h-3" />{' '}
-              {pulls[bestIndex]?.serialized ? 'SERIALIZED!' : 'BEST PULL'}
-            </div>
-            <div className={cn(rarityGlow(pulls[bestIndex]?.rarity))}>
-              <CardFace
-                def={pullToDef(pulls[bestIndex])}
-                size="full"
-                foil={pulls[bestIndex]?.foil}
-                serial={
-                  pulls[bestIndex]?.serialized
-                    ? {
-                        number: pulls[bestIndex].serial_number!,
-                        cap: pulls[bestIndex].serial_cap!,
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2 max-w-5xl px-2 max-h-[38vh] overflow-y-auto">
-            {/* The best pull already has the full-size spotlight above — drop
-                that ONE copy from its group (not the whole group: a triple
-                top-rarity pull used to hide the other two copies entirely,
-                under-reporting the haul). */}
-            {groups
-              .map((grp) =>
-                grp.indices.includes(bestIndex)
-                  ? {
-                      ...grp,
-                      count: grp.count - 1,
-                      indices: grp.indices.filter((i) => i !== bestIndex),
-                    }
-                  : grp,
-              )
-              .filter((grp) => grp.count > 0)
-              .map((grp, gi) => {
-                const allSold = grp.indices.every((i) => sold.has(i));
-                return (
-                  <div key={gi} className="relative">
-                    <CardFace
-                      def={pullToDef(grp.pull)}
-                      size="compact"
-                      foil={grp.pull.foil}
-                      count={grp.count > 1 ? grp.count : undefined}
-                      dimmed={grp.pull.converted_to_credits || allSold}
-                      serial={
-                        grp.pull.serialized
-                          ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
-                          : undefined
-                      }
-                    />
-                    {(grp.pull.converted_to_credits || allSold) && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
-                          {allSold && !grp.pull.converted_to_credits
-                            ? 'SOLD'
-                            : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-wrap justify-center items-end gap-5 max-w-6xl mb-4 px-2">
-        {!grouped &&
-          pulls.map((pull, i) => {
-            const def = pullToDef(pull);
-            const isBest = i === bestIndex && pulls.length > 1;
+      {/* The rest of the haul */}
+      {groups.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-2 px-2 max-h-[34vh] overflow-y-auto mb-4">
+          {groups.map((grp, gi) => {
+            const allSold = grp.indices.every((i) => sold.has(i));
+            const spent = grp.pull.converted_to_credits || allSold;
             return (
-              // Split static positioning (outer, e.g. the best-pull scale-up)
-              // from the entrance animation (inner): both set `transform`, and
-              // stacking them on one element meant the animation — which has
-              // no `forwards` fill — reverted to the outer's static transform
-              // the instant it finished, producing a visible snap/jump.
-              // Nested elements compose their transforms instead of fighting.
-              <div key={i} className={cn('relative', isBest && 'scale-110 z-10 mx-3')}>
-                <div
-                  className="relative po-anim"
-                  style={{
-                    animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out backwards',
-                    animationDelay: reducedMotion ? undefined : `${i * 70}ms`,
-                  }}
-                >
-                  {isBest && (
-                    <>
-                      <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
-                        <Sparkles className="w-3 h-3" />{' '}
-                        {pull.serialized ? 'SERIALIZED!' : 'BEST PULL'}
-                      </div>
-                    </>
-                  )}
-                  <div
-                    className={cn(
-                      !pull.converted_to_credits && !sold.has(i) && rarityGlow(pull.rarity),
-                    )}
-                  >
-                    <CardFace
-                      def={def}
-                      size="full"
-                      foil={pull.foil}
-                      dimmed={pull.converted_to_credits || sold.has(i)}
-                      serial={
-                        pull.serialized
-                          ? { number: pull.serial_number!, cap: pull.serial_cap! }
-                          : undefined
-                      }
-                    />
+              <div key={gi} className="relative">
+                <CardFace
+                  def={pullToDef(grp.pull)}
+                  size="compact"
+                  foil={grp.pull.foil}
+                  count={grp.count > 1 ? grp.count : undefined}
+                  dimmed={spent}
+                  serial={
+                    grp.pull.serialized
+                      ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
+                      : undefined
+                  }
+                />
+                {spent && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+                      {allSold && !grp.pull.converted_to_credits
+                        ? 'SOLD'
+                        : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
+                    </span>
                   </div>
-                  {sold.has(i) && !pull.converted_to_credits && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="heading-font text-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                        SOLD
-                      </span>
-                    </div>
-                  )}
-                  {pull.converted_to_credits && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="heading-font text-sm bg-[var(--c-ink)] text-[#67E8F9] px-2 py-1 ink-border-sm shadow-hard-black-xs">
-                        +{fmtCredits(pull.credit_value)} CREDITS
-                      </span>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             );
           })}
-      </div>
+        </div>
+      )}
 
       {convertedCount > 0 && (
-        <p className="text-[10px] font-bold text-[#67E8F9] mb-4 text-center max-w-md">
+        <p className="text-[10px] font-bold text-[#67E8F9] mb-3 text-center max-w-md">
           {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
-          {convertedCount === 1 ? 'was' : 'were'} past your copy cap and converted to ✦{' '}
-          {fmtCredits(creditsGained)} credits instead of a duplicate.
+          {convertedCount === 1 ? 'was' : 'were'} past your copy cap, so{' '}
+          {convertedCount === 1 ? 'it was' : 'they were'} paid out as ✦ {fmtCredits(creditsGained)}{' '}
+          credits instead of a copy you couldn't play.
         </p>
       )}
 
@@ -1054,7 +995,9 @@ function SummaryStage({
           <PopButton color="steel" disabled={sellBusy} onClick={quicksellClutter}>
             <span className="flex items-center gap-1">
               <Coins className="w-3.5 h-3.5" />
-              {sellBusy ? 'SELLING…' : `QUICKSELL COMMONS & UNCOMMONS (${clutterIndices.length})`}
+              {sellBusy
+                ? 'SELLING…'
+                : `QUICKSELL ${clutterIndices.length} C/U — ${fmtCredits(clutterValue)}`}
             </span>
           </PopButton>
         )}
@@ -1063,6 +1006,39 @@ function SummaryStage({
         </PopButton>
       </div>
       <div className="h-4 shrink-0" />
+    </div>
+  );
+}
+
+/** One headline number in the summary's stat strip. */
+function StatTile({
+  label,
+  value,
+  accent,
+  rarity,
+}: {
+  label: string;
+  value: string;
+  accent?: 'yellow' | 'cyan';
+  rarity?: string;
+}) {
+  return (
+    <div className="ink-border-sm bg-[var(--c-ink)] px-3 py-1.5 text-center min-w-[84px]">
+      <div className="text-[8px] font-black tracking-widest text-[var(--c-paper)]/50">{label}</div>
+      <div
+        className="heading-font text-sm leading-tight"
+        style={{
+          color: rarity
+            ? RARITY_HEX[rarity] || RARITY_HEX.Common
+            : accent === 'cyan'
+              ? '#67E8F9'
+              : accent === 'yellow'
+                ? 'var(--c-yellow)'
+                : 'var(--c-paper)',
+        }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

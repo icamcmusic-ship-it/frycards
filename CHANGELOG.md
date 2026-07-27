@@ -8,6 +8,129 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.2 — Pack rework, Leader-kit lever, balance pass
+
+#### Packs & economy
+
+- **Booster: 6 → 8 cards, one slot a guaranteed foil.** New slot shape is
+  4 foundation / 2 synergy / 1 chase / 1 foil. Price unchanged at 499 credits
+  (5 vouchers).
+- **Foil chance is now stated per PACK, not per slot.** `pack_types.foil_chance`
+  was always a per-slot probability, so the advertised "4%" really meant
+  ~1 - 0.96^6 ≈ 21% of a foil somewhere in the pack. The per-slot rate is
+  retuned to 0.0118 so the seven non-guaranteed slots land on
+  1 - 0.9882^7 ≈ 8.0%, and the store's odds modal now shows
+  "N guaranteed foils + X% chance of an extra" via `packFoilChance()`.
+  Verified against the live `roll_weighted_rarity` by Monte Carlo: 1.08
+  foils/pack, 7.50 foils/box.
+- **Box: 36 → 49 cards**, restructured as six full boosters (6 × 8) plus the
+  topper, so box and pack stay in a readable relationship. **Box topper floor
+  Rare → Super-Rare** and always foil (62% SR / 32% UR / 4.5% FA / 1.5%
+  Mythic). Price 2,699 → 3,199 credits, 27 → 32 vouchers, sized to the
+  ~+466-credit quicksell EV the topper change adds.
+- **Full-Art and Mythic made more common** in every chase and topper slot.
+  Per booster: Mythic 0.10% → 0.50%, Full-Art 0.60% → 1.93%.
+- **Dupe protection removed from pack opening.** `grant_pack_contents` no
+  longer branches on the `dupe_protected` slot flag; every non-Leader slot is
+  a straight `random_card_of_rarity` pull. Both `pick_card_dupe_protected`
+  overloads dropped, the flag cleared from every `pack_types` row, and the
+  `dupeProtected` field removed from `SlotOdds`. The copy-cap auto-convert is
+  a separate mechanic and is retained — it is now labelled "over copy cap"
+  rather than "duplicate protected", which is what it always was.
+- **Alt-Art dropped from every weight table.** `public.cards` has zero Alt-Art
+  rows and `random_card_of_rarity` walks *down* its ladder on an empty tier, so
+  every advertised Alt-Art roll silently paid out a Full-Art. The weight is
+  folded into Full-Art — the odds screens now describe what can actually be
+  pulled.
+
+#### Cards & balance
+
+See `docs/BALANCE_SIM_FINDINGS_v7.2.md` for the full pass (two 5,952-game
+cohorts, 0 invariant violations, seven trial pairs).
+
+- **Six cards to Full-Art**: `absolute_eruption`, `apex_nanite_shinobi`,
+  `avatar_of_the_abyss`, `crimson_vector_commander`, `spectral_leviathan`,
+  `submerged_starfall`. These were also the six the v6.9 pass left drifting
+  between the live DB and the bundled catalog, so this closes that too — all
+  three sources now digest to `5ddd58b02bd1d4e951d6e2acd7ae3120`, 292/292.
+  Because `seedOf` is `id|type|rarity` the six are reprinted, and the three
+  Leaders drop Resolve 6 → 5.
+- **New `LEADER_MINUS_ABILITY_OVERRIDE` lever.** `mapLeader` derives the minus
+  ability from `identity[0]` and the plus from `identity[1]`, and neither is
+  rolled — they are the array order in `LEADER_COLORS`. The three Leaders
+  below baseline in both cohorts were exactly the three whose first colour
+  yields a non-interactive minus. Each now takes an ability from its own other
+  colour: Apex Nanite Shinobi `-2: -2/-2`, Ethereal Sea Witch `-1: Deal 2
+  damage to a target enemy unit`, Ruin-Walker Overseer `-3: Banish`.
+  **Leader spread 24.3 → 17.9 (A) and 30.3 → 14.8 (B)**, against v6.9's 31.6
+  and 39.8.
+- **Cost adjustments**: `submerged_statue` +1, `dr_aries_chief_biogeneticist`
+  +1 (both gated in both cohorts), `ashen_circle_rite` -1 → -2.
+- **Doublestrike carry-forward closed without action** — the four-pass signal
+  is two carriers' Leader cohorts, not the keyword; their absolute win rate
+  was below even in both cohorts.
+- **Sacred left at weight 1** after three cost trials, and the reason is now
+  documented at the call site: cost is not a lever for Locations, because
+  "win rate conditional on having played it" rises with price by construction
+  (a pricier Location is only played in games with more ramp). Every
+  two-cohort gated overperformer this pass is a Location. Next lever is a
+  ramp-matched baseline in the sim harness.
+
+#### CPU
+
+- **`charmOnDoomedUnit` down 14-20%** — the largest lapse counter for five
+  passes, targeted for the first time. `bestBondTarget` now checks whether the
+  enemy's ready board can reach the intended target instead of only scoring
+  durability, and `chooseAttackers`' `favorableTrade` branch counts the
+  non-Soulbound Charms that would die with the attacker.
+
+#### UI / UX
+
+- **Pack summary rebuilt.** One layout for every haul size — the old screen
+  branched at 12 cards into two near-duplicate render paths that had drifted
+  apart (different sold/converted badges, different best-pull markup). Adds a
+  headline stat strip (cards, foils, top pull, haul value, over-cap credits),
+  always spotlights the best pull, and the quicksell button now shows the
+  payout before it is pressed.
+- **Bulk opens are sized in cards, not packs.** The flat 24-pack cap meant one
+  "OPEN ALL" could hand the reveal 1,176 pulls; `bulkCapFor()` budgets ~250
+  cards per reveal, and the ×5/×10 buy buttons hide multiples that exceed it.
+- Store odds modal shows per-pack foil odds and says "PER BOX" for boxes.
+
+#### Fixes
+
+- `PackOpening.tsx` kept its own copy of the rarity ladder and it had drifted:
+  no `'Alt-Art'`, so `indexOf` returned -1 and every Alt-Art pull was clamped
+  to rank 0 — sorted, spotlighted and glowed as a Common. Both duplicate
+  ladders (here and in `packodds.ts`) now use `rarityTier` from `rarity.ts`.
+- `slotOdds`' guaranteed-foil test only matched a `foil_` *prefix*, so a slot
+  named exactly `foil` advertised the base chance instead of 100%.
+- `docs/RULEBOOK.md` copy-cap line was missing Alt-Art.
+
+#### Tests
+
+- `src/game/v3/edgecases-v72.test.ts` (22 tests) — adversarial coverage for
+  `weaken` (including shrink-to-0 and negative-stat overshoot), `exhaust`,
+  Nimble, Thriving, Radiant, Withering, Tidecaller and the new Leader kits.
+  Writing it surfaced that three tests built on empty decks were passing
+  vacuously — `runDawn` Deals a card, so the game ends the moment such a test
+  advances two turns and every later assertion silently no-ops.
+- `src/meta/packodds.test.ts` (9 tests) — pins the guaranteed-foil slot type,
+  the per-pack foil figure, weight tables summing to 1, ladder ordering
+  including Alt-Art, and that no client weight table offers a rarity the
+  catalog cannot supply.
+
+### v7.1 — Alt-Art rarity
+
+Shipped ahead of this entry and recorded in `src/meta/ChangelogScreen.tsx`
+but never written up here. Adds the **Alt-Art** rarity between Full-Art and
+Mythic (`RARITY_ORDER`, `RARITY_HEX/CHIP/TEXT/BORDER/GLOW/BG`, the "Prism Ink"
+full-bleed template in `CardFaceV4`, 1,800-credit quicksell, 1-copy deck cap),
+carves an Alt-Art share out of chase and box-topper slots, and fixes the
+server's rarity-exhaustion fallback ladder (still pre-v6.8 order) plus the
+Starter Box Leader-rarity check (no Full-Art entry at all). No Alt-Art cards
+have been printed yet — v7.2 removes the dead pack weights until one is.
+
 ### v7.0 — Board redesign, player-shop audit, Supabase hardening
 
 #### Match board — the "Tactile Lane" layout

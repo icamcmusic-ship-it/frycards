@@ -12,7 +12,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Event",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Set%202/Absolute_volcanic_energy_eruption._--ar_43_--raw_--sref_22084_d9f16813-c068-490b-9e4a-5abd193f8a4e_2.png",
     "flavor": "The mountain does not warn. It ends conversations.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "abyssal_dragonfish",
@@ -102,7 +102,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Leader",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Set%202/ultimate_nanite-integrated_shinobi._--ar_43_--raw_--sref_2208_1ef2a9f4-aba7-4094-8f2c-f658dca2886f_2.png",
     "flavor": "He is not wearing the swarm. The swarm is wearing him.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "apocalypse_beam",
@@ -165,7 +165,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Leader",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/SET%201/A_deity_of_the_deep_a_colossal_figure_made_of_water_and_glowi_6a37d7fc-859b-46f9-8c11-588c84e2c377_2_result.webp",
     "flavor": "The ocean incarnate, commanding the tides.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "baron_von_swine",
@@ -588,7 +588,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Leader",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Set%202/Crimson-armored_commander_overlooking_a_lava_pit._--chaos_5_-_c9144cb0-c6ac-4520-b9bb-5d988f91fca1_0.png",
     "flavor": "Her orders arrive at the speed of an eruption.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "crown_of_the_reef",
@@ -2127,7 +2127,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Unit",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/SET%201/A_massive_skeletal_fish_frame_made_of_glowing_blue_energy._--_b47e18ab-cbe2-4844-844e-24f5ebcc1af6_3_result.webp",
     "flavor": "The ghost of a predator long gone.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "sphere_pufferfish",
@@ -2190,7 +2190,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
     "type": "Event",
     "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/SET%201/A_meteor_shower_viewed_from_underwater_the_falling_stars_stre_48fcca4a-4ecc-4256-86ce-82944aea31a5_3_result.webp",
     "flavor": "The sky falls, even where the sun never shines.",
-    "rarity": "Ultra-Rare"
+    "rarity": "Full-Art"
   },
   {
     "id": "submerged_statue",

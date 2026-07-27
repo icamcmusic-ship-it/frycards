@@ -12,12 +12,29 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Packs & Leaders Update (v7.2)',
+    date: 'July 2026',
+    items: [
+      'Booster packs are now 8 cards instead of 6, and one of those 8 is ALWAYS a foil. On top of that guaranteed foil, every pack has about an 8% chance of a second foil turning up in another slot. The odds screen now states foil chances per PACK rather than per slot — the old "4%" was a per-slot roll that really meant a foil in about 1 pack in 5, which was not what it looked like.',
+      'Booster Boxes are now six full boosters (48 cards) plus the box topper, for 49 cards. The box topper floor is raised from Rare to SUPER-RARE — every box is now guaranteed a foil Super-Rare or better, with a 32% shot at Ultra-Rare, 4.5% at Full-Art and 1.5% at Mythic. The box price moves from 2,699 to 3,199 credits (32 vouchers) to match.',
+      'Full-Art and Mythic pulls are meaningfully more common. Per booster, Mythic goes from roughly 1-in-1,000 to 1-in-200, and Full-Art from about 1-in-165 to 1-in-52.',
+      'Duplicate protection has been removed from pack opening. Every slot is now a straight random pull, so packs can repeat cards you already own. The separate copy-cap payout is unchanged and still there: a pull past what you could ever play still comes back as credits rather than dead inventory (it is now labelled honestly as "over copy cap" rather than "duplicate protected").',
+      "Six cards moved to FULL-ART: Absolute Eruption, Apex Nanite Shinobi, Avatar of the Abyss, Crimson Vector Commander, Spectral Leviathan and Submerged Starfall. Because a card's stats and abilities are derived from its rarity, all six are reprinted — most notably the three Leaders, who now start at Resolve 5 instead of 6.",
+      'The three weakest Leaders in the game have been rebuilt, and the Leader spread is now the tightest it has ever been (every Leader between 43% and 62%, down from a 40-point gap). Apex Nanite Shinobi\'s useless "-1: Recover a friendly unit" becomes "-2: A target enemy unit gets -2/-2". Ethereal Sea Witch\'s "-1: Deal a card" becomes "-1: Deal 2 damage to a target enemy unit". Ruin-Walker Overseer\'s "-2: A friendly unit gets +2/+2" becomes "-3: Banish a target enemy unit". All three previously had kits that could not interact with the enemy board at all.',
+      'Avatar of the Abyss and Crimson Vector Commander are both toned down again as a consequence of the rarity move — one less Resolve means roughly a third as many Shatters and blasts per game.',
+      'Card tuning: Submerged Statue and Dr. Aries, Chief Biogeneticist both cost 1 more. Ashen Circle Rite costs 1 less.',
+      'The CPU plays Charms noticeably better. It no longer hangs a Charm on a body the enemy board can kill on the spot, and it no longer throws a charmed unit into a "good" trade without counting the Charms that die with it — the two together cut its single most common misplay by about 20%.',
+      'The post-pack summary has been rebuilt. One layout for every haul size instead of two that had drifted apart, headline numbers up top (cards, foils, your best pull, what the haul is worth, any credits paid out), a spotlight on the best card, and the quicksell button now tells you what you will get before you press it.',
+      'Fixed: an Alt-Art card would have been sorted, spotlighted and glowed as if it were a Common in the pack-opening screen. Fixed: packs advertised Alt-Art drop odds even though no Alt-Art cards exist yet, and those rolls quietly paid out a Full-Art instead — the odds screens now show what you can actually pull. Fixed: "OPEN ALL" on a stack of boxes could deal out over 1,100 cards into a single one-at-a-time reveal; bulk opens are now sized so one reveal stays readable.',
+    ],
+  },
+  {
     version: 'Alt-Art Update (v7.1)',
     date: 'July 2026',
     items: [
       'A new rarity: Alt-Art. It sits between Full-Art and Mythic on the ladder — a separately-illustrated alternate printing of a hand-picked existing card (same identity, same stats, striking new art), not a whole new pool of cards. Its own "Prism Ink" template gives it a slow hue-shifting holographic wash across the full-bleed art plus a pink/violet frame, deliberately distinct from Mythic\'s looping video and Serialized\'s rotating rainbow ring. Quicksells for 1,800 credits and caps at 1 copy per deck, same as Mythic.',
-      "Pack odds now carve out a small Alt-Art share everywhere Full-Art could drop (chase and box topper slots), so the tier is live end-to-end even before the first Alt-Art card ships — until then a roll quietly resolves to Full-Art instead.",
-      "Fixed a latent ordering bug in the server's rarity-pool-exhaustion fallback: it still walked the pre-v6.8 ladder (Ultra-Rare above Full-Art), out of step with every price, cap and pack-odds table. Also fixed the Starter Box's Leader-rarity check, which had no entry for Full-Art at all and would have silently let a Full-Art Leader through the \"Rare or lower\" restriction.",
+      'Pack odds now carve out a small Alt-Art share everywhere Full-Art could drop (chase and box topper slots), so the tier is live end-to-end even before the first Alt-Art card ships — until then a roll quietly resolves to Full-Art instead.',
+      'Fixed a latent ordering bug in the server\'s rarity-pool-exhaustion fallback: it still walked the pre-v6.8 ladder (Ultra-Rare above Full-Art), out of step with every price, cap and pack-odds table. Also fixed the Starter Box\'s Leader-rarity check, which had no entry for Full-Art at all and would have silently let a Full-Art Leader through the "Rare or lower" restriction.',
     ],
   },
   {
