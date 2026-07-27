@@ -42,7 +42,9 @@ export type EffectAction =
   | 'shatter' // destroy → Ash-pile
   | 'banish' // remove → The Void
   | 'erode' // mill opponent
-  | 'recover'; // ready a friendly permanent
+  | 'recover' // ready a friendly permanent
+  | 'exhaust' // v6.9: tap an enemy unit — it can't attack or guard until it recovers
+  | 'weaken'; // v6.9: permanently shrink a unit's Might and Grit
 
 export type EffectTarget =
   | 'enemyUnit'

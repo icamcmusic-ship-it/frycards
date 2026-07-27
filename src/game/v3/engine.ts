@@ -117,6 +117,16 @@ export interface ClashState {
   step: ClashStep;
   attackers: string[];
   guards: GuardAssignments;
+  /**
+   * Attackers that were guarded by at least one unit at the moment guards
+   * were declared. Kept separately from `guards` because `stateBasedChecks`
+   * prunes dead guards out of that map: without this record, an attacker
+   * whose only blocker was removed DURING the reaction window looked like it
+   * had never been guarded at all and hit the defender's face for full Might
+   * (see resolveClash). Blocked is blocked — a removed blocker absorbs the
+   * attack, it does not un-block it.
+   */
+  guardedOnce: string[];
 }
 
 export interface GameState {
@@ -489,8 +499,18 @@ export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string
     .filter((u) => !unitHasKw(u, 'Warded') && !(excludeUnbreakable && unitHasKw(u, 'Unbreakable')))
     .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
   switch (eff.target) {
-    case 'enemyUnit':
+    case 'enemyUnit': {
+      // v6.9: exhausting an already-exhausted unit does nothing — prefer the
+      // biggest READY body, and only fall back to the general pick if the
+      // whole enemy board is already tapped out.
+      if (eff.action === 'exhaust') {
+        const ready = [...opp.field]
+          .filter((u) => !u.exhausted && !unitHasKw(u, 'Warded'))
+          .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+        if (ready) return ready.iid;
+      }
       return biggestEnemy?.iid;
+    }
     case 'anyTarget':
       return biggestEnemy?.iid ?? opponentOf(pid);
     case 'enemyPlayer':
@@ -563,6 +583,13 @@ function damageUnit(state: GameState, u: UnitInst, amount: number, source?: Unit
   u.damage += amount;
   if (source && unitHasKw(source, 'Venomous')) u.venomed = true;
   if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, amount);
+  // v6.9 Withering: damage from this source also permanently erodes 1 Grit.
+  // Applied through permGrit (effGrit floors at 0), so it survives healing —
+  // marked damage clears, the shrunken body does not.
+  if (source && unitHasKw(source, 'Withering')) {
+    u.permGrit -= 1;
+    telemetry.onKeywordProc?.('Withering', 1);
+  }
 }
 
 function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: UnitInst): void {
@@ -676,6 +703,35 @@ export function applyEffect(
       if (u && u.owner === pid) u.exhausted = false;
       break;
     }
+    // v6.9 tempo denial: exhaust an enemy unit so it can neither attack on
+    // its controller's turn nor guard on yours until their next Dawn.
+    case 'exhaust': {
+      if (eff.target === 'allEnemyUnits') {
+        for (const u of opp.field) u.exhausted = true;
+        break;
+      }
+      const t = resolveTarget();
+      const u = t ? findUnit(state, t) : undefined;
+      if (u && u.owner !== pid) u.exhausted = true;
+      break;
+    }
+    // v6.9 attrition: permanently shrink a body rather than killing it.
+    // effMight/effGrit floor at 0, and a unit shrunk to 0 Grit is caught by
+    // the lethal check in stateBasedChecks below.
+    case 'weaken': {
+      const shrink = (u: UnitInst) => {
+        u.permMight -= v;
+        u.permGrit -= v;
+      };
+      if (eff.target === 'allEnemyUnits') {
+        for (const u of [...opp.field]) shrink(u);
+        break;
+      }
+      const t = resolveTarget();
+      const u = t ? findUnit(state, t) : undefined;
+      if (u && u.owner !== pid) shrink(u);
+      break;
+    }
   }
   stateBasedChecks(state);
 }
@@ -689,6 +745,9 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   const p = state.players[u.owner];
   const idx = p.field.indexOf(u);
   if (idx < 0) return;
+  // Read leave-the-field keywords BEFORE the bonded Charms are unhooked —
+  // a Charm-granted Wildfire is still granted at the moment of death.
+  const wildfire = unitHasKw(u, 'Wildfire');
   p.field.splice(idx, 1);
   for (const charm of u.charms) {
     // v6.0 Soulbound: the Charm returns to its owner's hand instead of dying
@@ -704,6 +763,12 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   if (dest === 'void') p.voidPile.push(inst);
   else p.ashPile.push(inst);
   state.log.push(`${u.def.name} ${dest === 'void' ? 'was banished' : 'was shattered'}.`);
+  // v6.9 Wildfire: a parting shot at the enemy player. Fires on banish too,
+  // for the same reason 'dies' triggers do (see below).
+  if (wildfire) {
+    telemetry.onKeywordProc?.('Wildfire', 2);
+    damagePlayer(state, opponentOf(u.owner), 2);
+  }
   // Rulebook "when ... leaves the field" has no ash/void distinction: 'dies'
   // triggers fire on banish too.
   runTriggers(state, u.owner, 'dies', u);
@@ -761,6 +826,17 @@ function runDawn(state: GameState): void {
       telemetry.onKeywordProc?.('Regenerate', u.damage);
       u.damage = 0;
     }
+    // v6.9 Thriving: compounding growth, one point of each per Dawn.
+    if (unitHasKw(u, 'Thriving')) {
+      u.permMight += 1;
+      u.permGrit += 1;
+      telemetry.onKeywordProc?.('Thriving', 1);
+    }
+    // v6.9 Radiant: a slow drip of Vitality while it holds the field.
+    if (unitHasKw(u, 'Radiant') && p.vitality < LEADER_HP) {
+      p.vitality += 1;
+      telemetry.onKeywordProc?.('Radiant', 1);
+    }
   }
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
@@ -797,6 +873,12 @@ function runDusk(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dusk';
   runTriggers(state, state.active, 'atDusk');
+  // v6.9 Entropic: each one mills the opponent for 1 at its controller's Dusk.
+  const entropic = p.field.filter((u) => unitHasKw(u, 'Entropic')).length;
+  if (entropic > 0) {
+    telemetry.onKeywordProc?.('Entropic', entropic);
+    applyEffect(state, state.active, { action: 'erode', value: entropic, target: 'enemyPlayer' });
+  }
   // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
   // the player reorder/pre-shed before ending Main II).
   while (p.hand.length > MAX_HAND) {
@@ -804,6 +886,11 @@ function runDusk(state: GameState): void {
     p.ashPile.push(c);
     state.log.push(`${p.id} sheds ${c.def.name}.`);
   }
+  // Defensive: a clash never survives the turn that opened it. The normal
+  // Clash -> Main2 transition already nulls this, but any path that reaches
+  // Dusk with a stale clash object would otherwise freeze the NEXT player's
+  // combat outright (declareAttackers refuses while `clash` is set).
+  state.clash = null;
   state.active = opponentOf(state.active);
   if (state.active === state.firstPlayer) state.turn++;
   clearEssence(state);
@@ -1170,7 +1257,7 @@ export function declareAttackers(state: GameState, iids: string[]): boolean {
     const u = findUnit(state, iid)!;
     if (!unitHasKw(u, 'Alert')) u.exhausted = true;
   }
-  state.clash = { step: 'guards', attackers: [...iids], guards: {} };
+  state.clash = { step: 'guards', attackers: [...iids], guards: {}, guardedOnce: [] };
   state.log.push(`${state.active} attacks with ${iids.length} unit(s).`);
   return true;
 }
@@ -1185,6 +1272,10 @@ export function legalGuardsFor(state: GameState, attackerIid: string): UnitInst[
   return defender.field.filter((g) => {
     if (g.exhausted) return false;
     if (unitHasKw(attacker, 'Aerial') && !unitHasKw(g, 'Aerial') && !unitHasKw(g, 'Skywatch'))
+      return false;
+    // v6.9 Nimble: only a smaller body can catch it. Strictly less Might, so
+    // an equal-Might guard does not qualify.
+    if (unitHasKw(attacker, 'Nimble') && effMight(state, g) >= effMight(state, attacker))
       return false;
     return true;
   });
@@ -1212,6 +1303,11 @@ export function declareGuards(state: GameState, assignments: GuardAssignments): 
   }
   state.clash.guards = {};
   for (const [a, gs] of Object.entries(assignments)) state.clash.guards[a] = [...gs];
+  // Snapshot who was blocked BEFORE the reaction window can start removing
+  // blockers — see ClashState.guardedOnce.
+  state.clash.guardedOnce = Object.entries(state.clash.guards)
+    .filter(([, gs]) => gs.length > 0)
+    .map(([a]) => a);
   state.clash.step = 'reaction';
   return true;
 }
@@ -1239,11 +1335,16 @@ function participates(u: UnitInst, step: 'first' | 'normal'): boolean {
 export function resolveClash(state: GameState): boolean {
   if (state.winner || !state.clash) return false;
   if (state.clash.step !== 'reaction' && state.clash.step !== 'guards') return false;
-  // Remember which attackers were ever guarded (before deaths clean the map).
+  // Which attackers were ever guarded. Taken from the declare-time snapshot
+  // so a blocker removed during the reaction window still counts as having
+  // blocked; falls back to the live map for callers that resolve straight
+  // out of the 'guards' step without ever declaring.
   const everGuarded = new Set(
-    Object.entries(state.clash.guards)
-      .filter(([, gs]) => gs.length > 0)
-      .map(([a]) => a),
+    state.clash.guardedOnce.length > 0
+      ? state.clash.guardedOnce
+      : Object.entries(state.clash.guards)
+          .filter(([, gs]) => gs.length > 0)
+          .map(([a]) => a),
   );
   const dealtBy = new Set<string>();
   // Damage each attacker has assigned to its guards across BOTH sub-steps —
@@ -1268,7 +1369,13 @@ export function resolveClash(state: GameState): boolean {
   }
   for (const iid of dealtBy) {
     const u = findUnit(state, iid);
-    if (u) runTriggers(state, u.owner, 'dealsClashDamage', u);
+    if (!u) continue;
+    // v6.9 Tidecaller: connecting in a clash refills the hand.
+    if (unitHasKw(u, 'Tidecaller')) {
+      telemetry.onKeywordProc?.('Tidecaller', 1);
+      dealCards(state, u.owner, 1);
+    }
+    runTriggers(state, u.owner, 'dealsClashDamage', u);
   }
   if (state.clash) state.clash.step = 'done';
   stateBasedChecks(state);

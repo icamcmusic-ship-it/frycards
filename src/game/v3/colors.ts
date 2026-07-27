@@ -39,6 +39,24 @@ export const KEYWORDS_OF_COLOR: Record<Color, string[]> = {
 };
 
 /**
+ * v6.9 new-generation keyword per Essence Type. Held in its own table rather
+ * than appended to KEYWORDS_OF_COLOR above on purpose: `pick()` indexes those
+ * lists modulo their length, so growing them would re-roll the keyword of
+ * EVERY card in the pool and invalidate the per-card balance tables. The card
+ * pool instead rolls separately for whether a card takes its colour's new
+ * keyword (see pickUnitKeywords), so only the cards that opt in re-print.
+ */
+export const NEW_KEYWORD_OF_COLOR: Record<Color, string> = {
+  Ember: 'Wildfire',
+  Tide: 'Tidecaller',
+  Root: 'Thriving',
+  Gale: 'Nimble',
+  Light: 'Radiant',
+  Shadow: 'Withering',
+  Void: 'Entropic',
+};
+
+/**
  * A card's color identity: the Essence Types among its cost pips (plus a
  * Location's produced type), stably ordered by COLORS. Empty array =
  * colorless (legal everywhere).

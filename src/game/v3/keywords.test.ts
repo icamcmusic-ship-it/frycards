@@ -27,17 +27,19 @@ const EXPECTED = [
   'Runic', 'Soulbound', // Charm
   'Bountiful', 'Sacred', // Location
   'Commander', 'Resolute', // Leader
+  // v6.9 new-generation Unit keywords: one per Essence Type
+  'Wildfire', 'Tidecaller', 'Thriving', 'Nimble', 'Radiant', 'Withering', 'Entropic',
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook keywords + 10 v6.0 type keywords, unique', () => {
+  test('the 14 rulebook keywords + 10 v6.0 type + 7 v6.9 colour keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
 
   test('every keyword maps to a card type; non-Unit types have exactly 2', () => {
     for (const kw of KEYWORDS) expect(KEYWORD_TYPES[kw]).toBeTruthy();
-    expect(keywordsForType('Unit').length).toBe(16);
+    expect(keywordsForType('Unit').length).toBe(23);
     for (const t of ['Event', 'Charm', 'Location', 'Leader'] as const) {
       expect(keywordsForType(t).length, `${t} keywords`).toBe(2);
     }

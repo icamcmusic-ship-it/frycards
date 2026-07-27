@@ -29,6 +29,15 @@ export const KEYWORDS = [
   // -- v6.0 Unit keywords --
   'Regenerate',
   'Hardened',
+  // -- v6.9 Unit keywords: one new-generation keyword per Essence Type, so
+  // every color gained fresh printable text (see KEYWORDS_OF_COLOR). --
+  'Wildfire', // Ember
+  'Tidecaller', // Tide
+  'Thriving', // Root
+  'Nimble', // Gale
+  'Radiant', // Light
+  'Withering', // Shadow
+  'Entropic', // Void
   // -- v6.0 Event keywords --
   'Surge',
   'Resonant',
@@ -67,6 +76,13 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Immobile: 'Unit',
   Regenerate: 'Unit',
   Hardened: 'Unit',
+  Wildfire: 'Unit',
+  Tidecaller: 'Unit',
+  Thriving: 'Unit',
+  Nimble: 'Unit',
+  Radiant: 'Unit',
+  Withering: 'Unit',
+  Entropic: 'Unit',
   Surge: 'Event',
   Resonant: 'Event',
   Runic: 'Charm',
@@ -100,6 +116,13 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Immobile: "Can't attack.",
   Regenerate: 'At Dawn, heal all damage marked on this unit.',
   Hardened: 'Damage dealt to this unit is reduced by 1.',
+  Wildfire: 'When this unit dies, deal 2 damage to the enemy player.',
+  Tidecaller: 'Whenever this unit deals clash damage, Deal a card.',
+  Thriving: 'At your Dawn, this unit gets +1/+1 permanently.',
+  Nimble: 'Can only be guarded by units with less Might.',
+  Radiant: 'At your Dawn, restore 1 Vitality.',
+  Withering: "Clash damage this deals to a unit permanently reduces that unit's Grit by 1.",
+  Entropic: 'At your Dusk, the enemy erodes 1.',
   Surge: 'Costs 1 less if you already invoked another card this turn.',
   Resonant: 'Its effect resolves twice.',
   Runic: 'When this Charm bonds to a unit from your hand, Deal a card.',
@@ -151,7 +174,10 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Aerial: 3,
   Overrun: 3,
   Quickstrike: 4,
-  Doublestrike: 4,
+  // v6.9: THIRD consecutive pass reading positive in both cohorts
+  // (+6.5/+12.4 in v6.7, +7.6/+7.9 here at n=353/1075). v6.7 said one more
+  // confirming pass before actioning — this is it. 4 -> 5.
+  Doublestrike: 5,
   Venomous: 3,
   Siphon: 0,
   Alert: 2,
@@ -164,8 +190,27 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Immobile: -2,
   Regenerate: 2,
   Hardened: 3,
+  // v6.9 initial weights for the seven new per-color keywords, set by
+  // analogy to the closest already-tuned keyword and re-derived from the
+  // first sim pass that carries them (see docs/BALANCE_SIM_FINDINGS).
+  // Tidecaller/Thriving/Nimble sit at the Aerial/Venomous tier (repeating,
+  // compounding or evasive); Wildfire/Withering at the Regenerate tier
+  // (one-shot or slow); Radiant/Entropic at the Sacred tier (1 point a turn).
+  Wildfire: 2,
+  Tidecaller: 3,
+  Thriving: 3,
+  Nimble: 3,
+  Radiant: 1,
+  Withering: 2,
+  Entropic: 1,
   Surge: 0,
-  Resonant: 2,
+  // v6.9: a three-pass repeat offender. Negative in both cohorts before this
+  // pass's cut (-12.2 / -14.9) and STILL negative in both after 2 -> 1
+  // (-11.9 / -20.3) — at weight 1 the surcharge still rounds up to a full
+  // point of cost. Taken to 0 on the established repeat-offender precedent
+  // (Surge in v6.2, Siphon/Skywatch before it): double-resolution has never
+  // once paid for a surcharge, so it now carries none.
+  Resonant: 0,
   Runic: 1,
   Soulbound: 1,
   Bountiful: 1,
