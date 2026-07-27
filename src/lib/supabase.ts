@@ -674,37 +674,23 @@ export async function claimDailyLogin(): Promise<{
 }
 
 /**
- * Opens the free "Starter Box" every new signup receives: grants the chosen
- * Leader + a legal, auto-saved 60-card deck + 8 bonus commons/uncommons. See
- * `claim_starter_box` (SECURITY DEFINER) for the server-side logic.
+ * Opens the one-time Deck Box every operative receives: grants the chosen
+ * Leader plus a ready-to-play, colour-legal 60-card deck built around them —
+ * exactly 2 Super-Rares and 8 Rares, the rest Uncommons/Commons — and saves
+ * it to the player's decks. See `claim_deck_box` (SECURITY DEFINER) for the
+ * server-side logic, including the per-rarity copy caps and the colour
+ * identity filter.
+ *
+ * Replaces the v7.2 `claimStarterBox`/`claimStarterDeck` pair: the former
+ * built its deck ordered by rarity ASCENDING (so, in practice, 60 Commons)
+ * and never filtered on colour identity, so the deck it auto-saved as
+ * "ready to play" was routinely illegal in the deck editor.
  */
-export async function claimStarterBox(leaderId: string): Promise<{
+export async function claimDeckBox(leaderId: string): Promise<{
   data: (OpenPackResult & { leader_id: string; deck_saved: boolean }) | null;
   error: string | null;
 }> {
-  const { data, error } = await supabase.rpc('claim_starter_box', { p_leader_id: leaderId });
-  return {
-    data: (data as OpenPackResult & { leader_id: string; deck_saved: boolean }) || null,
-    error: rpcError(error),
-  };
-}
-
-/** One of the three fixed Starter Box prebuilt decks (see StarterDeckPicker). */
-export type StarterDeckKey = 'aggro' | 'midrange' | 'control';
-
-/**
- * Alternate Starter Box claim: grants one of three fixed prebuilt 60-card
- * decks (Common/Uncommon-heavy with a small handful of Rares, no
- * Super-Rare-or-above, all non-foil) instead of picking a Leader for a
- * randomized legal deck. Consumes the same one-time Starter Box grant as
- * `claimStarterBox` — see `claim_starter_deck` (SECURITY DEFINER) for the
- * server-side logic.
- */
-export async function claimStarterDeck(deckKey: StarterDeckKey): Promise<{
-  data: (OpenPackResult & { leader_id: string; deck_saved: boolean }) | null;
-  error: string | null;
-}> {
-  const { data, error } = await supabase.rpc('claim_starter_deck', { p_deck_key: deckKey });
+  const { data, error } = await supabase.rpc('claim_deck_box', { p_leader_id: leaderId });
   return {
     data: (data as OpenPackResult & { leader_id: string; deck_saved: boolean }) || null,
     error: rpcError(error),

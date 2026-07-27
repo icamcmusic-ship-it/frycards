@@ -9,13 +9,13 @@ import { RARITY_CHIP } from './rarity';
 import { RARITIES } from '../types';
 import { cn } from '../lib/utils';
 
-// Starter Box picks are capped at Rare or below — enforced again server-side
-// by claim_starter_box (this filter is UI-only, not the source of truth).
-const STARTER_MAX_RARITY_IDX = RARITIES.indexOf('Rare');
+// Deck Box picks are capped at Rare or below — enforced again server-side
+// by claim_deck_box (this filter is UI-only, not the source of truth).
+const DECK_BOX_MAX_RARITY_IDX = RARITIES.indexOf('Rare');
 
 /**
- * Full-screen Leader picker for the one-time Starter Box: the player chooses
- * which Leader to open (Rare rarity or below only) before `claim_starter_box`
+ * Full-screen Leader picker for the one-time Deck Box: the player chooses
+ * which Leader to build around (Rare rarity or below only) before `claim_deck_box`
  * grants that Leader + its deterministic legal 60-card deck. Leader roster
  * comes straight from POOL_LEADERS (populated at boot by App.tsx's
  * applyCardPool call) so there's no duplicate hand-rolled Leader list to
@@ -30,8 +30,8 @@ export function LeaderPicker({
   onPick: (leaderId: string) => void;
   onClose: () => void;
 }) {
-  const starterLeaders = POOL_LEADERS.filter(
-    (l) => RARITIES.indexOf(l.rarity || 'Common') <= STARTER_MAX_RARITY_IDX,
+  const deckBoxLeaders = POOL_LEADERS.filter(
+    (l) => RARITIES.indexOf(l.rarity || 'Common') <= DECK_BOX_MAX_RARITY_IDX,
   );
   const dialogRef = useRef<HTMLDivElement>(null);
   // The parent's `busy` prop only flips true after onPick's async claim call
@@ -56,7 +56,7 @@ export function LeaderPicker({
   }, [busy]);
 
   // Move focus into the dialog on open and restore it to whatever triggered
-  // the Starter Box on close — otherwise a keyboard user opening this stays
+  // the Deck Box on close — otherwise a keyboard user opening this stays
   // focused on the (now hidden-behind-overlay) trigger button.
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;
@@ -71,30 +71,30 @@ export function LeaderPicker({
       className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       role="dialog"
       aria-modal="true"
-      aria-label="Starter Box — pick your Leader"
+      aria-label="Deck Box — pick your Leader"
     >
       <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0">
           <div>
-            <div className="heading-font text-sm text-[var(--c-yellow)]">STARTER BOX</div>
+            <div className="heading-font text-sm text-[var(--c-yellow)]">DECK BOX</div>
             <div className="text-[9px] font-bold text-[var(--c-paper)]/70">
               PICK YOUR LEADER (Rare or below) — this is permanent, but you can build more decks
               later.
             </div>
           </div>
-          <PopButton color="yellow" onClick={onClose} disabled={busy} ariaLabel="Close Starter Box">
+          <PopButton color="yellow" onClick={onClose} disabled={busy} ariaLabel="Close Deck Box">
             ✕
           </PopButton>
         </div>
 
         <div className="p-4">
-          {starterLeaders.length === 0 ? (
+          {deckBoxLeaders.length === 0 ? (
             <div className="text-center font-bold text-[var(--c-steel)] py-10">
               Leaders are still loading — try again in a moment.
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {starterLeaders.map((leader) => (
+              {deckBoxLeaders.map((leader) => (
                 <button
                   key={leader.id}
                   disabled={busy || pickStarted}
@@ -155,7 +155,7 @@ export function LeaderPicker({
           )}
           {busy && (
             <div className="mt-4 text-center heading-font text-xs text-[var(--c-red)]">
-              OPENING YOUR STARTER BOX…
+              BUILDING YOUR DECK…
             </div>
           )}
         </div>
