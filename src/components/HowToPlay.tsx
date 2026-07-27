@@ -181,15 +181,19 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     body: [
       [
         'The ladder',
-        'Common < Uncommon < Rare < Super-Rare < Ultra-Rare < Full-Art < Mythic, low to high. Full-Art now sits ABOVE Ultra-Rare — the second-rarest tier there is, behind Mythic only.',
+        'Common < Uncommon < Rare < Super-Rare < Ultra-Rare < Full-Art < Alt-Art < Mythic, low to high. Full-Art sits ABOVE Ultra-Rare — the third-rarest tier there is, behind Alt-Art and Mythic only.',
       ],
       [
         'Copy caps',
-        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Ultra-Rare/Full-Art: up to 2. Mythic: exactly 1.',
+        'Common/Uncommon/Rare: up to 4 copies in a deck (the rulebook maximum). Super-Rare/Ultra-Rare/Full-Art: up to 2. Alt-Art/Mythic: exactly 1.',
       ],
       [
         'Full-Art',
-        'A visually distinct print tier whose still art fills the entire card edge-to-edge — not stronger than other cards at the same power level, just a rarer, flashier version. Priced, dropped and capped above Ultra-Rare in every system; only Mythic is rarer.',
+        'A visually distinct print tier whose still art fills the entire card edge-to-edge — not stronger than other cards at the same power level, just a rarer, flashier version. Priced, dropped and capped above Ultra-Rare in every system.',
+      ],
+      [
+        'Alt-Art',
+        "A separately-illustrated alternate printing of a hand-picked existing card — same identity and stats, striking new art. Rarer than Full-Art, behind only Mythic. Its own holographic 'Prism Ink' template shifts color slowly across the full-bleed art, distinct from both Mythic's video and a Serialized print's rotating rainbow frame.",
       ],
       [
         'Mythic',

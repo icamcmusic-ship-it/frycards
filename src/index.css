@@ -475,6 +475,58 @@ h4,
   filter: blur(0.3px);
 }
 
+/* Alt-Art "Prism Ink" template (v7.0) — a separately-illustrated alternate
+   printing of a hand-picked existing card, ranked between Full-Art and
+   Mythic. Full-bleed like Full-Art/Mythic, but its signature is a slow
+   hue-rotating holographic wash across the whole face (like shifting foil
+   paper) plus a shimmering pink/violet/cyan frame — deliberately NOT a
+   video (Mythic's territory) and NOT the rotating rainbow ring Serialized
+   already owns. See CardFaceV4.tsx's `altArt` flag and `.aa-*` classes. */
+@keyframes aa-frame-kf {
+  0%,
+  100% {
+    box-shadow:
+      0 0 16px 3px rgba(236, 72, 153, 0.55),
+      0 0 32px 10px rgba(139, 92, 246, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 26px 7px rgba(217, 70, 239, 0.75),
+      0 0 46px 15px rgba(45, 212, 191, 0.4);
+  }
+}
+.aa-frame {
+  animation: aa-frame-kf 3s ease-in-out infinite;
+}
+@keyframes aa-holo-kf {
+  0% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: hue-rotate(35deg);
+  }
+  100% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+}
+.aa-holo {
+  background: linear-gradient(
+    115deg,
+    rgba(236, 72, 153, 0.4),
+    rgba(139, 92, 246, 0.35),
+    rgba(45, 212, 191, 0.35),
+    rgba(250, 204, 21, 0.3),
+    rgba(236, 72, 153, 0.4)
+  );
+  background-size: 280% 280%;
+  animation: aa-holo-kf 7s ease-in-out infinite;
+  mix-blend-mode: color-dodge;
+  opacity: 0.7;
+}
+
 /* Serialized card treatment — the rarest possible pull (a numbered 1-of-N
    print, never foil, see grant_pack_contents' serialized roll). Distinct from
    foil/Mythic: a rotating prismatic conic-gradient frame plus an
@@ -575,6 +627,8 @@ h4,
   .ultra-frame,
   .ultra-banner,
   .ultra-sparkle,
+  .aa-frame,
+  .aa-holo,
   .serialized-frame,
   .serialized-frame::before,
   .serialized-sheen {

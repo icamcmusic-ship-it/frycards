@@ -49,6 +49,11 @@ const RARITY_TIER: Record<string, number> = {
   'Super-Rare': 3,
   'Ultra-Rare': 4,
   'Full-Art': 5,
+  // Alt-Art (v7.0) is a separately-illustrated alternate PRINTING of an
+  // existing card — collectibility-rarer than Full-Art (see rarity.ts's
+  // RARITY_ORDER), but not meant to be a stronger card, so it shares
+  // Full-Art's stat-budget tier rather than getting its own higher one.
+  'Alt-Art': 5,
   Mythic: 6,
 };
 

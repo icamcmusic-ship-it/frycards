@@ -23,11 +23,12 @@ export const MAX_COPIES = 4;
 
 /**
  * Per-rarity deck copy caps: Common/Uncommon/Rare up to the rulebook's 4,
- * Super-Rare/Full-Art/Ultra-Rare up to 2, Mythic exactly 1 (the premium
- * caps are stricter economy limits layered under the rulebook's 4-copy max).
+ * Super-Rare/Full-Art/Ultra-Rare up to 2, Alt-Art/Mythic exactly 1 (the
+ * premium caps are stricter economy limits layered under the rulebook's
+ * 4-copy max).
  */
 export function maxCopiesForRarity(rarity?: string): number {
-  if (rarity === 'Mythic') return 1;
+  if (rarity === 'Mythic' || rarity === 'Alt-Art') return 1;
   if (rarity === 'Super-Rare' || rarity === 'Full-Art' || rarity === 'Ultra-Rare') return 2;
   return MAX_COPIES;
 }

@@ -8,11 +8,16 @@ export const ALL_SET_NAMES: string[] = ['Volume #1'];
 /**
  * Global rarity color code — fixed across every theme, since rarity is a
  * collection/economy signal players learn to recognize, not app chrome.
- * Gray -> Green -> Blue -> Purple -> Gold -> Teal -> Red, low to high.
+ * Gray -> Green -> Blue -> Purple -> Gold -> Teal -> Pink -> Red, low to high.
  *
  * v6.8: Full-Art moved back ABOVE Ultra-Rare — it is now the second-rarest
  * tier, behind Mythic only. Prices, shard costs, pack odds, serialized supply
  * and the deterministic stat budget all follow this order.
+ *
+ * v7.0: Alt-Art added between Full-Art and Mythic — a separately-illustrated
+ * alternate printing of a hand-picked existing card (same identity/stats,
+ * new art), not a whole new pool of cards. See `rarityBleeds`/CardFaceV4's
+ * "Prism Ink" template for its visual treatment.
  */
 export const RARITY_ORDER: string[] = [
   'Common',
@@ -21,6 +26,7 @@ export const RARITY_ORDER: string[] = [
   'Super-Rare',
   'Ultra-Rare',
   'Full-Art',
+  'Alt-Art',
   'Mythic',
 ];
 
@@ -37,6 +43,7 @@ export const RARITY_ABBR: Record<string, string> = {
   'Super-Rare': 'SR',
   'Ultra-Rare': 'UR',
   'Full-Art': 'FA',
+  'Alt-Art': 'AA',
   Mythic: 'MY',
 };
 
@@ -51,6 +58,7 @@ export const RARITY_HEX: Record<string, string> = {
   'Super-Rare': '#A855F7',
   'Full-Art': '#2DD4BF',
   'Ultra-Rare': '#D4AF37',
+  'Alt-Art': '#EC4899',
   Mythic: '#E11D2E',
 };
 
@@ -62,6 +70,7 @@ export const RARITY_CHIP: Record<string, string> = {
   'Super-Rare': 'bg-[#A855F7] text-white',
   'Full-Art': 'bg-[#2DD4BF] text-[#042F2C]',
   'Ultra-Rare': 'bg-[#D4AF37] text-[#1A1A1A]',
+  'Alt-Art': 'bg-[#EC4899] text-white',
   Mythic: 'bg-[#E11D2E] text-white',
 };
 
@@ -73,6 +82,7 @@ export const RARITY_TEXT: Record<string, string> = {
   'Super-Rare': 'text-[#A855F7]',
   'Full-Art': 'text-[#2DD4BF]',
   'Ultra-Rare': 'text-[#D4AF37]',
+  'Alt-Art': 'text-[#EC4899]',
   Mythic: 'text-[#E11D2E]',
 };
 
@@ -84,6 +94,7 @@ export const RARITY_BORDER: Record<string, string> = {
   'Super-Rare': 'border-[#A855F7]',
   'Full-Art': 'border-[#2DD4BF]',
   'Ultra-Rare': 'border-[#D4AF37]',
+  'Alt-Art': 'border-[#EC4899]',
   Mythic: 'border-[#E11D2E]',
 };
 
@@ -95,6 +106,7 @@ export const RARITY_GLOW: Record<string, string> = {
   'Super-Rare': 'shadow-[0_0_28px_8px_rgba(168,85,247,0.45)]',
   'Full-Art': 'shadow-[0_0_32px_9px_rgba(45,212,191,0.5)]',
   'Ultra-Rare': 'shadow-[0_0_36px_10px_rgba(212,175,55,0.55)]',
+  'Alt-Art': 'shadow-[0_0_40px_12px_rgba(236,72,153,0.55)]',
   Mythic: 'shadow-[0_0_45px_14px_rgba(225,29,46,0.6)]',
 };
 
@@ -123,6 +135,8 @@ export const RARITY_BG: Record<string, string> = {
     'linear-gradient(145deg, color-mix(in srgb, #D4AF37 30%, var(--c-paper)) 0%, color-mix(in srgb, #D4AF37 10%, var(--c-paper)) 45%, var(--c-paper) 80%)',
   'Full-Art':
     'linear-gradient(145deg, color-mix(in srgb, #2DD4BF 30%, var(--c-paper)) 0%, color-mix(in srgb, #2DD4BF 10%, var(--c-paper)) 45%, var(--c-paper) 80%)',
+  'Alt-Art':
+    'linear-gradient(145deg, color-mix(in srgb, #EC4899 32%, var(--c-paper)) 0%, color-mix(in srgb, #EC4899 12%, var(--c-paper)) 45%, var(--c-paper) 80%)',
   Mythic:
     'linear-gradient(150deg, color-mix(in srgb, #E11D2E 26%, var(--c-paper)) 0%, color-mix(in srgb, #FFB300 14%, var(--c-paper)) 50%, var(--c-paper) 85%)',
 };
@@ -140,15 +154,24 @@ export function isMythic(rarity?: string): boolean {
   return rarity === 'Mythic';
 }
 
+/** Alt-Art: a separately-illustrated alternate printing of a hand-picked
+ * existing card. Gets its own "Prism Ink" holo template (see CardFaceV4.tsx),
+ * distinct from Mythic's looping video and Serialized's rotating rainbow
+ * frame. */
+export function isAltArt(rarity?: string): boolean {
+  return rarity === 'Alt-Art';
+}
+
 // ---------------------------------------------------------------------------
 // v6.8 card-template predicates — the "Gold Foil" template set (see
-// CardFaceV4.tsx). Full-Art and Mythic print edge-to-edge art with the card
-// text floating over it; everything else keeps the framed 4:3 art box.
+// CardFaceV4.tsx). Full-Art, Alt-Art and Mythic print edge-to-edge art with
+// the card text floating over it; everything else keeps the framed 4:3 art
+// box.
 // ---------------------------------------------------------------------------
 
 /** Full-bleed template: art fills the whole card footprint. */
 export function rarityBleeds(rarity?: string): boolean {
-  return rarity === 'Full-Art' || rarity === 'Mythic';
+  return rarity === 'Full-Art' || rarity === 'Alt-Art' || rarity === 'Mythic';
 }
 
 /** Super-Rare and up — the framed template's animated art treatments

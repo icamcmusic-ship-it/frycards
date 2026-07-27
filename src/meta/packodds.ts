@@ -3,9 +3,14 @@
  * transparent per-slot breakdown before purchase.
  *
  * Two slot shapes exist in `pack_types.slot_config`:
- *  - explicit: { slot_type, count, rarity_weights, ... } — odds read directly
+ *  - explicit: { slot_type, count, rarity_weights, ... } — odds read directly.
+ *    Every pack_types row currently live uses this shape.
  *  - legacy:   { type: 'wildcard' } — odds live in the `roll_slot_rarity`
- *    Postgres function; LEGACY_SLOT_WEIGHTS below must stay in sync with it.
+ *    Postgres function (still called by `grant_pack_contents` as a fallback
+ *    whenever a slot has no `rarity_weights`); LEGACY_SLOT_WEIGHTS below must
+ *    stay in sync with it. No shipped pack uses this shape today, but the
+ *    fallback path is real — don't delete it without also retiring the
+ *    server-side `roll_slot_rarity` function.
  */
 import { PackSlot, PackType } from '../lib/supabase';
 
@@ -54,6 +59,7 @@ const RARITY_ORDER = [
   'Super-Rare',
   'Ultra-Rare',
   'Full-Art',
+  'Alt-Art',
   'Mythic',
 ];
 

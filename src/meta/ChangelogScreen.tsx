@@ -12,6 +12,15 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Alt-Art Update (v7.1)',
+    date: 'July 2026',
+    items: [
+      'A new rarity: Alt-Art. It sits between Full-Art and Mythic on the ladder — a separately-illustrated alternate printing of a hand-picked existing card (same identity, same stats, striking new art), not a whole new pool of cards. Its own "Prism Ink" template gives it a slow hue-shifting holographic wash across the full-bleed art plus a pink/violet frame, deliberately distinct from Mythic\'s looping video and Serialized\'s rotating rainbow ring. Quicksells for 1,800 credits and caps at 1 copy per deck, same as Mythic.',
+      "Pack odds now carve out a small Alt-Art share everywhere Full-Art could drop (chase and box topper slots), so the tier is live end-to-end even before the first Alt-Art card ships — until then a roll quietly resolves to Full-Art instead.",
+      "Fixed a latent ordering bug in the server's rarity-pool-exhaustion fallback: it still walked the pre-v6.8 ladder (Ultra-Rare above Full-Art), out of step with every price, cap and pack-odds table. Also fixed the Starter Box's Leader-rarity check, which had no entry for Full-Art at all and would have silently let a Full-Art Leader through the \"Rare or lower\" restriction.",
+    ],
+  },
+  {
     version: 'Board & Shops Update (v7.0)',
     date: 'July 2026',
     items: [
