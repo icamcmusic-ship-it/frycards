@@ -1536,7 +1536,18 @@ export function GameV4({
       if (!already) {
         const legal = legalGuardsFor(g, guardFocus).some((u) => u.iid === unitIid);
         if (!legal) {
-          say("That unit can't guard this attacker (exhausted, or Aerial rules).");
+          // Say WHICH rule blocked it rather than listing every rule that
+          // could have — with Aerial, Nimble and exhaustion all in play, a
+          // generic message leaves the player guessing.
+          const attacker = findUnit(g, guardFocus);
+          const unit = findUnit(g, unitIid);
+          let why = "That unit can't guard this attacker.";
+          if (unit?.exhausted) why = `${unit.def.name} is exhausted and can't guard.`;
+          else if (attacker && unit && unitHasKw(attacker, 'Aerial'))
+            why = `${attacker.def.name} is Aerial — only Aerial or Skywatch units can guard it.`;
+          else if (attacker && unit && unitHasKw(attacker, 'Nimble'))
+            why = `${attacker.def.name} is Nimble — only a unit with LESS Might can guard it.`;
+          say(why);
           return sel;
         }
         next[guardFocus] = [...(next[guardFocus] ?? []), unitIid];

@@ -14,6 +14,7 @@
     "format:check": "prettier --check src scripts",
     "test": "vitest run",
     "fetch:cards": "tsx scripts/fetch-cards.ts",
+    "verify:pool": "tsx scripts/verify-pool.ts",
     "db:backfill": "tsx scripts/backfill-cards-db.ts",
     "sim:v4": "tsx scripts/simulate-v5.ts"
   },

@@ -117,7 +117,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Guard restrictions',
-        'Aerial attackers can only be guarded by Aerial or Skywatch units. Swarmproof attackers must be guarded by two or more units, or not at all.',
+        'Aerial attackers can only be guarded by Aerial or Skywatch units. Nimble attackers can only be guarded by a unit with LESS Might. Swarmproof attackers must be guarded by two or more units, or not at all. Once an attacker is guarded it stays guarded — removing the blocker mid-clash does not let the attack through (only Overrun spills).',
       ],
       [
         'Reaction window',
@@ -129,21 +129,22 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'State checks',
-        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — Unbreakable units survive. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
+        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — Unbreakable units survive. A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
       ],
     ],
   },
   {
     title: '6 · Keywords',
-    // v6.0: every card type has its own keyword vocabulary — non-Unit
-    // keywords are labeled with the type they appear on.
-    body: KEYWORDS.map(
-      (kw) =>
-        [
-          KEYWORD_TYPES[kw] === 'Unit' ? kw : `${kw} (${KEYWORD_TYPES[kw]})`,
-          KEYWORD_TEXT[kw],
-        ] as [string, string],
-    ),
+    // v6.0 gave every card type its own keyword vocabulary and v6.9 added
+    // one more per Essence Type, which made a single flat A-to-Z list of 31
+    // entries hard to read. Grouped under a heading per card type instead,
+    // in the order a player meets them.
+    body: (['Unit', 'Event', 'Charm', 'Location', 'Leader'] as const).flatMap((type) => [
+      [`— ${type} keywords —`, ''] as [string, string],
+      ...KEYWORDS.filter((kw) => KEYWORD_TYPES[kw] === type).map(
+        (kw) => [kw, KEYWORD_TEXT[kw]] as [string, string],
+      ),
+    ]),
   },
   {
     title: '7 · Essence Identity (the Seven Colors)',
@@ -327,7 +328,18 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
             </button>
             {open === i && (
               <dl className="px-4 py-3 grid gap-2 text-sm">
-                {sec.body.map(([term, desc]) => (
+                {sec.body.map(([term, desc]) =>
+                  // A row with no description is a group heading (see the
+                  // Keywords section) — render it full-width, not as a
+                  // term chip with an empty definition beside it.
+                  desc === '' ? (
+                    <div
+                      key={term}
+                      className="text-[10px] font-mono font-black tracking-widest text-[var(--c-steel)] uppercase pt-2 first:pt-0"
+                    >
+                      {term}
+                    </div>
+                  ) : (
                   <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
                     <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
                       {sec.title.includes('Essence Identity') && (
@@ -354,7 +366,8 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                       {desc}
                     </dd>
                   </div>
-                ))}
+                  ),
+                )}
                 {sec.title === '9 · Rarity System' && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {RARITY_ORDER.map((r) => (
@@ -372,7 +385,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          FRY CARDS RULEBOOK V6.0
+          FRY CARDS RULEBOOK V6.9
         </div>
       </div>
     </div>
