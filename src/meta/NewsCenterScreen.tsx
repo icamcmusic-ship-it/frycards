@@ -8,6 +8,7 @@ import {
   NewsPost,
   SerializedFeedEntry,
   createNewsPost,
+  subscribeTable,
 } from '../lib/supabase';
 import { ENTRIES } from './ChangelogScreen';
 import { RARITY_CHIP } from './rarity';
@@ -87,6 +88,29 @@ export function NewsCenterScreen({
 
   useEffect(() => {
     load();
+  }, []);
+
+  // A news post going up or a Serialized print being pulled anywhere on the
+  // server should appear here without a re-navigation — this screen is the
+  // live feed.
+  useEffect(() => {
+    let timer: number | undefined;
+    const bump = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(load, 600);
+    };
+    const offPosts = subscribeTable('news_posts', bump);
+    // The pull feed is built from serialized_supply (world-readable), not the
+    // per-owner player_serialized_cards table.
+    const offSerial = subscribeTable('serialized_supply', bump);
+    return () => {
+      window.clearTimeout(timer);
+      offPosts();
+      offSerial();
+    };
+    // `load` is a stable closure over refs/setters recreated each render;
+    // re-subscribing on every render would churn the socket.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isCreator = profile?.role === 'creator';

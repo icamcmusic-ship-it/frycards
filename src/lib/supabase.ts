@@ -14,6 +14,59 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 export type { Session };
 
 // ---------------------------------------------------------------------------
+// Realtime
+//
+// The `supabase_realtime` publication carries the tables that change under a
+// player's feet — storefront stock, purchases, auctions, trades, friend
+// requests, news and the caller's own collection/inventory. Realtime evaluates
+// the same RLS SELECT policies the REST reads do, so a subscriber only ever
+// receives rows it is already allowed to read.
+//
+// Every subscription in the app goes through this helper so the channel name
+// stays unique (two channels with the same name silently share one
+// subscription) and the unsubscribe path is a single returned function.
+// ---------------------------------------------------------------------------
+export type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
+
+let realtimeChannelSeq = 0;
+
+/**
+ * Subscribe to changes on one table, optionally narrowed by a PostgREST-style
+ * filter (e.g. `owner=eq.<uuid>`).
+ *
+ * Returns an unsubscribe function; call it from an effect cleanup. Safe to call
+ * more than once.
+ */
+export function subscribeTable(
+  table: string,
+  onChange: (payload: { eventType: string; new: any; old: any }) => void,
+  opts: { filter?: string; event?: RealtimeEvent } = {},
+): () => void {
+  const channel = supabase
+    .channel(`rt:${table}:${++realtimeChannelSeq}`)
+    .on(
+      'postgres_changes' as any,
+      {
+        event: opts.event ?? '*',
+        schema: 'public',
+        table,
+        ...(opts.filter ? { filter: opts.filter } : {}),
+      },
+      (payload: any) => {
+        onChange({ eventType: payload.eventType, new: payload.new, old: payload.old });
+      },
+    )
+    .subscribe();
+
+  let removed = false;
+  return () => {
+    if (removed) return;
+    removed = true;
+    supabase.removeChannel(channel);
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Row types
 // ---------------------------------------------------------------------------
 export interface CardRow {
@@ -1087,10 +1140,41 @@ export async function fetchCardBlendedReference(cardId: string, foil = false): P
   return data as number;
 }
 
+/** Storefront accent — drives the header wash, chips and buttons on a public
+ * shop so two shops never look like the same page. */
+export type ShopAccent =
+  | 'yellow'
+  | 'red'
+  | 'steel'
+  | 'ink'
+  | 'ember'
+  | 'tide'
+  | 'root'
+  | 'gale'
+  | 'light'
+  | 'shadow'
+  | 'void';
+
+export const SHOP_ACCENTS: ShopAccent[] = [
+  'yellow',
+  'red',
+  'steel',
+  'ink',
+  'ember',
+  'tide',
+  'root',
+  'gale',
+  'light',
+  'shadow',
+  'void',
+];
+
 export interface PlayerShop {
   owner: string;
   name: string;
   banner_url: string | null;
+  tagline: string | null;
+  accent: ShopAccent;
   status: 'active' | 'dormant';
   slots_purchased: number;
   last_maintenance_at: string;
@@ -1117,9 +1201,17 @@ export interface MysterySlotSpec {
   rarity?: string;
 }
 
+/** "Every pack contains at least `count` cards of `rarity` or better." Checked
+ * cumulatively at pool-submission time and honoured first by the draw. */
+export interface MysteryGuarantee {
+  rarity: string;
+  count: number;
+}
+
 export interface MysteryTemplateConfig {
   rarity_weights?: Record<string, number>;
   slots?: MysterySlotSpec[];
+  guarantees?: MysteryGuarantee[];
 }
 
 export interface MysteryTemplate {
@@ -1175,9 +1267,14 @@ export interface ShopPublic {
   owner: string;
   name: string;
   banner_url: string | null;
+  tagline: string | null;
+  accent: ShopAccent;
   status: 'active' | 'dormant';
   created_at: string;
   sales_count: number;
+  repeat_buyers: number;
+  /** Active listing counts keyed by listing type. */
+  stock: Partial<Record<ShopListingType, number>>;
   unique_buyers: number;
   rating_unlocked: boolean;
   composite_score: number | null;
@@ -1187,9 +1284,16 @@ export interface BrowseShopEntry {
   owner: string;
   name: string;
   banner_url: string | null;
+  tagline: string | null;
+  accent: ShopAccent;
+  owner_username: string | null;
   status: 'active' | 'dormant';
   created_at: string;
   sales_count: number;
+  active_listings: number;
+  mystery_listings: number;
+  cheapest_price: number | null;
+  top_rarity_tier: number | null;
   trending_score: number;
   composite_score: number;
   rating_unlocked: boolean;
@@ -1203,6 +1307,65 @@ export interface MysteryPoolValidation {
   ev_per_pack?: number;
   suggested_min?: number;
   suggested_max?: number;
+  /** Cards in the submitted pool, counted per rarity. */
+  rarity_breakdown?: Record<string, number>;
+}
+
+/** One (card, foil) line of a mystery listing's publicly disclosed pool. */
+export interface MysteryPoolEntry {
+  card_id: string;
+  foil: boolean;
+  rarity: string;
+  tier: number;
+  name: string;
+  image_url: string | null;
+  card_type: string | null;
+  submitted: number;
+  remaining: number;
+  reference_value: number;
+}
+
+export interface MysteryPoolRarityRow {
+  rarity: string;
+  tier: number;
+  submitted: number;
+  remaining: number;
+  pull_chance_pct: number | null;
+}
+
+/** Everything a buyer can see about a mystery listing before paying for it:
+ * the whole submitted pool, what's left of it, and the odds that implies. */
+export interface MysteryPoolPublic {
+  listing_id: string;
+  template_name: string | null;
+  mode: MysteryMode | null;
+  pack_size: number | null;
+  price: number;
+  total_packs: number | null;
+  remaining_packs: number | null;
+  status: ShopListingStatus;
+  guarantees: MysteryGuarantee[];
+  rarity_weights: Record<string, number>;
+  slots: MysterySlotSpec[];
+  ev_frozen: number | null;
+  cards_remaining: number;
+  cards: MysteryPoolEntry[];
+  rarities: MysteryPoolRarityRow[];
+}
+
+/** A card the caller may actually list: spare copies only, already netted of
+ * deck locks and serialized prints by the server. */
+export interface ListableCard {
+  card_id: string;
+  name: string;
+  rarity: string;
+  tier: number;
+  card_type: string | null;
+  image_url: string | null;
+  spare_normal: number;
+  spare_foil: number;
+  value_normal: number;
+  value_foil: number;
 }
 
 export interface MysteryLiveStats {
@@ -1323,11 +1486,56 @@ export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase
   return (data as ShopPurchase[]) || [];
 }
 
+export async function fetchMysteryPoolPublic(listingId: string): Promise<MysteryPoolPublic | null> {
+  const { data, error } = await supabase.rpc('get_mystery_pool_public', {
+    p_listing_id: listingId,
+  });
+  if (error) {
+    console.error('fetchMysteryPoolPublic failed:', error.message);
+    throw error;
+  }
+  return (data as MysteryPoolPublic) || null;
+}
+
+/** The caller's listable (spare) collection, computed server-side with the
+ * same deck-lock + serialized reservations the escrow check enforces — so a
+ * bulk "add every spare Uncommon" can never stage more than will be accepted. */
+export async function fetchListableInventory(): Promise<ListableCard[]> {
+  const { data, error } = await supabase.rpc('get_listable_inventory');
+  if (error) {
+    console.error('fetchListableInventory failed:', error.message);
+    throw error;
+  }
+  return (data as ListableCard[]) || [];
+}
+
 // -- shop lifecycle -------------------------------------------------------
-export async function openShop(name: string, bannerUrl?: string | null): Promise<string | null> {
+export async function openShop(
+  name: string,
+  bannerUrl?: string | null,
+  tagline?: string | null,
+  accent?: ShopAccent | null,
+): Promise<string | null> {
   const { error } = await supabase.rpc('open_shop', {
     p_name: name,
     p_banner_url: bannerUrl ?? null,
+    p_tagline: tagline ?? null,
+    p_accent: accent ?? null,
+  });
+  return rpcError(error);
+}
+
+export async function updateShop(
+  name: string,
+  bannerUrl?: string | null,
+  tagline?: string | null,
+  accent?: ShopAccent | null,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('update_shop', {
+    p_name: name,
+    p_banner_url: bannerUrl ?? null,
+    p_tagline: tagline ?? null,
+    p_accent: accent ?? null,
   });
   return rpcError(error);
 }
