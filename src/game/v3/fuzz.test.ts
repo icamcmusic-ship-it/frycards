@@ -170,6 +170,14 @@ describe('soak — full AI matches over randomized real-catalog decks', () => {
         turns += 1;
         // Dusk sheds the acting player down to MAX_HAND; the player who is
         // about to act may legitimately be holding more mid-Deal.
+        //
+        // A turn that ENDS the game is the documented exception: playTurn
+        // skips endPhase once a winner is set (`if (!state.winner && ...)`),
+        // so the winning turn never reaches Dusk and never sheds. Asserting
+        // through it was checking a phase that provably did not run — it only
+        // stayed green because no deck this soak built had ever drawn a card
+        // in the clash reaction window of a lethal turn.
+        if (g.winner) break;
         expect(
           g.players[acting].hand.length,
           `seed ${seed}: ${acting} left its turn holding ${g.players[acting].hand.length}`,

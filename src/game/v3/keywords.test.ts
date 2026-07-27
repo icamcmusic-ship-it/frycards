@@ -13,7 +13,9 @@ import {
   isKeyword,
   keywordLabel,
   keywordsForType,
+  KEYWORD_COLOR,
 } from './keywords';
+import { poolHasKeyword } from './cardpool';
 import { KEYWORDS_OF_COLOR } from './colors';
 
 const EXPECTED = [
@@ -51,19 +53,63 @@ const EXPECTED = [
   'Radiant',
   'Withering',
   'Entropic',
+  // v7.3 non-Unit keywords, each themed to one Essence Type
+  'Echoing',
+  'Ritual', // Event
+  'Empowering',
+  'Tethered', // Charm
+  'Bulwark',
+  'Blighted',
+  'Archivist', // Location
+  'Warlord', // Leader
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook keywords + 10 v6.0 type + 7 v6.9 colour keywords, unique', () => {
+  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 non-Unit keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
 
-  test('every keyword maps to a card type; non-Unit types have exactly 2', () => {
+  test('every keyword maps to a card type; every non-Unit type gained options', () => {
     for (const kw of KEYWORDS) expect(KEYWORD_TYPES[kw]).toBeTruthy();
     expect(keywordsForType('Unit').length).toBe(23);
-    for (const t of ['Event', 'Charm', 'Location', 'Leader'] as const) {
-      expect(keywordsForType(t).length, `${t} keywords`).toBe(2);
+    // v7.3: was a flat 2 apiece. Leader keeps the smallest vocabulary on
+    // purpose — there are only 9 Leaders in the pool, so a Leader-only
+    // keyword is thinly printed by construction (which is why Archivist was
+    // moved to Location, where ~50 cards can carry it).
+    const counts: Record<string, number> = {
+      Event: 4,
+      Charm: 4,
+      Location: 5,
+      Leader: 3,
+    };
+    for (const [t, n] of Object.entries(counts)) {
+      expect(keywordsForType(t as 'Event').length, `${t} keywords`).toBe(n);
+    }
+  });
+
+  test('v7.3: every new non-Unit keyword is colour-themed and actually printed', () => {
+    const NEW = [
+      'Echoing',
+      'Ritual',
+      'Empowering',
+      'Tethered',
+      'Bulwark',
+      'Blighted',
+      'Archivist',
+      'Warlord',
+    ] as const;
+    // Each carries an Essence Type, and between them they cover all seven —
+    // the point of the pass was that the non-Unit types had no colour
+    // identity in their keyword vocabulary at all.
+    const colours = new Set(NEW.map((kw) => KEYWORD_COLOR[kw]));
+    expect(colours.size).toBe(7);
+    for (const kw of NEW) expect(KEYWORD_COLOR[kw], `${kw} colour`).toBeTruthy();
+    // Dead text is the failure mode this pass had to design around: a strict
+    // colour match left Echoing, Ritual and Bulwark on ZERO cards. Every new
+    // keyword must appear on at least one card in the real pool.
+    for (const kw of NEW) {
+      expect(poolHasKeyword(kw).length, `${kw} has no carriers`).toBeGreaterThan(0);
     }
   });
 

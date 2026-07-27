@@ -7,7 +7,43 @@ const PER_IMAGE_TIMEOUT_MS = 12_000;
  * recovering from it. */
 const CONCURRENCY = 24;
 
+/** True when `url` points at a video file rather than a still image — kept in
+ * sync with CardFaceV4's isVideoSrc, since Full-Art/Mythic cards print .mp4
+ * art (see CardArt). */
+function isVideoSrc(url: string): boolean {
+  return /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
+}
+
 function loadOne(url: string): Promise<void> {
+  // A video URL fed to `new Image()` fails to decode immediately — the
+  // browser fires onerror right away, so it was counting as "loaded" without
+  // ever issuing a real network request. Every Full-Art/Mythic card's art was
+  // therefore never actually preloaded and still stalled/popped in the first
+  // time it rendered in game. Preload it the way CardArt actually plays it:
+  // through a <video> element buffering its data.
+  if (isVideoSrc(url)) {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.preload = 'auto';
+      video.muted = true;
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        video.oncanplaythrough = null;
+        video.onerror = null;
+        video.src = '';
+        video.load();
+        resolve();
+      };
+      const timer = window.setTimeout(settle, PER_IMAGE_TIMEOUT_MS);
+      video.oncanplaythrough = settle;
+      video.onerror = settle;
+      video.src = url;
+      video.load();
+    });
+  }
   return new Promise((resolve) => {
     const img = new Image();
     let settled = false;

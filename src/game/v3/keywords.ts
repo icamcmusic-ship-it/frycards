@@ -50,6 +50,20 @@ export const KEYWORDS = [
   // -- v6.0 Leader keywords --
   'Commander',
   'Resolute',
+  // -- v7.3: a second keyword pair for every NON-Unit type. Units had 23
+  // keywords and the other four types had two apiece, so an Event/Charm/
+  // Location/Leader's keyword slot was a coin flip between the same two
+  // options on every card in the pool. Each new keyword is themed to one
+  // Essence Type (see KEYWORD_COLOR) so all seven colours gain printable
+  // non-Unit text, the same way v6.9 did for Units. --
+  'Echoing', // Event — Tide
+  'Ritual', // Event — Root
+  'Empowering', // Charm — Ember
+  'Tethered', // Charm — Gale
+  'Bulwark', // Location — Light
+  'Blighted', // Location — Void
+  'Warlord', // Leader — Shadow
+  'Archivist', // Location — Tide
 ] as const;
 
 export type Keyword = (typeof KEYWORDS)[number];
@@ -91,6 +105,37 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Sacred: 'Location',
   Commander: 'Leader',
   Resolute: 'Leader',
+  Echoing: 'Event',
+  Ritual: 'Event',
+  Empowering: 'Charm',
+  Tethered: 'Charm',
+  Bulwark: 'Location',
+  Blighted: 'Location',
+  Warlord: 'Leader',
+  Archivist: 'Location',
+};
+
+/**
+ * v7.3: the Essence Type each NON-Unit keyword reads as. Units already had
+ * this via NEW_KEYWORD_OF_COLOR in colors.ts; the other four types had no
+ * colour identity in their keyword vocabulary at all, so a Void Location and
+ * a Light Location drew from the same two-keyword pool. The non-Unit mappers
+ * use this to prefer a keyword that matches the card's own colour.
+ *
+ * Keywords with no entry here are colourless and legal on any card of their
+ * type (Surge, Resonant, Runic, Soulbound, Bountiful, Sacred, Commander,
+ * Resolute) — the v6.0 set stays universal so nothing that prints today
+ * stops being printable.
+ */
+export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
+  Echoing: 'Tide',
+  Ritual: 'Root',
+  Empowering: 'Ember',
+  Tethered: 'Gale',
+  Bulwark: 'Light',
+  Blighted: 'Void',
+  Warlord: 'Shadow',
+  Archivist: 'Tide',
 };
 
 /** Keywords legal on a given card type. */
@@ -131,6 +176,14 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Sacred: 'At your Dawn, restore 1 Vitality.',
   Commander: 'While your Leader is on the field, your units get +1 Might.',
   Resolute: 'At your Dawn, your invoked Leader recovers 1 Resolve (up to its starting value).',
+  Echoing: 'When this Event resolves, Deal a card.',
+  Ritual: 'Costs 1 less if you control 3 or more Sanctums.',
+  Empowering: 'At your Dawn, the bonded unit gets +1/+0 permanently.',
+  Tethered: 'When this Charm bonds to a unit from your hand, recover that unit.',
+  Bulwark: 'Damage dealt to you is reduced by 1.',
+  Blighted: 'At your Dusk, the enemy erodes 1.',
+  Warlord: 'While your Leader is on the field, your units get +0/+1.',
+  Archivist: 'At your Dawn, Deal a card if you control 3 or more Sanctums.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -246,6 +299,19 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Sacred: 1,
   Commander: 2,
   Resolute: 1,
+  // v7.3 initial weights, set by analogy to the closest already-tuned
+  // keyword — these have never been through a sim pass, so they are first
+  // candidates for the next balance run. Note keywordCostAdj is
+  // Math.round(w / 2), so this table's effective resolution is TWO: a 1 -> 2
+  // step is a no-op on a single-keyword carrier (see the Sacred note above).
+  Echoing: 2, // a cantrip on an Event — Runic (1) on the Charm side, one step up
+  Ritual: 0, // conditional discount, same shape and same price as Surge
+  Empowering: 3, // compounding growth, priced with Thriving
+  Tethered: 1, // one-shot tempo, priced with Ambush
+  Bulwark: 3, // permanent damage reduction on the player, priced with Hardened
+  Blighted: 1, // 1 erosion a turn, priced with Entropic
+  Warlord: 2, // a stat aura on a Leader, priced with Commander
+  Archivist: 3, // repeating, build-around card advantage, priced with Tidecaller
 };
 
 /** Short label for card-face chips. */

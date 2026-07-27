@@ -73,6 +73,14 @@ restore it, and a unit withered to 0 Grit is shattered by the state checks.
 | Sacred (Location) | At your Dawn, restore 1 Vitality |
 | Commander (Leader) | While your Leader is on the field, your units get +1 Might |
 | Resolute (Leader) | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
+| Echoing (Event) | When this Event resolves, Deal a card |
+| Ritual (Event) | Costs 1 less if you control 3 or more Sanctums |
+| Empowering (Charm) | At your Dawn, the bonded unit gets +1/+0 permanently |
+| Tethered (Charm) | When this Charm bonds to a unit from your hand, recover that unit |
+| Bulwark (Location) | Damage dealt to you is reduced by 1 |
+| Blighted (Location) | At your Dusk, the enemy erodes 1 |
+| Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums |
+| Warlord (Leader) | While your Leader is on the field, your units get +0/+1 |
 
 ### Zones
 
@@ -122,7 +130,8 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 ## 4. Turn Structure
 
 1. **Dawn Phase** — Recover all your exhausted permanents; Regenerate units
-   heal; Sacred Locations and Resolute Leaders tick; "at Dawn" triggers;
+   heal; Sacred Locations, Archivist Sanctums and Resolute Leaders tick;
+   Empowering Charms grow their bonded unit; "at Dawn" triggers;
    Deal one card (the first player skips this on turn 1).
 2. **Main Phase I** — Invoke Units, Charms, Events, Sanctums, or your
    Leader; play one basic Wellspring (once per turn — the second player gets
@@ -140,6 +149,10 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 - A cost's colored pips must be paid with matching Essence; the generic
   part with any Essence. Unspent Essence empties at the end of each phase.
 - Surge Events cost 1 less once you have invoked another card this turn.
+- Ritual Events cost 1 less while you control three or more Sanctums. "Sanctum"
+  means a Location CARD — basic Wellsprings are not Sanctums and never count
+  toward Ritual or Archivist.
+- A card carrying both Surge and Ritual still discounts only once.
 - Slow Events, Charms, Sanctums, and Leaders: own main phases only.
   Quick Events and Ambush cards: any priority window — **[digital]** in this
   client that means your main phases plus the guard-step reaction window of
@@ -211,7 +224,7 @@ the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
 
 | Phase | What happens |
 |---|---|
-| Dawn | Recover, Regenerate/Sacred/Resolute, triggers, Deal one card |
+| Dawn | Recover, Regenerate/Sacred/Resolute/Archivist/Empowering, triggers, Deal one card |
 | Main I | Invoke spells, play one Wellspring |
 | Clash | Attack, guard, deal damage |
 | Main II | Invoke spells |

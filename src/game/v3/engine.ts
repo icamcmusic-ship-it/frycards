@@ -220,6 +220,27 @@ function commanderBonus(p: PlayerState): number {
   return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Commander') ? 1 : 0;
 }
 
+/** v7.3 Warlord: Commander's defensive twin — +1 Grit to all your units
+ * while your Leader is fielded. */
+function warlordBonus(p: PlayerState): number {
+  return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Warlord') ? 1 : 0;
+}
+
+/** v7.3: how many real Sanctums (Location CARDS) a player controls. Basic
+ * Wellsprings sit in the same `locations` array with no `def`, so a plain
+ * `locations.length` counts them too — which would leave Ritual and Archivist
+ * switched on permanently from about turn 3, since Wellsprings only ever
+ * accumulate. Both keywords say "Sanctums", and this is what that means. */
+function sanctumCount(p: PlayerState): number {
+  return p.locations.filter((l) => l.def).length;
+}
+
+/** v7.3 Bulwark: each Bulwark Sanctum shaves 1 off every point of damage
+ * dealt to its controller. Stacks, but can never reduce a hit below 0. */
+function bulwarkReduction(p: PlayerState): number {
+  return p.locations.filter((l) => l.def && hasKw(l.def, 'Bulwark')).length;
+}
+
 export function effMight(state: GameState, u: UnitInst): number {
   const p = state.players[u.owner];
   const charm = u.charms.reduce((s, c) => s + (c.def.bond?.might ?? 0), 0);
@@ -232,7 +253,10 @@ export function effMight(state: GameState, u: UnitInst): number {
 export function effGrit(state: GameState, u: UnitInst): number {
   const p = state.players[u.owner];
   const charm = u.charms.reduce((s, c) => s + (c.def.bond?.grit ?? 0), 0);
-  return Math.max(0, (u.def.grit ?? 0) + u.permGrit + charm + sanctumBonus(p, 'GRIT_ALL'));
+  return Math.max(
+    0,
+    (u.def.grit ?? 0) + u.permGrit + charm + sanctumBonus(p, 'GRIT_ALL') + warlordBonus(p),
+  );
 }
 
 export function remainingGrit(state: GameState, u: UnitInst): number {
@@ -594,8 +618,13 @@ function damageUnit(state: GameState, u: UnitInst, amount: number, source?: Unit
 
 function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: UnitInst): void {
   if (amount <= 0) return;
-  state.players[pid].vitality -= amount;
-  if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, amount);
+  // v7.3 Bulwark: reduce before anything else reads the number, so Siphon
+  // gains only what actually landed.
+  const reduced = Math.max(0, amount - bulwarkReduction(state.players[pid]));
+  if (reduced <= 0) return;
+  if (reduced < amount) telemetry.onKeywordProc?.('Bulwark', amount - reduced);
+  state.players[pid].vitality -= reduced;
+  if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, reduced);
 }
 
 /**
@@ -837,6 +866,12 @@ function runDawn(state: GameState): void {
       p.vitality += 1;
       telemetry.onKeywordProc?.('Radiant', 1);
     }
+    // v7.3 Empowering: each Empowering Charm grows the unit it is bonded to.
+    const empowering = u.charms.filter((c) => hasKw(c.def, 'Empowering')).length;
+    if (empowering > 0) {
+      u.permMight += empowering;
+      telemetry.onKeywordProc?.('Empowering', empowering);
+    }
   }
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
@@ -850,6 +885,16 @@ function runDawn(state: GameState): void {
     if (l.def && hasKw(l.def, 'Sacred') && p.vitality < LEADER_HP) {
       p.vitality += 1;
       telemetry.onKeywordProc?.('Sacred', 1);
+    }
+  }
+  // v7.3 Archivist: card advantage that only switches on once the Sanctum
+  // board is actually built out — the payoff half of a ramp deck, where
+  // Ritual (below, on Events) is the discount half.
+  if (sanctumCount(p) >= 3) {
+    const archivists = p.locations.filter((l) => l.def && hasKw(l.def, 'Archivist')).length;
+    if (archivists > 0) {
+      telemetry.onKeywordProc?.('Archivist', archivists);
+      dealCards(state, state.active, archivists);
     }
   }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
@@ -873,6 +918,12 @@ function runDusk(state: GameState): void {
   if (entropic > 0) {
     telemetry.onKeywordProc?.('Entropic', entropic);
     applyEffect(state, state.active, { action: 'erode', value: entropic, target: 'enemyPlayer' });
+  }
+  // v7.3 Blighted: Entropic's Location-side counterpart.
+  const blighted = p.locations.filter((l) => l.def && hasKw(l.def, 'Blighted')).length;
+  if (blighted > 0) {
+    telemetry.onKeywordProc?.('Blighted', blighted);
+    applyEffect(state, state.active, { action: 'erode', value: blighted, target: 'enemyPlayer' });
   }
   // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
   // the player reorder/pre-shed before ending Main II).
@@ -1014,7 +1065,12 @@ export function effectiveCost(
 ): EssenceCost | undefined {
   const cost = def.cost;
   if (!cost) return cost;
-  if (!hasKw(def, 'Surge') || !state.players[pid].invokedCardThisTurn) return cost;
+  const surged = hasKw(def, 'Surge') && state.players[pid].invokedCardThisTurn;
+  // v7.3 Ritual: the same shape of conditional discount as Surge, on a
+  // different condition (a built-out Sanctum board rather than a second
+  // invoke this turn). A card carrying both still only ever discounts once.
+  const ritual = hasKw(def, 'Ritual') && sanctumCount(state.players[pid]) >= 3;
+  if (!surged && !ritual) return cost;
   if (cost.generic > 0) return { generic: cost.generic - 1, pips: cost.pips };
   for (const t of COLORS) {
     if ((cost.pips[t] ?? 0) > 0) {
@@ -1122,6 +1178,12 @@ export function invokeCard(
             : undefined;
         applyEffect(state, pid, def.onInvoke, target);
       }
+      // v7.3 Echoing: the Event replaces itself. Draws once however many
+      // times its effect resolved — Resonant doubles the effect, not the card.
+      if (hasKw(def, 'Echoing')) {
+        telemetry.onKeywordProc?.('Echoing', 1);
+        dealCards(state, pid, 1);
+      }
       p.ashPile.push(card);
       break;
     }
@@ -1131,6 +1193,12 @@ export function invokeCard(
       if (hasKw(def, 'Runic')) {
         telemetry.onKeywordProc?.('Runic', 1);
         dealCards(state, pid, 1);
+      }
+      // v7.3 Tethered: bonding untaps the unit it lands on, so a Charm can
+      // buy back an attack or a guard the turn it is played.
+      if (hasKw(def, 'Tethered') && bondTarget!.exhausted) {
+        telemetry.onKeywordProc?.('Tethered', 1);
+        bondTarget!.exhausted = false;
       }
       if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
       break;

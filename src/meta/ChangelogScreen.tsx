@@ -12,6 +12,18 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Art, Deck Box & Keywords Update (v7.3)',
+    date: 'July 2026',
+    items: [
+      'Fixed: every card in the game was showing a blank "NO IMAGE" plate instead of its art. The image library had been reorganised into new folders but every card still pointed at the old folder names, so all 292 arts failed to load. All 297 cards now resolve to real art.',
+      'Fixed: the animated art on Full-Art and Mythic cards was never actually being preloaded on the loading screen — video art was being loaded as if it were a still image, which fails instantly and silently. The loading bar could hit 100% with those cards still unfetched, so they popped in mid-game. They now genuinely preload.',
+      'The Starter Box is replaced by the DECK BOX, and every operative gets one — new and existing. Pick any Rare-or-below Leader and it opens into a ready-to-play, colour-legal 60-card deck built around them: 2 Super-Rares, 8 Rares, and Uncommons/Commons filling a real curve, with a 12-Sanctum mana base. It saves straight to your decks. The old Starter Box handed out what was effectively 60 Commons and never checked colour identity, so the deck it saved was frequently illegal in the deck editor. The three prebuilt starter decks and the old Starter Pack are retired.',
+      'Eight new keyword abilities, one per Essence Type, for Events, Charms, Locations and Leaders — types that had only two keywords each while Units had 23. Echoing (Event: draws you a card when it resolves), Ritual (Event: costs 1 less with 3+ Sanctums), Empowering (Charm: grows its unit every Dawn), Tethered (Charm: recovers the unit it bonds to), Bulwark (Location: reduces damage dealt to you by 1), Blighted (Location: erodes the enemy each Dusk), Archivist (Location: draws you a card each Dawn with 3+ Sanctums) and Warlord (Leader: your units get +0/+1). 25 existing cards gained one of these abilities.',
+      'Every Unit at Rare or above now prints an ability. 37 cards — including Full-Art pulls — had rolled no keywords and no effect, printing a bare stat line with no rules text at all. Vanilla bodies are still a normal part of the curve at Common and Uncommon.',
+      'Card revisions: 19 cards renamed, reflavoured or moved rarity, six of them changing type entirely. Void Mother is now a Leader (Void/Shadow). Five new cards join the set, bringing it to 297: Blossom-Veiled Refuge, Cruel Effervescence, Blight-Snarler, Curse of the Ruby Tide and Stag of the Cosmic Pyre.',
+    ],
+  },
+  {
     version: 'Packs & Leaders Update (v7.2)',
     date: 'July 2026',
     items: [

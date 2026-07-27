@@ -225,8 +225,8 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         "The Volume #1 Booster Box is six boosters' worth (36 cards) in one big rip at a bulk discount, ending in a guaranteed-foil box topper (Rare floor).",
       ],
       [
-        'Starter Box',
-        'Every new account claims one free Starter Box from the Store: pick any Rare-or-below Leader and it opens into that Leader, a ready-to-play legal 60-card deck built around it, and some bonus cards.',
+        'Deck Box',
+        'Every operative claims one free Deck Box from the Store: pick any Rare-or-below Leader and it opens into that Leader plus a ready-to-play, colour-legal 60-card deck built around them — 2 Super-Rares, 8 Rares, and Uncommons/Commons to fill the curve. The deck is saved to your decks automatically.',
       ],
       [
         'Mass opening',
