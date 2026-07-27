@@ -24,7 +24,14 @@ import { totalCost } from './cards';
 import type { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import { COLORS, KEYWORDS_OF_COLOR, LEADER_COLORS, NEW_KEYWORD_OF_COLOR, Color } from './colors';
-import { KEYWORD_COST, KEYWORD_TEXT, Keyword, isKeyword } from './keywords';
+import {
+  KEYWORD_COLOR,
+  KEYWORD_COST,
+  KEYWORD_TEXT,
+  Keyword,
+  isKeyword,
+  keywordsForType,
+} from './keywords';
 
 // ---------------------------------------------------------------------------
 // Deterministic hashing — FNV-1a, same util style as the v4.x pool, so the
@@ -576,6 +583,28 @@ function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
   return out;
 }
 
+/**
+ * v7.3: the new keyword a NON-Unit card of this type and colour prints.
+ *
+ * Prefers the keyword whose KEYWORD_COLOR matches the card's own colour, and
+ * falls back to any v7.3 keyword legal on the type when the colour has none.
+ * The fallback is what makes these printable at all: each type only gained
+ * TWO new keywords, so a strict colour match would leave five of the seven
+ * colours with nothing and — measured on the real pool — left Echoing, Ritual
+ * and Bulwark with ZERO carriers, i.e. dead text.
+ */
+function freshKeywordFor(
+  seed: string,
+  type: CardDef['type'],
+  color: Color | undefined,
+): string | undefined {
+  const all = keywordsForType(type).filter((kw) => KEYWORD_COLOR[kw] !== undefined);
+  if (!all.length) return undefined;
+  const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
+  const list = onColor.length ? onColor : all;
+  return pick(seed, 27, list) as string;
+}
+
 function mapUnit(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
@@ -717,8 +746,20 @@ function mapEvent(c: CardTemplate): CardDef {
   // (double resolution, rare+ only). Surcharges come from KEYWORD_COST via
   // keywordCostAdj — the effect is scaled from the PRE-surcharge total so it
   // doesn't double a full-cost effect for free.
+  // v7.3 adds a third band (26..42) for the new Event keywords. The 0..26
+  // bands are untouched, so every existing Surge/Resonant carrier re-prints
+  // byte-identically and only cards that previously rolled NO keyword pick
+  // one up — priced, as always, through KEYWORD_COST.
   const kwRoll = roll(seed, 'ev-kw', 100);
-  const keywords: string[] = kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
+  const evFresh =
+    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Event', colors[0]) : undefined;
+  const keywords: string[] = evFresh
+    ? [evFresh]
+    : kwRoll < 14
+      ? ['Surge']
+      : kwRoll < 26 && rt >= 1
+        ? ['Resonant']
+        : [];
   const kwAdj = keywordCostAdj(keywords);
   const base = baseTotal(seed, rt);
   const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
@@ -759,8 +800,15 @@ function mapCharm(c: CardTemplate): CardDef {
   // Soulbound (returns to hand when its unit dies). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ch-kw2', 100);
-  const charmKws: string[] =
-    kwRoll < 12 ? ['Runic'] : kwRoll < 24 && subtype === 'Bound' ? ['Soulbound'] : [];
+  const chFresh =
+    kwRoll >= 24 && kwRoll < 40 ? freshKeywordFor(seed, 'Charm', colors[0]) : undefined;
+  const charmKws: string[] = chFresh
+    ? [chFresh]
+    : kwRoll < 12
+      ? ['Runic']
+      : kwRoll < 24 && subtype === 'Bound'
+        ? ['Soulbound']
+        : [];
   const kwAdj = keywordCostAdj(charmKws);
   const base = baseTotal(seed, rt);
   const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
@@ -837,7 +885,15 @@ function mapLocation(c: CardTemplate): CardDef {
   // any other ability), ~14% Sacred (Dawn lifegain). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'loc-kw2', 100);
-  const locKws: string[] = kwRoll < 12 ? ['Bountiful'] : kwRoll < 26 ? ['Sacred'] : [];
+  const locFresh =
+    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Location', produces) : undefined;
+  const locKws: string[] = locFresh
+    ? [locFresh]
+    : kwRoll < 12
+      ? ['Bountiful']
+      : kwRoll < 26
+        ? ['Sacred']
+        : [];
   const kwAdj = keywordCostAdj(locKws);
   // Base total keeps the pre-v6 1..4 clamp so keyword-free Sanctums price
   // identically; the keyword surcharge stacks on top (ceiling 6).
@@ -1172,9 +1228,17 @@ function mapLeader(c: CardTemplate): CardDef {
   // from KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ldr-kw6', 6);
   const stripped = new Set(LEADER_KEYWORD_STRIP[c.id] ?? []);
-  const leaderKws: string[] = (kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []).filter(
-    (kw) => !stripped.has(kw),
-  );
+  // v7.3: rolls 4-5 (previously "no keyword") now take a new Leader keyword,
+  // matched against whichever half of the identity has one. Rolls 0..3 keep
+  // Commander/Resolute exactly as before, and LEADER_KEYWORD_STRIP still
+  // applies last so a stripped Leader stays stripped.
+  const leaderFreshColor =
+    identity.find((col) => keywordsForType('Leader').some((kw) => KEYWORD_COLOR[kw] === col)) ??
+    identity[0];
+  const ldrFresh = kwRoll >= 4 ? freshKeywordFor(seed, 'Leader', leaderFreshColor) : undefined;
+  const leaderKws: string[] = (
+    ldrFresh ? [ldrFresh] : kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []
+  ).filter((kw) => !stripped.has(kw));
   const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));

@@ -37,6 +37,80 @@ version of this history also powers the in-app Changelog screen
   one, or move it between types — which is why the two catalogs were able to
   drift apart in the first place.
 
+#### Keywords — a second pair for every non-Unit type
+
+- **Units had 23 keywords; Event, Charm, Location and Leader had two apiece.**
+  So a non-Unit card's keyword slot was a coin flip between the same two
+  options on every card in the pool, and none of those four types had any
+  colour identity in its vocabulary at all — a Void Location and a Light
+  Location drew from the same two keywords. Eight new keywords, one per
+  Essence Type, each wired to a real engine hook:
+  - **Echoing** (Event, Tide) — when this Event resolves, Deal a card.
+  - **Ritual** (Event, Root) — costs 1 less if you control 3+ Sanctums.
+  - **Empowering** (Charm, Ember) — at your Dawn, the bonded unit gets +1/+0
+    permanently.
+  - **Tethered** (Charm, Gale) — bonding from hand recovers that unit.
+  - **Bulwark** (Location, Light) — damage dealt to you is reduced by 1.
+  - **Blighted** (Location, Void) — at your Dusk, the enemy erodes 1.
+  - **Archivist** (Location, Tide) — at your Dawn, Deal a card if you control
+    3+ Sanctums.
+  - **Warlord** (Leader, Shadow) — Commander's defensive twin: your units get
+    +0/+1 while your Leader is fielded.
+- **Archivist is a Location keyword, not the Leader keyword it started as.**
+  There are only 9 Leaders in the whole pool, so a Leader-only keyword is
+  thinly printed by construction — the first draft put both Archivist and
+  Warlord on Leaders and shipped Warlord to **zero** carriers. Locations have
+  ~50 cards, so moving it there is what makes it printable at all; Leader
+  keeps the smallest vocabulary on purpose.
+- **The new keywords get their own roll band rather than substituting.**
+  v6.9's Unit generation was a swap (a keyword-carrying card traded its legacy
+  keyword for its colour's new one), and reusing that rule here left Echoing,
+  Ritual and Bulwark on zero cards — the substitution only fires on the ~26%
+  of cards that already carry a keyword, times a 30% roll, times a 1-in-7
+  colour match. Each non-Unit mapper now has a band ABOVE its legacy ones, so
+  the 0..26 bands are untouched (every existing Surge/Resonant/Runic/
+  Soulbound/Bountiful/Sacred carrier re-prints byte-identically) and only
+  cards that previously rolled NO keyword pick one up. **25 existing cards**
+  gained new abilities this way, resynced to `public.cards`.
+- **"Sanctum" means a Location card.** Ritual and Archivist first shipped
+  reading `locations.length`, which counts basic Wellsprings — and since
+  Wellsprings only accumulate, that left both switched on permanently from
+  about turn 3. Both now count real Sanctums via `sanctumCount`.
+- **Bulwark cannot invert into healing.** The reduction clamps at 0 before
+  anything reads the number, so a 1-point hit into two Bulwarks is absorbed
+  rather than gaining Vitality — and Siphon gains only what actually landed.
+- **Fuzz soak: the hand-cap invariant exempts the game-ending turn.**
+  `playTurn` skips `endPhase` once a winner is set, so a lethal turn never
+  reaches Dusk and never sheds to MAX_HAND. The assertion was checking a phase
+  that provably had not run; it only stayed green because no deck the soak
+  built had ever drawn a card in the clash reaction window of a lethal turn,
+  which Echoing now makes reachable.
+
+#### New-operative Deck Box (replaces the starter pack/deck system)
+
+- **`claim_starter_box` built a deck of 60 Commons and never checked colour
+  identity.** It ordered the whole catalog by rarity ASCENDING and took the
+  first 60, so the "ready to play" deck it auto-saved was both a pile of
+  Commons and routinely illegal in the deck editor. `claim_starter_deck` was a
+  second parallel path handing out three fixed prebuilt lists. Both are gone.
+- **One `claim_deck_box(p_leader_id)`**, which builds a colour-legal 60-card
+  deck around the chosen Leader with a fixed mix: exactly **2 Super-Rares and
+  8 Rares**, the rest Uncommons/Commons, plus a 12-Sanctum mana base and a
+  cheap-first curve on the filler. Per-rarity copy caps match the client's
+  `maxCopiesForRarity`, and selection is hashed on the player id so two
+  operatives picking the same Leader do not open identical decks.
+- **Super-Rare/Rare picks allow any non-Leader type on purpose.** Ruin-Walker
+  Overseer's only colour-legal Super-Rare IS a Location, so restricting those
+  buckets to non-Locations makes that Leader unbuildable. Locations landing in
+  those buckets count toward the 12-Sanctum target rather than stacking on it.
+  Verified across all six eligible Leaders: 60 cards, 2 SR, 8 Rare, 50 basics,
+  zero colour-illegal, zero over-cap.
+- Every existing profile is granted the box once (idempotent backfill);
+  `handle_new_user` grants it to new signups. The old pack types are
+  deactivated and their inventory rows removed. The client drops
+  `StarterDeckPicker` and the two-way choice modal — the box opens straight
+  into the Leader picker.
+
 #### Catalog
 
 - **19 cards revised**: renames and new flavor for Apex Nanite Shinobi
