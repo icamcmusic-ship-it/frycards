@@ -11,9 +11,7 @@ const leader = POOL_BY_ID['avatar_of_the_abyss'];
 // `leader`'s identity now that validateDeckList enforces it.
 const identity = LEADER_COLORS[leader.id];
 const units = POOL_V4.filter((c) => c.type !== 'Leader' && isColorLegal(c, identity));
-const offColorUnits = POOL_V4.filter(
-  (c) => c.type !== 'Leader' && !isColorLegal(c, identity),
-);
+const offColorUnits = POOL_V4.filter((c) => c.type !== 'Leader' && !isColorLegal(c, identity));
 
 function fillDeck(n: number, maxPerCard = MAX_COPIES): string[] {
   const ids: string[] = [];

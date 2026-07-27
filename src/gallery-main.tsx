@@ -92,7 +92,13 @@ function Gallery() {
               size={size}
             />
           ))}
-          <Band title="Serialized" note="numbered prints" cards={serialCards} size={size} serialized />
+          <Band
+            title="Serialized"
+            note="numbered prints"
+            cards={serialCards}
+            size={size}
+            serialized
+          />
           <Band
             title="Foil Print"
             note="one per rarity, static prismatic (no motion)"

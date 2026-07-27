@@ -861,33 +861,33 @@ function SummaryStage({
               )
               .filter((grp) => grp.count > 0)
               .map((grp, gi) => {
-              const allSold = grp.indices.every((i) => sold.has(i));
-              return (
-                <div key={gi} className="relative">
-                  <CardFace
-                    def={pullToDef(grp.pull)}
-                    size="compact"
-                    foil={grp.pull.foil}
-                    count={grp.count > 1 ? grp.count : undefined}
-                    dimmed={grp.pull.converted_to_credits || allSold}
-                    serial={
-                      grp.pull.serialized
-                        ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
-                        : undefined
-                    }
-                  />
-                  {(grp.pull.converted_to_credits || allSold) && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
-                        {allSold && !grp.pull.converted_to_credits
-                          ? 'SOLD'
-                          : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                const allSold = grp.indices.every((i) => sold.has(i));
+                return (
+                  <div key={gi} className="relative">
+                    <CardFace
+                      def={pullToDef(grp.pull)}
+                      size="compact"
+                      foil={grp.pull.foil}
+                      count={grp.count > 1 ? grp.count : undefined}
+                      dimmed={grp.pull.converted_to_credits || allSold}
+                      serial={
+                        grp.pull.serialized
+                          ? { number: grp.pull.serial_number!, cap: grp.pull.serial_cap! }
+                          : undefined
+                      }
+                    />
+                    {(grp.pull.converted_to_credits || allSold) && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+                          {allSold && !grp.pull.converted_to_credits
+                            ? 'SOLD'
+                            : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

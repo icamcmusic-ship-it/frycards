@@ -50,10 +50,9 @@ test('units have sane stats and only real keywords', () => {
   }
   for (const c of POOL_V4) {
     for (const kw of c.keywords ?? []) {
-      expect(
-        (KEYWORDS as readonly string[]).includes(kw),
-        `${c.id}: unknown keyword "${kw}"`,
-      ).toBe(true);
+      expect((KEYWORDS as readonly string[]).includes(kw), `${c.id}: unknown keyword "${kw}"`).toBe(
+        true,
+      );
     }
     expect(new Set(c.keywords ?? []).size, `${c.id}: duplicate keywords`).toBe(
       (c.keywords ?? []).length,

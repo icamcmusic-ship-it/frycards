@@ -196,7 +196,11 @@ export function AuthScreen() {
             disabled={busy}
             className="btn-pop w-full py-3 bg-[var(--c-red)] text-[var(--c-paper)] heading-font ink-border-sm shadow-hard-black-xs disabled:opacity-50"
           >
-            {busy ? 'CONTACTING FRY CARDS…' : mode === 'signin' ? 'ENTER FRY CARDS' : 'FORGE ACCOUNT'}
+            {busy
+              ? 'CONTACTING FRY CARDS…'
+              : mode === 'signin'
+                ? 'ENTER FRY CARDS'
+                : 'FORGE ACCOUNT'}
           </button>
 
           <div className="flex items-center gap-2 my-1">

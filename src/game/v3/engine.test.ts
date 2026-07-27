@@ -39,7 +39,13 @@ import {
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
-const U = (id: string, might: number, grit: number, keywords: string[] = [], extra: Partial<CardDef> = {}): CardDef => ({
+const U = (
+  id: string,
+  might: number,
+  grit: number,
+  keywords: string[] = [],
+  extra: Partial<CardDef> = {},
+): CardDef => ({
   id,
   name: id,
   type: 'Unit',
@@ -57,7 +63,11 @@ const LEADER: CardDef = {
   cost: { generic: 1, pips: {} },
   resolve: 3,
   leaderAbilities: [
-    { resolveDelta: -1, effect: { action: 'damage', value: 2, target: 'anyTarget' }, text: '-1: 2 dmg' },
+    {
+      resolveDelta: -1,
+      effect: { action: 'damage', value: 2, target: 'anyTarget' },
+      text: '-1: 2 dmg',
+    },
     { resolveDelta: 1, effect: { action: 'draw', value: 1, target: 'none' }, text: '+1: deal 1' },
   ],
 };
@@ -269,12 +279,20 @@ describe('timing', () => {
   test('Slow events only in own main phase; Quick/Ambush usable in the reaction window', () => {
     const s = game();
     const slow: CardDef = {
-      id: 'slow_ev', name: 'slow', type: 'Event', subtype: 'Slow',
-      cost: { generic: 0, pips: {} }, onInvoke: { action: 'draw', value: 0, target: 'none' },
+      id: 'slow_ev',
+      name: 'slow',
+      type: 'Event',
+      subtype: 'Slow',
+      cost: { generic: 0, pips: {} },
+      onInvoke: { action: 'draw', value: 0, target: 'none' },
     };
     const quick: CardDef = {
-      id: 'quick_ev', name: 'quick', type: 'Event', subtype: 'Quick',
-      cost: { generic: 0, pips: {} }, onInvoke: { action: 'damage', value: 1, target: 'anyTarget' },
+      id: 'quick_ev',
+      name: 'quick',
+      type: 'Event',
+      subtype: 'Quick',
+      cost: { generic: 0, pips: {} },
+      onInvoke: { action: 'damage', value: 1, target: 'anyTarget' },
     };
     const ambush = U('ambusher', 1, 1, ['Ambush']);
     const slowIid = toHand(s, 'P2', slow);
@@ -477,13 +495,19 @@ describe('Warded', () => {
     const dmg = { action: 'damage' as const, value: 3, target: 'enemyUnit' as const };
     expect(canTarget(s, 'P1', dmg, w.iid)).toBe(false);
     const ev: CardDef = {
-      id: 'bolt', name: 'bolt', type: 'Event', subtype: 'Slow',
-      cost: { generic: 0, pips: {} }, onInvoke: dmg,
+      id: 'bolt',
+      name: 'bolt',
+      type: 'Event',
+      subtype: 'Slow',
+      cost: { generic: 0, pips: {} },
+      onInvoke: dmg,
     };
     const iid = toHand(s, 'P1', ev);
     expect(invokeCard(s, 'P1', iid, { targetIid: w.iid })).toBe(false);
     // Friendly buffs on your own Warded unit are fine.
-    expect(canTarget(s, 'P2', { action: 'buff', value: 1, target: 'friendlyUnit' }, w.iid)).toBe(true);
+    expect(canTarget(s, 'P2', { action: 'buff', value: 1, target: 'friendlyUnit' }, w.iid)).toBe(
+      true,
+    );
   });
 });
 
@@ -520,12 +544,21 @@ describe('leader', () => {
 // Charms
 // ---------------------------------------------------------------------------
 const BOUND_CHARM: CardDef = {
-  id: 'bound_charm', name: 'Bound Charm', type: 'Charm', subtype: 'Bound',
-  cost: { generic: 0, pips: {} }, bond: { might: 1, grit: 2 },
+  id: 'bound_charm',
+  name: 'Bound Charm',
+  type: 'Charm',
+  subtype: 'Bound',
+  cost: { generic: 0, pips: {} },
+  bond: { might: 1, grit: 2 },
 };
 const WORN_CHARM: CardDef = {
-  id: 'worn_charm', name: 'Worn Charm', type: 'Charm', subtype: 'Worn',
-  cost: { generic: 0, pips: {} }, rebondCost: 2, bond: { might: 2, grants: ['Quickstrike'] },
+  id: 'worn_charm',
+  name: 'Worn Charm',
+  type: 'Charm',
+  subtype: 'Worn',
+  cost: { generic: 0, pips: {} },
+  rebondCost: 2,
+  bond: { might: 2, grants: ['Quickstrike'] },
 };
 
 describe('charms', () => {

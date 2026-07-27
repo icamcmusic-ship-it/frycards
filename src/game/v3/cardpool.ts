@@ -23,13 +23,7 @@ import type {
 import { totalCost } from './cards';
 import type { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
-import {
-  COLORS,
-  KEYWORDS_OF_COLOR,
-  LEADER_COLORS,
-  NEW_KEYWORD_OF_COLOR,
-  Color,
-} from './colors';
+import { COLORS, KEYWORDS_OF_COLOR, LEADER_COLORS, NEW_KEYWORD_OF_COLOR, Color } from './colors';
 import { KEYWORD_COST, KEYWORD_TEXT, Keyword, isKeyword } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -44,8 +38,7 @@ function hash(s: string): number {
   }
   return h >>> 0;
 }
-const pick = <T>(seed: string, salt: number, arr: T[]): T =>
-  arr[(hash(seed) + salt) % arr.length];
+const pick = <T>(seed: string, salt: number, arr: T[]): T => arr[(hash(seed) + salt) % arr.length];
 /** Uniform integer in [0, n) from a salted hash of the card's seed. */
 const roll = (seed: string, salt: string, n: number): number => hash(`${seed}:${salt}`) % n;
 
@@ -337,7 +330,11 @@ function newThemedEffect(color: Color | undefined, v: number): Effect | undefine
   const val = Math.max(1, v);
   switch (color) {
     case 'Ember': // sweeping fire, not just a single bolt
-      return { action: 'damage', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'allEnemyUnits' };
+      return {
+        action: 'damage',
+        value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+        target: 'allEnemyUnits',
+      };
     case 'Tide': // tempo denial
       return { action: 'exhaust', target: 'enemyUnit' };
     case 'Root': // mass regrowth
@@ -347,9 +344,17 @@ function newThemedEffect(color: Color | undefined, v: number): Effect | undefine
     case 'Light': // a blessing over the whole board
       return { action: 'heal', value: Math.max(1, Math.ceil(val / 2)), target: 'allFriendlyUnits' };
     case 'Shadow': // attrition rather than removal
-      return { action: 'weaken', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' };
+      return {
+        action: 'weaken',
+        value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+        target: 'enemyUnit',
+      };
     case 'Void': // unmake it a piece at a time
-      return { action: 'weaken', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' };
+      return {
+        action: 'weaken',
+        value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+        target: 'enemyUnit',
+      };
     default:
       return undefined;
   }
@@ -365,7 +370,11 @@ function themedEffect(seed: string, color: Color | undefined, v: number): Effect
     case 'Ember':
       return { action: 'damage', value: val, target: 'anyTarget' };
     case 'Tide':
-      return { action: 'draw', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'none' };
+      return {
+        action: 'draw',
+        value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+        target: 'none',
+      };
     case 'Root':
       return { action: 'buff', value: Math.max(1, Math.ceil(val / 2)), target: 'friendlyUnit' };
     case 'Gale':
@@ -376,17 +385,33 @@ function themedEffect(seed: string, color: Color | undefined, v: number): Effect
       return { action: 'heal', value: val, target: 'friendlyAny' };
     case 'Shadow':
       return roll(seed, 'shadow-fx', 2) === 0
-        ? { action: 'damage', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' }
-        : { action: 'erode', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyPlayer' };
+        ? {
+            action: 'damage',
+            value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+            target: 'enemyUnit',
+          }
+        : {
+            action: 'erode',
+            value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+            target: 'enemyPlayer',
+          };
     case 'Void':
       return roll(seed, 'void-fx', 2) === 0
         ? { action: 'erode', value: Math.max(1, Math.min(4, val)), target: 'enemyPlayer' }
-        : { action: 'damage', value: Math.max(1, Math.min(3, Math.ceil(val / 2))), target: 'enemyUnit' };
+        : {
+            action: 'damage',
+            value: Math.max(1, Math.min(3, Math.ceil(val / 2))),
+            target: 'enemyUnit',
+          };
     default:
       // Colorless: neutral utility.
       return roll(seed, 'gray-fx', 2) === 0
         ? { action: 'draw', value: 1, target: 'none' }
-        : { action: 'damage', value: Math.max(1, Math.min(2, Math.ceil(val / 2))), target: 'enemyUnit' };
+        : {
+            action: 'damage',
+            value: Math.max(1, Math.min(2, Math.ceil(val / 2))),
+            target: 'enemyUnit',
+          };
   }
 }
 
@@ -462,9 +487,9 @@ function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
   const out: string[] = [];
   if (primaryList.length) out.push(pick(seed, 9, primaryList) as string);
   if (count >= 2) {
-    const secondList = (
-      colors[1] ? KEYWORDS_OF_COLOR[colors[1]] : primaryList
-    ).filter((kw) => legal(kw) && !out.includes(kw));
+    const secondList = (colors[1] ? KEYWORDS_OF_COLOR[colors[1]] : primaryList).filter(
+      (kw) => legal(kw) && !out.includes(kw),
+    );
     if (secondList.length) out.push(pick(seed, 13, secondList) as string);
   }
   // v6.9: roughly a quarter of keyword-carrying units swap their PRIMARY
@@ -516,7 +541,10 @@ function mapUnit(c: CardTemplate): CardDef {
   // clamp the two expressions are identical (naturalT - kwAdj = base), so
   // this is a no-op there and only removes the double penalty at the ceiling.
   const statBase = Math.max(1, base);
-  const budget = Math.max(2, 2 * statBase + (roll(seed, 'stat-spread', 4) - 1) + statAdjustFor(c.id));
+  const budget = Math.max(
+    2,
+    2 * statBase + (roll(seed, 'stat-spread', 4) - 1) + statAdjustFor(c.id),
+  );
   const primary = colors[0];
   const mightShare =
     primary === 'Ember' || primary === 'Gale'
@@ -593,7 +621,11 @@ function eventEffect(seed: string, color: Color | undefined, t: number, slow: bo
         ? { action: 'heal', value: Math.min(6, v + 1), target: 'friendlyAny' }
         : { action: 'buff', value: Math.max(1, Math.ceil(v / 2)), target: 'friendlyUnit' };
     case 'Root':
-      return { action: 'buff', value: Math.max(1, Math.min(3, Math.ceil(v / 3))), target: 'allFriendlyUnits' };
+      return {
+        action: 'buff',
+        value: Math.max(1, Math.min(3, Math.ceil(v / 3))),
+        target: 'allFriendlyUnits',
+      };
     case 'Gale':
       return roll(seed, 'gale-ev', 2) === 0
         ? { action: 'recover', target: 'friendlyUnit' }
@@ -612,8 +644,7 @@ function mapEvent(c: CardTemplate): CardDef {
   // keywordCostAdj — the effect is scaled from the PRE-surcharge total so it
   // doesn't double a full-cost effect for free.
   const kwRoll = roll(seed, 'ev-kw', 100);
-  const keywords: string[] =
-    kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
+  const keywords: string[] = kwRoll < 14 ? ['Surge'] : kwRoll < 26 && rt >= 1 ? ['Resonant'] : [];
   const kwAdj = keywordCostAdj(keywords);
   const base = baseTotal(seed, rt);
   const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
@@ -669,7 +700,11 @@ function mapCharm(c: CardTemplate): CardDef {
   const statBudget = Math.max(1, t + 1 - (subtype === 'Worn' ? 1 : 0));
   const mShare = roll(seed, 'ch-split', 3); // 0 mighty, 1 even, 2 gritty
   const might =
-    mShare === 0 ? Math.ceil(statBudget * 0.7) : mShare === 2 ? Math.floor(statBudget * 0.3) : Math.round(statBudget / 2);
+    mShare === 0
+      ? Math.ceil(statBudget * 0.7)
+      : mShare === 2
+        ? Math.floor(statBudget * 0.3)
+        : Math.round(statBudget / 2);
   const grit = Math.max(0, statBudget - might);
   const bond: NonNullable<CardDef['bond']> = {};
   if (might > 0) bond.might = might;
@@ -734,8 +769,10 @@ function mapLocation(c: CardTemplate): CardDef {
   // identically; the keyword surcharge stacks on top (ceiling 6).
   const total = Math.min(
     6,
-    Math.max(1, Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id))) +
-      kwAdj,
+    Math.max(
+      1,
+      Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id)),
+    ) + kwAdj,
   );
   const cost: EssenceCost = { generic: total - 1, pips: { [produces]: 1 } };
 
@@ -973,9 +1010,9 @@ function mapLeader(c: CardTemplate): CardDef {
   // from KEYWORD_COST via keywordCostAdj.
   const kwRoll = roll(seed, 'ldr-kw6', 6);
   const stripped = new Set(LEADER_KEYWORD_STRIP[c.id] ?? []);
-  const leaderKws: string[] = (
-    kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []
-  ).filter((kw) => !stripped.has(kw));
+  const leaderKws: string[] = (kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []).filter(
+    (kw) => !stripped.has(kw),
+  );
   const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));

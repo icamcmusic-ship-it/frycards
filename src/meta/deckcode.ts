@@ -55,7 +55,9 @@ export function decodeDeckCode(
     // each individual entry's own count.
     const total = (totals.get(id) || 0) + n;
     if (total > cap)
-      return { error: `Too many total copies of ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).` };
+      return {
+        error: `Too many total copies of ${id} (max ${cap} cop${cap === 1 ? 'y' : 'ies'}).`,
+      };
     totals.set(id, total);
     for (let i = 0; i < n; i++) cardIds.push(id);
     // Cap the whole deck, not just per-card copies — a concatenated code
