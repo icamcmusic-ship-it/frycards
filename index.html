@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <!-- maximum-scale is deliberately absent: pinning it to 1.0 disables
+      pinch-zoom, which fails WCAG 1.4.4 and takes away the only way to read
+      the board's smallest text on a phone. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0b0d" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,4 +17,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

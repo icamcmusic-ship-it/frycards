@@ -346,7 +346,7 @@ describe('v7.2 Leader kits', () => {
     }
   });
 
-  test('exactly one Leader kit still has no answer to the enemy board', () => {
+  test('every Leader kit can answer the enemy board', () => {
     // `mapLeader` takes the minus ability from identity[0] and the plus from
     // identity[1], and neither is rolled — they are the literal array order in
     // LEADER_COLORS. A Leader whose pair happens to be written
@@ -354,13 +354,22 @@ describe('v7.2 Leader kits', () => {
     // the enemy board at all. v7.2 fixed the three such Leaders that were
     // below baseline in both cohorts.
     //
-    // Mer-King is the fourth, and it is deliberately LEFT alone: it has the
-    // same fully non-interactive kit ('-1: Deal a card' + '+1: Restore 2
-    // Vitality' — byte-identical to Ethereal Sea Witch's pre-v6.9 kit) and it
-    // sits at 46.8% / 48.8%, dead centre of the spread. So a kit with no
-    // answer is NOT sufficient on its own to sink a Leader, and this test
-    // pins that counter-example down so the next pass cannot quietly
-    // "fix" Mer-King on a theory the data does not support.
+    // Mer-King was the fourth, and v7.2 deliberately LEFT it alone: same fully
+    // non-interactive kit ('-1: Deal a card' + '+1: Restore 2 Vitality'), but
+    // it sat at 46.8% / 48.8%, dead centre of the spread. This test used to
+    // pin that as a counter-example — a kit with no answer was not sufficient
+    // on its own to sink a Leader — specifically so a later pass could not
+    // quietly "fix" Mer-King on a theory the data did not support.
+    //
+    // v7.4: the data now supports it. The counter-example did not survive the
+    // v7.3 pool (Void Mother reassigned to Leader, eight new keywords, 19
+    // cards revised): re-measured on the current catalog at 6x32 in both
+    // cohorts, Mer-King reads **35.1% (n=1488) / 33.4% (n=1860)** — bottom or
+    // second-bottom on the two largest Leader samples in the run, not dead
+    // centre. It was given `-3: All enemy units get -1/-1` and moved to 52.2%
+    // / 47.1%, mid-table in both. So the assertion inverts: EVERY Leader kit
+    // now answers the board, and `minusColorFor` keeps it that way for the
+    // next Leader printed without another hand override.
     const interactive = new Set(['damage', 'shatter', 'banish', 'weaken', 'exhaust', 'erode']);
     const leaders = Object.values(POOL_BY_ID).filter((d) => d.type === 'Leader');
     // 9 since v7.3, when Void Mother was reassigned Unit -> Leader. Its
@@ -370,7 +379,7 @@ describe('v7.2 Leader kits', () => {
     const noAnswer = leaders
       .filter((l) => !(l.leaderAbilities ?? []).some((a) => interactive.has(a.effect.action)))
       .map((l) => l.id);
-    expect(noAnswer).toEqual(['mer_king']);
+    expect(noAnswer).toEqual([]);
   });
 
   test('a Leader ability cannot be activated below zero Resolve', () => {

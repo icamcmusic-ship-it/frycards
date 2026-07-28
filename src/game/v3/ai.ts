@@ -148,6 +148,19 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
  * within the reserving player's own turn), so nothing leaks across games. */
 const reservedLocations = new Set<string>();
 
+/**
+ * Resolve what `pid` just put on the stack. If that leaves the opponent
+ * holding a real response window, hand it over — or, with nobody installed to
+ * take it (sims, tests, the player's own turn), resolve through it rather
+ * than waiting on a pass that can never arrive.
+ */
+function settleAfterPlay(state: GameState, pid: PlayerId): void {
+  settleStack(state);
+  if (!hasPriority(state, opponentOf(pid))) return;
+  if (yieldPriority) yieldPriority(state, opponentOf(pid));
+  else settleStack(state, { interactive: false });
+}
+
 function tapAllLocations(state: GameState, pid: PlayerId): void {
   for (const l of [...state.players[pid].locations]) {
     if (!l.exhausted && !reservedLocations.has(l.iid)) tapLocationForEssence(state, pid, l.iid);
@@ -453,7 +466,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
       const bondTargetIid = c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
-        settleStack(state, { interactive: false });
+        settleAfterPlay(state, pid);
         observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
         progress = true;
         break;
@@ -473,7 +486,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
         if (invokeCard(state, pid, reserved.iid, { targetIid })) {
-          settleStack(state, { interactive: false });
+          settleAfterPlay(state, pid);
           observe?.({
             kind: 'invoke',
             name: reserved.def.name,
@@ -820,10 +833,9 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
     });
     plays++;
   }
-  // The human has no mid-turn response UI outside the clash reaction window,
-  // so whatever is left resolves rather than waiting on a pass that can never
-  // arrive. Drop this once the board grows a response prompt.
-  settleStack(state, { interactive: false });
+  // If the CPU's answer left the player holding priority in turn, the window
+  // stays open — the caller offers them the counter-response.
+  settleStack(state);
   return plays;
 }
 
@@ -893,7 +905,7 @@ export function reactionPlays(
       }
       targetIid ??= c.def.onInvoke ? autoTarget(state, defender, c.def.onInvoke) : undefined;
       if (invokeCard(state, defender, c.iid, { targetIid })) {
-        settleStack(state, { interactive: false });
+        settleAfterPlay(state, defender);
         observe?.({
           kind: 'invoke',
           name: c.def.name,
@@ -914,11 +926,27 @@ export function reactionPlays(
 // ---------------------------------------------------------------------------
 // Full turn
 // ---------------------------------------------------------------------------
+/**
+ * Called when the CPU's play has left the OPPONENT holding priority over it.
+ * The UI installs this to pause the turn and hand the response window to the
+ * player — it does that by throwing, and resumes by calling `playTurn` again
+ * once the window closes. A handler that returns normally must have closed
+ * the window itself.
+ */
+export type YieldPriority = (state: GameState, to: PlayerId) => void;
+
 export interface PlayTurnOptions {
   /** Override guard selection for the defending player during the CPU's
    * clash (the UI passes the human's choices; defaults to chooseGuards). */
   chooseGuardsFor?: (state: GameState, defender: PlayerId) => GuardAssignments;
+  /** Hand response windows to the opponent instead of resolving through them.
+   * Omitted by sims and tests, where nobody is there to answer. */
+  onOpponentPriority?: YieldPriority;
 }
+
+/** Installed for the duration of a `playTurn` call — the CPU's play sites are
+ * several functions deep and every one of them can open a response window. */
+let yieldPriority: YieldPriority | undefined;
 
 /**
  * Play the CPU's whole turn (must be called with `state.active === pid` in
@@ -933,6 +961,23 @@ export function playTurn(
   const events: CpuTurnEvent[] = [];
   const observe: CpuTurnObserver = (ev) => events.push(ev);
   if (state.winner || state.active !== pid) return events;
+  yieldPriority = opts.onOpponentPriority;
+  try {
+    playTurnBody(state, pid, opts, observe);
+  } finally {
+    // A handler that pauses the turn does it by throwing; the UI resumes by
+    // calling playTurn again, which reinstalls its own hook.
+    yieldPriority = undefined;
+  }
+  return events;
+}
+
+function playTurnBody(
+  state: GameState,
+  pid: PlayerId,
+  opts: PlayTurnOptions,
+  observe: CpuTurnObserver,
+): void {
   // Stale reservations (previous turns, previous games — iids never repeat)
   // must not constrain this turn's tapping.
   reservedLocations.clear();
@@ -971,5 +1016,4 @@ export function playTurn(
     mainPhasePlays(state, pid, observe);
     if (!state.winner && endPhase(state)) observe({ kind: 'phase', phase: state.phase });
   }
-  return events;
 }

@@ -1007,7 +1007,10 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
 
 /** Shatter a unit (Unbreakable prevents it). Returns true if it was shattered. */
 export function shatterUnit(state: GameState, u: UnitInst): boolean {
-  if (unitHasKw(u, 'Unbreakable')) return false;
+  if (unitHasKw(u, 'Unbreakable')) {
+    telemetry.onKeywordProc?.('Unbreakable', 1);
+    return false;
+  }
   removeUnit(state, u, 'ash');
   return true;
 }
@@ -1022,6 +1025,11 @@ export function stateBasedChecks(state: GameState): void {
       if (!lethal) continue;
       if (unitHasKw(u, 'Unbreakable')) {
         u.venomed = false; // survives; damage stays marked
+        // Every other keyword reports its procs, so the balance harness can
+        // price it. This one never did — it read as 0 activations however many
+        // lethal hits it walked away from, which is exactly the signal that
+        // matters for the most expensive keyword in the table.
+        telemetry.onKeywordProc?.('Unbreakable', 1);
         continue;
       }
       const byVenom = u.venomed && u.damage < effGrit(state, u);
@@ -1242,7 +1250,10 @@ export function playWellspring(state: GameState, pid: PlayerId, type: EssenceTyp
 export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: string): boolean {
   const p = state.players[pid];
   if (state.winner) return false;
-  if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid)) return false;
+  // Holding priority is enough: a response window is worthless if you cannot
+  // produce the essence to pay for the response.
+  if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid) && !hasPriority(state, pid))
+    return false;
   const loc = p.locations.find((l) => l.iid === locIid);
   if (!loc || loc.exhausted) return false;
   loc.exhausted = true;

@@ -25,7 +25,7 @@ function markCoachDone(): void {
   }
 }
 
-type CoachStage = 'main1' | 'clash' | 'main2' | 'cpu';
+type CoachStage = 'main1' | 'clash' | 'main2' | 'cpu' | 'respond';
 
 const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
@@ -47,6 +47,11 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
     stage: 'cpu',
     title: '4. OPPONENT’S TURN',
     body: 'Watch the opponent play. If it attacks, YOU assign guards — pick an attacker line, click your units to block, then confirm. A reaction window follows where Quick Events and Ambush units can still be invoked before damage.',
+  },
+  {
+    stage: 'respond',
+    title: '5. THE STACK — YOUR RESPONSE',
+    body: 'Cards don’t take effect the moment they’re played: they wait on THE STACK while you get a window to answer. Whatever goes on last resolves first, so a Quick Event you play now happens BEFORE the card it’s answering. Kill the target of an enemy spell and that spell fizzles. Nothing worth answering? Just PASS.',
   },
 ];
 

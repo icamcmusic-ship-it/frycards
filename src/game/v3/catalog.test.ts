@@ -42,6 +42,29 @@ test('every card has a legal essence cost (total 0-8, non-negative parts)', () =
   }
 });
 
+/**
+ * The other half of "only real keywords": every real keyword must reach at
+ * least one card. A keyword the engine implements and the rulebook prints but
+ * that no card can carry is dead text the player is told about and can never
+ * meet — and it is invisible to every other test in this file, all of which
+ * check cards rather than coverage.
+ *
+ * This has bitten twice. v7.3 shipped Warlord to zero carriers (a Leader-only
+ * keyword over a 9-Leader pool), and v7.4 found Unbreakable had NEVER printed:
+ * premium-gated to 21 eligible Units, at index 1 of two four-entry colour
+ * lists, needing one of those two colours as the primary. Both were found by
+ * hand, months apart. This test is what makes the third one fail loudly.
+ */
+test('every keyword the rulebook prints reaches at least one card', () => {
+  const carriers = new Map<string, number>();
+  for (const kw of KEYWORDS) carriers.set(kw, 0);
+  for (const c of POOL_V4) {
+    for (const kw of c.keywords ?? []) carriers.set(kw, (carriers.get(kw) ?? 0) + 1);
+  }
+  const dead = [...carriers].filter(([, n]) => n === 0).map(([kw]) => kw);
+  expect(dead, `keywords with no carrier in the pool: ${dead.join(', ')}`).toEqual([]);
+});
+
 test('units have sane stats and only real keywords', () => {
   for (const c of POOL_V4) {
     if (c.type !== 'Unit') continue;

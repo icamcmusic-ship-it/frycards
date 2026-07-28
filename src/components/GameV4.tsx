@@ -37,6 +37,9 @@ import {
   resolveClash,
   canInvokeLeader,
   canPayCost,
+  hasPriority,
+  passPriority,
+  settleStack,
   potentialEssence,
   canTarget,
   effectiveCost,
@@ -771,7 +774,12 @@ function LeaderLane({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-2 py-1 shrink-0 flex-wrap',
+        // v7.4: wrapping was costing ~90px a lane on a phone — the vitality
+        // plate, essence readout and INVOKE LEADER each fell onto their own
+        // row, and two lanes doing that pushed the player's HAND entirely off
+        // a 375x667 screen. Scroll sideways instead of stacking; nothing is
+        // lost, and the lane stays one row tall.
+        'flex items-center gap-2 px-2 py-1 shrink-0 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible',
         isHuman
           ? 'bg-[var(--c-yellow)]/12 border-t border-[var(--c-yellow)]/25'
           : 'bg-[var(--c-red)]/12 border-b border-[var(--c-red)]/25',
@@ -828,7 +836,7 @@ function LeaderLane({
           disabled={!!invokeWhy}
           title={invokeWhy}
           className={cn(
-            'heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
+            'tap-44 heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
             invokeWhy
               ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60 cursor-not-allowed'
               : 'btn-pop bg-[var(--c-red)] text-white',
@@ -906,7 +914,7 @@ function LocationsLane({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type Stage = 'mulligan' | 'play' | 'cpu' | 'cpuGuard' | 'over';
+type Stage = 'mulligan' | 'play' | 'cpu' | 'cpuGuard' | 'respond' | 'over';
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
   Dawn: 'DAWN',
@@ -943,6 +951,16 @@ function mulliganRedraw(g: GameState): void {
  * CPU's turn halts mid-clash with state.clash.step === 'guards', handing the
  * guard decision to the human (see resolveCpuTurn / cpuGuard stage). */
 const CLASH_PAUSE: object = { clashPause: true };
+
+/** The priority-pause sentinel: thrown out of playTurn's onOpponentPriority
+ * hook so the CPU's turn halts with the human holding priority over whatever
+ * the CPU just played (see resolveCpuTurn / respond stage). */
+const PRIORITY_PAUSE: object = { priorityPause: true };
+
+/** Backstop on response windows per CPU turn. Well above any real game (each
+ * one costs the player a card), low enough that a resume loop that stops
+ * making progress ends the turn instead of spinning the narration timer. */
+const MAX_CPU_RESUMES = 40;
 
 export function GameV4({
   humanDeck,
@@ -1024,6 +1042,11 @@ export function GameV4({
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
   // Combat feedback: floating damage numbers + attack flashes + phase banner.
+  // v7.4: the hand fan lays out in fixed pixels, so it needs the real viewport
+  // width to know how hard to overlap the cards (see fanOverlap).
+  const [viewportW, setViewportW] = useState(() =>
+    typeof window === 'undefined' ? 1280 : window.innerWidth,
+  );
   const [floats, setFloats] = useState<DmgFloat[]>([]);
   const [phaseFx, setPhaseFx] = useState<string | null>(null);
   const [flashIids, setFlashIids] = useState<Set<string>>(new Set());
@@ -1043,6 +1066,12 @@ export function GameV4({
   const cpuBeatsRef = useRef<string[]>([]);
   const cpuBeatIdxRef = useRef(0);
   const cpuDoneRef = useRef<(() => void) | null>(null);
+  /** What to do once the human's response window closes. Set whenever the
+   * 'respond' stage is entered — the window can open from the player's own
+   * turn (resume play) or from a paused CPU turn (resume the CPU). */
+  const respondResumeRef = useRef<(() => void) | null>(null);
+  /** Response windows opened during the current CPU turn (loop backstop). */
+  const cpuResumeCountRef = useRef(0);
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -1232,6 +1261,16 @@ export function GameV4({
     return () => window.removeEventListener('keydown', onKey);
   }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded]);
 
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
+
   // ---- essence & invoking -------------------------------------------------
   const inMyMain =
     stage === 'play' &&
@@ -1242,7 +1281,11 @@ export function GameV4({
    * Rulebook §5: the window belongs to EITHER player — you can respond with
    * Quick Events / Ambush units in your own Clash too, before resolving. */
   const inMyReaction = g.clash?.step === 'reaction';
-  const canTapNow = inMyMain || inMyReaction;
+  /** A response window (rulebook §6): something is on the stack and priority
+   * is ours, so instant-speed cards — and the Locations to pay for them —
+   * are live even on the opponent's turn. */
+  const inMyResponse = stage === 'respond' && hasPriority(g, HUMAN);
+  const canTapNow = inMyMain || inMyReaction || inMyResponse;
 
   /** Why can't this hand card be invoked right now? (undefined = it can) */
   const invokeWhy = (c: { def: CardDef }): string | undefined => {
@@ -1250,11 +1293,13 @@ export function GameV4({
     const quick = def.type === 'Event' && def.subtype === 'Quick';
     const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
     if (!inMyMain) {
-      if (inMyReaction) {
-        if (!quick && !ambush) return 'Only Quick Events / Ambush units in a reaction window';
+      if (inMyReaction || inMyResponse) {
+        if (!quick && !ambush) return 'Only Quick Events / Ambush units can respond';
       } else {
         return 'Invoke during your own main phases';
       }
+    } else if (g.stack.length > 0 && !quick && !ambush) {
+      return 'Something is still on the stack — only Quick Events / Ambush units';
     }
     if (!canAfford(me, effectiveCost(g, HUMAN, def))) {
       // Say WHICH pip is short when the problem is color, not quantity.
@@ -1275,6 +1320,7 @@ export function GameV4({
     const card = me.hand.find((c) => c.iid === cardIid);
     if (!card) return;
     autoTapFor(g, HUMAN, effectiveCost(g, HUMAN, card.def));
+    const respondingAlready = stage === 'respond';
     if (invokeCard(g, HUMAN, cardIid, opts)) {
       // The card is on the stack, not resolved: the CPU gets its priority
       // window to answer before it takes effect.
@@ -1283,6 +1329,14 @@ export function GameV4({
       say(
         answers > 0 ? `${card.def.name} invoked — the CPU responds.` : `${card.def.name} invoked.`,
       );
+      if (respondingAlready) {
+        // Playing INTO an open window: it stays open only while priority is
+        // still ours, and closing it resumes whatever was paused.
+        afterResponseAction();
+      } else if (hasPriority(g, HUMAN)) {
+        // The CPU answered and handed priority back — counter it or pass.
+        openResponseWindow(() => setStage('play'));
+      }
     } else {
       bump(); // taps may have happened
       say("Can't invoke that right now.");
@@ -1597,6 +1651,8 @@ export function GameV4({
 
   const beginHumanTurn = () => {
     setCpuBeat(null);
+    respondResumeRef.current = null;
+    cpuResumeCountRef.current = 0;
     bump();
     if (checkWinner()) return;
     setPending(null);
@@ -1608,21 +1664,61 @@ export function GameV4({
     flashPhase('YOUR TURN');
   };
 
-  /** Play the CPU's turn. If it declares an attack, playTurn is paused at the
-   * guard step (via the CLASH_PAUSE sentinel) and the human takes over guard
-   * assignment; otherwise the whole turn runs through and it's back to P1. */
+  /**
+   * Open the human's response window: something is on the stack that they hold
+   * priority over. `onClose` runs once they have passed (or spent everything
+   * they could respond with) and the stack has settled past them.
+   */
+  const openResponseWindow = (onClose: () => void) => {
+    respondResumeRef.current = onClose;
+    setPending(null);
+    closePreview();
+    setStage('respond');
+    const top = g.stack[g.stack.length - 1];
+    say(top ? `${top.sourceName} is on the stack — respond or pass.` : 'Respond or pass.');
+  };
+
+  /**
+   * Called after the human acts inside a response window. If they still hold
+   * priority (another item to answer, or their own response drew a counter)
+   * the window stays open; otherwise it closes and play resumes.
+   */
+  const afterResponseAction = () => {
+    settleStack(g);
+    bump();
+    if (checkWinner()) return;
+    if (hasPriority(g, HUMAN)) return; // still their window
+    const resume = respondResumeRef.current;
+    respondResumeRef.current = null;
+    if (resume) resume();
+  };
+
+  /** PASS button in a response window. */
+  const passMyPriority = () => {
+    if (!hasPriority(g, HUMAN)) return;
+    passPriority(g, HUMAN);
+    afterResponseAction();
+  };
+
+  /** Play the CPU's turn. It can pause twice: at the guard step (CLASH_PAUSE,
+   * the human assigns guards) and whenever a CPU play leaves the human holding
+   * priority over it (PRIORITY_PAUSE, the human responds or passes). Both
+   * resume by re-entering playTurn, which picks up from the current phase. */
   const resolveCpuTurn = () => {
     cpuTimeoutRef.current = null;
     const logStart = g.log.length;
-    let paused = false;
+    let pause: object | null = null;
     try {
       playTurn(g, CPU, {
         chooseGuardsFor: () => {
           throw CLASH_PAUSE;
         },
+        onOpponentPriority: () => {
+          throw PRIORITY_PAUSE;
+        },
       });
     } catch (e) {
-      if (e !== CLASH_PAUSE) {
+      if (e !== CLASH_PAUSE && e !== PRIORITY_PAUSE) {
         // An engine exception out of this timer callback would escape React
         // entirely (white screen, match unrecoverable) — recover to the
         // human's turn instead and leave the details in the console.
@@ -1631,25 +1727,44 @@ export function GameV4({
         beginHumanTurn();
         return;
       }
-      paused = true;
+      pause = e as object;
     }
     bump();
     narrate(g.log.slice(logStart), () => {
       if (checkWinner()) return;
-      if (paused && g.clash && g.clash.step === 'guards') {
+      if (pause === CLASH_PAUSE && g.clash && g.clash.step === 'guards') {
         setGuardSel({});
         setGuardFocus(g.clash.attackers[0] ?? null);
         setStage('cpuGuard');
         say(`${cpuLabel} attacks — assign your guards!`);
+      } else if (pause === PRIORITY_PAUSE) {
+        // Bounded: a resume that somehow makes no progress must not spin the
+        // turn forever through the narration timer.
+        if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+          settleStack(g, { interactive: false });
+          bump();
+          beginHumanTurn();
+        } else if (hasPriority(g, HUMAN)) {
+          openResponseWindow(resumeCpuTurn);
+        } else {
+          resumeCpuTurn();
+        }
       } else {
         beginHumanTurn();
       }
     });
   };
 
+  /** Pick the CPU's turn back up where a response window paused it. */
+  const resumeCpuTurn = () => {
+    setStage('cpu');
+    resolveCpuTurn();
+  };
+
   const runCpuTurn = () => {
     setStage('cpu');
     setCpuBeat(null);
+    cpuResumeCountRef.current = 0;
     cpuThinkTimeoutRef.current = window.setTimeout(() => {
       cpuThinkTimeoutRef.current = null;
       resolveCpuTurn();
@@ -1659,21 +1774,53 @@ export function GameV4({
   /** After the human's guard step + reaction window resolve the clash, the
    * CPU finishes its turn (Main II, Dusk) and play passes back. */
   const continueCpuAfterClash = () => {
-    const logStart = g.log.length;
     try {
       endPhase(g); // Clash → Main II (clash must be 'done')
-      playTurn(g, CPU); // Main II plays, then Dusk → the human's Dawn
     } catch (e) {
       console.error('CPU post-clash crashed:', e);
       say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
       beginHumanTurn();
       return;
     }
+    playCpuRemainder();
+  };
+
+  /** Run whatever is left of the CPU's turn from the current phase (Main II,
+   * then Dusk). Re-entrant: a response window pauses it and resumes here, so
+   * this must never re-do the phase change that got us here. */
+  const playCpuRemainder = () => {
+    const logStart = g.log.length;
+    let paused = false;
+    try {
+      playTurn(g, CPU, {
+        onOpponentPriority: () => {
+          throw PRIORITY_PAUSE;
+        },
+      });
+    } catch (e) {
+      if (e !== PRIORITY_PAUSE) {
+        console.error('CPU post-clash crashed:', e);
+        say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
+        beginHumanTurn();
+        return;
+      }
+      paused = true;
+    }
     bump();
     setStage('cpu');
     narrate(g.log.slice(logStart), () => {
       if (checkWinner()) return;
-      beginHumanTurn();
+      if (!paused) {
+        beginHumanTurn();
+      } else if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+        settleStack(g, { interactive: false });
+        bump();
+        beginHumanTurn();
+      } else if (hasPriority(g, HUMAN)) {
+        openResponseWindow(playCpuRemainder);
+      } else {
+        playCpuRemainder();
+      }
     });
   };
 
@@ -1772,6 +1919,23 @@ export function GameV4({
     };
   });
 
+  /**
+   * How far each hand card slides over the one before it. Fixed at 46px, the
+   * fan was laid out in absolute pixels and simply ran off the screen: seven
+   * compact cards measure 494px, so on a 375px phone it overflowed by 59px on
+   * each side and the cards at both ends were unreachable. Now it tightens
+   * until the whole fan fits, down to a floor that always leaves a usable
+   * sliver of every card showing.
+   */
+  const fanOverlap = (() => {
+    const n = me.hand.length;
+    const w = CARD_SIZES.compact.w;
+    if (n <= 1) return 46;
+    const avail = Math.max(220, viewportW - 12);
+    const needed = w - (avail - w) / (n - 1);
+    return Math.round(Math.min(w - 20, Math.max(46, needed)));
+  })();
+
   // Coach stage: coarse key for the first-match walkthrough.
   const coachStage =
     stage === 'cpu'
@@ -1803,6 +1967,12 @@ export function GameV4({
       return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
     }
     if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
+    if (stage === 'respond') {
+      const top = g.stack[g.stack.length - 1];
+      return top
+        ? `${top.sourceName} is on the stack — answer it with a Quick Event or Ambush unit (essence auto-taps), or PASS to let it resolve.`
+        : 'Respond with a Quick Event or Ambush unit, or PASS.';
+    }
     if (stage === 'play') {
       // The attacker's own reaction window is easy to miss: the rulebook
       // opens it to EITHER player, the engine and the CPU both use it, but
@@ -1887,7 +2057,7 @@ export function GameV4({
                 onConfirm: concede,
               });
           }}
-          className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
+          className="tap-44 btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
           aria-label="Concede match"
         >
           ✕ CONCEDE
@@ -1924,7 +2094,7 @@ export function GameV4({
 
       {/* Contextual hint bar */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
-        <div className="px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
+        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
           💡 {hint}
         </div>
       )}
@@ -2023,6 +2193,34 @@ export function GameV4({
         </div>
       )}
 
+      {/* The stack — top of the list resolves first. Only worth showing while
+          something is actually waiting on it, which outside a response window
+          is never more than an instant. */}
+      {g.stack.length > 0 && (
+        <div className="absolute left-1/2 top-[7.4rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-col gap-0.5">
+          <span className="heading-font text-[9px] text-[#29B6F6]">
+            ▤ STACK — resolves top-first
+          </span>
+          {[...g.stack].reverse().map((item, i) => (
+            <span
+              key={item.id}
+              className={cn(
+                'text-[8.5px] font-bold leading-tight',
+                i === 0 ? 'text-[var(--c-yellow)]' : 'text-[var(--c-paper)]/70',
+              )}
+            >
+              {item.controller === HUMAN ? 'YOU' : cpuLabel} · {item.sourceName}
+              {item.kind === 'trigger' ? ' (trigger)' : ''}
+            </span>
+          ))}
+          {inMyResponse && (
+            <span className="text-[8px] font-bold text-[#29B6F6]">
+              YOUR RESPONSE — Quick / Ambush cards playable, or pass
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ================= OPPONENT LANE ================= */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
       <LeaderLane
@@ -2042,7 +2240,7 @@ export function GameV4({
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
-              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
               title="Inspect the opponent's ash-pile and void"
             >
               ASH {foe.ashPile.length}
@@ -2057,7 +2255,7 @@ export function GameV4({
         mine={false}
         onInspect={(l) => setInspect(l.def!)}
       />
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
         {foe.field.length === 0 && (
           <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
             <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
@@ -2132,6 +2330,13 @@ export function GameV4({
           >
             💥 RESOLVE CLASH
           </button>
+        ) : inMyResponse ? (
+          <button
+            onClick={passMyPriority}
+            className="btn-pop heading-font text-sm bg-[#29B6F6] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+          >
+            ⏭ PASS — LET IT RESOLVE
+          </button>
         ) : showPhaseButton ? (
           <button
             onClick={advanceMyPhase}
@@ -2160,7 +2365,7 @@ export function GameV4({
             player's lane for vertical space. */}
         <button
           onClick={() => setLogExpanded((e) => !e)}
-          className="absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+          className="tap-44 absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
           title={logExpanded ? 'Hide the Battle Log' : 'Show the Battle Log'}
         >
           {logExpanded ? '▾ LOG' : '▴ LOG'}
@@ -2179,7 +2384,7 @@ export function GameV4({
       )}
 
       {/* ================= PLAYER LANE ================= */}
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
         {me.field.length === 0 && (
           <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
             <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
@@ -2280,7 +2485,7 @@ export function GameV4({
         ))}
         <Tip
           text="Locations produce your Essence — exhaust one to add a pip. Invoking auto-taps whatever the cost needs. The pool empties at the end of every phase."
-          className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
+          className="tap-44 text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
         >
           ?
         </Tip>
@@ -2307,7 +2512,7 @@ export function GameV4({
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
-              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
             >
               ASH-PILE {me.ashPile.length}
             </button>
@@ -2384,10 +2589,17 @@ export function GameV4({
         <div className="flex items-center gap-2 px-2 pt-1">
           <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
             HAND {me.hand.length}/{MAX_HAND} · tap or hover a card to preview
-            {inMyReaction || reactionStep ? ' · REACTION: Quick & Ambush only' : ''}
+            {inMyReaction || reactionStep
+              ? ' · REACTION: Quick & Ambush only'
+              : inMyResponse
+                ? ' · RESPONDING: Quick & Ambush only'
+                : ''}
           </span>
         </div>
-        <div className="relative h-[118px] overflow-hidden" style={{ perspective: 800 }}>
+        <div
+          className="relative h-[92px] sm:h-[118px] overflow-hidden"
+          style={{ perspective: 800 }}
+        >
           {me.hand.length === 0 && (
             <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
               — empty hand —
@@ -2417,7 +2629,7 @@ export function GameV4({
                   style={{
                     width: CARD_SIZES.compact.w,
                     height: CARD_SIZES.compact.h,
-                    marginLeft: i === 0 ? 0 : -46,
+                    marginLeft: i === 0 ? 0 : -fanOverlap,
                     zIndex: isFocused ? 50 : i,
                   }}
                   onMouseEnter={() => previewIntent(c.iid)}
@@ -2448,7 +2660,10 @@ export function GameV4({
                       dimmed={!!why}
                       // During the clash reaction window, playable Quick /
                       // Ambush cards light up so the window is discoverable.
-                      highlight={preview === c.iid || ((inMyReaction || reactionStep) && !why)}
+                      highlight={
+                        preview === c.iid ||
+                        ((inMyReaction || reactionStep || inMyResponse) && !why)
+                      }
                       introduceKeywords
                     />
                   </div>

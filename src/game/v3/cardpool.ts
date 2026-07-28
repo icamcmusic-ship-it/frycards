@@ -304,6 +304,20 @@ const STAT_ADJUST: Record<string, number> = {
   // (COST_ADJUST would clip to nothing at the ceiling) — trim stat budget.
   // v6.5: STILL +8.5 residual (z=1.50, n=336) after that — third point
   // stacked.
+  //
+  // v7.4: the three cards the Unbreakable salvage band prints (see
+  // pickUnitKeywords). Unbreakable carries the heaviest weight in
+  // KEYWORD_COST (7, i.e. +3.5), and all three land ON the cost cap of 7 —
+  // so the printed price collects only part of that surcharge and the body
+  // keeps the stats of its pre-keyword base cost. That is the "keywords are
+  // free stats" skew the stat-budget comment in mapUnit warns about,
+  // resurfacing at the ceiling. Measured as the pool's #1 keyword outlier in
+  // both cohorts on first print (+7.6 n=218 / +8.5 n=122, carrier win 69.3% /
+  // 73.8%, ~5k activations a run), so it is trimmed on arrival rather than
+  // shipped and walked back. COST_ADJUST is provably a no-op at the cap.
+  the_pier_side_menace: -3, // 8/7, the largest body of the three
+  the_wolf_of_wall_street: -2, // 6/6 plus a recurring at-Dawn weaken
+  skyborne_skeleton_dragon: -2, // 4/7 plus a death-trigger buff
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
@@ -544,14 +558,41 @@ const NEUTRAL_KEYWORDS: Keyword[] = ['Alert', 'Skywatch', 'Warded', 'Ambush', 'O
 /** Premium keywords restricted to rt >= 4. */
 const PREMIUM = new Set<string>(['Doublestrike', 'Unbreakable']);
 
+/** Colours whose KEYWORDS_OF_COLOR list carries Unbreakable — the only ones
+ * allowed to print it through the salvage band below. */
+const UNBREAKABLE_COLORS = new Set<Color>(['Root', 'Void']);
+
+/** How many keywords this Unit rolls on its own, before any salvage band.
+ * Split out because `forceFx` keys off a card having rolled NOTHING, which is
+ * not the same question as its final keyword list being empty. */
+function naturalKeywordCount(seed: string, rt: number): number {
+  const r = roll(seed, 'kwcount', 10);
+  if (rt >= 4) return r < 2 ? 0 : r < 6 ? 1 : 2;
+  if (rt >= 2) return r < 3 ? 0 : r < 8 ? 1 : 2;
+  return r < 5 ? 0 : r < 9 ? 1 : 2;
+}
+
 function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
   // 0-2 keywords, more at higher rarity.
-  const r = roll(seed, 'kwcount', 10);
-  let count: number;
-  if (rt >= 4) count = r < 2 ? 0 : r < 6 ? 1 : 2;
-  else if (rt >= 2) count = r < 3 ? 0 : r < 8 ? 1 : 2;
-  else count = r < 5 ? 0 : r < 9 ? 1 : 2;
-  if (count === 0) return [];
+  const count = naturalKeywordCount(seed, rt);
+  if (count === 0) {
+    // v7.4: **Unbreakable printed on ZERO cards** — rulebook text and a fully
+    // implemented engine keyword that no card in the 297-card pool could ever
+    // carry. It is PREMIUM (rt >= 4, so 21 eligible Units), it lives at index
+    // 1 of two FOUR-entry colour lists, and it needs Root or Void as the
+    // PRIMARY colour: that intersection is empty on the real catalog.
+    // (Doublestrike clears the same gate only because Shadow's list has two
+    // entries, giving it a 1-in-2 rather than a 1-in-4.)
+    //
+    // Salvaged the way v7.3 salvaged Warlord's zero carriers: a band that
+    // fires only where NO keyword was rolled at all, so every existing
+    // carrier re-prints byte-identically and no colour list changes length
+    // (growing one would re-roll the keyword of every card sharing it).
+    // Rarity floor drops to Rare because rt >= 4 is 21 cards — thin enough
+    // that "printable" and "unprintable" are the same thing.
+    if (rt >= 2 && colors[0] && UNBREAKABLE_COLORS.has(colors[0])) return ['Unbreakable'];
+    return [];
+  }
 
   const legal = (kw: string) => !PREMIUM.has(kw) || rt >= 4;
   const primaryList = (colors[0] ? KEYWORDS_OF_COLOR[colors[0]] : NEUTRAL_KEYWORDS).filter(legal);
@@ -681,7 +722,10 @@ function mapUnit(c: CardTemplate): CardDef {
   // the v7.2 pool, including Full-Art pulls). The effect magnitude already
   // scales off the natural cost, so the forced roll prints the same size
   // effect the card would have got had the 1-in-4 landed.
-  const forceFx = rt >= 2 && keywords.length === 0;
+  // Keyed off the card rolling NOTHING of its own, not off the final list
+  // being empty: the Unbreakable salvage band hands a keyword to some of these
+  // cards, and that must not silently cost them the ability this guarantees.
+  const forceFx = rt >= 2 && naturalKeywordCount(seed, rt) === 0;
   if (forceFx || roll(seed, 'unit-fx', 4) === 0) {
     const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2)));
     const fx = themedEffect(seed, primary, v);
@@ -1214,7 +1258,75 @@ const LEADER_MINUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
     effect: { action: 'damage', value: 2, target: 'enemyUnit' },
     text: '-1: Deal 2 damage to a target enemy unit.',
   },
+  // v7.4 Mer-King (Tide/Root): 35.1% (n=1488) / 33.4% (n=1860) — bottom or
+  // second-bottom in both cohorts on the two largest Leader samples in the
+  // run. It is the ONLY Leader left whose minus does not touch the enemy
+  // board, and `minusColorFor` cannot help it: neither Tide (`Deal a card`)
+  // nor Root (`+2/+2 on a friendly unit`) yields an interactive minus, so
+  // there is no half to draw from. Its whole kit points inward — `-1: Deal a
+  // card` and `+1: Restore 2 Vitality` — which is the Ruin-Walker failure
+  // shape with the volume turned up: no answer to anything, at either price.
+  //
+  // Every small interactive effect is already spoken for, and three of them
+  // sit on PLUS halves where they GAIN resolve (Ethereal's +1 exhaust,
+  // Ruin-Walker's +1 weaken) — so handing Mer-King the same effect on a minus
+  // would print a strictly dominated ability. It takes a shape no other
+  // Leader has instead: the tide going out, shrinking the whole enemy board
+  // at once. Colour-honest for Tide and Root, and `weaken`/`allEnemyUnits` is
+  // an already-implemented path in applyEffect.
+  //
+  // Priced at -3 on purpose, against the two overshoots this table records.
+  // Apex measured 61.6%/55.6% and Ruin-Walker 68.2% when their answers were
+  // cheap enough for a full tank to buy twice; board-wide is stronger than
+  // single-target, so at Resolve 4 this buys exactly one, and the +1 half
+  // needs three turns to fund the next.
+  mer_king: {
+    resolveDelta: -3,
+    effect: { action: 'weaken', value: 1, target: 'allEnemyUnits' },
+    text: '-3: All enemy units get -1/-1.',
+  },
 };
+
+/** Does this ability actually reach across the table? */
+function isInteractive(a: LeaderAbility): boolean {
+  return (
+    a.effect.target === 'enemyUnit' ||
+    a.effect.target === 'anyTarget' ||
+    a.effect.target === 'enemyPlayer' ||
+    a.effect.target === 'allEnemyUnits'
+  );
+}
+
+/**
+ * v7.4: which half of a Leader's identity supplies its MINUS ability.
+ *
+ * It used to be `identity[0]` — literal array order in `LEADER_COLORS`,
+ * hand-written in colors.ts and never rolled. So whether a Leader's one
+ * answer touched the enemy board came down to which of its two colours
+ * happened to be typed first, and the three Leaders whose first colour
+ * produced an inert minus were the bottom three of the v7.2 pass. See the
+ * LEADER_MINUS_ABILITY_OVERRIDE header for the full diagnosis.
+ *
+ * The rule now prefers whichever half yields an ability that reaches the
+ * opponent, falling back to `identity[0]` when both halves do or neither
+ * does. Deliberately no-op on the current nine Leaders: the only two it would
+ * flip (Apex Nanite Shinobi, Ruin-Walker Overseer) already carry hand
+ * overrides that outrank it — and those overrides are NOT redundant, because
+ * both encode a price the raw colour table overshoots at. Apex was measured
+ * at 61.6%/55.6% with Shadow's own `-2: Shatter`-shaped effect, and
+ * Ruin-Walker at 68.2% with Void's printed `-2: Banish`; they ship at halved
+ * frequency for that reason. What this rule buys is that the NEXT Leader
+ * printed does not need a fourth hand patch to get an answer.
+ */
+function minusColorFor(identity: Color[]): Color {
+  const first = identity[0];
+  const second = identity[1];
+  if (!second) return first;
+  const a = leaderMinusAbility('', first);
+  const b = leaderMinusAbility('', second);
+  if (isInteractive(a)) return first;
+  return isInteractive(b) ? second : first;
+}
 
 function mapLeader(c: CardTemplate): CardDef {
   const seed = seedOf(c);
@@ -1244,7 +1356,7 @@ function mapLeader(c: CardTemplate): CardDef {
   const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = LEADER_MINUS_ABILITY_OVERRIDE[c.id]
     ? { ...LEADER_MINUS_ABILITY_OVERRIDE[c.id] }
-    : leaderMinusAbility(seed, identity[0]);
+    : leaderMinusAbility(seed, minusColorFor(identity));
   const minusOverride = LEADER_MINUS_RESOLVE_OVERRIDE[c.id];
   if (minusOverride !== undefined) {
     minus.text = minus.text.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);

@@ -4,32 +4,50 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Human response window on the board** — the engine's stack and APNAP
-  priority round are live (`docs/RULEBOOK.md` §6) and the CPU answers what the
-  player invokes, but the player is still auto-passed during the CPU's own
-  turn: `GameV4.tsx` has no prompt to hold priority mid-replay, only the
-  existing guard-step reaction window. Until that lands, the interaction the
-  stack unlocks runs in one direction.
-- **Mobile/responsive polish** — touch targets and small-screen layout for the
-  board and card views.
+- **Mobile/responsive polish, second pass** — v7.4 made the match board
+  playable on a phone (see `CHANGELOG.md`). Still open: the card *views*
+  outside the board (collection, deck editor, pack opening) have not been
+  measured at all, and the hand fan at seven-plus cards is tight enough on a
+  375px screen that names are hard to read even though every card is tappable.
+  A per-card horizontal scroll strip may beat the fan below the `sm`
+  breakpoint.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme (partially underway — see
   the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
 
 ## Medium term
 
-- **Ramp-matched baseline for Location residuals** — the balance harness
-  scores a card's win rate conditional on having played it, which is
-  structurally biased upward for Locations (a pricier Location is only played
-  in games with more ramp). Every two-cohort outlier in the v7.2 pass is a
-  Location, and several already carry +2/+3 cost stacks chasing it. Blocks any
-  further Location pricing. See `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3.
-- **Colour-aware Leader minus abilities** — `mapLeader` takes the minus from
-  `identity[0]` and the plus from `identity[1]`, so which colour supplies a
-  Leader's answer is decided by array order in `LEADER_COLORS`. v7.2 patched
-  the three worst cases by hand via `LEADER_MINUS_ABILITY_OVERRIDE`; the
-  systemic fix is to let the kit draw from whichever half is interactive,
-  which re-rolls all eight Leaders and needs its own pass.
+- **The rest of the Location residual gap** — v7.4 added the ramp-matched
+  baseline the v7.2 pass asked for (`topOverperformersRampMatched`), and it
+  moves individual cards by up to 8 points, but it removes only 6-18% of the
+  aggregate Location/non-Location gap and both cohorts still show ~+1.7 left.
+  Either Locations really are that much stronger or there is a second confound
+  length-matching cannot see. Price off the ramp-matched list meanwhile, and
+  lift the old blanket block card by card. See the v7.4 addendum in
+  `docs/BALANCE_SIM_FINDINGS_v7.2.md`.
+- **Unbreakable's residual** — v7.4 printed the keyword for the first time and
+  trimmed all three carriers' stat budgets on arrival. Post-trim the cohorts
+  disagree: +4.5 (n=183) on seed 1337, +10.6 (n=139) on seed 24601. At that
+  sample size that is the cohort artifact the `KEYWORD_COST` Doublestrike note
+  warns against chasing, so it needs a proper pass rather than another
+  stacked point. Note all three sit at the cost cap, so `COST_ADJUST` is a
+  no-op and `STAT_ADJUST` is the only live lever. See `CHANGELOG.md` v7.4.
+- **Two Leaders at the extremes** — the colour-aware minus rule landed in v7.4
+  and Mer-King, the last inert kit, is fixed (see `CHANGELOG.md`). What is left
+  is per-Leader pricing, which that rule cannot reach, and both cases are the
+  same well-documented shape: a full Resolve tank buying unconditional removal
+  more than once.
+  - **Void Mother 71.7% / 72.0%**, first in both cohorts by ~12 points. Resolve
+    **6** with a `-2: Banish` — three unconditional removals per tank. The
+    `LEADER_MINUS_ABILITY_OVERRIDE` header already names this exact shape as
+    "the strongest kit shape in the game" and repriced Ruin-Walker's identical
+    Void Banish from -2 to -3 for it; Void Mother kept the -2 AND has double
+    the Resolve. Lever: price the minus, or drop the Resolve.
+  - **Kuro, the Unseen 32.4% / 34.0%**, last in both. Resolve **3** against a
+    `-2` minus, so a full tank buys one use and strands a point. Its v7.2
+    override shipped at -2 after a -1 version overshot to 61.6%; at Resolve 3
+    that reprice appears to have overcorrected. Lever: Resolve, or the minus
+    price — not the effect, which two trials already bracketed.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the

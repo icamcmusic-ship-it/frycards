@@ -8,6 +8,173 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — The board is playable on a phone
+
+- **The player's hand was entirely off-screen on a 375x667 phone.** Measured in
+  a real browser against `board-preview.html`: the hand sat at y=733 in a
+  667px viewport on a page with no scroll, so it was not merely awkward — no
+  card could be seen or played, and the match was unwinnable. Two causes, both
+  fixed:
+  - Each Leader lane wrapped onto three rows on a narrow screen (the vitality
+    plate, the essence readout and INVOKE LEADER each fell onto their own
+    line), costing about 90px a lane. The lanes now scroll sideways instead of
+    stacking, which keeps every control reachable at one row tall.
+  - The field lanes held a `min-h-[122px]` floor that the phone layout could
+    not afford; it drops to 84px below the `sm` breakpoint and is unchanged
+    above it.
+- **The hand fan overflowed the viewport by 59px on each side.** It was laid
+  out in absolute pixels with a fixed -46px overlap, so seven compact cards
+  measured a hard 494px whatever the screen. The overlap is now computed from
+  the live viewport width and tightens until the fan fits, with a floor that
+  always leaves a usable sliver of every card showing. Above ~1000px the
+  computation lands back on the original -46, so the desktop board is
+  byte-identical.
+- **Pinch-zoom was disabled.** `maximum-scale=1.0` in the viewport meta fails
+  WCAG 1.4.4 and, on a board this dense, removes the only way to read the
+  smallest text on a phone. Removed.
+- **Touch targets.** A new `tap-44` utility expands a control's hit area to the
+  44px minimum on coarse pointers only, without changing how it looks or
+  costing vertical space the phone layout has none of. Applied to CONCEDE, LOG,
+  both ash-pile buttons, the Locations help chip and INVOKE LEADER: buttons
+  under 44px drop from 33 to 13, and what remains are the informational chips
+  on a card face (keyword pills, cost badges) where a larger hit area would
+  overlap its neighbours.
+- **The contextual hint bar was clipped to half its height** on any screen tall
+  enough to squeeze it — it was missing `shrink-0` in the flex column.
+- `board-preview.html` and `gallery.html` had no viewport meta at all, so the
+  dev harness laid out at Chromium's 980px fallback and disagreed with the real
+  app about what a phone even is. Both now carry the same tag as `index.html`.
+
+### v7.4 — Mer-King gets an answer
+
+- **Which colour supplies a Leader's answer was decided by typing order.**
+  `mapLeader` took the minus ability from `identity[0]` — literal array order
+  in `LEADER_COLORS`, hand-written and never rolled — so whether a Leader's one
+  answer touched the enemy board came down to which of its two colours happened
+  to be written first. `minusColorFor` now prefers whichever half yields an
+  ability that reaches the opponent.
+- **The roadmap said this would re-roll all eight Leaders. It re-rolls none** —
+  verified by diffing the whole pool before and after: zero cards change. The
+  only two the rule would flip (Kuro, Ruin-Walker) already carry hand overrides
+  that outrank it, and those overrides are *not* redundant — both encode a
+  price the raw colour table overshoots at (Kuro measured 61.6%/55.6% and
+  Ruin-Walker 68.2% before being repriced). What the rule buys is that the next
+  Leader printed does not need a fourth hand patch to get an answer.
+- **It also cannot fix the one Leader still inert, which is the real finding.**
+  Mer-King (Tide/Root) has no interactive half to draw from: Tide gives `Deal a
+  card`, Root gives `+2/+2 on a friendly unit`. Its whole kit pointed inward —
+  `-1: Deal a card` and `+1: Restore 2 Vitality` — and it finished **35.1%
+  (n=1488) / 33.4% (n=1860)**, bottom or second-bottom in both cohorts on the
+  two largest Leader samples in the run.
+- **It takes a shape no other Leader has: `-3: All enemy units get -1/-1`.**
+  Every small interactive effect was already spoken for, and three sit on PLUS
+  halves where they *gain* Resolve, so the same effect on a minus would have
+  printed a strictly dominated ability. A board-wide shrink is colour-honest
+  for Tide and Root and reuses an already-implemented `applyEffect` path.
+  Priced at -3 against the two overshoots this table records: at Resolve 4 a
+  full tank buys exactly one, and the +1 half needs three turns to fund the
+  next.
+- **Result: 35.1% → 52.2% and 33.4% → 47.1%** — up ~15 points to baseline in
+  both cohorts, mid-table in both, with none of the jump-to-first overshoot
+  that killed the first Kuro and Ruin-Walker trials. Zero invariant violations
+  on both runs.
+- Two Leaders are now the extremes in both cohorts — Void Mother at 71.7%/72.0%
+  and Kuro at 32.4%/34.0% — and both are per-Leader Resolve/price problems the
+  colour rule cannot reach. Diagnosed but deliberately not actioned in the same
+  pass as another Leader change; see `ROADMAP.md`.
+
+### v7.4 — The Location metric (balance harness)
+
+- **The balance harness could not price a Location, and had blocked itself on
+  saying so.** v7.2's top-priority carry-forward: every two-cohort gated
+  overperformer that pass was a Location, three separate cost trials on Sacred
+  never moved its number, and several Locations already carried +2/+3 stacks
+  chasing a signal that would not settle. `scripts/simulate-v5.ts` now computes
+  a **ramp-matched residual** beside the flat one and reports it as
+  `topOverperformersRampMatched` — the list to price off for anything gated on
+  essence.
+- **The confound is game length, not cost.** Residual-vs-cost correlation is
+  near zero under *both* metrics in both cohorts (0.056/0.095 flat,
+  0.082/0.023 matched), so "expensive cards read high" was the wrong model —
+  recorded in the findings doc so nobody re-derives it. What is real: a card
+  that lands on turn 12 cannot appear in a game that ended on turn 6, and
+  games that end on turn 6 are decided. Its in-deck denominator carries short
+  losses an early card's does not. Matching on Location count instead barely
+  bites, because Wellsprings accumulate about one a turn and nearly everything
+  eventually becomes castable.
+- The fix keeps the deck control the flat residual depends on — the
+  denominator is still the card's own in-deck games — and restricts it to
+  games that ran at least as long as the card was actually cast on, weighted
+  by its own play-turn distribution.
+- **Per card the two lists disagree by up to 8 points**, which is larger than
+  any lever this project applies: Sunken Archive +11.3 → +3.2, Melted Hollow
+  +13.1 → +6.6, Stone Bubbles +11.2 → +6.8, while Units move the other way
+  (Phosphor Lich +3.1 → +8.0). Locations deflating and Units inflating is the
+  signature of a Location-specific correction rather than a rescaling.
+- **In aggregate it is a partial fix, and the entry says so.** Mean Location
+  residual minus mean non-Location residual goes +1.96 → +1.61 (cohort A) and
+  +1.89 → +1.78 (cohort B) — same sign in both, so it is real, but that is
+  6-18% of the gap removed, not the whole of it. The blanket "no Location
+  takes another cost point" lifts card by card rather than wholesale, and the
+  remainder is back on the roadmap.
+- **A diagnostic that does not work, kept as the cautionary example.**
+  "Location share of the top-15" was tried first and is useless — 47% → 27% in
+  one cohort, 40% → 47% in the other, because it is a membership count over
+  fifteen items that moves by whole cards. `metricDiagnostics` reports the
+  mean-residual gap as the number to read and keeps the share beside it
+  labelled as noise.
+
+### v7.4 — Unbreakable finally prints
+
+- **Unbreakable printed on ZERO cards.** A rulebook keyword with a fully
+  implemented engine branch that nothing in the 297-card pool could carry: it
+  is premium-gated to `rt >= 4` (21 eligible Units), sits at index 1 of two
+  FOUR-entry colour lists, and needs Root or Void as the card's PRIMARY
+  colour. That intersection is empty on the real catalog. Doublestrike clears
+  the same gate only because Shadow's list has two entries, giving it a 1-in-2
+  instead of a 1-in-4. The keyword was so unreachable that `fuzz.test.ts`
+  carried a comment noting the soak had never once built a deck containing a
+  carrier, and its state-based-check exemption had never executed.
+- Salvaged the way v7.3 salvaged Warlord's zero carriers: a band that fires
+  only where NO keyword was rolled at all, so every existing carrier re-prints
+  byte-identically and no colour list changes length (growing one re-rolls the
+  keyword of every card sharing it). The rarity floor drops to Rare, because
+  21 cards is thin enough that "printable" and "unprintable" are the same
+  thing. **Three cards** now carry it: Skyborne Skeleton Dragon, The Pier-Side
+  Menace and The Wolf of Wall Street — and nothing else in the pool changed.
+- **They keep their printed abilities.** v7.3's "every Unit at Rare or above
+  prints an ability" rule keys off the card having no keyword, so handing
+  these three Unbreakable would have silently taken away the trigger or
+  on-enter effect they had. That check now keys off what the card *rolled*
+  rather than what it ended up with.
+- **Unbreakable reported zero activations however many kills it walked away
+  from** — it was the one keyword with no telemetry hook, so the balance
+  harness was blind to the most expensive entry in `KEYWORD_COST`. It now
+  reports from both branches (lethal damage survived, shatter prevented):
+  ~7,000 procs per 528-game run.
+- **Priced on arrival, not shipped and walked back.** All three land ON the
+  cost cap of 7, so the printed price collects only part of Unbreakable's +3.5
+  surcharge and the body keeps the stats of its pre-keyword base — the
+  "keywords are free stats" skew, resurfacing at the ceiling where
+  `COST_ADJUST` is provably a no-op. First print measured as the pool's #1
+  keyword outlier in both cohorts (+7.6 n=218 / +8.5 n=122, carrier win 69.3%
+  / 73.8%), so all three took a `STAT_ADJUST` trim. That pulled the aggregate
+  back to baseline (P1 40.5% at 19.9 average turns, against 40.7% / 20.6
+  before the keyword existed) and halved the seed-1337 delta to +4.5. The
+  seed-24601 cohort still reads +10.6 at n=139; the two cohorts now disagree
+  in direction, which at that sample size is the cohort artifact the
+  Doublestrike note in `KEYWORD_COST` warns about chasing. Left for a real
+  balance pass — see `ROADMAP.md`.
+- **A catalog test now fails loudly on the next one.** "Only real keywords"
+  was checked; "every real keyword reaches a card" was not, and that blind
+  spot has now cost two keywords (Warlord in v7.3, Unbreakable here), both
+  found by hand months apart.
+- **`fuzz.test.ts` checks the stack too**: an undecided game must return
+  control with the stack empty and no priority window open, every stack item
+  must have a valid controller and the right payload for its kind, and cards
+  waiting on the stack are counted in the one-instance-one-zone check.
+  `passPriority` and `settleStack` join the hostile-input suite.
+
 ### v7.4 — A real stack and APNAP priority
 
 - **Nothing resolved where it was played.** Invoking a card ran its effect
@@ -46,8 +213,19 @@ version of this history also powers the in-app Changelog screen
   triggers between the Quickstrike and normal damage sub-steps.
 - **The CPU uses its windows.** `respondToStack` answers a player's
   invocation with Quick removal when there is a live target worth spending on,
-  and passes otherwise. The player is still auto-passed during the CPU's own
-  turn — the board has no mid-replay response prompt yet; see `ROADMAP.md`.
+  and passes otherwise.
+- **And so does the player.** The board opens a real response window whenever
+  priority lands on the human: a new `respond` stage with the stack listed
+  top-first, instant-speed cards live in hand, and a PASS button. It opens in
+  both directions — during the CPU's turn (`playTurn` pauses through the new
+  `onOpponentPriority` hook and resumes by re-entering, the same shape as the
+  existing guard-step pause) and on the player's own turn when the CPU answers
+  something and hands priority back. Bounded at 40 windows per CPU turn so a
+  resume that stops making progress ends the turn instead of spinning.
+- **Locations tap while you hold priority.** They were tappable only in your
+  own main phase or the clash reaction window, which would have made every new
+  response window unusable — you cannot pay for an answer you cannot produce
+  essence for.
 
 ### v7.3 — Card art restored, catalog edits, five new cards
 

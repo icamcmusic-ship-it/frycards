@@ -275,13 +275,11 @@ now the largest un-actioned lapse.
 
 ## Carry-forward items
 
-1. **The Location metric (top priority).** Every two-cohort gated
-   overperformer in this pass is a Location, cost provably does not move them,
-   and past passes have stacked +2 and +3 on several chasing it. The fix is in
-   `scripts/simulate-v5.ts`, not `cardpool.ts`: compute a Location's residual
-   against a **ramp-matched** baseline (cards played on the same turn number,
-   or at the same locations-in-play count) rather than the flat in-deck
-   baseline. Until that lands, **no Location should take another cost point.**
+1. **The Location metric (top priority).** *Partly addressed in v7.4* — the
+   ramp-matched residual is implemented and reproduces in both cohorts, but it
+   removes only 6-18% of the Location/non-Location residual gap. Price off
+   `topOverperformersRampMatched`, and lift the "no Location takes another
+   cost point" block card by card rather than wholesale. See the addendum.
 2. **Sacred** — +26.3 / +17.4 and unresolved. Blocked on #1; if the
    ramp-matched baseline still shows it, the next lever is the effect, not the
    price (it is the only "free value every turn on a near-permanent" text in
@@ -330,3 +328,76 @@ now the largest un-actioned lapse.
   and down 14-20%.
 - ~~`galleon_shipwreck` / `resonant_shuriken`~~ (v6.9 carry-forward #2) — no
   longer two-cohort signals; folded into carry-forward #1.
+
+---
+
+## Addendum (v7.4): the Location metric — implemented, and only partly a fix
+
+Carry-forward #1 is implemented in `scripts/simulate-v5.ts`
+(`lengthMatchedBaseline`, surfaced as `topOverperformersRampMatched`). It does
+real work per card, it reproduces in both cohorts, and it does **not** remove
+the confound. All three of those matter for how the next pass uses it.
+
+**The mechanism was not what #1 assumed.** Residual-vs-cost correlation is
+0.056 / 0.095 flat and 0.082 / 0.023 ramp-matched — near zero under *both*
+metrics in both cohorts. "Expensive cards read high" is the wrong model and is
+recorded here so nobody re-derives it. The channel is game **length**.
+Wellsprings accumulate about one a turn, so nearly everything eventually
+becomes castable and matching on Location count barely bites; but a card that
+typically lands on turn 12 cannot appear in a game that ended on turn 6, and
+games that end on turn 6 are decided. Its in-deck denominator carries a pile
+of short losses an early card's does not.
+
+**The correction.** Keep the deck control that makes the flat residual
+meaningful — the denominator is still *this card's own in-deck games* — but
+restrict it to games that ran at least as long as the card was actually cast
+on, weighted by the card's own play-turn distribution.
+
+**Per card it is large.** On `6 32 1337`:
+
+| card | flat | ramp-matched |
+|---|---|---|
+| Sunken Archive (Location, 3) | +11.3 | **+3.2** |
+| Melted Hollow (Location, 1) | +13.1 | **+6.6** |
+| Stone Bubbles (Location, 2) | +11.2 | **+6.8** |
+| Cold Fire Volcano (Location, 1) | +13.1 | **+8.9** |
+| Haunted Submarine (Location, 3) | +11.6 | **+8.9** |
+| Phosphor Lich (Unit, 7) | +3.1 | **+8.0** |
+| The Chimney Snacker (Unit, 6) | +9.3 | **+12.1** |
+| Amethyst Starfish (Unit, 5) | +4.6 | **+7.5** |
+
+Locations deflate and Units inflate, which is the signature of a
+Location-specific correction rather than a rescaling. Stone Bubbles — the card
+three separate cost trials failed to move — drops from +11.2 to +6.8 with
+nobody touching its price.
+
+**In aggregate it is small, and that is the honest headline.** Mean Location
+residual minus mean non-Location residual, over every scored card:
+
+| cohort | flat | ramp-matched | gap removed |
+|---|---|---|---|
+| A (`6 32 1337`) | +1.96 | +1.61 | 18% |
+| B (`6 32 1337 42`) | +1.89 | +1.78 | 6% |
+
+Same sign in both cohorts, so it clears this project's bar for being real —
+but it removes 6-18% of the Location inflation, not the whole of it. The
+remaining ~+1.7 is either genuine Location strength or a second confound
+length-matching does not see.
+
+**A statistic that does not work, recorded so it is not retried.** "Location
+share of the top-15" was the first diagnostic tried and it is useless: 47% →
+27% in cohort A but 40% → 47% in cohort B. It is a membership count over
+fifteen items, it moves by whole cards, and on 5,952 games it swings either
+way. `metricDiagnostics.locationResidualGap` is the number to read;
+`locationShareOfTop15` is kept beside it only as the cautionary example.
+
+**What this changes.** Price Locations off `topOverperformersRampMatched`
+rather than the flat list — per-card the two disagree by up to 8 points, which
+is larger than any lever this project applies. But #1's blanket "no Location
+should take another cost point" should lift only card by card: a Location that
+is still an outlier *after* the correction is now actionable, while one that
+deflates below the bar (Sunken Archive, Melted Hollow) never needed the points
+it was queued for. The keyword deltas are computed on a different
+(archetype-normalized) baseline and are untouched by any of this, so Sacred
+(#2) is not resolved and the note there — that the next lever is the effect,
+not the price — still stands.
