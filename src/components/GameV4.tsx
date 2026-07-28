@@ -774,7 +774,12 @@ function LeaderLane({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-2 py-1 shrink-0 flex-wrap',
+        // v7.4: wrapping was costing ~90px a lane on a phone — the vitality
+        // plate, essence readout and INVOKE LEADER each fell onto their own
+        // row, and two lanes doing that pushed the player's HAND entirely off
+        // a 375x667 screen. Scroll sideways instead of stacking; nothing is
+        // lost, and the lane stays one row tall.
+        'flex items-center gap-2 px-2 py-1 shrink-0 flex-nowrap overflow-x-auto sm:flex-wrap sm:overflow-visible',
         isHuman
           ? 'bg-[var(--c-yellow)]/12 border-t border-[var(--c-yellow)]/25'
           : 'bg-[var(--c-red)]/12 border-b border-[var(--c-red)]/25',
@@ -831,7 +836,7 @@ function LeaderLane({
           disabled={!!invokeWhy}
           title={invokeWhy}
           className={cn(
-            'heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
+            'tap-44 heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
             invokeWhy
               ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60 cursor-not-allowed'
               : 'btn-pop bg-[var(--c-red)] text-white',
@@ -1037,6 +1042,11 @@ export function GameV4({
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
   // Combat feedback: floating damage numbers + attack flashes + phase banner.
+  // v7.4: the hand fan lays out in fixed pixels, so it needs the real viewport
+  // width to know how hard to overlap the cards (see fanOverlap).
+  const [viewportW, setViewportW] = useState(() =>
+    typeof window === 'undefined' ? 1280 : window.innerWidth,
+  );
   const [floats, setFloats] = useState<DmgFloat[]>([]);
   const [phaseFx, setPhaseFx] = useState<string | null>(null);
   const [flashIids, setFlashIids] = useState<Set<string>>(new Set());
@@ -1250,6 +1260,16 @@ export function GameV4({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded]);
+
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
 
   // ---- essence & invoking -------------------------------------------------
   const inMyMain =
@@ -1899,6 +1919,23 @@ export function GameV4({
     };
   });
 
+  /**
+   * How far each hand card slides over the one before it. Fixed at 46px, the
+   * fan was laid out in absolute pixels and simply ran off the screen: seven
+   * compact cards measure 494px, so on a 375px phone it overflowed by 59px on
+   * each side and the cards at both ends were unreachable. Now it tightens
+   * until the whole fan fits, down to a floor that always leaves a usable
+   * sliver of every card showing.
+   */
+  const fanOverlap = (() => {
+    const n = me.hand.length;
+    const w = CARD_SIZES.compact.w;
+    if (n <= 1) return 46;
+    const avail = Math.max(220, viewportW - 12);
+    const needed = w - (avail - w) / (n - 1);
+    return Math.round(Math.min(w - 20, Math.max(46, needed)));
+  })();
+
   // Coach stage: coarse key for the first-match walkthrough.
   const coachStage =
     stage === 'cpu'
@@ -2020,7 +2057,7 @@ export function GameV4({
                 onConfirm: concede,
               });
           }}
-          className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
+          className="tap-44 btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
           aria-label="Concede match"
         >
           ✕ CONCEDE
@@ -2057,7 +2094,7 @@ export function GameV4({
 
       {/* Contextual hint bar */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
-        <div className="px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
+        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
           💡 {hint}
         </div>
       )}
@@ -2203,7 +2240,7 @@ export function GameV4({
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
-              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
               title="Inspect the opponent's ash-pile and void"
             >
               ASH {foe.ashPile.length}
@@ -2218,7 +2255,7 @@ export function GameV4({
         mine={false}
         onInspect={(l) => setInspect(l.def!)}
       />
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
         {foe.field.length === 0 && (
           <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
             <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
@@ -2328,7 +2365,7 @@ export function GameV4({
             player's lane for vertical space. */}
         <button
           onClick={() => setLogExpanded((e) => !e)}
-          className="absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+          className="tap-44 absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
           title={logExpanded ? 'Hide the Battle Log' : 'Show the Battle Log'}
         >
           {logExpanded ? '▾ LOG' : '▴ LOG'}
@@ -2347,7 +2384,7 @@ export function GameV4({
       )}
 
       {/* ================= PLAYER LANE ================= */}
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
+      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
         {me.field.length === 0 && (
           <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
             <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
@@ -2448,7 +2485,7 @@ export function GameV4({
         ))}
         <Tip
           text="Locations produce your Essence — exhaust one to add a pip. Invoking auto-taps whatever the cost needs. The pool empties at the end of every phase."
-          className="text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
+          className="tap-44 text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
         >
           ?
         </Tip>
@@ -2475,7 +2512,7 @@ export function GameV4({
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
-              className="btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
             >
               ASH-PILE {me.ashPile.length}
             </button>
@@ -2559,7 +2596,10 @@ export function GameV4({
                 : ''}
           </span>
         </div>
-        <div className="relative h-[118px] overflow-hidden" style={{ perspective: 800 }}>
+        <div
+          className="relative h-[92px] sm:h-[118px] overflow-hidden"
+          style={{ perspective: 800 }}
+        >
           {me.hand.length === 0 && (
             <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
               — empty hand —
@@ -2589,7 +2629,7 @@ export function GameV4({
                   style={{
                     width: CARD_SIZES.compact.w,
                     height: CARD_SIZES.compact.h,
-                    marginLeft: i === 0 ? 0 : -46,
+                    marginLeft: i === 0 ? 0 : -fanOverlap,
                     zIndex: isFocused ? 50 : i,
                   }}
                   onMouseEnter={() => previewIntent(c.iid)}

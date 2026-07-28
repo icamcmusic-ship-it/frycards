@@ -638,3 +638,30 @@ h4,
     animation-iteration-count: 3;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Touch targets
+
+   The board is a dense, deliberately small-text layout, and several of its
+   controls print at well under the 44px minimum a finger needs (CONCEDE at
+   77x23, LOG at 40x20, the help chip at 17x18). Rather than inflate them for
+   everyone — which would cost vertical space the phone layout has none of —
+   this expands the HIT area only, and only on touch pointers. The control
+   looks identical; there is just more of it to hit.
+   --------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  .tap-44 {
+    position: relative;
+  }
+  .tap-44::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}

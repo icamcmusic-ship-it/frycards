@@ -8,6 +8,43 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — The board is playable on a phone
+
+- **The player's hand was entirely off-screen on a 375x667 phone.** Measured in
+  a real browser against `board-preview.html`: the hand sat at y=733 in a
+  667px viewport on a page with no scroll, so it was not merely awkward — no
+  card could be seen or played, and the match was unwinnable. Two causes, both
+  fixed:
+  - Each Leader lane wrapped onto three rows on a narrow screen (the vitality
+    plate, the essence readout and INVOKE LEADER each fell onto their own
+    line), costing about 90px a lane. The lanes now scroll sideways instead of
+    stacking, which keeps every control reachable at one row tall.
+  - The field lanes held a `min-h-[122px]` floor that the phone layout could
+    not afford; it drops to 84px below the `sm` breakpoint and is unchanged
+    above it.
+- **The hand fan overflowed the viewport by 59px on each side.** It was laid
+  out in absolute pixels with a fixed -46px overlap, so seven compact cards
+  measured a hard 494px whatever the screen. The overlap is now computed from
+  the live viewport width and tightens until the fan fits, with a floor that
+  always leaves a usable sliver of every card showing. Above ~1000px the
+  computation lands back on the original -46, so the desktop board is
+  byte-identical.
+- **Pinch-zoom was disabled.** `maximum-scale=1.0` in the viewport meta fails
+  WCAG 1.4.4 and, on a board this dense, removes the only way to read the
+  smallest text on a phone. Removed.
+- **Touch targets.** A new `tap-44` utility expands a control's hit area to the
+  44px minimum on coarse pointers only, without changing how it looks or
+  costing vertical space the phone layout has none of. Applied to CONCEDE, LOG,
+  both ash-pile buttons, the Locations help chip and INVOKE LEADER: buttons
+  under 44px drop from 33 to 13, and what remains are the informational chips
+  on a card face (keyword pills, cost badges) where a larger hit area would
+  overlap its neighbours.
+- **The contextual hint bar was clipped to half its height** on any screen tall
+  enough to squeeze it — it was missing `shrink-0` in the flex column.
+- `board-preview.html` and `gallery.html` had no viewport meta at all, so the
+  dev harness laid out at Chromium's 980px fallback and disagreed with the real
+  app about what a phone even is. Both now carry the same tag as `index.html`.
+
 ### v7.4 — Mer-King gets an answer
 
 - **Which colour supplies a Leader's answer was decided by typing order.**
