@@ -24,9 +24,12 @@ hand/deck and fabricate any action or outcome.
   exist yet and would need to be introduced as part of this work (it's a
   smaller lift than writing a server-side rules engine from scratch, since
   all the actual rules logic is reusable as-is).
-- Reconnect support and per-action timeouts (the rules have no interactive
-  priority, which greatly simplifies turn handling: only the active player —
-  plus the defender during the block step — ever acts).
+- Reconnect support and per-action timeouts. Note that this is no longer the
+  simple case it was when this spike was written: the engine now has a real
+  stack and APNAP priority (`docs/RULEBOOK.md` §6), so the non-active player
+  can hold priority over any stack item, not just during the block step. The
+  server has to treat "who may act" as `GameState.priority` rather than
+  "the active player", and the action timeout has to auto-pass.
 
 ## Recommended architecture
 
@@ -75,8 +78,10 @@ future spectator/replay mode.
 ## Explicitly out of scope for the MVP
 
 - Spectating, replays, chat, tournaments.
-- Interactive priority/stack — deterministic resolution stays; simultaneous
-  input is needed only for mulligans and the block step.
+- A response prompt for every priority window. The engine auto-passes a
+  player holding nothing they could legally respond with, so the MVP can ship
+  by auto-passing the rest too and only prompting where the client already
+  does: mulligans and the guard step.
 
 ## Open questions
 
