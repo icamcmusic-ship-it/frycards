@@ -1242,7 +1242,10 @@ export function playWellspring(state: GameState, pid: PlayerId, type: EssenceTyp
 export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: string): boolean {
   const p = state.players[pid];
   if (state.winner) return false;
-  if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid)) return false;
+  // Holding priority is enough: a response window is worthless if you cannot
+  // produce the essence to pay for the response.
+  if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid) && !hasPriority(state, pid))
+    return false;
   const loc = p.locations.find((l) => l.iid === locIid);
   if (!loc || loc.exhausted) return false;
   loc.exhausted = true;

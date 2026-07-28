@@ -4,12 +4,6 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Human response window on the board** — the engine's stack and APNAP
-  priority round are live (`docs/RULEBOOK.md` §6) and the CPU answers what the
-  player invokes, but the player is still auto-passed during the CPU's own
-  turn: `GameV4.tsx` has no prompt to hold priority mid-replay, only the
-  existing guard-step reaction window. Until that lands, the interaction the
-  stack unlocks runs in one direction.
 - **Mobile/responsive polish** — touch targets and small-screen layout for the
   board and card views.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card

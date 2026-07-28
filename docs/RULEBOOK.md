@@ -188,6 +188,9 @@ card in response to your own. Second, a player holding nothing they could
 legally respond with is passed for automatically, so a board with no
 instant-speed cards plays exactly as it did before the stack existed.
 
+You may exhaust Locations for Essence in any window where you hold priority,
+not only in your own main phase — an answer you cannot pay for is no answer.
+
 ## 7. Combat
 
 - Only recovered, non-Immobile units without summoning sickness (unless

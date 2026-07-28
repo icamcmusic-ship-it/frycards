@@ -26,7 +26,9 @@ import {
   resolveClash,
   settleStack,
   summonUnit,
+  opponentOf,
 } from './engine';
+import { playTurn } from './ai';
 
 const U = (
   id: string,
@@ -286,6 +288,67 @@ describe('triggers on the stack', () => {
     endPhase(s); // Clash -> Main2
     endPhase(s); // Main2 -> Dusk, turn passes
     expect(s.players[acting].hand.length).toBeGreaterThan(before);
+    expect(s.stack).toHaveLength(0);
+  });
+});
+
+describe('handing a response window to the opponent', () => {
+  /** A deck the CPU can actually develop out of, so playTurn has plays to
+   * make and something to put on the stack. */
+  const BODY = U('body', 2, 2);
+  const TURN_POOL: Record<string, CardDef> = { ...POOL, [BODY.id]: BODY };
+
+  function turnGame(): GameState {
+    const dd: DeckDef = { leaderId: LEADER.id, cards: Array(20).fill(BODY.id) };
+    return createGame(dd, dd, TURN_POOL, { rng: mulberry32(3), shuffle: false, handSize: 4 });
+  }
+
+  test('playTurn resolves through response windows when no hook is installed', () => {
+    const s = turnGame();
+    toHand(s, opponentOf(s.active), QUICK_KILL);
+    playTurn(s, s.active);
+    // Nobody was there to take the window, so nothing is left waiting.
+    expect(s.stack).toHaveLength(0);
+    expect(s.priority).toBeNull();
+  });
+
+  test('onOpponentPriority fires with the opponent holding a real window', () => {
+    const s = turnGame();
+    const foe = opponentOf(s.active);
+    toHand(s, foe, QUICK_KILL);
+    const seen: PlayerId[] = [];
+    playTurn(s, s.active, {
+      onOpponentPriority: (state, to) => {
+        seen.push(to);
+        // Take the window the way the UI does — pass and settle.
+        passPriority(state, to);
+        settleStack(state, { interactive: false });
+      },
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((p) => p === foe)).toBe(true);
+    expect(s.stack).toHaveLength(0);
+  });
+
+  test('a hook that throws leaves the turn paused with the window open', () => {
+    const s = turnGame();
+    const foe = opponentOf(s.active);
+    toHand(s, foe, QUICK_KILL);
+    const PAUSE = { pause: true };
+    expect(() =>
+      playTurn(s, s.active, {
+        onOpponentPriority: () => {
+          throw PAUSE;
+        },
+      }),
+    ).toThrow();
+    expect(s.stack.length).toBeGreaterThan(0);
+    expect(hasPriority(s, foe)).toBe(true);
+
+    // Resuming is just re-entering playTurn once the window is closed.
+    passPriority(s, foe);
+    settleStack(s, { interactive: false });
+    playTurn(s, s.active, { onOpponentPriority: () => settleStack(s, { interactive: false }) });
     expect(s.stack).toHaveLength(0);
   });
 });

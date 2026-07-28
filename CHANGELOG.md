@@ -46,8 +46,19 @@ version of this history also powers the in-app Changelog screen
   triggers between the Quickstrike and normal damage sub-steps.
 - **The CPU uses its windows.** `respondToStack` answers a player's
   invocation with Quick removal when there is a live target worth spending on,
-  and passes otherwise. The player is still auto-passed during the CPU's own
-  turn — the board has no mid-replay response prompt yet; see `ROADMAP.md`.
+  and passes otherwise.
+- **And so does the player.** The board opens a real response window whenever
+  priority lands on the human: a new `respond` stage with the stack listed
+  top-first, instant-speed cards live in hand, and a PASS button. It opens in
+  both directions — during the CPU's turn (`playTurn` pauses through the new
+  `onOpponentPriority` hook and resumes by re-entering, the same shape as the
+  existing guard-step pause) and on the player's own turn when the CPU answers
+  something and hands priority back. Bounded at 40 windows per CPU turn so a
+  resume that stops making progress ends the turn instead of spinning.
+- **Locations tap while you hold priority.** They were tappable only in your
+  own main phase or the clash reaction window, which would have made every new
+  response window unusable — you cannot pay for an answer you cannot produce
+  essence for.
 
 ### v7.3 — Card art restored, catalog edits, five new cards
 

@@ -37,6 +37,9 @@ import {
   resolveClash,
   canInvokeLeader,
   canPayCost,
+  hasPriority,
+  passPriority,
+  settleStack,
   potentialEssence,
   canTarget,
   effectiveCost,
@@ -906,7 +909,7 @@ function LocationsLane({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type Stage = 'mulligan' | 'play' | 'cpu' | 'cpuGuard' | 'over';
+type Stage = 'mulligan' | 'play' | 'cpu' | 'cpuGuard' | 'respond' | 'over';
 
 const PHASE_LABEL: Record<GameState['phase'], string> = {
   Dawn: 'DAWN',
@@ -943,6 +946,16 @@ function mulliganRedraw(g: GameState): void {
  * CPU's turn halts mid-clash with state.clash.step === 'guards', handing the
  * guard decision to the human (see resolveCpuTurn / cpuGuard stage). */
 const CLASH_PAUSE: object = { clashPause: true };
+
+/** The priority-pause sentinel: thrown out of playTurn's onOpponentPriority
+ * hook so the CPU's turn halts with the human holding priority over whatever
+ * the CPU just played (see resolveCpuTurn / respond stage). */
+const PRIORITY_PAUSE: object = { priorityPause: true };
+
+/** Backstop on response windows per CPU turn. Well above any real game (each
+ * one costs the player a card), low enough that a resume loop that stops
+ * making progress ends the turn instead of spinning the narration timer. */
+const MAX_CPU_RESUMES = 40;
 
 export function GameV4({
   humanDeck,
@@ -1043,6 +1056,12 @@ export function GameV4({
   const cpuBeatsRef = useRef<string[]>([]);
   const cpuBeatIdxRef = useRef(0);
   const cpuDoneRef = useRef<(() => void) | null>(null);
+  /** What to do once the human's response window closes. Set whenever the
+   * 'respond' stage is entered — the window can open from the player's own
+   * turn (resume play) or from a paused CPU turn (resume the CPU). */
+  const respondResumeRef = useRef<(() => void) | null>(null);
+  /** Response windows opened during the current CPU turn (loop backstop). */
+  const cpuResumeCountRef = useRef(0);
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -1242,7 +1261,11 @@ export function GameV4({
    * Rulebook §5: the window belongs to EITHER player — you can respond with
    * Quick Events / Ambush units in your own Clash too, before resolving. */
   const inMyReaction = g.clash?.step === 'reaction';
-  const canTapNow = inMyMain || inMyReaction;
+  /** A response window (rulebook §6): something is on the stack and priority
+   * is ours, so instant-speed cards — and the Locations to pay for them —
+   * are live even on the opponent's turn. */
+  const inMyResponse = stage === 'respond' && hasPriority(g, HUMAN);
+  const canTapNow = inMyMain || inMyReaction || inMyResponse;
 
   /** Why can't this hand card be invoked right now? (undefined = it can) */
   const invokeWhy = (c: { def: CardDef }): string | undefined => {
@@ -1250,11 +1273,13 @@ export function GameV4({
     const quick = def.type === 'Event' && def.subtype === 'Quick';
     const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
     if (!inMyMain) {
-      if (inMyReaction) {
-        if (!quick && !ambush) return 'Only Quick Events / Ambush units in a reaction window';
+      if (inMyReaction || inMyResponse) {
+        if (!quick && !ambush) return 'Only Quick Events / Ambush units can respond';
       } else {
         return 'Invoke during your own main phases';
       }
+    } else if (g.stack.length > 0 && !quick && !ambush) {
+      return 'Something is still on the stack — only Quick Events / Ambush units';
     }
     if (!canAfford(me, effectiveCost(g, HUMAN, def))) {
       // Say WHICH pip is short when the problem is color, not quantity.
@@ -1275,6 +1300,7 @@ export function GameV4({
     const card = me.hand.find((c) => c.iid === cardIid);
     if (!card) return;
     autoTapFor(g, HUMAN, effectiveCost(g, HUMAN, card.def));
+    const respondingAlready = stage === 'respond';
     if (invokeCard(g, HUMAN, cardIid, opts)) {
       // The card is on the stack, not resolved: the CPU gets its priority
       // window to answer before it takes effect.
@@ -1283,6 +1309,14 @@ export function GameV4({
       say(
         answers > 0 ? `${card.def.name} invoked — the CPU responds.` : `${card.def.name} invoked.`,
       );
+      if (respondingAlready) {
+        // Playing INTO an open window: it stays open only while priority is
+        // still ours, and closing it resumes whatever was paused.
+        afterResponseAction();
+      } else if (hasPriority(g, HUMAN)) {
+        // The CPU answered and handed priority back — counter it or pass.
+        openResponseWindow(() => setStage('play'));
+      }
     } else {
       bump(); // taps may have happened
       say("Can't invoke that right now.");
@@ -1597,6 +1631,8 @@ export function GameV4({
 
   const beginHumanTurn = () => {
     setCpuBeat(null);
+    respondResumeRef.current = null;
+    cpuResumeCountRef.current = 0;
     bump();
     if (checkWinner()) return;
     setPending(null);
@@ -1608,21 +1644,61 @@ export function GameV4({
     flashPhase('YOUR TURN');
   };
 
-  /** Play the CPU's turn. If it declares an attack, playTurn is paused at the
-   * guard step (via the CLASH_PAUSE sentinel) and the human takes over guard
-   * assignment; otherwise the whole turn runs through and it's back to P1. */
+  /**
+   * Open the human's response window: something is on the stack that they hold
+   * priority over. `onClose` runs once they have passed (or spent everything
+   * they could respond with) and the stack has settled past them.
+   */
+  const openResponseWindow = (onClose: () => void) => {
+    respondResumeRef.current = onClose;
+    setPending(null);
+    closePreview();
+    setStage('respond');
+    const top = g.stack[g.stack.length - 1];
+    say(top ? `${top.sourceName} is on the stack — respond or pass.` : 'Respond or pass.');
+  };
+
+  /**
+   * Called after the human acts inside a response window. If they still hold
+   * priority (another item to answer, or their own response drew a counter)
+   * the window stays open; otherwise it closes and play resumes.
+   */
+  const afterResponseAction = () => {
+    settleStack(g);
+    bump();
+    if (checkWinner()) return;
+    if (hasPriority(g, HUMAN)) return; // still their window
+    const resume = respondResumeRef.current;
+    respondResumeRef.current = null;
+    if (resume) resume();
+  };
+
+  /** PASS button in a response window. */
+  const passMyPriority = () => {
+    if (!hasPriority(g, HUMAN)) return;
+    passPriority(g, HUMAN);
+    afterResponseAction();
+  };
+
+  /** Play the CPU's turn. It can pause twice: at the guard step (CLASH_PAUSE,
+   * the human assigns guards) and whenever a CPU play leaves the human holding
+   * priority over it (PRIORITY_PAUSE, the human responds or passes). Both
+   * resume by re-entering playTurn, which picks up from the current phase. */
   const resolveCpuTurn = () => {
     cpuTimeoutRef.current = null;
     const logStart = g.log.length;
-    let paused = false;
+    let pause: object | null = null;
     try {
       playTurn(g, CPU, {
         chooseGuardsFor: () => {
           throw CLASH_PAUSE;
         },
+        onOpponentPriority: () => {
+          throw PRIORITY_PAUSE;
+        },
       });
     } catch (e) {
-      if (e !== CLASH_PAUSE) {
+      if (e !== CLASH_PAUSE && e !== PRIORITY_PAUSE) {
         // An engine exception out of this timer callback would escape React
         // entirely (white screen, match unrecoverable) — recover to the
         // human's turn instead and leave the details in the console.
@@ -1631,25 +1707,44 @@ export function GameV4({
         beginHumanTurn();
         return;
       }
-      paused = true;
+      pause = e as object;
     }
     bump();
     narrate(g.log.slice(logStart), () => {
       if (checkWinner()) return;
-      if (paused && g.clash && g.clash.step === 'guards') {
+      if (pause === CLASH_PAUSE && g.clash && g.clash.step === 'guards') {
         setGuardSel({});
         setGuardFocus(g.clash.attackers[0] ?? null);
         setStage('cpuGuard');
         say(`${cpuLabel} attacks — assign your guards!`);
+      } else if (pause === PRIORITY_PAUSE) {
+        // Bounded: a resume that somehow makes no progress must not spin the
+        // turn forever through the narration timer.
+        if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+          settleStack(g, { interactive: false });
+          bump();
+          beginHumanTurn();
+        } else if (hasPriority(g, HUMAN)) {
+          openResponseWindow(resumeCpuTurn);
+        } else {
+          resumeCpuTurn();
+        }
       } else {
         beginHumanTurn();
       }
     });
   };
 
+  /** Pick the CPU's turn back up where a response window paused it. */
+  const resumeCpuTurn = () => {
+    setStage('cpu');
+    resolveCpuTurn();
+  };
+
   const runCpuTurn = () => {
     setStage('cpu');
     setCpuBeat(null);
+    cpuResumeCountRef.current = 0;
     cpuThinkTimeoutRef.current = window.setTimeout(() => {
       cpuThinkTimeoutRef.current = null;
       resolveCpuTurn();
@@ -1659,21 +1754,53 @@ export function GameV4({
   /** After the human's guard step + reaction window resolve the clash, the
    * CPU finishes its turn (Main II, Dusk) and play passes back. */
   const continueCpuAfterClash = () => {
-    const logStart = g.log.length;
     try {
       endPhase(g); // Clash → Main II (clash must be 'done')
-      playTurn(g, CPU); // Main II plays, then Dusk → the human's Dawn
     } catch (e) {
       console.error('CPU post-clash crashed:', e);
       say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
       beginHumanTurn();
       return;
     }
+    playCpuRemainder();
+  };
+
+  /** Run whatever is left of the CPU's turn from the current phase (Main II,
+   * then Dusk). Re-entrant: a response window pauses it and resumes here, so
+   * this must never re-do the phase change that got us here. */
+  const playCpuRemainder = () => {
+    const logStart = g.log.length;
+    let paused = false;
+    try {
+      playTurn(g, CPU, {
+        onOpponentPriority: () => {
+          throw PRIORITY_PAUSE;
+        },
+      });
+    } catch (e) {
+      if (e !== PRIORITY_PAUSE) {
+        console.error('CPU post-clash crashed:', e);
+        say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
+        beginHumanTurn();
+        return;
+      }
+      paused = true;
+    }
     bump();
     setStage('cpu');
     narrate(g.log.slice(logStart), () => {
       if (checkWinner()) return;
-      beginHumanTurn();
+      if (!paused) {
+        beginHumanTurn();
+      } else if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+        settleStack(g, { interactive: false });
+        bump();
+        beginHumanTurn();
+      } else if (hasPriority(g, HUMAN)) {
+        openResponseWindow(playCpuRemainder);
+      } else {
+        playCpuRemainder();
+      }
     });
   };
 
@@ -1803,6 +1930,12 @@ export function GameV4({
       return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
     }
     if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
+    if (stage === 'respond') {
+      const top = g.stack[g.stack.length - 1];
+      return top
+        ? `${top.sourceName} is on the stack — answer it with a Quick Event or Ambush unit (essence auto-taps), or PASS to let it resolve.`
+        : 'Respond with a Quick Event or Ambush unit, or PASS.';
+    }
     if (stage === 'play') {
       // The attacker's own reaction window is easy to miss: the rulebook
       // opens it to EITHER player, the engine and the CPU both use it, but
@@ -2023,6 +2156,34 @@ export function GameV4({
         </div>
       )}
 
+      {/* The stack — top of the list resolves first. Only worth showing while
+          something is actually waiting on it, which outside a response window
+          is never more than an instant. */}
+      {g.stack.length > 0 && (
+        <div className="absolute left-1/2 top-[7.4rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-col gap-0.5">
+          <span className="heading-font text-[9px] text-[#29B6F6]">
+            ▤ STACK — resolves top-first
+          </span>
+          {[...g.stack].reverse().map((item, i) => (
+            <span
+              key={item.id}
+              className={cn(
+                'text-[8.5px] font-bold leading-tight',
+                i === 0 ? 'text-[var(--c-yellow)]' : 'text-[var(--c-paper)]/70',
+              )}
+            >
+              {item.controller === HUMAN ? 'YOU' : cpuLabel} · {item.sourceName}
+              {item.kind === 'trigger' ? ' (trigger)' : ''}
+            </span>
+          ))}
+          {inMyResponse && (
+            <span className="text-[8px] font-bold text-[#29B6F6]">
+              YOUR RESPONSE — Quick / Ambush cards playable, or pass
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ================= OPPONENT LANE ================= */}
       <div className="h-[3px] w-full bg-[var(--c-red)]/70 shrink-0" />
       <LeaderLane
@@ -2131,6 +2292,13 @@ export function GameV4({
             className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
             💥 RESOLVE CLASH
+          </button>
+        ) : inMyResponse ? (
+          <button
+            onClick={passMyPriority}
+            className="btn-pop heading-font text-sm bg-[#29B6F6] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+          >
+            ⏭ PASS — LET IT RESOLVE
           </button>
         ) : showPhaseButton ? (
           <button
@@ -2384,7 +2552,11 @@ export function GameV4({
         <div className="flex items-center gap-2 px-2 pt-1">
           <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
             HAND {me.hand.length}/{MAX_HAND} · tap or hover a card to preview
-            {inMyReaction || reactionStep ? ' · REACTION: Quick & Ambush only' : ''}
+            {inMyReaction || reactionStep
+              ? ' · REACTION: Quick & Ambush only'
+              : inMyResponse
+                ? ' · RESPONDING: Quick & Ambush only'
+                : ''}
           </span>
         </div>
         <div className="relative h-[118px] overflow-hidden" style={{ perspective: 800 }}>
@@ -2448,7 +2620,10 @@ export function GameV4({
                       dimmed={!!why}
                       // During the clash reaction window, playable Quick /
                       // Ambush cards light up so the window is discoverable.
-                      highlight={preview === c.iid || ((inMyReaction || reactionStep) && !why)}
+                      highlight={
+                        preview === c.iid ||
+                        ((inMyReaction || reactionStep || inMyResponse) && !why)
+                      }
                       introduceKeywords
                     />
                   </div>
