@@ -137,8 +137,9 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
    Leader; play one basic Wellspring (once per turn — the second player gets
    two on their opening turn, see §3).
 3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
-   defender assigns guards → clash damage, simultaneous unless
-   Quickstrike/Doublestrike changes the timing.
+   defender assigns guards → a priority round both players may act in (§6) →
+   clash damage, simultaneous unless Quickstrike/Doublestrike changes the
+   timing.
 4. **Main Phase II** — as Main Phase I.
 5. **Dusk Phase** — "at Dusk" triggers; Shed down to 7 cards; pass.
 
@@ -153,12 +154,41 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   means a Location CARD — basic Wellsprings are not Sanctums and never count
   toward Ritual or Archivist.
 - A card carrying both Surge and Ritual still discounts only once.
-- Slow Events, Charms, Sanctums, and Leaders: own main phases only.
-  Quick Events and Ambush cards: any priority window — **[digital]** in this
-  client that means your main phases plus the guard-step reaction window of
-  either player's Clash Phase.
+- Slow Events, Charms, Sanctums, and Leaders: own main phases only, and only
+  with the stack empty (see §6).
+- Quick Events and Ambush cards: any priority window — your main phases, the
+  guard-step reaction window of either player's Clash Phase, and any window
+  you hold while something waits on the stack.
 
-## 6. Combat
+## 6. The Stack & Priority
+
+Nothing takes effect the instant it is played. An invoked card or a triggered
+ability goes on **the stack** and waits there while both players get a chance
+to respond.
+
+- **Order of priority is APNAP** — Active Player, then Non-Active Player. The
+  player whose turn it is always speaks first in a round.
+- **Both players passing in succession** resolves the top item of the stack —
+  **last in, first out**, so a response resolves *before* the thing it
+  answers. With an empty stack, passing simply closes the window.
+- **Only instant-speed cards can be played into an open stack**: Quick Events
+  and Ambush units. Everything else waits for your own main phase with the
+  stack empty.
+- **Targets are re-checked on resolution.** If the target is gone or has
+  become illegal (a unit that died in response, or one that gained Warded),
+  the item **fizzles**: an Event does nothing and still goes to the Ash-pile,
+  a Unit still enters the field and loses only its rider, and a Charm whose
+  host is gone goes to the Worn row (Worn) or the Ash-pile (Bound).
+- **Steps with no response window**: combat damage, Dawn and Dusk. Anything
+  put on the stack inside them resolves before the step continues.
+
+**[digital]** Two simplifications in this client. First, you answer your
+opponent's cards and triggers, not your own — there is no chaining a second
+card in response to your own. Second, a player holding nothing they could
+legally respond with is passed for automatically, so a board with no
+instant-speed cards plays exactly as it did before the stack existed.
+
+## 7. Combat
 
 - Only recovered, non-Immobile units without summoning sickness (unless
   Reckless) may attack. Attacking exhausts the unit unless it has Alert.
@@ -177,7 +207,7 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   converts damage dealt into Vitality; Hardened shaves 1 off every damage
   packet (a fully-absorbed hit applies no Venom and feeds no Siphon).
 
-## 7. Death, Removal & State-Based Checks
+## 8. Death, Removal & State-Based Checks
 
 Before any player acts, the game automatically checks: 0-or-less Vitality
 loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
@@ -199,7 +229,7 @@ as of v6.9 *exhaust* and *weaken*.
   state-based checks above. Like Withering, this is not damage: healing does
   not undo it.
 
-## 8. Essence Identity (the seven colors)
+## 9. Essence Identity (the seven colors)
 
 | Essence Type | Theme |
 |---|---|
@@ -215,7 +245,7 @@ A card's color identity is the colored pips in its Essence Cost. Deck
 legality: every colored pip must fall within your Leader's two-color
 identity; colorless cards fit any deck.
 
-## 9. Triggered ability wording
+## 10. Triggered ability wording
 
 "**Whenever**" = repeatable trigger · "**When**" = one-time (enters/leaves
 the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
@@ -226,6 +256,6 @@ the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
 |---|---|
 | Dawn | Recover, Regenerate/Sacred/Resolute/Archivist/Empowering, triggers, Deal one card |
 | Main I | Invoke spells, play one Wellspring |
-| Clash | Attack, guard, deal damage |
+| Clash | Attack, guard, priority round, deal damage |
 | Main II | Invoke spells |
 | Dusk | Triggers, shed to 7, pass turn |

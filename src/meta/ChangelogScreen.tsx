@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Stack Update (v7.4)',
+    date: 'July 2026',
+    items: [
+      'Cards no longer take effect the moment you play them. An invoked card — or an ability it triggers — now goes on THE STACK and waits there while your opponent gets a window to answer it. Whatever goes on last resolves first, so a response happens before the thing it responds to.',
+      "That means Quick Events finally do what they say. Point removal at an attacker mid-combat and it dies before it deals damage; answer an opponent's Event and yours resolves first. The CPU has learned to do this to you too — expect it to hold up removal and answer your plays.",
+      'Cards can now MISS. If a card is aimed at a unit and that unit is gone by the time the card resolves, it fizzles: an Event does nothing and goes to the ash-pile, a unit still enters the field but loses its bonus effect, and a Charm whose target died ends up unbonded rather than disappearing.',
+      'Turn order in a response window follows the active player first, then the defender, and both players passing resolves the top of the stack.',
+      'You will not notice any of this in a game where neither side is holding an instant-speed card: the game passes for you automatically and everything resolves as it always did. Balance is unchanged — 528 test games measured the same win rates and the same game length as before.',
+    ],
+  },
+  {
     version: 'Art, Deck Box & Keywords Update (v7.3)',
     date: 'July 2026',
     items: [

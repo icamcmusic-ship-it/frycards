@@ -8,6 +8,47 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — A real stack and APNAP priority
+
+- **Nothing resolved where it was played.** Invoking a card ran its effect
+  inside `invokeCard`, and a triggered ability ran inside the loop that found
+  it — so the only "response window" the game had was the guard step, and
+  even there the two players' plays just happened in whatever order the caller
+  made them. That is a hard ceiling on card design: an Event that answers
+  another Event is unprintable if there is no moment at which both exist.
+  Cards invoked from hand and triggered abilities now go on a **stack** and
+  wait, resolving **last in, first out**, so a response resolves before the
+  thing it answers.
+- **Priority is a real APNAP round.** `GameState` carries `priority`; the
+  active player speaks first, both players passing in succession resolves the
+  top item, and the guard-step reaction window is now one of these rounds
+  rather than a bare `step === 'reaction'` flag. See `docs/RULEBOOK.md` §6.
+- **The loop passes for you when you have no answer.** A player holding no
+  Quick Event or Ambush unit they could pay for is auto-passed, so a board
+  with no instant-speed cards resolves inside the same call and behaves
+  exactly as it did before. 528 CPU-vs-CPU games on the same seed measured
+  P1 40.3% → 40.7% at an identical 20.6 average turns, with no invariant
+  violations — the stack is behaviour-preserving where nobody can interact.
+- **The loop also never stops for the player who just acted.** You answer
+  your opponent's cards and triggers, not your own. Retaining priority over
+  your own spell is the one piece of real priority left out: it would force
+  every caller — the UI, the CPU, the sim harness — to drive a priority round
+  after every single action, and it buys only self-chaining.
+- **Targets are re-checked on resolution.** Previously impossible; now that a
+  target can die in response, an Event whose target is gone **fizzles** into
+  the ash-pile, a Unit still enters and loses only its rider, and a Charm
+  whose host died lands in the Worn row or the ash-pile instead of vanishing.
+- **Sorcery speed now also requires an empty stack.** Slow Events, Units,
+  Charms and Sanctums were gated on "your own main phase" alone, which would
+  have let a player develop their board in the middle of an unresolved spell.
+- **Combat damage, Dawn and Dusk get no response window** — anything they put
+  on the stack resolves before the step continues, including the death
+  triggers between the Quickstrike and normal damage sub-steps.
+- **The CPU uses its windows.** `respondToStack` answers a player's
+  invocation with Quick removal when there is a live target worth spending on,
+  and passes otherwise. The player is still auto-passed during the CPU's own
+  turn — the board has no mid-replay response prompt yet; see `ROADMAP.md`.
+
 ### v7.3 — Card art restored, catalog edits, five new cards
 
 #### Card art

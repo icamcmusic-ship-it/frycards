@@ -4,6 +4,12 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
+- **Human response window on the board** — the engine's stack and APNAP
+  priority round are live (`docs/RULEBOOK.md` §6) and the CPU answers what the
+  player invokes, but the player is still auto-passed during the CPU's own
+  turn: `GameV4.tsx` has no prompt to hold priority mid-replay, only the
+  existing guard-step reaction window. Until that lands, the interaction the
+  stack unlocks runs in one direction.
 - **Mobile/responsive polish** — touch targets and small-screen layout for the
   board and card views.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
@@ -37,9 +43,6 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 - **Multiplayer (PvP)** — requires a server-authoritative engine; see
   `docs/PVP_DESIGN.md` for the design spike.
-- **True stack/priority (APNAP) system** — currently simplified to
-  deterministic resolution order; a real priority system would unlock
-  instant-speed, interaction-heavy card designs.
 - **Unprinted keywords** (Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate,
   Exhume) — implement when cards using them are printed. (v6.9 printed a
   different new generation instead: one keyword per Essence Type — Wildfire,

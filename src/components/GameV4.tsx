@@ -37,9 +37,9 @@ import {
   resolveClash,
   canInvokeLeader,
   canPayCost,
+  potentialEssence,
   canTarget,
   effectiveCost,
-  locationYield,
   mulliganHand,
   legalAttackers,
   legalGuardsFor,
@@ -52,7 +52,13 @@ import {
   essenceTotal,
   findUnit,
 } from '../game/v3/engine';
-import { playTurn, chooseGuards, maybeMulliganPlayer, reactionPlays } from '../game/v3/ai';
+import {
+  playTurn,
+  chooseGuards,
+  maybeMulliganPlayer,
+  reactionPlays,
+  respondToStack,
+} from '../game/v3/ai';
 import { CardDef, Effect, EssenceCost, MAX_HAND, totalCost, hasKw } from '../game/v3/cards';
 import { COLORS, EssenceType } from '../game/v3/colors';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -189,19 +195,9 @@ function targetsFor(g: GameState, pid: PlayerId, eff: Effect): string[] {
   return cands.filter((iid) => canTarget(g, pid, eff, iid));
 }
 
-/** Essence a player could have right now: floating pool + every untapped
- * Location counted by its produced type (Bountiful Sanctums count double). */
-function potentialPool(p: PlayerState): Partial<Record<EssenceType, number>> {
-  const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
-  for (const l of p.locations) {
-    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
-  }
-  return pool;
-}
-
 /** Could this cost be paid if we tapped Locations for it? */
 function canAfford(p: PlayerState, cost?: EssenceCost): boolean {
-  return canPayCost(potentialPool(p), cost);
+  return canPayCost(potentialEssence(p), cost);
 }
 
 /**
@@ -1262,7 +1258,7 @@ export function GameV4({
     }
     if (!canAfford(me, effectiveCost(g, HUMAN, def))) {
       // Say WHICH pip is short when the problem is color, not quantity.
-      const pool = potentialPool(me);
+      const pool = potentialEssence(me);
       const missing = (Object.entries(def.cost?.pips ?? {}) as [EssenceType, number][])
         .filter(([t, n]) => (pool[t] ?? 0) < (n ?? 0))
         .map(([t]) => t);
@@ -1280,8 +1276,13 @@ export function GameV4({
     if (!card) return;
     autoTapFor(g, HUMAN, effectiveCost(g, HUMAN, card.def));
     if (invokeCard(g, HUMAN, cardIid, opts)) {
+      // The card is on the stack, not resolved: the CPU gets its priority
+      // window to answer before it takes effect.
+      const answers = respondToStack(g, CPU);
       bump();
-      say(`${card.def.name} invoked.`);
+      say(
+        answers > 0 ? `${card.def.name} invoked — the CPU responds.` : `${card.def.name} invoked.`,
+      );
     } else {
       bump(); // taps may have happened
       say("Can't invoke that right now.");
