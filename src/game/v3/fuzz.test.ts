@@ -28,7 +28,9 @@ import {
   invokeLeader,
   mulberry32,
   mulliganHand,
+  passPriority,
   playWellspring,
+  settleStack,
   rebondCharm,
   remainingGrit,
   resolveClash,
@@ -85,8 +87,9 @@ function checkInvariants(g: GameState, where: string): void {
       // documented exception — stateBasedChecks explicitly keeps such a unit
       // on the field with its damage still marked ("Can't be shattered or
       // dealt lethal damage"), so its remaining Grit legitimately sits at or
-      // below zero. No deck this soak built before v7.3 happened to field an
-      // Unbreakable carrier, which is why the exemption was never needed here.
+      // below zero. The exemption went years without ever firing because the
+      // keyword had no carriers at all to build a deck from (v7.4); it is a
+      // live branch now that three cards print it.
       if (!unitHasKw(u, 'Unbreakable')) {
         expect(
           remainingGrit(g, u),
@@ -117,6 +120,28 @@ function checkInvariants(g: GameState, where: string): void {
 
   if (g.winner) {
     expect(SEATS.includes(g.winner), `${where}: winner is not a seat`).toBe(true);
+  } else {
+    // Control only ever returns to a caller with the stack fully settled: the
+    // priority loop auto-passes for anyone who cannot respond, and no caller
+    // here installs a handler to hold a window open. A decided game is the one
+    // exception — settleStack bails the instant a winner exists, which
+    // legitimately strands whatever was mid-resolution.
+    expect(
+      g.stack.length,
+      `${where}: stack left unresolved (${g.stack.map((i) => i.sourceName).join(', ')})`,
+    ).toBe(0);
+    expect(g.priority, `${where}: priority window left open`).toBeNull();
+  }
+  for (const item of g.stack) {
+    expect(SEATS.includes(item.controller), `${where}: stack item has no valid controller`).toBe(
+      true,
+    );
+    if (item.kind === 'card') {
+      expect(item.card, `${where}: a card stack item carries no card`).toBeDefined();
+      if (item.card) note(item.card.iid, `${item.controller}.stack`);
+    } else {
+      expect(item.effect, `${where}: a trigger stack item carries no effect`).toBeDefined();
+    }
   }
 }
 
@@ -273,6 +298,31 @@ describe('hostile input — malformed arguments are refused without side effects
       }
     }
     expect(snapshot(g)).toBe(before);
+  });
+
+  test('passPriority is refused from anyone who does not hold priority', () => {
+    const g = midGame(1234);
+    const before = snapshot(g);
+    // No window is open between turns, so nobody may pass.
+    expect(g.priority).toBeNull();
+    for (const pid of SEATS) {
+      expect(passPriority(g, pid), `passPriority accepted a pass from ${pid}`).toBe(false);
+    }
+    for (const id of NASTY_IDS) {
+      expect(passPriority(g, id as PlayerId)).toBe(false);
+    }
+    expect(snapshot(g)).toBe(before);
+  });
+
+  test('settleStack on an idle state is a no-op in both modes', () => {
+    const g = midGame(555);
+    const before = snapshot(g);
+    settleStack(g);
+    settleStack(g, { interactive: false });
+    expect(snapshot(g)).toBe(before);
+    expect(g.stack).toHaveLength(0);
+    expect(g.priority).toBeNull();
+    checkInvariants(g, 'idle settleStack');
   });
 
   test('playWellspring rejects unknown, prototype-shaped and non-string essence types', () => {

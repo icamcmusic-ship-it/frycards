@@ -8,6 +8,57 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — Unbreakable finally prints
+
+- **Unbreakable printed on ZERO cards.** A rulebook keyword with a fully
+  implemented engine branch that nothing in the 297-card pool could carry: it
+  is premium-gated to `rt >= 4` (21 eligible Units), sits at index 1 of two
+  FOUR-entry colour lists, and needs Root or Void as the card's PRIMARY
+  colour. That intersection is empty on the real catalog. Doublestrike clears
+  the same gate only because Shadow's list has two entries, giving it a 1-in-2
+  instead of a 1-in-4. The keyword was so unreachable that `fuzz.test.ts`
+  carried a comment noting the soak had never once built a deck containing a
+  carrier, and its state-based-check exemption had never executed.
+- Salvaged the way v7.3 salvaged Warlord's zero carriers: a band that fires
+  only where NO keyword was rolled at all, so every existing carrier re-prints
+  byte-identically and no colour list changes length (growing one re-rolls the
+  keyword of every card sharing it). The rarity floor drops to Rare, because
+  21 cards is thin enough that "printable" and "unprintable" are the same
+  thing. **Three cards** now carry it: Skyborne Skeleton Dragon, The Pier-Side
+  Menace and The Wolf of Wall Street — and nothing else in the pool changed.
+- **They keep their printed abilities.** v7.3's "every Unit at Rare or above
+  prints an ability" rule keys off the card having no keyword, so handing
+  these three Unbreakable would have silently taken away the trigger or
+  on-enter effect they had. That check now keys off what the card *rolled*
+  rather than what it ended up with.
+- **Unbreakable reported zero activations however many kills it walked away
+  from** — it was the one keyword with no telemetry hook, so the balance
+  harness was blind to the most expensive entry in `KEYWORD_COST`. It now
+  reports from both branches (lethal damage survived, shatter prevented):
+  ~7,000 procs per 528-game run.
+- **Priced on arrival, not shipped and walked back.** All three land ON the
+  cost cap of 7, so the printed price collects only part of Unbreakable's +3.5
+  surcharge and the body keeps the stats of its pre-keyword base — the
+  "keywords are free stats" skew, resurfacing at the ceiling where
+  `COST_ADJUST` is provably a no-op. First print measured as the pool's #1
+  keyword outlier in both cohorts (+7.6 n=218 / +8.5 n=122, carrier win 69.3%
+  / 73.8%), so all three took a `STAT_ADJUST` trim. That pulled the aggregate
+  back to baseline (P1 40.5% at 19.9 average turns, against 40.7% / 20.6
+  before the keyword existed) and halved the seed-1337 delta to +4.5. The
+  seed-24601 cohort still reads +10.6 at n=139; the two cohorts now disagree
+  in direction, which at that sample size is the cohort artifact the
+  Doublestrike note in `KEYWORD_COST` warns about chasing. Left for a real
+  balance pass — see `ROADMAP.md`.
+- **A catalog test now fails loudly on the next one.** "Only real keywords"
+  was checked; "every real keyword reaches a card" was not, and that blind
+  spot has now cost two keywords (Warlord in v7.3, Unbreakable here), both
+  found by hand months apart.
+- **`fuzz.test.ts` checks the stack too**: an undecided game must return
+  control with the stack empty and no priority window open, every stack item
+  must have a valid controller and the right payload for its kind, and cards
+  waiting on the stack are counted in the one-instance-one-zone check.
+  `passPriority` and `settleStack` join the hostile-input suite.
+
 ### v7.4 — A real stack and APNAP priority
 
 - **Nothing resolved where it was played.** Invoking a card ran its effect

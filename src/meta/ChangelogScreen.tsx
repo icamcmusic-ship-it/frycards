@@ -20,6 +20,7 @@ export const ENTRIES: ChangelogEntry[] = [
       "The opponent's turn can now stop and ask you. When the CPU plays something you could answer, the board shows the stack and hands you a response window — play a Quick Event or Ambush unit, or PASS to let it resolve. Your Locations tap for it even on their turn.",
       'Cards can now MISS. If a card is aimed at a unit and that unit is gone by the time the card resolves, it fizzles: an Event does nothing and goes to the ash-pile, a unit still enters the field but loses its bonus effect, and a Charm whose target died ends up unbonded rather than disappearing.',
       'Turn order in a response window follows the active player first, then the defender, and both players passing resolves the top of the stack.',
+      'UNBREAKABLE now exists. The keyword is in the rulebook and always worked in the engine, but no card in the whole 297-card set could actually carry it — it was printed on exactly zero cards. Three cards now have it: Skyborne Skeleton Dragon, The Pier-Side Menace and The Wolf of Wall Street. Their costs went up to pay for it, and their stat budgets were trimmed after testing showed them winning about 70% of the games they appeared in.',
       'You will not notice any of this in a game where neither side is holding an instant-speed card: the game passes for you automatically and everything resolves as it always did. Balance is unchanged — 528 test games measured the same win rates and the same game length as before.',
     ],
   },

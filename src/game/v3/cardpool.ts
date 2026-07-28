@@ -304,6 +304,20 @@ const STAT_ADJUST: Record<string, number> = {
   // (COST_ADJUST would clip to nothing at the ceiling) — trim stat budget.
   // v6.5: STILL +8.5 residual (z=1.50, n=336) after that — third point
   // stacked.
+  //
+  // v7.4: the three cards the Unbreakable salvage band prints (see
+  // pickUnitKeywords). Unbreakable carries the heaviest weight in
+  // KEYWORD_COST (7, i.e. +3.5), and all three land ON the cost cap of 7 —
+  // so the printed price collects only part of that surcharge and the body
+  // keeps the stats of its pre-keyword base cost. That is the "keywords are
+  // free stats" skew the stat-budget comment in mapUnit warns about,
+  // resurfacing at the ceiling. Measured as the pool's #1 keyword outlier in
+  // both cohorts on first print (+7.6 n=218 / +8.5 n=122, carrier win 69.3% /
+  // 73.8%, ~5k activations a run), so it is trimmed on arrival rather than
+  // shipped and walked back. COST_ADJUST is provably a no-op at the cap.
+  the_pier_side_menace: -3, // 8/7, the largest body of the three
+  the_wolf_of_wall_street: -2, // 6/6 plus a recurring at-Dawn weaken
+  skyborne_skeleton_dragon: -2, // 4/7 plus a death-trigger buff
 };
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
@@ -544,14 +558,41 @@ const NEUTRAL_KEYWORDS: Keyword[] = ['Alert', 'Skywatch', 'Warded', 'Ambush', 'O
 /** Premium keywords restricted to rt >= 4. */
 const PREMIUM = new Set<string>(['Doublestrike', 'Unbreakable']);
 
+/** Colours whose KEYWORDS_OF_COLOR list carries Unbreakable — the only ones
+ * allowed to print it through the salvage band below. */
+const UNBREAKABLE_COLORS = new Set<Color>(['Root', 'Void']);
+
+/** How many keywords this Unit rolls on its own, before any salvage band.
+ * Split out because `forceFx` keys off a card having rolled NOTHING, which is
+ * not the same question as its final keyword list being empty. */
+function naturalKeywordCount(seed: string, rt: number): number {
+  const r = roll(seed, 'kwcount', 10);
+  if (rt >= 4) return r < 2 ? 0 : r < 6 ? 1 : 2;
+  if (rt >= 2) return r < 3 ? 0 : r < 8 ? 1 : 2;
+  return r < 5 ? 0 : r < 9 ? 1 : 2;
+}
+
 function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
   // 0-2 keywords, more at higher rarity.
-  const r = roll(seed, 'kwcount', 10);
-  let count: number;
-  if (rt >= 4) count = r < 2 ? 0 : r < 6 ? 1 : 2;
-  else if (rt >= 2) count = r < 3 ? 0 : r < 8 ? 1 : 2;
-  else count = r < 5 ? 0 : r < 9 ? 1 : 2;
-  if (count === 0) return [];
+  const count = naturalKeywordCount(seed, rt);
+  if (count === 0) {
+    // v7.4: **Unbreakable printed on ZERO cards** — rulebook text and a fully
+    // implemented engine keyword that no card in the 297-card pool could ever
+    // carry. It is PREMIUM (rt >= 4, so 21 eligible Units), it lives at index
+    // 1 of two FOUR-entry colour lists, and it needs Root or Void as the
+    // PRIMARY colour: that intersection is empty on the real catalog.
+    // (Doublestrike clears the same gate only because Shadow's list has two
+    // entries, giving it a 1-in-2 rather than a 1-in-4.)
+    //
+    // Salvaged the way v7.3 salvaged Warlord's zero carriers: a band that
+    // fires only where NO keyword was rolled at all, so every existing
+    // carrier re-prints byte-identically and no colour list changes length
+    // (growing one would re-roll the keyword of every card sharing it).
+    // Rarity floor drops to Rare because rt >= 4 is 21 cards — thin enough
+    // that "printable" and "unprintable" are the same thing.
+    if (rt >= 2 && colors[0] && UNBREAKABLE_COLORS.has(colors[0])) return ['Unbreakable'];
+    return [];
+  }
 
   const legal = (kw: string) => !PREMIUM.has(kw) || rt >= 4;
   const primaryList = (colors[0] ? KEYWORDS_OF_COLOR[colors[0]] : NEUTRAL_KEYWORDS).filter(legal);
@@ -681,7 +722,10 @@ function mapUnit(c: CardTemplate): CardDef {
   // the v7.2 pool, including Full-Art pulls). The effect magnitude already
   // scales off the natural cost, so the forced roll prints the same size
   // effect the card would have got had the 1-in-4 landed.
-  const forceFx = rt >= 2 && keywords.length === 0;
+  // Keyed off the card rolling NOTHING of its own, not off the final list
+  // being empty: the Unbreakable salvage band hands a keyword to some of these
+  // cards, and that must not silently cost them the ability this guarantees.
+  const forceFx = rt >= 2 && naturalKeywordCount(seed, rt) === 0;
   if (forceFx || roll(seed, 'unit-fx', 4) === 0) {
     const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2)));
     const fx = themedEffect(seed, primary, v);

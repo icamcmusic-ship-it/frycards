@@ -18,6 +18,13 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   in games with more ramp). Every two-cohort outlier in the v7.2 pass is a
   Location, and several already carry +2/+3 cost stacks chasing it. Blocks any
   further Location pricing. See `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3.
+- **Unbreakable's residual** — v7.4 printed the keyword for the first time and
+  trimmed all three carriers' stat budgets on arrival. Post-trim the cohorts
+  disagree: +4.5 (n=183) on seed 1337, +10.6 (n=139) on seed 24601. At that
+  sample size that is the cohort artifact the `KEYWORD_COST` Doublestrike note
+  warns against chasing, so it needs a proper pass rather than another
+  stacked point. Note all three sit at the cost cap, so `COST_ADJUST` is a
+  no-op and `STAT_ADJUST` is the only live lever. See `CHANGELOG.md` v7.4.
 - **Colour-aware Leader minus abilities** — `mapLeader` takes the minus from
   `identity[0]` and the plus from `identity[1]`, so which colour supplies a
   Leader's answer is decided by array order in `LEADER_COLORS`. v7.2 patched
