@@ -8,6 +8,44 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — Mer-King gets an answer
+
+- **Which colour supplies a Leader's answer was decided by typing order.**
+  `mapLeader` took the minus ability from `identity[0]` — literal array order
+  in `LEADER_COLORS`, hand-written and never rolled — so whether a Leader's one
+  answer touched the enemy board came down to which of its two colours happened
+  to be written first. `minusColorFor` now prefers whichever half yields an
+  ability that reaches the opponent.
+- **The roadmap said this would re-roll all eight Leaders. It re-rolls none** —
+  verified by diffing the whole pool before and after: zero cards change. The
+  only two the rule would flip (Kuro, Ruin-Walker) already carry hand overrides
+  that outrank it, and those overrides are *not* redundant — both encode a
+  price the raw colour table overshoots at (Kuro measured 61.6%/55.6% and
+  Ruin-Walker 68.2% before being repriced). What the rule buys is that the next
+  Leader printed does not need a fourth hand patch to get an answer.
+- **It also cannot fix the one Leader still inert, which is the real finding.**
+  Mer-King (Tide/Root) has no interactive half to draw from: Tide gives `Deal a
+  card`, Root gives `+2/+2 on a friendly unit`. Its whole kit pointed inward —
+  `-1: Deal a card` and `+1: Restore 2 Vitality` — and it finished **35.1%
+  (n=1488) / 33.4% (n=1860)**, bottom or second-bottom in both cohorts on the
+  two largest Leader samples in the run.
+- **It takes a shape no other Leader has: `-3: All enemy units get -1/-1`.**
+  Every small interactive effect was already spoken for, and three sit on PLUS
+  halves where they *gain* Resolve, so the same effect on a minus would have
+  printed a strictly dominated ability. A board-wide shrink is colour-honest
+  for Tide and Root and reuses an already-implemented `applyEffect` path.
+  Priced at -3 against the two overshoots this table records: at Resolve 4 a
+  full tank buys exactly one, and the +1 half needs three turns to fund the
+  next.
+- **Result: 35.1% → 52.2% and 33.4% → 47.1%** — up ~15 points to baseline in
+  both cohorts, mid-table in both, with none of the jump-to-first overshoot
+  that killed the first Kuro and Ruin-Walker trials. Zero invariant violations
+  on both runs.
+- Two Leaders are now the extremes in both cohorts — Void Mother at 71.7%/72.0%
+  and Kuro at 32.4%/34.0% — and both are per-Leader Resolve/price problems the
+  colour rule cannot reach. Diagnosed but deliberately not actioned in the same
+  pass as another Leader change; see `ROADMAP.md`.
+
 ### v7.4 — The Location metric (balance harness)
 
 - **The balance harness could not price a Location, and had blocked itself on

@@ -27,12 +27,22 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   warns against chasing, so it needs a proper pass rather than another
   stacked point. Note all three sit at the cost cap, so `COST_ADJUST` is a
   no-op and `STAT_ADJUST` is the only live lever. See `CHANGELOG.md` v7.4.
-- **Colour-aware Leader minus abilities** — `mapLeader` takes the minus from
-  `identity[0]` and the plus from `identity[1]`, so which colour supplies a
-  Leader's answer is decided by array order in `LEADER_COLORS`. v7.2 patched
-  the three worst cases by hand via `LEADER_MINUS_ABILITY_OVERRIDE`; the
-  systemic fix is to let the kit draw from whichever half is interactive,
-  which re-rolls all eight Leaders and needs its own pass.
+- **Two Leaders at the extremes** — the colour-aware minus rule landed in v7.4
+  and Mer-King, the last inert kit, is fixed (see `CHANGELOG.md`). What is left
+  is per-Leader pricing, which that rule cannot reach, and both cases are the
+  same well-documented shape: a full Resolve tank buying unconditional removal
+  more than once.
+  - **Void Mother 71.7% / 72.0%**, first in both cohorts by ~12 points. Resolve
+    **6** with a `-2: Banish` — three unconditional removals per tank. The
+    `LEADER_MINUS_ABILITY_OVERRIDE` header already names this exact shape as
+    "the strongest kit shape in the game" and repriced Ruin-Walker's identical
+    Void Banish from -2 to -3 for it; Void Mother kept the -2 AND has double
+    the Resolve. Lever: price the minus, or drop the Resolve.
+  - **Kuro, the Unseen 32.4% / 34.0%**, last in both. Resolve **3** against a
+    `-2` minus, so a full tank buys one use and strands a point. Its v7.2
+    override shipped at -2 after a -1 version overshot to 61.6%; at Resolve 3
+    that reprice appears to have overcorrected. Lever: Resolve, or the minus
+    price — not the effect, which two trials already bracketed.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the
