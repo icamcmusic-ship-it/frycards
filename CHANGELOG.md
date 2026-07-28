@@ -70,6 +70,54 @@ violations across all eleven trial pairs.
   `cold_fire_volcano` as above, and `seabed_mandala` -4.5/-6.1 -> -3.1/+2.2 —
   priced against the Event row of the type table rather than the pool mean.
 
+### v7.5 — The card views outside the board
+
+The v7.4 pass made the match board playable on a phone and left the roadmap
+saying the collection, deck editor and pack opening "have not been measured at
+all". They now have been — and the reason they never were is the first thing
+fixed.
+
+- **Nothing outside the board could be rendered offline.** All three screens
+  read from `useMeta`, which needs a Supabase session, so there was no way to
+  put them in front of a browser without signing in. New dev-only
+  `meta-preview.html` (`?screen=collection|decks|pack`) mounts them against a
+  stubbed MetaState, the same trick `board-preview.html` uses for the match
+  board.
+- **The deck editor was the worst of the three.** Its header laid out as two
+  rows of controls that could not wrap, so SAVE DECK and CHANGE LEADER sat off
+  the right edge of a 375px screen and the page itself measured 443px wide. Its
+  two panes were side by side at every width, which squeezed the card pool to
+  about 90px — narrower than one card. The header wraps, the panes stack below
+  `sm` with the deck list capped and scrolling under the pool, and the legality
+  warnings (four wrapped sentences, ~300px, which was most of the editor's
+  vertical budget) are capped and scroll too. Desktop is unchanged.
+- **The collection was a 119,000px page.** The browse grid printed `full`
+  240x336 cards, which is ONE per row on a phone; 297 cards plus foil and
+  serialized entries made it effectively unbrowsable. It prints `standard`
+  below `sm` — two per row, and a third of the scroll.
+- **The mulligan screen clipped its own top.** The dialog is taller than a
+  667px phone and was centred in a scroll container, so the title and first row
+  of cards were above the scrollable area with no way to reach them. It aligns
+  to the top below `sm`, prints `compact` cards, and its sticky footer is now
+  full-bleed and above the grid instead of a bar the width of its buttons with
+  cards showing through and over it.
+- **The hand fan is a scroll strip below `sm`.** v7.4 made the fan fit a 375px
+  screen by tightening the overlap until it did, which works and leaves every
+  card tappable — but at seven-plus cards the overlap floor leaves about 20px
+  of each card showing and the names are unreadable. A fan's premise is that
+  you can see the cards it splays, and at phone width there is not enough room
+  for that premise, so the layout changes rather than being squeezed further.
+  It costs no vertical space: the dock height is unchanged and the cards sit
+  un-rotated, so the 92px on show is the card's own top rather than 84px of a
+  rotated card behind its neighbour. Above `sm` the fan is untouched.
+- Pack opening was measured at all three of its stages and needed no changes.
+- New `src/lib/useIsNarrow.ts` — the card faces pick their tier through a
+  `size` PROP, so there is no class that turns a 240px card into a 140px one
+  and those choices have to be made in JS. One place now decides where the
+  line is.
+- The deck editor is `100dvh` rather than `100vh`, so its bottom row is not
+  under mobile Safari's URL bar.
+
 ### v7.5 — The two Leaders at the extremes
 
 - **Void Mother 71.7%/72.0% -> 55.6%/56.3%**, and no longer first in either

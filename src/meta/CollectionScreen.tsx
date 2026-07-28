@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, ProgressBar, CardMarketValuePanel, Credits } from './ui';
 import { cn } from '../lib/utils';
+import { useIsNarrow } from '../lib/useIsNarrow';
 import { CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
@@ -73,6 +74,11 @@ async function runBulkQuicksell(
 }
 
 export function CollectionScreen({ onBack }: { onBack: () => void }) {
+  // v7.5: the browse grid printed `full` (240x336) cards. On a 375px phone
+  // that is ONE card per row and, at 297 cards plus foil/serialized entries,
+  // a 119,000px-tall page — the collection was effectively unbrowsable on a
+  // phone. `standard` fits two per row inside the same padding.
+  const narrow = useIsNarrow();
   const {
     profile,
     collection,
@@ -534,7 +540,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             <CardFace
               key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
               def={e.def}
-              size="full"
+              size={narrow ? 'standard' : 'full'}
               count={e.kind !== 'serialized' ? e.count : undefined}
               foil={e.kind === 'foil'}
               serial={e.serial}

@@ -614,10 +614,16 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   }
 
   return (
-    <div className="w-full h-screen flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)]">
+    // `100dvh` rather than `100vh`: on mobile Safari/Chrome the latter is the
+    // viewport WITHOUT the retracted URL bar, so a full-height editor is taller
+    // than the screen and its bottom row sits under the browser chrome.
+    <div className="w-full h-[100dvh] flex flex-col bg-[var(--c-paper)] text-[var(--c-ink)]">
       {/* Editor header */}
-      <div className="flex items-center justify-between gap-3 bg-[var(--c-ink)] px-4 py-2.5 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* v7.5: this header laid out as two fixed rows of controls that could
+          not wrap, so on a 375px phone SAVE DECK and CHANGE LEADER were off
+          the right edge of the screen and the page itself was 443px wide. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
           <PopButton onClick={handleBack} color="yellow">
             &lt; BACK
           </PopButton>
@@ -626,7 +632,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             onChange={(e) => setName(e.target.value)}
             maxLength={40}
             aria-label="Deck name"
-            className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-48"
+            className="px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm w-32 sm:w-48"
           />
           <span className="heading-font text-sm text-[var(--c-paper)] truncate">{leader.name}</span>
           <PopButton
@@ -660,7 +666,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <span
             className={cn(
               'heading-font text-sm px-2 py-1 ink-border-sm',
@@ -693,7 +699,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       </div>
 
       {(issues.length > 0 || saveError) && (
-        <div className="bg-[var(--c-yellow)] border-b-4 border-[var(--c-ink)] px-4 py-1.5 text-[10px] font-bold flex flex-wrap gap-x-4 gap-y-0.5 shrink-0">
+        // Capped and scrolling: four full-sentence legality warnings wrap to
+        // about 300px on a 375px screen, which was most of the editor's
+        // vertical budget and left the card pool a ~40px sliver.
+        <div className="bg-[var(--c-yellow)] border-b-4 border-[var(--c-ink)] px-2 sm:px-4 py-1.5 text-[10px] font-bold flex flex-wrap gap-x-4 gap-y-0.5 shrink-0 max-h-16 sm:max-h-none overflow-y-auto">
           {saveError && <span className="text-[var(--c-red)]">SAVE FAILED: {saveError}</span>}
           {issues.slice(0, 4).map((i) => (
             <span key={i.text}>⚠ {i.text}</span>
@@ -702,9 +711,12 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0">
+      {/* v7.5: side-by-side below `sm` squeezed the pool column to ~90px —
+          narrower than a single card — so the pool was unusable on a phone.
+          Stacked instead, with the deck list capped and scrolling under it. */}
+      <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-y-auto sm:overflow-visible">
         {/* Card pool */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 min-h-[55vh] sm:min-h-0 flex flex-col">
           <div className="flex gap-2 items-center p-3 pb-2 shrink-0 flex-wrap">
             <input
               className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
@@ -789,7 +801,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         </div>
 
         {/* Deck list */}
-        <div className="w-72 shrink-0 border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
+        <div className="w-full sm:w-72 shrink-0 max-h-[45vh] sm:max-h-none border-t-4 sm:border-t-0 sm:border-l-4 border-[var(--c-ink)] bg-[var(--c-steel)] flex flex-col">
           {/* Deck stats: essence-cost curve, type breakdown, top keywords */}
           <div className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0">
             <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK STATS</div>

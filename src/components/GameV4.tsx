@@ -1920,12 +1920,32 @@ export function GameV4({
   });
 
   /**
+   * v7.5: below the `sm` breakpoint the hand is a horizontal SCROLL STRIP
+   * rather than a fan.
+   *
+   * v7.4 made the fan fit a 375px screen by tightening the overlap until it
+   * did — which it does, and every card stays tappable, but at seven-plus
+   * cards the overlap floor leaves about 20px of each card showing and the
+   * names are unreadable. A fan's whole premise is that you can see the cards
+   * it splays; at phone width there is not enough horizontal room for that
+   * premise to hold, so the layout changes instead of being squeezed further.
+   *
+   * The strip costs no vertical space — the dock height is unchanged, and the
+   * cards sit un-rotated at translateY(0) so the 92px on show is the card's
+   * own top (masthead, cost, art) rather than 84px of a rotated card behind
+   * its neighbour. Above `sm` the fan is untouched.
+   */
+  const isNarrow = viewportW < 640;
+  const handStrip = isNarrow;
+
+  /**
    * How far each hand card slides over the one before it. Fixed at 46px, the
    * fan was laid out in absolute pixels and simply ran off the screen: seven
    * compact cards measure 494px, so on a 375px phone it overflowed by 59px on
-   * each side and the cards at both ends were unreachable. Now it tightens
-   * until the whole fan fits, down to a floor that always leaves a usable
-   * sliver of every card showing.
+   * each side and the cards at both ends were unreachable. v7.4 made it
+   * tighten until the whole fan fits, down to a floor that always leaves a
+   * usable sliver of every card showing; v7.5 stops using it below `sm`
+   * entirely (see `handStrip`).
    */
   const fanOverlap = (() => {
     const n = me.hand.length;
@@ -2597,15 +2617,28 @@ export function GameV4({
           </span>
         </div>
         <div
-          className="relative h-[92px] sm:h-[118px] overflow-hidden"
-          style={{ perspective: 800 }}
+          className={cn(
+            'relative h-[92px] sm:h-[118px]',
+            // The strip scrolls sideways; the fan is clipped as before.
+            handStrip ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden',
+          )}
+          style={handStrip ? undefined : { perspective: 800 }}
         >
           {me.hand.length === 0 && (
             <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
               — empty hand —
             </span>
           )}
-          <div className="absolute left-1/2 bottom-0 -translate-x-1/2 flex">
+          <div
+            className={cn(
+              'flex',
+              handStrip
+                ? // A scrolling row: full-width cards, snapped, with enough
+                  // trailing room that the last card can reach the left edge.
+                  'gap-1.5 px-2 pt-1 w-max snap-x snap-mandatory'
+                : 'absolute left-1/2 bottom-0 -translate-x-1/2',
+            )}
+          >
             {me.hand.map((c, i) => {
               const why = invokeWhy(c);
               const n = me.hand.length;
@@ -2625,11 +2658,11 @@ export function GameV4({
                   role="button"
                   tabIndex={0}
                   aria-label={`${c.def.name} — preview and invoke`}
-                  className="relative shrink-0 outline-none"
+                  className={cn('relative shrink-0 outline-none', handStrip && 'snap-start')}
                   style={{
                     width: CARD_SIZES.compact.w,
                     height: CARD_SIZES.compact.h,
-                    marginLeft: i === 0 ? 0 : -fanOverlap,
+                    marginLeft: handStrip || i === 0 ? 0 : -fanOverlap,
                     zIndex: isFocused ? 50 : i,
                   }}
                   onMouseEnter={() => previewIntent(c.iid)}
@@ -2649,9 +2682,16 @@ export function GameV4({
                     className="pointer-events-none transition-transform duration-150 ease-out"
                     style={{
                       transformOrigin: 'bottom center',
-                      transform: isFocused
-                        ? `translateY(-84px) rotate(0deg) scale(1.04)`
-                        : `translateY(${70 + arcDrop}px) rotate(${angle}deg)`,
+                      // Strip: no fan geometry at all — the card sits flat at
+                      // the top of the dock so its masthead is legible, and
+                      // the focused one only lifts by the 2px the dock has.
+                      transform: handStrip
+                        ? isFocused
+                          ? 'translateY(-2px) scale(1.02)'
+                          : 'translateY(0)'
+                        : isFocused
+                          ? `translateY(-84px) rotate(0deg) scale(1.04)`
+                          : `translateY(${70 + arcDrop}px) rotate(${angle}deg)`,
                     }}
                   >
                     <CardFace
@@ -2889,38 +2929,49 @@ export function GameV4({
 
       {/* Mulligan overlay */}
       {stage === 'mulligan' && (
-        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-center justify-center p-4 overflow-y-auto">
+        /* v7.5: `items-start` below `sm`. On a 375x667 phone this dialog is
+           taller than the viewport, and a centred flex child in a scroll
+           container has its overflow clipped off the TOP with no way to reach
+           it — the title and the first row of cards were unreachable. */
+        <div className="absolute inset-0 z-50 bg-[var(--c-ink)]/95 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
           <div
             ref={mulliganDialogRef}
             tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label="Mulligan"
-            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-5 text-center max-w-5xl w-full my-auto outline-none"
+            className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 sm:p-5 text-center max-w-5xl w-full my-auto outline-none"
           >
-            <div className="heading-font text-3xl mb-1">
+            <div className="heading-font text-xl sm:text-3xl mb-1">
               {mulliganCount > 0 ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
             </div>
             <div className="text-[12px] font-bold text-[var(--c-steel)] mb-1">
               Opening hand — {playerName}
               {mulliganCount > 0 ? ` · mulligan ×${mulliganCount}` : ''}
             </div>
-            <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-4 leading-snug">
-              {`A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${Math.max(0, me.hand.length - 1)} fresh ones — one FEWER each time (rulebook §3). You can mulligan as often as you like. Click any card to zoom in.`}
+            <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-3 sm:mb-4 leading-snug">
+              {`A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${Math.max(0, me.hand.length - 1)} fresh ones — one FEWER each time (rulebook §3). ${isNarrow ? 'Tap' : 'Click'} any card to zoom in.`}
             </div>
-            <div className="flex gap-2 justify-center flex-wrap mb-5">
+            <div className="flex gap-1.5 sm:gap-2 justify-center flex-wrap mb-3 sm:mb-5">
               {me.hand.map((c) => (
                 <React.Fragment key={c.iid}>
                   <CardFace
                     def={c.def}
-                    size="standard"
+                    // Two `standard` cards do not fit a 375px row beside the
+                    // dialog's own padding; `compact` fits three, and the card
+                    // is tappable to zoom either way.
+                    size={isNarrow ? 'compact' : 'standard'}
                     introduceKeywords
                     onClick={() => setInspect(c.def)}
                   />
                 </React.Fragment>
               ))}
             </div>
-            <div className="flex gap-4 justify-center flex-wrap sticky bottom-0 bg-[var(--c-paper)] py-2 -mb-2">
+            {/* Full-bleed sticky footer. It used to be a bare `bg-paper` bar
+                the width of its buttons, so on a phone the wrapped buttons
+                floated over the card grid with the cards showing between and
+                around them. */}
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center items-stretch sm:items-center sticky bottom-0 z-20 bg-[var(--c-paper)] border-t-2 border-[var(--c-ink)] -mx-3 sm:-mx-5 px-3 sm:px-5 pt-2 pb-1 -mb-3 sm:-mb-5">
               <button
                 onClick={afterMulligan}
                 className="btn-pop heading-font text-base bg-[var(--c-yellow)] px-8 py-3 ink-border-md shadow-hard-black-xs"

@@ -4,13 +4,13 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Mobile/responsive polish, second pass** — v7.4 made the match board
-  playable on a phone (see `CHANGELOG.md`). Still open: the card *views*
-  outside the board (collection, deck editor, pack opening) have not been
-  measured at all, and the hand fan at seven-plus cards is tight enough on a
-  375px screen that names are hard to read even though every card is tappable.
-  A per-card horizontal scroll strip may beat the fan below the `sm`
-  breakpoint.
+- **Mobile/responsive polish, third pass** — v7.4 made the match board
+  playable on a phone and v7.5 did the card views outside it (collection, deck
+  editor, pack opening, mulligan) plus the hand scroll strip; see
+  `CHANGELOG.md`. Not yet measured on a phone: the store, marketplace, player
+  shops, social and profile screens, and the 3D card inspector. `npm run dev`
+  plus `meta-preview.html` / `board-preview.html` is the harness — extend the
+  former as screens are covered.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme (partially underway — see
   the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
