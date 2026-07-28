@@ -62,10 +62,18 @@ const EXPECTED = [
   'Blighted',
   'Archivist', // Location
   'Warlord', // Leader
+  // v7.5: the six that had names on the roadmap and no implementation, placed
+  // where each type's colour vocabulary had a hole.
+  'Fate',
+  'Exhume', // Event — Void, Shadow
+  'Freeze-Dry',
+  'Blessed', // Charm — Tide, Light
+  'Scorched-Earth',
+  'Glaciate', // Location — Ember, Gale
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 non-Unit keywords, unique', () => {
+  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 + 6 v7.5 keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
@@ -77,10 +85,14 @@ describe('keyword set', () => {
     // purpose — there are only 9 Leaders in the pool, so a Leader-only
     // keyword is thinly printed by construction (which is why Archivist was
     // moved to Location, where ~50 cards can carry it).
+    // v7.5 adds two apiece to Event, Charm and Location. Leader is the one
+    // type it deliberately skipped: its keyword roll (`roll(seed,'ldr-kw6',6)`)
+    // has no free band, so any addition re-rolls existing Leaders — a balance
+    // change disguised as a content one, over a 9-card type.
     const counts: Record<string, number> = {
-      Event: 4,
-      Charm: 4,
-      Location: 5,
+      Event: 6,
+      Charm: 6,
+      Location: 7,
       Leader: 3,
     };
     for (const [t, n] of Object.entries(counts)) {

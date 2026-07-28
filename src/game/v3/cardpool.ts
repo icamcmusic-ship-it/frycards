@@ -31,6 +31,7 @@ import {
   Keyword,
   isKeyword,
   keywordsForType,
+  V75_KEYWORDS,
 } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -722,11 +723,51 @@ function freshKeywordFor(
   type: CardDef['type'],
   color: Color | undefined,
 ): string | undefined {
-  const all = keywordsForType(type).filter((kw) => KEYWORD_COLOR[kw] !== undefined);
+  // v7.5: the newest generation is EXCLUDED here. `pick` indexes modulo the
+  // list's length, so letting these into this list would re-roll the keyword
+  // of every card of the type whose own colour has no match and falls back to
+  // `all` — see V75_KEYWORDS. They get their own band and their own list.
+  const all = keywordsForType(type).filter(
+    (kw) => KEYWORD_COLOR[kw] !== undefined && !V75_KEYWORDS.includes(kw),
+  );
   if (!all.length) return undefined;
   const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
   const list = onColor.length ? onColor : all;
   return pick(seed, 27, list) as string;
+}
+
+/**
+ * v7.5: the same roll over the NEW keyword generation only, drawn on a roll
+ * band of its own so no existing carrier re-prints.
+ *
+ * It keeps `freshKeywordFor`'s colour fallback, and for the reason that
+ * function records: a STRICT colour match prints nothing. Measured on the real
+ * pool with the fallback removed — 297 cards, a 12-point band per type — Fate,
+ * Exhume and Scorched-Earth all landed ZERO carriers, which is exactly the
+ * dead-text failure `catalog.test.ts` exists to catch and the third time this
+ * project has walked into it. The fallback list here is only ever the two
+ * keywords of the card's own type, and its length is fixed, so unlike
+ * `freshKeywordFor`'s it cannot grow and re-roll anything later.
+ */
+function freshKeywordV75For(
+  seed: string,
+  type: CardDef['type'],
+  color: Color | undefined,
+): string | undefined {
+  const all = keywordsForType(type).filter((kw) => V75_KEYWORDS.includes(kw));
+  if (!all.length) return undefined;
+  const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
+  if (onColor.length) return onColor[0];
+  // Off-colour, the pair is split by the card's OWN colour rather than by a
+  // fresh roll. A two-entry list is small enough that a hash over it is not
+  // reliably even, and measured on the real pool it was not: rolling the
+  // fallback gave Glaciate eight Locations and Scorched-Earth one, and Fate
+  // zero Events across two band widths. Indexing by colour spreads the pair
+  // deterministically over the seven Essence Types instead, so neither of a
+  // generation's keywords can be starved by luck the way Doublestrike's two
+  // carriers were.
+  const i = color ? COLORS.indexOf(color) : hash(seed);
+  return all[((i % all.length) + all.length) % all.length];
 }
 
 function mapUnit(c: CardTemplate): CardDef {
@@ -810,10 +851,7 @@ function mapUnit(c: CardTemplate): CardDef {
   // cards, and that must not silently cost them the ability this guarantees.
   const forceFx = rt >= 2 && naturalKeywordCount(seed, rt) === 0;
   if (forceFx || roll(seed, 'unit-fx', 4) === 0) {
-    const v = Math.max(
-      1,
-      Math.min(4, Math.ceil(naturalT / 2) + (UNIT_EFFECT_ADJUST[c.id] ?? 0)),
-    );
+    const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2) + (UNIT_EFFECT_ADJUST[c.id] ?? 0)));
     const fx = themedEffect(seed, primary, v);
     const when = pick(seed, 17, ['enters', 'enters', 'dies', 'atDawn', 'atDusk'] as const);
     if (when === 'enters') {
@@ -880,9 +918,18 @@ function mapEvent(c: CardTemplate): CardDef {
   // bands are untouched, so every existing Surge/Resonant carrier re-prints
   // byte-identically and only cards that previously rolled NO keyword pick
   // one up — priced, as always, through KEYWORD_COST.
+  // v7.5 adds a FOURTH band (42..62) for Fate/Exhume — wider than the Charm
+  // and Location bands because there are only 41 Events in the pool, and a
+  // 12-point band put just two of them in range, on the same rule: the
+  // 0..42 bands are untouched, so every existing carrier re-prints
+  // byte-identically and only cards that previously rolled nothing pick one up.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
-    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Event', colors[0]) : undefined;
+    kwRoll >= 26 && kwRoll < 42
+      ? freshKeywordFor(seed, 'Event', colors[0])
+      : kwRoll >= 42 && kwRoll < 62
+        ? freshKeywordV75For(seed, 'Event', colors[0])
+        : undefined;
   const keywords: string[] = evFresh
     ? [evFresh]
     : kwRoll < 14
@@ -929,9 +976,15 @@ function mapCharm(c: CardTemplate): CardDef {
   // v6.0 Charm keywords: ~12% Runic (bond cantrip); ~12% of BOUND charms
   // Soulbound (returns to hand when its unit dies). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
+  // v7.5 adds a fourth band (40..52) for Freeze-Dry/Blessed — see the Event
+  // mapper for the rule these bands follow.
   const kwRoll = roll(seed, 'ch-kw2', 100);
   const chFresh =
-    kwRoll >= 24 && kwRoll < 40 ? freshKeywordFor(seed, 'Charm', colors[0]) : undefined;
+    kwRoll >= 24 && kwRoll < 40
+      ? freshKeywordFor(seed, 'Charm', colors[0])
+      : kwRoll >= 40 && kwRoll < 52
+        ? freshKeywordV75For(seed, 'Charm', colors[0])
+        : undefined;
   const charmKws: string[] = chFresh
     ? [chFresh]
     : kwRoll < 12
@@ -1014,9 +1067,15 @@ function mapLocation(c: CardTemplate): CardDef {
   // v6.0 Location keywords: ~12% Bountiful (taps for 2 essence — replaces
   // any other ability), ~14% Sacred (Dawn lifegain). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
+  // v7.5 adds a fourth band (42..54) for Scorched-Earth/Glaciate — see the
+  // Event mapper for the rule these bands follow.
   const kwRoll = roll(seed, 'loc-kw2', 100);
   const locFresh =
-    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Location', produces) : undefined;
+    kwRoll >= 26 && kwRoll < 42
+      ? freshKeywordFor(seed, 'Location', produces)
+      : kwRoll >= 42 && kwRoll < 54
+        ? freshKeywordV75For(seed, 'Location', produces)
+        : undefined;
   const locKws: string[] = locFresh
     ? [locFresh]
     : kwRoll < 12

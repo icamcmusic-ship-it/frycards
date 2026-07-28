@@ -570,8 +570,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const attackerKills = (a: UnitInst, g: UnitInst) => {
     const hit = packetDamage(g, effMight(state, a));
     return (
-      hit >= remainingGrit(state, g) ||
-      (unitHasKw(a, 'Venomous') && hit > 0 && !unbreakableUp(g))
+      hit >= remainingGrit(state, g) || (unitHasKw(a, 'Venomous') && hit > 0 && !unbreakableUp(g))
     );
   };
   const attackerSurvives = (a: UnitInst, g: UnitInst) => {
@@ -712,8 +711,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         if (kills && aFirst && !gFirst && guardDies) kills = false;
         let survives = !guardDies;
         // A Quickstrike guard that pre-kills the attacker takes nothing back.
-        if (!survives && gFirst && !aFirst && kills && !unbreakableUp(attacker))
-          survives = true;
+        if (!survives && gFirst && !aFirst && kills && !unbreakableUp(attacker)) survives = true;
         let v = 0;
         if (kills) v += 3;
         if (survives) v += 2;

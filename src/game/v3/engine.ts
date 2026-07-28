@@ -1140,6 +1140,14 @@ function runDawn(state: GameState): void {
       dealCards(state, state.active, archivists);
     }
   }
+  // v7.5 Glaciate: repeating tempo denial on a Sanctum — one enemy unit
+  // frozen per Glaciate every Dawn. `exhaust` picks its own target through
+  // autoTarget, the same as every other untargeted keyword effect.
+  const glaciate = p.locations.filter((l) => l.def && hasKw(l.def, 'Glaciate')).length;
+  for (let i = 0; i < glaciate; i++) {
+    telemetry.onKeywordProc?.('Glaciate', 1);
+    applyEffect(state, state.active, { action: 'exhaust', target: 'enemyUnit' });
+  }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
   const L = p.leader;
   if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
@@ -1169,6 +1177,17 @@ function runDusk(state: GameState): void {
   if (blighted > 0) {
     telemetry.onKeywordProc?.('Blighted', blighted);
     applyEffect(state, state.active, { action: 'erode', value: blighted, target: 'enemyPlayer' });
+  }
+  // v7.5 Scorched-Earth: Ember's Location text — a recurring board sweep,
+  // which is why it is the most expensive entry in KEYWORD_COST for the type.
+  const scorched = p.locations.filter((l) => l.def && hasKw(l.def, 'Scorched-Earth')).length;
+  if (scorched > 0) {
+    telemetry.onKeywordProc?.('Scorched-Earth', scorched);
+    applyEffect(state, state.active, {
+      action: 'damage',
+      value: scorched,
+      target: 'allEnemyUnits',
+    });
   }
   // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
   // the player reorder/pre-shed before ending Main II).
@@ -1470,6 +1489,31 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         telemetry.onKeywordProc?.('Echoing', 1);
         dealCards(state, pid, 1);
       }
+      // v7.5 Fate: Void's denial half. Erode puts a card in the ash-pile,
+      // where Exhume and the rest of Shadow can still reach it; Fate puts it
+      // in The Void, where nothing can. Same size, strictly harder to answer,
+      // which is the difference the two colours are supposed to have.
+      if (hasKw(def, 'Fate')) {
+        const top = state.players[opponentOf(pid)].deck.pop();
+        if (top) {
+          state.players[opponentOf(pid)].voidPile.push(top);
+          telemetry.onKeywordProc?.('Fate', 1);
+          state.log.push(`${def.name} banishes the top card of ${opponentOf(pid)}'s deck.`);
+        }
+      }
+      // v7.5 Exhume: Shadow's ash-pile recursion, which COLOR_IDENTITY has
+      // promised since v5.0 and no keyword implemented. Units only — a
+      // recursion loop that can return the Event itself is a different card
+      // and a much harder one to price.
+      if (hasKw(def, 'Exhume')) {
+        const i = p.ashPile.findIndex((c) => c.def.type === 'Unit');
+        if (i >= 0) {
+          const [unit] = p.ashPile.splice(i, 1);
+          p.hand.push(unit);
+          telemetry.onKeywordProc?.('Exhume', 1);
+          state.log.push(`${def.name} exhumes ${unit.def.name}.`);
+        }
+      }
       p.ashPile.push(card);
       break;
     }
@@ -1494,6 +1538,18 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       if (hasKw(def, 'Tethered') && bondTarget.exhausted) {
         telemetry.onKeywordProc?.('Tethered', 1);
         bondTarget.exhausted = false;
+      }
+      // v7.5 Freeze-Dry: Tethered's mirror image — the same one-shot tempo
+      // swing, pointed across the table instead of at your own board.
+      if (hasKw(def, 'Freeze-Dry')) {
+        telemetry.onKeywordProc?.('Freeze-Dry', 1);
+        applyEffect(state, pid, { action: 'exhaust', target: 'enemyUnit' });
+      }
+      // v7.5 Blessed: the Light-side one-shot, priced with Runic.
+      if (hasKw(def, 'Blessed') && p.vitality < LEADER_HP) {
+        const gained = Math.min(3, LEADER_HP - p.vitality);
+        p.vitality += gained;
+        telemetry.onKeywordProc?.('Blessed', gained);
       }
       if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);

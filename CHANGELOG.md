@@ -70,6 +70,54 @@ violations across all eleven trial pairs.
   `cold_fire_volcano` as above, and `seabed_mandala` -4.5/-6.1 -> -3.1/+2.2 —
   priced against the Event row of the type table rather than the pool mean.
 
+### v7.5 — Six keywords that existed only as names
+
+- **Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate and Exhume are
+  implemented and printed.** They had sat on the roadmap for several versions
+  under "implement when cards using them are printed", which is a deadlock — no
+  card can be printed with a keyword the engine does not have, so the condition
+  could never be met.
+- **Each was placed where the vocabulary was actually thin, not where its name
+  first suggests.** Events had no printable text in Shadow or Void, Charms none
+  in Tide or Light, Locations none in Ember or Gale:
+  - **Fate** (Event — Void): banishes the top card of the opponent's deck. The
+    deliberate contrast with Erode: Erode puts the card in the ash-pile, where
+    Shadow can still reach it; Fate puts it in The Void, where nothing can.
+  - **Exhume** (Event — Shadow): returns a Unit from your ash-pile to your
+    hand. Shadow's colour identity has promised "ash-pile recursion" since v5.0
+    and nothing implemented it.
+  - **Freeze-Dry** (Charm — Tide): exhausts an enemy unit when it bonds —
+    Tethered's mirror image, pointed across the table.
+  - **Blessed** (Charm — Light): restores 3 Vitality when it bonds.
+  - **Scorched-Earth** (Location — Ember): deals 1 to each enemy unit at your
+    Dusk.
+  - **Glaciate** (Location — Gale): exhausts an enemy unit at your Dawn.
+- **Leaders were deliberately skipped**, despite having the smallest vocabulary.
+  Their keyword roll has no free band, so any addition re-rolls the existing
+  nine — a balance change disguised as a content one, over a 9-card type, in
+  the same pass that repriced two Leaders.
+- **Nothing that already prints changed.** Each of the three types gets its own
+  new roll band, on its own keyword list, so every existing carrier re-prints
+  byte-identically and only cards that previously rolled NO keyword can pick
+  one up — the salvage rule v7.3 and v7.4 established. `freshKeywordFor`
+  explicitly excludes the new generation for the same reason: it indexes modulo
+  its list, so growing that list would re-roll every card of the type whose
+  colour has no match.
+- **A strict colour match prints nothing, measured.** With the colour fallback
+  removed, Fate, Exhume and Scorched-Earth all landed zero carriers — the exact
+  dead-text failure the catalog test exists to catch, and the third time this
+  project has walked into it. Off-colour cards now split the pair by their own
+  Essence Type rather than by a roll, because a hash over a two-entry list is
+  not reliably even and measured it was not: rolling it gave Glaciate eight
+  Locations and Scorched-Earth one.
+- **Two were over on their first measured run, and the price lever could not
+  fix either.** Glaciate (+11.5 / +12.0) and Scorched-Earth (+22.3, level with
+  Sacred in the cohort that measured it) were both raised, and both raises were
+  reverted: they deleted the carriers rather than pricing them. That is the
+  third independent demonstration in this pass that a cost point on a Location
+  is close to binary. Both carry forward for an effect-side lever.
+- Nine new engine tests, and the rulebook has the six.
+
 ### v7.5 — The card views outside the board
 
 The v7.4 pass made the match board playable on a phone and left the roadmap

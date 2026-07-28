@@ -33,6 +33,14 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   pulled (its minus repriced -2 -> -1). The Resolve lever is measured at
   +2.3 / +3.6 and unspent; the "one lever per Leader per pass" rule holds it
   for the next pass.
+- **`Scorched-Earth` and `Glaciate`** — both came in over on their first
+  measured run and both resisted the price lever the way every other Location
+  has this pass (see `docs/BALANCE_SIM_FINDINGS_v7.5.md` §5). The effect side
+  is untouched: gate the sweep on Sanctum count, or move either to every other
+  Dusk.
+- **`Blessed` has one carrier and `Exhume` two** — neither is measurable at
+  that width. Widen their roll bands before reading anything into their
+  deltas.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the
@@ -46,8 +54,8 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 - **Multiplayer (PvP)** — requires a server-authoritative engine; see
   `docs/PVP_DESIGN.md` for the design spike.
-- **Unprinted keywords** (Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate,
-  Exhume) — implement when cards using them are printed. (v6.9 printed a
-  different new generation instead: one keyword per Essence Type — Wildfire,
-  Tidecaller, Thriving, Nimble, Radiant, Withering, Entropic — plus the
-  `exhaust` and `weaken` effect actions. See `docs/RULEBOOK.md`.)
+- **Leader keywords** — Leaders have three (Commander, Resolute, Warlord) where
+  every other type now has six or seven, and v7.5 skipped them on purpose: the
+  Leader keyword roll (`roll(seed, 'ldr-kw6', 6)`) has no free band, so any
+  addition re-rolls all nine existing Leaders. Needs the roll restructured
+  first, and a balance pass to follow it.

@@ -12,6 +12,19 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Keywords, Phones & Balance (v7.5)',
+    date: 'July 2026',
+    items: [
+      'Six keyword abilities that existed only as names in the rulebook are now real cards you can open. FATE (Void Events) banishes the top card of your opponent\u2019s deck \u2014 to The Void, where nothing can get it back, unlike Erode. EXHUME (Shadow Events) returns a Unit from your ash-pile to your hand. FREEZE-DRY (Tide Charms) exhausts an enemy unit when it bonds. BLESSED (Light Charms) restores 3 Vitality when it bonds. SCORCHED-EARTH (Ember Sanctums) deals 1 damage to every enemy unit at your Dusk. GLACIATE (Gale Sanctums) freezes an enemy unit at your Dawn. 22 existing cards picked one up; no card that already had a keyword changed.',
+      'UNBREAKABLE is now once per turn: it still walks away from the first thing that would shatter it or deal it lethal damage, and the damage is prevented rather than left marked \u2014 but the save is spent, so a second removal in the same turn gets through, and it recharges at every Dawn. It used to mean "can never be removed by any means at any price", which was the only text in the game with no answer. Testing showed the cards carrying it do not actually win on that, so removal gets a line of play and nothing else changes.',
+      'Leader balance: VOID MOTHER was winning 72% of its games, first in both test cohorts by twelve points \u2014 Resolve 6 buying three unconditional Banishes a tank. Its Banish now costs 4 Resolve and its Resolve is 5, and it wins ~56%. KURO, THE UNSEEN was last in both at ~33%; its -2/-2 now costs 1 Resolve instead of 2, and it is up around five points. The gap between the best and worst Leader fell from 39 points to about 21.',
+      'Card balance: The Wolf of Wall Street and The Pier-Side Menace were the two strongest cards in the game and had shrugged off every price and stat cut aimed at them \u2014 it turned out to be the ability printed beside Unbreakable, not the keyword. Both had those abilities trimmed. Phosphor Lich, Blight-Snarler and Cold Fire Volcano came down too, and Seabed Mandala was buffed.',
+      'Phones, part two. The collection was a single column of full-size cards \u2014 297 of them, on a page over a hundred thousand pixels tall; it now shows two per row. The deck editor was wider than the screen with SAVE DECK off the right edge and the card pool squeezed narrower than one card; its controls wrap and its panes stack. The mulligan screen cut off its own title and first row of cards with no way to scroll to them. And your hand is now a side-scrolling strip on a phone instead of a fan \u2014 at seven cards the fan left about 20px of each card showing, which is not enough to read a name.',
+      'Fixed: flavor text was rendering underneath the Might/Grit plate in the corner of the card \u2014 worst on Full-Art and Mythic cards, where the plate sits straight on the art. 35 card layouts were affected.',
+      'Fixed: any card whose ability exhausted or weakened something printed the literal word "Undefined." where its rules text should be.',
+    ],
+  },
+  {
     version: 'The Stack Update (v7.4)',
     date: 'July 2026',
     items: [

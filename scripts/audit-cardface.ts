@@ -79,7 +79,9 @@ for (const rarity of RARITIES) {
     });
     cardsChecked += tally.pairs;
     if (process.env.AUDIT_VERBOSE)
-      console.log(`  ${rarity} @ ${size}: ${tally.cards} cards, ${tally.withFlavor} flavor, ${tally.withStats} stats, ${tally.pairs} measurable, ${found.length} overlapping`);
+      console.log(
+        `  ${rarity} @ ${size}: ${tally.cards} cards, ${tally.withFlavor} flavor, ${tally.withStats} stats, ${tally.pairs} measurable, ${found.length} overlapping`,
+      );
     for (const f of found) overlaps.push({ rarity, size, ...f });
   }
 }

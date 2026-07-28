@@ -25,6 +25,9 @@ out is what unblocked them.
 | Avg game length | 19.8 | 21.0 | Flat. |
 | Invariant violations | 0 | 0 | |
 
+(Headline row measured after the Leader and card actions; §5's keyword content
+landed after it and is reported there.)
+
 ---
 
 ## 1. The rest of the Location residual gap — it was the comparator, not a confound
@@ -253,6 +256,54 @@ Reverted, with the measurements kept: `stone_bubbles`, `glowing_glyph_tablet`,
 
 ---
 
+## 5. The six unprinted keywords, and a third demonstration of the same thing
+
+Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate and Exhume had sat on the
+roadmap for several versions under "implement when cards using them are
+printed", which is a deadlock: no card can be printed with a keyword the
+engine does not have. All six now have an engine hook, a colour, a price and
+carriers — placed where each type's colour vocabulary was empty (Events had
+nothing in Shadow or Void, Charms nothing in Tide or Light, Locations nothing
+in Ember or Gale), not where the name first suggests. Leaders were deliberately
+skipped: their keyword roll has no free band, so any addition re-rolls the
+existing nine, which is a balance change disguised as a content one.
+
+First measured run, weights set by analogy the way v7.3's were:
+
+| keyword | A | B | carriers |
+|---|---|---|---|
+| `Scorched-Earth` | **+22.3** (n=411) | no reading | 3 |
+| `Freeze-Dry` | +15.9 (n=649) | +2.4 (n=1,307) | 4 |
+| `Glaciate` | **+11.5** (n=283) | **+12.0** (n=965) | 5 |
+| `Fate` | -2.7 (n=1,599) | -0.6 (n=1,351) | 7 |
+| `Exhume` | -9.6 (n=225) | +0.8 (n=505) | 2 |
+| `Blessed` | under the floor | under the floor | 1 |
+
+Glaciate reproduces in both cohorts and Scorched-Earth was level with Sacred in
+the only cohort that measured it, so both were raised 3 → 5 (a move of two —
+`keywordCostAdj` is `Math.round(w / 2)`, so a 3 → 4 step is a no-op).
+
+**Both raises were reverted on the re-run, for the same reason as §1's cost
+trials.** They did not price the carriers; they deleted them. Glaciate's delta
+did fall (+11.5 → +5.0 in cohort A) but its two cohort-B carriers dropped out
+of the report entirely, and Scorched-Earth's best-sampled carrier
+(`sparkling_meadow`, n=411, ramp residual +7.3) fell under the floor in both.
+
+That is the **third independent demonstration in this pass** — after §1's three
+failed per-card Location cost trials and v7.2's Sacred weight raise before them
+— that a cost point on a Location is close to binary rather than a smooth nerf.
+Both keywords are left at their by-analogy weights with the readings recorded,
+and both carry forward for an effect-side lever.
+
+Freeze-Dry and Exhume both split their cohorts and are the small-n signature,
+not actions. Blessed has a single carrier, which is the Doublestrike shape and
+is noted rather than acted on.
+
+Post-change headline: spread 20.5 / 26.3, P1 45.9% / 45.6%, 20.0 / 20.7 turns,
+**0 invariant violations** in both cohorts.
+
+---
+
 ## Carry-forward items
 
 1. **`stone_bubbles` / Sacred (top priority).** Now the only carry-forward with
@@ -270,10 +321,12 @@ Reverted, with the measurements kept: `stone_bubbles`, `glowing_glyph_tablet`,
    pool answers these two.
 3. **Kuro, the Unseen 37.4 / 38.6** — bottom in both, one lever pulled. The
    Resolve lever is measured at +2.3 / +3.6 and unspent.
-4. **Sentinel of the Nether Pit 41.3 (A) / 61.6 (B)** — a 20-point cohort
-   split, and it has the smallest sample of any Leader in both runs (n=744 /
-   n=372). Note its shatter rate is 13-17%, an order of magnitude above every
-   other Leader. Single-cohort in each direction, so no action; watch.
+4. **Sentinel of the Nether Pit 42.5 (A) / 66.4 (B)** — a 24-point cohort
+   split, and it has the smallest sample of any Leader in both runs. Note its
+   shatter rate is 13-17%, an order of magnitude above every other Leader, and
+   the split is the whole of cohort B's 26.3 spread. Single-cohort in each
+   direction, so no action; watch, and consider pinning it for a
+   `leaderPairSuite` read that cohort composition cannot reach.
 5. **Ruin-Walker Overseer 62.7 / 58.5** — now first in A and second in B, and
    the only Leader above baseline in both. It took its lever in v7.2 and its
    `+1: weaken` in v6.9; due for a look next pass.
@@ -281,6 +334,15 @@ Reverted, with the measurements kept: `stone_bubbles`, `glowing_glyph_tablet`,
    sign-flipping at n≈200-300. Watch, do not act.
 7. **Reservation waste** — unchanged from v7.2 carry-forward #7 and still the
    largest un-actioned lapse counter.
+8. **`Scorched-Earth` and `Glaciate`** — both over on first print, both
+   price-lever-immune (§5). The effect side is untouched: gate the sweep on
+   Sanctum count, or move either to every other Dusk.
+9. **`Blessed` has one carrier and `Exhume` two.** Neither is measurable at
+   that width — the Doublestrike shape. Widen their roll bands before drawing
+   any conclusion from their deltas.
+10. **The v7.5 keyword weights are all by-analogy** except where §5 says
+    otherwise, and none of the six has been through a settled pass. Same status
+    the v7.3 set had after its first print.
 
 ## Closed this pass
 

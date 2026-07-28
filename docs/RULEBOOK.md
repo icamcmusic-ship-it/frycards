@@ -82,6 +82,25 @@ restore it, and a unit withered to 0 Grit is shattered by the state checks.
 | Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums |
 | Warlord (Leader) | While your Leader is on the field, your units get +0/+1 |
 
+**v7.5:** six more, filling the colours each type still had nothing printable
+in — Events had no Shadow or Void text, Charms none in Tide or Light,
+Locations none in Ember or Gale:
+
+| Keyword (type — Essence Type) | Meaning |
+|---|---|
+| Fate (Event — Void) | When this Event resolves, banish the top card of the opponent's deck |
+| Exhume (Event — Shadow) | When this Event resolves, return a Unit from your ash-pile to your hand |
+| Freeze-Dry (Charm — Tide) | When this Charm bonds to a unit from your hand, exhaust a target enemy unit |
+| Blessed (Charm — Light) | When this Charm bonds to a unit from your hand, restore 3 Vitality |
+| Scorched-Earth (Location — Ember) | At your Dusk, deal 1 damage to each enemy unit |
+| Glaciate (Location — Gale) | At your Dawn, exhaust a target enemy unit |
+
+Fate and Erode are deliberately different sizes of the same idea: Erode puts
+the card in the ash-pile, where Exhume and the rest of Shadow can still reach
+it, and Fate puts it in The Void, where nothing can. Exhume returns Units
+only — it cannot return itself or any other Event. Scorched-Earth and Glaciate
+stack: two copies sweep for 2 and freeze two units.
+
 ### Zones
 
 Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void

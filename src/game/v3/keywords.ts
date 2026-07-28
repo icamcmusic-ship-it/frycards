@@ -64,7 +64,41 @@ export const KEYWORDS = [
   'Blighted', // Location — Void
   'Warlord', // Leader — Shadow
   'Archivist', // Location — Tide
+  // -- v7.5: the six keywords that had names in the roadmap and nothing else.
+  // They were listed as "implement when cards using them are printed", which
+  // is a deadlock — nothing prints a keyword the engine does not have. Each
+  // is placed where the vocabulary was actually thin rather than where the
+  // name first suggests: Events, Charms and Locations all had colours with no
+  // printable text, and all three have a free roll band (see V75_KEYWORDS).
+  'Fate', // Event — Void
+  'Exhume', // Event — Shadow
+  'Freeze-Dry', // Charm — Tide
+  'Blessed', // Charm — Light
+  'Scorched-Earth', // Location — Ember
+  'Glaciate', // Location — Gale
 ] as const;
+
+/**
+ * v7.5: the newest keyword generation, held apart from the v7.3 set on
+ * purpose.
+ *
+ * `freshKeywordFor` picks with `pick(seed, 27, list)`, which indexes MODULO
+ * the list's length — so adding a keyword to a type's coloured vocabulary
+ * re-rolls the keyword of every card of that type whose own colour has no
+ * match and falls back to the full list. That is the trap the v7.3 colour-pair
+ * note and the v7.4 Unbreakable salvage both record. The card pool therefore
+ * draws these from their own roll band, on their own list, so every existing
+ * carrier re-prints byte-identically and only cards that previously rolled NO
+ * keyword can pick one up.
+ */
+export const V75_KEYWORDS: readonly string[] = [
+  'Fate',
+  'Exhume',
+  'Freeze-Dry',
+  'Blessed',
+  'Scorched-Earth',
+  'Glaciate',
+];
 
 export type Keyword = (typeof KEYWORDS)[number];
 
@@ -113,6 +147,12 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Blighted: 'Location',
   Warlord: 'Leader',
   Archivist: 'Location',
+  Fate: 'Event',
+  Exhume: 'Event',
+  'Freeze-Dry': 'Charm',
+  Blessed: 'Charm',
+  'Scorched-Earth': 'Location',
+  Glaciate: 'Location',
 };
 
 /**
@@ -136,6 +176,14 @@ export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
   Blighted: 'Void',
   Warlord: 'Shadow',
   Archivist: 'Tide',
+  // v7.5. Placed to fill colour holes: Events had nothing in Shadow or Void,
+  // Charms nothing in Tide or Light, Locations nothing in Ember or Gale.
+  Fate: 'Void',
+  Exhume: 'Shadow',
+  'Freeze-Dry': 'Tide',
+  Blessed: 'Light',
+  'Scorched-Earth': 'Ember',
+  Glaciate: 'Gale',
 };
 
 /** Keywords legal on a given card type. */
@@ -185,6 +233,12 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Blighted: 'At your Dusk, the enemy erodes 1.',
   Warlord: 'While your Leader is on the field, your units get +0/+1.',
   Archivist: 'At your Dawn, Deal a card if you control 3 or more Sanctums.',
+  Fate: "When this Event resolves, banish the top card of the opponent's deck.",
+  Exhume: 'When this Event resolves, return a random Unit from your ash-pile to your hand.',
+  'Freeze-Dry': 'When this Charm bonds to a unit from your hand, exhaust a target enemy unit.',
+  Blessed: 'When this Charm bonds to a unit from your hand, restore 3 Vitality.',
+  'Scorched-Earth': 'At your Dusk, deal 1 damage to each enemy unit.',
+  Glaciate: 'At your Dawn, exhaust a target enemy unit.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -313,6 +367,42 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Blighted: 1, // 1 erosion a turn, priced with Entropic
   Warlord: 2, // a stat aura on a Leader, priced with Commander
   Archivist: 3, // repeating, build-around card advantage, priced with Tidecaller
+  // v7.5 initial weights, set by analogy the same way v7.3's were — none of
+  // these has been through a sim pass, so they are the first candidates for
+  // the next balance run. Remember keywordCostAdj is Math.round(w / 2), so
+  // this table's effective resolution is TWO: a 1 -> 2 step is a no-op on a
+  // single-keyword carrier (see the Sacred note above).
+  Fate: 1, // 1 card of denial per cast, and to the Void rather than the ash-pile
+  Exhume: 3, // recursion is card advantage that picks its own card; Tidecaller tier
+  'Freeze-Dry': 1, // one-shot tempo on the enemy board, priced with Tethered
+  Blessed: 1, // one-shot Vitality, priced with Runic
+  // The two repeating Location effects were both set at 3 by analogy and both
+  // came back over on their first measured run:
+  //
+  //   Glaciate        +11.5 (n=283) / +12.0 (n=965)  — reproduces in both
+  //   Scorched-Earth  +22.3 (n=411) / no reading      — level with Sacred
+  //
+  // Both were raised 3 -> 5 (a move of TWO, because keywordCostAdj is
+  // Math.round(w / 2) and a 3 -> 4 step is a byte-for-byte no-op) and both
+  // raises were REVERTED on the re-run. They did not price the carriers; they
+  // deleted them. Glaciate's delta did fall (+11.5 -> +5.0 in cohort A) but
+  // its two cohort-B carriers dropped out of the report entirely, and
+  // Scorched-Earth's best-sampled carrier (`sparkling_meadow`, n=411, ramp
+  // residual +7.3) fell under the floor in both.
+  //
+  // That is the third independent demonstration in this pass of the same
+  // thing — see §1 of docs/BALANCE_SIM_FINDINGS_v7.5.md, where three of four
+  // per-card Location cost trials failed the identical way, and the v7.2
+  // Sacred weight raise before them. A cost point on a Location is close to
+  // binary: it either moves no win rate or it removes the card from the
+  // format, and a residual measured on a third of the games is not the same
+  // measurement.
+  //
+  // Left at their by-analogy weights with the readings recorded. Both carry
+  // forward for an EFFECT-side lever (gate the sweep on Sanctum count, or
+  // move it to every other Dusk) rather than a fourth attempt at price.
+  'Scorched-Earth': 3, // a repeating unconditional board sweep
+  Glaciate: 3, // repeating tempo denial, priced with Scorched-Earth
 };
 
 /** Short label for card-face chips. */
