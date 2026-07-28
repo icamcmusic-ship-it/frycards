@@ -8,6 +8,7 @@
 import { CardDef, Effect, EssenceCost, LEADER_HP, hasKw, totalCost } from './cards';
 import { EssenceType } from './colors';
 import {
+  unbreakableUp,
   GameState,
   GuardAssignments,
   PlayerId,
@@ -306,7 +307,7 @@ function bestBondTarget(state: GameState, pid: PlayerId): UnitInst | undefined {
   return [...p.field]
     .map((u) => {
       const grit = remainingGrit(state, u);
-      const safe = unitHasKw(u, 'Unbreakable') || (grit > enemyReach && !(enemyVenom && grit > 0));
+      const safe = unbreakableUp(u) || (grit > enemyReach && !(enemyVenom && grit > 0));
       return {
         u,
         score: grit * 2 + effMight(state, u) - u.charms.length * 3 + (safe ? 6 : 0),
@@ -342,7 +343,7 @@ function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   if (isRemoval(def.onInvoke)) {
     const isShatter = def.onInvoke?.action === 'shatter';
     const biggest = [...opp.field]
-      .filter((u) => !unitHasKw(u, 'Warded') && !(isShatter && unitHasKw(u, 'Unbreakable')))
+      .filter((u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)))
       .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
     // Removal wants a live target; anyTarget damage can still go face.
     if (biggest) v += 20;
@@ -570,11 +571,11 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const hit = packetDamage(g, effMight(state, a));
     return (
       hit >= remainingGrit(state, g) ||
-      (unitHasKw(a, 'Venomous') && hit > 0 && !unitHasKw(g, 'Unbreakable'))
+      (unitHasKw(a, 'Venomous') && hit > 0 && !unbreakableUp(g))
     );
   };
   const attackerSurvives = (a: UnitInst, g: UnitInst) => {
-    if (unitHasKw(a, 'Unbreakable')) return true;
+    if (unbreakableUp(a)) return true;
     const hit = packetDamage(a, effMight(state, g));
     const dies = hit >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && hit > 0);
     if (!dies) return true;
@@ -701,7 +702,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         const hitOnGuard = packetDamage(g, effMight(state, attacker));
         // Venomous attacker: any contact kills the guard unless Unbreakable.
         const guardDies =
-          !unitHasKw(g, 'Unbreakable') &&
+          !unbreakableUp(g) &&
           (hitOnGuard >= remainingGrit(state, g) ||
             (unitHasKw(attacker, 'Venomous') && hitOnGuard > 0));
         let kills =
@@ -711,7 +712,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         if (kills && aFirst && !gFirst && guardDies) kills = false;
         let survives = !guardDies;
         // A Quickstrike guard that pre-kills the attacker takes nothing back.
-        if (!survives && gFirst && !aFirst && kills && !unitHasKw(attacker, 'Unbreakable'))
+        if (!survives && gFirst && !aFirst && kills && !unbreakableUp(attacker))
           survives = true;
         let v = 0;
         if (kills) v += 3;
@@ -898,7 +899,7 @@ export function reactionPlays(
           .map((iid) => findUnit(state, iid))
           .filter(
             (u): u is UnitInst =>
-              !!u && !unitHasKw(u, 'Warded') && !(isShatter && unitHasKw(u, 'Unbreakable')),
+              !!u && !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)),
           )
           .sort((a, b) => effMight(state, b) - effMight(state, a));
         targetIid = attackers[0]?.iid;

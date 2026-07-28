@@ -156,7 +156,8 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Swarmproof: 'Must be guarded by two or more units.',
   Skywatch: 'Can guard Aerial units.',
   Warded: "Can't be targeted by an opponent.",
-  Unbreakable: "Can't be shattered or dealt lethal damage.",
+  Unbreakable:
+    'Once per turn, prevent the first effect that would shatter this or deal it lethal damage.',
   Ambush: 'Can be invoked at any time, even outside your main phase.',
   Immobile: "Can't attack.",
   Regenerate: 'At Dawn, heal all damage marked on this unit.',
