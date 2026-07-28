@@ -8,6 +8,47 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — The Location metric (balance harness)
+
+- **The balance harness could not price a Location, and had blocked itself on
+  saying so.** v7.2's top-priority carry-forward: every two-cohort gated
+  overperformer that pass was a Location, three separate cost trials on Sacred
+  never moved its number, and several Locations already carried +2/+3 stacks
+  chasing a signal that would not settle. `scripts/simulate-v5.ts` now computes
+  a **ramp-matched residual** beside the flat one and reports it as
+  `topOverperformersRampMatched` — the list to price off for anything gated on
+  essence.
+- **The confound is game length, not cost.** Residual-vs-cost correlation is
+  near zero under *both* metrics in both cohorts (0.056/0.095 flat,
+  0.082/0.023 matched), so "expensive cards read high" was the wrong model —
+  recorded in the findings doc so nobody re-derives it. What is real: a card
+  that lands on turn 12 cannot appear in a game that ended on turn 6, and
+  games that end on turn 6 are decided. Its in-deck denominator carries short
+  losses an early card's does not. Matching on Location count instead barely
+  bites, because Wellsprings accumulate about one a turn and nearly everything
+  eventually becomes castable.
+- The fix keeps the deck control the flat residual depends on — the
+  denominator is still the card's own in-deck games — and restricts it to
+  games that ran at least as long as the card was actually cast on, weighted
+  by its own play-turn distribution.
+- **Per card the two lists disagree by up to 8 points**, which is larger than
+  any lever this project applies: Sunken Archive +11.3 → +3.2, Melted Hollow
+  +13.1 → +6.6, Stone Bubbles +11.2 → +6.8, while Units move the other way
+  (Phosphor Lich +3.1 → +8.0). Locations deflating and Units inflating is the
+  signature of a Location-specific correction rather than a rescaling.
+- **In aggregate it is a partial fix, and the entry says so.** Mean Location
+  residual minus mean non-Location residual goes +1.96 → +1.61 (cohort A) and
+  +1.89 → +1.78 (cohort B) — same sign in both, so it is real, but that is
+  6-18% of the gap removed, not the whole of it. The blanket "no Location
+  takes another cost point" lifts card by card rather than wholesale, and the
+  remainder is back on the roadmap.
+- **A diagnostic that does not work, kept as the cautionary example.**
+  "Location share of the top-15" was tried first and is useless — 47% → 27% in
+  one cohort, 40% → 47% in the other, because it is a membership count over
+  fifteen items that moves by whole cards. `metricDiagnostics` reports the
+  mean-residual gap as the number to read and keeps the share beside it
+  labelled as noise.
+
 ### v7.4 — Unbreakable finally prints
 
 - **Unbreakable printed on ZERO cards.** A rulebook keyword with a fully

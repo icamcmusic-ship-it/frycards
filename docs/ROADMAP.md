@@ -12,12 +12,14 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Medium term
 
-- **Ramp-matched baseline for Location residuals** — the balance harness
-  scores a card's win rate conditional on having played it, which is
-  structurally biased upward for Locations (a pricier Location is only played
-  in games with more ramp). Every two-cohort outlier in the v7.2 pass is a
-  Location, and several already carry +2/+3 cost stacks chasing it. Blocks any
-  further Location pricing. See `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3.
+- **The rest of the Location residual gap** — v7.4 added the ramp-matched
+  baseline the v7.2 pass asked for (`topOverperformersRampMatched`), and it
+  moves individual cards by up to 8 points, but it removes only 6-18% of the
+  aggregate Location/non-Location gap and both cohorts still show ~+1.7 left.
+  Either Locations really are that much stronger or there is a second confound
+  length-matching cannot see. Price off the ramp-matched list meanwhile, and
+  lift the old blanket block card by card. See the v7.4 addendum in
+  `docs/BALANCE_SIM_FINDINGS_v7.2.md`.
 - **Unbreakable's residual** — v7.4 printed the keyword for the first time and
   trimmed all three carriers' stat budgets on arrival. Post-trim the cohorts
   disagree: +4.5 (n=183) on seed 1337, +10.6 (n=139) on seed 24601. At that

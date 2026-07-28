@@ -10,6 +10,11 @@
  *    win condition (vitality vs deck-out), game length distribution
  *  - card health: per-card played-vs-deck-baseline win-rate residuals,
  *    dead-in-hand rates, cost-band curves (win rate & residual by total cost)
+ *  - v7.4 RAMP-MATCHED residuals (`topOverperformersRampMatched`): the same
+ *    comparison with the card's in-deck denominator restricted to games that
+ *    ran long enough for it to appear. **Price off these, not the flat list,
+ *    for anything gated on essence** — see `lengthMatchedBaseline` and
+ *    `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3 / carry-forward #1.
  *  - keyword health: carrier win-rate deltas + activation counts
  *    (Overrun spill, Venomous kills, Siphon vitality, Quickstrike pre-kills,
  *    Ambush reaction invokes, Warded target denials, ...)
@@ -247,7 +252,43 @@ interface CardStat {
   // in a game (avg = firstPlayTurnSum / firstPlayGames).
   firstPlayTurnSum: number;
   firstPlayGames: number;
+  /**
+   * v7.4 ramp-matched baseline (v7.2 carry-forward #1, which blocked all
+   * further Location pricing on it).
+   *
+   * `residual` is `playedWin - inDeckWin`, and for anything gated on essence
+   * that difference is a selection effect rather than a power reading. A
+   * Location is ramp: it is only ever played in games where the essence for it
+   * existed, and a pricier one only in games where MORE existed. So
+   * "win rate conditional on having played it" rises with price by
+   * construction — which is why three separate cost trials on Sacred never
+   * moved its number, and why every two-cohort gated overperformer in v7.2
+   * was a Location.
+   *
+   * The dominant channel turns out to be game LENGTH rather than Location
+   * count: Wellsprings accumulate about one a turn, so almost everything
+   * eventually becomes castable, but an expensive card still cannot appear in
+   * a game that ended on turn 6 — and games that end on turn 6 are decided.
+   * Its in-deck denominator therefore carries a pile of short losses no
+   * cheap card's denominator has.
+   *
+   * `inDeckByLen` buckets the card's in-deck games by how long they ran, and
+   * `playsByTurn` records the turns it was actually cast on. Weighting the
+   * former by the latter gives a length-matched baseline: same deck control as
+   * the flat residual, with the never-got-there games taken out of the
+   * comparison instead of silently depressing it.
+   */
+  inDeckByLen: Record<number, { games: number; wins: number }>;
+  playsByTurn: Record<number, number>;
 }
+
+/**
+ * Diagnostic only: win rate of every player-game that reached N Locations.
+ * Published so a future pass can see the ramp curve the correction assumes
+ * exists, rather than taking it on trust.
+ */
+const rampReached: Record<number, { games: number; wins: number }> = {};
+const rr = (n: number) => (rampReached[n] ??= { games: 0, wins: 0 });
 const cardStats: Record<string, CardStat> = {};
 function cs(id: string): CardStat {
   return (cardStats[id] ??= {
@@ -262,6 +303,8 @@ function cs(id: string): CardStat {
     timesDeadInHand: 0,
     firstPlayTurnSum: 0,
     firstPlayGames: 0,
+    inDeckByLen: {},
+    playsByTurn: {},
   });
 }
 
@@ -912,6 +955,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   let turns = 0;
   let logCursor = 0;
   let firstClashTurn = 0;
+  // v7.4: highest Location count each seat ever reached — how much ramp the
+  // game actually offered them, and so which of their deck's cards were ever
+  // castable. A running max rather than the final board, so a Location leaving
+  // play cannot understate it.
+  const maxLocs: Record<PlayerId, number> = { P1: 0, P2: 0 };
   // v6.6: which seat invoked its Leader first this game ('tie' if the same
   // turn boundary saw both).
   let leaderFirst: PlayerId | 'tie' | null = null;
@@ -924,6 +972,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     turns++;
     const pid = state.active;
     const p = state.players[pid];
+    for (const seat of ['P1', 'P2'] as PlayerId[]) {
+      maxLocs[seat] = Math.max(maxLocs[seat], state.players[seat].locations.length);
+    }
     const preHand = new Set(p.hand.map((c) => c.iid));
     const preVit = state.players[opponentOf(pid)].vitality;
     // v6.3: whether a free +resolve builder was LEGALLY available this turn,
@@ -998,6 +1049,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
             const s = cs(def.id);
             s.firstPlayTurnSum += turns;
             s.firstPlayGames++;
+            s.playsByTurn[turns] = (s.playsByTurn[turns] ?? 0) + 1;
           }
           essenceSpentTotal += totalCost(def.cost);
           played[actor].add(def.id);
@@ -1491,12 +1543,24 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (won) s.wins++;
     }
 
+    // v7.4: ramp curve diagnostic, plus the castable-matched denominators.
+    {
+      const b = rr(maxLocs[pid]);
+      b.games++;
+      if (won) b.wins++;
+    }
+
     // Card stats.
     const inDeck = new Set(deck.cards);
     for (const id of inDeck) {
       const s = cs(id);
       s.inDeckGames++;
       if (won) s.inDeckWins++;
+      // v7.4: the same game, also filed by how long it ran, so the report can
+      // build a length-matched denominator per card.
+      const bucket = (s.inDeckByLen[turns] ??= { games: 0, wins: 0 });
+      bucket.games++;
+      if (won) bucket.wins++;
     }
     for (const id of played[pid]) {
       const s = cs(id);
@@ -1776,11 +1840,83 @@ const leaderPairSuite: Record<string, Record<string, { games: number; wins: numb
 // ---------------------------------------------------------------------------
 const pct = (a: number, b: number) => (b > 0 ? +((100 * a) / b).toFixed(1) : 0);
 
+/**
+ * v7.4 ramp-matched baseline (carry-forward #1 of the v7.2 pass, which blocked
+ * all further Location pricing on it).
+ *
+ * The flat `residual` below compares a card's played win rate to its in-deck
+ * win rate. For anything gated on essence that is a selection effect, not a
+ * power reading: a Location is ramp, "played it" already means the essence
+ * existed, and a pricier one means MORE existed — games the player was winning
+ * anyway. Three separate cost trials on Sacred failed to move the number, and
+ * every two-cohort gated overperformer in v7.2 was a Location.
+ *
+ * This standardizes the comparison instead: bucket the card's play-games by
+ * the ramp state it was cast into, then weight the win rate of every
+ * player-game that REACHED each of those states by how often the card was
+ * actually played there. What comes back is "of players who got this far, how
+ * much better did the ones holding this card do" — which no longer rewards a
+ * card simply for costing more.
+ */
+/**
+ * Length-matched in-deck baseline: for each turn this card was actually cast
+ * on, the win rate of its own in-deck games that ran at least that long,
+ * weighted by how often it was cast then. Answers "against the games where
+ * this card could have shown up, did playing it help" rather than "against
+ * every game it was shuffled into, most of which ended before its turn".
+ *
+ * Returns null below a sample floor rather than a number nobody should act on.
+ */
+function lengthMatchedBaseline(s: CardStat): { winPct: number; games: number } | null {
+  const lens = Object.keys(s.inDeckByLen)
+    .map(Number)
+    .sort((a, b) => a - b);
+  // Suffix sums: games (and wins) whose length was >= each turn index.
+  const atLeast = new Map<number, { games: number; wins: number }>();
+  let g = 0;
+  let w = 0;
+  for (let i = lens.length - 1; i >= 0; i--) {
+    const b = s.inDeckByLen[lens[i]];
+    g += b.games;
+    w += b.wins;
+    atLeast.set(lens[i], { games: g, wins: w });
+  }
+  /** Games of length >= t, walking up to the next recorded length. */
+  const suffix = (t: number) => {
+    let best: { games: number; wins: number } | undefined;
+    for (const len of lens) {
+      if (len >= t) {
+        best = atLeast.get(len);
+        break;
+      }
+    }
+    return best;
+  };
+  let weight = 0;
+  let acc = 0;
+  let sampled = 0;
+  for (const [k, n] of Object.entries(s.playsByTurn)) {
+    const b = suffix(Number(k));
+    if (!b || b.games === 0) continue;
+    acc += n * ((100 * b.wins) / b.games);
+    weight += n;
+    sampled = Math.max(sampled, b.games);
+  }
+  if (weight === 0 || sampled < 20) return null;
+  return { winPct: +(acc / weight).toFixed(1), games: sampled };
+}
+
 const cardReport = Object.entries(cardStats)
   .filter(([, s]) => s.playedGames >= 20)
   .map(([id, s]) => {
     const def = POOL_BY_ID[id];
+    const playedWinPct = pct(s.playedWins, s.playedGames);
+    const matched = lengthMatchedBaseline(s);
     return {
+      matchedWin: matched?.winPct ?? null,
+      matchedGames: matched?.games ?? 0,
+      /** The number to price on for anything gated on essence. */
+      rampResidual: matched === null ? null : +(playedWinPct - matched.winPct).toFixed(1),
       id,
       name: def?.name,
       type: def?.type,
@@ -1800,6 +1936,28 @@ const cardReport = Object.entries(cardStats)
   });
 
 const byResidual = [...cardReport].sort((a, b) => b.residual - a.residual);
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+
+/** Pearson correlation, for the residual-vs-cost diagnostic below. */
+function corr(xs: number[], ys: number[]): number {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 3) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - mx) * (ys[i] - my);
+    dx += (xs[i] - mx) ** 2;
+    dy += (ys[i] - my) ** 2;
+  }
+  return dx > 0 && dy > 0 ? +(num / Math.sqrt(dx * dy)).toFixed(3) : 0;
+}
+
+const byRampResidual = [...cardReport]
+  .filter((c) => c.rampResidual !== null)
+  .sort((a, b) => (b.rampResidual ?? 0) - (a.rampResidual ?? 0));
 
 // v6.2: cost-vs-ability outliers as a z-score over the residual distribution
 // (residual = played-win-rate minus in-deck-baseline win-rate, the practical
@@ -2270,6 +2428,70 @@ const report = {
   ),
   topOverperformers: byResidual.slice(0, 15),
   topUnderperformers: byResidual.slice(-15).reverse(),
+  // v7.4: the same lists ranked on the ramp-matched residual. Price off THESE
+  // for anything gated on essence — see matchedBaseline. A card that is near
+  // the top of the flat list and mid-table here was never overpowered; it was
+  // expensive, and the flat metric was reading its own cost back at us.
+  /**
+   * v7.4: the direct test of whether the correction worked, and the number a
+   * future pass should re-check before trusting either list.
+   *
+   * `locationShareOfTop15` is the real one. v7.2's finding was not that the
+   * residual tracks cost — it does not, and `costCorrelation` below is near
+   * zero under BOTH metrics, which is worth recording so nobody re-derives
+   * that wrong mechanism. The finding was that *every* two-cohort gated
+   * overperformer was a Location. Locations are about a sixth of the pool, so
+   * their share of the top of the outlier list is what the confound actually
+   * shows up in, and what a working correction has to move.
+   */
+  metricDiagnostics: {
+    poolLocationShare: +(
+      POOL_V4.filter((c) => c.type === 'Location').length / Math.max(1, POOL_V4.length)
+    ).toFixed(3),
+    /**
+     * The stable version of the same question, and the one to read. A top-15
+     * membership count moves by whole cards, so on 5,952 games it swings
+     * either way between cohorts and says nothing — measured, and it did
+     * exactly that (47%->27% on seed 1337, 40%->47% on seed 1337/42). The
+     * mean-residual gap uses every scored card instead, so it is not hostage
+     * to which handful of cards happen to top a list.
+     */
+    locationResidualGap: {
+      flat: +(
+        mean(cardReport.filter((c) => c.type === 'Location').map((c) => c.residual)) -
+        mean(cardReport.filter((c) => c.type !== 'Location').map((c) => c.residual))
+      ).toFixed(2),
+      rampMatched: +(
+        mean(byRampResidual.filter((c) => c.type === 'Location').map((c) => c.rampResidual ?? 0)) -
+        mean(byRampResidual.filter((c) => c.type !== 'Location').map((c) => c.rampResidual ?? 0))
+      ).toFixed(2),
+      locations: cardReport.filter((c) => c.type === 'Location').length,
+    },
+    locationShareOfTop15: {
+      flat: +(byResidual.slice(0, 15).filter((c) => c.type === 'Location').length / 15).toFixed(3),
+      rampMatched: +(
+        byRampResidual.slice(0, 15).filter((c) => c.type === 'Location').length / 15
+      ).toFixed(3),
+    },
+    costCorrelation: {
+      flat: corr(
+        cardReport.map((c) => c.cost),
+        cardReport.map((c) => c.residual),
+      ),
+      rampMatched: corr(
+        byRampResidual.map((c) => c.cost),
+        byRampResidual.map((c) => c.rampResidual ?? 0),
+      ),
+    },
+    n: byRampResidual.length,
+  },
+  topOverperformersRampMatched: byRampResidual.slice(0, 15),
+  topUnderperformersRampMatched: byRampResidual.slice(-15).reverse(),
+  rampBaselineCurve: Object.fromEntries(
+    Object.entries(rampReached)
+      .filter(([, v]) => v.games >= 50)
+      .map(([k, v]) => [k, { games: v.games, winPct: pct(v.wins, v.games) }]),
+  ),
   deadestInHand: [...cardReport].sort((a, b) => b.deadInHandRate - a.deadInHandRate).slice(0, 15),
   baselineWin: overallWin,
   archetypes: Object.fromEntries(
@@ -2544,6 +2766,26 @@ for (const c of report.topUnderperformers)
   console.log(
     `  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% deck ${c.deckWin}% residual ${c.residual} [${c.keywords.join(',')}]`,
   );
+console.log('\nTop overperformers (RAMP-MATCHED — price off this list):');
+for (const c of report.topOverperformersRampMatched)
+  console.log(
+    `  ${c.name} (${c.type}${c.subtype ? '/' + c.subtype : ''}, cost ${c.cost}) played ${c.playedWin}% matchedBase ${c.matchedWin}% residual ${(c.rampResidual ?? 0) >= 0 ? '+' : ''}${c.rampResidual} (flat ${c.residual >= 0 ? '+' : ''}${c.residual}) n=${c.playedGames}`,
+  );
+{
+  const md = report.metricDiagnostics;
+  console.log(
+    `\nMetric check — mean Location residual MINUS mean non-Location residual: ` +
+      `flat ${md.locationResidualGap.flat >= 0 ? '+' : ''}${md.locationResidualGap.flat}, ` +
+      `ramp-matched ${md.locationResidualGap.rampMatched >= 0 ? '+' : ''}${md.locationResidualGap.rampMatched} ` +
+      `(over ${md.locationResidualGap.locations} Locations; closer to 0 is the confound removed). ` +
+      `Top-15 share ${(md.locationShareOfTop15.flat * 100).toFixed(0)}% -> ` +
+      `${(md.locationShareOfTop15.rampMatched * 100).toFixed(0)}% vs a ` +
+      `${(md.poolLocationShare * 100).toFixed(0)}% pool share, but that one is a 15-item count and swings between cohorts — read the gap.`,
+  );
+}
+console.log('\nRamp baseline curve (win rate of all card-plays made at N Locations):');
+for (const [n, v] of Object.entries(report.rampBaselineCurve))
+  console.log(`  ${n} Locations: ${v.winPct}% over ${v.games} plays`);
 console.log('\nDeadest in hand:');
 for (const c of report.deadestInHand)
   console.log(`  ${c.name} cost ${c.cost} deadRate ${c.deadInHandRate}%`);
