@@ -29,6 +29,7 @@ import {
   KEYWORD_COST,
   KEYWORD_TEXT,
   Keyword,
+  V74_KEYWORDS,
   isKeyword,
   keywordsForType,
 } from './keywords';
@@ -591,6 +592,12 @@ function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
     // Rarity floor drops to Rare because rt >= 4 is 21 cards — thin enough
     // that "printable" and "unprintable" are the same thing.
     if (rt >= 2 && colors[0] && UNBREAKABLE_COLORS.has(colors[0])) return ['Unbreakable'];
+    // v7.4: the two new Unit keywords ride the same salvage band. Their
+    // colours (Ember, Shadow) are deliberately chosen to miss Unbreakable's
+    // Root/Void, so this never competes with the branch above and those three
+    // carriers re-print byte-identically.
+    const fresh = colors[0] ? freshKeywordV74For(seed, 'Unit', colors[0]) : undefined;
+    if (fresh && KEYWORD_COLOR[fresh as Keyword] === colors[0]) return [fresh];
     return [];
   }
 
@@ -639,11 +646,31 @@ function freshKeywordFor(
   type: CardDef['type'],
   color: Color | undefined,
 ): string | undefined {
-  const all = keywordsForType(type).filter((kw) => KEYWORD_COLOR[kw] !== undefined);
+  // v7.4 keywords are excluded on purpose: `pick` indexes this list with
+  // `% length`, so admitting them here would re-roll every v7.3 carrier that
+  // shares the list. They get their own band via freshKeywordV74For.
+  const all = keywordsForType(type).filter(
+    (kw) => KEYWORD_COLOR[kw] !== undefined && !V74_KEYWORDS.has(kw),
+  );
   if (!all.length) return undefined;
   const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
   const list = onColor.length ? onColor : all;
   return pick(seed, 27, list) as string;
+}
+
+/** The v7.4 keyword this type/colour prints, for the band above the v7.3 one.
+ * Same colour-preferred-then-fallback shape as freshKeywordFor, on its own
+ * salt so the two bands never share a roll. */
+function freshKeywordV74For(
+  seed: string,
+  type: CardDef['type'],
+  color: Color | undefined,
+): string | undefined {
+  const all = keywordsForType(type).filter((kw) => V74_KEYWORDS.has(kw));
+  if (!all.length) return undefined;
+  const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
+  const list = onColor.length ? onColor : all;
+  return pick(seed, 31, list) as string;
 }
 
 function mapUnit(c: CardTemplate): CardDef {
@@ -794,9 +821,16 @@ function mapEvent(c: CardTemplate): CardDef {
   // bands are untouched, so every existing Surge/Resonant carrier re-prints
   // byte-identically and only cards that previously rolled NO keyword pick
   // one up — priced, as always, through KEYWORD_COST.
+  // v7.4 adds a FOURTH band on the same principle: everything below it is
+  // untouched, so every Surge/Resonant/v7.3 carrier re-prints byte-identically
+  // and only cards that still rolled NO keyword can pick one up.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
-    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Event', colors[0]) : undefined;
+    kwRoll >= 26 && kwRoll < 42
+      ? freshKeywordFor(seed, 'Event', colors[0])
+      : kwRoll >= 42 && kwRoll < 64
+        ? freshKeywordV74For(seed, 'Event', colors[0])
+        : undefined;
   const keywords: string[] = evFresh
     ? [evFresh]
     : kwRoll < 14
@@ -843,9 +877,16 @@ function mapCharm(c: CardTemplate): CardDef {
   // v6.0 Charm keywords: ~12% Runic (bond cantrip); ~12% of BOUND charms
   // Soulbound (returns to hand when its unit dies). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
+  // v7.4 adds a FOURTH band on the same principle: everything below it is
+  // untouched, so every Surge/Resonant/v7.3 carrier re-prints byte-identically
+  // and only cards that still rolled NO keyword can pick one up.
   const kwRoll = roll(seed, 'ch-kw2', 100);
   const chFresh =
-    kwRoll >= 24 && kwRoll < 40 ? freshKeywordFor(seed, 'Charm', colors[0]) : undefined;
+    kwRoll >= 24 && kwRoll < 40
+      ? freshKeywordFor(seed, 'Charm', colors[0])
+      : kwRoll >= 40 && kwRoll < 52
+        ? freshKeywordV74For(seed, 'Charm', colors[0])
+        : undefined;
   const charmKws: string[] = chFresh
     ? [chFresh]
     : kwRoll < 12
@@ -928,9 +969,16 @@ function mapLocation(c: CardTemplate): CardDef {
   // v6.0 Location keywords: ~12% Bountiful (taps for 2 essence — replaces
   // any other ability), ~14% Sacred (Dawn lifegain). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
+  // v7.4 adds a FOURTH band on the same principle: everything below it is
+  // untouched, so every Surge/Resonant/v7.3 carrier re-prints byte-identically
+  // and only cards that still rolled NO keyword can pick one up.
   const kwRoll = roll(seed, 'loc-kw2', 100);
   const locFresh =
-    kwRoll >= 26 && kwRoll < 42 ? freshKeywordFor(seed, 'Location', produces) : undefined;
+    kwRoll >= 26 && kwRoll < 42
+      ? freshKeywordFor(seed, 'Location', produces)
+      : kwRoll >= 42 && kwRoll < 54
+        ? freshKeywordV74For(seed, 'Location', produces)
+        : undefined;
   const locKws: string[] = locFresh
     ? [locFresh]
     : kwRoll < 12
@@ -1128,6 +1176,57 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
   // pays for six times over. At -2 it gets three, which is still the most
   // reach of any kit but no longer an every-turn faucet.
   crimson_vector_commander: -2,
+  // v7.4: Void Mother is Avatar's v6.3 problem, printed fresh. v7.3 reassigned
+  // it Unit -> Leader, which handed it Mythic's Resolve 6 against the Void
+  // table's printed `-2: Banish` — and nobody re-derived what that pairing
+  // buys. It buys THREE unconditional removals per tank. Every other removal
+  // Leader in the pool buys exactly one (Avatar 5/-4, Ruin-Walker 4/-3), which
+  // is why they sit near baseline and this finished FIRST in both cohorts by
+  // ~12 points at 71.7% / 72.0% — the largest outlier in the game.
+  //
+  // The mechanism is already named twice in this file: the header above calls
+  // an unconditional removal a full tank buys twice "the strongest kit shape
+  // in the game", and Ruin-Walker's identical Void Banish was repriced from -2
+  // to -3 for exactly it. Void Mother kept the -2 and has double the Resolve.
+  // Priced to -4, which is Avatar's ratio at one more Resolve: one removal a
+  // tank, two points stranded, and four turns of the +1 builder to fund the
+  // next. Price-only, same lever as Avatar and Crimson Vector.
+  void_mother: -4,
+};
+
+/**
+ * v7.4: Leader BASE-Resolve override — the last lever the Leader kit had no
+ * table for. Resolve is derived from rarity alone
+ * (`3 + floor(rt / 2)`, clamped 3..6), so it is the one input to a kit that
+ * has nothing to do with what the kit actually does.
+ *
+ * That is fine until a Leader's minus ability and its Resolve disagree about
+ * how often the kit is meant to fire. Uses-per-tank is the number that
+ * actually predicts the Leader spread — every removal Leader that sits near
+ * baseline buys exactly one use (Avatar 5/-4, Ruin-Walker 4/-3), and the one
+ * that bought three finished first by twelve points. A Leader whose effect is
+ * far WEAKER than removal but whose Resolve still only funds one use is the
+ * same mismatch pointing the other way, and neither of the existing tables can
+ * reach it: LEADER_MINUS_RESOLVE_OVERRIDE only makes an ability cost more, and
+ * LEADER_MINUS_ABILITY_OVERRIDE replaces the effect that two trials already
+ * bracketed.
+ */
+const LEADER_RESOLVE_OVERRIDE: Record<string, number> = {
+  // Kuro, the Unseen: 32.4% / 34.0%, last in both cohorts. Uncommon, so
+  // Resolve 3, against the v7.2 `-2: A target enemy unit gets -2/-2` override
+  // — one use a tank with a point stranded, which is Avatar's ratio for an
+  // effect nothing like Avatar's. A permanent -2/-2 does not kill a real
+  // threat outright; it is a soft answer that has to repeat to matter, and at
+  // one use per tank it never repeats.
+  //
+  // Deliberately NOT re-priced to -1: v7.2 measured that at 61.6% / 55.6%,
+  // last place to FIRST, and its note is explicit that "the size was never the
+  // problem; the frequency was". This is that same conclusion applied through
+  // the input v7.2 had no lever for. Resolve 4 buys two shrinks a tank rather
+  // than one, strands nothing, and adds a point of Leader durability to the
+  // bottom Leader in the game — without touching an effect size that two
+  // trials have already bracketed from both sides.
+  apex_nanite_shinobi: 4,
 };
 
 /**
@@ -1353,7 +1452,7 @@ function mapLeader(c: CardTemplate): CardDef {
   ).filter((kw) => !stripped.has(kw));
   const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
-  const resolve = Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
+  const resolve = LEADER_RESOLVE_OVERRIDE[c.id] ?? Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = LEADER_MINUS_ABILITY_OVERRIDE[c.id]
     ? { ...LEADER_MINUS_ABILITY_OVERRIDE[c.id] }
     : leaderMinusAbility(seed, minusColorFor(identity));

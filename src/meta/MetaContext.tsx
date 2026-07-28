@@ -82,7 +82,11 @@ export interface MetaState {
   signOut: () => Promise<void>;
 }
 
-const MetaContext = createContext<MetaState | null>(null);
+/** Exported for the dev-only meta-preview harness (src/meta-preview.tsx),
+ * which mounts the collection/deck/pack screens against a mock state so their
+ * layout can be measured at phone widths without a Supabase session. Nothing
+ * in the app should consume this directly — use `useMeta`. */
+export const MetaContext = createContext<MetaState | null>(null);
 
 export function useMeta(): MetaState {
   const ctx = useContext(MetaContext);

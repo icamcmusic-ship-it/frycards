@@ -64,7 +64,40 @@ export const KEYWORDS = [
   'Blighted', // Location — Void
   'Warlord', // Leader — Shadow
   'Archivist', // Location — Tide
+  // -- v7.4: the six names the roadmap has carried unimplemented since v4.x.
+  // They had no definitions anywhere in the repo's history — only the list —
+  // so each is designed here against a gap the live pool actually has, rather
+  // than added for coverage. In pool order of what was missing:
+  //
+  //   ash-pile recursion  — nothing ever came back from the ash-pile at all
+  //   graveyard denial    — and so nothing interacted with the other player's
+  //   damage prevention   — Bulwark shields the PLAYER; no unit had a shield
+  //   hard tempo denial   — `exhaust` was the only answer and it wears off
+  //   a death sweeper     — Wildfire hits the face; nothing hit a board
+  //   deck filtering      — no card in the pool looked at the deck at all
+  'Exhume', // Unit — Shadow
+  'Freeze-Dry', // Location — Tide
+  'Blessed', // Charm — Light
+  'Glaciate', // Event — Gale
+  'Scorched-Earth', // Unit — Ember
+  'Fate', // Event — Void
 ] as const;
+
+/**
+ * The v7.4 additions, kept in their own set because `pick()` indexes keyword
+ * lists with `% length` — so adding these to the list the v7.3 mappers draw
+ * from re-rolls the keyword of every non-Unit card that shares it. Measured:
+ * 16 cards changed and Ritual dropped to zero carriers. The mappers give them
+ * their own roll band instead and use this to keep the older list intact.
+ */
+export const V74_KEYWORDS = new Set<string>([
+  'Exhume',
+  'Freeze-Dry',
+  'Blessed',
+  'Glaciate',
+  'Scorched-Earth',
+  'Fate',
+]);
 
 export type Keyword = (typeof KEYWORDS)[number];
 
@@ -113,6 +146,12 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Blighted: 'Location',
   Warlord: 'Leader',
   Archivist: 'Location',
+  Exhume: 'Unit',
+  'Freeze-Dry': 'Location',
+  Blessed: 'Charm',
+  Glaciate: 'Event',
+  'Scorched-Earth': 'Unit',
+  Fate: 'Event',
 };
 
 /**
@@ -136,6 +175,12 @@ export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
   Blighted: 'Void',
   Warlord: 'Shadow',
   Archivist: 'Tide',
+  Exhume: 'Shadow',
+  'Freeze-Dry': 'Tide',
+  Blessed: 'Light',
+  Glaciate: 'Gale',
+  'Scorched-Earth': 'Ember',
+  Fate: 'Void',
 };
 
 /** Keywords legal on a given card type. */
@@ -184,6 +229,13 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Blighted: 'At your Dusk, the enemy erodes 1.',
   Warlord: 'While your Leader is on the field, your units get +0/+1.',
   Archivist: 'At your Dawn, Deal a card if you control 3 or more Sanctums.',
+  Exhume: 'When this unit enters the field, return a Unit from your ash-pile to your hand.',
+  'Freeze-Dry': 'Enemy units that would go to the ash-pile are banished to The Void instead.',
+  Blessed: 'Prevent the first damage dealt to the bonded unit each turn.',
+  Glaciate:
+    'When this Event resolves, exhaust a target enemy unit; it does not recover at its controller\u2019s next Dawn.',
+  'Scorched-Earth': 'When this unit leaves the field, deal 1 damage to every enemy unit.',
+  Fate: 'When this Event resolves, Deal a card, then put the costliest card you cannot pay for on the bottom of your deck.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -312,6 +364,27 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Blighted: 1, // 1 erosion a turn, priced with Entropic
   Warlord: 2, // a stat aura on a Leader, priced with Commander
   Archivist: 3, // repeating, build-around card advantage, priced with Tidecaller
+  // v7.4. Each priced by analogy to the closest already-tuned keyword, which
+  // is how v6.9 and v7.3 seeded theirs; the first sim pass that carries them
+  // re-derives these.
+  Exhume: 4, // a card back from the ash-pile on a body — card advantage that
+  // beats Runic's (1) draw-a-card because it picks a KNOWN card, and beats
+  // Tidecaller's (3) because it needs no combat to fire. One-shot, so below
+  // Archivist's repeating 3... but the card it returns is the best one you
+  // have lost, so it is priced above it.
+  'Freeze-Dry': 2, // pure denial with no board impact the turn it lands —
+  // priced with Blighted/Warlord, not with Bulwark, because it does nothing
+  // at all against a deck that never wanted its ash-pile back.
+  Blessed: 3, // a damage shield on the bonded unit, priced with Hardened (3),
+  // which is the same effect metered per packet instead of per turn.
+  Glaciate: 3, // strictly better than the `exhaust` action (which the enemy
+  // Dawn undoes), so priced a step above Tethered's one-shot tempo and level
+  // with Aerial/Venomous.
+  'Scorched-Earth': 2, // Wildfire (2) pointed at the board instead of the
+  // face. Same one-shot death trigger, same price.
+  Fate: 2, // draw-then-bottom is a cantrip plus a filter, so one step above
+  // Echoing's plain cantrip (2) in value but the same in price — the discard
+  // half is a real cost against an empty hand.
 };
 
 /** Short label for card-face chips. */

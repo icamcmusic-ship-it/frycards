@@ -61,6 +61,26 @@ grants either still grants it at the moment its bearer leaves the field.
 Withering's Grit loss is permanent: unlike marked damage, healing does not
 restore it, and a unit withered to 0 Grit is shattered by the state checks.
 
+**v7.4:** six keywords the game had named but never printed. Each answers a
+gap the card pool had no card for at all:
+
+| Keyword (type — Essence Type) | Meaning |
+|---|---|
+| Exhume (Unit — Shadow) | When this unit enters the field, return a Unit from your ash-pile to your hand |
+| Scorched-Earth (Unit — Ember) | When this unit leaves the field, deal 1 damage to every enemy unit |
+| Blessed (Charm — Light) | Prevent the first damage dealt to the bonded unit each turn |
+| Freeze-Dry (Location — Tide) | Enemy units that would go to the ash-pile are banished to The Void instead |
+| Glaciate (Event — Gale) | When this Event resolves, exhaust a target enemy unit; it does not recover at its controller's next Dawn |
+| Fate (Event — Void) | When this Event resolves, Deal a card, then put the costliest card you cannot pay for on the bottom of your deck |
+
+Exhume is the only way anything returns from an ash-pile, and Freeze-Dry is
+the only answer to one. Blessed prevents a whole packet rather than shaving a
+point off it, so it blanks a removal spell outright — but only once a turn, so
+it does not stop a board of attackers. A Glaciated unit still gets its Dawn
+triggers (Regenerate, Thriving, Radiant, Empowering); it only misses the
+recovery. Fate only ever bottoms a card you could not have played anyway —
+it clears a clog, it never takes your best card.
+
 **v6.0:** every other card type has its own keyword pair:
 
 | Keyword (type) | Meaning |

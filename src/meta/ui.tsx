@@ -45,7 +45,11 @@ export function PopButton({
       title={title}
       aria-label={ariaLabel}
       className={cn(
-        'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors',
+        // v7.4: PopButton is the shared control across every meta screen and
+        // printed at 36px tall — under the 44px a finger needs, on all of
+        // them. `tap-44` expands the hit area on touch pointers only, so the
+        // desktop look is untouched.
+        'tap-44 btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors',
         palette,
         disabled && 'opacity-40 cursor-not-allowed',
         className,

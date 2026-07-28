@@ -62,25 +62,33 @@ const EXPECTED = [
   'Blighted',
   'Archivist', // Location
   'Warlord', // Leader
+  // v7.4: the six names the roadmap carried unimplemented since v4.x, each
+  // designed against a gap the live pool actually had (see keywords.ts).
+  'Exhume', // Unit — ash-pile recursion, of which the pool had none
+  'Scorched-Earth', // Unit — a death trigger that hits the enemy BOARD
+  'Blessed', // Charm — the only damage shield on a unit
+  'Freeze-Dry', // Location — the only interaction with an ash-pile
+  'Glaciate', // Event — tempo denial that outlasts the next Dawn
+  'Fate', // Event — the only card selection in the pool
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 non-Unit keywords, unique', () => {
+  test('the 14 rulebook + 10 v6.0 + 7 v6.9 + 8 v7.3 + 6 v7.4 keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
 
   test('every keyword maps to a card type; every non-Unit type gained options', () => {
     for (const kw of KEYWORDS) expect(KEYWORD_TYPES[kw]).toBeTruthy();
-    expect(keywordsForType('Unit').length).toBe(23);
+    expect(keywordsForType('Unit').length).toBe(25);
     // v7.3: was a flat 2 apiece. Leader keeps the smallest vocabulary on
     // purpose — there are only 9 Leaders in the pool, so a Leader-only
     // keyword is thinly printed by construction (which is why Archivist was
     // moved to Location, where ~50 cards can carry it).
     const counts: Record<string, number> = {
-      Event: 4,
-      Charm: 4,
-      Location: 5,
+      Event: 6,
+      Charm: 5,
+      Location: 6,
       Leader: 3,
     };
     for (const [t, n] of Object.entries(counts)) {

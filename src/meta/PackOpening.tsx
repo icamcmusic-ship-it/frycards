@@ -472,7 +472,7 @@ function TearStage({
       </div>
       <button
         onClick={finishTear}
-        className="mt-3 text-[10px] font-black text-[var(--c-paper)]/60 underline decoration-2 underline-offset-2 hover:text-[var(--c-paper)] relative"
+        className="tap-44 mt-3 text-[10px] font-black text-[var(--c-paper)]/60 underline decoration-2 underline-offset-2 hover:text-[var(--c-paper)] relative"
       >
         JUST TEAR IT OPEN FOR ME
       </button>

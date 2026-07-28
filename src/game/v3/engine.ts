@@ -7,7 +7,7 @@
  * Replaces the v4.x dice-placement engine (dice, rolls, combos, Cast Slots)
  * entirely.
  */
-import { CardDef, Effect, EssenceCost, LEADER_HP, MAX_HAND, hasKw } from './cards';
+import { CardDef, Effect, EssenceCost, LEADER_HP, MAX_HAND, hasKw, totalCost } from './cards';
 import { COLORS, EssenceType, LEADER_COLORS } from './colors';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,10 @@ export interface UnitInst {
   charms: CharmInst[];
   /** Hit by Venomous damage this clash — lethal unless Unbreakable. */
   venomed?: boolean;
+  /** v7.4 Glaciate: skips its controller's next Dawn recovery, then thaws. */
+  frozen?: boolean;
+  /** v7.4 Blessed: this turn's prevented-damage shield has been spent. */
+  wardSpent?: boolean;
 }
 
 /** A Location on the field: a basic Wellspring (no def) or an invoked Sanctum. */
@@ -269,6 +273,12 @@ function warlordBonus(p: PlayerState): number {
  * accumulate. Both keywords say "Sanctums", and this is what that means. */
 function sanctumCount(p: PlayerState): number {
   return p.locations.filter((l) => l.def).length;
+}
+
+/** v7.4 Freeze-Dry: does `pid` control a Sanctum that banishes what the
+ * OPPONENT would otherwise put in their ash-pile? */
+function freezeDriedBy(state: GameState, pid: PlayerId): boolean {
+  return state.players[pid].locations.some((l) => l.def && hasKw(l.def, 'Freeze-Dry'));
 }
 
 /** v7.3 Bulwark: each Bulwark Sanctum shaves 1 off every point of damage
@@ -800,6 +810,16 @@ function siphonGain(state: GameState, source: UnitInst, amount: number): void {
 
 function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): void {
   if (amount <= 0) return;
+  // v7.4 Blessed: the pool's only shield on a UNIT — Bulwark protects the
+  // player and Hardened only shaves a point. Prevents the packet outright,
+  // once a turn, so it blanks a removal spell but not a board of attackers.
+  // Checked before Hardened so a Blessed+Hardened body does not spend the
+  // shield on damage Hardened was going to absorb anyway.
+  if (!u.wardSpent && u.charms.some((c) => hasKw(c.def, 'Blessed'))) {
+    u.wardSpent = true;
+    telemetry.onKeywordProc?.('Blessed', amount);
+    return;
+  }
   // v6.0 Hardened: every packet of damage dealt to this unit is reduced by 1.
   if (unitHasKw(u, 'Hardened')) {
     amount -= 1;
@@ -979,6 +999,16 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   // Read leave-the-field keywords BEFORE the bonded Charms are unhooked —
   // a Charm-granted Wildfire is still granted at the moment of death.
   const wildfire = unitHasKw(u, 'Wildfire');
+  // v7.4 Scorched-Earth: Wildfire's board-facing twin, read at the same moment
+  // and for the same reason.
+  const scorched = unitHasKw(u, 'Scorched-Earth');
+  // v7.4 Freeze-Dry: the OPPONENT's Sanctums decide where this unit lands. It
+  // is the pool's only answer to an ash-pile, so it has to bite on units that
+  // die to combat and to removal alike — i.e. here, not at any one call site.
+  if (dest === 'ash' && freezeDriedBy(state, opponentOf(u.owner))) {
+    dest = 'void';
+    telemetry.onKeywordProc?.('Freeze-Dry', 1);
+  }
   p.field.splice(idx, 1);
   for (const charm of u.charms) {
     // v6.0 Soulbound: the Charm returns to its owner's hand instead of dying
@@ -999,6 +1029,13 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   if (wildfire) {
     telemetry.onKeywordProc?.('Wildfire', 2);
     damagePlayer(state, opponentOf(u.owner), 2);
+  }
+  // v7.4 Scorched-Earth: a parting shot at the enemy BOARD. Nothing else in
+  // the pool sweeps from a body — Wildfire only ever reaches the face.
+  if (scorched) {
+    const enemies = [...state.players[opponentOf(u.owner)].field];
+    if (enemies.length > 0) telemetry.onKeywordProc?.('Scorched-Earth', enemies.length);
+    for (const e of enemies) damageUnit(state, e, 1);
   }
   // Rulebook "when ... leaves the field" has no ash/void distinction: 'dies'
   // triggers fire on banish too.
@@ -1057,8 +1094,22 @@ export function stateBasedChecks(state: GameState): void {
 function runDawn(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dawn';
+  // v7.4 Blessed: the shield refreshes at the start of every turn, for BOTH
+  // sides — "each turn" is a turn of the game, not a turn of its controller,
+  // so a Blessed blocker is shielded on the turn it blocks.
+  for (const seat of ['P1', 'P2'] as PlayerId[]) {
+    for (const u of state.players[seat].field) u.wardSpent = false;
+  }
   for (const u of p.field) {
-    u.exhausted = false;
+    // v7.4 Glaciate: skips exactly one recovery, then thaws. Only the
+    // recovery — the printed text says nothing about Regenerate, Thriving,
+    // Radiant or Empowering, and a frozen unit still gets all of them.
+    if (u.frozen) {
+      u.frozen = false;
+      telemetry.onKeywordProc?.('Glaciate', 1);
+    } else {
+      u.exhausted = false;
+    }
     u.enteredThisTurn = false;
     // v6.0 Regenerate: heals all marked damage at its controller's Dawn.
     if (u.damage > 0 && unitHasKw(u, 'Regenerate')) {
@@ -1414,6 +1465,21 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
+      // v7.4 Exhume: the pool had NO ash-pile recursion of any kind — cards
+      // that left the field were gone for the rest of the game. Returns the
+      // costliest Unit, which is both the strongest pick and a deterministic
+      // one (no prompt), matching how Shed and autoTarget already choose.
+      if (hasKw(def, 'Exhume')) {
+        const best = p.ashPile
+          .filter((c) => c.def.type === 'Unit')
+          .sort((a, b) => totalCost(b.def.cost) - totalCost(a.def.cost))[0];
+        if (best) {
+          p.ashPile.splice(p.ashPile.indexOf(best), 1);
+          p.hand.push(best);
+          telemetry.onKeywordProc?.('Exhume', 1);
+          state.log.push(`${def.name} exhumes ${best.def.name}.`);
+        }
+      }
       runTriggers(state, pid, 'enters', u);
       break;
     }
@@ -1429,6 +1495,41 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
           // explicit target is gone — usually the first one killed it.
           const target = i === 0 || !fizzles(state, item, eff) ? item.targetIid : undefined;
           applyEffect(state, pid, eff, target);
+        }
+      }
+      // v7.4 Glaciate: hard tempo denial. The `exhaust` action alone is undone
+      // by the very next Dawn, so it only ever buys a single attack step;
+      // freezing costs the target a whole turn cycle.
+      if (hasKw(def, 'Glaciate')) {
+        const frost = autoTarget(state, pid, { action: 'exhaust', value: 0, target: 'enemyUnit' });
+        const target = frost ? findUnit(state, frost) : undefined;
+        if (target && target.owner !== pid) {
+          target.exhausted = true;
+          target.frozen = true;
+          telemetry.onKeywordProc?.('Glaciate', 1);
+          state.log.push(`${def.name} freezes ${target.def.name}.`);
+        }
+      }
+      // v7.4 Fate: the pool had no card selection at all — every draw was
+      // blind. Bottoms a card the hand cannot currently pay for, which is the
+      // only kind it is ever right to give up.
+      //
+      // The first draft bottomed the COSTLIEST card outright and measured
+      // below even in both cohorts (39.7% / 41.1%, delta -3.6 / -4.5) — of
+      // course it did: a hand's costliest card is usually its best one, so
+      // "filtering" was throwing away the bomb it had been holding for. And
+      // when the card just drawn was itself the costliest, the whole keyword
+      // was a null that still charged for itself.
+      if (hasKw(def, 'Fate')) {
+        dealCards(state, pid, 1);
+        const pool = potentialEssence(p);
+        const clog = [...p.hand]
+          .filter((c) => !canPayCost(pool, effectiveCost(state, pid, c.def)))
+          .sort((a, b) => totalCost(b.def.cost) - totalCost(a.def.cost))[0];
+        if (clog) {
+          p.hand.splice(p.hand.indexOf(clog), 1);
+          p.deck.unshift(clog);
+          telemetry.onKeywordProc?.('Fate', 1);
         }
       }
       // v7.3 Echoing: the Event replaces itself. Draws once however many

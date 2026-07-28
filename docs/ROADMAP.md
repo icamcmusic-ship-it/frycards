@@ -4,13 +4,14 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Mobile/responsive polish, second pass** — v7.4 made the match board
-  playable on a phone (see `CHANGELOG.md`). Still open: the card *views*
-  outside the board (collection, deck editor, pack opening) have not been
-  measured at all, and the hand fan at seven-plus cards is tight enough on a
-  375px screen that names are hard to read even though every card is tappable.
-  A per-card horizontal scroll strip may beat the fan below the `sm`
-  breakpoint.
+- **Mobile, third pass.** The board (v7.4) and the three card-heavy meta
+  screens (v7.4, via the new `meta-preview.html` harness) are measured and
+  clean at 375px. Still open: the remaining meta screens (Store, Marketplace,
+  Social, Profile, Settings, Battle Pass) have never been measured — the
+  harness makes that cheap now — and the board's hand fan at seven-plus cards
+  is tight enough on a 375px screen that names are hard to read even though
+  every card is tappable. A horizontal scroll strip may beat the fan below the
+  `sm` breakpoint.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme (partially underway — see
   the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
@@ -32,22 +33,28 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
   warns against chasing, so it needs a proper pass rather than another
   stacked point. Note all three sit at the cost cap, so `COST_ADJUST` is a
   no-op and `STAT_ADJUST` is the only live lever. See `CHANGELOG.md` v7.4.
-- **Two Leaders at the extremes** — the colour-aware minus rule landed in v7.4
-  and Mer-King, the last inert kit, is fixed (see `CHANGELOG.md`). What is left
-  is per-Leader pricing, which that rule cannot reach, and both cases are the
-  same well-documented shape: a full Resolve tank buying unconditional removal
-  more than once.
-  - **Void Mother 71.7% / 72.0%**, first in both cohorts by ~12 points. Resolve
-    **6** with a `-2: Banish` — three unconditional removals per tank. The
-    `LEADER_MINUS_ABILITY_OVERRIDE` header already names this exact shape as
-    "the strongest kit shape in the game" and repriced Ruin-Walker's identical
-    Void Banish from -2 to -3 for it; Void Mother kept the -2 AND has double
-    the Resolve. Lever: price the minus, or drop the Resolve.
-  - **Kuro, the Unseen 32.4% / 34.0%**, last in both. Resolve **3** against a
-    `-2` minus, so a full tank buys one use and strands a point. Its v7.2
-    override shipped at -2 after a -1 version overshot to 61.6%; at Resolve 3
-    that reprice appears to have overcorrected. Lever: Resolve, or the minus
-    price — not the effect, which two trials already bracketed.
+- **Kuro, the Unseen — 35.2% / 35.8%, still last in both cohorts.** v7.4 gave
+  it Resolve 4 (a new `LEADER_RESOLVE_OVERRIDE`) so a tank buys two shrinks
+  rather than one; that moved it only +2.8 / +1.8, so Resolve is close to
+  exhausted as a lever and the effect size was already bracketed from both
+  sides in v7.2 (-1 overshot to 61.6%, -2 undershot). What the v7.4 kit
+  diagnostics newly rule out: it is not idling (0% idle, both abilities fired
+  thousands of times, both at ~35%), so the kit is being used and losing
+  anyway. The next lever is its cost or its Gale/Shadow colour pair, not its
+  abilities. Void Mother, the other extreme, was fixed this pass (71.7% →
+  60.1%).
+- **The v7.4 keywords, one settling pass.** All six now print and are wired to
+  real engine hooks (see `CHANGELOG.md` and `docs/RULEBOOK.md`). Two want a
+  second look once the pool has settled:
+  - **Blessed** reads +21.9 (76.3%, n=194) in one cohort and +6.0 (51.4%,
+    n=755) in the other. The cohorts disagree and the high reading is the
+    small sample, so no action — but a damage shield that blanks a whole
+    removal spell is the kind of effect that deserves confirming.
+  - **Fate** is -2.0 / -3.4 after its redesign, below even in both cohorts but
+    inside the band Surge, Aerial and Resonant already occupy. Watch, do not
+    price.
+  - **Exhume** cleared the sample floor in only one cohort (+13.0, n=253).
+    Needs a run where both cohorts draft it before it means anything.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the
@@ -61,8 +68,3 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 - **Multiplayer (PvP)** — requires a server-authoritative engine; see
   `docs/PVP_DESIGN.md` for the design spike.
-- **Unprinted keywords** (Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate,
-  Exhume) — implement when cards using them are printed. (v6.9 printed a
-  different new generation instead: one keyword per Essence Type — Wildfire,
-  Tidecaller, Thriving, Nimble, Radiant, Withering, Entropic — plus the
-  `exhaust` and `weaken` effect actions. See `docs/RULEBOOK.md`.)

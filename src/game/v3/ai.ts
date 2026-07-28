@@ -356,6 +356,35 @@ function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   }
   if (def.type === 'Event' && hasKw(def, 'Resonant')) v += 4; // double value
   if (def.type === 'Location' && hasKw(def, 'Bountiful')) v += 3; // ramp
+  // v7.4 keywords. Each is worth what its condition is worth RIGHT NOW —
+  // without these the CPU reads a Glaciate Event into an empty board and an
+  // Exhume body over an empty ash-pile as if they were free value, which is
+  // how a new keyword ends up measuring as a dud that is really just misplayed.
+  if (hasKw(def, 'Glaciate')) {
+    // Same shape as needsEnemyUnit above: a whole turn of denial against a
+    // developed board, literally nothing against an empty one.
+    v += opp.field.some((u) => !unitHasKw(u, 'Warded') && !u.exhausted) ? 14 : -40;
+  }
+  if (hasKw(def, 'Exhume')) {
+    // Worth the best body waiting in the ash-pile, and nothing at all when
+    // there is none — the body itself is still fine, hence no big penalty.
+    const best = state.players[pid].ashPile
+      .filter((c) => c.def.type === 'Unit')
+      .sort((a, b) => totalCost(b.def.cost) - totalCost(a.def.cost))[0];
+    v += best ? Math.min(15, totalCost(best.def.cost) * 3) : 0;
+  }
+  // A death trigger that sweeps only pays against a board with something on
+  // it, and it is a body either way.
+  if (hasKw(def, 'Scorched-Earth')) v += Math.min(10, opp.field.length * 4);
+  // Denial that does nothing unless the opponent actually wants their
+  // ash-pile back — cheap insurance, never a priority.
+  if (hasKw(def, 'Freeze-Dry')) v += 2;
+  // A shield is worth having on anything; Blessed is a Charm, so the Charm
+  // penalty below already handles the empty-board case.
+  if (hasKw(def, 'Blessed')) v += 4;
+  // Filtering is worth most when the hand is clogged with what it cannot pay
+  // for, which is exactly when the CPU is otherwise stuck.
+  if (hasKw(def, 'Fate')) v += 3;
   if (def.onInvoke?.target === 'allEnemyUnits' && opp.field.length < 2) v -= 60;
   if (def.type === 'Charm' && state.players[pid].field.length === 0) v -= 200;
   return v;

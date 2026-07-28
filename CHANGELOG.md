@@ -8,6 +8,96 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.4 — Six keywords that existed only as names
+
+- **Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate and Exhume have been
+  on the roadmap since v4.x with no definitions anywhere in the repo's
+  history** — just the six names, carried forward pass after pass with
+  "implement when cards using them are printed". Each is now designed against
+  a gap the live pool measurably had, rather than invented for coverage:
+  - **Exhume** (Unit — Shadow): returns a Unit from your ash-pile. Nothing in
+    the pool brought anything back from an ash-pile at all; once a card left
+    the field it was gone for the game.
+  - **Freeze-Dry** (Location — Tide): enemy units are banished instead of
+    ash-piled. The only card that interacts with an opponent's ash-pile, and
+    the answer to Exhume.
+  - **Blessed** (Charm — Light): prevents the first damage each turn. Bulwark
+    shields the player and Hardened shaves a point; no card shielded a unit.
+    Prevents the whole packet, so it blanks a removal spell — but once a turn,
+    so it does not stop a board of attackers.
+  - **Glaciate** (Event — Gale): exhausts a unit *through* its controller's
+    next Dawn. `exhaust` was the only tempo answer and the very next Dawn
+    undid it.
+  - **Scorched-Earth** (Unit — Ember): a death trigger that damages every
+    enemy unit. Wildfire only ever reached the face.
+  - **Fate** (Event — Void): draws, then bottoms a card you cannot pay for.
+    No card in the pool looked at the deck.
+- **They print without re-rolling a single existing card.** `pick()` indexes
+  keyword lists with `% length`, so simply adding these re-rolled 16 cards and
+  dropped Ritual to zero carriers — caught by the catalog test added earlier
+  this version. They now sit in their own band above the v7.3 one (and behind
+  `V74_KEYWORDS`, which the older mapper filters out), so only cards that
+  still rolled NO keyword can pick one up. 43 cards gained one; none lost one.
+- **Glaciate first printed on zero cards** — the same dead-text failure, in a
+  keyword added in the same pass, caught by the same test. Its Event band was
+  too narrow for any Gale Event to land in; widened until it prints.
+- **Fate's first design was actively bad and the sims said so.** It bottomed
+  your *costliest* card, which is usually your best one, and did nothing at
+  all when the card just drawn was that card. It measured below even in both
+  cohorts (39.7% / 41.1%, delta -3.6 / -4.5). It now bottoms the costliest
+  card you cannot pay for — only ever a clog — and reads -2.0 / -3.4, inside
+  the band several long-standing keywords already sit in.
+- **The CPU knows what they are worth.** `invokePriority` scores each against
+  its actual condition, so a Glaciate into an empty board and an Exhume over
+  an empty ash-pile are no longer read as free value — the difference between
+  a weak keyword and a misplayed one.
+- Freeze-Dry shipped reporting **zero** activations across two full runs — the
+  same missing-telemetry hole Unbreakable had earlier this version. Hooked up,
+  it reports ~7,900 procs a run.
+
+### v7.4 — Void Mother priced, Kuro nudged
+
+- **Void Mother was buying three unconditional removals per Resolve tank.**
+  v7.3 reassigned it Unit → Leader, which handed it Mythic's Resolve 6 against
+  the Void table's printed `-2: Banish`, and nobody re-derived that pairing.
+  Every other removal Leader buys exactly one (Avatar 5/-4, Ruin-Walker 4/-3);
+  this bought three and finished **first in both cohorts by ~12 points**
+  (71.7% / 72.0%), the largest outlier in the game. The mechanism was already
+  written down twice in `cardpool.ts` — the override header calls this exact
+  shape "the strongest kit shape in the game", and Ruin-Walker's identical
+  Void Banish was repriced from -2 to -3 for it. Priced to **-4**, Avatar's
+  ratio at one more Resolve. Result: **60.1% / 60.2%**, first in neither.
+- **Kuro was paying Avatar's price ratio for a much weaker effect.** Resolve 3
+  against a `-2` permanent shrink is one use a tank with a point stranded, for
+  an effect that does not kill anything outright. v7.2 had already bracketed
+  the effect size from both sides (-1 overshot to 61.6%, -2 undershot) and
+  concluded "the size was never the problem; the frequency was" — but had no
+  lever for frequency, because Resolve is derived from rarity alone. A new
+  `LEADER_RESOLVE_OVERRIDE` supplies one; Kuro moves to Resolve 4, buying two
+  shrinks a tank.
+- **That moved it +2.8 / +1.8 and it is still last in both cohorts**, so the
+  lever is close to exhausted. Recorded rather than stacked on: the new kit
+  diagnostics rule out the obvious causes — 0% idle, both abilities fired
+  thousands of times, both at ~35% — so whatever is wrong is not the kit being
+  unused. Back on the roadmap with that narrowed.
+
+### v7.4 — Mobile, second pass
+
+- **The meta screens had never been measured at any width** — they all read
+  from a Supabase-backed context, so there was no way to render them without
+  an account. A `meta-preview.html` harness (the counterpart to the existing
+  `board-preview.html`) now mounts Collection, Deck Builder and Pack Opening
+  against a mock state, so their layout is measurable offline.
+- Measured at 375px: **no horizontal overflow on any of the three** — they
+  were already width-responsive. The real gap was touch targets: `PopButton`
+  is the shared control across every meta screen and printed at 36px tall, so
+  every button on every one of them was under the 44px minimum. It now carries
+  the `tap-44` utility, which expands the hit area on touch pointers only.
+  Deck Builder goes from 5 undersized controls to 0.
+- What remains under 44px on Collection is card-face furniture — keyword chips
+  and cost badges — where a larger hit area would overlap its neighbours. Same
+  call as on the board.
+
 ### v7.4 — The board is playable on a phone
 
 - **The player's hand was entirely off-screen on a 375x667 phone.** Measured in
