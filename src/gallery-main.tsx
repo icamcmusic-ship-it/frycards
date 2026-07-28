@@ -62,6 +62,24 @@ function Band({
   );
 }
 
+/**
+ * `?all=<rarity>[&size=<size>]` — every card at one rarity, one size, nothing
+ * else on the page. The default gallery shows ONE card per type per rarity,
+ * which is the right shape for reviewing the templates but useless for
+ * auditing anything that depends on a card's own content: the v7.5 flavor-text
+ * overlap only reproduced on the cards whose rules text happened to be long
+ * enough to push the flavor block down onto the stat plate. Used by the
+ * layout audit in `scripts/audit-cardface.ts`.
+ */
+function AllOfRarity({ rarity, size }: { rarity: string; size: CardSize }) {
+  const cards = POOL_V4.filter((c) => c.rarity === rarity);
+  return (
+    <div style={{ background: '#20242c', padding: 16 }}>
+      <Band title={`${rarity} — all ${cards.length}`} cards={cards} size={size} />
+    </div>
+  );
+}
+
 function Gallery() {
   const premium = ['Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
   const oneEach = RARITY_ORDER.map((r) => pickBy((c) => c.rarity === r)).filter(
@@ -112,4 +130,9 @@ function Gallery() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<Gallery />);
+const params = new URLSearchParams(window.location.search);
+const allRarity = params.get('all');
+const allSize = (params.get('size') as CardSize) || 'full';
+createRoot(document.getElementById('root')!).render(
+  allRarity ? <AllOfRarity rarity={allRarity} size={allSize} /> : <Gallery />,
+);
