@@ -106,6 +106,38 @@ export interface PlayerState {
   invokedCardThisTurn: boolean;
 }
 
+/**
+ * An entry on the resolution stack. Cards invoked from hand and triggered
+ * abilities both wait here instead of resolving where they were created, so
+ * either player can respond before they take effect.
+ */
+export interface StackItem {
+  id: string;
+  kind: 'card' | 'trigger';
+  controller: PlayerId;
+  /** Display name for the log/UI (card name, or the trigger's source card). */
+  sourceName: string;
+  /** kind 'card': the card that left hand and is waiting to resolve. */
+  card?: CardInst;
+  /** kind 'trigger': the ability's effect. */
+  effect?: Effect;
+  targetIid?: string;
+  bondTargetIid?: string;
+  /** Event-only: how many times its effect resolves (Resonant prints 2). */
+  resolveTimes?: number;
+}
+
+/** An open priority window. Absent when nobody may act (mid-resolution). */
+export interface PriorityState {
+  holder: PlayerId;
+  /**
+   * Players who have passed since the stack last changed. Both players
+   * passing in succession resolves the top item (or closes the window when
+   * the stack is empty).
+   */
+  passed: PlayerId[];
+}
+
 export type ClashStep = 'guards' | 'reaction' | 'done';
 
 export interface GuardAssignments {
@@ -144,6 +176,10 @@ export interface GameState {
   firstPlayer: PlayerId;
   winner: PlayerId | null;
   clash: ClashState | null;
+  /** Waiting-to-resolve cards and triggers, resolved last-in-first-out. */
+  stack: StackItem[];
+  /** Whose window it is to respond, or null when no window is open. */
+  priority: PriorityState | null;
   log: string[];
   rng: Rng;
 }
@@ -384,6 +420,8 @@ export function createGame(
     turn: 1,
     winner: null,
     clash: null,
+    stack: [],
+    priority: null,
     log: [],
     rng,
   };
@@ -457,11 +495,11 @@ function runTriggers(
   when: 'enters' | 'dies' | 'atDawn' | 'atDusk' | 'dealsClashDamage',
   unit?: UnitInst,
 ): void {
+  const batch: { name: string; effect: Effect }[] = [];
   const units = unit ? [unit] : [...state.players[pid].field];
   for (const u of units) {
     for (const t of u.def.triggers ?? []) {
-      if (t.when !== when) continue;
-      applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
+      if (t.when === when) batch.push({ name: u.def.name, effect: t.effect });
     }
   }
   // Sanctum Locations carry atDawn/atDusk triggers too (cardpool prints them
@@ -470,11 +508,175 @@ function runTriggers(
   if (!unit && (when === 'atDawn' || when === 'atDusk')) {
     for (const l of [...state.players[pid].locations]) {
       for (const t of l.def?.triggers ?? []) {
-        if (t.when !== when) continue;
-        applyEffect(state, pid, t.effect, autoTarget(state, pid, t.effect));
+        if (t.when === when) batch.push({ name: l.def?.name ?? 'Sanctum', effect: t.effect });
       }
     }
   }
+  // A controller's own simultaneous triggers go on the stack in the order they
+  // choose; the engine picks board order for them. Pushed in reverse so that
+  // LIFO resolution still runs them front-of-board first.
+  for (const t of batch.reverse()) {
+    pushStack(state, {
+      kind: 'trigger',
+      controller: pid,
+      sourceName: t.name,
+      effect: t.effect,
+      targetIid: autoTarget(state, pid, t.effect),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stack & priority (APNAP)
+// ---------------------------------------------------------------------------
+let stackIdCounter = 0;
+
+/** Turn order for a priority round: active player, then non-active player. */
+export function apnapOrder(state: GameState): [PlayerId, PlayerId] {
+  return [state.active, opponentOf(state.active)];
+}
+
+/** Put an item on the stack. Its controller keeps priority, and any passes
+ * already recorded are void — the stack changed, so everyone answers again. */
+function pushStack(state: GameState, item: Omit<StackItem, 'id'>): StackItem {
+  const full: StackItem = { ...item, id: `s${++stackIdCounter}` };
+  state.stack.push(full);
+  state.priority = { holder: full.controller, passed: [] };
+  return full;
+}
+
+/** Essence a player could produce right now: floating pool plus every untapped
+ * Location counted by its yield. */
+export function potentialEssence(p: PlayerState): Partial<Record<EssenceType, number>> {
+  const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
+  for (const l of p.locations) {
+    if (!l.exhausted) pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
+  }
+  return pool;
+}
+
+/** Is this card playable at instant speed (i.e. whenever its controller holds
+ * priority) rather than only in their own main phase? */
+export function isInstantSpeed(def: CardDef): boolean {
+  if (def.type === 'Event') return def.subtype === 'Quick';
+  return def.type === 'Unit' && hasKw(def, 'Ambush');
+}
+
+/**
+ * Does `pid` hold anything they could actually respond with? Costs are checked
+ * against essence they could still tap for, so a player is never auto-passed
+ * just because their Locations are untapped.
+ */
+export function hasInstantResponse(state: GameState, pid: PlayerId): boolean {
+  if (state.winner) return false;
+  const p = state.players[pid];
+  const pool = potentialEssence(p);
+  return p.hand.some((c) => {
+    if (!isInstantSpeed(c.def)) return false;
+    return canPayCost(pool, effectiveCost(state, pid, c.def));
+  });
+}
+
+/** Does `pid` currently hold priority? */
+export function hasPriority(state: GameState, pid: PlayerId): boolean {
+  return state.priority?.holder === pid;
+}
+
+/**
+ * Should the priority loop actually stop and wait for `pid`? Only when there
+ * is something of the opponent's to answer and `pid` holds an answer.
+ */
+export function canRespondNow(state: GameState, pid: PlayerId): boolean {
+  const top = state.stack[state.stack.length - 1];
+  if (!top || top.controller === pid) return false;
+  return hasInstantResponse(state, pid);
+}
+
+/**
+ * Pass priority. When both players have passed in succession the top of the
+ * stack resolves (and priority returns to the active player, per APNAP); with
+ * an empty stack the window simply closes.
+ */
+export function passPriority(state: GameState, pid: PlayerId): boolean {
+  const pr = state.priority;
+  if (!pr || pr.holder !== pid || state.winner) return false;
+  const passed = pr.passed.includes(pid) ? pr.passed : [...pr.passed, pid];
+  if (passed.length < 2) {
+    state.priority = { holder: opponentOf(pid), passed };
+    return true;
+  }
+  if (state.stack.length === 0) {
+    state.priority = null;
+    return true;
+  }
+  resolveTop(state);
+  // Only reopen a window if the game is still live; an empty stack after the
+  // last resolution closes out on the next round of passes.
+  state.priority = state.winner ? null : { holder: state.active, passed: [] };
+  return true;
+}
+
+/** Resolve the top item of the stack. */
+function resolveTop(state: GameState): void {
+  const item = state.stack.pop();
+  if (!item) return;
+  if (item.kind === 'trigger') {
+    if (fizzles(state, item, item.effect)) {
+      state.log.push(`${item.sourceName}'s trigger fizzles — no legal target.`);
+      return;
+    }
+    applyEffect(state, item.controller, item.effect!, item.targetIid);
+  } else {
+    resolveInvokedCard(state, item);
+  }
+  stateBasedChecks(state);
+}
+
+/** An item with an explicit target fizzles if that target is no longer legal —
+ * the response window is what makes this reachable at all. */
+function fizzles(state: GameState, item: StackItem, eff?: Effect): boolean {
+  if (!eff || item.targetIid === undefined) return false;
+  if (!SINGLE_TARGETS.includes(eff.target)) return false;
+  return !canTarget(state, item.controller, eff, item.targetIid);
+}
+
+/**
+ * Run the priority loop until either the stack is empty or a player actually
+ * has a response to hold. Players with nothing to respond with are passed for
+ * automatically, so a board with no instant-speed cards behaves exactly as if
+ * everything resolved on invocation.
+ *
+ * The loop only ever stops for the player who did NOT put the top item on the
+ * stack: you answer your opponent's cards and triggers, not your own. That
+ * keeps callers from having to drive a priority round after every single
+ * action, at the cost of not being able to chain a second card in response to
+ * your own — a trade the interaction this unlocks is not worth complicating.
+ *
+ * `interactive: false` drains the stack outright — used inside steps the
+ * rulebook gives no response window to (combat damage, Dawn, Dusk).
+ */
+export function settleStack(state: GameState, opts: { interactive?: boolean } = {}): void {
+  const interactive = opts.interactive ?? true;
+  // Bounded so a pathological trigger loop can never hang the game.
+  let guard = 256;
+  while (state.priority && !state.winner && guard-- > 0) {
+    const holder = state.priority.holder;
+    if (interactive && canRespondNow(state, holder)) return;
+    passPriority(state, holder);
+  }
+  if (guard <= 0) {
+    state.log.push('Resolution limit reached — remaining stack discarded.');
+    state.stack.length = 0;
+    state.priority = null;
+  }
+}
+
+/** Resolve everything pending with no response windows at all. */
+function drainStack(state: GameState): void {
+  if (state.stack.length > 0 && !state.priority) {
+    state.priority = { holder: state.active, passed: [] };
+  }
+  settleStack(state, { interactive: false });
 }
 
 const SINGLE_TARGETS = ['enemyUnit', 'friendlyUnit', 'anyTarget', 'friendlyAny'];
@@ -904,6 +1106,7 @@ function runDawn(state: GameState): void {
     telemetry.onKeywordProc?.('Resolute', 1);
   }
   runTriggers(state, state.active, 'atDawn');
+  drainStack(state); // Dawn is not a response window — resolve before the Deal.
   // Deal 1 (first player skips on turn 1).
   if (!(state.turn === 1 && state.active === state.firstPlayer)) dealCards(state, state.active, 1);
   if (!state.winner) state.phase = 'Main1';
@@ -913,6 +1116,7 @@ function runDusk(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dusk';
   runTriggers(state, state.active, 'atDusk');
+  drainStack(state);
   // v6.9 Entropic: each one mills the opponent for 1 at its controller's Dusk.
   const entropic = p.field.filter((u) => unitHasKw(u, 'Entropic')).length;
   if (entropic > 0) {
@@ -951,6 +1155,10 @@ function runDusk(state: GameState): void {
 export function endPhase(state: GameState): boolean {
   if (state.winner) return false;
   if (state.clash && state.clash.step !== 'done') return false;
+  // Ending a phase is a concession of priority: anything still pending
+  // resolves before the phase actually changes.
+  drainStack(state);
+  if (state.winner) return false;
   clearEssence(state);
   switch (state.phase) {
     case 'Main1':
@@ -1081,11 +1289,13 @@ export function effectiveCost(
 }
 
 function timingLegal(state: GameState, pid: PlayerId, def: CardDef): boolean {
-  const quick = def.type === 'Event' && def.subtype === 'Quick';
-  const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
-  if (inOwnMain(state, pid)) return true;
-  if ((quick || ambush) && reactionOpenFor(state, pid)) return true;
-  return false;
+  // Instant speed: any window where this player holds priority — including
+  // holding a response over something already on the stack.
+  if (isInstantSpeed(def)) {
+    return inOwnMain(state, pid) || reactionOpenFor(state, pid) || hasPriority(state, pid);
+  }
+  // Everything else is sorcery speed: own main phase, nothing pending.
+  return inOwnMain(state, pid) && state.stack.length === 0;
 }
 
 /** Can this hand card be invoked right now (timing + current essence pool +
@@ -1103,13 +1313,13 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
 }
 
 /**
- * Invoke a card from hand, paying its Essence Cost from the essence pool.
- * - Units enter the field (summoning sick unless Reckless), run onInvoke and
- *   'enters' triggers. Ambush units may also enter during the reaction window.
- * - Events resolve onInvoke then go to the ash-pile (Quick: any open window;
- *   Slow: own main phase only).
- * - Charms bond to a friendly unit (`bondTargetIid`).
- * - Sanctums enter the Location row ready.
+ * Invoke a card from hand: pay its Essence Cost, put it on the stack, then run
+ * the priority loop. Costs and targets are locked in here; the card's actual
+ * effect happens in `resolveInvokedCard` once both players pass, so either
+ * player can respond in between (and a removed target makes it fizzle).
+ *
+ * When neither player holds an instant-speed answer the loop drains in this
+ * same call, so the card resolves before this function returns.
  */
 export function invokeCard(
   state: GameState,
@@ -1122,11 +1332,12 @@ export function invokeCard(
   if (!card || !canInvoke(state, pid, cardIid)) return false;
   const def = card.def;
 
-  let bondTarget: UnitInst | undefined;
+  let bondTargetIid: string | undefined;
   if (def.type === 'Charm') {
     const iid = opts.bondTargetIid ?? opts.targetIid ?? p.field[0]?.iid;
-    bondTarget = iid ? findUnit(state, iid) : undefined;
+    const bondTarget = iid ? findUnit(state, iid) : undefined;
     if (!bondTarget || bondTarget.owner !== pid) return false;
+    bondTargetIid = bondTarget.iid;
   }
   if (
     def.onInvoke &&
@@ -1135,6 +1346,7 @@ export function invokeCard(
   ) {
     if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
   }
+  if (!['Unit', 'Event', 'Charm', 'Location'].includes(def.type)) return false;
 
   const cost = effectiveCost(state, pid, def);
   if (hasKw(def, 'Surge') && cost !== def.cost) telemetry.onKeywordProc?.('Surge', 1);
@@ -1142,6 +1354,35 @@ export function invokeCard(
   p.hand.splice(p.hand.indexOf(card), 1);
   p.invokedCardThisTurn = true;
   state.log.push(`${pid} invokes ${def.name}.`);
+
+  // v6.0 Resonant: the Event's effect resolves twice.
+  const times = def.type === 'Event' && hasKw(def, 'Resonant') ? 2 : 1;
+  if (times === 2) telemetry.onKeywordProc?.('Resonant', 1);
+  pushStack(state, {
+    kind: 'card',
+    controller: pid,
+    sourceName: def.name,
+    card,
+    targetIid: opts.targetIid,
+    bondTargetIid,
+    resolveTimes: times,
+  });
+  settleStack(state);
+  return true;
+}
+
+/**
+ * Apply an invoked card once it resolves off the stack.
+ * - Units enter the field (summoning sick unless Reckless), run onInvoke and
+ *   'enters' triggers.
+ * - Events resolve onInvoke then go to the ash-pile.
+ * - Charms bond to their unit; Sanctums enter the Location row ready.
+ */
+function resolveInvokedCard(state: GameState, item: StackItem): void {
+  const pid = item.controller;
+  const p = state.players[pid];
+  const card = item.card!;
+  const def = card.def;
 
   switch (def.type) {
     case 'Unit': {
@@ -1157,26 +1398,27 @@ export function invokeCard(
         charms: [],
       };
       p.field.push(u);
-      if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
+      // The body still enters when the rider's target is gone — only the
+      // onInvoke effect fizzles.
+      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+        applyEffect(state, pid, def.onInvoke, item.targetIid);
+      }
       runTriggers(state, pid, 'enters', u);
       break;
     }
     case 'Event': {
-      // v6.0 Resonant: the Event's effect resolves twice. If the explicit
-      // target is gone (or illegal) by the second resolution — it usually
-      // died to the first — fall back to auto-targeting instead of letting
-      // the whole second resolution fizzle.
-      const times = hasKw(def, 'Resonant') ? 2 : 1;
-      if (times === 2) telemetry.onKeywordProc?.('Resonant', 1);
-      for (let i = 0; i < times; i++) {
-        if (!def.onInvoke) continue;
-        const target =
-          i === 0 ||
-          opts.targetIid === undefined ||
-          canTarget(state, pid, def.onInvoke, opts.targetIid)
-            ? opts.targetIid
-            : undefined;
-        applyEffect(state, pid, def.onInvoke, target);
+      // An Event is nothing but its effect, so a target that died in response
+      // fizzles the whole card — it still goes to the ash-pile.
+      const eff = def.onInvoke;
+      if (eff && fizzles(state, item, eff)) {
+        state.log.push(`${def.name} fizzles — its target is gone.`);
+      } else if (eff) {
+        for (let i = 0; i < (item.resolveTimes ?? 1); i++) {
+          // Resonant's second resolution falls back to auto-targeting when the
+          // explicit target is gone — usually the first one killed it.
+          const target = i === 0 || !fizzles(state, item, eff) ? item.targetIid : undefined;
+          applyEffect(state, pid, eff, target);
+        }
       }
       // v7.3 Echoing: the Event replaces itself. Draws once however many
       // times its effect resolved — Resonant doubles the effect, not the card.
@@ -1188,7 +1430,16 @@ export function invokeCard(
       break;
     }
     case 'Charm': {
-      bondTarget!.charms.push({ iid: card.iid, def });
+      const bondTarget = item.bondTargetIid ? findUnit(state, item.bondTargetIid) : undefined;
+      // The unit it was aimed at can die in response; the Charm is then a Worn
+      // Charm with nothing to bond to, or ash.
+      if (!bondTarget || bondTarget.owner !== pid) {
+        state.log.push(`${def.name} fizzles — nothing left to bond to.`);
+        if (def.subtype === 'Worn') p.wornCharms.push({ iid: card.iid, def });
+        else p.ashPile.push(card);
+        break;
+      }
+      bondTarget.charms.push({ iid: card.iid, def });
       // v6.0 Runic: bonding this Charm from hand Deals its controller a card.
       if (hasKw(def, 'Runic')) {
         telemetry.onKeywordProc?.('Runic', 1);
@@ -1196,11 +1447,13 @@ export function invokeCard(
       }
       // v7.3 Tethered: bonding untaps the unit it lands on, so a Charm can
       // buy back an attack or a guard the turn it is played.
-      if (hasKw(def, 'Tethered') && bondTarget!.exhausted) {
+      if (hasKw(def, 'Tethered') && bondTarget.exhausted) {
         telemetry.onKeywordProc?.('Tethered', 1);
-        bondTarget!.exhausted = false;
+        bondTarget.exhausted = false;
       }
-      if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
+      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+        applyEffect(state, pid, def.onInvoke, item.targetIid);
+      }
       break;
     }
     case 'Location': {
@@ -1210,14 +1463,12 @@ export function invokeCard(
         produces: def.produces ?? wellspringChoices(state, pid)[0],
         exhausted: false,
       });
-      if (def.onInvoke) applyEffect(state, pid, def.onInvoke, opts.targetIid);
+      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+        applyEffect(state, pid, def.onInvoke, item.targetIid);
+      }
       break;
     }
-    default:
-      return false;
   }
-  stateBasedChecks(state);
-  return true;
 }
 
 /** Re-bond a Worn Charm from the field to a friendly unit for its re-bond
@@ -1301,6 +1552,8 @@ export function activateLeaderAbility(
     L.invoked = false;
     state.log.push(`${pid}'s Leader ${L.def.name} is shattered.`);
   }
+  stateBasedChecks(state);
+  drainStack(state);
   return true;
 }
 
@@ -1378,6 +1631,9 @@ export function declareGuards(state: GameState, assignments: GuardAssignments): 
     .filter(([, gs]) => gs.length > 0)
     .map(([a]) => a);
   state.clash.step = 'reaction';
+  // The reaction window is a real priority round: APNAP gives the active
+  // player the first say, and `resolveClash` is what ends it.
+  state.priority = { holder: state.active, passed: [] };
   return true;
 }
 
@@ -1404,6 +1660,10 @@ function participates(u: UnitInst, step: 'first' | 'normal'): boolean {
 export function resolveClash(state: GameState): boolean {
   if (state.winner || !state.clash) return false;
   if (state.clash.step !== 'reaction' && state.clash.step !== 'guards') return false;
+  // Resolving is what closes the reaction window: anything still held there
+  // resolves first, and combat damage itself gets no response window.
+  drainStack(state);
+  if (state.winner || !state.clash) return false;
   // Which attackers were ever guarded. Taken from the declare-time snapshot
   // so a blocker removed during the reaction window still counts as having
   // blocked; falls back to the live map for callers that resolve straight
@@ -1430,6 +1690,7 @@ export function resolveClash(state: GameState): boolean {
       else if (pkt.targetPlayer) damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
     }
     stateBasedChecks(state);
+    drainStack(state); // death triggers land before the normal-damage sub-step
     if (step === 'first' && packets.length > 0) {
       const died = preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
       if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
@@ -1447,6 +1708,8 @@ export function resolveClash(state: GameState): boolean {
   }
   if (state.clash) state.clash.step = 'done';
   stateBasedChecks(state);
+  drainStack(state);
+  state.priority = null;
   return true;
 }
 

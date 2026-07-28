@@ -23,9 +23,13 @@ import {
   effectiveCost,
   endPhase,
   findUnit,
+  hasPriority,
   locationYield,
   mulliganHand,
   invokeCard,
+  passPriority,
+  potentialEssence,
+  settleStack,
   invokeLeader,
   legalAttackers,
   legalGuardsFor,
@@ -449,6 +453,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
       const bondTargetIid = c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
+        settleStack(state, { interactive: false });
         observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
         progress = true;
         break;
@@ -468,6 +473,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
         if (invokeCard(state, pid, reserved.iid, { targetIid })) {
+          settleStack(state, { interactive: false });
           observe?.({
             kind: 'invoke',
             name: reserved.def.name,
@@ -777,6 +783,69 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
 }
 
 /**
+ * The CPU's answer to a priority window: something of the opponent's is on the
+ * stack and the CPU holds instant-speed cards. Responds with Quick removal
+ * when the stack item is worth answering, otherwise passes.
+ *
+ * Call this whenever an engine action leaves the CPU holding priority (the
+ * engine auto-passes for a player with no possible response, so a window only
+ * ever reaches here when the CPU genuinely has a choice).
+ */
+export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): number {
+  let plays = 0;
+  let guard = 16;
+  while (hasPriority(state, pid) && !state.winner && guard-- > 0) {
+    const top = state.stack[state.stack.length - 1];
+    // Answer an incoming Unit by shooting it is impossible (it is not on the
+    // field yet), so the CPU only spends removal here when there is already a
+    // worthwhile board target — the same judgement `reactionPlays` uses.
+    const answer = top && top.controller !== pid ? pickInstantAnswer(state, pid) : undefined;
+    if (!answer) {
+      passPriority(state, pid);
+      continue;
+    }
+    tapAllLocations(state, pid);
+    const targetIid = answer.def.onInvoke ? autoTarget(state, pid, answer.def.onInvoke) : undefined;
+    if (!invokeCard(state, pid, answer.iid, { targetIid })) {
+      passPriority(state, pid);
+      continue;
+    }
+    observe?.({
+      kind: 'invoke',
+      name: answer.def.name,
+      iid: answer.iid,
+      targetIid,
+      targetName: targetIid ? findUnit(state, targetIid)?.def.name : undefined,
+      by: pid,
+    });
+    plays++;
+  }
+  // The human has no mid-turn response UI outside the clash reaction window,
+  // so whatever is left resolves rather than waiting on a pass that can never
+  // arrive. Drop this once the board grows a response prompt.
+  settleStack(state, { interactive: false });
+  return plays;
+}
+
+/** The best instant-speed card the CPU could hold up right now, if any is
+ * worth spending. Only removal with a live target qualifies. */
+function pickInstantAnswer(state: GameState, pid: PlayerId) {
+  const enemyField = state.players[opponentOf(pid)].field;
+  return (
+    state.players[pid].hand
+      .filter((c) => c.def.type === 'Event' && c.def.subtype === 'Quick')
+      .filter((c) => isRemoval(c.def.onInvoke))
+      .filter(() => enemyField.some((u) => !unitHasKw(u, 'Warded')))
+      // Affordability is measured against Locations the CPU could still tap —
+      // it holds them untapped until it decides to answer.
+      .filter((c) =>
+        canPayCost(potentialEssence(state.players[pid]), effectiveCost(state, pid, c.def)),
+      )
+      .sort((a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def))[0]
+  );
+}
+
+/**
  * Defender's reaction window (after guards, before damage): tap locations
  * and invoke Quick Events — removal pointed at the biggest attacker — and
  * cheap Ambush units for board presence. Exported for the sim harness and UI.
@@ -824,6 +893,7 @@ export function reactionPlays(
       }
       targetIid ??= c.def.onInvoke ? autoTarget(state, defender, c.def.onInvoke) : undefined;
       if (invokeCard(state, defender, c.iid, { targetIid })) {
+        settleStack(state, { interactive: false });
         observe?.({
           kind: 'invoke',
           name: c.def.name,
