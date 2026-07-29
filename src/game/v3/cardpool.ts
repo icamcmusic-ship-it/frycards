@@ -1170,8 +1170,10 @@ function mapLocation(c: CardTemplate): CardDef {
   // The keyword surcharge stacks on top (ceiling 6, floor 1).
   const total = Math.min(
     6,
-    Math.max(1, Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2)) + adjustFor(c.id)) +
-      kwAdj,
+    Math.max(
+      1,
+      Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2)) + adjustFor(c.id),
+    ) + kwAdj,
   );
   const cost: EssenceCost = { generic: total - 1, pips: { [produces]: 1 } };
 

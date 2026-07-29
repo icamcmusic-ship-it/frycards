@@ -1318,8 +1318,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
         setSeller(sellers[0] || null);
       } catch {
-        if (!stale())
-          setLoadError("Couldn't load this shop. Check your connection and try again.");
+        if (!stale()) setLoadError("Couldn't load this shop. Check your connection and try again.");
       } finally {
         if (!stale()) setLoading(false);
       }
@@ -1743,8 +1742,7 @@ function MyShopTab() {
         setPurchases(pur.filter((p) => p.buyer === userId));
         setMyRatings(rat);
       } catch {
-        if (!stale())
-          setLoadError("Couldn't load your shop. Check your connection and try again.");
+        if (!stale()) setLoadError("Couldn't load your shop. Check your connection and try again.");
       } finally {
         if (!stale()) setLoading(false);
       }

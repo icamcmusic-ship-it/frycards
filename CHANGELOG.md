@@ -8,6 +8,64 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.9 — Bug hunt: the checks that were not running
+
+Third bug-hunt sweep. The headline finding is that CI has been failing on
+`main` for at least ten consecutive runs, so the previous two sweeps'
+"everything is green" was measured locally and never verified by the pipeline
+that was supposed to be gating it.
+
+- **CI was red on `main` and had been for ten runs.** Two independent
+  breakages, both in required steps, both invisible because nothing was
+  reading the result. (1) `npm run typecheck` failed with
+  `TS2307: Cannot find module 'playwright'` —
+  `scripts/audit-cardface.ts` has imported `playwright` since v7.4 but the
+  package was never added to `package.json`, so `npm ci` never installs it.
+  Added as a devDependency, with `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` in the
+  CI job: the audit is a manual tool run against a local dev server and CI
+  only typechecks it, so there is no reason to pull ~500MB of browser binaries
+  on every install. (2) `npm run format:check` failed on nine files.
+  Reformatted. Every CI step (typecheck, lint, format:check, test, sim, build)
+  now passes.
+- **A Leader ability with no legal target burned Resolve for nothing.**
+  `activateLeaderAbility` spends the ability's Resolve — and shatters the
+  Leader outright when that takes it to zero — whether or not the effect
+  finds anything to resolve against. The CPU has guarded itself against this
+  since v6.9 (`runLeaderAbility`, "burned Resolve on guaranteed whiffs"); the
+  human's ability pill was still enabled, so clicking
+  `avatar_of_the_abyss`'s "-4: Shatter a target enemy unit" into an empty or
+  entirely-Warded enemy board cost four Resolve and did nothing — and at
+  Resolve 4 it killed the player's own Leader to do it. `leaderAbilityWhy` is
+  now a pure, exported, unit-tested predicate that disables the pill in that
+  case. Abilities that can legally hit a PLAYER (`anyTarget` damage,
+  `friendlyAny` heal) are deliberately unaffected — those still have a legal
+  target on an empty board.
+- **Deck locks mean two different things on the server.** `save_deck` and
+  `get_listable_inventory` SUM a card's copies across every deck (a deck
+  exclusively reserves its copies); `quicksell_cards` and
+  `assert_cards_available` take `max(per_deck)` (decks share physical copies).
+  The two disagree, and the permissive one wins at the point of sale: with 4
+  copies of a card split 2/2 across two legally-saved decks, quicksell sees a
+  lock of 2 and will sell 2, leaving both decks reserving copies the player no
+  longer owns and unable to be re-saved. `CollectionScreen`'s client-side
+  mirror stays on the stricter SUM (it was already SUM despite a comment
+  claiming it mirrored `quicksell_cards`; the comment is corrected) — awaiting
+  the server-side alignment.
+- **The daily bounty shop ignores deck locks and Serialized prints.**
+  `sell_bounty_card` checks only that the player owns a copy, so it will sell
+  a card straight out of a saved deck and will decrement the non-foil count
+  backing a Serialized print — both of which `quicksell_cards` explicitly
+  refuses ("in use by one of your decks", "You own a Serialized copy"). The
+  StoreScreen bounty tile mirrors the RPC and offers no warning either. Not
+  yet fixed: the remedy is a server migration.
+- **Guest quick match is unreachable.** `PlayScreen` has a guest branch
+  ("QUICK MATCH", "the only way to play as a guest") and `MainMenu` gates
+  every other tile on `guest`, but `App`'s `case 'play'` requires
+  `profile?.role === 'creator'` and a guest has no profile — so the PLAY tile
+  is disabled for guests and that whole branch, plus its comments, is dead.
+  Left as-is: enabling guest quick match vs. deleting the branch is a product
+  call, not a bug fix.
+
 ### v7.8 — The screens nobody had measured
 
 Product pass: mobile third pass, accessibility, the deck guide, and a

@@ -11,14 +11,7 @@ export type { EssenceType };
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
 export type Rarity =
-  | 'Common'
-  | 'Uncommon'
-  | 'Rare'
-  | 'Super-Rare'
-  | 'Ultra-Rare'
-  | 'Full-Art'
-  | 'Alt-Art'
-  | 'Mythic';
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Alt-Art' | 'Mythic';
 
 /** Location subtypes: Wellsprings are basic (essence only, auto-supplied by
  * the engine, not collectible); Sanctums are collectible utility Locations. */

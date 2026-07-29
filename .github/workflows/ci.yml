@@ -8,6 +8,12 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # `playwright` is a devDependency purely so `scripts/audit-cardface.ts`
+    # typechecks — that audit is a manual tool run against a local dev server
+    # and CI never invokes it, so there is no reason to pull ~500MB of browser
+    # binaries on every install.
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
