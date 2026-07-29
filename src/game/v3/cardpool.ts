@@ -1361,6 +1361,40 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
 const LEADER_RESOLVE_OVERRIDE: Record<string, number> = { void_mother: 5 };
 
 /**
+ * v7.7: Leader ESSENCE-COST override — the lever v7.6 carry-forward #5 said
+ * would have to be found rather than looked up, and the one hole left in the
+ * per-Leader toolkit.
+ *
+ * Five Leader levers existed (strip a keyword, reprice the minus, override the
+ * Resolve, replace either ability) and not one of them could change what a
+ * Leader costs to put on the table. `mapLeader` prices it at
+ * `3 + roll(0..1) + keywordCostAdj(keywords)`, so a Leader's arrival turn is
+ * a coin flip plus whichever keyword it happened to roll — and the spread that
+ * produces is not small. Measured, cohort A:
+ *
+ *   Void Mother 6.4   Ethereal 6.5   Ruin-Walker 6.6   Sentinel 6.7
+ *   Mer-King 6.9      Legendary Diver 7.2
+ *   Avatar 8.4        Sovereign 8.4   Kuro 8.4
+ *
+ * Two full turns between the earliest and the latest kit in the game.
+ *
+ * Kuro, the Unseen is the case that forced it. It is the joint LATEST-arriving
+ * Leader at turn 8.4, it is one of the most expensive at 5 total, and it has
+ * the LOWEST printed Resolve in the pool at 3 — it pays a Commander surcharge
+ * on top of the smallest ability budget anyone has. Its kit is not idle
+ * (0.1% idle rate, 6.6-7.2 activations a game) and it is not misused; its win
+ * rate by game length is 54.0% at 11-20 turns and 28.3% at 21-30, which is a
+ * Leader that arrives late and then cannot out-grind. Every other lever on it
+ * is spent: v7.5 repriced its minus, v7.6 spent and reverted the Resolve
+ * point, and its minus ability is already a hand override.
+ *
+ * Price-only by construction: nothing in `mapLeader` derives from `total`
+ * (Resolve comes from rarity, both abilities from the colour identity), so
+ * unlike the Unit/Event/Charm mappers there is no power term to keep in step.
+ */
+const LEADER_COST_OVERRIDE: Record<string, number> = { apex_nanite_shinobi: 4 };
+
+/**
  * v7.6 — Kuro, the Unseen (`apex_nanite_shinobi`) TRIED HERE AND REVERTED, and
  * the reason is a rule about carried-forward measurements rather than a fact
  * about this Leader.
@@ -1606,7 +1640,8 @@ function mapLeader(c: CardTemplate): CardDef {
   const leaderKws: string[] = (
     ldrFresh ? [ldrFresh] : kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []
   ).filter((kw) => !stripped.has(kw));
-  const total = 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
+  const total =
+    LEADER_COST_OVERRIDE[c.id] ?? 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };
   const resolve = LEADER_RESOLVE_OVERRIDE[c.id] ?? Math.max(3, Math.min(6, 3 + Math.floor(rt / 2)));
   const minus = LEADER_MINUS_ABILITY_OVERRIDE[c.id]

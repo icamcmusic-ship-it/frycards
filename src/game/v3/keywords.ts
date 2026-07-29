@@ -373,7 +373,21 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // the next balance run. Remember keywordCostAdj is Math.round(w / 2), so
   // this table's effective resolution is TWO: a 1 -> 2 step is a no-op on a
   // single-keyword carrier (see the Sacred note above).
-  Fate: 1, // 1 card of denial per cast, and to the Void rather than the ash-pile
+  // v7.7: 1 -> 0. Fate was the largest sample of any keyword in the pool
+  // (3,451-4,341 carrier games) and read NEGATIVE in all four cohorts
+  // (-5.0 / -1.8 / -1.7 / -4.2) without ever having been priced. At weight 1
+  // `keywordCostAdj` rounds 0.5 up to a full essence point, so nine Events
+  // were each paying a whole point of cost for "banish the top card of the
+  // opponent's deck" in a format where 92-94% of wins come from Vitality —
+  // a price tag on text that does approximately nothing. At 0 they pay
+  // nothing for it, and the effect is unchanged (`t` is `naturalT - kwAdj`,
+  // so both terms drop by one and the magnitude derivation is untouched).
+  // Carrier win rate rose or held in all four cohorts: 43.4 -> 46.0,
+  // 50.2 -> 50.2, 47.6 -> 50.6, 43.8 -> 46.2. The archetype-normalized delta
+  // rose in three of the four (-5.0 -> -2.5, -1.7 -> +0.6, -4.2 -> -3.0) and
+  // fell 1.2 in cohort B on a moving archetype baseline; the carrier win rate
+  // is the more direct read of a price-only change and it is monotone.
+  Fate: 0,
   Exhume: 3, // recursion is card advantage that picks its own card; Tidecaller tier
   'Freeze-Dry': 1, // one-shot tempo on the enemy board, priced with Tethered
   Blessed: 1, // one-shot Vitality, priced with Runic
@@ -392,7 +406,7 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // residual +7.3) fell under the floor in both.
   //
   // That is the third independent demonstration in this pass of the same
-  // thing — see §1 of docs/BALANCE_SIM_FINDINGS_v7.6.md, where three of four
+  // thing — see the v7.6 findings §1, where three of four
   // per-card Location cost trials failed the identical way, and the v7.2
   // Sacred weight raise before them. A cost point on a Location is close to
   // binary: it either moves no win rate or it removes the card from the

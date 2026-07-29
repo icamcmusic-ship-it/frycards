@@ -2,69 +2,95 @@
 
 Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
-## Near term
+Rewritten in v7.7. The previous version had drifted into being a copy of the
+balance doc's carry-forward list with the product work pushed to the margins —
+nine of its thirteen items were individual card and keyword numbers that go
+stale every pass. Balance now gets **one** entry here that points at the
+findings doc, which is the thing that actually tracks it, and the rest of this
+file is about the game.
 
-- **Mobile/responsive polish, third pass** — v7.4 made the match board
-  playable on a phone and v7.5 did the card views outside it (collection, deck
-  editor, pack opening, mulligan) plus the hand scroll strip; see
-  `CHANGELOG.md`. Not yet measured on a phone: the store, marketplace, player
-  shops, social and profile screens, and the 3D card inspector. `npm run dev`
-  plus `meta-preview.html` / `board-preview.html` is the harness — extend the
-  former as screens are covered.
-- **Accessibility pass** — keyboard navigation, screen-reader labels for card
-  actions, contrast audit of the monochrome theme (partially underway — see
-  the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
+Three horizons, and each item says what it is blocked on rather than only what
+it is.
 
-## Medium term
+---
 
-- **The cost-2 Sanctum band** — the balance item v7.6 uncovered while closing
-  the Sacred one, and the top of the list. `metricDiagnostics.locationsByCost`
-  reads +5.38 / +4.60 for 2-cost Sanctums as a class and +6.65 / +5.30 for the
-  ones with no keyword at all — the keyword-free Sanctums read at or ABOVE
-  their keyworded neighbours in both cohorts. The next move is a comparator,
-  not a lever: a Sanctum play is itself the ramp step the ramp-matched baseline
-  matches on, so try a Location-only baseline before pricing anything (and note
-  a cost point on a Location is still binary — three demonstrations in v7.5).
-  See `docs/BALANCE_SIM_FINDINGS_v7.6.md` §1.
-- **Sentinel of the Nether Pit (`crimson_vector_commander`) 38.8 / 63.7** — a
-  25-point cohort split, a shatter rate an order of magnitude above every other
-  Leader, and it owns cohort A's whole spread. Never actioned. Needs a pinned
-  `leaderPairSuite` read that cohort composition cannot reach.
-- **The two Unbreakable 7-drops** — `the_wolf_of_wall_street` (+8.6 / +6.4) and
-  `the_pier_side_menace` (+10.5 / +10.5). v7.6 removed the Wolf's printed
-  ability entirely (it ships) and refused the same lever on the Menace (it lost
-  a third of its plays). Every lever aimed at the Wolf's TEXT is now spent, so
-  what is left is the body — and v7.5's "STAT_ADJUST is inert on it" reading
-  was taken while the ability was still printed, so under v7.6 §3 it has
-  expired. Re-measure the stat lever on the cards as they now print.
-- **Kuro, the Unseen 45.6 / 39.8** — still bottom in cohort B. Both named
-  levers are now spent or refuted (v7.6 §3); the next one has to be found
-  rather than looked up.
-- **`Fate` -5.0 / -1.8** — nine carriers and the largest sample of any keyword
-  in the pool after v7.6 widened its roll band, and it has never been priced.
-  First candidate for a keyword weight change (it sits at 1, and note
-  `keywordCostAdj` is `Math.round(w / 2)`, so the effective step is two).
-- **`Glaciate` +9.8 / +11.5** — its every-other-Dawn lever measured -3.3 / -4.2
-  in isolation and then did not survive the roll-band widening later in the
-  same pass. Re-measure on the settled pool.
-- **`Scorched-Earth` has no cohort-B reading**, before or after its v7.6 gate.
-  A keyword one of the two deck cohorts never drafts cannot clear a two-cohort
-  bar; it needs a third cohort or a pinned deck suite.
-- **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
-  stepping stone to real matchmaking.
-- **Volume #2** — the content pipeline supports further drops on top of the
-  live 292-card pool. (The old per-set split — Blue Coral / Crimson Circuit /
-  Dragonbone Wastes / Full Arts Collection 1 — was consolidated into the
-  single "Volume #1" set; see `CHANGELOG.md`.)
-- **Persistent match history / replays** — store per-match logs and let players
-  review past games.
+## Now — finish what is half-built
 
-## Long term
+Everything here has a started implementation and a visible seam.
 
-- **Multiplayer (PvP)** — requires a server-authoritative engine; see
-  `docs/PVP_DESIGN.md` for the design spike.
-- **Leader keywords** — Leaders have three (Commander, Resolute, Warlord) where
-  every other type now has six or seven, and v7.5 skipped them on purpose: the
-  Leader keyword roll (`roll(seed, 'ldr-kw6', 6)`) has no free band, so any
-  addition re-rolls all nine existing Leaders. Needs the roll restructured
-  first, and a balance pass to follow it.
+- **Mobile/responsive, third pass.** v7.4 did the match board and v7.5 the card
+  views around it (collection, deck editor, pack opening, mulligan, hand
+  strip). Still unmeasured on a phone: the store, marketplace, player shops,
+  social and profile screens, and the 3D card inspector. Harness is `npm run
+dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
+  screens are covered.
+- **Accessibility pass.** Keyboard navigation, screen-reader labels for card
+  actions, contrast audit of the monochrome theme. Partially underway — see the
+  "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
+  `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
+  been walked.
+- **One balance pass per release, against the findings doc.** The whole live
+  list is `docs/BALANCE_SIM_FINDINGS_v7.7.md` carry-forward. Top of it is
+  `Unbreakable` and the cost cap, which is the first keyword-mechanism item the
+  project has had rather than a per-card one. Standing rules that came out of
+  v7.7 and should not be relearned: **four deck cohorts, not two** (two cohorts
+  cannot see a keyword with fewer than ~6 carriers), and **never interleave
+  content changes with balance trials in one pass**.
+
+## Next — the things players will notice
+
+Ordered by how much they change what it feels like to own and play the game.
+
+- **Persistent match history and replays.** Store per-match logs; let players
+  review past games. The engine already emits a structured event stream (the
+  sim harness consumes it), so this is storage and a viewer, not new game code.
+  It is also the prerequisite for anything competitive: a ladder without
+  replays is unauditable.
+- **ELO-tracked CPU gauntlet.** A ranked-style ladder against the CPU, as the
+  stepping stone to real matchmaking. Blocked on nothing; wants match history
+  first so a rating has evidence behind it.
+- **Volume #2.** The content pipeline supports further drops on top of the live
+  292-card pool. The v7.7 rule bites here: a new set is a **content** change, so
+  it lands in its own pass, the pool re-baselines, and only then do balance
+  trials resume. The v7.6 Glaciate result was erased exactly this way.
+- **Custom fonts as first-class assets.** Currently two Google Fonts pulled at
+  runtime by an `@import` at the top of `src/index.css` — a third-party
+  request on first paint and a hard dependency on a CDN. Two things worth
+  doing, in order: **(1)** self-host the two existing faces as `.woff2` under
+  `src/assets/fonts/` with `@font-face`, which Vite fingerprints and bundles —
+  removes the CDN round-trip and makes the app work offline; **(2)** let a
+  theme name a font the way `src/meta/themes.ts` already names a palette, so a
+  set or a cosmetic can ship its own display face. (2) is the one that wants a
+  Supabase Storage bucket, since the point is swapping faces without a
+  redeploy; it needs a public bucket with CORS and a `crossorigin` attribute,
+  and a licence check that the face permits webfont embedding.
+- **Deck archetype guidance in the builder.** The sim knows a great deal about
+  what makes a deck work (`archetypes`, `essenceCurve`, `costTiers`,
+  `colorMatchups`) and the deck editor tells the player none of it. The
+  cheapest large win in the meta game.
+
+## Later — needs a foundation first
+
+- **Multiplayer (PvP).** Requires a server-authoritative engine; design spike
+  is in `docs/PVP_DESIGN.md`. Real blocker is that `engine.ts` is a
+  client-side pure reducer with no notion of hidden information across a wire.
+  Match history and replays are the honest first step toward it.
+- **Leader keywords.** Leaders have three (Commander, Resolute, Warlord) where
+  every other type now has six or seven. `roll(seed, 'ldr-kw6', 6)` has no free
+  band, so any addition re-rolls all nine existing Leaders and invalidates every
+  per-Leader adjustment in `cardpool.ts` at a stroke — the same trap the v7.3
+  colour-pair note and the v7.5 `V75_KEYWORDS` split both record. Needs the roll
+  restructured onto its own band first, then a balance pass.
+- **Raise the Unit cost ceiling for keyword surcharges.** The v7.7 top
+  carry-forward, listed here as well because it is a **rules** change and not a
+  number: three Unbreakable bodies all print at the cost cap of 7, so the pool's
+  heaviest keyword weight is only partly collected, and no per-card lever can
+  reach them. Fixing it means the cap stops being a silent balance ceiling —
+  which touches the printed cost of every expensive keyworded Unit, so it is a
+  content-scale change that needs its own pass.
+- **Make the pinned Leader suite the primary Leader instrument.** v7.7 found
+  its decks had been re-rolling with the cohort seed since v6.2, which is why
+  four passes of random-cohort Leader readings disagreed with each other. Now
+  that it is fixed and stable to within a point across cohorts, the random-deck
+  Leader table should probably be demoted to a deck-composition diagnostic
+  rather than the number Leader balance is judged on.
