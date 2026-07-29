@@ -75,6 +75,11 @@ export interface LocationInst {
   def?: CardDef;
   produces: EssenceType;
   exhausted: boolean;
+  /**
+   * v7.6 Glaciate: this Sanctum's freeze is spent and it rests next Dawn. See
+   * the Dawn handler — Glaciate fires every other Dawn per Sanctum.
+   */
+  glaciateAsleep?: boolean;
 }
 
 export interface LeaderZone {
@@ -1124,6 +1129,36 @@ function runDawn(state: GameState): void {
   state.players.P1.invokedCardThisTurn = false;
   state.players.P2.invokedCardThisTurn = false;
   // v6.0 Sacred: each Sacred Location restores 1 Vitality at its Dawn.
+  //
+  // v7.6 measured the EFFECT side of this keyword to exhaustion — the lever
+  // six passes of price trials had left as the only one untried — and the
+  // result is that Sacred is not the variable at all. Unchanged, and this is
+  // the closing entry rather than a to-do:
+  //
+  //   trial                        stone_bubbles (A / B)   Sacred delta (A / B)
+  //   baseline                     +9.2 / +7.3             21.9 / 19.2
+  //   exhaust the Sanctum to heal  +7.2 / +8.0             19.2 / 19.4
+  //   finite: 3 charges            +8.9 / +7.1             21.1 / 18.6
+  //   NULL — effect deleted        +7.4 / +6.2             18.6 / 15.8
+  //
+  // Read the last row. With the keyword's text removed outright — not
+  // repriced, not bounded, gone — the card is still +7.4 / +6.2 and its
+  // carriers still win 73.0% / 69.7% on an 18.6 / 15.8 normalized delta. The
+  // whole effect is worth about a point and a half of residual, so no
+  // effect-side lever could have moved this card into band; the charge cap
+  // bought -0.3 / -0.2, which is noise, and shipping it would have taken text
+  // off a card in exchange for nothing measurable.
+  //
+  // Where the residual actually lives is `metricDiagnostics.locationsByCost`,
+  // added for this: cost-2 Sanctums read +5.72 / +5.42 as a CLASS, and the
+  // ones with no keyword at all read +5.75 / +5.80 — at or above their
+  // keyworded neighbours in both cohorts. `stone_bubbles` is a cost-2 Sanctum,
+  // and so is most of its residual. See BALANCE_SIM_FINDINGS §1.
+  //
+  // The v7.5 diagnosis this replaces — "free value every turn on a near-
+  // permanent, where the Unit equivalent is fine because units die" — is a
+  // good design argument that happens to describe about 1.5 points of win
+  // rate. It was never load-bearing enough to explain a +9.
   for (const l of p.locations) {
     if (l.def && hasKw(l.def, 'Sacred') && p.vitality < LEADER_HP) {
       p.vitality += 1;
@@ -1143,8 +1178,27 @@ function runDawn(state: GameState): void {
   // v7.5 Glaciate: repeating tempo denial on a Sanctum — one enemy unit
   // frozen per Glaciate every Dawn. `exhaust` picks its own target through
   // autoTarget, the same as every other untargeted keyword effect.
-  const glaciate = p.locations.filter((l) => l.def && hasKw(l.def, 'Glaciate')).length;
-  for (let i = 0; i < glaciate; i++) {
+  //
+  // v7.6: EVERY OTHER Dawn. Glaciate came in over on its first measured run
+  // and reproduced in both cohorts (+11.5 n=283 / +12.0 n=965), and v7.5 then
+  // established that its price is not a lever — the 3 -> 5 weight raise did
+  // not balance the carriers, it deleted them from the format, which is the
+  // same binary failure three per-card Location cost trials and the v7.2
+  // Sacred raise had already produced. So the v7.5 doc carried it forward for
+  // an effect-side lever and named this one.
+  //
+  // The counter is per-SANCTUM rather than per-turn on purpose: a player with
+  // two Glaciates should get one freeze a turn between them, not two freezes
+  // every other turn. A Sanctum that arrives asleep would also hand the
+  // opponent a free turn on the one turn a tempo card most needs to matter,
+  // so a fresh Glaciate fires on its first Dawn and rests on the next.
+  const glaciate = p.locations.filter((l) => l.def && hasKw(l.def, 'Glaciate'));
+  for (const l of glaciate) {
+    if (l.glaciateAsleep) {
+      l.glaciateAsleep = false;
+      continue;
+    }
+    l.glaciateAsleep = true;
     telemetry.onKeywordProc?.('Glaciate', 1);
     applyEffect(state, state.active, { action: 'exhaust', target: 'enemyUnit' });
   }
@@ -1180,8 +1234,17 @@ function runDusk(state: GameState): void {
   }
   // v7.5 Scorched-Earth: Ember's Location text — a recurring board sweep,
   // which is why it is the most expensive entry in KEYWORD_COST for the type.
+  //
+  // v7.6: the sweep is GATED ON SANCTUM COUNT, the other effect-side lever the
+  // v7.5 doc named when it recorded that this keyword's price is inert (+22.3
+  // on its first measured run, and the 3 -> 5 raise deleted its best-sampled
+  // carrier from the format rather than pricing it). Three Sanctums is the
+  // same gate Ritual and Archivist already use, so the pool has one ramp
+  // threshold rather than a new one per keyword — and it makes an unconditional
+  // repeating sweep into the payoff half of a ramp deck, which is what an
+  // every-Dusk board wipe should have to be built toward.
   const scorched = p.locations.filter((l) => l.def && hasKw(l.def, 'Scorched-Earth')).length;
-  if (scorched > 0) {
+  if (scorched > 0 && sanctumCount(p) >= 3) {
     telemetry.onKeywordProc?.('Scorched-Earth', scorched);
     applyEffect(state, state.active, {
       action: 'damage',

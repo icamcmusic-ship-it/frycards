@@ -14,7 +14,7 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    `docs/BALANCE_SIM_FINDINGS_v7.5.md` §3 / carry-forward #1.
+ *    `docs/BALANCE_SIM_FINDINGS_v7.6.md` §3 / carry-forward #1.
  *  - keyword health: carrier win-rate deltas + activation counts
  *    (Overrun spill, Venomous kills, Siphon vitality, Quickstrike pre-kills,
  *    Ambush reaction invokes, Warded target denials, ...)
@@ -2244,6 +2244,55 @@ const watchlistReport = WATCHLIST_IDS.map((id) => {
   };
 });
 
+/**
+ * v7.6: every card the findings doc carries forward, reported in FULL on every
+ * run — flat residual, ramp-matched residual and sample size — regardless of
+ * whether it happens to land in a top-15 list this run.
+ *
+ * The v7.5 pass had to read its carried-forward cards out of
+ * `topOverperformers*`, which are 15-item slices: a card that moves off the
+ * list reads as "gone" when it may only have moved from 1st to 16th, and a
+ * card that is genuinely fine still has to be hunted for. Worse, the two lists
+ * are sorted by DIFFERENT metrics, so which of the two numbers a carried card
+ * showed depended on which list it fell out of first. This block is the
+ * un-truncated read, and it is the one to compare across trials.
+ *
+ * `underFloor` means the card did not clear cardReport's 20-played-game gate:
+ * that is a REAL result, not a missing one — it is the signature of the cost
+ * trials that priced a card out of the format rather than balancing it (v7.5
+ * §1 and §5), and it must never be read as "the residual came down".
+ */
+const CARRY_FORWARD_IDS = [
+  'stone_bubbles', // Sacred, carry-forward #1
+  'the_wolf_of_wall_street', // Unbreakable, #2
+  'the_pier_side_menace', // Unbreakable, #2
+  'sparkling_meadow', // best-sampled Scorched-Earth carrier, #8
+  'phosphor_lich', // v7.5 STAT_ADJUST, watch for overshoot
+  'blight_snarler', // v7.5 STAT_ADJUST, watch for overshoot
+  'cold_fire_volcano', // v7.5 COST_ADJUST, watch for overshoot
+  'seabed_mandala', // v7.5 COST_ADJUST -1, the only buff of that pass
+  'glowing_glyph_tablet', // v7.5 reverted cost trial
+  'amethyst_starfish', // v7.5 reverted cost trial
+];
+const carryForward = CARRY_FORWARD_IDS.map((id) => {
+  const def = POOL_BY_ID[id];
+  const full = cardReport.find((c) => c.id === id);
+  if (full) return { ...full, underFloor: false };
+  const s = cs(id);
+  return {
+    id,
+    name: def?.name,
+    type: def?.type,
+    cost: totalCost(def?.cost),
+    keywords: def?.keywords ?? [],
+    underFloor: true,
+    playedGames: s.playedGames,
+    inDeckGames: s.inDeckGames,
+    residual: null,
+    rampResidual: null,
+  };
+});
+
 // v6.1: full-pool coverage — how much of the 292-card catalog the random
 // deck cohort actually exercised (never-decked / decked-but-never-played).
 const poolCoverage = (() => {
@@ -2530,6 +2579,47 @@ const report = {
       ).toFixed(2),
       locations: cardReport.filter((c) => c.type === 'Location').length,
     },
+    /**
+     * v7.6: Locations broken out by PRINTED COST, and Sanctums that carry a
+     * keyword split from Sanctums that do not.
+     *
+     * Added because of this pass's Sacred null trial. Sacred's effect was
+     * deleted outright — not repriced, not bounded, removed — and
+     * `stone_bubbles` moved only -1.8 / -1.1, with its carriers still winning
+     * 73.0% / 69.7% on a +18.6 / +15.8 normalized delta while printing NO
+     * text at all. Six passes had been spent on that keyword's price and this
+     * pass spent two more on its effect, and neither side of the card is where
+     * its residual comes from.
+     *
+     * What is left to test is the class: a cheap Sanctum may simply read high
+     * whatever is written on it. `residualByType` cannot see that, because it
+     * averages every Location together — a 1-cost ramp Sanctum and a 6-cost
+     * build-around land in the same number. This table asks the question the
+     * null trial raised directly, and the keyword split is its control: if
+     * blank Sanctums at the same cost read the same as Sacred ones, the
+     * keyword was never the variable.
+     */
+    locationsByCost: Object.fromEntries(
+      [1, 2, 3, 4, 5, 6]
+        .map((cost) => {
+          const at = byRampResidual.filter((c) => c.type === 'Location' && c.cost === cost);
+          const withKw = at.filter((c) => (c.keywords ?? []).length > 0);
+          const blank = at.filter((c) => (c.keywords ?? []).length === 0);
+          return [
+            String(cost),
+            {
+              cards: at.length,
+              rampMatched: +mean(at.map((c) => c.rampResidual ?? 0)).toFixed(2),
+              flat: +mean(at.map((c) => c.residual)).toFixed(2),
+              keywordedCards: withKw.length,
+              keyworded: +mean(withKw.map((c) => c.rampResidual ?? 0)).toFixed(2),
+              blankCards: blank.length,
+              blank: +mean(blank.map((c) => c.rampResidual ?? 0)).toFixed(2),
+            },
+          ] as const;
+        })
+        .filter(([, v]) => v.cards > 0),
+    ),
     locationShareOfTop15: {
       flat: +(byResidual.slice(0, 15).filter((c) => c.type === 'Location').length / 15).toFixed(3),
       rampMatched: +(
@@ -2568,6 +2658,7 @@ const report = {
   essenceCurve: curveReport,
   seatSwap: seatSwapReport,
   watchlist: watchlistReport,
+  carryForward,
   // v6.1 additions.
   leaderMatchups: Object.fromEntries(
     Object.entries(leaderMatchup).map(([a, row]) => [
@@ -2842,6 +2933,12 @@ for (const c of report.topOverperformersRampMatched)
     console.log(
       `  ${t.padEnd(9)} ${String(v.cards).padStart(3)} cards   flat ${sg(v.flat).padStart(6)}   ramp-matched ${sg(v.rampMatched).padStart(6)}`,
     );
+  console.log('\n  Locations by printed cost (v7.6 — is a cheap Sanctum just good?):');
+  for (const [cost, v] of Object.entries(md.locationsByCost))
+    console.log(
+      `    cost ${cost}  ${String(v.cards).padStart(2)} cards  ramp ${sg(v.rampMatched).padStart(6)}  ` +
+        `(with keyword ${sg(v.keyworded).padStart(6)} n=${v.keywordedCards}, blank ${sg(v.blank).padStart(6)} n=${v.blankCards})`,
+    );
   console.log(
     `  Location MINUS Unit: flat ${sg(md.locationMinusUnit.flat)} -> ramp-matched ` +
       `${sg(md.locationMinusUnit.rampMatched)} — the type gap the correction had to close; ` +
@@ -2857,6 +2954,15 @@ for (const c of report.topOverperformersRampMatched)
       `${(md.poolLocationShare * 100).toFixed(0)}% pool share — a 15-item count that swings between cohorts; ignore it.`,
   );
 }
+console.log('\nCarried-forward cards (v7.6 — the un-truncated read; compare these across trials):');
+for (const c of report.carryForward)
+  console.log(
+    c.underFloor
+      ? `  ${c.name} (${c.type}, cost ${c.cost}) UNDER FLOOR — played in only ${c.playedGames} games ` +
+          `(decked in ${'inDeckGames' in c ? c.inDeckGames : '?'}). Not a lower residual; a smaller format.`
+      : `  ${c.name} (${c.type}, cost ${c.cost}) ramp ${(c.rampResidual ?? 0) >= 0 ? '+' : ''}${c.rampResidual} ` +
+          `(flat ${(c.residual ?? 0) >= 0 ? '+' : ''}${c.residual}) n=${c.playedGames} [${(c.keywords ?? []).join(',')}]`,
+  );
 console.log('\nRamp baseline curve (win rate of all card-plays made at N Locations):');
 for (const [n, v] of Object.entries(report.rampBaselineCurve))
   console.log(`  ${n} Locations: ${v.winPct}% over ${v.games} plays`);

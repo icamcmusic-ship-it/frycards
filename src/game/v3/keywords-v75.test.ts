@@ -215,6 +215,18 @@ describe('v7.5 Charm keywords', () => {
 
 // ---------------------------------------------------------------------------
 describe('v7.5 Location keywords', () => {
+  test('Scorched-Earth does nothing below three Sanctums (v7.6 gate)', () => {
+    const s = game();
+    s.active = 'P1';
+    const a = summonUnit(s, 'P2', VANILLA);
+    placeSanctum(s, 'P1', sanctum('scorch', ['Scorched-Earth']), 'sc#1');
+    placeSanctum(s, 'P1', sanctum('plain', []), 'pl#1');
+
+    s.phase = 'Main2';
+    endPhase(s); // through our Dusk, at two Sanctums
+    expect(a.damage).toBe(0);
+  });
+
   test('Scorched-Earth sweeps the enemy board at your Dusk, and stacks', () => {
     const s = game();
     s.active = 'P1';
@@ -222,6 +234,10 @@ describe('v7.5 Location keywords', () => {
     const b = summonUnit(s, 'P2', VANILLA);
     const mine = summonUnit(s, 'P1', VANILLA);
     placeSanctum(s, 'P1', sanctum('scorch', ['Scorched-Earth']), 'sc#1');
+    // v7.6: the sweep is the payoff half of a ramp deck — three Sanctums, the
+    // same gate Ritual and Archivist use.
+    placeSanctum(s, 'P1', sanctum('plain1', []), 'pl#1');
+    placeSanctum(s, 'P1', sanctum('plain2', []), 'pl#2');
 
     s.phase = 'Main2';
     endPhase(s); // through our Dusk
@@ -238,7 +254,7 @@ describe('v7.5 Location keywords', () => {
     expect(s.players.P2.field.length).toBe(0);
   });
 
-  test('Glaciate exhausts an enemy unit at your Dawn', () => {
+  test('Glaciate exhausts an enemy unit at your Dawn, then rests a turn (v7.6)', () => {
     const s = game();
     s.active = 'P1';
     const theirs = summonUnit(s, 'P2', VANILLA);
@@ -248,6 +264,30 @@ describe('v7.5 Location keywords', () => {
     toNextDawn(s);
     expect(s.active).toBe('P1');
     expect(theirs.exhausted).toBe(true);
+
+    // v7.6: every other Dawn. The unit recovered at its own Dawn in between,
+    // and this Sanctum is asleep, so nothing freezes it again this turn.
+    toNextDawn(s);
+    expect(theirs.exhausted).toBe(false);
+
+    // ...and it is back on the Dawn after that.
+    toNextDawn(s);
+    expect(theirs.exhausted).toBe(true);
+  });
+
+  test('two Glaciates alternate into one freeze per Dawn, not two every other', () => {
+    const s = game();
+    s.active = 'P1';
+    const x = summonUnit(s, 'P2', VANILLA);
+    const y = summonUnit(s, 'P2', VANILLA);
+    placeSanctum(s, 'P1', sanctum('glacA', ['Glaciate']), 'gl#A');
+    placeSanctum(s, 'P1', sanctum('glacB', ['Glaciate']), 'gl#B');
+
+    // Both are fresh, so the first Dawn does fire both — the counter is per
+    // Sanctum, and they only fall out of step once one of them arrives later.
+    toNextDawn(s);
+    expect(x.exhausted).toBe(true);
+    expect(y.exhausted).toBe(true);
   });
 
   test('Glaciate with an empty enemy board is a no-op', () => {

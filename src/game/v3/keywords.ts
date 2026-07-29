@@ -237,8 +237,9 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Exhume: 'When this Event resolves, return a random Unit from your ash-pile to your hand.',
   'Freeze-Dry': 'When this Charm bonds to a unit from your hand, exhaust a target enemy unit.',
   Blessed: 'When this Charm bonds to a unit from your hand, restore 3 Vitality.',
-  'Scorched-Earth': 'At your Dusk, deal 1 damage to each enemy unit.',
-  Glaciate: 'At your Dawn, exhaust a target enemy unit.',
+  'Scorched-Earth':
+    'At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit.',
+  Glaciate: 'At every other Dawn, exhaust a target enemy unit.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -391,7 +392,7 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // residual +7.3) fell under the floor in both.
   //
   // That is the third independent demonstration in this pass of the same
-  // thing — see §1 of docs/BALANCE_SIM_FINDINGS_v7.5.md, where three of four
+  // thing — see §1 of docs/BALANCE_SIM_FINDINGS_v7.6.md, where three of four
   // per-card Location cost trials failed the identical way, and the v7.2
   // Sacred weight raise before them. A cost point on a Location is close to
   // binary: it either moves no win rate or it removes the card from the
@@ -401,8 +402,29 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // Left at their by-analogy weights with the readings recorded. Both carry
   // forward for an EFFECT-side lever (gate the sweep on Sanctum count, or
   // move it to every other Dusk) rather than a fourth attempt at price.
-  'Scorched-Earth': 3, // a repeating unconditional board sweep
-  Glaciate: 3, // repeating tempo denial, priced with Scorched-Earth
+  //
+  // v7.6 pulled both of those effect levers, in engine.ts's Dawn/Dusk
+  // handlers, and the weights stay where they are because the effect is now
+  // doing the work the price could not:
+  //
+  //   Scorched-Earth  gated on 3+ Sanctums   +22.3 -> +9.5 -> +5.3 (A)
+  //   Glaciate        every other Dawn       +11.5 / +12.0 -> +8.2 / +7.8
+  //
+  // Both held their carriers this time (`sparkling_meadow` n=411 -> 412 where
+  // the price raise had put it under the floor), which is the whole difference
+  // between an effect lever and a cost point on a Location.
+  //
+  // Two caveats are recorded rather than smoothed over. Scorched-Earth still
+  // has NO cohort-B reading — B decks it in zero games, before and after — so
+  // its number is single-cohort in the only cohort that can see it. And
+  // Glaciate's improvement did not survive to the end of the pass: the final
+  // verification, run after the v7.5 keyword roll bands were widened, reads
+  // +9.8 (A) / +12.0 (B), i.e. back to baseline in B. Widening a roll band is
+  // a content change that moves the meta, and it was interleaved with balance
+  // trials in this pass; the lesson is to sequence them, and Glaciate carries
+  // forward on that basis.
+  'Scorched-Earth': 3, // a repeating board sweep, gated on 3+ Sanctums
+  Glaciate: 3, // tempo denial every other Dawn, priced with Scorched-Earth
 };
 
 /** Short label for card-face chips. */

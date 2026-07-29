@@ -7,7 +7,14 @@
  * assignment must be deterministic.
  */
 import { test, expect } from 'vitest';
-import { POOL_V4, POOL_BY_ID, POOL_LEADERS, poolByType, applyCardPool } from './cardpool';
+import {
+  POOL_V4,
+  POOL_BY_ID,
+  POOL_LEADERS,
+  PRINTED_EFFECT_ADJUST,
+  poolByType,
+  applyCardPool,
+} from './cardpool';
 import { totalCost } from './cards';
 import { GENERATED_CARDS } from '../generated-cards';
 import { KEYWORDS } from './keywords';
@@ -122,6 +129,18 @@ test('subtypes: Locations are Sanctums with produces; Charms/Events typed', () =
           !c.locPassive && !(c.triggers && c.triggers.length > 0),
           `${c.id}: Bountiful Sanctum must have no other ability`,
         ).toBe(true);
+      } else if (PRINTED_EFFECT_ADJUST[c.id] !== undefined && !c.locPassive && !c.triggers) {
+        // v7.6: a balance lever may zero a Sanctum's printed ability outright
+        // (PRINTED_EFFECT_ADJUST — the only move it has on a card whose
+        // magnitude is already the minimum of 1). That is legal, but the
+        // invariant this test exists for is "no Sanctum prints blank", not
+        // "every Sanctum has a trigger" — so a zeroed one has to be carrying
+        // keyword text instead.
+        expect(
+          (c.keywords ?? []).length > 0,
+          `${c.id}: a Sanctum with its printed ability zeroed must still carry a keyword`,
+        ).toBe(true);
+        expect(c.text, `${c.id}: Sanctum needs rules text`).toBeTruthy();
       } else {
         expect(
           !!c.locPassive !== !!(c.triggers && c.triggers.length > 0),

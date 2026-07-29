@@ -92,14 +92,20 @@ Locations none in Ember or Gale:
 | Exhume (Event — Shadow) | When this Event resolves, return a Unit from your ash-pile to your hand |
 | Freeze-Dry (Charm — Tide) | When this Charm bonds to a unit from your hand, exhaust a target enemy unit |
 | Blessed (Charm — Light) | When this Charm bonds to a unit from your hand, restore 3 Vitality |
-| Scorched-Earth (Location — Ember) | At your Dusk, deal 1 damage to each enemy unit |
-| Glaciate (Location — Gale) | At your Dawn, exhaust a target enemy unit |
+| Scorched-Earth (Location — Ember) | At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit |
+| Glaciate (Location — Gale) | At every other Dawn, exhaust a target enemy unit |
 
 Fate and Erode are deliberately different sizes of the same idea: Erode puts
 the card in the ash-pile, where Exhume and the rest of Shadow can still reach
 it, and Fate puts it in The Void, where nothing can. Exhume returns Units
-only — it cannot return itself or any other Event. Scorched-Earth and Glaciate
-stack: two copies sweep for 2 and freeze two units.
+only — it cannot return itself or any other Event.
+
+Scorched-Earth and Glaciate stack, but each is bounded. Scorched-Earth's sweep
+needs three Sanctums — the same threshold Ritual and Archivist use — and two
+copies then sweep for 2. Glaciate rests every second Dawn, and each Sanctum
+keeps its own counter, so two of them freeze one unit per turn between them
+rather than two units every other turn. A Glaciate Sanctum fires on the first
+Dawn after it arrives.
 
 ### Zones
 

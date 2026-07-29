@@ -24,6 +24,8 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
+import { POOL_BY_ID } from '../src/game/v3/cardpool';
+import type { EssenceCost } from '../src/game/v3/cards';
 import type { CardTemplate } from '../src/types';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
@@ -35,6 +37,15 @@ interface Row {
   rarity: string | null;
   card_type: string | null;
   template: CardTemplate | null;
+  // v7.6: the DERIVED mechanics columns. Every balance pass rewrites these in
+  // code, and nothing checked that the database had been told.
+  keywords: string | null;
+  essence_cost: EssenceCost | null;
+  might: number | null;
+  grit: number | null;
+  resolve: number | null;
+  card_subtype: string | null;
+  rules_text: string | null;
 }
 
 /** The identity fields a card's deterministic mechanics are hashed from. */
@@ -44,7 +55,9 @@ const digest = (id: string, type?: string, rarity?: string): string =>
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const { data, error } = await supabase
   .from('cards')
-  .select('id, rarity, card_type, template')
+  .select(
+    'id, rarity, card_type, template, keywords, essence_cost, might, grit, resolve, card_subtype, rules_text',
+  )
   .order('id');
 
 if (error) {
@@ -96,11 +109,60 @@ for (const id of bundled.keys()) {
   if (!live.has(id)) problems.push(`${id}: bundled-only — no longer in the live catalog`);
 }
 
+/**
+ * 3. v7.6 — the DERIVED mechanics columns against the pool every client
+ * actually derives.
+ *
+ * These columns exist so the server can answer "what is this card" without
+ * running the client's assignment code, and `sync-cards-db.ts` fills them from
+ * exactly that code. But nothing checked them, and a check of the first seven
+ * cards this pass touched found the live catalog two full balance passes
+ * behind: Void Mother still printed Resolve 6 with a `-2: Banish` after v7.5
+ * moved it to 5 and -4, and The Wolf of Wall Street still printed a keywordless
+ * 6/6 with `-2/-2` after v7.5 gave it Unbreakable, 5/5 and -1/-1.
+ *
+ * `template` was in parity the whole time, which is why the existing checks
+ * were quiet — the client derives its mechanics from the template and was
+ * therefore correct. What was wrong was every server-side reader of these
+ * columns. A balance pass is not finished until `npm run db:sync` has been
+ * applied, and this is the check that says so.
+ */
+const norm = (s: string | null | undefined) => (s == null || s === '' ? null : s);
+for (const r of rows) {
+  const c = POOL_BY_ID[r.id];
+  if (!c) continue; // covered by the live-only check above
+  const expectKw = (c.keywords ?? []).join(', ') || null;
+  if (norm(r.keywords) !== expectKw)
+    problems.push(`${r.id}: cards.keywords="${r.keywords}" but the pool derives "${expectKw}"`);
+  if (JSON.stringify(r.essence_cost ?? null) !== JSON.stringify(c.cost ?? null))
+    problems.push(
+      `${r.id}: cards.essence_cost=${JSON.stringify(r.essence_cost)} but the pool derives ` +
+        `${JSON.stringify(c.cost)}`,
+    );
+  if ((r.might ?? null) !== (c.might ?? null) || (r.grit ?? null) !== (c.grit ?? null))
+    problems.push(
+      `${r.id}: cards stats ${r.might}/${r.grit} but the pool derives ${c.might}/${c.grit}`,
+    );
+  if ((r.resolve ?? null) !== (c.resolve ?? null))
+    problems.push(`${r.id}: cards.resolve=${r.resolve} but the pool derives ${c.resolve}`);
+  if (norm(r.card_subtype) !== (c.subtype ?? null))
+    problems.push(
+      `${r.id}: cards.card_subtype="${r.card_subtype}" but the pool derives ${c.subtype}`,
+    );
+  if (norm(r.rules_text) !== norm(c.text))
+    problems.push(
+      `${r.id}: cards.rules_text is stale — "${r.rules_text}" vs "${c.text}" (run npm run db:sync)`,
+    );
+}
+
 console.log(
   `Live catalog: ${rows.length} cards. Bundled catalog: ${GENERATED_CARDS.length} cards.`,
 );
 if (problems.length === 0) {
-  console.log('Pool parity OK — template, rarity column and bundled catalog all agree.');
+  console.log(
+    'Pool parity OK — template, rarity column, bundled catalog and the derived ' +
+      'mechanics columns all agree.',
+  );
   process.exit(0);
 }
 console.error(`\n${problems.length} drift problem(s):`);

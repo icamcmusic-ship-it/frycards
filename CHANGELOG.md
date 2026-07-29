@@ -8,6 +8,67 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.6 — The keyword was innocent
+
+Full pass: `docs/BALANCE_SIM_FINDINGS_v7.6.md` (supersedes the v7.5 doc,
+deleted this pass). Two 5,952-game cohorts, zero invariant violations across
+all seven trial pairs.
+
+- **Sacred is not what made `stone_bubbles` strong, and the proof is a null
+  trial.** Six passes priced the keyword and this pass measured its effect to
+  exhaustion: making the Sanctum exhaust itself to pay for the heal (inert),
+  capping it at three charges (-0.3/-0.2, noise), and finally deleting the
+  effect outright — with the text _gone_, the card still read +7.4/+6.2 and its
+  carriers still won 73.0%/69.7%. The whole effect is worth about 1.5 points of
+  residual. Both effect trials reverted, both measurements kept.
+- **What was actually doing the work was the ability printed beside it**:
+  `At Dusk, a target enemy unit gets -1/-1`, recurring and unanswerable, on a
+  2-cost Sanctum. `UNIT_EFFECT_ADJUST` is now **`PRINTED_EFFECT_ADJUST`** and
+  reaches Locations as well as Units, with its floor moved from 1 to 0 (0 =
+  the ability is not printed at all, the only move the lever has on a card
+  whose magnitude is already the minimum). `stone_bubbles` **+9.2/+7.3 →
+  +3.5/+3.5**, sample intact — the first change of any kind to move it in seven
+  passes, and the v7.2 carry-forward it closes had been top of the list for
+  three.
+- **New diagnostic, `metricDiagnostics.locationsByCost`.** It asks whether a
+  cheap Sanctum simply reads high whatever is written on it, and the answer is
+  yes: 2-cost Sanctums read +5.38/+4.60 as a class, and the ones with **no
+  keyword at all** read +6.65/+5.30 — at or above their keyworded neighbours in
+  both cohorts. That class is the new top carry-forward, and the next move on it
+  is a comparator rather than a lever.
+- **The Wolf of Wall Street loses its printed ability entirely** (+10.4/+8.2 →
+  +9.0/+5.0, sample held). The same trial on The Pier-Side Menace was
+  **reverted**: opposite signs across cohorts _and_ a third of its cohort-A
+  plays gone — the "priced out rather than balanced" signature, appearing on an
+  effect lever for the first time.
+- **Scorched-Earth's sweep is gated on 3+ Sanctums** (+22.3 → +4.9 in the only
+  cohort that drafts it) and **Glaciate now fires every other Dawn**
+  (+11.5/+12.0 → +8.2/+7.8 in isolation). Both held their carriers, which is
+  the difference between an effect lever and a cost point on a Location — three
+  separate v7.5 price trials had deleted carriers instead of pricing them.
+- **Blessed and Exhume are measurable at last.** Their v7.5 roll bands were
+  widened upward (Charm 40..52 → 40..70, Event 42..62 → 42..76): Blessed 1 → 5
+  carriers and Exhume 2 → 6, both now in band on real samples, with zero
+  existing carriers re-rolled and 14 cards that printed no keyword picking one
+  up.
+- **Kuro's Resolve point was spent and reverted** (+1.2 A, -0.7 B), and it
+  produced the more useful half of the result: v7.5 had measured that lever in
+  isolation at +2.3/+3.6 _while Kuro's minus was still -2_. An isolated
+  measurement of an unspent lever is a hypothesis for the next pass, not a
+  result banked for it — it expires the moment another lever on the same card
+  ships.
+- **The live card catalog was two balance passes stale.** `public.cards` still
+  printed Void Mother at Resolve 6 with a `-2: Banish` and the Wolf as a
+  keywordless 6/6 — the `template` column was in parity the whole time, which
+  is why the existing drift guard was quiet, so every _server-side_ reader of
+  the mechanics columns was wrong. `scripts/verify-pool.ts` now checks the
+  derived columns (keywords, essence cost, stats, Resolve, subtype, rules text)
+  against the pool the client derives, and the catalog has been re-synced.
+- **Harness**: `report.carryForward` prints every carried-forward card in full
+  on every run — flat residual, ramp-matched residual and sample size —
+  including an explicit `UNDER FLOOR` marker, so a card that was priced out of
+  the format can never again be read as a card whose residual came down.
+
 ### v7.5 — Three levers that do not work, and the two that do
 
 Full pass: `docs/BALANCE_SIM_FINDINGS_v7.5.md` (supersedes the v7.2 doc and its
@@ -44,9 +105,9 @@ violations across all eleven trial pairs.
 - **All three levers were then measured to exhaustion on the two outliers, and
   all three are inert.** `COST_ADJUST` is a provable no-op at the cost cap;
   five and six extra points of `STAT_ADJUST` moved nothing (the Wolf went
-  *up*); and bounding the keyword itself was neutral. What moved them was the
+  _up_); and bounding the keyword itself was neutral. What moved them was the
   ability printed BESIDE the keyword — the Wolf's `At Dawn, a target enemy unit
-  gets -2/-2` is unconditional recurring removal with no off switch, the shape
+gets -2/-2` is unconditional recurring removal with no off switch, the shape
   the Leader table calls "the strongest kit shape in the game", printed on a
   Unit where no lever could reach it.
 - **New `UNIT_EFFECT_ADJUST` lever** — a per-card trim to the magnitude of a
@@ -58,7 +119,7 @@ violations across all eleven trial pairs.
   as the nerf — it measured neutral, and that is the point: an unconditional
   "can never be removed by any means at any price" was the only text in the
   game with no answer, and the harness proved these cards' win rates do not
-  rest on it. The absorbed damage is *prevented* rather than left marked (or
+  rest on it. The absorbed damage is _prevented_ rather than left marked (or
   the state-based check re-fires on it a tick later and kills the unit through
   a shield it just paid for), and the save recharges at every Dawn for both
   players, so a unit gets one per turn of the game rather than one per turn
@@ -241,19 +302,19 @@ fixed.
 - **The roadmap said this would re-roll all eight Leaders. It re-rolls none** —
   verified by diffing the whole pool before and after: zero cards change. The
   only two the rule would flip (Kuro, Ruin-Walker) already carry hand overrides
-  that outrank it, and those overrides are *not* redundant — both encode a
+  that outrank it, and those overrides are _not_ redundant — both encode a
   price the raw colour table overshoots at (Kuro measured 61.6%/55.6% and
   Ruin-Walker 68.2% before being repriced). What the rule buys is that the next
   Leader printed does not need a fourth hand patch to get an answer.
 - **It also cannot fix the one Leader still inert, which is the real finding.**
   Mer-King (Tide/Root) has no interactive half to draw from: Tide gives `Deal a
-  card`, Root gives `+2/+2 on a friendly unit`. Its whole kit pointed inward —
+card`, Root gives `+2/+2 on a friendly unit`. Its whole kit pointed inward —
   `-1: Deal a card` and `+1: Restore 2 Vitality` — and it finished **35.1%
   (n=1488) / 33.4% (n=1860)**, bottom or second-bottom in both cohorts on the
   two largest Leader samples in the run.
 - **It takes a shape no other Leader has: `-3: All enemy units get -1/-1`.**
   Every small interactive effect was already spoken for, and three sit on PLUS
-  halves where they *gain* Resolve, so the same effect on a minus would have
+  halves where they _gain_ Resolve, so the same effect on a minus would have
   printed a strictly dominated ability. A board-wide shrink is colour-honest
   for Tide and Root and reuses an already-implemented `applyEffect` path.
   Priced at -3 against the two overshoots this table records: at Resolve 4 a
@@ -279,7 +340,7 @@ fixed.
   `topOverperformersRampMatched` — the list to price off for anything gated on
   essence.
 - **The confound is game length, not cost.** Residual-vs-cost correlation is
-  near zero under *both* metrics in both cohorts (0.056/0.095 flat,
+  near zero under _both_ metrics in both cohorts (0.056/0.095 flat,
   0.082/0.023 matched), so "expensive cards read high" was the wrong model —
   recorded in the findings doc so nobody re-derives it. What is real: a card
   that lands on turn 12 cannot appear in a game that ended on turn 6, and
@@ -330,7 +391,7 @@ fixed.
 - **They keep their printed abilities.** v7.3's "every Unit at Rare or above
   prints an ability" rule keys off the card having no keyword, so handing
   these three Unbreakable would have silently taken away the trigger or
-  on-enter effect they had. That check now keys off what the card *rolled*
+  on-enter effect they had. That check now keys off what the card _rolled_
   rather than what it ended up with.
 - **Unbreakable reported zero activations however many kills it walked away
   from** — it was the one keyword with no telemetry hook, so the balance
@@ -592,7 +653,7 @@ fixed.
   a separate mechanic and is retained — it is now labelled "over copy cap"
   rather than "duplicate protected", which is what it always was.
 - **Alt-Art dropped from every weight table.** `public.cards` has zero Alt-Art
-  rows and `random_card_of_rarity` walks *down* its ladder on an empty tier, so
+  rows and `random_card_of_rarity` walks _down_ its ladder on an empty tier, so
   every advertised Alt-Art roll silently paid out a Full-Art. The weight is
   folded into Full-Art — the odds screens now describe what can actually be
   pulled.
@@ -615,7 +676,7 @@ cohorts, 0 invariant violations, seven trial pairs).
   below baseline in both cohorts were exactly the three whose first colour
   yields a non-interactive minus. Each now takes an ability from its own other
   colour: Apex Nanite Shinobi `-2: -2/-2`, Ethereal Sea Witch `-1: Deal 2
-  damage to a target enemy unit`, Ruin-Walker Overseer `-3: Banish`.
+damage to a target enemy unit`, Ruin-Walker Overseer `-3: Banish`.
   **Leader spread 24.3 → 17.9 (A) and 30.3 → 14.8 (B)**, against v6.9's 31.6
   and 39.8.
 - **Cost adjustments**: `submerged_statue` +1, `dr_aries_chief_biogeneticist`
@@ -657,7 +718,7 @@ cohorts, 0 invariant violations, seven trial pairs).
   no `'Alt-Art'`, so `indexOf` returned -1 and every Alt-Art pull was clamped
   to rank 0 — sorted, spotlighted and glowed as a Common. Both duplicate
   ladders (here and in `packodds.ts`) now use `rarityTier` from `rarity.ts`.
-- `slotOdds`' guaranteed-foil test only matched a `foil_` *prefix*, so a slot
+- `slotOdds`' guaranteed-foil test only matched a `foil_` _prefix_, so a slot
   named exactly `foil` advertised the base chance instead of 100%.
 - `docs/RULEBOOK.md` copy-cap line was missing Alt-Art.
 

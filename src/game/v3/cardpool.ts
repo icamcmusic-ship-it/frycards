@@ -379,8 +379,8 @@ const STAT_ADJUST: Record<string, number> = {
 const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
 
 /**
- * v7.5: per-card adjustment to the MAGNITUDE of a Unit's printed ability —
- * the third lever, and the one this pass had to build because the other two
+ * v7.5: per-card adjustment to the MAGNITUDE of a card's printed ability —
+ * the third lever, and the one that pass had to build because the other two
  * were measured inert on the cards that needed them.
  *
  * COST_ADJUST is a no-op at the cost cap of 7 (recorded since v5.3) and
@@ -391,18 +391,54 @@ const statAdjustFor = (id: string): number => STAT_ADJUST[id] ?? 0;
  * residual did not move on either card. What moved it was this: the ability
  * printed BESIDE the keyword.
  *
- * A value of 0 or less prints no ability at all; the clamp keeps it at 1
- * minimum, so the lever trims magnitude rather than deleting text.
+ * v7.6 renamed it from `UNIT_EFFECT_ADJUST` and wired it into `mapLocation`
+ * as well, because the same finding turned out to be true of a Location. A
+ * Sanctum's printed trigger had no lever at all, and `stone_bubbles` — six
+ * passes of failed price levers, then two failed effect levers on its KEYWORD
+ * this pass — turned out to print `At Dusk, a target enemy unit gets -1/-1`
+ * beside the Sacred it was being blamed for. Same shape as the Wolf's, same
+ * conclusion, one card type over. See BALANCE_SIM_FINDINGS §1.
+ *
+ * The clamp floor is 0, and 0 means the card prints NO ability — text, trigger
+ * and all. That is deliberate and it is the only way this lever reaches a card
+ * whose magnitude already sits at the minimum of 1: on a cheap card,
+ * `ceil(naturalCost / 2)` is 1 before any adjustment, so "trim the magnitude"
+ * has nowhere to go and the only remaining question the harness can ask is
+ * whether the ability should be printed at all. Every entry below records the
+ * measurement that set it.
  */
-const UNIT_EFFECT_ADJUST: Record<string, number> = {
+export const PRINTED_EFFECT_ADJUST: Record<string, number> = {
   // The Wolf of Wall Street: `At Dawn, a target enemy unit gets -2/-2` on an
   // Unbreakable body — unconditional recurring removal that the opponent has
   // no way to switch off, which is the shape LEADER_MINUS_ABILITY_OVERRIDE
   // calls "the strongest kit shape in the game", printed on a Unit. Its
   // ramp-matched residual was +11.4 (n=504) / +16.1 (n=343) and survived
   // every price and stat lever aimed at it.
-  the_wolf_of_wall_street: -2,
+  // v7.6: -2 -> -4, which takes the magnitude to 0 and prints the ability off
+  // the card entirely. v7.5 shipped the -2 and asked for a re-check after one
+  // pass with Unbreakable bounded; the re-check says the bound did nothing for
+  // it (+10.4 / +8.2, against +11.4 / +16.1 before the -2), so the same lever
+  // was pulled again as far as it goes: +9.0 / +5.0, down in both cohorts with
+  // the sample held (498 -> 497, 338 -> 331). Note -3 would have been a no-op:
+  // `themedEffect` floors its magnitude at 1 internally, so -1/-1 is the
+  // smallest weaken that can be printed and 0 is the next step down.
+  the_wolf_of_wall_street: -4,
+  // The Pier-Side Menace took the SAME trial and REVERTED, on both halves of
+  // the bar: +10.7 -> +13.4 in cohort A against +10.6 -> +7.6 in B (opposite
+  // signs), and its cohort-A play count fell 520 -> 356. That is the "priced
+  // out rather than balanced" signature this project keeps meeting — a
+  // residual measured on two thirds of the plays is not the same measurement —
+  // and it is the first time it has shown up on an EFFECT lever rather than a
+  // cost one. Stays at -2 (its `enters: deal 1 damage`).
   the_pier_side_menace: -2,
+  // v7.6: Stone Bubbles, the top carry-forward for three passes and the item
+  // six cost trials and two Sacred EFFECT trials had all failed to move. It
+  // prints `At Dusk, a target enemy unit gets -1/-1` — recurring, unconditional,
+  // unanswerable, on a 2-cost Sanctum — beside the Sacred it was being blamed
+  // for. Its magnitude was already the minimum of 1, so the only move left was
+  // 0: +9.2 / +7.3 -> +2.6 / +2.9 with the sample intact (772 -> 769, 484 ->
+  // 486), the first change of any kind ever to move this card.
+  stone_bubbles: -1,
 };
 
 // ---------------------------------------------------------------------------
@@ -851,15 +887,24 @@ function mapUnit(c: CardTemplate): CardDef {
   // cards, and that must not silently cost them the ability this guarantees.
   const forceFx = rt >= 2 && naturalKeywordCount(seed, rt) === 0;
   if (forceFx || roll(seed, 'unit-fx', 4) === 0) {
-    const v = Math.max(1, Math.min(4, Math.ceil(naturalT / 2) + (UNIT_EFFECT_ADJUST[c.id] ?? 0)));
-    const fx = themedEffect(seed, primary, v);
-    const when = pick(seed, 17, ['enters', 'enters', 'dies', 'atDawn', 'atDusk'] as const);
-    if (when === 'enters') {
-      def.onInvoke = fx;
-      lines.push(`When this unit enters the field, ${effectText(fx)}.`);
-    } else {
-      def.triggers = [{ when, effect: fx }];
-      lines.push(`${TRIGGER_TEXT[when]}, ${effectText(fx)}.`);
+    // v7.6: floor of 0 rather than 1 — see PRINTED_EFFECT_ADJUST. No Unit
+    // entry currently reaches it (both sit at magnitude 1 after their -2), so
+    // this re-prints the pool byte-identically; it exists so the lever can
+    // reach a card whose magnitude is already at the minimum.
+    const v = Math.max(
+      0,
+      Math.min(4, Math.ceil(naturalT / 2) + (PRINTED_EFFECT_ADJUST[c.id] ?? 0)),
+    );
+    if (v > 0) {
+      const fx = themedEffect(seed, primary, v);
+      const when = pick(seed, 17, ['enters', 'enters', 'dies', 'atDawn', 'atDusk'] as const);
+      if (when === 'enters') {
+        def.onInvoke = fx;
+        lines.push(`When this unit enters the field, ${effectText(fx)}.`);
+      } else {
+        def.triggers = [{ when, effect: fx }];
+        lines.push(`${TRIGGER_TEXT[when]}, ${effectText(fx)}.`);
+      }
     }
   }
   def.text = lines.join(' ');
@@ -923,11 +968,25 @@ function mapEvent(c: CardTemplate): CardDef {
   // 12-point band put just two of them in range, on the same rule: the
   // 0..42 bands are untouched, so every existing carrier re-prints
   // byte-identically and only cards that previously rolled nothing pick one up.
+  //
+  // v7.6 widens it again, 62 -> 76, and the Charm band 52 -> 70. That is v7.5
+  // carry-forward #9: `Blessed` printed on ONE card and `Exhume` on two, which
+  // is the Doublestrike width — a delta at that sample is a fact about two
+  // cards' Leader cohorts, not about the keyword, and v7.5 correctly refused
+  // to act on either. Blessed 1 -> 5 carriers and Exhume 2 -> 6 (Fate 7 -> 9,
+  // Freeze-Dry 4 -> 8), and both now read in band with real samples: Blessed
+  // -1.0 / +0.7 at n=643/1684, Exhume -2.2 / -0.7 at n=495/667, against the
+  // -9.6 / +0.8 cohort split that was all v7.5 could see.
+  //
+  // Widening upward only is what makes this safe: verified card by card, zero
+  // existing carriers changed keyword and 14 cards that had rolled NOTHING
+  // picked one up. It is still a content change and it moved the meta — see
+  // the Glaciate note in keywords.ts.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
     kwRoll >= 26 && kwRoll < 42
       ? freshKeywordFor(seed, 'Event', colors[0])
-      : kwRoll >= 42 && kwRoll < 62
+      : kwRoll >= 42 && kwRoll < 76
         ? freshKeywordV75For(seed, 'Event', colors[0])
         : undefined;
   const keywords: string[] = evFresh
@@ -976,13 +1035,14 @@ function mapCharm(c: CardTemplate): CardDef {
   // v6.0 Charm keywords: ~12% Runic (bond cantrip); ~12% of BOUND charms
   // Soulbound (returns to hand when its unit dies). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
-  // v7.5 adds a fourth band (40..52) for Freeze-Dry/Blessed — see the Event
-  // mapper for the rule these bands follow.
+  // v7.5 adds a fourth band (40..52) for Freeze-Dry/Blessed, widened to 40..70
+  // in v7.6 — see the Event mapper for the rule these bands follow and for why
+  // the widening happened.
   const kwRoll = roll(seed, 'ch-kw2', 100);
   const chFresh =
     kwRoll >= 24 && kwRoll < 40
       ? freshKeywordFor(seed, 'Charm', colors[0])
-      : kwRoll >= 40 && kwRoll < 52
+      : kwRoll >= 40 && kwRoll < 70
         ? freshKeywordV75For(seed, 'Charm', colors[0])
         : undefined;
   const charmKws: string[] = chFresh
@@ -1118,10 +1178,19 @@ function mapLocation(c: CardTemplate): CardDef {
     def.locPassive = roll(seed, 'loc-passive', 2) === 0 ? 'MIGHT_ALL' : 'GRIT_ALL';
     def.text = `${base} Your units get +1 ${def.locPassive === 'MIGHT_ALL' ? 'Might' : 'Grit'}.`;
   } else {
-    const fx = themedEffect(seed, produces, 1);
-    const when = pick(seed, 23, ['atDawn', 'atDusk'] as const);
-    def.triggers = [{ when, effect: fx }];
-    def.text = `${base} ${TRIGGER_TEXT[when]}, ${effectText(fx)}.`;
+    // v7.6: a Sanctum's printed trigger goes through PRINTED_EFFECT_ADJUST
+    // like a Unit's. Its natural magnitude is a hardcoded 1, so the only move
+    // this lever has here is 0 — print no ability — which is exactly the
+    // question `stone_bubbles` needed asked of it.
+    const v = Math.max(0, 1 + (PRINTED_EFFECT_ADJUST[c.id] ?? 0));
+    if (v > 0) {
+      const fx = themedEffect(seed, produces, v);
+      const when = pick(seed, 23, ['atDawn', 'atDusk'] as const);
+      def.triggers = [{ when, effect: fx }];
+      def.text = `${base} ${TRIGGER_TEXT[when]}, ${effectText(fx)}.`;
+    } else {
+      def.text = base;
+    }
   }
   return def;
 }
@@ -1290,6 +1359,31 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
  * This lever moves Resolve alone, leaving the print untouched.
  */
 const LEADER_RESOLVE_OVERRIDE: Record<string, number> = { void_mother: 5 };
+
+/**
+ * v7.6 — Kuro, the Unseen (`apex_nanite_shinobi`) TRIED HERE AND REVERTED, and
+ * the reason is a rule about carried-forward measurements rather than a fact
+ * about this Leader.
+ *
+ * v7.5 repriced Kuro's minus (-2 -> -1), held the Resolve point back under the
+ * "one lever per Leader per pass" rule, and measured it in isolation first so
+ * the next pass would not have to re-derive it: Resolve 4 alone, +2.3 (A) /
+ * +3.6 (B). This pass spent it — `apex_nanite_shinobi: 4` — and it did NOT
+ * reproduce: 43.3 -> 44.5 (A) and 40.1 -> 39.4 (B), opposite signs, which is
+ * the bar this project has used since v6.6.
+ *
+ * The two levers are not additive, and could not have been. That +2.3 / +3.6
+ * was measured against the -2 minus, where a Resolve-3 tank bought ONE use and
+ * stranded a point — the fourth point of Resolve was buying a second
+ * activation. Against the -1 that shipped, a tank already buys three, and the
+ * fourth point buys a fourth activation of an ability that is no longer the
+ * constraint. A measurement of lever B taken while lever A was unspent expires
+ * the moment A ships.
+ *
+ * So: an isolated measurement of an unspent lever is a hypothesis for the next
+ * pass, not a result banked for it. Kuro stays at its printed Resolve 3 and
+ * the next lever on it has to be found rather than looked up.
+ */
 
 /**
  * v6.9: Leader PLUS-ability override — the buff-side counterpart to the two
