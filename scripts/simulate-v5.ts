@@ -14,7 +14,9 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    `docs/BALANCE_SIM_FINDINGS_v7.6.md` §3 / carry-forward #1.
+ *    `docs/BALANCE_SIM_FINDINGS_v7.7.md` §1, which adds a THIRD residual
+ *    (`rampStateMatchedBaseline`) matching on ramp ACCESS rather than game
+ *    length — the one to read for anything essence-gated.
  *  - keyword health: carrier win-rate deltas + activation counts
  *    (Overrun spill, Venomous kills, Siphon vitality, Quickstrike pre-kills,
  *    Ambush reaction invokes, Warded target denials, ...)
@@ -280,6 +282,16 @@ interface CardStat {
    */
   inDeckByLen: Record<number, { games: number; wins: number }>;
   playsByTurn: Record<number, number>;
+  /**
+   * v7.7 ramp-state-matched denominator, per card: this card's own in-deck
+   * games filed by the highest Location count its controller ever reached.
+   * Paired with `playsByLocs` below. See `rampStateMatchedBaseline`.
+   */
+  inDeckByMaxLocs: Record<number, { games: number; wins: number }>;
+  /** Locations the controller had ON BOARD after the turn this card was first
+   * played — the ramp state the play PUT THEM IN, which for a Sanctum already
+   * includes the card itself. */
+  playsByLocs: Record<number, number>;
 }
 
 /**
@@ -289,6 +301,36 @@ interface CardStat {
  */
 const rampReached: Record<number, { games: number; wins: number }> = {};
 const rr = (n: number) => (rampReached[n] ??= { games: 0, wins: 0 });
+
+/**
+ * v7.7 Sanctum-drop curve: for each turn T, the player-games in which that
+ * player made AT LEAST ONE Sanctum drop on turn T. Pool-wide and NOT
+ * deck-controlled, so it is published as a diagnostic only — it is what shows
+ * that a land drop is worth win rate on its own, which is the whole reason
+ * `rampStateMatchedBaseline` exists. The per-card denominator that the
+ * ramp-state residual actually uses is `inDeckByMaxLocs`.
+ *
+ * This is the population a Location should be read against, and the reason is
+ * v7.6 carry-forward #1. The ramp-matched baseline
+ * (`lengthMatchedBaseline`) matches a card's play-games against its own
+ * in-deck games that ran at least as long — which corrects for "an expensive
+ * card cannot appear in a game that ended on turn 6". It does NOT correct for
+ * the fact that playing a Sanctum *is itself* a ramp step: the played cohort
+ * has one more Location on board than the length-matched cohort by
+ * construction, so every Sanctum in the pool collects the win-rate value of
+ * "made a land drop this turn" on top of whatever its text is worth. That is
+ * why the v7.6 table reads +5.38 / +4.60 for the 2-cost band and +6.65 / +5.30
+ * for the Sanctums that print NO keyword at all — the blank ones read at or
+ * above their keyworded neighbours, which is not a statement about cards.
+ *
+ * Matching on the drop removes it from both sides: of the players who made a
+ * Sanctum drop on turn T, did the ones whose drop was THIS card do better?
+ * Anything left is the card's own text and price. Same shape as the fix v7.5
+ * §1 applied to Events — read a card against its own class rather than against
+ * a mixture it is not comparable to.
+ */
+const locPlayByTurn: Record<number, { games: number; wins: number }> = {};
+const lpt = (t: number) => (locPlayByTurn[t] ??= { games: 0, wins: 0 });
 const cardStats: Record<string, CardStat> = {};
 function cs(id: string): CardStat {
   return (cardStats[id] ??= {
@@ -305,6 +347,8 @@ function cs(id: string): CardStat {
     firstPlayGames: 0,
     inDeckByLen: {},
     playsByTurn: {},
+    inDeckByMaxLocs: {},
+    playsByLocs: {},
   });
 }
 
@@ -960,6 +1004,9 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
   // castable. A running max rather than the final board, so a Location leaving
   // play cannot understate it.
   const maxLocs: Record<PlayerId, number> = { P1: 0, P2: 0 };
+  // v7.7: the turns on which each seat made a SANCTUM DROP this game — the
+  // population behind the published `sanctumDropCurve` diagnostic.
+  const locTurns: Record<PlayerId, Set<number>> = { P1: new Set(), P2: new Set() };
   // v6.6: which seat invoked its Leader first this game ('tie' if the same
   // turn boundary saw both).
   let leaderFirst: PlayerId | 'tie' | null = null;
@@ -1050,12 +1097,20 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
             s.firstPlayTurnSum += turns;
             s.firstPlayGames++;
             s.playsByTurn[turns] = (s.playsByTurn[turns] ?? 0) + 1;
+            // v7.7: and the ramp state the play left its controller in. For a
+            // Sanctum this count already includes the card just played, which
+            // is the whole point — see rampStateMatchedBaseline.
+            const nl = state.players[actor].locations.length;
+            s.playsByLocs[nl] = (s.playsByLocs[nl] ?? 0) + 1;
           }
           essenceSpentTotal += totalCost(def.cost);
           played[actor].add(def.id);
           cs(def.id).timesPlayed++;
           tps(def.type).plays++;
-          if (def.type === 'Location') mech.sanctumPlays++;
+          if (def.type === 'Location') {
+            mech.sanctumPlays++;
+            locTurns[actor].add(turns);
+          }
           if (def.type === 'Charm') mech.charmPlays++;
           if (def.type === 'Event' && def.subtype === 'Quick') mech.quickEventPlays++;
           if (def.type === 'Event' && def.subtype === 'Slow') mech.slowEventPlays++;
@@ -1549,6 +1604,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       b.games++;
       if (won) b.wins++;
     }
+    // v7.7: the sanctum-drop curve — this seat made a Sanctum drop on each of
+    // these turns, filed once per (game, turn).
+    for (const t of locTurns[pid]) {
+      const b = lpt(t);
+      b.games++;
+      if (won) b.wins++;
+    }
 
     // Card stats.
     const inDeck = new Set(deck.cards);
@@ -1561,6 +1623,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       const bucket = (s.inDeckByLen[turns] ??= { games: 0, wins: 0 });
       bucket.games++;
       if (won) bucket.wins++;
+      // v7.7: and filed by the ramp state this seat actually reached, so a
+      // Location can be compared against the games that got that far.
+      const lb = (s.inDeckByMaxLocs[maxLocs[pid]] ??= { games: 0, wins: 0 });
+      lb.games++;
+      if (won) lb.wins++;
     }
     for (const id of played[pid]) {
       const s = cs(id);
@@ -1807,10 +1874,22 @@ function pinnedDeckForLeader(leaderId: string): DeckDef {
     units: 34,
     spells: 21,
     sanctums: 5,
-    seed: (strHash(leaderId) ^ DECK_SEED) >>> 0,
+    // v7.7: seeded from the LEADER ID ALONE. It used to be
+    // `strHash(leaderId) ^ DECK_SEED`, which quietly defeated the whole point
+    // of the suite: v6.2 built it (carry-forward #5) to give a Leader read
+    // "that cohort composition cannot reach", and then re-rolled its 60-card
+    // decks with the cohort seed, so the two cohorts were not running the same
+    // pinned suite at all. That is why v7.6 could not close its Sentinel item
+    // with this instrument — Sentinel of the Nether Pit read 57.3% on deckSeed
+    // 1337 and 23.4% on deckSeed 42, a 34-point swing on a suite whose entire
+    // premise is that decks are held fixed. With the deck fixed, the only
+    // thing a second cohort varies is the game RNG (`pairRng` below still
+    // takes DECK_SEED), so two runs are two independent samples of the SAME
+    // matchup and the spread between them is honest sampling error.
+    seed: strHash(leaderId),
   });
 }
-const LEADER_PAIR_SEAT_GAMES = 12; // per ordered pair, per seat orientation
+const LEADER_PAIR_SEAT_GAMES = 20; // per ordered pair, per seat orientation
 const leaderPairSuite: Record<string, Record<string, { games: number; wins: number }>> = {};
 {
   const leaderIds = POOL_LEADERS.map((l) => l.id);
@@ -1906,17 +1985,109 @@ function lengthMatchedBaseline(s: CardStat): { winPct: number; games: number } |
   return { winPct: +(acc / weight).toFixed(1), games: sampled };
 }
 
+/**
+ * v7.7 RAMP-STATE-MATCHED baseline — v7.6 carry-forward #1, and a COMPARATOR
+ * rather than a lever, which is what that item asked for.
+ *
+ * The length-matched baseline above corrects for "an expensive card cannot
+ * appear in a game that ended on turn 6". It does not correct for the thing
+ * v7.6 §1 named: **playing a Sanctum is itself a ramp step**. A Location's
+ * play-games have, by construction, one more Location on board than the games
+ * it is being compared against, so every Sanctum in the pool collects the win
+ * value of "made a land drop" on top of whatever its text is worth. That is
+ * why the v7.6 table read +5.38 / +4.60 for the whole 2-cost band and
+ * +6.65 / +5.30 for the Sanctums that print no keyword at all.
+ *
+ * This matches on the ramp state the play LEFT THE CONTROLLER IN: for each
+ * Location count L the card was played into, the win rate of the card's own
+ * in-deck games that reached at least L Locations, weighted by how often it
+ * was played there. Same deck control as the flat residual, with the land drop
+ * now on both sides of the subtraction.
+ *
+ * Two earlier attempts are recorded because each failed in an instructive way
+ * and neither should be re-tried:
+ *
+ *  - **A pool-wide "everyone who dropped a Sanctum on turn T" denominator**
+ *    threw the deck control away. The two cohorts then disagreed by thirty
+ *    points on card after card (Ossuary Vault +2.1 / -28.3), and all of the
+ *    movement was in the NUMERATOR — that card's played win rate is 56.4% in
+ *    cohort A and 22.3% in B, because in B it sits in worse decks. Trading a
+ *    ramp confound for a deck-quality confound is not a correction.
+ *  - **The card's own decks, matched on the drop TURN**, is deck-controlled
+ *    but degenerate: on a card played in most of its in-deck games the two
+ *    sides are nearly the same games. Measured — with `stone_bubbles` printing
+ *    its ability again, the flat residual moved +9.8 -> +16.2 and the
+ *    ramp-matched +3.5 -> +10.2, while that metric moved +0.1 -> +1.2.
+ *    Excluding the card's own play-games fixes the degeneracy and replaces it
+ *    with a tiny, heavily selected denominator ("games where I never played
+ *    it"), which put half the pool under the sample floor and disagreed across
+ *    cohorts by twenty points.
+ *
+ * Matching on ramp state avoids both: reaching L Locations is something most
+ * in-deck games do by many routes, so the denominator stays large and is not
+ * mostly this card.
+ *
+ * v7.7b: computed for EVERY card type, not just Locations. The correction was
+ * built for Sanctums, but the selection effect it removes is not specific to
+ * them — a cost-7 Unit is also only ever played in games that got to seven
+ * essence, and `lengthMatchedBaseline` matches on game LENGTH, which is a
+ * proxy for that and not the thing itself. The difference between a card's
+ * ramp-matched and ramp-state-matched residual is therefore the part of its
+ * number that was ramp access rather than card power, whatever type it is.
+ *
+ * Returns null below the same 20-game floor the length-matched baseline uses.
+ */
+function rampStateMatchedBaseline(s: CardStat): { winPct: number; games: number } | null {
+  const levels = Object.keys(s.inDeckByMaxLocs)
+    .map(Number)
+    .sort((a, b) => a - b);
+  // Suffix sums: in-deck games (and wins) that reached AT LEAST each level.
+  const atLeast = new Map<number, { games: number; wins: number }>();
+  let g = 0;
+  let w = 0;
+  for (let i = levels.length - 1; i >= 0; i--) {
+    const b = s.inDeckByMaxLocs[levels[i]];
+    g += b.games;
+    w += b.wins;
+    atLeast.set(levels[i], { games: g, wins: w });
+  }
+  const suffix = (n: number) => {
+    for (const lv of levels) if (lv >= n) return atLeast.get(lv);
+    return undefined;
+  };
+  let weight = 0;
+  let acc = 0;
+  let sampled = 0;
+  for (const [k, n] of Object.entries(s.playsByLocs)) {
+    const b = suffix(Number(k));
+    if (!b || b.games === 0) continue;
+    acc += n * ((100 * b.wins) / b.games);
+    weight += n;
+    sampled = Math.max(sampled, b.games);
+  }
+  if (weight === 0 || sampled < 20) return null;
+  return { winPct: +(acc / weight).toFixed(1), games: sampled };
+}
+
 const cardReport = Object.entries(cardStats)
   .filter(([, s]) => s.playedGames >= 20)
   .map(([id, s]) => {
     const def = POOL_BY_ID[id];
     const playedWinPct = pct(s.playedWins, s.playedGames);
     const matched = lengthMatchedBaseline(s);
+    // v7.7: Locations get a third residual, measured against the players who
+    // made a Sanctum drop on the same turn. Null on every other type — the
+    // comparison is only defined for cards that ARE the ramp step.
+    const peer = rampStateMatchedBaseline(s);
     return {
       matchedWin: matched?.winPct ?? null,
       matchedGames: matched?.games ?? 0,
       /** The number to price on for anything gated on essence. */
       rampResidual: matched === null ? null : +(playedWinPct - matched.winPct).toFixed(1),
+      /** See rampStateMatchedBaseline — the residual with ramp ACCESS held
+       * constant, as opposed to game length. Price essence-gated cards off it. */
+      stateResidual: peer === null ? null : +(playedWinPct - peer.winPct).toFixed(1),
+      stateWin: peer?.winPct ?? null,
       id,
       name: def?.name,
       type: def?.type,
@@ -2290,6 +2461,7 @@ const carryForward = CARRY_FORWARD_IDS.map((id) => {
     inDeckGames: s.inDeckGames,
     residual: null,
     rampResidual: null,
+    stateResidual: null,
   };
 });
 
@@ -2546,6 +2718,10 @@ const report = {
             cards: all.length,
             flat: +mean(all.map((c) => c.residual)).toFixed(2),
             rampMatched: +mean(matched.map((c) => c.rampResidual ?? 0)).toFixed(2),
+            // v7.7: ramp ACCESS held constant rather than game length.
+            rampState: +mean(
+              all.filter((c) => c.stateResidual !== null).map((c) => c.stateResidual ?? 0),
+            ).toFixed(2),
           },
         ];
       }),
@@ -2605,16 +2781,25 @@ const report = {
           const at = byRampResidual.filter((c) => c.type === 'Location' && c.cost === cost);
           const withKw = at.filter((c) => (c.keywords ?? []).length > 0);
           const blank = at.filter((c) => (c.keywords ?? []).length === 0);
+          const state = (xs: typeof at) => {
+            const ok = xs.filter((c) => c.stateResidual !== null);
+            return ok.length ? +mean(ok.map((c) => c.stateResidual ?? 0)).toFixed(2) : null;
+          };
           return [
             String(cost),
             {
               cards: at.length,
               rampMatched: +mean(at.map((c) => c.rampResidual ?? 0)).toFixed(2),
               flat: +mean(at.map((c) => c.residual)).toFixed(2),
+              // v7.7: the ramp-state-matched read of the same three rows.
+              // This is the column to act on — see rampStateMatchedBaseline.
+              state: state(at),
               keywordedCards: withKw.length,
               keyworded: +mean(withKw.map((c) => c.rampResidual ?? 0)).toFixed(2),
+              keywordedState: state(withKw),
               blankCards: blank.length,
               blank: +mean(blank.map((c) => c.rampResidual ?? 0)).toFixed(2),
+              blankState: state(blank),
             },
           ] as const;
         })
@@ -2638,6 +2823,41 @@ const report = {
     },
     n: byRampResidual.length,
   },
+  /**
+   * v7.7: of the players who dropped a Sanctum on turn T, how many won.
+   * Published as the direct evidence for the correction below it: if making a
+   * land drop is worth win rate on its own, a metric that does not hold it
+   * constant is paying every Sanctum in the pool for it. `rampBaselineCurve`
+   * is the same courtesy for the length-matched baseline.
+   */
+  sanctumDropCurve: Object.fromEntries(
+    Object.entries(locPlayByTurn)
+      .filter(([, v]) => v.games >= 50)
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([k, v]) => [k, { games: v.games, winPct: pct(v.wins, v.games) }]),
+  ),
+  /**
+   * v7.7: EVERY Location that cleared the play floor, ranked on the
+   * ramp-state-matched residual — not a top-15 slice, because there are only
+   * ~29 of them and the whole point of this baseline is to compare Sanctums to
+   * each other. Ramp-matched and flat are carried alongside so the size of the
+   * correction is visible per card rather than only in the class means.
+   */
+  locationsStateRanked: cardReport
+    .filter((c) => c.type === 'Location' && c.stateResidual !== null)
+    .sort((a, b) => (b.stateResidual ?? 0) - (a.stateResidual ?? 0))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      cost: c.cost,
+      keywords: c.keywords,
+      state: c.stateResidual,
+      ramp: c.rampResidual,
+      flat: c.residual,
+      playedWin: c.playedWin,
+      stateWin: c.stateWin,
+      n: c.playedGames,
+    })),
   topOverperformersRampMatched: byRampResidual.slice(0, 15),
   topUnderperformersRampMatched: byRampResidual.slice(-15).reverse(),
   rampBaselineCurve: Object.fromEntries(
@@ -2690,6 +2910,35 @@ const report = {
   poolCoverage,
   // v6.2 additions.
   costAbilityOutliers,
+  /**
+   * v7.7: the pinned suite collapsed to one row per Leader — its average
+   * across all eight pinned opponents, and its best and worst matchup.
+   *
+   * The matrix has been published since v6.2 and read out of maybe twice,
+   * because 72 cells is not something a pass compares across trials. This is
+   * the number the Sentinel item (v7.6 carry-forward #2) actually needed: a
+   * Leader read on FIXED decks, so a 25-point cohort split in the random-deck
+   * table can be checked against a measurement that deck composition cannot
+   * move.
+   */
+  leaderPairSuiteSummary: Object.entries(leaderPairSuite)
+    .map(([a, row]) => {
+      const cells = Object.entries(row);
+      const games = cells.reduce((s, [, v]) => s + v.games, 0);
+      const wins = cells.reduce((s, [, v]) => s + v.wins, 0);
+      const ranked = cells
+        .map(([b, v]) => ({ vs: POOL_BY_ID[b]?.name ?? b, winPct: pct(v.wins, v.games) }))
+        .sort((x, y) => y.winPct - x.winPct);
+      return {
+        id: a,
+        name: POOL_BY_ID[a]?.name ?? a,
+        winPct: pct(wins, games),
+        games,
+        best: ranked[0],
+        worst: ranked[ranked.length - 1],
+      };
+    })
+    .sort((x, y) => y.winPct - x.winPct),
   leaderPairSuite: Object.fromEntries(
     Object.entries(leaderPairSuite).map(([a, row]) => [
       POOL_BY_ID[a]?.name ?? a,
@@ -2869,6 +3118,15 @@ for (const c of report.costAbilityOutliers)
   console.log(
     `  ${c.name} (${c.type}, cost ${c.cost}) residual ${c.residual} z=${c.zScore} n=${c.playedGames}`,
   );
+console.log(
+  '\nLeader-pair pinned suite (v6.2), one row per Leader on FIXED decks (v7.7 — decks no',
+);
+console.log('longer re-roll with the cohort seed, so this is comparable across cohorts):');
+for (const l of report.leaderPairSuiteSummary)
+  console.log(
+    `  ${String(l.name).padEnd(28)} ${String(l.winPct).padStart(5)}%  n=${l.games}   ` +
+      `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}`,
+  );
 console.log('\nLeader-pair pinned suite (v6.2):', JSON.stringify(report.leaderPairSuite, null, 2));
 console.log('\nKeyword dead-weight (v6.3):', JSON.stringify(report.keywordDeadWeight, null, 2));
 console.log(
@@ -2931,13 +3189,28 @@ for (const c of report.topOverperformersRampMatched)
   console.log('\nMetric check — mean residual by card TYPE (v7.5; this is the one to read):');
   for (const [t, v] of Object.entries(md.residualByType))
     console.log(
-      `  ${t.padEnd(9)} ${String(v.cards).padStart(3)} cards   flat ${sg(v.flat).padStart(6)}   ramp-matched ${sg(v.rampMatched).padStart(6)}`,
+      `  ${t.padEnd(9)} ${String(v.cards).padStart(3)} cards   flat ${sg(v.flat).padStart(6)}` +
+        `   ramp-matched ${sg(v.rampMatched).padStart(6)}   ramp-STATE ${sg(v.rampState).padStart(6)}`,
     );
   console.log('\n  Locations by printed cost (v7.6 — is a cheap Sanctum just good?):');
+  const sgn = (n: number | null) => (n === null ? '   n/a' : sg(n).padStart(6));
   for (const [cost, v] of Object.entries(md.locationsByCost))
     console.log(
       `    cost ${cost}  ${String(v.cards).padStart(2)} cards  ramp ${sg(v.rampMatched).padStart(6)}  ` +
-        `(with keyword ${sg(v.keyworded).padStart(6)} n=${v.keywordedCards}, blank ${sg(v.blank).padStart(6)} n=${v.blankCards})`,
+        `STATE ${sgn(v.state)}  ` +
+        `(with keyword ${sg(v.keyworded).padStart(6)}/${sgn(v.keywordedState)} n=${v.keywordedCards}, ` +
+        `blank ${sg(v.blank).padStart(6)}/${sgn(v.blankState)} n=${v.blankCards})`,
+    );
+  console.log(
+    "    STATE = v7.7 ramp-state-matched baseline: measured against this card's own in-deck\n" +
+      '    games that reached the same Location count, so the land drop the Sanctum IS sits on\n' +
+      '    both sides of the subtraction. Price Sanctums off it, not off ramp.',
+  );
+  console.log('\n  Every Location, ranked on the ramp-state residual (v7.7):');
+  for (const c of report.locationsStateRanked)
+    console.log(
+      `    ${String(c.name).padEnd(30)} cost ${c.cost}  state ${sgn(c.state).padStart(6)}  ` +
+        `ramp ${sgn(c.ramp)}  flat ${sgn(c.flat)}  n=${c.n}  [${c.keywords.join(',')}]`,
     );
   console.log(
     `  Location MINUS Unit: flat ${sg(md.locationMinusUnit.flat)} -> ramp-matched ` +
@@ -2960,7 +3233,8 @@ for (const c of report.carryForward)
     c.underFloor
       ? `  ${c.name} (${c.type}, cost ${c.cost}) UNDER FLOOR — played in only ${c.playedGames} games ` +
           `(decked in ${'inDeckGames' in c ? c.inDeckGames : '?'}). Not a lower residual; a smaller format.`
-      : `  ${c.name} (${c.type}, cost ${c.cost}) ramp ${(c.rampResidual ?? 0) >= 0 ? '+' : ''}${c.rampResidual} ` +
+      : `  ${c.name} (${c.type}, cost ${c.cost}) state ${(c.stateResidual ?? 0) >= 0 ? '+' : ''}${c.stateResidual} ` +
+          `ramp ${(c.rampResidual ?? 0) >= 0 ? '+' : ''}${c.rampResidual} ` +
           `(flat ${(c.residual ?? 0) >= 0 ? '+' : ''}${c.residual}) n=${c.playedGames} [${(c.keywords ?? []).join(',')}]`,
   );
 console.log('\nRamp baseline curve (win rate of all card-plays made at N Locations):');

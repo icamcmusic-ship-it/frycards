@@ -8,10 +8,78 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.7 — Two cohorts were not enough
+
+Full pass: `docs/BALANCE_SIM_FINDINGS_v7.7.md` (supersedes the v7.6 doc,
+deleted this pass). **Four** 5,952-game deck cohorts instead of two, zero
+invariant violations on all four before and after every change.
+
+- **Four cohorts, and three carried-forward answers change.** A keyword carried
+  by three to five cards is drafted by a random 32-deck cohort as a coin flip,
+  so two cohorts is not a reproducibility bar for it — it is two samples of a
+  distribution fifteen points wide. `Glaciate` was carried as a +9.8/+11.5
+  overperformer and reads **-0.5 / -0.5** on the two new cohorts. Scorched-Earth
+  was carried as having no second reading at all and reads **-9.1 / -6.0** —
+  its v7.6 gate did not bring it into band, it took it out the other side, and
+  the item reverses from nerf-candidate to buff-candidate. Both close.
+- **The cost-2 Sanctum band closes with no lever pulled.** v7.6 asked for a
+  comparator before pricing anything, and that turned out to be the right
+  instinct twice over: the band does not reproduce on four cohorts, and the
+  premise behind the item was backwards. The new `rampStateMatchedBaseline`
+  matches a card against its own decks' games that reached the same Location
+  count, and it raises Location residuals by about two points rather than
+  lowering them — because `rampBaselineCurve` is **decreasing** (89.5% at four
+  Locations, 43.0% at thirteen). Reaching a lot of Sanctums is what a long
+  grinding game looks like, not what winning looks like. Two earlier versions
+  of the comparator are recorded in the code as rejected, with the measurements
+  that rejected them.
+- **The pinned Leader suite had been seeded from the cohort seed since v6.2.**
+  Its entire premise is that decks are held fixed so a Leader can be read
+  independently of deck luck, and `pinnedDeckForLeader` was seeding its 60-card
+  decks with `strHash(leaderId) ^ DECK_SEED`. Sentinel of the Nether Pit read
+  57.3% on one cohort and 23.4% on another — on the instrument that was
+  supposed to be cohort-proof. Fixed, plus 20 seat-games per pair instead of 12
+  and a one-row-per-Leader summary, because a 72-cell matrix is why nobody
+  caught this for four passes.
+- **Sentinel of the Nether Pit inverts.** On fixed decks it is **first in all
+  four cohorts** (64.1 / 64.1 / 65.0 / 65.0), by a clear margin. Its 38.0%
+  random-cohort reading was a statement about the decks that cohort dealt it.
+  The file had been carrying the strongest kit in the game as an underperformer
+  for three passes. It takes no buff; what stays open is its 10.1% Leader
+  shatter rate, which is a mechanism question.
+- **Kuro, the Unseen: the lever was a missing lever.** Five per-Leader levers
+  existed and none of them could change what a Leader **costs**, though
+  `mapLeader` prices it as `3 + roll(0..1) + keywordCostAdj` and the resulting
+  arrival spread is two full turns. Kuro printed at 5 total — joint most
+  expensive — with Resolve 3, the lowest in the pool, arriving turn 8.4 with the
+  smallest ability budget anyone has. New **`LEADER_COST_OVERRIDE`**, Kuro at 4:
+  first invoke 8.4 → 6.5, and up in **all four cohorts on both instruments**
+  (random-deck 45.6→50.8 / 39.8→46.5 / 44.1→46.6 / 42.3→48.0). Leader spread
+  narrows in all four.
+- **`Fate` priced, weight 1 → 0.** Nine carriers, the largest sample of any
+  keyword in the pool, negative in all four cohorts, never priced — and at
+  weight 1 `Math.round(w / 2)` charged a **full essence point** for "banish the
+  top card of the opponent's deck" in a format where 92-94% of wins come from
+  Vitality. Carrier win rate rises or holds in all four cohorts. The effect is
+  untouched; this is a pure price cut.
+- **The two Unbreakable 7-drops: refuted, and it is the keyword.** The Wolf's
+  expired stat reading was re-measured on the card as it now prints — at four
+  more points of trim it prints a **3/3 for seven** (the most under-budget body
+  in the pool) and still reads +9.7 in cohort A. The Menace was tried at two
+  step sizes: the smaller goes **up** in three of four, the larger comes down
+  but costs it a fifth to a third of its plays. Every per-card lever is now
+  spent on both. What the four-cohort table shows instead is that
+  **`Unbreakable` is the most reproducing outlier in the pool** (+14.6 / +12.7 /
+  +13.9 / +12.9) and that all three carriers print at the cost cap of 7, so the
+  heaviest keyword weight in the file is only partly collected. The cap is the
+  next lever, and it is a rules change rather than a number.
+- **Roadmap rewritten.** It had become a copy of the balance carry-forward list
+  with the product work in the margins. Balance now gets one entry pointing at
+  the findings doc; the rest is the game.
+
 ### v7.6 — The keyword was innocent
 
-Full pass: `docs/BALANCE_SIM_FINDINGS_v7.6.md` (supersedes the v7.5 doc,
-deleted this pass). Two 5,952-game cohorts, zero invariant violations across
+Full pass, superseded by the v7.7 doc above. Two 5,952-game cohorts, zero invariant violations across
 all seven trial pairs.
 
 - **Sacred is not what made `stone_bubbles` strong, and the proof is a null
