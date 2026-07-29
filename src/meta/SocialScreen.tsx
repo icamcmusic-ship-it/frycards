@@ -63,7 +63,7 @@ function TradeSide({
   credits: number;
 }) {
   return (
-    <div className="flex-1 min-w-[180px]">
+    <div className="flex-1 min-w-[140px] sm:min-w-[180px]">
       <div className="text-[9px] font-black text-[var(--c-steel)] mb-1">{label}</div>
       <div className="flex flex-wrap gap-1">
         {cards.map((c) => (
@@ -263,8 +263,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="FRIENDS & TRADING" onBack={onBack} />
-      <div className="p-5 max-w-5xl mx-auto">
-        <div className="flex gap-2 mb-4">
+      <div className="p-3 sm:p-5 max-w-5xl mx-auto">
+        <div className="flex flex-wrap gap-2 mb-4">
           <PopButton
             color={tab === 'friends' ? 'black' : 'yellow'}
             onClick={() => setTab('friends')}
@@ -398,7 +398,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         key={r.id}
                         className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
                       >
-                        <div className="text-xs font-bold">
+                        <div className="text-xs font-bold min-w-0 truncate">
                           <PlayerLink id={r.id} name={r.username} role={r.role} />
                           <span className="text-[9px] text-[var(--c-steel)] ml-2">
                             LV {r.level} · {r.wins}W {r.losses}L
@@ -406,6 +406,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         </div>
                         <PopButton
                           color="red"
+                          className="shrink-0"
                           disabled={busy}
                           onClick={() =>
                             run(
@@ -442,14 +443,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         key={f.id}
                         className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                       >
-                        <span className="text-xs font-bold">
+                        <span className="text-xs font-bold min-w-0 truncate">
                           <PlayerLink
                             id={f.requester}
                             name={nameOf(f.requester)}
                             role={profiles.get(f.requester)?.role}
                           />
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                           <PopButton
                             color="red"
                             disabled={busy}
@@ -486,7 +487,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     key={friendship.id}
                     className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                   >
-                    <div className="text-xs font-bold">
+                    <div className="text-xs font-bold min-w-0 truncate">
                       {other ? (
                         <PlayerLink id={otherId} name={other.username} role={other.role} />
                       ) : (
@@ -498,7 +499,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <PopButton
                         color="yellow"
                         disabled={busy || !other}
@@ -548,7 +549,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         key={f.id}
                         className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
                       >
-                        <span className="text-xs font-bold">
+                        <span className="text-xs font-bold min-w-0 truncate">
                           <PlayerLink
                             id={f.addressee}
                             name={nameOf(f.addressee)}
@@ -619,7 +620,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           credits={t.recipient_credits ?? 0}
                         />
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         {isIncoming ? (
                           <>
                             <PopButton
@@ -776,6 +777,18 @@ function TradeComposerModal({
   const [requestCredits, setRequestCredits] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the dialog on open and restore it to the trigger on
+  // close, matching PlayerProfileModal — otherwise keyboard focus stays
+  // behind the overlay.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    return () => {
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -867,7 +880,7 @@ function TradeComposerModal({
                 <button
                   onClick={() => toggle(list, setList, c.card_id, false, normalMax)}
                   className={cn(
-                    'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+                    'text-[9px] font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
                     pickedQty(list, c.card_id, false) > 0 &&
                       'outline outline-2 outline-[var(--c-red)]',
@@ -882,7 +895,7 @@ function TradeComposerModal({
                 <button
                   onClick={() => toggle(list, setList, c.card_id, true, foilMax)}
                   className={cn(
-                    'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+                    'text-[9px] font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
                     pickedQty(list, c.card_id, true) > 0 &&
                       'outline outline-2 outline-[var(--c-red)]',
@@ -910,20 +923,22 @@ function TradeComposerModal({
       aria-label={`Trade with ${partner.username || 'player'}`}
     >
       <div
-        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md shadow-hard-yellow max-w-3xl w-full max-h-[90vh] overflow-y-auto outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0 z-10">
-          <div className="heading-font text-sm text-[var(--c-yellow)]">
+          <div className="heading-font text-sm text-[var(--c-yellow)] min-w-0 truncate">
             TRADE WITH {(partner.username || 'PLAYER').toUpperCase()}
             <RoleBadge role={partner.role} />
           </div>
-          <PopButton color="yellow" onClick={onClose} ariaLabel="Close trade composer">
+          <PopButton color="yellow" onClick={onClose} className="shrink-0" ariaLabel="Close trade composer">
             ✕
           </PopButton>
         </div>
 
-        <div className="p-4">
+        <div className="p-3 sm:p-4">
           {error && (
             <div className="mb-3">
               <Notice text={error} />

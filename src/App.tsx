@@ -196,6 +196,9 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   // fixed archetype presets — keeps every match legal even when the human's
   // own custom deck is still a work in progress.
   const [cpuArch] = useState(() => randomArchetype());
+  // Same initializer rule as the human deck above: buildDeck is random, so
+  // calling it inline in the JSX re-rolled the CPU's deck on every render.
+  const [cpuDeck] = useState(() => buildDeck(cpuArch));
   const [reward, setReward] = useState<MatchResult | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
   // While recordMatchResult() is in flight (including its retries), both
@@ -219,7 +222,10 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         const { data, error } = await recordMatchResult(won);
         if (data) {
           setReward(data);
-          refreshProfile();
+          // Fire-and-forget with an explicit catch: a rejected refresh here
+          // must not surface as an unhandled rejection — the realtime profile
+          // subscription catches the wallet up anyway.
+          refreshProfile().catch(() => {});
           return;
         }
         if (!error) return; // legitimately no reward to report (e.g. cooldown)
@@ -236,7 +242,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
     <div className="relative w-full h-screen">
       <GameV4
         humanDeck={human.deck}
-        cpuDeck={buildDeck(cpuArch)}
+        cpuDeck={cpuDeck}
         humanLabel={human.label}
         cpuLabel={cpuArch.label}
         playerName={profile?.username || 'Player 1'}
@@ -363,6 +369,10 @@ function AppInner() {
 
   switch (screen) {
     case 'play':
+      // CPU battles are Creator-only while the mode is finished (the menu
+      // tile shows COMING SOON! for everyone else) — this guard covers any
+      // other path that could set the screen to 'play'.
+      if (profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
       return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
     case 'store':
       return <StoreScreen onBack={() => setScreen('menu')} />;

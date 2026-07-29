@@ -376,6 +376,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
         <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
           <button
             className="w-full flex items-center justify-between gap-2"
+            aria-expanded={showProgress}
             onClick={() => setShowProgress((s) => !s)}
           >
             <span className="heading-font text-sm">COLLECTION PROGRESS</span>
@@ -385,7 +386,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               {showProgress ? '▴' : '▾'}
             </span>
           </button>
-          <ProgressBar value={uniqueOwned} max={POOL_V4.length} className="mt-2" />
+          <ProgressBar
+            value={uniqueOwned}
+            max={POOL_V4.length}
+            className="mt-2"
+            ariaLabel="Collection progress"
+          />
           {showProgress && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
               {rarityProgress.map((e) => (
@@ -396,7 +402,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       {e.owned}/{e.total}
                     </span>
                   </div>
-                  <ProgressBar value={e.owned} max={e.total} className="h-1.5" />
+                  <ProgressBar
+                    value={e.owned}
+                    max={e.total}
+                    className="h-1.5"
+                    ariaLabel={`${e.rarity} cards collected`}
+                  />
                 </div>
               ))}
             </div>
@@ -493,6 +504,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           </select>
           <PopButton
             color={ownedOnly ? 'black' : 'yellow'}
+            ariaPressed={ownedOnly}
             onClick={() => setOwnedOnly(!ownedOnly)}
           >
             {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
@@ -614,6 +626,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       disabled={
                         showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
                       }
+                      ariaLabel={
+                        inspectShowcased
+                          ? `Remove from showcase: ${inspect.def.name}`
+                          : showcase.length >= MAX_SHOWCASE
+                            ? undefined
+                            : `Add to showcase: ${inspect.def.name}`
+                      }
                       onClick={() => toggleShowcase(inspect.def.id)}
                     >
                       {inspectShowcased
@@ -656,6 +675,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                       color="yellow"
                       className="w-full"
                       disabled={selling || normalSellable <= 0}
+                      ariaLabel={`Quicksell 1 normal copy of ${inspect.def.name}`}
                       onClick={() => handleSell(false, 1)}
                     >
                       QUICKSELL 1
@@ -665,6 +685,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                         color="black"
                         className="w-full"
                         disabled={selling || normalSellable <= 0}
+                        ariaLabel={`Quicksell all normal spare copies of ${inspect.def.name}`}
                         onClick={() => {
                           const n = normalSellable;
                           if (confirm(`Quicksell all ${n} spare copies of ${inspect.def.name}?`))
@@ -684,6 +705,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                           color="red"
                           className="w-full"
                           disabled={selling || foilSellable <= 0}
+                          ariaLabel={`Quicksell 1 foil copy of ${inspect.def.name}`}
                           onClick={() => handleSell(true, 1)}
                         >
                           QUICKSELL 1
@@ -693,6 +715,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                             color="black"
                             className="w-full"
                             disabled={selling || foilSellable <= 0}
+                            ariaLabel={`Quicksell all foil spare copies of ${inspect.def.name}`}
                             onClick={() => {
                               const n = Math.min(inspectOwned?.f || 0, foilSellable);
                               if (

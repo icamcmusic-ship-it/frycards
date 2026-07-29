@@ -4,7 +4,8 @@
 /* ---------------------------------------------------------------------------
    Monochrome & Pop visual identity
    Palette: ink #1A1A1A · paper #F7F7F7 · pop yellow #FFD54F · alarm red
-   #E53935 · steel #2C3E50. Stark comic standard: heavy ink borders, flat
+   #D43531 (darkened from #E53935 so paper-on-red text meets WCAG AA 4.5:1)
+   · steel #2C3E50. Stark comic standard: heavy ink borders, flat
    offset shadows, Montserrat 900 uppercase headings, Space Grotesk body.
 --------------------------------------------------------------------------- */
 
@@ -15,7 +16,7 @@
   --c-ink: #1a1a1a;
   --c-paper: #f7f7f7;
   --c-yellow: #ffd54f;
-  --c-red: #e53935;
+  --c-red: #d43531;
   --c-steel: #2c3e50;
 }
 
@@ -649,6 +650,21 @@ h4,
    this expands the HIT area only, and only on touch pointers. The control
    looks identical; there is just more of it to hit.
    --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   Accessibility: a clearly visible keyboard-focus ring, in the theme's own
+   graphic language — an ink outline over a thin yellow underlay, so the ring
+   reads on both paper and ink surfaces (the ink ring carries on light
+   backgrounds, the yellow underlay carries on dark ones). Applies only to
+   keyboard/switch focus (:focus-visible), never to mouse/touch clicks.
+   Declared after the .shadow-hard-* utilities on purpose so the focus
+   box-shadow wins while an element is keyboard-focused.
+   --------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 3px solid var(--c-ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--c-yellow);
+}
+
 @media (pointer: coarse) {
   .tap-44 {
     position: relative;

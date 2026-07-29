@@ -56,6 +56,8 @@ export function SettingsScreen({
               <button
                 key={theme.name}
                 onClick={() => onThemeChange(theme.name)}
+                aria-pressed={currentTheme === theme.name}
+                aria-label={`${theme.label} theme${currentTheme === theme.name ? ', selected' : ''}`}
                 className={`relative overflow-hidden rounded-lg p-4 ink-border-md transition-all ${
                   currentTheme === theme.name
                     ? 'ring-4 ring-[var(--c-ink)] shadow-hard-black'
@@ -111,6 +113,12 @@ export function SettingsScreen({
               <PopButton
                 color={profile.hide_serialized_announcements ? 'black' : 'yellow'}
                 disabled={busy}
+                ariaPressed={profile.hide_serialized_announcements}
+                ariaLabel={
+                  profile.hide_serialized_announcements
+                    ? 'Hidden — your username is not shown in News Center announcements'
+                    : 'Visible — your username is shown in News Center announcements'
+                }
                 onClick={toggleHideSerialized}
               >
                 {profile.hide_serialized_announcements ? 'HIDDEN' : 'VISIBLE'}

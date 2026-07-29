@@ -8,6 +8,83 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.8 — The screens nobody had measured
+
+Product pass: mobile third pass, accessibility, the deck guide, and a
+twelve-finding bug hunt. No balance trials were run — the v7.7 top
+carry-forward (`Unbreakable` and the Unit cost cap) is a content-scale rules
+change and keeps its own dedicated pass, per the v7.7 standing rule against
+interleaving content changes with balance trials.
+
+- **Mobile, third pass.** v7.4 did the match board and v7.5 the card views;
+  this pass covers what was still unmeasured on a phone: the Store,
+  Marketplace, Player Shops, Social and Profile screens, the player-profile
+  modal, and the 3D card inspector. Tap targets to 40px, modals capped to the
+  viewport, wrapping rows instead of horizontal scroll, long usernames
+  truncate instead of pushing buttons off-screen, and the 3D inspector drops
+  its card-height budget below `sm` so the metadata column stays above the
+  fold. `meta-preview.html` gained `?screen=profile`, `?screen=inspect` and
+  `?screen=social` harness routes.
+- **Accessibility pass.** Global `:focus-visible` ring (there was none),
+  `role="alert"`/`role="status"` on notices, labelled progress bars,
+  `sr-only` units on credit/voucher chips, aria-labels on icon-only buttons
+  and placeholder-only inputs across the store/market/shops/social/profile
+  screens, card-naming action labels in the collection ("Quicksell 1 normal
+  copy of …"), pack-opening flip target labelled with an `aria-live` rarity
+  readout, and focus management on the trade composer. Contrast audit of all
+  eleven themes: four AA failures fixed by minimal nudges (classic red,
+  dusty red, purple red, lilac steel); watermelon and neutral reds left as
+  deliberate art-direction misses, marked in `themes.ts` with ready-made
+  passing values.
+- **Deck Guide in the builder.** The sim's knowledge finally reaches the
+  player: a panel in the deck editor shows the cost curve against the sim's
+  40/40/20 target bands, colour spread with a two-colour workable ceiling,
+  closest archetype match, and concrete suggestions ("13 Sanctums is above
+  the 4–6 band") — every threshold sourced from `decks.ts`/`colors.ts`
+  constants, none invented. Pure logic in `deckAdvice.ts`, with tests.
+- **CPU battles gated behind COMING SOON.** The PLAY tile is Creator-only
+  while the mode is finished; everyone else sees the tile with a COMING
+  SOON! tag, and a route guard covers any other path into the play screen.
+- **Copy-cap autosell removed.** Pack pulls past the per-rarity copy cap
+  were auto-converted to credits; every pull is now kept
+  (`grant_pack_contents` migration; return shape unchanged). The per-deck
+  copy rule in `save_deck` and the builder is untouched — that one is the
+  rulebook.
+- **Leader keyword roll gets its own band.** `roll(seed, 'ldr-kw6', 6)` had
+  no free room, so any Leader keyword addition would have re-rolled all nine
+  Leaders — the v7.3/v7.5 trap, third appearance. Future Leader keywords now
+  draw from a separate frozen-list band (`ldr-kw-next`), mirroring the
+  `V75_KEYWORDS` split; the generated pool verified byte-identical before
+  and after. Adding Leader keywords is now unblocked, pending its own
+  balance pass.
+- **Pinned Leader suite promoted to the primary Leader instrument.** Per
+  v7.7 §2 (the suite had been seeded with the cohort seed since v6.2, now
+  fixed and stable to within a point): the sim report now leads with the
+  pinned suite's one-row-per-Leader summary, and the random-deck Leader
+  table is relabelled a deck-composition diagnostic
+  (`randomDeckLeaderDiagnostic`), no longer the number Leader balance is
+  judged on.
+- **Bug hunt** (one read-only sweep, twelve findings, all fixed):
+  - The CPU never took its first turn when it won the coin flip —
+    `afterMulligan` dropped straight into the player's controls, leaving the
+    human to manually advance the CPU's phases (~half of matches).
+  - The CPU could reserve essence for a response and then be unable to pay
+    for it: `respondToStack` refused to tap reserved Locations while its
+    affordability check counted them.
+  - Exhume's engine pick now matches its printed text — a *random* ash-pile
+    Unit via the seeded engine RNG, not deterministically the oldest.
+  - Battle Pass / Achievements / News Center rendered network failures as
+    "nothing here yet" — their fetchers swallowed errors so the RETRY path
+    was unreachable; they now throw like the rest of the readers.
+  - The CPU's deck was rebuilt from scratch on every render of the match
+    wrapper; Escape couldn't dismiss an empty shed picker; the BEST PULL
+    spotlight kept rendering a quicksold card as kept; three post-claim
+    profile refreshes could raise unhandled rejections.
+  - Stale copy: How to Play §10 still described 5-card boosters, 36-card
+    boxes and dupe protection (all changed in v7.2), §1 omitted the Alt-Art
+    copy cap, the footer said V6.9, and the in-app changelog's newest entry
+    (which feeds the News Center's LATEST UPDATE banner) was still v7.6.
+
 ### v7.7 — Two cohorts were not enough
 
 Full pass: `docs/BALANCE_SIM_FINDINGS_v7.7.md` (supersedes the v7.6 doc,

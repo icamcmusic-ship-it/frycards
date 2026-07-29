@@ -137,6 +137,7 @@ function DailyLoginPanel() {
                       : 'bg-[var(--c-paper)] text-[var(--c-steel)]'
                 }`}
                 title={`Day ${dayNum}: ${d.label}`}
+                aria-label={`Day ${dayNum}: ${d.label}${done ? ', collected' : isNext ? ', next to claim' : ''}`}
               >
                 D{dayNum}
                 <br />
@@ -171,6 +172,10 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
 
+  // CPU battles are gated to the Creator account (Fry) while the mode is
+  // being finished — everyone else sees the tile with a COMING SOON! tag.
+  const cpuLocked = profile?.role !== 'creator';
+
   const tiles: {
     key: MetaScreen;
     label: string;
@@ -178,13 +183,16 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     icon: React.ReactNode;
     color: string;
     disabled?: boolean;
+    badge?: string;
   }[] = [
     {
       key: 'play',
       label: 'PLAY',
-      desc: 'Battle the CPU',
+      desc: cpuLocked ? 'CPU battles are almost ready' : 'Battle the CPU',
       icon: <Swords className="w-8 h-8" />,
       color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
+      disabled: cpuLocked,
+      badge: cpuLocked ? 'COMING SOON!' : undefined,
     },
     {
       key: 'collection',
@@ -380,9 +388,14 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             key={t.key}
             onClick={() => !t.disabled && onNavigate(t.key)}
             disabled={t.disabled}
-            title={t.disabled ? 'Create an account to unlock' : undefined}
-            className={`btn-pop w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:-translate-y-1'}`}
+            title={t.disabled ? (t.badge ? t.desc : 'Create an account to unlock') : undefined}
+            className={`btn-pop relative w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? (t.badge ? 'opacity-70 cursor-not-allowed' : 'opacity-40 cursor-not-allowed') : 'hover:-translate-y-1'}`}
           >
+            {t.badge && (
+              <span className="absolute -top-2 -right-2 rotate-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-2 py-0.5 ink-border-sm shadow-hard-black-xs">
+                {t.badge}
+              </span>
+            )}
             {t.icon}
             <div className="heading-font text-xl mt-3">{t.label}</div>
             <div className="text-[11px] font-bold opacity-80 mt-1">{t.desc}</div>

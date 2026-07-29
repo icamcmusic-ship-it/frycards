@@ -93,8 +93,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setNotice(`"${a.name}" reward claimed!`);
-      refreshProfile();
-      if (a.reward_pack_id) refreshInventory();
+      // Awaited inside the try — a bare call here could escape as an
+      // unhandled rejection instead of landing in the catch below.
+      await refreshProfile();
+      if (a.reward_pack_id) await refreshInventory();
       // Awaited — otherwise busyId clears (re-enabling this CLAIM button)
       // before `mine` reflects the claim, opening a window for a double
       // claim attempt on the same achievement.
@@ -118,7 +120,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setNotice(`"${m.name}" complete — rewards collected!`);
-      refreshProfile();
+      await refreshProfile();
       // Awaited — same double-claim race as handleClaimAchievement above.
       await reload();
     } catch {

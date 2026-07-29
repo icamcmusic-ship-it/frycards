@@ -124,7 +124,7 @@ export function ProfileScreen({
       <MetaHeader title="OPERATIVE PROFILE" onBack={onBack} />
 
       {/* Identity card */}
-      <div className="max-w-4xl mx-auto p-5">
+      <div className="max-w-4xl mx-auto p-3 sm:p-5">
         <div className="ink-border-md shadow-hard-black overflow-hidden bg-[var(--c-steel)] relative">
           <div className="h-40 relative">
             <SafeImage
@@ -134,8 +134,8 @@ export function ProfileScreen({
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[var(--c-ink)]/80 to-transparent" />
           </div>
-          <div className="absolute bottom-3 left-4 flex items-end gap-3">
-            <div className="w-20 h-20 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
+          <div className="absolute bottom-3 left-4 right-3 flex items-end gap-3">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
               {avatar?.image_url ? (
                 <SafeImage
                   src={avatar.image_url}
@@ -149,9 +149,9 @@ export function ProfileScreen({
                 </div>
               )}
             </div>
-            <div className="pb-1">
+            <div className="pb-1 min-w-0">
               {editingName ? (
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                   <input
                     value={nameDraft}
                     onChange={(e) => setNameDraft(e.target.value)}
@@ -164,14 +164,16 @@ export function ProfileScreen({
                     }}
                     maxLength={24}
                     disabled={renaming}
-                    className="px-2 py-1 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm disabled:opacity-60"
+                    className="px-2 py-1 w-36 sm:w-auto min-w-0 bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm disabled:opacity-60"
                     autoFocus
+                    aria-label="New username"
                   />
                   <PopButton
                     color="red"
                     onClick={handleRename}
                     disabled={renaming}
                     title="Save name"
+                    ariaLabel="Save name"
                   >
                     <Check className="w-4 h-4" />
                   </PopButton>
@@ -182,6 +184,7 @@ export function ProfileScreen({
                       setError('');
                     }}
                     title="Cancel"
+                    ariaLabel="Cancel rename"
                   >
                     ✕
                   </PopButton>
@@ -192,11 +195,12 @@ export function ProfileScreen({
                     setNameDraft(profile.username || '');
                     setEditingName(true);
                   }}
-                  className="heading-font text-2xl text-[var(--c-paper)] flex items-center gap-2 hover:text-[var(--c-yellow)]"
+                  className="heading-font text-xl sm:text-2xl text-[var(--c-paper)] flex items-center gap-2 max-w-full hover:text-[var(--c-yellow)]"
+                  title="Edit username"
                 >
-                  {profile.username || 'Unnamed operative'}
+                  <span className="truncate">{profile.username || 'Unnamed operative'}</span>
                   <RoleBadge role={profile.role} size="md" />
-                  <Pencil className="w-4 h-4" />
+                  <Pencil className="w-4 h-4 shrink-0" aria-hidden />
                 </button>
               )}
               <div className="text-[11px] font-bold text-[var(--c-yellow)]">

@@ -1569,8 +1569,13 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // recursion loop that can return the Event itself is a different card
       // and a much harder one to price.
       if (hasKw(def, 'Exhume')) {
-        const i = p.ashPile.findIndex((c) => c.def.type === 'Unit');
-        if (i >= 0) {
+        // Keyword text says a RANDOM Unit — seeded rng, so replays stay
+        // deterministic. findIndex silently returned the oldest one instead.
+        const unitIdxs = p.ashPile
+          .map((c, idx) => (c.def.type === 'Unit' ? idx : -1))
+          .filter((idx) => idx >= 0);
+        if (unitIdxs.length > 0) {
+          const i = unitIdxs[Math.floor(state.rng() * unitIdxs.length)];
           const [unit] = p.ashPile.splice(i, 1);
           p.hand.push(unit);
           telemetry.onKeywordProc?.('Exhume', 1);

@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Balance Update (v7.7)',
+    date: 'July 2026',
+    items: [
+      'The balance testing behind these patches now runs FOUR full deck cohorts instead of two. Two cohorts turned out to be far too few to read a keyword that only appears on a handful of cards — several "confirmed" v7.6 problem cards turned out to be coin-flip noise, and both Glaciate and Scorched-Earth read as perfectly fine on the wider data. Neither changes.',
+      'KURO, THE UNSEEN now costs 4 instead of 5. Kuro was the joint most expensive Leader in the game with the lowest Resolve and the smallest ability budget, arriving around turn 8; no balance lever could change what a Leader costs until this patch added one. Kuro now lands about two turns earlier and is up in every test cohort, and the gap between the best and worst Leader narrows again.',
+      'FATE is now free: the keyword was quietly charging a full essence point for "banish the top card of the opponent’s deck", which almost never decides a game. The effect is untouched — this is a pure price cut, and every Fate card wins at least as much as before.',
+      'Fixed: the instrument used to measure Leaders on FIXED decks had been seeding those decks from the test cohort itself since v6.2 — the one measurement that was supposed to be immune to deck luck was not. With the fix in, Sentinel of the Nether Pit re-reads as the strongest Leader kit in the game (first in all four cohorts) after three patches of being carried as an underperformer. It takes no buff.',
+      'The long-standing "are cheap Sanctums too good?" question is closed: it does not reproduce on four cohorts, and the measurement it came from was reading "long grindy game" as "winning". No card changes.',
+    ],
+  },
+  {
     version: 'Balance Update (v7.6)',
     date: 'July 2026',
     items: [

@@ -816,6 +816,14 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
       passPriority(state, pid);
       continue;
     }
+    // This response window is what the reserved locations were saved for —
+    // pickInstantAnswer budgets against ALL untapped locations (reserved
+    // included), so leaving the hold in place made tapAllLocations skip them
+    // and the answer whiff. Same release rule as reactionPlays: only the
+    // non-active player's hold ends here.
+    if (state.active !== pid) {
+      for (const l of state.players[pid].locations) reservedLocations.delete(l.iid);
+    }
     tapAllLocations(state, pid);
     const targetIid = answer.def.onInvoke ? autoTarget(state, pid, answer.def.onInvoke) : undefined;
     if (!invokeCard(state, pid, answer.iid, { targetIid })) {

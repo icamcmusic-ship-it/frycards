@@ -2621,7 +2621,16 @@ const report = {
   ),
   lapses,
   invariantViolations: invariants.slice(0, 50),
-  leaders: Object.fromEntries(
+  /**
+   * v7.8: DEMOTED from "leaders". This is the random-cohort per-Leader win
+   * table, and per the v7.7 findings (§2) it is NOT the number Leader balance
+   * is judged on: it moves with cohort/deck composition (the pinned suite it
+   * was checked against had itself been seeded with the cohort seed since
+   * v6.2, hiding that). The pinned `leaderPairSuiteSummary` is the primary
+   * Leader instrument; this table remains as a deck-composition diagnostic —
+   * how a Leader fares given the decks THIS cohort happened to roll.
+   */
+  randomDeckLeaderDiagnostic: Object.fromEntries(
     Object.entries(leaderStats).map(([id, s]) => [
       id,
       {
@@ -3093,7 +3102,19 @@ console.log(
     2,
   ),
 );
-console.log('\nLeaders:', JSON.stringify(report.leaders, null, 2));
+// v7.8: the pinned suite is the PRIMARY Leader section (v7.7 §2 — the random
+// table moves with cohort deck composition, and the pinned decks had been
+// seeded with the cohort seed since v6.2), so it prints first, here.
+console.log('\nLeaders — PRIMARY (pinned-deck suite, one row per Leader; v7.7):');
+for (const l of report.leaderPairSuiteSummary)
+  console.log(
+    `  ${String(l.name).padEnd(28)} ${String(l.winPct).padStart(5)}%  n=${l.games}   ` +
+      `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}`,
+  );
+console.log(
+  '\nRandom-deck Leader table — deck-composition DIAGNOSTIC, not a balance read (v7.8):',
+  JSON.stringify(report.randomDeckLeaderDiagnostic, null, 2),
+);
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
 console.log('\nCost bands:', JSON.stringify(report.costBands, null, 2));
@@ -3118,16 +3139,12 @@ for (const c of report.costAbilityOutliers)
   console.log(
     `  ${c.name} (${c.type}, cost ${c.cost}) residual ${c.residual} z=${c.zScore} n=${c.playedGames}`,
   );
+// v7.8: the one-row-per-Leader summary of this suite now prints as the
+// primary Leaders section above; only the raw matrix is kept here.
 console.log(
-  '\nLeader-pair pinned suite (v6.2), one row per Leader on FIXED decks (v7.7 — decks no',
+  '\nLeader-pair pinned suite raw matrix (v6.2):',
+  JSON.stringify(report.leaderPairSuite, null, 2),
 );
-console.log('longer re-roll with the cohort seed, so this is comparable across cohorts):');
-for (const l of report.leaderPairSuiteSummary)
-  console.log(
-    `  ${String(l.name).padEnd(28)} ${String(l.winPct).padStart(5)}%  n=${l.games}   ` +
-      `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}`,
-  );
-console.log('\nLeader-pair pinned suite (v6.2):', JSON.stringify(report.leaderPairSuite, null, 2));
 console.log('\nKeyword dead-weight (v6.3):', JSON.stringify(report.keywordDeadWeight, null, 2));
 console.log(
   '\nEssence float by game stage (v6.3):',

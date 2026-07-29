@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CardDef } from '../game/v3/cards';
 import { CardFace, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
+import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
 
 const MAX_TILT_DEG = 14;
@@ -106,10 +107,16 @@ export function Card3DInspector({
       window.removeEventListener('orientationchange', onResize);
     };
   }, []);
+  // On a phone the meta/actions column stacks BELOW the card (flex-col), so
+  // the card gets a smaller share of the viewport height — otherwise the
+  // card alone fills the screen and the quicksell/metadata panels are only
+  // reachable by scrolling past a card that overflows the fold.
+  const narrow = useIsNarrow();
   const scale = useMemo(() => {
     const { w, h } = CARD_SIZES.full;
-    return Math.max(1, Math.min(INSPECT_SCALE, (viewport.h * 0.72) / h, (viewport.w * 0.92) / w));
-  }, [viewport]);
+    const heightBudget = viewport.h * (narrow ? 0.6 : 0.72);
+    return Math.max(1, Math.min(INSPECT_SCALE, heightBudget / h, (viewport.w * 0.92) / w));
+  }, [viewport, narrow]);
   const { w, h } = CARD_SIZES.full;
 
   const handleMove = (clientX: number, clientY: number) => {
@@ -287,8 +294,9 @@ export function Card3DInspector({
                 </div>
               </div>
 
-              {/* Back face */}
+              {/* Back face (purely decorative card-back art) */}
               <div
+                aria-hidden
                 className="absolute inset-0"
                 style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
               >
@@ -315,7 +323,7 @@ export function Card3DInspector({
             {!reducedMotion && (
               <button
                 onClick={() => setFlipped((f) => !f)}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-paper)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-paper)] text-[var(--c-ink)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
               >
                 {flipped ? '↺ SHOW FRONT' : '↻ SHOW BACK'}
               </button>
@@ -323,14 +331,14 @@ export function Card3DInspector({
             {canToggleFoil && !serial && (
               <button
                 onClick={() => setShowFoil((f) => !f)}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
               >
                 {showFoil ? 'VIEW NORMAL' : '✦ VIEW FOIL'}
               </button>
             )}
             <button
               onClick={onClose}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
             >
               CLOSE (ESC)
             </button>
@@ -338,9 +346,9 @@ export function Card3DInspector({
         </div>
 
         {/* Metadata + actions column */}
-        <div className="flex flex-col gap-3 shrink-0">
+        <div className="flex flex-col gap-3 shrink-0 max-w-full pb-4 md:pb-0">
           {meta && meta.length > 0 && (
-            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px]">
+            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] max-w-full">
               <div className="heading-font text-xs mb-2">
                 {(def.name || def.id || 'CARD').toUpperCase()}
               </div>

@@ -11,6 +11,10 @@
 //   /meta-preview.html?screen=collection
 //   /meta-preview.html?screen=decks
 //   /meta-preview.html?screen=pack
+//   /meta-preview.html?screen=profile
+//   /meta-preview.html?screen=inspect
+//   /meta-preview.html?screen=social   (network calls fail offline — renders
+//                                       the layout with its error/empty states)
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -18,6 +22,9 @@ import { MetaContext, MetaState } from './meta/MetaContext';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { PackOpening } from './meta/PackOpening';
+import { ProfileScreen } from './meta/ProfileScreen';
+import { SocialScreen } from './meta/SocialScreen';
+import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
 import type { PackPull, Profile } from './lib/supabase';
 
@@ -107,10 +114,28 @@ const meta: MetaState = {
 
 const screen = new URLSearchParams(window.location.search).get('screen') ?? 'collection';
 
+// A non-Leader card with some metadata rows, for the 3D inspector preview.
+const inspectDef = POOL_V4.find((c) => c.type !== 'Leader')!;
+
 createRoot(document.getElementById('root')!).render(
   <MetaContext.Provider value={meta}>
     {screen === 'decks' ? (
       <DeckBuilderScreen onBack={() => undefined} />
+    ) : screen === 'profile' ? (
+      <ProfileScreen onBack={() => undefined} />
+    ) : screen === 'social' ? (
+      <SocialScreen onBack={() => undefined} />
+    ) : screen === 'inspect' ? (
+      <Card3DInspector
+        def={inspectDef}
+        foil
+        canToggleFoil
+        meta={[
+          { label: 'Rarity', value: inspectDef.rarity ?? 'Common' },
+          { label: 'Owned', value: '2 (+1 foil)' },
+        ]}
+        onClose={() => undefined}
+      />
     ) : screen === 'pack' ? (
       <PackOpening
         packName="Preview Pack"

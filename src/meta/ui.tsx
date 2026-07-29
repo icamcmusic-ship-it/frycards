@@ -14,6 +14,7 @@ export function PopButton({
   className,
   title,
   ariaLabel,
+  ariaPressed,
 }: {
   key?: React.Key;
   children: React.ReactNode;
@@ -26,6 +27,9 @@ export function PopButton({
    * (e.g. the Deck Builder delete button) — without it screen readers
    * announce a bare "button". */
   ariaLabel?: string;
+  /** For PopButtons acting as on/off toggles (OWNED ONLY, HIDDEN/VISIBLE) —
+   * conveys the pressed state to screen readers. */
+  ariaPressed?: boolean;
 }) {
   const palette = {
     yellow: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
@@ -44,6 +48,7 @@ export function PopButton({
       disabled={disabled}
       title={title}
       aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
       className={cn(
         'btn-pop heading-font text-xs px-4 py-2 ink-border-sm shadow-hard-black-xs transition-colors',
         palette,
@@ -61,7 +66,8 @@ export function PopButton({
 export function CreditChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm heading-font text-xs">
-      <Coins className="w-3.5 h-3.5" /> {fmtCredits(amount)}
+      <Coins className="w-3.5 h-3.5" aria-hidden /> {fmtCredits(amount)}
+      <span className="sr-only">credits</span>
     </span>
   );
 }
@@ -77,7 +83,8 @@ export function Credits({
 }) {
   return (
     <span className={cn('inline-flex items-center gap-0.5', className)}>
-      <Coins className="w-3 h-3 shrink-0" /> {fmtCredits(amount)}
+      <Coins className="w-3 h-3 shrink-0" aria-hidden /> {fmtCredits(amount)}
+      <span className="sr-only">credits</span>
     </span>
   );
 }
@@ -86,7 +93,8 @@ export function Credits({
 export function VoucherChip({ amount }: { amount: number }) {
   return (
     <span className="flex items-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm heading-font text-xs">
-      <Ticket className="w-3.5 h-3.5" /> {fmtVouchers(amount)}
+      <Ticket className="w-3.5 h-3.5" aria-hidden /> {fmtVouchers(amount)}
+      <span className="sr-only">vouchers</span>
     </span>
   );
 }
@@ -163,15 +171,25 @@ export function ProgressBar({
   max,
   className,
   barClassName,
+  ariaLabel,
 }: {
   value: number;
   max: number;
   className?: string;
   barClassName?: string;
+  /** Accessible name for the bar (e.g. "Battle pass progress"). */
+  ariaLabel?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className={cn('h-2.5 ink-border-sm bg-[var(--c-ink)]/10 overflow-hidden', className)}>
+    <div
+      className={cn('h-2.5 ink-border-sm bg-[var(--c-ink)]/10 overflow-hidden', className)}
+      role="progressbar"
+      aria-label={ariaLabel}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={Math.min(value, max)}
+    >
       <div
         className={cn('h-full bg-[var(--c-yellow)] transition-all', barClassName)}
         style={{ width: `${pct}%` }}
@@ -204,7 +222,12 @@ export function LevelBadge({
       </span>
       {!compact && (
         <div className="flex flex-col gap-0.5 w-28">
-          <ProgressBar value={xp - cur} max={next - cur} className="h-1.5" />
+          <ProgressBar
+            value={xp - cur}
+            max={next - cur}
+            className="h-1.5"
+            ariaLabel={`XP toward level ${level + 1}`}
+          />
           <span className="text-[8px] font-bold text-[var(--c-steel)] leading-none">
             {xp - cur}/{next - cur} XP TO LV {level + 1}
           </span>
@@ -219,6 +242,8 @@ export function Notice({ text, kind = 'error' }: { text: string; kind?: 'error' 
   if (!text) return null;
   return (
     <div
+      // Errors interrupt (assertive); success confirmations wait their turn.
+      role={kind === 'error' ? 'alert' : 'status'}
       className={cn(
         'text-xs font-bold px-3 py-1.5 ink-border-sm inline-block',
         kind === 'error'
