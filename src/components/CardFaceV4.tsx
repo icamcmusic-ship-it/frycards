@@ -566,6 +566,26 @@ export function describeEffect(eff: Effect): string {
       return `Erode ${vOr1} (mill the enemy deck)`;
     case 'recover':
       return `Recover ${targetPhrase(eff.target) || 'a friendly permanent'}`;
+    // v7.5: `exhaust` and `weaken` shipped with the v6.9 keyword generation
+    // and were never added here. The switch has no default and this function
+    // is typed to return a string, so every card printing one of them fell
+    // off the end and rendered the literal text "Undefined." in its rules box
+    // — including Full-Art pulls, and every Leader kit that reads its text
+    // through this path.
+    case 'exhaust':
+      return eff.target === 'allEnemyUnits'
+        ? 'Exhaust each enemy unit'
+        : `Exhaust ${targetPhrase(eff.target)}`;
+    case 'weaken':
+      return eff.target === 'allEnemyUnits'
+        ? `ALL enemy units get -${v}/-${v}`
+        : `${cap1(targetPhrase(eff.target))} gets -${v}/-${v}`;
+    default: {
+      // Exhaustiveness guard: a new EffectAction now fails the build here
+      // rather than printing "Undefined." on a card.
+      const never: never = eff.action;
+      return never;
+    }
   }
 }
 
@@ -1412,13 +1432,34 @@ const TIER: Record<
  * badge column has to clear. */
 const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard: 21, full: 26 };
 
-/** Bottom padding the text box reserves for the corner stat plate — sized to
- * that tier's StatChip height (see the `textClass`/`iconClass` picks in
- * StatChip) so flavor text can never render underneath it. Cards with no
- * stat plate (Locations, Charms, Events) don't need the clearance, but
- * reserving it unconditionally keeps every card's text box the same height
- * within a tier. */
-const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 8, compact: 11, standard: 14, full: 18 };
+/**
+ * Bottom padding the text box reserves for the corner stat plate, so flavor
+ * text can never render underneath it. Cards with no stat plate (Locations,
+ * Charms, Events) don't need the clearance, but reserving it unconditionally
+ * keeps every card's text box the same height within a tier.
+ *
+ * v7.5: these were 8/11/14/18, hand-estimated from StatChip's `textClass` /
+ * `iconClass` picks, and they were all too small — flavor text rendered UNDER
+ * the Might/Grit (or Resolve) plate on 35 of the 131 card renders that have
+ * both, worst on the two full-bleed templates where it overlapped by a full
+ * 8px and the plate sits directly on the art. Measured in a real browser
+ * instead (the geometry is: plate height + its `bottom-1` offset, minus the
+ * text box's own distance from the card's bottom edge):
+ *
+ *   tier      plate H   plate bottom   box bottom   needed
+ *   full         26          8            8-9         25-26
+ *   standard     23          7            ~8          22
+ *   compact      16          6            ~7          15
+ *
+ * Set with ~2px of slack over the worst case of the two templates. `micro`
+ * renders through MicroCard, which has its own layout and no flavor block, so
+ * its value is unused by this path and left alone.
+ *
+ * Guarded by `npm run audit:cardface`, which measures the two boxes in a real
+ * browser at every rarity and size and fails on any intersection. Re-run it
+ * after touching StatChip's type scale or either template's bottom padding.
+ */
+const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 8, compact: 17, standard: 24, full: 28 };
 
 const RIBBON: Record<CardSize, { top: number; left: number; font: number; padX: number }> = {
   micro: { top: 4, left: -16, font: 5, padX: 16 },
@@ -1646,6 +1687,9 @@ function FittedFlavor({
   return (
     <div
       ref={ref}
+      // Layout-audit hook (scripts/audit-cardface.ts) — the flavor block and
+      // the stat plate are the two boxes that must never intersect.
+      data-fc="flavor"
       className={cn(
         // Pinned to the bottom of the text box under a dashed rule, per the
         // template's flavor divider.
@@ -1747,6 +1791,7 @@ function MicroCard({
   return (
     <div
       role="button"
+      data-card-id={def.id}
       tabIndex={onClick ? 0 : -1}
       aria-disabled={!onClick}
       aria-label={label}
@@ -2241,6 +2286,7 @@ export function CardFace({
    * in both templates, on an ink plate the design carries at every rarity. */
   const statPlate = statChips && (
     <div
+      data-fc="stats"
       className={cn(
         'absolute z-30 flex items-center gap-0.5 rounded-[2px] px-0.5 py-[1px] bg-[var(--c-ink)]',
         'bottom-1 right-1',
@@ -2314,6 +2360,7 @@ export function CardFace({
     // invalid HTML / break screen-reader and keyboard navigation.
     <div
       role="button"
+      data-card-id={def.id}
       tabIndex={onClick ? 0 : -1}
       aria-disabled={!onClick}
       aria-label={label}

@@ -18,7 +18,8 @@
     "db:backfill": "tsx scripts/backfill-cards-db.ts",
     "db:sync": "tsx scripts/sync-cards-db.ts",
     "audit:blank": "tsx scripts/audit-blank.ts",
-    "sim:v4": "tsx scripts/simulate-v5.ts"
+    "sim:v4": "tsx scripts/simulate-v5.ts",
+    "audit:cardface": "tsx scripts/audit-cardface.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

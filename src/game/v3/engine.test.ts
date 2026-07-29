@@ -471,7 +471,11 @@ describe('clash', () => {
     expect(findUnit(s, a.iid)?.damage).toBe(4); // both guards hit back
   });
 
-  test('Unbreakable survives lethal damage (damage stays marked) and cannot be shattered', () => {
+  // v7.5: Unbreakable is once per turn. It still walks away from the first
+  // lethal thing that happens to it — and the damage is PREVENTED rather than
+  // left marked, or the state-based check would re-fire on it a tick later —
+  // but the save is spent, so the second one in the same turn kills it.
+  test('Unbreakable absorbs the first lethal hit of a turn, and the save is spent', () => {
     const s = clashSetup();
     const a = summonUnit(s, 'P1', U('smasher', 9, 9));
     const g = summonUnit(s, 'P2', U('unb', 2, 3, ['Unbreakable']));
@@ -479,9 +483,21 @@ describe('clash', () => {
     declareGuards(s, { [a.iid]: [g.iid] });
     resolveClash(s);
     expect(findUnit(s, g.iid)).toBeDefined();
-    expect(findUnit(s, g.iid)!.damage).toBeGreaterThanOrEqual(3);
+    expect(findUnit(s, g.iid)!.damage).toBe(0); // prevented, not marked
+    expect(findUnit(s, g.iid)!.unbreakableSpent).toBe(true);
+    // Second removal the same turn gets through.
     applyEffect(s, 'P1', { action: 'shatter', target: 'enemyUnit' }, g.iid);
-    expect(findUnit(s, g.iid)).toBeDefined(); // shatter-proof too
+    expect(findUnit(s, g.iid)).toBeUndefined();
+  });
+
+  test('Unbreakable stops the first shatter of a turn but not the second', () => {
+    const s = clashSetup();
+    const g = summonUnit(s, 'P2', U('unb', 2, 3, ['Unbreakable']));
+    applyEffect(s, 'P1', { action: 'shatter', target: 'enemyUnit' }, g.iid);
+    expect(findUnit(s, g.iid)).toBeDefined();
+    expect(findUnit(s, g.iid)!.unbreakableSpent).toBe(true);
+    applyEffect(s, 'P1', { action: 'shatter', target: 'enemyUnit' }, g.iid);
+    expect(findUnit(s, g.iid)).toBeUndefined();
   });
 });
 

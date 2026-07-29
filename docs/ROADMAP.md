@@ -4,50 +4,43 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Near term
 
-- **Mobile/responsive polish, second pass** — v7.4 made the match board
-  playable on a phone (see `CHANGELOG.md`). Still open: the card *views*
-  outside the board (collection, deck editor, pack opening) have not been
-  measured at all, and the hand fan at seven-plus cards is tight enough on a
-  375px screen that names are hard to read even though every card is tappable.
-  A per-card horizontal scroll strip may beat the fan below the `sm`
-  breakpoint.
+- **Mobile/responsive polish, third pass** — v7.4 made the match board
+  playable on a phone and v7.5 did the card views outside it (collection, deck
+  editor, pack opening, mulligan) plus the hand scroll strip; see
+  `CHANGELOG.md`. Not yet measured on a phone: the store, marketplace, player
+  shops, social and profile screens, and the 3D card inspector. `npm run dev`
+  plus `meta-preview.html` / `board-preview.html` is the harness — extend the
+  former as screens are covered.
 - **Accessibility pass** — keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme (partially underway — see
   the "Bug hunt / accessibility" entries in `CHANGELOG.md`).
 
 ## Medium term
 
-- **The rest of the Location residual gap** — v7.4 added the ramp-matched
-  baseline the v7.2 pass asked for (`topOverperformersRampMatched`), and it
-  moves individual cards by up to 8 points, but it removes only 6-18% of the
-  aggregate Location/non-Location gap and both cohorts still show ~+1.7 left.
-  Either Locations really are that much stronger or there is a second confound
-  length-matching cannot see. Price off the ramp-matched list meanwhile, and
-  lift the old blanket block card by card. See the v7.4 addendum in
-  `docs/BALANCE_SIM_FINDINGS_v7.2.md`.
-- **Unbreakable's residual** — v7.4 printed the keyword for the first time and
-  trimmed all three carriers' stat budgets on arrival. Post-trim the cohorts
-  disagree: +4.5 (n=183) on seed 1337, +10.6 (n=139) on seed 24601. At that
-  sample size that is the cohort artifact the `KEYWORD_COST` Doublestrike note
-  warns against chasing, so it needs a proper pass rather than another
-  stacked point. Note all three sit at the cost cap, so `COST_ADJUST` is a
-  no-op and `STAT_ADJUST` is the only live lever. See `CHANGELOG.md` v7.4.
-- **Two Leaders at the extremes** — the colour-aware minus rule landed in v7.4
-  and Mer-King, the last inert kit, is fixed (see `CHANGELOG.md`). What is left
-  is per-Leader pricing, which that rule cannot reach, and both cases are the
-  same well-documented shape: a full Resolve tank buying unconditional removal
-  more than once.
-  - **Void Mother 71.7% / 72.0%**, first in both cohorts by ~12 points. Resolve
-    **6** with a `-2: Banish` — three unconditional removals per tank. The
-    `LEADER_MINUS_ABILITY_OVERRIDE` header already names this exact shape as
-    "the strongest kit shape in the game" and repriced Ruin-Walker's identical
-    Void Banish from -2 to -3 for it; Void Mother kept the -2 AND has double
-    the Resolve. Lever: price the minus, or drop the Resolve.
-  - **Kuro, the Unseen 32.4% / 34.0%**, last in both. Resolve **3** against a
-    `-2` minus, so a full tank buys one use and strands a point. Its v7.2
-    override shipped at -2 after a -1 version overshot to 61.6%; at Resolve 3
-    that reprice appears to have overcorrected. Lever: Resolve, or the minus
-    price — not the effect, which two trials already bracketed.
+- **Sacred / `stone_bubbles`** — the last balance item with a clean diagnosis
+  and no lever pulled. Four cost trials across three passes, under both the
+  flat and the ramp-matched metric, and the number has never once moved down in
+  both cohorts; v7.5 §1 removed the last reason to blame the measurement. The
+  next lever is the Sacred **effect**, not its price. See
+  `docs/BALANCE_SIM_FINDINGS_v7.5.md`.
+- **The two Unbreakable 7-drops** — `the_wolf_of_wall_street` (+8.2 / +10.6)
+  and `the_pier_side_menace` (+9.1 / +9.7). v7.5 moved both for the first time
+  with the new `UNIT_EFFECT_ADJUST` lever after cost, stats and the keyword's
+  own text all measured inert on them; both are still out of band. The residue
+  is a body that cannot be answered on the turn it lands, so re-check after one
+  pass with Unbreakable bounded to once per turn.
+- **Kuro, the Unseen 37.4 / 38.6** — bottom in both cohorts with one lever
+  pulled (its minus repriced -2 -> -1). The Resolve lever is measured at
+  +2.3 / +3.6 and unspent; the "one lever per Leader per pass" rule holds it
+  for the next pass.
+- **`Scorched-Earth` and `Glaciate`** — both came in over on their first
+  measured run and both resisted the price lever the way every other Location
+  has this pass (see `docs/BALANCE_SIM_FINDINGS_v7.5.md` §5). The effect side
+  is untouched: gate the sweep on Sanctum count, or move either to every other
+  Dusk.
+- **`Blessed` has one carrier and `Exhume` two** — neither is measurable at
+  that width. Widen their roll bands before reading anything into their
+  deltas.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the
@@ -61,8 +54,8 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 - **Multiplayer (PvP)** — requires a server-authoritative engine; see
   `docs/PVP_DESIGN.md` for the design spike.
-- **Unprinted keywords** (Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate,
-  Exhume) — implement when cards using them are printed. (v6.9 printed a
-  different new generation instead: one keyword per Essence Type — Wildfire,
-  Tidecaller, Thriving, Nimble, Radiant, Withering, Entropic — plus the
-  `exhaust` and `weaken` effect actions. See `docs/RULEBOOK.md`.)
+- **Leader keywords** — Leaders have three (Commander, Resolute, Warlord) where
+  every other type now has six or seven, and v7.5 skipped them on purpose: the
+  Leader keyword roll (`roll(seed, 'ldr-kw6', 6)`) has no free band, so any
+  addition re-rolls all nine existing Leaders. Needs the roll restructured
+  first, and a balance pass to follow it.

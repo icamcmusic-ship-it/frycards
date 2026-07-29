@@ -60,6 +60,12 @@ export interface UnitInst {
   charms: CharmInst[];
   /** Hit by Venomous damage this clash — lethal unless Unbreakable. */
   venomed?: boolean;
+  /**
+   * v7.5: Unbreakable is once per turn, and this is the turn's charge being
+   * spent. Cleared for BOTH players at every Dawn, so a unit gets one save
+   * per turn of the game rather than one per turn cycle.
+   */
+  unbreakableSpent?: boolean;
 }
 
 /** A Location on the field: a basic Wellspring (no def) or an invoked Sanctum. */
@@ -717,12 +723,14 @@ export function canTarget(state: GameState, pid: PlayerId, eff: Effect, iid: str
 export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string | undefined {
   const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
-  // Shatter can't affect Unbreakable units (engine no-ops it) — exclude them
-  // from consideration for that action so a shatter effect never gets pointed
-  // at a target it will just whiff on while a killable target sits legal.
+  // Shatter whiffs on an Unbreakable unit that still holds this turn's save
+  // (v7.5 — it is once per turn now, so one that has already spent it is a
+  // legal, killable target). Exclude only the ones the effect would no-op on,
+  // so a shatter is never pointed at a whiff while a killable target sits
+  // legal, and IS pointed at a wall whose shield is already down.
   const excludeUnbreakable = eff.action === 'shatter';
   const biggestEnemy = [...opp.field]
-    .filter((u) => !unitHasKw(u, 'Warded') && !(excludeUnbreakable && unitHasKw(u, 'Unbreakable')))
+    .filter((u) => !unitHasKw(u, 'Warded') && !(excludeUnbreakable && unbreakableUp(u)))
     .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
   switch (eff.target) {
     case 'enemyUnit': {
@@ -1005,9 +1013,23 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   runTriggers(state, u.owner, 'dies', u);
 }
 
-/** Shatter a unit (Unbreakable prevents it). Returns true if it was shattered. */
+/**
+ * v7.5: is this unit's Unbreakable save actually up right now? Unbreakable is
+ * once per turn, so "has the keyword" and "cannot be killed this instant" are
+ * different questions, and every caller that used to ask the first one wants
+ * this one.
+ */
+export function unbreakableUp(u: UnitInst): boolean {
+  return unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent;
+}
+
+/**
+ * Shatter a unit. Unbreakable prevents it, but only once per turn (v7.5 — see
+ * `unbreakableSpent`). Returns true if it was shattered.
+ */
 export function shatterUnit(state: GameState, u: UnitInst): boolean {
-  if (unitHasKw(u, 'Unbreakable')) {
+  if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
+    u.unbreakableSpent = true;
     telemetry.onKeywordProc?.('Unbreakable', 1);
     return false;
   }
@@ -1023,8 +1045,14 @@ export function stateBasedChecks(state: GameState): void {
     for (const u of [...p.field]) {
       const lethal = u.damage >= effGrit(state, u) || u.venomed;
       if (!lethal) continue;
-      if (unitHasKw(u, 'Unbreakable')) {
-        u.venomed = false; // survives; damage stays marked
+      if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
+        // v7.5: the save is spent for the turn, and the damage it absorbed is
+        // prevented rather than left marked — otherwise the state-based check
+        // would re-fire on the same marked damage a tick later and kill the
+        // unit through a shield it had just paid for.
+        u.unbreakableSpent = true;
+        u.damage = 0;
+        u.venomed = false;
         // Every other keyword reports its procs, so the balance harness can
         // price it. This one never did — it read as 0 activations however many
         // lethal hits it walked away from, which is exactly the signal that
@@ -1057,6 +1085,11 @@ export function stateBasedChecks(state: GameState): void {
 function runDawn(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dawn';
+  // v7.5: Unbreakable's once-per-turn save recharges at every Dawn, for both
+  // players — a unit gets one save per TURN OF THE GAME, not one per turn
+  // cycle, so a defender is not immune for a whole round on its own turn.
+  for (const pid of ['P1', 'P2'] as PlayerId[])
+    for (const u of state.players[pid].field) u.unbreakableSpent = false;
   for (const u of p.field) {
     u.exhausted = false;
     u.enteredThisTurn = false;
@@ -1107,6 +1140,14 @@ function runDawn(state: GameState): void {
       dealCards(state, state.active, archivists);
     }
   }
+  // v7.5 Glaciate: repeating tempo denial on a Sanctum — one enemy unit
+  // frozen per Glaciate every Dawn. `exhaust` picks its own target through
+  // autoTarget, the same as every other untargeted keyword effect.
+  const glaciate = p.locations.filter((l) => l.def && hasKw(l.def, 'Glaciate')).length;
+  for (let i = 0; i < glaciate; i++) {
+    telemetry.onKeywordProc?.('Glaciate', 1);
+    applyEffect(state, state.active, { action: 'exhaust', target: 'enemyUnit' });
+  }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
   const L = p.leader;
   if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
@@ -1136,6 +1177,17 @@ function runDusk(state: GameState): void {
   if (blighted > 0) {
     telemetry.onKeywordProc?.('Blighted', blighted);
     applyEffect(state, state.active, { action: 'erode', value: blighted, target: 'enemyPlayer' });
+  }
+  // v7.5 Scorched-Earth: Ember's Location text — a recurring board sweep,
+  // which is why it is the most expensive entry in KEYWORD_COST for the type.
+  const scorched = p.locations.filter((l) => l.def && hasKw(l.def, 'Scorched-Earth')).length;
+  if (scorched > 0) {
+    telemetry.onKeywordProc?.('Scorched-Earth', scorched);
+    applyEffect(state, state.active, {
+      action: 'damage',
+      value: scorched,
+      target: 'allEnemyUnits',
+    });
   }
   // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
   // the player reorder/pre-shed before ending Main II).
@@ -1437,6 +1489,31 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         telemetry.onKeywordProc?.('Echoing', 1);
         dealCards(state, pid, 1);
       }
+      // v7.5 Fate: Void's denial half. Erode puts a card in the ash-pile,
+      // where Exhume and the rest of Shadow can still reach it; Fate puts it
+      // in The Void, where nothing can. Same size, strictly harder to answer,
+      // which is the difference the two colours are supposed to have.
+      if (hasKw(def, 'Fate')) {
+        const top = state.players[opponentOf(pid)].deck.pop();
+        if (top) {
+          state.players[opponentOf(pid)].voidPile.push(top);
+          telemetry.onKeywordProc?.('Fate', 1);
+          state.log.push(`${def.name} banishes the top card of ${opponentOf(pid)}'s deck.`);
+        }
+      }
+      // v7.5 Exhume: Shadow's ash-pile recursion, which COLOR_IDENTITY has
+      // promised since v5.0 and no keyword implemented. Units only — a
+      // recursion loop that can return the Event itself is a different card
+      // and a much harder one to price.
+      if (hasKw(def, 'Exhume')) {
+        const i = p.ashPile.findIndex((c) => c.def.type === 'Unit');
+        if (i >= 0) {
+          const [unit] = p.ashPile.splice(i, 1);
+          p.hand.push(unit);
+          telemetry.onKeywordProc?.('Exhume', 1);
+          state.log.push(`${def.name} exhumes ${unit.def.name}.`);
+        }
+      }
       p.ashPile.push(card);
       break;
     }
@@ -1461,6 +1538,18 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       if (hasKw(def, 'Tethered') && bondTarget.exhausted) {
         telemetry.onKeywordProc?.('Tethered', 1);
         bondTarget.exhausted = false;
+      }
+      // v7.5 Freeze-Dry: Tethered's mirror image — the same one-shot tempo
+      // swing, pointed across the table instead of at your own board.
+      if (hasKw(def, 'Freeze-Dry')) {
+        telemetry.onKeywordProc?.('Freeze-Dry', 1);
+        applyEffect(state, pid, { action: 'exhaust', target: 'enemyUnit' });
+      }
+      // v7.5 Blessed: the Light-side one-shot, priced with Runic.
+      if (hasKw(def, 'Blessed') && p.vitality < LEADER_HP) {
+        const gained = Math.min(3, LEADER_HP - p.vitality);
+        p.vitality += gained;
+        telemetry.onKeywordProc?.('Blessed', gained);
       }
       if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);

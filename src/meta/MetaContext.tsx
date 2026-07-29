@@ -82,7 +82,13 @@ export interface MetaState {
   signOut: () => Promise<void>;
 }
 
-const MetaContext = createContext<MetaState | null>(null);
+/**
+ * Exported for the dev-only meta preview harness (`src/meta-preview.tsx`),
+ * which mounts the collection / deck editor / pack opening against a stubbed
+ * MetaState so their layouts can be measured without a Supabase session. App
+ * code should use `useMeta`/`MetaProvider`, never this directly.
+ */
+export const MetaContext = createContext<MetaState | null>(null);
 
 export function useMeta(): MetaState {
   const ctx = useContext(MetaContext);

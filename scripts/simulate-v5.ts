@@ -14,7 +14,7 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    `docs/BALANCE_SIM_FINDINGS_v7.2.md` §3 / carry-forward #1.
+ *    `docs/BALANCE_SIM_FINDINGS_v7.5.md` §3 / carry-forward #1.
  *  - keyword health: carrier win-rate deltas + activation counts
  *    (Overrun spill, Venomous kills, Siphon vitality, Quickstrike pre-kills,
  *    Ambush reaction invokes, Warded target denials, ...)
@@ -2436,13 +2436,39 @@ const report = {
    * v7.4: the direct test of whether the correction worked, and the number a
    * future pass should re-check before trusting either list.
    *
-   * `locationShareOfTop15` is the real one. v7.2's finding was not that the
-   * residual tracks cost — it does not, and `costCorrelation` below is near
-   * zero under BOTH metrics, which is worth recording so nobody re-derives
-   * that wrong mechanism. The finding was that *every* two-cohort gated
-   * overperformer was a Location. Locations are about a sixth of the pool, so
-   * their share of the top of the outlier list is what the confound actually
-   * shows up in, and what a working correction has to move.
+   * v7.5 — READ `residualByType`, NOT `locationResidualGap`. The v7.4 pass
+   * closed with ~+1.7 of Location/non-Location gap left over and asked
+   * whether Locations are genuinely that much stronger or there is a second
+   * confound. Neither: the leftover is an artifact of the CONTRAST, not of
+   * the metric. "non-Location" is a mixture, and about a fifth of it is
+   * Events, which sit far below every other type because a one-shot stops
+   * paying the moment it resolves. Split by type and the correction has in
+   * fact landed — Locations and Units are on top of each other in both
+   * cohorts:
+   *
+   *            cohort A            cohort B
+   *   type     flat   ramp        flat   ramp
+   *   Unit     +3.00  +3.20       +2.89  +3.08
+   *   Location +3.29  +3.28       +3.48  +3.27
+   *   Charm    +2.01  +2.30       +2.43  +2.66
+   *   Event    -0.89  -0.53       -0.53  -0.71
+   *
+   *   Location minus Unit: +0.28 -> +0.07 (A), +0.59 -> +0.20 (B)
+   *
+   * So ramp-matching removes two thirds of the only type gap that was ever a
+   * confound, and lands it inside noise in both cohorts. The permanent-minus-
+   * Event split that remains (+3.57 / +3.75) is a property of the cards, not
+   * of the measurement, and the right response is to read an Event against
+   * the Event row rather than to "correct" it away.
+   *
+   * Consequence for pricing: the v7.2 blanket "no Location takes another cost
+   * point" is LIFTED. Locations are priced off `topOverperformersRampMatched`
+   * like every other permanent.
+   *
+   * `costCorrelation` stays because v7.2's wrong model — "expensive cards
+   * read high" — is worth keeping refuted; it is near zero under both metrics
+   * in both cohorts. `locationShareOfTop15` stays as the cautionary example
+   * of a diagnostic that moves by whole cards and says nothing.
    */
   metricDiagnostics: {
     poolLocationShare: +(
@@ -2455,6 +2481,43 @@ const report = {
      * exactly that (47%->27% on seed 1337, 40%->47% on seed 1337/42). The
      * mean-residual gap uses every scored card instead, so it is not hostage
      * to which handful of cards happen to top a list.
+     */
+    /**
+     * v7.5: the number to read. Per card TYPE, so the Location question is
+     * asked against Units (the other permanent that is actually comparable)
+     * instead of against a mixture that is a fifth Events.
+     */
+    residualByType: Object.fromEntries(
+      ['Unit', 'Location', 'Charm', 'Event'].map((t) => {
+        const all = cardReport.filter((c) => c.type === t);
+        const matched = byRampResidual.filter((c) => c.type === t);
+        return [
+          t,
+          {
+            cards: all.length,
+            flat: +mean(all.map((c) => c.residual)).toFixed(2),
+            rampMatched: +mean(matched.map((c) => c.rampResidual ?? 0)).toFixed(2),
+          },
+        ];
+      }),
+    ),
+    /** Location minus Unit — the type gap the ramp-matched metric had to close. */
+    locationMinusUnit: {
+      flat: +(
+        mean(cardReport.filter((c) => c.type === 'Location').map((c) => c.residual)) -
+        mean(cardReport.filter((c) => c.type === 'Unit').map((c) => c.residual))
+      ).toFixed(2),
+      rampMatched: +(
+        mean(byRampResidual.filter((c) => c.type === 'Location').map((c) => c.rampResidual ?? 0)) -
+        mean(byRampResidual.filter((c) => c.type === 'Unit').map((c) => c.rampResidual ?? 0))
+      ).toFixed(2),
+    },
+    /**
+     * Kept, but it is NOT the number to act on — "non-Location" is a mixture
+     * that is about a fifth Events, and Events sit ~3.6 points below every
+     * other type as a class. This contrast therefore reports that composition
+     * as if it were Location inflation, which is what left v7.4 with an
+     * unexplained ~+1.7. See `residualByType`.
      */
     locationResidualGap: {
       flat: +(
@@ -2773,14 +2836,25 @@ for (const c of report.topOverperformersRampMatched)
   );
 {
   const md = report.metricDiagnostics;
+  const sg = (n: number) => (n >= 0 ? '+' : '') + n;
+  console.log('\nMetric check — mean residual by card TYPE (v7.5; this is the one to read):');
+  for (const [t, v] of Object.entries(md.residualByType))
+    console.log(
+      `  ${t.padEnd(9)} ${String(v.cards).padStart(3)} cards   flat ${sg(v.flat).padStart(6)}   ramp-matched ${sg(v.rampMatched).padStart(6)}`,
+    );
   console.log(
-    `\nMetric check — mean Location residual MINUS mean non-Location residual: ` +
-      `flat ${md.locationResidualGap.flat >= 0 ? '+' : ''}${md.locationResidualGap.flat}, ` +
-      `ramp-matched ${md.locationResidualGap.rampMatched >= 0 ? '+' : ''}${md.locationResidualGap.rampMatched} ` +
-      `(over ${md.locationResidualGap.locations} Locations; closer to 0 is the confound removed). ` +
+    `  Location MINUS Unit: flat ${sg(md.locationMinusUnit.flat)} -> ramp-matched ` +
+      `${sg(md.locationMinusUnit.rampMatched)} — the type gap the correction had to close; ` +
+      `near 0 means Locations price like any other permanent.`,
+  );
+  console.log(
+    `  (Legacy Location-minus-NON-Location, kept but NOT the number to act on: ` +
+      `flat ${sg(md.locationResidualGap.flat)} -> ramp-matched ${sg(md.locationResidualGap.rampMatched)}. ` +
+      `"non-Location" is a fifth Events, and Events sit ~3.6 below every other type as a class, ` +
+      `so this contrast reports composition as if it were Location inflation.) ` +
       `Top-15 share ${(md.locationShareOfTop15.flat * 100).toFixed(0)}% -> ` +
       `${(md.locationShareOfTop15.rampMatched * 100).toFixed(0)}% vs a ` +
-      `${(md.poolLocationShare * 100).toFixed(0)}% pool share, but that one is a 15-item count and swings between cohorts — read the gap.`,
+      `${(md.poolLocationShare * 100).toFixed(0)}% pool share — a 15-item count that swings between cohorts; ignore it.`,
   );
 }
 console.log('\nRamp baseline curve (win rate of all card-plays made at N Locations):');

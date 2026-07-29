@@ -8,6 +8,191 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v7.5 — Three levers that do not work, and the two that do
+
+Full pass: `docs/BALANCE_SIM_FINDINGS_v7.5.md` (supersedes the v7.2 doc and its
+v7.4 addendum, deleted this pass). Two 5,952-game cohorts, zero invariant
+violations across all eleven trial pairs.
+
+- **The rest of the Location residual gap was the comparator, not a confound.**
+  v7.4 closed with ~+1.7 of Location/non-Location gap it could not explain.
+  Split by card TYPE and it is gone: ramp-matched, Locations and Units sit on
+  top of each other (+3.28 vs +3.20 in cohort A, +3.27 vs +3.08 in B), and
+  Location-minus-Unit falls +0.28 -> +0.07 and +0.59 -> +0.20. "non-Location"
+  is a mixture that is about a fifth Events, and Events sit ~3.6 below every
+  other type as a class because a one-shot stops paying the moment it resolves.
+  The harness now reports `residualByType` and `locationMinusUnit` as the
+  numbers to read, and prints the type table in the console summary.
+- **So the blanket "no Location takes another cost point" is lifted.** One
+  Location has been priced through it (`cold_fire_volcano`, +8.9/+7.5 -> +6.1/
+  +4.5 with its play counts held).
+- **But three of four cost trials failed the same way, and that is its own
+  finding.** `stone_bubbles` rose in cohort A and fell under the reporting
+  floor in B; `glowing_glyph_tablet` fell under the floor in both;
+  `amethyst_starfish` did not move while its play count dropped threefold. All
+  three reverted, all three measurements kept. At this pool's curve a single
+  cost point is close to **binary** rather than a smooth nerf — it either does
+  not move the residual or it prices the card out of the format — which is the
+  v7.2 Sacred weight-raise failure reproducing card by card under the corrected
+  metric.
+- **Unbreakable was never a keyword problem.** Per card the residual reproduces
+  cleanly and the three carriers disagree with each other: the Wolf of Wall
+  Street +11.4/+16.1 and The Pier-Side Menace +11.9/+11.1, but Skyborne
+  Skeleton Dragon +3.5/+2.3. The keyword-level number the v7.4 roadmap carried
+  forward was reading their average — the v7.2 Doublestrike mistake from the
+  other direction.
+- **All three levers were then measured to exhaustion on the two outliers, and
+  all three are inert.** `COST_ADJUST` is a provable no-op at the cost cap;
+  five and six extra points of `STAT_ADJUST` moved nothing (the Wolf went
+  *up*); and bounding the keyword itself was neutral. What moved them was the
+  ability printed BESIDE the keyword — the Wolf's `At Dawn, a target enemy unit
+  gets -2/-2` is unconditional recurring removal with no off switch, the shape
+  the Leader table calls "the strongest kit shape in the game", printed on a
+  Unit where no lever could reach it.
+- **New `UNIT_EFFECT_ADJUST` lever** — a per-card trim to the magnitude of a
+  Unit's printed ability, built because the other two levers were measured
+  wrong about this case. First thing that has ever moved either card: the Wolf
+  +11.4/+16.1 -> +8.2/+10.6, Pier-Side +11.9/+11.1 -> +9.1/+9.7. Both still out
+  of band and carried forward.
+- **Unbreakable is now once per turn**, and it ships as a rules fix rather than
+  as the nerf — it measured neutral, and that is the point: an unconditional
+  "can never be removed by any means at any price" was the only text in the
+  game with no answer, and the harness proved these cards' win rates do not
+  rest on it. The absorbed damage is *prevented* rather than left marked (or
+  the state-based check re-fires on it a tick later and kills the unit through
+  a shield it just paid for), and the save recharges at every Dawn for both
+  players, so a unit gets one per turn of the game rather than one per turn
+  cycle.
+- **Card actions**, off the ramp-matched list, two cohorts, same sign:
+  `phosphor_lich` +10.6/+7.2 -> **+4.7/+4.9** (one point of stat budget; its
+  v6.9 `COST_ADJUST` +1 is inert at the cap and is now commented as such rather
+  than silently dropped), `blight_snarler` +8.6/+6.1 -> +6.4/+6.4,
+  `cold_fire_volcano` as above, and `seabed_mandala` -4.5/-6.1 -> -3.1/+2.2 —
+  priced against the Event row of the type table rather than the pool mean.
+
+### v7.5 — Six keywords that existed only as names
+
+- **Fate, Freeze-Dry, Blessed, Scorched-Earth, Glaciate and Exhume are
+  implemented and printed.** They had sat on the roadmap for several versions
+  under "implement when cards using them are printed", which is a deadlock — no
+  card can be printed with a keyword the engine does not have, so the condition
+  could never be met.
+- **Each was placed where the vocabulary was actually thin, not where its name
+  first suggests.** Events had no printable text in Shadow or Void, Charms none
+  in Tide or Light, Locations none in Ember or Gale:
+  - **Fate** (Event — Void): banishes the top card of the opponent's deck. The
+    deliberate contrast with Erode: Erode puts the card in the ash-pile, where
+    Shadow can still reach it; Fate puts it in The Void, where nothing can.
+  - **Exhume** (Event — Shadow): returns a Unit from your ash-pile to your
+    hand. Shadow's colour identity has promised "ash-pile recursion" since v5.0
+    and nothing implemented it.
+  - **Freeze-Dry** (Charm — Tide): exhausts an enemy unit when it bonds —
+    Tethered's mirror image, pointed across the table.
+  - **Blessed** (Charm — Light): restores 3 Vitality when it bonds.
+  - **Scorched-Earth** (Location — Ember): deals 1 to each enemy unit at your
+    Dusk.
+  - **Glaciate** (Location — Gale): exhausts an enemy unit at your Dawn.
+- **Leaders were deliberately skipped**, despite having the smallest vocabulary.
+  Their keyword roll has no free band, so any addition re-rolls the existing
+  nine — a balance change disguised as a content one, over a 9-card type, in
+  the same pass that repriced two Leaders.
+- **Nothing that already prints changed.** Each of the three types gets its own
+  new roll band, on its own keyword list, so every existing carrier re-prints
+  byte-identically and only cards that previously rolled NO keyword can pick
+  one up — the salvage rule v7.3 and v7.4 established. `freshKeywordFor`
+  explicitly excludes the new generation for the same reason: it indexes modulo
+  its list, so growing that list would re-roll every card of the type whose
+  colour has no match.
+- **A strict colour match prints nothing, measured.** With the colour fallback
+  removed, Fate, Exhume and Scorched-Earth all landed zero carriers — the exact
+  dead-text failure the catalog test exists to catch, and the third time this
+  project has walked into it. Off-colour cards now split the pair by their own
+  Essence Type rather than by a roll, because a hash over a two-entry list is
+  not reliably even and measured it was not: rolling it gave Glaciate eight
+  Locations and Scorched-Earth one.
+- **Two were over on their first measured run, and the price lever could not
+  fix either.** Glaciate (+11.5 / +12.0) and Scorched-Earth (+22.3, level with
+  Sacred in the cohort that measured it) were both raised, and both raises were
+  reverted: they deleted the carriers rather than pricing them. That is the
+  third independent demonstration in this pass that a cost point on a Location
+  is close to binary. Both carry forward for an effect-side lever.
+- Nine new engine tests, and the rulebook has the six.
+
+### v7.5 — The card views outside the board
+
+The v7.4 pass made the match board playable on a phone and left the roadmap
+saying the collection, deck editor and pack opening "have not been measured at
+all". They now have been — and the reason they never were is the first thing
+fixed.
+
+- **Nothing outside the board could be rendered offline.** All three screens
+  read from `useMeta`, which needs a Supabase session, so there was no way to
+  put them in front of a browser without signing in. New dev-only
+  `meta-preview.html` (`?screen=collection|decks|pack`) mounts them against a
+  stubbed MetaState, the same trick `board-preview.html` uses for the match
+  board.
+- **The deck editor was the worst of the three.** Its header laid out as two
+  rows of controls that could not wrap, so SAVE DECK and CHANGE LEADER sat off
+  the right edge of a 375px screen and the page itself measured 443px wide. Its
+  two panes were side by side at every width, which squeezed the card pool to
+  about 90px — narrower than one card. The header wraps, the panes stack below
+  `sm` with the deck list capped and scrolling under the pool, and the legality
+  warnings (four wrapped sentences, ~300px, which was most of the editor's
+  vertical budget) are capped and scroll too. Desktop is unchanged.
+- **The collection was a 119,000px page.** The browse grid printed `full`
+  240x336 cards, which is ONE per row on a phone; 297 cards plus foil and
+  serialized entries made it effectively unbrowsable. It prints `standard`
+  below `sm` — two per row, and a third of the scroll.
+- **The mulligan screen clipped its own top.** The dialog is taller than a
+  667px phone and was centred in a scroll container, so the title and first row
+  of cards were above the scrollable area with no way to reach them. It aligns
+  to the top below `sm`, prints `compact` cards, and its sticky footer is now
+  full-bleed and above the grid instead of a bar the width of its buttons with
+  cards showing through and over it.
+- **The hand fan is a scroll strip below `sm`.** v7.4 made the fan fit a 375px
+  screen by tightening the overlap until it did, which works and leaves every
+  card tappable — but at seven-plus cards the overlap floor leaves about 20px
+  of each card showing and the names are unreadable. A fan's premise is that
+  you can see the cards it splays, and at phone width there is not enough room
+  for that premise, so the layout changes rather than being squeezed further.
+  It costs no vertical space: the dock height is unchanged and the cards sit
+  un-rotated, so the 92px on show is the card's own top rather than 84px of a
+  rotated card behind its neighbour. Above `sm` the fan is untouched.
+- Pack opening was measured at all three of its stages and needed no changes.
+- New `src/lib/useIsNarrow.ts` — the card faces pick their tier through a
+  `size` PROP, so there is no class that turns a 240px card into a 140px one
+  and those choices have to be made in JS. One place now decides where the
+  line is.
+- The deck editor is `100dvh` rather than `100vh`, so its bottom row is not
+  under mobile Safari's URL bar.
+
+### v7.5 — The two Leaders at the extremes
+
+- **Void Mother 71.7%/72.0% -> 55.6%/56.3%**, and no longer first in either
+  cohort. Resolve 6 with a `-2: Banish` bought three unconditional removals a
+  tank, against Ruin-Walker's identical Void Banish already repriced to -3 for
+  exactly that and Avatar's Shatter repriced twice. Never actioned before this
+  pass. Both roadmap levers were measured in isolation first: the price is the
+  live one (`-3` -> 62.5/63.7, `-4` -> 59.5/59.7) and Resolve 5 on its own is
+  nearly inert (67.7/70.5, -4.0/-1.5). They ship together for that reason —
+  the Resolve point is not a second nerf but a correction of a **rarity side
+  effect**, since `mapLeader` derives Resolve from rarity and Void Mother has
+  the largest ability budget in the game because of which rarity slot its card
+  sits in.
+- **New `LEADER_RESOLVE_OVERRIDE`** — the third per-Leader lever. v7.2 recorded
+  that a rarity edit is a balance edit (it re-seeds the print via `seedOf`), so
+  rarity is the wrong tool for a Resolve problem; this moves Resolve alone.
+- **Kuro, the Unseen 32.4%/34.0% -> 40.3%/40.4%** on its own trial, finishing
+  the pass at 37.4/38.6 once the rest of the pool moved. Its minus is repriced
+  `-2` -> `-1`. The v7.2 record said a `-1` version had overshot to 61.6% and
+  bracketed the effect — **but that trial ran at Resolve 5**, where -1 bought
+  five shrinks a tank. Kuro is Uncommon and prints at Resolve 3, where it buys
+  three, so the bracket never applied to the card as it now prints. Same result
+  as Void Mother from the other end: price is the strong lever (+7.9/+6.4),
+  Resolve the weak one (+2.3/+3.6, measured and left unspent for the next
+  pass).
+- **Leader spread 39.3/38.0 -> 25.3/23.0.** P1 win rate and game length flat.
+
 ### v7.4 — The board is playable on a phone
 
 - **The player's hand was entirely off-screen on a 375x667 phone.** Measured in
