@@ -405,7 +405,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
 
         {/* Daily free pack */}
         {tab === 'packs' && profile && dailyPack && (
-          <div className="mb-6 flex items-center justify-between gap-3 bg-[var(--c-paper)] ink-border-md shadow-hard-black p-3">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 bg-[var(--c-paper)] ink-border-md shadow-hard-black p-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0 bg-[var(--c-ink)]">
                 <SafeImage
@@ -537,7 +537,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     {pack.acquisition !== 'deck_box_grant' && (
                       <button
                         onClick={() => setOddsPack(pack)}
-                        className="px-2 ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
+                        className="px-2 min-w-10 min-h-10 flex items-center justify-center ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
                         title="View drop odds"
                         aria-label="View drop odds"
                       >
@@ -745,7 +745,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
               {pack.pack_tier === 'booster_box' ? 'BOX' : 'PACK'}
             </div>
           </div>
-          <PopButton color="yellow" onClick={onClose}>
+          <PopButton color="yellow" onClick={onClose} ariaLabel="Close drop odds">
             ✕
           </PopButton>
         </div>
@@ -899,7 +899,7 @@ function PackTile({
           <div className="absolute inset-x-0 top-1 flex items-center justify-between px-1">
             <button
               onClick={() => setIdx((i) => (i - 1 + variants.length) % variants.length)}
-              className="w-5 h-5 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
+              className="w-10 h-10 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
               title="Previous set"
               aria-label="Previous set"
             >
@@ -918,7 +918,7 @@ function PackTile({
             </div>
             <button
               onClick={() => setIdx((i) => (i + 1) % variants.length)}
-              className="w-5 h-5 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
+              className="w-10 h-10 flex items-center justify-center bg-[var(--c-ink)]/80 text-[var(--c-paper)] ink-border-sm"
               title="Next set"
               aria-label="Next set"
             >
@@ -933,7 +933,7 @@ function PackTile({
       </p>
       <button
         onClick={() => onViewOdds(pack)}
-        className="mx-3 mt-2 self-start flex items-center gap-1 text-[10px] font-black text-[var(--c-steel)] underline decoration-2 underline-offset-2 hover:text-[var(--c-ink)]"
+        className="mx-3 mt-1 py-2 self-start flex items-center gap-1 text-[10px] font-black text-[var(--c-steel)] underline decoration-2 underline-offset-2 hover:text-[var(--c-ink)]"
       >
         <Percent className="w-3 h-3" /> VIEW DROP ODDS
       </button>
@@ -999,7 +999,7 @@ function PackTile({
                 key={n}
                 disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
                 onClick={() => onBuyBulk(pack, n, 'credits')}
-                className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busyId === 'bulk:' + pack.id + ':' + n ? (
                   'OPENING…'
@@ -1017,7 +1017,7 @@ function PackTile({
           <button
             disabled={!profile || !!busyId || profile.credits < pack.price_credits}
             onClick={() => onSaveForLater(pack, 'credits')}
-            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
             {busyId === 'inv:' + pack.id + ':credits' ? (
@@ -1035,7 +1035,7 @@ function PackTile({
           <button
             disabled={!profile || !!busyId || profile.vouchers < pack.price_vouchers}
             onClick={() => onSaveForLater(pack, 'vouchers')}
-            className="flex-1 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
             {busyId === 'inv:' + pack.id + ':vouchers' ? 'BUYING…' : 'SAVE FOR LATER (VOUCHERS)'}
@@ -1162,7 +1162,7 @@ function BountiesTab({
         <span className="text-[12px] font-bold text-[var(--c-red)]">{loadErr}</span>
         <button
           onClick={() => setAttempt((n) => n + 1)}
-          className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
+          className="btn-pop heading-font text-[10px] min-h-10 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
         >
           RETRY
         </button>

@@ -262,7 +262,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </span>
             )}
           </div>
-          <div className="flex gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2">
             {/* Timed-out-but-unsettled listings show the SETTLING badge for
                 the owner too — the CANCEL button previously stayed live here
                 and could only error once server-side settlement ran. */}
@@ -456,7 +456,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           aria-modal="true"
         >
           <div
-            className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
+            className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80 max-w-full"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="heading-font text-sm mb-2">
@@ -655,7 +655,8 @@ function SellForm({
               setQuantity(1);
             }}
             className={cn(
-              'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+              // min-h keeps these dense chips tappable on a phone.
+              'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
               RARITY_CHIP[c.def.rarity || 'Common'] || RARITY_CHIP.Common,
               cardId === c.card_id && 'outline outline-2 outline-[var(--c-red)]',
             )}

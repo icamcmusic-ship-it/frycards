@@ -480,14 +480,22 @@ export async function fetchActiveSeason(): Promise<{
     .select('*')
     .eq('is_active', true)
     .maybeSingle();
-  if (seasonError) console.error('fetchActiveSeason (season) failed:', seasonError.message);
+  if (seasonError) {
+    console.error('fetchActiveSeason (season) failed:', seasonError.message);
+    // Thrown (not a null season) — swallowing made an outage render as the
+    // misleading "No season is live" empty state instead of the RETRY path.
+    throw seasonError;
+  }
   if (!season) return { season: null, tiers: [] };
   const { data: tiers, error: tiersError } = await supabase
     .from('battle_pass_tiers')
     .select('*')
     .eq('season_id', (season as Season).id)
     .order('tier');
-  if (tiersError) console.error('fetchActiveSeason (tiers) failed:', tiersError.message);
+  if (tiersError) {
+    console.error('fetchActiveSeason (tiers) failed:', tiersError.message);
+    throw tiersError;
+  }
   return { season: season as Season, tiers: (tiers as BattlePassTier[]) || [] };
 }
 
@@ -501,7 +509,12 @@ export async function fetchBattlePassProgress(
     .eq('user_id', userId)
     .eq('season_id', seasonId)
     .maybeSingle();
-  if (error) console.error('fetchBattlePassProgress failed:', error.message);
+  if (error) {
+    console.error('fetchBattlePassProgress failed:', error.message);
+    // Thrown (not a zeroed default) — a fake xp:0 row on a network failure
+    // rendered as wiped progress instead of the screen's RETRY path.
+    throw error;
+  }
   return (data as PlayerBattlePass) || { season_id: seasonId, xp: 0, claimed_tiers: [] };
 }
 
@@ -539,8 +552,16 @@ export async function fetchAchievements(
       .select('achievement_id, progress, claimed')
       .eq('user_id', userId),
   ]);
-  if (allError) console.error('fetchAchievements (all) failed:', allError.message);
-  if (mineError) console.error('fetchAchievements (mine) failed:', mineError.message);
+  if (allError) {
+    console.error('fetchAchievements (all) failed:', allError.message);
+    // Thrown (not []) — swallowing made an outage render as the misleading
+    // "No achievements" empty state instead of the screen's RETRY path.
+    throw allError;
+  }
+  if (mineError) {
+    console.error('fetchAchievements (mine) failed:', mineError.message);
+    throw mineError;
+  }
   return { all: (all as Achievement[]) || [], mine: (mine as PlayerAchievement[]) || [] };
 }
 
@@ -565,9 +586,11 @@ export interface Mission {
 
 export async function fetchMissions(): Promise<Mission[]> {
   const { data, error } = await supabase.rpc('get_missions');
-  if (error) console.error('fetchMissions failed:', error.message);
-  if (error || !data) return [];
-  return data as Mission[];
+  if (error) {
+    console.error('fetchMissions failed:', error.message);
+    throw error;
+  }
+  return (data as Mission[]) || [];
 }
 
 export async function claimMission(id: string): Promise<string | null> {
@@ -1690,7 +1713,12 @@ export async function fetchNewsPosts(limit = 30): Promise<NewsPost[]> {
     .select('*')
     .order('published_at', { ascending: false })
     .limit(limit);
-  if (error) console.error('fetchNewsPosts failed:', error.message);
+  if (error) {
+    console.error('fetchNewsPosts failed:', error.message);
+    // Thrown (not []) — swallowing made an outage render as an empty feed
+    // instead of NewsCenter's RETRY path.
+    throw error;
+  }
   return (data as NewsPost[]) || [];
 }
 
@@ -1717,9 +1745,11 @@ export interface SerializedFeedEntry {
 
 export async function fetchSerializedFeed(limit = 30): Promise<SerializedFeedEntry[]> {
   const { data, error } = await supabase.rpc('get_serialized_feed', { p_limit: limit });
-  if (error) console.error('fetchSerializedFeed failed:', error.message);
-  if (error || !data) return [];
-  return data as SerializedFeedEntry[];
+  if (error) {
+    console.error('fetchSerializedFeed failed:', error.message);
+    throw error;
+  }
+  return (data as SerializedFeedEntry[]) || [];
 }
 
 /** This player's own Serialized pulls — used to badge owned copies in

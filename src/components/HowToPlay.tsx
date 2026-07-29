@@ -20,7 +20,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck',
-        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Mythic exactly 1.',
+        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic exactly 1.',
       ],
       [
         'Color legality',
@@ -218,11 +218,11 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     body: [
       [
         'Pack anatomy',
-        'Every card in the game is part of the "Volume #1" set, and every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The smallest pack is 5 cards.',
+        'Every card in the game is part of the "Volume #1" set, and every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The standard booster is 8 cards, and one of them is ALWAYS a foil — with about an 8% chance of a second foil elsewhere in the pack.',
       ],
       [
         'Booster Box',
-        "The Volume #1 Booster Box is six boosters' worth (36 cards) in one big rip at a bulk discount, ending in a guaranteed-foil box topper (Rare floor).",
+        'The Volume #1 Booster Box is six full boosters (48 cards) in one big rip at a bulk discount, plus a guaranteed-foil box topper with a SUPER-RARE floor — 49 cards, every box guaranteed a foil Super-Rare or better.',
       ],
       [
         'Deck Box',
@@ -233,8 +233,8 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Buy-and-open 5 or 10 copies of any pack in one click, or OPEN ALL from MY PACKS. Big hauls show a grouped summary — duplicates stack with a ×N badge, best pull spotlighted on top.',
       ],
       [
-        'Dupe protection',
-        'Marked slots avoid cards you already own at cap. Any pull past your per-rarity copy cap auto-converts to credits instead of a dead duplicate.',
+        'No dupe protection',
+        'Every slot is a straight random pull — packs can repeat cards you already own. The copy-cap payout still applies: any pull past your per-rarity copy cap auto-converts to credits instead of dead inventory.',
       ],
       [
         'Daily freebies',
@@ -386,7 +386,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          FRY CARDS RULEBOOK V6.9
+          FRY CARDS RULEBOOK V7.7
         </div>
       </div>
     </div>

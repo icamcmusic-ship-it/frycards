@@ -93,7 +93,9 @@ export function AuthScreen() {
   };
 
   const input =
-    'w-full px-3 py-2.5 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm font-bold text-sm placeholder:text-[var(--c-steel)]/50 focus:outline-none focus:shadow-hard-black-xs';
+    // No focus:outline-none here — the global :focus-visible ink ring
+    // (src/index.css) is the keyboard-focus indicator for these inputs too.
+    'w-full px-3 py-2.5 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm font-bold text-sm placeholder:text-[var(--c-steel)]/50 focus:shadow-hard-black-xs';
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] flex items-center justify-center p-6 relative overflow-hidden text-[var(--c-ink)]">
@@ -155,6 +157,7 @@ export function AuthScreen() {
             <input
               className={input}
               placeholder="Operative name"
+              aria-label="Operative name"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               maxLength={24}
@@ -164,6 +167,7 @@ export function AuthScreen() {
             className={input}
             type="email"
             placeholder="Email"
+            aria-label="Email"
             value={email}
             required
             onChange={(e) => setEmail(e.target.value)}
@@ -173,6 +177,7 @@ export function AuthScreen() {
               className={input + ' pr-10'}
               type={showPassword ? 'text' : 'password'}
               placeholder="Password (6+ characters)"
+              aria-label="Password"
               value={password}
               required
               minLength={6}

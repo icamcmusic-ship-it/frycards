@@ -85,9 +85,11 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       setProgress((p) =>
         p ? { ...p, claimed_tiers: [...(p.claimed_tiers ?? []), tier.tier] } : p,
       );
-      refreshProfile();
-      if (tier.reward_type === 'pack') refreshInventory();
-      if (tier.reward_type === 'cosmetic') refreshCosmetics();
+      // Awaited inside the try — a bare call here could escape as an
+      // unhandled rejection instead of landing in the catch below.
+      await refreshProfile();
+      if (tier.reward_type === 'pack') await refreshInventory();
+      if (tier.reward_type === 'cosmetic') await refreshCosmetics();
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {

@@ -539,6 +539,11 @@ function RevealStage({
       <div
         onClick={onCardClick}
         role="button"
+        aria-label={
+          currentShown
+            ? `${currentDef?.name || 'Card'} revealed — continue to next card`
+            : `Flip card ${index + 1} of ${pulls.length} face-up`
+        }
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -640,8 +645,9 @@ function RevealStage({
           )}
       </div>
 
-      {/* rarity readout */}
-      <div className="h-9 mt-4 flex items-center">
+      {/* rarity readout — a live region so screen readers hear each flip's
+          rarity without having to re-scan the page */}
+      <div className="h-9 mt-4 flex items-center" role="status" aria-live="polite">
         {currentShown && (
           <div
             className={cn(
@@ -662,8 +668,9 @@ function RevealStage({
         )}
       </div>
 
-      {/* progress pips */}
-      <div className="flex gap-1.5 mt-3 max-w-full flex-wrap justify-center px-4">
+      {/* progress pips — purely visual; the CARD X / Y readout above carries
+          the same information for screen readers */}
+      <div aria-hidden className="flex gap-1.5 mt-3 max-w-full flex-wrap justify-center px-4">
         {pulls.map((p, i) => (
           <span
             key={i}
@@ -905,18 +912,30 @@ function SummaryStage({
           <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
         </div>
         <div
-          className={cn('po-anim', !best.converted_to_credits && rarityGlow(best.rarity))}
+          className={cn(
+            'relative po-anim',
+            !best.converted_to_credits && !sold.has(bestIndex) && rarityGlow(best.rarity),
+          )}
           style={{ animation: reducedMotion ? undefined : 'po-card-out 0.35s ease-out' }}
         >
           <CardFace
             def={pullToDef(best)}
             size="full"
             foil={best.foil}
-            dimmed={best.converted_to_credits}
+            dimmed={best.converted_to_credits || sold.has(bestIndex)}
             serial={
               best.serialized ? { number: best.serial_number!, cap: best.serial_cap! } : undefined
             }
           />
+          {/* QUICKSELL C/U can sell the best pull too — the spotlight must
+              stamp it SOLD like the grid, not keep rendering it as kept. */}
+          {sold.has(bestIndex) && !best.converted_to_credits && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+                SOLD
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

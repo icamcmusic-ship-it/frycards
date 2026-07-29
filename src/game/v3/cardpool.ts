@@ -1617,6 +1617,48 @@ function minusColorFor(identity: Color[]): Color {
   return isInteractive(b) ? second : first;
 }
 
+/**
+ * The Leader keyword vocabulary as of v7.3, FROZEN.
+ *
+ * `mapLeader`'s roll 4-5 branch previously drew from
+ * `keywordsForType('Leader')` via `freshKeywordFor`, whose `pick` indexes
+ * MODULO the list's length — so adding a 4th coloured Leader keyword to
+ * keywords.ts would have re-rolled the keyword of all nine existing Leaders
+ * and invalidated every per-Leader adjustment (LEADER_KEYWORD_STRIP, cost and
+ * Resolve overrides). That is the same trap the v7.3 colour-pair note and the
+ * v7.5 V75_KEYWORDS split record, and this is the same fix: the existing
+ * generation is pinned to its own fixed list here, and any FUTURE Leader
+ * keyword must go into LEADER_NEXT_KEYWORDS below and roll on its own band.
+ *
+ * INVARIANT (verified byte-identical at the split, scripts/verify-pool.ts):
+ * the generated pool is unchanged by this restructure, and adding entries to
+ * LEADER_NEXT_KEYWORDS cannot change any existing Leader's keyword outcome —
+ * the 'ldr-kw6' band and this frozen list are never touched again.
+ */
+const V73_LEADER_KEYWORDS: readonly string[] = ['Warlord'];
+
+/**
+ * Future Leader keyword generations, drawn on their OWN roll band
+ * ('ldr-kw-next') so no existing Leader re-prints — mirror of
+ * `freshKeywordV75For`. Currently empty on purpose: this pass is plumbing
+ * only, no new keywords. When a new Leader keyword lands, add it here (and to
+ * keywords.ts) — it will only ever be offered to Leaders that end the frozen
+ * v7.3 path with NO keyword, exactly how the v7.5 split let only keyword-less
+ * cards pick up the new generation.
+ */
+const LEADER_NEXT_KEYWORDS: readonly string[] = [];
+
+/** Roll 4-5 Leader keyword from the FROZEN v7.3 list only (see above). */
+function leaderFreshKeywordFor(seed: string, color: Color | undefined): string | undefined {
+  // Same selection logic as freshKeywordFor, restricted to the frozen list so
+  // future additions to keywordsForType('Leader') cannot re-roll it.
+  const all = V73_LEADER_KEYWORDS.filter((kw) => KEYWORD_COLOR[kw as Keyword] !== undefined);
+  if (!all.length) return undefined;
+  const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw as Keyword] === color) : [];
+  const list = onColor.length ? onColor : all;
+  return pick(seed, 27, [...list]);
+}
+
 function mapLeader(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
@@ -1633,13 +1675,27 @@ function mapLeader(c: CardTemplate): CardDef {
   // matched against whichever half of the identity has one. Rolls 0..3 keep
   // Commander/Resolute exactly as before, and LEADER_KEYWORD_STRIP still
   // applies last so a stripped Leader stays stripped.
+  // v7.8: this branch is pinned to V73_LEADER_KEYWORDS (see the comment on
+  // that constant) so adding future Leader keywords cannot re-roll it.
   const leaderFreshColor =
-    identity.find((col) => keywordsForType('Leader').some((kw) => KEYWORD_COLOR[kw] === col)) ??
-    identity[0];
-  const ldrFresh = kwRoll >= 4 ? freshKeywordFor(seed, 'Leader', leaderFreshColor) : undefined;
+    identity.find((col) =>
+      V73_LEADER_KEYWORDS.some((kw) => KEYWORD_COLOR[kw as Keyword] === col),
+    ) ?? identity[0];
+  const ldrFresh = kwRoll >= 4 ? leaderFreshKeywordFor(seed, leaderFreshColor) : undefined;
   const leaderKws: string[] = (
     ldrFresh ? [ldrFresh] : kwRoll < 2 ? ['Commander'] : kwRoll < 4 ? ['Resolute'] : []
   ).filter((kw) => !stripped.has(kw));
+  // v7.8: future Leader keyword generations roll on their OWN band, offered
+  // only to Leaders the frozen path left keyword-less — the V75_KEYWORDS
+  // pattern. A no-op while LEADER_NEXT_KEYWORDS is empty.
+  if (!leaderKws.length && LEADER_NEXT_KEYWORDS.length) {
+    const onColor = identity
+      .map((col) => LEADER_NEXT_KEYWORDS.find((kw) => KEYWORD_COLOR[kw as Keyword] === col))
+      .find((kw) => kw !== undefined);
+    const next =
+      onColor ?? LEADER_NEXT_KEYWORDS[roll(seed, 'ldr-kw-next', LEADER_NEXT_KEYWORDS.length)];
+    if (next && !stripped.has(next)) leaderKws.push(next);
+  }
   const total =
     LEADER_COST_OVERRIDE[c.id] ?? 3 + roll(seed, 'ldr-cost', 2) + keywordCostAdj(leaderKws); // 3-5
   const cost: EssenceCost = { generic: Math.max(0, total - pipSum), pips };

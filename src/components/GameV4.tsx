@@ -1216,11 +1216,17 @@ export function GameV4({
   };
 
   const afterMulligan = () => {
-    // createGame already ran the human's first Dawn — the match opens in
-    // P1's Main I.
+    // createGame already ran the first player's Dawn — the match opens in
+    // that player's Main I. The coin flip can hand the opening turn to the
+    // CPU, in which case its turn must actually run instead of leaving the
+    // human parked in the CPU's Main I.
     damageMemoRef.current = new Map();
     recordDamageFloats(); // seed the memo without floats (first pass)
     setFloats([]);
+    if (g.active === CPU) {
+      runCpuTurn();
+      return;
+    }
     setStage('play');
     flashPhase('MAIN I');
   };
@@ -1253,7 +1259,12 @@ export function GameV4({
         setPreviewPinned(false);
       } else if (pending) setPending(null);
       else if (showAsh) setShowAsh(false);
-      else if (shedPick !== null && shedPick.length > 0) setShedPick([]);
+      else if (shedPick !== null) {
+        // Same as the picker's ✕ BACK: clear a partial selection first, then
+        // a second Escape closes the picker entirely.
+        if (shedPick.length > 0) setShedPick([]);
+        else setShedPick(null);
+      }
       else if (logExpanded) setLogExpanded(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
     };

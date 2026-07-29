@@ -136,8 +136,8 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--c-ink)]/80 to-transparent" />
               </div>
-              <div className="absolute bottom-3 left-4 flex items-end gap-3">
-                <div className="w-16 h-16 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
+              <div className="absolute bottom-3 left-4 right-3 flex items-end gap-3">
+                <div className="w-16 h-16 shrink-0 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
                   {avatar?.image_url ? (
                     <SafeImage
                       src={avatar.image_url}
@@ -150,8 +150,8 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                     </div>
                   )}
                 </div>
-                <div className="pb-1">
-                  <div className="heading-font text-xl text-[var(--c-paper)]">
+                <div className="pb-1 min-w-0">
+                  <div className="heading-font text-xl text-[var(--c-paper)] truncate">
                     {card.username}
                     <RoleBadge role={card.role} />
                     {isSelf && (
@@ -177,7 +177,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
             </div>
 
             <div className="p-4">
-              <div className="grid grid-cols-4 gap-2 mb-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
                 {[
                   { label: 'MATCHES', value: card.games_played },
                   { label: 'WINS', value: card.wins },

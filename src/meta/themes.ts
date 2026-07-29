@@ -41,7 +41,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       ink: '#1a1a1a',
       paper: '#f7f7f7',
       yellow: '#ffd54f',
-      red: '#e53935',
+      // #e53935 darkened a step — paper-on-red text was 3.95:1, below the
+      // WCAG AA 4.5:1 small-text bar; #d43531 hits 4.5:1 with the same hue.
+      red: '#d43531',
       steel: '#2c3e50',
     },
   },
@@ -52,7 +54,8 @@ export const THEMES: Record<ThemeName, Theme> = {
       ink: '#5b507a',
       paper: '#d8efbf',
       yellow: '#d6d84f',
-      red: '#666f80',
+      // was #666f80 (4.10:1 on this paper) — nudged to reach WCAG AA 4.5:1.
+      red: '#606878',
       steel: '#5b618a',
     },
   },
@@ -63,6 +66,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       ink: '#011936',
       paper: '#daf2d7',
       yellow: '#f9dc5c',
+      // KNOWN AA MISS (3.55:1 vs paper, passes the 3:1 large-text bar):
+      // this crimson IS the watermelon identity — darkening it to 4.5:1
+      // (#ce2044) is an art-direction call left to a human.
       red: '#ed254e',
       steel: '#465362',
     },
@@ -85,7 +91,8 @@ export const THEMES: Record<ThemeName, Theme> = {
       ink: '#2f242c',
       paper: '#f7dddc',
       yellow: '#ead1e7',
-      red: '#a42cd6',
+      // was #a42cd6 (4.18:1 on this paper) — nudged to reach WCAG AA 4.5:1.
+      red: '#9c2acb',
       steel: '#502274',
     },
   },
@@ -96,6 +103,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       ink: '#252422',
       paper: '#fffcf2',
       yellow: '#ccc5b9',
+      // KNOWN AA MISS (3.32:1 vs paper, passes the 3:1 large-text bar):
+      // the bright orange is this theme's signature accent — darkening it
+      // to 4.5:1 (#c54f22) is an art-direction call left to a human.
       red: '#eb5e28',
       steel: '#403d39',
     },
@@ -119,7 +129,9 @@ export const THEMES: Record<ThemeName, Theme> = {
       paper: '#e4f7e2',
       yellow: '#d7d3eb',
       red: '#6e6d7b',
-      steel: '#868784',
+      // was #868784 (3.22:1 on this paper) — steel is the secondary-text
+      // color everywhere, so it must clear WCAG AA 4.5:1.
+      steel: '#6e6f6c',
     },
   },
   desert: {

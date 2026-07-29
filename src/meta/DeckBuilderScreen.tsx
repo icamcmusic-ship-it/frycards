@@ -16,6 +16,7 @@ import {
   maxCopiesForRarity,
 } from '../game/v3/decks';
 import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
+import { deriveDeckAdvice } from './deckAdvice';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
 import { EssenceIcon } from '../components/EssenceIcon';
@@ -487,6 +488,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return { curve, maxCurve, topKeywords };
   }, [grouped]);
 
+  // Archetype/curve/color guidance derived from the sim's own deck knowledge
+  // (see src/meta/deckAdvice.ts — thresholds sourced from game/v3/decks.ts
+  // and game/v3/colors.ts, not invented here).
+  const advice = useMemo(() => deriveDeckAdvice(grouped), [grouped]);
+
   const handleSave = async () => {
     if (!session?.user || !leaderId || saving) return;
     setSaving(true);
@@ -845,6 +851,85 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   </span>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Deck guide: curve vs the sim's targets, color spread, closest
+              archetype and concrete suggestions — always visible while
+              editing. Statuses are text ("UNDER"/"OVER"), never color-only. */}
+          <div
+            className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0"
+            aria-label="Deck guidance"
+          >
+            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">DECK GUIDE</div>
+            <div className="flex gap-1.5 mb-1.5">
+              {advice.curve.map((b) => (
+                <div
+                  key={b.label}
+                  className="flex-1 bg-[var(--c-ink)]/50 px-1.5 py-1 text-center"
+                  title={`Cost ${b.label}: ${b.count} cards, builder targets ~${b.target}`}
+                >
+                  <div className="text-[8px] font-mono font-bold text-[var(--c-paper)]/70">
+                    COST {b.label}
+                  </div>
+                  <div className="text-[10px] font-black text-[var(--c-paper)]">
+                    {b.count}
+                    <span className="text-[var(--c-paper)]/60 font-bold">/{b.target}</span>
+                  </div>
+                  <div
+                    className={cn(
+                      'text-[7px] font-black',
+                      b.status === 'ok'
+                        ? 'text-[var(--c-paper)]/60'
+                        : 'text-[var(--c-yellow)]',
+                    )}
+                  >
+                    {b.status === 'low' ? '▼ UNDER' : b.status === 'high' ? '▲ OVER' : '✓ ON CURVE'}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+              {advice.colors.counts.map(({ color, count }) => (
+                <span
+                  key={color}
+                  className="inline-flex items-center gap-1 text-[9px] font-bold text-[var(--c-paper)] bg-[var(--c-ink)]/50 px-1.5 py-0.5"
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full inline-flex items-center justify-center"
+                    style={{ backgroundColor: COLOR_HEX[color] }}
+                    aria-hidden="true"
+                  >
+                    <EssenceIcon type={color} color="#FFFFFF" size={7} />
+                  </span>
+                  {color} ×{count}
+                </span>
+              ))}
+              {advice.colors.colorless > 0 && (
+                <span className="text-[9px] font-bold text-[var(--c-paper)]/80 bg-[var(--c-ink)]/50 px-1.5 py-0.5">
+                  Colorless ×{advice.colors.colorless}
+                </span>
+              )}
+              {advice.colors.counts.length === 0 && advice.colors.colorless === 0 && (
+                <span className="text-[9px] font-bold text-[var(--c-paper)]/60">
+                  No cards yet — the guide fills in as you build.
+                </span>
+              )}
+            </div>
+            {advice.archetype && (
+              <div className="text-[9px] font-bold text-[var(--c-paper)] mb-1">
+                <span className="text-[var(--c-yellow)] font-black">
+                  CLOSEST ARCHETYPE: {advice.archetype.profile.label.toUpperCase()}
+                </span>{' '}
+                — {advice.archetype.profile.wants}
+              </div>
+            )}
+            {advice.suggestions.length > 0 && (
+              <ul className="text-[9px] font-bold text-[var(--c-paper)]/90 list-none space-y-0.5">
+                {advice.suggestions.slice(0, 3).map((s) => (
+                  <li key={s}>› {s}</li>
+                ))}
+              </ul>
             )}
           </div>
 

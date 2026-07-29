@@ -237,7 +237,11 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
               actually left.
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close pool viewer" className="shrink-0">
+          <button
+            onClick={onClose}
+            aria-label="Close pool viewer"
+            className="shrink-0 w-10 h-10 -m-2 flex items-center justify-center"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -544,7 +548,7 @@ function QuickAddBar({
           <button
             key={r}
             onClick={() => addRarity(r)}
-            className="text-[9px] font-black px-1.5 py-0.5 ink-border-sm btn-pop"
+            className="text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm btn-pop"
             style={{
               backgroundColor: RARITY_HEX[r],
               color: rarityTier(r) === 0 || r === 'Ultra-Rare' ? '#1A1A1A' : '#fff',
@@ -722,6 +726,7 @@ function CardStackPicker({
       <input
         className={cn(select, 'w-full mb-2 placeholder:text-[var(--c-steel)]/50')}
         placeholder="Search your collection…"
+        aria-label="Search your collection"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -735,7 +740,8 @@ function CardStackPicker({
               setQty(1);
             }}
             className={cn(
-              'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+              // min-h keeps these dense chips tappable on a phone.
+              'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
               RARITY_CHIP[c.def.rarity || 'Common'] || RARITY_CHIP.Common,
               cardId === c.card_id && 'outline outline-2 outline-[var(--c-red)]',
             )}
@@ -770,6 +776,7 @@ function CardStackPicker({
             min={1}
             max={maxQty}
             value={qty}
+            aria-label="Quantity to add"
             onChange={(e) => setQty(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))}
             className="w-16 px-2 py-1 ink-border-sm text-xs"
           />
@@ -812,7 +819,7 @@ function CardStackPicker({
                 <button
                   onClick={() => onChange(items.filter((_, idx) => idx !== i))}
                   aria-label={`Remove ${def?.name || it.card_id} from selection`}
-                  className="text-[var(--c-red)]"
+                  className="w-10 h-10 -my-2 -mr-2 flex items-center justify-center text-[var(--c-red)]"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -843,6 +850,7 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
     <div className="flex-1 min-w-[160px]">
       <input
         className="w-full px-2 py-1 ink-border-sm text-xs font-bold"
+        aria-label="Search for an exact card"
         placeholder={current ? current.name : 'Search a card…'}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -857,7 +865,7 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
                 setSearch('');
               }}
               className={cn(
-                'text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+                'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
                 RARITY_CHIP[c.rarity || 'Common'],
               )}
             >
@@ -1071,7 +1079,7 @@ function ReportModal({
       aria-label="Report listing"
     >
       <div
-        className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80"
+        className="bg-[var(--c-paper)] ink-border-md shadow-hard-yellow p-4 w-80 max-w-full"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="heading-font text-sm mb-2">REPORT LISTING</div>
@@ -1258,7 +1266,7 @@ function MysteryListingCard({
               onClick={onReport}
               aria-label="Report listing"
               title="Report listing"
-              className="text-[var(--c-steel)] hover:text-[var(--c-red)]"
+              className="w-10 h-10 -m-2 flex items-center justify-center text-[var(--c-steel)] hover:text-[var(--c-red)]"
             >
               <Flag className="w-3.5 h-3.5" />
             </button>
@@ -1516,7 +1524,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                 onClick={() => setReportTarget(l.id)}
                 aria-label="Report listing"
                 title="Report listing"
-                className="text-[var(--c-steel)] hover:text-[var(--c-red)]"
+                className="w-10 h-10 -m-2 flex items-center justify-center text-[var(--c-steel)] hover:text-[var(--c-red)]"
               >
                 <Flag className="w-3.5 h-3.5" />
               </button>
@@ -1564,7 +1572,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                 {shopMonogram(shop.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="heading-font text-2xl leading-tight drop-shadow">{shop.name}</div>
+                <div className="heading-font text-xl sm:text-2xl leading-tight drop-shadow">
+                  {shop.name}
+                </div>
                 {shop.tagline && (
                   <div className="text-[12px] font-bold italic text-[var(--c-paper)]/85 mt-0.5">
                     “{shop.tagline}”
@@ -1889,7 +1899,7 @@ function MyShopTab() {
           </div>
         )}
         <div className="relative">
-          <div className="heading-font text-xl">{shop.name}</div>
+          <div className="heading-font text-lg sm:text-xl">{shop.name}</div>
           {shop.tagline && (
             <div className="text-[11px] font-bold italic text-[var(--c-paper)]/85">
               “{shop.tagline}”
@@ -2117,7 +2127,9 @@ function MyShopTab() {
                       onClick={() => run(() => rateShopPurchase(p.id, n), undefined, true)}
                       aria-label={`Rate ${n} star${n === 1 ? '' : 's'}`}
                       className={cn(
-                        'w-4 h-4',
+                        // 40px hit area around a 16px glyph; negative margin
+                        // keeps the row's visual height unchanged.
+                        'w-10 h-10 -my-2 flex items-center justify-center',
                         existing && existing.rating >= n
                           ? 'text-[var(--c-yellow)]'
                           : 'text-[var(--c-steel)]',
@@ -2251,6 +2263,7 @@ function ShopCustomizePanel({
           <label className="block text-xs font-bold mb-1">Shop name</label>
           <input
             className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
+            aria-label="Shop name"
             value={name}
             maxLength={40}
             onChange={(e) => setName(e.target.value)}
@@ -2262,6 +2275,7 @@ function ShopCustomizePanel({
           <input
             className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
             placeholder="Cheap staples, fast restocks."
+            aria-label="Tagline"
             value={tagline}
             maxLength={120}
             onChange={(e) => setTagline(e.target.value)}
@@ -2269,6 +2283,7 @@ function ShopCustomizePanel({
           <label className="block text-xs font-bold mb-1">Banner image URL (optional)</label>
           <input
             className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
+            aria-label="Banner image URL"
             value={banner}
             onChange={(e) => setBanner(e.target.value)}
           />
@@ -2328,6 +2343,7 @@ function OpenShopPanel({
         <label className="block text-xs font-bold mb-1">Shop name</label>
         <input
           className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
+          aria-label="Shop name"
           value={name}
           maxLength={40}
           onChange={(e) => setName(e.target.value)}
@@ -2336,6 +2352,7 @@ function OpenShopPanel({
         <input
           className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
           placeholder="Cheap staples, fast restocks."
+          aria-label="Tagline"
           value={tagline}
           maxLength={120}
           onChange={(e) => setTagline(e.target.value)}
@@ -2343,6 +2360,7 @@ function OpenShopPanel({
         <label className="block text-xs font-bold mb-1">Banner image URL (optional)</label>
         <input
           className="w-full px-2 py-1.5 ink-border-sm text-xs font-bold mb-3"
+          aria-label="Banner image URL"
           value={banner}
           onChange={(e) => setBanner(e.target.value)}
         />
@@ -2720,6 +2738,7 @@ function MysteryBuilderPanel({
             <input
               className="px-2 py-1.5 ink-border-sm text-xs font-bold flex-1 min-w-[140px]"
               placeholder="Pack type name"
+              aria-label="Pack type name"
               value={tName}
               onChange={(e) => setTName(e.target.value)}
             />
@@ -2772,6 +2791,7 @@ function MysteryBuilderPanel({
                 <div key={i} className="flex items-center gap-2 flex-wrap ink-border-sm p-1.5">
                   <span className="text-[9px] font-black w-14">SLOT {i + 1}</span>
                   <select
+                    aria-label={`Slot ${i + 1} mode`}
                     className="px-1 py-1 ink-border-sm text-[10px] font-bold"
                     value={spec.mode}
                     onChange={(e) => {
@@ -2786,6 +2806,7 @@ function MysteryBuilderPanel({
                   </select>
                   {spec.mode === 'minimum' && (
                     <select
+                      aria-label={`Slot ${i + 1} minimum rarity`}
                       className="px-1 py-1 ink-border-sm text-[10px] font-bold"
                       value={spec.rarity || 'Common'}
                       onChange={(e) => {
@@ -2865,7 +2886,7 @@ function MysteryBuilderPanel({
                   <button
                     onClick={() => setGuarantees(guarantees.filter((_, idx) => idx !== i))}
                     aria-label="Remove guarantee"
-                    className="text-[var(--c-red)]"
+                    className="w-10 h-10 -my-2 flex items-center justify-center text-[var(--c-red)]"
                   >
                     <X className="w-3 h-3" />
                   </button>
