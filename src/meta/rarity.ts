@@ -30,7 +30,7 @@ export const RARITY_ORDER: string[] = [
   'Mythic',
 ];
 
-/** Position on the ladder, 0-indexed (Common 0 … Mythic 6). */
+/** Position on the ladder, 0-indexed (Common 0 … Alt-Art 6, Mythic 7). */
 export function rarityTier(rarity?: string): number {
   return Math.max(0, RARITY_ORDER.indexOf(rarity || 'Common'));
 }
@@ -145,7 +145,9 @@ export function rarityBg(rarity?: string): string | undefined {
   return RARITY_BG[rarity || ''];
 }
 
-/** True from Super-Rare up — these rarities also get an animated effect layer. */
+/** True for Super-Rare / Ultra-Rare / Full-Art — the tiers whose card frame
+ * gets an animated effect layer. Alt-Art and Mythic sit above these but are
+ * deliberately excluded: each has its own dedicated template instead. */
 export function rarityAnimated(rarity?: string): boolean {
   return rarity === 'Super-Rare' || rarity === 'Ultra-Rare' || rarity === 'Full-Art';
 }

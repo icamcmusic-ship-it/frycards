@@ -126,6 +126,10 @@ export function packOdds(pack: PackType): SlotOdds[] {
       prev &&
       prev.label === odds.label &&
       prev.foilChance === odds.foilChance &&
+      // A type-locked slot (e.g. "always a Leader") must not merge into a
+      // typeless neighbour with the same label/weights — the collapsed row
+      // would misstate how many slots the lock applies to.
+      prev.cardType === odds.cardType &&
       JSON.stringify(prev.weights) === JSON.stringify(odds.weights)
     ) {
       prev.count += odds.count;

@@ -143,7 +143,11 @@ export interface ArchetypeMatch {
 
 export const UNIT_BAND: readonly [number, number] = [32, 40]; // 32 + rng*9
 export const SANCTUM_BAND: readonly [number, number] = [4, 6]; // 4 + rng*3
-export const SPELL_MIN = 8; // Math.max(8, ...)
+// The auto-builder's real spell floor: DECK_SIZE − max units − max sanctums
+// (60 − 40 − 6). Its literal `Math.max(8, …)` is a vestigial bound that can
+// never bind with those bands — mirroring the 8 here meant a 9–13-spell deck
+// got no "thin spells" suggestion even though the builder never produces one.
+export const SPELL_MIN = 14;
 
 export interface DeckAdvice {
   curve: CurveBucketAdvice[];

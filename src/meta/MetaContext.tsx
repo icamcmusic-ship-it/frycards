@@ -196,36 +196,71 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
 
   const userId = session?.user?.id;
 
+  // The refreshX callbacks are fired from dozens of "refresh after a
+  // purchase/claim/trade" call sites and from the realtime subscription below.
+  // The underlying fetchers throw on a query failure (so the boot effect can
+  // distinguish "failed" from "genuinely empty") — but a mid-session refresh
+  // failing must keep whatever is already on screen, not blank the wallet or
+  // wipe the collection, and must not surface as an unhandled rejection at a
+  // call site that never expected one. So each catches and keeps prior state.
   const refreshProfile = useCallback(async () => {
     if (!userId) return;
-    setProfile(await fetchProfile(userId));
+    try {
+      setProfile(await fetchProfile(userId));
+    } catch {
+      /* keep the profile already on screen */
+    }
   }, [userId]);
   const refreshCollection = useCallback(async () => {
     if (!userId) return;
-    const [coll, serial] = await Promise.all([
-      fetchCollection(userId),
-      fetchMySerializedCards(userId),
-    ]);
-    setCollection(coll);
-    setSerializedCards(serial);
+    try {
+      const [coll, serial] = await Promise.all([
+        fetchCollection(userId),
+        fetchMySerializedCards(userId),
+      ]);
+      setCollection(coll);
+      setSerializedCards(serial);
+    } catch {
+      /* keep the collection already on screen */
+    }
   }, [userId]);
   const refreshCosmetics = useCallback(async () => {
     if (!userId) return;
-    setCosmetics(await fetchCosmetics(userId));
+    try {
+      setCosmetics(await fetchCosmetics(userId));
+    } catch {
+      /* keep prior state */
+    }
   }, [userId]);
   const refreshDecks = useCallback(async () => {
     if (!userId) return;
-    setDecks(await fetchDecks(userId));
+    try {
+      setDecks(await fetchDecks(userId));
+    } catch {
+      /* keep prior state */
+    }
   }, [userId]);
   const refreshInventory = useCallback(async () => {
     if (!userId) return;
-    setInventory(await fetchInventory(userId));
+    try {
+      setInventory(await fetchInventory(userId));
+    } catch {
+      /* keep prior state */
+    }
   }, [userId]);
   const refreshShopItems = useCallback(async () => {
-    setShopItems(await fetchShopItems());
+    try {
+      setShopItems(await fetchShopItems());
+    } catch {
+      /* keep prior state */
+    }
   }, []);
   const refreshPackTypes = useCallback(async () => {
-    setPackTypes(await fetchPackTypes());
+    try {
+      setPackTypes(await fetchPackTypes());
+    } catch {
+      /* keep prior state */
+    }
   }, []);
 
   // Load per-user data when a session appears. Guarded against a fast

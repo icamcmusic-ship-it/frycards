@@ -121,12 +121,16 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // action forced a reload.
   useEffect(() => {
     let timer: number | undefined;
-    return subscribeTable('market_listings', () => {
+    const off = subscribeTable('market_listings', () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         void reload();
       }, 400);
     });
+    return () => {
+      window.clearTimeout(timer);
+      off();
+    };
   }, [reload]);
 
   useEffect(() => {

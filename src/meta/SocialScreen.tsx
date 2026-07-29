@@ -768,6 +768,8 @@ function TradeComposerModal({
     return m;
   }, [serializedCards]);
   const [theirCollection, setTheirCollection] = useState<PlayerCard[] | null>(null);
+  const [theirCollectionError, setTheirCollectionError] = useState(false);
+  const [theirCollectionAttempt, setTheirCollectionAttempt] = useState(0);
   const [offer, setOffer] = useState<TradeCardItem[]>([]);
   const [request, setRequest] = useState<TradeCardItem[]>([]);
   // Credits are a plain integer (same unit as everywhere else in the app —
@@ -792,20 +794,22 @@ function TradeComposerModal({
 
   useEffect(() => {
     let cancelled = false;
+    setTheirCollectionError(false);
     fetchFriendCollection(partner.id)
       .then((c) => {
         if (!cancelled) setTheirCollection(c);
       })
       .catch(() => {
-        // Fall back to an empty collection on failure — without this the
-        // modal is stuck on "Loading their collection…" forever with no way
-        // out except Cancel.
-        if (!cancelled) setTheirCollection([]);
+        // A failed load must not be stuck on "Loading their collection…"
+        // forever — but it must not render as the genuine "No tradable
+        // cards" empty state either (the player would send a one-sided
+        // trade believing the friend owns nothing). Distinct error + retry.
+        if (!cancelled) setTheirCollectionError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [partner.id]);
+  }, [partner.id, theirCollectionAttempt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -974,7 +978,18 @@ function TradeComposerModal({
           </div>
 
           <div className="heading-font text-xs mb-1">YOU RECEIVE (from {partner.username})</div>
-          {theirCollection === null ? (
+          {theirCollectionError ? (
+            <div className="text-[10px] font-bold text-[var(--c-steel)] py-4">
+              Couldn't load their collection.{' '}
+              <button
+                type="button"
+                onClick={() => setTheirCollectionAttempt((n) => n + 1)}
+                className="underline font-black text-[var(--c-ink)]"
+              >
+                RETRY
+              </button>
+            </div>
+          ) : theirCollection === null ? (
             <div className="text-[10px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
               Loading their collection…
             </div>

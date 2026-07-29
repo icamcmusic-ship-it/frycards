@@ -36,7 +36,13 @@ export function decodeDeckCode(
   const cardIds: string[] = [];
   const totals = new Map<string, number>();
   for (const entry of body.split(',').filter(Boolean)) {
-    const [id, nStr] = entry.split('*');
+    // Strict shape: `id` or `id*N` with N all digits — encodeDeckCode never
+    // emits anything else, and the lax split/parseInt silently accepted
+    // hand-mangled entries like `id**3` (as 1) or `id*4x` (as 4).
+    const segs = entry.split('*');
+    if (segs.length > 2 || (segs.length === 2 && !/^\d+$/.test(segs[1])))
+      return { error: `Malformed entry: ${entry} (expected id or id*count).` };
+    const [id, nStr] = segs;
     const n = nStr ? parseInt(nStr, 10) : 1;
     const card = db.get(id);
     if (!card) return { error: `Unknown card id: ${id}` };

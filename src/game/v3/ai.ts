@@ -518,8 +518,14 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
   abilities.forEach((ab, i) => {
     if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0) return;
     const eff = ab.effect;
+    // Value unit-targeted effects against what autoTarget can actually hit:
+    // Warded units are untargetable, so against a Warded-only board the
+    // ability resolves with no target and does nothing — the old
+    // `opp.field.length > 0` check burned Resolve on guaranteed whiffs
+    // (and could shatter our own Leader for zero value, see below).
+    const targetable = opp.field.filter((u) => !unitHasKw(u, 'Warded'));
     let v: number;
-    if (isRemoval(eff)) v = opp.field.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
+    if (isRemoval(eff)) v = targetable.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
     else if (eff.action === 'heal')
@@ -528,12 +534,13 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     // attack or a guard) and literally nothing against a tapped-out one.
     else if (eff.action === 'exhaust')
       v = opp.field.some((u) => !u.exhausted && !unitHasKw(u, 'Warded')) ? 6 : 0;
-    else if (eff.action === 'weaken') v = opp.field.length > 0 ? 5 : 0;
+    else if (eff.action === 'weaken') v = targetable.length > 0 ? 5 : 0;
     else v = 2;
     // Never shatter our own Leader for marginal value — only a genuinely
-    // scary board (a Might-6+ unit to answer) can justify going to zero.
+    // scary board (a Might-6+ unit we can actually TARGET) can justify
+    // going to zero.
     if (L.resolve + ab.resolveDelta <= 0) {
-      const bigThreat = opp.field.some((u) => effMight(state, u) >= 6);
+      const bigThreat = targetable.some((u) => effMight(state, u) >= 6);
       v -= bigThreat && isRemoval(eff) ? 6 : 20;
     }
     if (ab.resolveDelta > 0) v += 1; // building resolve is free value
@@ -819,11 +826,11 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
     // This response window is what the reserved locations were saved for —
     // pickInstantAnswer budgets against ALL untapped locations (reserved
     // included), so leaving the hold in place made tapAllLocations skip them
-    // and the answer whiff. Same release rule as reactionPlays: only the
-    // non-active player's hold ends here.
-    if (state.active !== pid) {
-      for (const l of state.players[pid].locations) reservedLocations.delete(l.iid);
-    }
+    // and the answer whiff. Released on the CPU's OWN turn too: the active
+    // player's window (the human responding to a CPU spell) is still the
+    // response the hold was for, and keeping it made the CPU silently pass
+    // on an answer its affordability check said it could pay for.
+    for (const l of state.players[pid].locations) reservedLocations.delete(l.iid);
     tapAllLocations(state, pid);
     const targetIid = answer.def.onInvoke ? autoTarget(state, pid, answer.def.onInvoke) : undefined;
     if (!invokeCard(state, pid, answer.iid, { targetIid })) {

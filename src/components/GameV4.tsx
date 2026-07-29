@@ -268,8 +268,10 @@ function useHoverPreview<T extends HTMLElement>() {
 function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
+  const moved = useRef(false);
   const start = () => {
     fired.current = false;
+    moved.current = false;
     timer.current = setTimeout(() => {
       fired.current = true;
       onLongPress();
@@ -281,7 +283,7 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
     if (fired.current) {
       e.preventDefault();
       onEnd();
-    } else if (wasTap) {
+    } else if (wasTap && !moved.current) {
       onTap?.();
     }
   };
@@ -292,6 +294,16 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
   }, []);
   return {
     onTouchStart: start,
+    // A moving finger is a scroll, not a press (and not a tap either) —
+    // without this, slowly dragging the overflow-x field lane across units
+    // popped the full-card preview whenever one sat under the finger >350ms.
+    onTouchMove: () => {
+      moved.current = true;
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+    },
     onTouchEnd: (e: React.TouchEvent) => clear(e, true),
     onTouchCancel: (e: React.TouchEvent) => clear(e, false),
   };
@@ -366,7 +378,6 @@ function Tip({
       {open && (
         <span
           className="absolute z-[9995] top-full right-0 mt-1 w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
-          onTouchStart={(e) => e.stopPropagation()}
         >
           {text}
         </span>
@@ -461,9 +472,24 @@ function LocationTile({
   const sanctum = !!loc.def;
   const label = sanctum ? loc.def!.name : `${loc.produces} Wellspring`;
   const action = tappable && !loc.exhausted ? onTap : sanctum ? onInspect : undefined;
+  // While a Sanctum is tappable, click is tap-for-essence — which used to
+  // leave no way at all to READ your own Sanctum without first spending its
+  // tap. Long-press (touch) and right-click both inspect instead.
+  const inspectPress = useLongPress(() => {
+    if (sanctum) onInspect?.();
+  }, () => {});
   return (
     <button
       onClick={action}
+      {...(sanctum ? inspectPress : {})}
+      onContextMenu={
+        sanctum && onInspect
+          ? (e) => {
+              e.preventDefault();
+              onInspect();
+            }
+          : undefined
+      }
       disabled={!action}
       title={
         loc.exhausted
@@ -1267,10 +1293,14 @@ export function GameV4({
       }
       else if (logExpanded) setLogExpanded(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
+      // Symmetric with attacker selection: Escape clears an in-progress
+      // guard assignment too (previously the only way to undo a guard was
+      // re-clicking each unit).
+      else if (Object.keys(guardSel).length > 0) setGuardSel({});
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded]);
+  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded, guardSel]);
 
   useEffect(() => {
     const onResize = () => setViewportW(window.innerWidth);
@@ -1346,7 +1376,13 @@ export function GameV4({
         afterResponseAction();
       } else if (hasPriority(g, HUMAN)) {
         // The CPU answered and handed priority back — counter it or pass.
-        openResponseWindow(() => setStage('play'));
+        // Resume to the stage this window opened FROM: invoking in the
+        // CPU-clash reaction window (stage 'cpuGuard') must come back to
+        // 'cpuGuard', not 'play' — resuming to 'play' mid-CPU-clash showed
+        // the human's RESOLVE CLASH, which never runs continueCpuAfterClash
+        // and abandoned the rest of the CPU's turn.
+        const resumeStage = stage;
+        openResponseWindow(() => setStage(resumeStage));
       }
     } else {
       bump(); // taps may have happened

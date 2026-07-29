@@ -186,7 +186,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
       const o = owned.get(c.id);
       if (!o) continue;
       const reserved = serializedByCard.get(c.id)?.length || 0;
-      const spare = Math.max(0, o.q + o.f - (lockedByDecks.get(c.id) || 0) - reserved);
+      // Same arithmetic as runBulkQuicksell above (spareSplit, then reserves
+      // out of the normal split only) — a flat q+f−locked−reserved diverges
+      // when a deck lock spills into foil copies on a card with serialized
+      // reserves, and the progress bar's total disagrees with what the loop
+      // actually sells ("SELLING 3/2").
+      const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
+      const spare = Math.max(0, normal - reserved) + foil;
       if (spare <= 0) continue;
       const r = c.rarity || 'Common';
       m.set(r, (m.get(r) || 0) + spare);

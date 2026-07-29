@@ -1298,8 +1298,14 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
   // `isCancelled` guards a fast owner-to-owner navigation (or unmount) from
   // letting a stale fetch for the PREVIOUS shop overwrite this one's fresh
   // state — same pattern as the other reload()s in this file.
+  // Generation counter: the subscription below fires reload() bare while a
+  // previous reload may still be awaiting — without this, the older reload's
+  // commit can land after (and overwrite) the newer one's.
+  const reloadGen = useRef(0);
   const reload = useCallback(
     async (isCancelled?: () => boolean) => {
+      const gen = ++reloadGen.current;
+      const stale = () => isCancelled?.() || gen !== reloadGen.current;
       setLoadError('');
       try {
         const [s, ls, sellers] = await Promise.all([
@@ -1307,15 +1313,15 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           fetchShopListings(owner),
           fetchPublicProfiles([owner]),
         ]);
-        if (isCancelled?.()) return;
+        if (stale()) return;
         setShop(s);
         setListings(ls.filter((l) => l.status === 'active' || l.status === 'sold_out'));
         setSeller(sellers[0] || null);
       } catch {
-        if (!isCancelled?.())
+        if (!stale())
           setLoadError("Couldn't load this shop. Check your connection and try again.");
       } finally {
-        if (!isCancelled?.()) setLoading(false);
+        if (!stale()) setLoading(false);
       }
     },
     [owner],
@@ -1703,12 +1709,20 @@ function MyShopTab() {
   // `isCancelled` guards a fast account switch (or unmount) from letting a
   // stale fetch for the PREVIOUS user overwrite this one's fresh shop state
   // — same pattern as the other reload()s in this file.
+  // Generation counter: the sales/listings subscription below calls reload()
+  // bare while the mount reload (or an earlier event's) may still be in
+  // flight; this reload commits in two sequential await batches, so two
+  // interleaved runs could otherwise mix old and new state (e.g. a cancelled
+  // listing reappearing until the next event).
+  const reloadGen = useRef(0);
   const reload = useCallback(
     async (isCancelled?: () => boolean) => {
+      const gen = ++reloadGen.current;
+      const stale = () => isCancelled?.() || gen !== reloadGen.current;
       setLoadError('');
       try {
         const s = await fetchMyShop(userId);
-        if (isCancelled?.()) return;
+        if (stale()) return;
         setShop(s);
         if (s) {
           const [sl, li, tp] = await Promise.all([
@@ -1716,7 +1730,7 @@ function MyShopTab() {
             fetchShopListings(userId),
             fetchMysteryTemplates(userId),
           ]);
-          if (isCancelled?.()) return;
+          if (stale()) return;
           setSlots(sl);
           setListings(li);
           setTemplates(tp);
@@ -1725,14 +1739,14 @@ function MyShopTab() {
           fetchMyShopPurchases(userId),
           fetchMyBuyerRatings(userId),
         ]);
-        if (isCancelled?.()) return;
+        if (stale()) return;
         setPurchases(pur.filter((p) => p.buyer === userId));
         setMyRatings(rat);
       } catch {
-        if (!isCancelled?.())
+        if (!stale())
           setLoadError("Couldn't load your shop. Check your connection and try again.");
       } finally {
-        if (!isCancelled?.()) setLoading(false);
+        if (!stale()) setLoading(false);
       }
     },
     [userId],
