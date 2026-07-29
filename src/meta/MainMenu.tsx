@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Swords,
   Library,
@@ -62,12 +62,20 @@ function DailyLoginPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [claimed, setClaimed] = useState<DailyLoginResult | null>(null);
+  // Ticks once a minute so "today" rolls over on its own — same fix as the
+  // Store's daily-pack countdown: a menu left open across UTC midnight used
+  // to keep showing "CLAIMED TODAY ✓" until something else re-rendered.
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   if (!profile) return null;
   const lastClaim = profile.last_login_claim_at
     ? new Date(profile.last_login_claim_at).toISOString().slice(0, 10)
     : null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(nowTs).toISOString().slice(0, 10);
   const claimable = lastClaim !== today && !claimed;
   // Projected streak for the "next claim" preview — the server only continues
   // a streak when the last claim was exactly yesterday (UTC); a lapsed streak

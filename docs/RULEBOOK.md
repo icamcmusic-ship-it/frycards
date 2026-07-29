@@ -103,9 +103,12 @@ only — it cannot return itself or any other Event.
 Scorched-Earth and Glaciate stack, but each is bounded. Scorched-Earth's sweep
 needs three Sanctums — the same threshold Ritual and Archivist use — and two
 copies then sweep for 2. Glaciate rests every second Dawn, and each Sanctum
-keeps its own counter, so two of them freeze one unit per turn between them
-rather than two units every other turn. A Glaciate Sanctum fires on the first
-Dawn after it arrives.
+keeps its own counter — a Glaciate Sanctum always fires on the first Dawn
+after it arrives, then rests on the next. Two Glaciates therefore run on
+their own rhythms: arrivals an odd number of your turns apart alternate,
+freezing one unit per turn between them; arrivals on the same turn (or an
+even number apart) fire and rest in step, freezing two units every other
+turn.
 
 ### Zones
 

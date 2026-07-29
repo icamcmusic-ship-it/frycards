@@ -84,6 +84,72 @@ interleaving content changes with balance trials.
     boxes and dupe protection (all changed in v7.2), §1 omitted the Alt-Art
     copy cap, the footer said V6.9, and the in-app changelog's newest entry
     (which feeds the News Center's LATEST UPDATE banner) was still v7.6.
+- **Bug hunt, second sweep** (four parallel read-only sweeps over the engine,
+  the meta screens, the board UI and the pure-logic modules; every fix
+  verified against the standing rule that the generated pool stays
+  byte-identical — confirmed before and after):
+  - A response window opened from the CPU-clash reaction window resumed into
+    the human's own stage: invoke a Quick Event while the CPU's attack is
+    pausing at 'reaction', let the CPU counter, and closing the window set
+    the stage to 'play' mid-CPU-clash — the human's RESOLVE CLASH then never
+    ran the CPU's Main II/Dusk. The window now resumes to the stage it
+    opened from.
+  - The mulligan window spanned both players' first turns: `turn === 1` let
+    the second player redraw a full 8-card hand for free after watching the
+    first player's whole turn, and a Wellspring play (which never set
+    `invokedCardThisTurn`) left it open mid-turn. Rulebook §3: before the
+    first turn only — now enforced (regression tests added).
+  - Tidecaller (and any deals-clash-damage trigger) never fired when the
+    unit died dealing its damage — the mutual trade, the most common clash
+    outcome. The trigger loop now keeps the dealer instance instead of
+    re-finding it on the field.
+  - The CPU could shatter its own Leader on a guaranteed whiff: removal and
+    weaken abilities were valued against `opp.field.length` while autoTarget
+    excludes Warded units, so a Warded-only board burned Resolve (or the
+    Leader itself) for zero value. Valued against targetable units now, and
+    the CPU's reserved-essence hold is also released on its OWN turn's
+    response window — it silently passed on answers its affordability check
+    said it could pay for.
+  - One transient query failure mid-session read as catastrophic state: a
+    failed `fetchProfile` nulled the signed-in profile (wallet blanked,
+    every buy button disabled, ProfileScreen stuck on LOADING), and the
+    per-user readers returned `[]` on error so a failed load rendered as
+    "you own nothing" and the boot effect's bootError/RETRY path was
+    unreachable. The readers now throw like `fetchShopItems`; the refreshX
+    callbacks keep on-screen state on failure.
+  - The trade composer rendered a failed partner-collection load as the
+    genuine "No tradable cards" empty state — now a distinct error with
+    RETRY. Marketplace's realtime debounce timer leaked across unmount; both
+    PlayerShops reloads had no stale-guard, so interleaved reloads could
+    commit mixed old/new state; the daily-login panel never re-evaluated
+    "today" across UTC midnight (Store's 60s tick, applied); the bulk
+    quicksell progress denominator could disagree with what the loop sells.
+  - Board UI on touch: a slow scroll across the field lane popped the card
+    preview (long-press now cancels on touch-move), Escape couldn't clear a
+    guard assignment in progress (symmetric with attacker selection now),
+    and a ready Sanctum's ability was unreadable without spending its tap —
+    long-press or right-click now inspects.
+  - How to Play taught three stale rules: Unbreakable as "always survives"
+    (it's once per turn), the reaction window as defender-only (either
+    player, rulebook §5), and nothing at all about the stack/priority
+    (§6) — all corrected, plus a "Responding (the stack)" entry.
+  - The deck guide's spell floor mirrored the auto-builder's vestigial
+    `max(8, …)` — its real floor is 14, so 9–13-spell decks got no thin-
+    spells suggestion. Pack-odds row merging ignored `card_type`, so a
+    type-locked slot could collapse into a typeless neighbour. Deck-code
+    import silently accepted malformed entries (`id**3` as 1 copy).
+  - RULEBOOK.md overstated Glaciate's stagger: two copies played the same
+    turn (or an even number apart) fire in lockstep by design — the doc now
+    says so. The Location COST_ADJUST is applied outside the 1–4 base clamp
+    (byte-identical today; previously the next point stacked onto a base-4
+    Sanctum would have silently vanished, the kunoichi failure one type
+    over). Recorded, not fixed (content-scale, belongs to the
+    Unbreakable/cost-cap pass): Events and Charms still carry the
+    at-the-cap double penalty that v6.7 fixed for Units — marked KNOWN
+    ISSUE at both sites. Stale in-code records corrected: the STAT_ADJUST
+    v7.5 arrows that never landed, the colors.ts mono-pip fallback claim
+    (the hash picks are always adjacent, never equal), rarity tier/animation
+    doc-strings, and two probability comments.
 
 ### v7.7 — Two cohorts were not enough
 

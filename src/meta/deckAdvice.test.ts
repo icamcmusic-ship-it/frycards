@@ -89,6 +89,21 @@ describe('deriveDeckAdvice', () => {
     expect(advice.suggestions.some((s) => s.includes('Sanctums is above'))).toBe(true);
   });
 
+  it('flags a spell count below the auto-builder floor (14, not the vestigial 8)', () => {
+    // v7.8 bug hunt: the builder's literal Math.max(8, …) can never bind —
+    // its real floor is DECK_SIZE − 40 units − 6 sanctums = 14. A 12-spell
+    // deck must get the thin-spells suggestion.
+    const charm: CardDef = {
+      id: 'ch',
+      name: 'ch',
+      type: 'Charm',
+      subtype: 'Bound',
+      cost: { generic: 2, pips: {} },
+    };
+    const advice = deriveDeckAdvice([e(charm, 12), e(unit('u', 2), 48)]);
+    expect(advice.suggestions.some((s) => s.includes('Only 12 Charms/Events'))).toBe(true);
+  });
+
   it('stays quiet about under-band composition while the deck is half-built', () => {
     const advice = deriveDeckAdvice([e(unit('u', 2), 10)]);
     expect(advice.suggestions.some((s) => s.includes('auto-builder runs'))).toBe(false);

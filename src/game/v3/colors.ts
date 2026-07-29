@@ -81,8 +81,11 @@ export const LEADER_COLORS: Record<string, Color[]> = {
   ruinwalker_overseer: ['Root', 'Void'],
   sovereign_of_the_dying_star: ['Ember', 'Void'],
   // v7.3: Void Mother was reassigned Unit -> Leader. Without an entry here
-  // mapLeader falls back to two hash-picked colours, which can roll the same
-  // colour twice (a mono-pip identity no other Leader has). Void first so its
+  // mapLeader falls back to two hash-picked colours — and because those two
+  // picks use salts 3 and 11 (11−3 ≡ 1 mod 7) the pair is always ADJACENT in
+  // COLORS order: never a repeat, but only 7 of the 21 possible pairs are
+  // reachable, so an unlisted Leader gets a hash-constrained identity rather
+  // than a chosen one. Void first so its
   // minus ability is the Void `Banish` its art and name promise; Shadow
   // second for the plus half.
   void_mother: ['Void', 'Shadow'],

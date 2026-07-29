@@ -602,6 +602,31 @@ describe('mulligan', () => {
     mulliganHand(s, 'P1');
     expect(s.players.P1.hand.length).toBe(2);
   });
+
+  // v7.8 bug hunt: `turn === 1` alone spanned BOTH players' first turns, so
+  // the second player could redraw a full hand for free after watching the
+  // first player's entire turn.
+  test('the second player cannot mulligan once their own first turn has begun', () => {
+    const s = game({ deck: Array(10).fill(VANILLA.id), handSize: 3 });
+    // Advance through the first player's whole turn.
+    while (s.active === s.firstPlayer && !s.winner) endPhase(s);
+    expect(s.turn).toBe(1); // still "turn 1" — exactly the loophole
+    expect(mulliganHand(s, s.active)).toBe(false);
+  });
+
+  test('both players can mulligan before anything has happened', () => {
+    const s = game({ deck: Array(10).fill(VANILLA.id), handSize: 3 });
+    expect(mulliganHand(s, 'P1')).toBe(true);
+    expect(mulliganHand(s, 'P2')).toBe(true);
+  });
+
+  test('a Wellspring play closes the mulligan window for both players', () => {
+    const s = game({ deck: Array(10).fill(VANILLA.id), handSize: 3 });
+    s.phase = 'Main1';
+    expect(playWellspring(s, s.active, 'Ember')).toBe(true);
+    expect(mulliganHand(s, 'P1')).toBe(false);
+    expect(mulliganHand(s, 'P2')).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

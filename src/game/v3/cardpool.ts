@@ -365,6 +365,12 @@ const STAT_ADJUST: Record<string, number> = {
   //   the_pier_side_menace     +11.9 (n=516) / +11.1 (n=881)  -> -3 becomes -4
   //   skyborne_skeleton_dragon  +3.5 (n=557) /  +2.3 (n=766)  -> in band, alone
   //
+  // v7.8 correction: the two arrows above never landed — the shipped values
+  // are still Wolf -2 and Menace -3, and the v7.7 findings doc (§6) reads
+  // those as the live baselines. Do NOT derive the next lever from the
+  // arrow targets; the v7.7 carry-forward (Unbreakable and the cost cap)
+  // owns whether these move at all.
+  //
   // So Unbreakable is not uniformly underpriced: two of its three bodies are,
   // and the keyword's own number was reading their average. The third is
   // deliberately NOT stacked with them.
@@ -724,7 +730,7 @@ function pickUnitKeywords(seed: string, colors: Color[], rt: number): string[] {
     );
     if (secondList.length) out.push(pick(seed, 13, secondList) as string);
   }
-  // v6.9: roughly a quarter of keyword-carrying units swap their PRIMARY
+  // v6.9: 30% of keyword-carrying units swap their PRIMARY
   // keyword for their colour's new-generation one (NEW_KEYWORD_OF_COLOR).
   // A swap, not an addition — an extra keyword would hand those cards a free
   // power bump on top of the new text. Rolled on its own salt so the legacy
@@ -955,7 +961,7 @@ function mapEvent(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  // v6.0 Event keywords: ~12% Surge (conditional discount), ~8% Resonant
+  // v6.0 Event keywords: 14% Surge (conditional discount), 12% Resonant
   // (double resolution, rare+ only). Surcharges come from KEYWORD_COST via
   // keywordCostAdj — the effect is scaled from the PRE-surcharge total so it
   // doesn't double a full-cost effect for free.
@@ -1004,6 +1010,13 @@ function mapEvent(c: CardTemplate): CardDef {
   // a balance cut makes the Event cheaper without shrinking its effect (and a
   // raise makes it pricier without growing it) — see naturalTotalFor.
   const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  // KNOWN ISSUE (v7.8 bug hunt, deferred): this still carries the double
+  // penalty at the cost cap that the v6.7 statBase fix removed for Units
+  // (see mapUnit) — when base + kwAdj exceeds naturalTotalFor's 7-clamp the
+  // full kwAdj is subtracted from a total that never collected it, shrinking
+  // the effect for a surcharge never charged. Fixing it reprints every
+  // affected Event/Charm (content-scale), so it belongs to the same
+  // dedicated pass as the Unbreakable/cost-cap carry-forward, not a bug fix.
   const t = Math.max(1, naturalT - kwAdj);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
   const fx = eventEffect(seed, colors[0], t, subtype === 'Slow');
@@ -1060,6 +1073,10 @@ function mapCharm(c: CardTemplate): CardDef {
   // stats). v6.6: and from the NATURAL (pre-COST_ADJUST) cost, so a balance
   // cut lowers only the price, never the bond — see naturalTotalFor.
   const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  // KNOWN ISSUE (v7.8 bug hunt, deferred): same cost-cap double penalty as
+  // mapEvent above — see the note there; fixed for Units in v6.7 (mapUnit's
+  // statBase), never ported here. Content-scale to fix, so deferred to the
+  // Unbreakable/cost-cap pass.
   const t = Math.max(1, naturalT - kwAdj);
 
   const statBudget = Math.max(1, t + 1 - (subtype === 'Worn' ? 1 : 0));
@@ -1145,13 +1162,16 @@ function mapLocation(c: CardTemplate): CardDef {
         : [];
   const kwAdj = keywordCostAdj(locKws);
   // Base total keeps the pre-v6 1..4 clamp so keyword-free Sanctums price
-  // identically; the keyword surcharge stacks on top (ceiling 6).
+  // identically; COST_ADJUST is applied OUTSIDE that clamp — per its header
+  // it is a price-only lever whose points must stay real, and inside the
+  // clamp any adjustment landing on a base-4 Sanctum silently vanished (the
+  // kunoichi_of_the_magma_rings failure, one type over). Verified
+  // byte-identical on the current pool: no live Location entry clips.
+  // The keyword surcharge stacks on top (ceiling 6, floor 1).
   const total = Math.min(
     6,
-    Math.max(
-      1,
-      Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2) + adjustFor(c.id)),
-    ) + kwAdj,
+    Math.max(1, Math.min(4, 1 + Math.floor(rt / 2) + roll(seed, 'loc-spread', 2)) + adjustFor(c.id)) +
+      kwAdj,
   );
   const cost: EssenceCost = { generic: total - 1, pips: { [produces]: 1 } };
 

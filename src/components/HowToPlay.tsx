@@ -6,7 +6,7 @@ import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
-// Condensed view of docs/RULEBOOK.md (Rulebook v5.0), plus a
+// Condensed view of docs/RULEBOOK.md (Rulebook v6.0), plus a
 // standalone rarity-system explainer and an app feature guide — reachable
 // any time from the Main Menu's HOW TO PLAY button (and auto-opened on a
 // first-ever visit).
@@ -72,7 +72,11 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Timing',
-        'Slow Events, Charms, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases plus the guard-step reaction window of either player’s Clash.',
+        'Slow Events, Charms, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases, the guard-step reaction window of either player’s Clash, and whenever an opponent’s card is on the stack waiting to resolve.',
+      ],
+      [
+        'Responding (the stack)',
+        'An invoked card does not resolve instantly — it goes on the stack, and the other player gets a window to answer with a Quick Event or Ambush unit before it takes effect. Responses resolve last-in-first-out, and a response whose target is gone by the time it resolves fizzles. PASS when you have no answer (or don’t want to spend one).',
       ],
     ],
   },
@@ -118,7 +122,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Reaction window',
-        'After guards are set, the defender may still invoke Quick Events and Ambush units (tapping Locations for essence as needed) before damage resolves.',
+        'After guards are set, EITHER player may still invoke Quick Events and Ambush units (tapping Locations for essence as needed) before damage resolves — the attacker gets the window in their own Clash too.',
       ],
       [
         'Damage',
@@ -126,7 +130,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'State checks',
-        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — Unbreakable units survive. A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
+        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — an Unbreakable unit shrugs off the FIRST such effect each turn (once per turn, not always). A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
       ],
     ],
   },

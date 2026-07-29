@@ -260,10 +260,14 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   // A transient query failure must not read the same as "no profile" — the
   // caller (MetaContext.refreshProfile, called after every purchase) would
   // otherwise show credits/vouchers/xp as wiped even though nothing changed
-  // server-side. Logging at minimum makes a real outage diagnosable; callers
-  // that care about distinguishing "failed" from "genuinely empty" can be
-  // extended to check this too.
-  if (error) console.error('fetchProfile failed:', error.message);
+  // server-side. Thrown (not null): MetaContext's boot effect turns a
+  // rejection into bootError+retry, and its refreshProfile keeps the profile
+  // already on screen. Returning null here made one network blip mid-session
+  // blank the wallet and disable every buy button until a full reload.
+  if (error) {
+    console.error('fetchProfile failed:', error.message);
+    throw error;
+  }
   return (data as Profile) || null;
 }
 
@@ -304,7 +308,13 @@ export async function fetchCollection(userId: string): Promise<PlayerCard[]> {
     .from('player_cards')
     .select('card_id, quantity, foil_quantity')
     .eq('user_id', userId);
-  if (error) console.error('fetchCollection failed:', error.message);
+  // Thrown (not []) — same contract as fetchShopItems below: a failed read
+  // must not render as "you own nothing" (empty collection, every deck card
+  // marked unowned, sell/trade forms offering copies the server will reject).
+  if (error) {
+    console.error('fetchCollection failed:', error.message);
+    throw error;
+  }
   return (data as PlayerCard[]) || [];
 }
 
@@ -313,7 +323,10 @@ export async function fetchCosmetics(userId: string): Promise<PlayerCosmetic[]> 
     .from('player_cosmetics')
     .select('shop_item_id, is_foil')
     .eq('user_id', userId);
-  if (error) console.error('fetchCosmetics failed:', error.message);
+  if (error) {
+    console.error('fetchCosmetics failed:', error.message);
+    throw error;
+  }
   return (data as PlayerCosmetic[]) || [];
 }
 
@@ -323,7 +336,10 @@ export async function fetchDecks(userId: string): Promise<DeckRow[]> {
     .select('*')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false });
-  if (error) console.error('fetchDecks failed:', error.message);
+  if (error) {
+    console.error('fetchDecks failed:', error.message);
+    throw error;
+  }
   return (data as DeckRow[]) || [];
 }
 
@@ -609,7 +625,10 @@ export async function fetchInventory(userId: string): Promise<InventoryEntry[]> 
     .select('pack_type_id, quantity')
     .eq('user_id', userId)
     .gt('quantity', 0);
-  if (error) console.error('fetchInventory failed:', error.message);
+  if (error) {
+    console.error('fetchInventory failed:', error.message);
+    throw error;
+  }
   return (data as InventoryEntry[]) || [];
 }
 
@@ -1776,7 +1795,12 @@ export async function fetchMySerializedCards(userId: string): Promise<OwnedSeria
       .eq('user_id', userId),
     supabase.from('serialized_supply').select('rarity, cap'),
   ]);
-  if (error) console.error('fetchMySerializedCards (cards) failed:', error.message);
+  // The cards query failing throws (same contract as fetchCollection); the
+  // supply query alone failing degrades to the NaN/"?" cap below instead.
+  if (error) {
+    console.error('fetchMySerializedCards (cards) failed:', error.message);
+    throw error;
+  }
   if (supplyError) console.error('fetchMySerializedCards (supply) failed:', supplyError.message);
   const capByRarity = new Map((supply || []).map((s) => [s.rarity, s.cap as number]));
   // NaN (rendered as "?" — see CollectionScreen/NewsCenterScreen) when the

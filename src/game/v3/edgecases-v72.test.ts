@@ -311,6 +311,24 @@ describe('Tidecaller', () => {
     expect(s.players.P1.hand.length).toBe(MAX_HAND);
   });
 
+  // v7.8 bug hunt: "whenever this unit deals clash damage" has no
+  // survives-clause — a Tidecaller that dies in a mutual trade (the most
+  // common clash outcome) still dealt its damage and still draws.
+  test('a Tidecaller that dies dealing its clash damage still draws', () => {
+    const s = game();
+    s.active = 'P1';
+    const tide = summonUnit(s, 'P1', U('tide', 2, 2, ['Tidecaller']));
+    const wall = summonUnit(s, 'P2', U('wall', 2, 2));
+    s.players.P1.deck.push(makeCardInst(U('spare', 1, 1)));
+    const before = s.players.P1.hand.length;
+    s.phase = 'Clash';
+    declareAttackers(s, [tide.iid]);
+    declareGuards(s, { [tide.iid]: [wall.iid] });
+    resolveClash(s);
+    expect(findUnit(s, tide.iid)).toBeUndefined(); // the trade happened
+    expect(s.players.P1.hand.length).toBe(before + 1);
+  });
+
   test('a Tidecaller that deals no damage does not draw', () => {
     const s = game();
     const tide = summonUnit(s, 'P1', U('tide', 0, 3, ['Tidecaller']));

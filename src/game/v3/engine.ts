@@ -461,11 +461,19 @@ export function createGame(
  */
 export function mulliganHand(state: GameState, pid: PlayerId): boolean {
   const p = state.players[pid];
-  // Only legal before the first turn's actions: turn 1, no clash yet, still
-  // in Dawn/Main1, and this player hasn't invoked anything.
+  // Only legal BEFORE the first turn (rulebook §3): nothing may have
+  // happened in the game yet. `turn === 1` alone spanned BOTH players' first
+  // turns (turn only increments after the second player's), which let the
+  // second player redraw a full 8-card hand for free after watching the
+  // first player's whole turn — and "hasn't invoked" missed Wellspring
+  // plays, so a mulligan stayed legal mid-turn after seeing information.
   if (state.winner || state.turn !== 1 || state.clash) return false;
+  if (state.active !== state.firstPlayer) return false;
   if (state.phase !== 'Dawn' && state.phase !== 'Main1') return false;
-  if (p.invokedCardThisTurn || p.leader.invoked) return false;
+  for (const q of [state.players.P1, state.players.P2]) {
+    if (q.invokedCardThisTurn || q.leader.invoked || q.wellspringsPlayedThisTurn > 0)
+      return false;
+  }
   const n = p.hand.length - 1;
   if (n < 0) return false;
   p.deck.push(...p.hand);
@@ -1843,7 +1851,12 @@ export function resolveClash(state: GameState): boolean {
           .filter(([, gs]) => gs.length > 0)
           .map(([a]) => a),
   );
-  const dealtBy = new Set<string>();
+  // Keyed by iid, holding the INSTANCE: "whenever this unit deals clash
+  // damage" has no survives-clause, so a unit that died dealing its damage
+  // (the mutual 2/2 trade — the most common clash outcome) still triggers.
+  // Looking the iid up on the field afterwards silently dropped exactly
+  // those procs.
+  const dealtBy = new Map<string, UnitInst>();
   // Damage each attacker has assigned to its guards across BOTH sub-steps —
   // Overrun only ever spills (Might - total guard absorption) to the face.
   const absorbed = new Map<string, number>();
@@ -1853,7 +1866,7 @@ export function resolveClash(state: GameState): boolean {
     const preFieldCount =
       step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;
     for (const pkt of packets) {
-      if (pkt.amount > 0) dealtBy.add(pkt.source.iid);
+      if (pkt.amount > 0) dealtBy.set(pkt.source.iid, pkt.source);
       if (pkt.targetUnit) damageUnit(state, pkt.targetUnit, pkt.amount, pkt.source);
       else if (pkt.targetPlayer) damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
     }
@@ -1864,9 +1877,8 @@ export function resolveClash(state: GameState): boolean {
       if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
     }
   }
-  for (const iid of dealtBy) {
-    const u = findUnit(state, iid);
-    if (!u) continue;
+  for (const u of dealtBy.values()) {
+    if (state.winner) break;
     // v6.9 Tidecaller: connecting in a clash refills the hand.
     if (unitHasKw(u, 'Tidecaller')) {
       telemetry.onKeywordProc?.('Tidecaller', 1);
