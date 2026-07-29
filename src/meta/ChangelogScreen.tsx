@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Balance Update (v7.6)',
+    date: 'July 2026',
+    items: [
+      'STONE BUBBLES has been the strongest card in the game for three balance passes and nothing we tried ever moved it. We had been blaming SACRED, its lifegain keyword — six attempts to make that keyword more expensive, then attempts to weaken the effect itself. So we deleted the effect entirely as a test, and the card was still winning just as much. It was never the keyword: it was the OTHER line of text, "At Dusk, a target enemy unit gets -1/-1", every turn, forever, on a 2-cost Sanctum with nothing your opponent can do about it. That line is gone; the card keeps Sacred and its essence, and now wins about as often as any other Location. Sacred itself is completely unchanged — it was innocent.',
+      'THE WOLF OF WALL STREET loses its printed ability too, for the same reason and after the same investigation. It is now a plain 5/5 with Unbreakable. THE PIER-SIDE MENACE keeps its "deal 1 damage when it enters" — we tried removing that as well, and it made the card unplayable rather than fair.',
+      'SCORCHED-EARTH now only sweeps the enemy board if you control 3 or more Sanctums, the same build-toward requirement Ritual and Archivist already use. GLACIATE now freezes an enemy unit every OTHER turn instead of every turn. Both were winning far too much on their debut, and raising their cost had simply pushed them out of decks entirely instead of making them fair.',
+      'BLESSED and EXHUME are on more cards. Blessed had printed on exactly one card in the whole pool and Exhume on two, which was too few to tell whether they were any good; they are now on five and six. Fate and Freeze-Dry got a few more carriers as well. No card that already had a keyword changed.',
+      'Fixed: the live card database was two balance passes out of date — Void Mother still listed at Resolve 6 with a 2-cost Banish, The Wolf of Wall Street still listed as a keywordless 6/6. The game itself was always right; the catalog behind it was not, and it now is.',
+    ],
+  },
+  {
     version: 'Keywords, Phones & Balance (v7.5)',
     date: 'July 2026',
     items: [

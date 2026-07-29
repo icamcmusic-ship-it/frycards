@@ -17,30 +17,39 @@ Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
 ## Medium term
 
-- **Sacred / `stone_bubbles`** — the last balance item with a clean diagnosis
-  and no lever pulled. Four cost trials across three passes, under both the
-  flat and the ramp-matched metric, and the number has never once moved down in
-  both cohorts; v7.5 §1 removed the last reason to blame the measurement. The
-  next lever is the Sacred **effect**, not its price. See
-  `docs/BALANCE_SIM_FINDINGS_v7.5.md`.
-- **The two Unbreakable 7-drops** — `the_wolf_of_wall_street` (+8.2 / +10.6)
-  and `the_pier_side_menace` (+9.1 / +9.7). v7.5 moved both for the first time
-  with the new `UNIT_EFFECT_ADJUST` lever after cost, stats and the keyword's
-  own text all measured inert on them; both are still out of band. The residue
-  is a body that cannot be answered on the turn it lands, so re-check after one
-  pass with Unbreakable bounded to once per turn.
-- **Kuro, the Unseen 37.4 / 38.6** — bottom in both cohorts with one lever
-  pulled (its minus repriced -2 -> -1). The Resolve lever is measured at
-  +2.3 / +3.6 and unspent; the "one lever per Leader per pass" rule holds it
-  for the next pass.
-- **`Scorched-Earth` and `Glaciate`** — both came in over on their first
-  measured run and both resisted the price lever the way every other Location
-  has this pass (see `docs/BALANCE_SIM_FINDINGS_v7.5.md` §5). The effect side
-  is untouched: gate the sweep on Sanctum count, or move either to every other
-  Dusk.
-- **`Blessed` has one carrier and `Exhume` two** — neither is measurable at
-  that width. Widen their roll bands before reading anything into their
-  deltas.
+- **The cost-2 Sanctum band** — the balance item v7.6 uncovered while closing
+  the Sacred one, and the top of the list. `metricDiagnostics.locationsByCost`
+  reads +5.38 / +4.60 for 2-cost Sanctums as a class and +6.65 / +5.30 for the
+  ones with no keyword at all — the keyword-free Sanctums read at or ABOVE
+  their keyworded neighbours in both cohorts. The next move is a comparator,
+  not a lever: a Sanctum play is itself the ramp step the ramp-matched baseline
+  matches on, so try a Location-only baseline before pricing anything (and note
+  a cost point on a Location is still binary — three demonstrations in v7.5).
+  See `docs/BALANCE_SIM_FINDINGS_v7.6.md` §1.
+- **Sentinel of the Nether Pit (`crimson_vector_commander`) 38.8 / 63.7** — a
+  25-point cohort split, a shatter rate an order of magnitude above every other
+  Leader, and it owns cohort A's whole spread. Never actioned. Needs a pinned
+  `leaderPairSuite` read that cohort composition cannot reach.
+- **The two Unbreakable 7-drops** — `the_wolf_of_wall_street` (+8.6 / +6.4) and
+  `the_pier_side_menace` (+10.5 / +10.5). v7.6 removed the Wolf's printed
+  ability entirely (it ships) and refused the same lever on the Menace (it lost
+  a third of its plays). Every lever aimed at the Wolf's TEXT is now spent, so
+  what is left is the body — and v7.5's "STAT_ADJUST is inert on it" reading
+  was taken while the ability was still printed, so under v7.6 §3 it has
+  expired. Re-measure the stat lever on the cards as they now print.
+- **Kuro, the Unseen 45.6 / 39.8** — still bottom in cohort B. Both named
+  levers are now spent or refuted (v7.6 §3); the next one has to be found
+  rather than looked up.
+- **`Fate` -5.0 / -1.8** — nine carriers and the largest sample of any keyword
+  in the pool after v7.6 widened its roll band, and it has never been priced.
+  First candidate for a keyword weight change (it sits at 1, and note
+  `keywordCostAdj` is `Math.round(w / 2)`, so the effective step is two).
+- **`Glaciate` +9.8 / +11.5** — its every-other-Dawn lever measured -3.3 / -4.2
+  in isolation and then did not survive the roll-band widening later in the
+  same pass. Re-measure on the settled pool.
+- **`Scorched-Earth` has no cohort-B reading**, before or after its v7.6 gate.
+  A keyword one of the two deck cohorts never drafts cannot clear a two-cohort
+  bar; it needs a third cohort or a pinned deck suite.
 - **ELO-tracked CPU gauntlet** — a ranked-style ladder against the CPU as a
   stepping stone to real matchmaking.
 - **Volume #2** — the content pipeline supports further drops on top of the
