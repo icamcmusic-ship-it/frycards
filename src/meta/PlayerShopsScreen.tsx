@@ -1251,7 +1251,14 @@ function MysteryListingCard({
             </span>
             {soldOut && (
               <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
-                {(listing.status || 'SOLD OUT').toUpperCase()}
+                {/* soldOut is derived from live stock (remaining <= 0), which
+                    can go true a beat before the row reloads off 'active' —
+                    so a still-'active' status here means "sold out, not yet
+                    reloaded", never a live listing. Only a genuinely terminal
+                    status (closed/cancelled) overrides the SOLD OUT label. */}
+                {listing.status && listing.status !== 'active'
+                  ? listing.status.toUpperCase()
+                  : 'SOLD OUT'}
               </span>
             )}
           </div>
