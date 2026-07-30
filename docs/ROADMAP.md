@@ -23,7 +23,13 @@ Everything here has a started implementation and a visible seam.
   strip). Still unmeasured on a phone: the store, marketplace, player shops,
   social and profile screens, and the 3D card inspector. Harness is `npm run
 dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
-  screens are covered.
+  screens are covered. **Named by the v9 hunt:** the pinned hand-card preview
+  scales the card 1.55x with a fixed 160px control column and no viewport clamp
+  (the 3D inspector already clamps for exactly this), so on a ~375px phone the
+  `✕ CLOSE` and half the INVOKE button are clipped off-screen with no
+  outside-tap dismiss — and INVOKE only exists inside that preview, making it
+  the primary invoke path on mobile. Clamp the preview scale/position to the
+  viewport the way `Card3DInspector` does.
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
@@ -102,8 +108,31 @@ Ordered by how much they change what it feels like to own and play the game.
     `case 'play'` requires `profile?.role === 'creator'` and a guest has no
     profile — so the whole branch plus its comments is dead code. Enabling it
     vs. deleting it is a product call.
+  - **The sell-reservation model is not the same across surfaces** (found v9).
+    `sell_bounty_card` (the authoritative server) and the bounty tile's client
+    gate treat a deck lock and a Serialized-print reserve as *independent*
+    checks: one physical copy can satisfy both, so a player holding two copies —
+    one Serialized, one deck-locked — can sell down to one. The other four sell
+    surfaces (Collection, Marketplace, Player Shops, Social) treat them as
+    *additive* (that player sees zero sellable). Both are defensible; the game
+    should pick one. If additive is correct, the RPCs (`sell_bounty_card`,
+    `quicksell_cards`, `assert_cards_available`) are what enforce it and so are
+    where the change belongs. A clean fix also wants `get_daily_bounties` to
+    return the quantity/foil split so the bounty tile can mirror the server
+    exactly instead of guessing from a combined `owned`.
 
 ## Later — needs a foundation first
+
+- **Unbreakable's save heals marked damage instead of only preventing the
+  packet** (found v9). `stateBasedChecks` catches a lethal Unbreakable unit and
+  sets `u.damage = 0`, so a wall carrying pre-existing marked damage that then
+  survives a lethal hit walks away fully healed. Rulebook §8 prevents the
+  *incoming packet*, not the marked damage already on the body. A correct fix
+  can't be done at the state-based check, which no longer knows the packet size —
+  it means moving Unbreakable's prevention into `damageUnit` (packet-level),
+  which changes combat's simultaneous-damage sequencing and so is a combat
+  refactor, not a one-liner. Belongs with the clash-math work, behind a balance
+  pass, since it makes the most expensive keyword in the pool strictly weaker.
 
 - **Multiplayer (PvP).** Requires a server-authoritative engine; design spike
   is in `docs/PVP_DESIGN.md`. Real blocker is that `engine.ts` is a

@@ -883,6 +883,14 @@ const AUTO_INTRO_VISIBLE_MS = 6000;
  * never-seen keywords mount at once, this staggers their auto-introduce
  * popovers instead of firing them all on top of each other. */
 let nextAutoIntroSlot = 0;
+/** Keywords with an auto-introduce popover currently scheduled but not yet
+ * shown. Marking a keyword "seen" is deferred until its popover actually opens
+ * (a chip can unmount during the stagger delay before its slot fires, and a
+ * keyword marked seen without ever showing is lost forever). This set keeps the
+ * dedup the synchronous mark used to provide, so two chips for the same keyword
+ * don't both introduce it; an entry is cleared when the popover fires or when
+ * the chip unmounts first, letting a later mount retry the intro. */
+const autoIntroInFlight = new Set<string>();
 
 /** Shared popover behavior for any clickable keyword mention. */
 function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: string) {
@@ -941,15 +949,20 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   };
 
   useEffect(() => {
-    if (!autoIntroduce || !text || hasSeenKeyword(kw)) return;
-    markKeywordSeen(kw);
+    if (!autoIntroduce || !text || hasSeenKeyword(kw) || autoIntroInFlight.has(kw)) return;
+    autoIntroInFlight.add(kw);
     const now = Date.now();
     const showAt = Math.max(now, nextAutoIntroSlot);
     nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
     autoOpenRef.current = window.setTimeout(() => {
       autoOpenRef.current = null;
       const next = computePos();
+      autoIntroInFlight.delete(kw);
       if (!next) return;
+      // Only mark seen once the popover actually opens — deferring it here is
+      // the whole point: a chip that unmounts before this fires leaves the
+      // keyword un-seen so the intro still gets its one chance later.
+      markKeywordSeen(kw);
       setPos(next);
       autoCloseRef.current = window.setTimeout(() => {
         autoCloseRef.current = null;
@@ -957,6 +970,9 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
       }, AUTO_INTRO_VISIBLE_MS);
     }, showAt - now);
     return () => {
+      // Unmounted before the slot fired: release the in-flight claim (the timer
+      // never marked it seen) so a future mount can reintroduce it.
+      if (autoOpenRef.current !== null) autoIntroInFlight.delete(kw);
       clearAutoOpen();
       clearAutoClose();
     };
@@ -2471,7 +2487,7 @@ export function CardFace({
         <>
           <div
             className={cn(
-              'relative overflow-hidden w-full aspect-[4/3] shrink-0 mx-1.5 mt-1 border border-[var(--c-ink)]',
+              'relative overflow-hidden aspect-[4/3] shrink-0 mx-1.5 mt-1 border border-[var(--c-ink)]',
             )}
           >
             <CardArt def={def} />

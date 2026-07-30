@@ -8,6 +8,87 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v9.0 — Deep bug hunt: clash math, dead events, and a leaking Dusk
+
+Fifth bug-hunt sweep, run wide: five parallel audits over the engine, the CPU,
+the match UI, the meta/economy screens, and the Supabase RPC layer. The
+backend came back clean where it counts — RLS exposes only `SELECT` policies, so
+every economy mutation is forced through the `SECURITY DEFINER` RPCs, and the
+card-removal paths (`create_listing`, `create_shop_listing`, `submit_mystery_pool`,
+`sell_bounty_card`) all reserve deck locks and Serialized prints the same way
+`quicksell_cards` does. The finds were in the engine, and they change who wins
+clashes.
+
+- **Hardened guards were unkillable in clash by any single attacker.** The
+  attacker only ever assigned `remainingGrit` to each guard, and `damageUnit`
+  then shaves 1 off the packet for Hardened — so a 3-grit Hardened guard took 2
+  marked and lived, no matter the attacker's Might, and a Venomous attacker's
+  single point was absorbed to zero (no venom mark either). The printed keyword
+  is "damage dealt to this unit is reduced by 1", i.e. a bigger body still gets
+  through; the engine had turned it into "cannot be killed in combat." The
+  assignment now adds the point Hardened absorbs (`remainingGrit + 1`, or 2 for
+  Venom), which also reconciles the engine with the CPU's own kill model
+  (`ai.ts` `packetDamage` already assumed the guard dies to `Might − 1`), so the
+  AI stops attacking into walls it thought it could break and declining blocks
+  it thought would die. Found independently by two of the five audits.
+- **A clash hit fully absorbed by Hardened still "dealt clash damage."**
+  `resolveClash` recorded the source from the *pre*-mitigation packet, so a
+  1-Might Tidecaller into a Hardened guard drew a card despite marking nothing.
+  `damageUnit`/`damagePlayer` now return the net damage that landed, and the
+  `dealsClashDamage`/Tidecaller triggers fire only when a point actually
+  connects.
+- **Fizzled Events still ran their riders.** An Event whose target was killed in
+  response logged "fizzles" and skipped its `onInvoke` — but the Echoing draw,
+  the Fate banish, and the Exhume return all fired unconditionally, so a
+  countered Event still drew a card, banished the top of the enemy deck, or
+  raised a Unit from the ash-pile. Rulebook §6: a fizzled Event "does nothing and
+  still goes to the Ash-pile." The riders are now gated on the Event actually
+  resolving.
+- **Dusk-death triggers leaked past the turn boundary.** `runDusk` drains the
+  stack *before* the Entropic/Blighted/Scorched-Earth sweeps, then hands the turn
+  over without draining again — so a dies-trigger from a Scorched-Earth board
+  wipe resolved only during the *opponent's* Dawn, after it had recharged every
+  Unbreakable save and ticked Regenerate/Thriving. A martyr's death-shatter that
+  should have killed a wall whose save was already spent instead hit a
+  freshly-recharged shield and whiffed. A drain now runs after the Dusk sweeps,
+  per §6 ("anything put on the stack inside a step resolves before the step
+  continues").
+- **The CPU Leader burned Resolve on guaranteed-whiff shatters.**
+  `runLeaderAbility` valued a shatter against the Warded-only target list, but
+  `autoTarget` also excludes Unbreakable units whose save is up — so against an
+  all-Unbreakable board the CPU activated a shatter that resolved with no target,
+  paying 2+ Resolve for nothing. The two other AI shatter sites already had the
+  guard; the Leader path was the one that was missed.
+- **The Daily Login panel bricked across UTC midnight after a claim.** The
+  minute ticker rolls `today` over so a menu left open past midnight becomes
+  claimable again — but the local `claimed` state was never scoped to its day, so
+  after claiming, the panel stayed stuck on the "CLAIMED" summary and the new
+  day's reward (and the streak) could not be claimed until the panel remounted.
+  The claim result now lapses when the day rolls over.
+- **First-time keyword teaching could be silently consumed.** The keyword
+  auto-introduce popover marked a keyword "seen" the moment it was *scheduled*,
+  but the open is deferred by a stagger; a chip that unmounted during the delay
+  (card invoked, board unit shattered, hand redrawn) cancelled the popover yet
+  left it marked seen forever. The "seen" mark is now deferred until the popover
+  actually opens, with an in-flight guard preserving the concurrent-duplicate
+  dedup.
+- **Two smaller UI-state fixes in the match view.** A framed card's art window
+  used `w-full` where its siblings use margin-aware stretch, so its right edge
+  and border were clipped 6px past the card; dropped the `w-full`. And a
+  half-built target pick made in a response window survived into the CPU's turn —
+  the red "PICK A TARGET" bar and target rings stayed up through the CPU's whole
+  turn — because `pending` was never cleared when priority passed; it is now
+  dropped at both CPU hand-off points.
+
+Left open, on the roadmap, as decisions rather than defects: the mobile
+hand-card preview overflows a phone viewport (part of the responsive pass), the
+`record_match_result` reward is client-trusted (inherent to the client-side
+engine — the PvP/server-authority item), the Unbreakable save wipes *marked*
+damage rather than only the prevented packet (a correct fix needs packet-level
+prevention, a combat refactor), and the bounty-sell reservation gate uses the
+authoritative server's independent-check reading while four other sell surfaces
+use a stricter additive one.
+
 ### v8.0 — Bug hunt: the resource with no ceiling
 
 Fourth bug-hunt sweep. The headline finding is a rules bug the engine has
