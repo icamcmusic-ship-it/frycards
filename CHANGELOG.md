@@ -8,6 +8,85 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v10.0 — Deep bug hunt: a cosmetic entitlement, a mis-modelled clash, and legality that stopped at card count
+
+Sixth bug-hunt sweep, run the same way — six audits in parallel over the engine,
+the CPU, the match UI, the meta/economy screens, the deck/market/social
+surfaces, and the Supabase RPC layer. The engine came back clean this time: the
+whole v9.0 clash-math batch (Hardened lethality, net-damage triggers, fizzled
+riders, the Dusk drain) verified as correctly applied with no regressions, and
+the only rules-doc drift was one word (Exhume returns a _random_ Unit; the
+rulebook table had lost the word the engine and card text both print). The finds
+were spread across the CPU's combat model, the match view's clash decorations,
+two server RPCs, and one server entitlement bug.
+
+- **A paid, season-pass-exclusive cosmetic could be equipped without owning it.**
+  The server's `equip_cosmetic` computed "free" as `cost_credits = 0 OR
+cost_vouchers = 0` — but a `cost_vouchers` of 0 means "not voucher-purchasable"
+  everywhere else in the app, not "free". The live banner _Into the Pines_
+  (799 credits, `is_season_pass_exclusive`, `cost_vouchers = 0`) was equippable
+  by any authenticated player straight through the RPC. Free now means
+  `cost_credits = 0` **and** not season-pass-exclusive, matching the client's
+  `usable()`. The identical logic had been fixed client-side in an earlier hunt;
+  the server kept the loose predicate. (Supabase migration.)
+- **The CPU mis-modelled six kinds of clash and lost material to it.**
+  Doublestrike dealt its packet once in every unit-vs-unit calculation though
+  the engine strikes in both sub-steps, so the CPU donated guards to
+  Doublestrike attackers and mis-scored Doublestrike blocks; `attackerKills`
+  ignored a Quickstrike guard's pre-kill, so the CPU walked units into
+  Quickstrike walls for a one-for-zero it scored as a favourable trade; the
+  Overrun-spill and all-in-lethal math credited a guard its full grit against a
+  Venomous attacker (which marks only 1) and omitted Hardened's +1 absorption,
+  so it skipped chump blocks that would have lived and false-flagged non-lethal
+  all-ins as lethal; and `invokePriority`'s "no legal target" penalties were
+  swamped by its `cost*10` base, so a cost-5 dead spell cast into an empty board,
+  a sweep fired at nothing, and a cheap creature with a fizzled enters-rider was
+  withheld. Each was verified with a direct repro; the 2208-game sim keeps zero
+  invariant violations and a stable win rate.
+- **Deck legality stopped at card count.** `save_deck` graded `is_valid` on
+  "60–100 cards" alone, so a color-illegal deck — built by swapping the Leader
+  after the fact, or importing a deck code the editor flags — saved as valid,
+  showed the green LEGAL badge, and was offered in the match deck picker. It now
+  also requires every card's color identity to sit inside the Leader's, matching
+  the editor's own rule. Separately, `save_deck` reserved Leader copies with a
+  bare `owned > 0` check that never subtracted other decks' claims, so two decks
+  could "exclusively reserve" the same single Leader and leave quicksell seeing
+  `locked > owned` forever; it now uses the same per-copy reservation as the
+  card list. (Supabase migrations; no existing deck was mis-graded.)
+- **Match-view clash decorations lingered a full step past the clash.** The
+  defender's Vitality plate flashed "hit" for an attacker whose guard was killed
+  in the reaction window (blocked-is-blocked means no face damage; the flash read
+  the live guards map instead of the declare-time `guardedOnce` snapshot the
+  engine uses), and after the human's own clash resolved the "RESOLVE CLASH"
+  hint, the clash bar, and the attacker/guard rings all stayed on screen until
+  the next phase because `g.clash` lingers at `step: 'done'`. Both now clear at
+  resolution, matching the CPU-side path.
+- **The first-match coach dropped its guard lesson exactly when guards were
+  due.** Step 4 ("Opponent's Turn", whose body teaches guarding) mapped the
+  guard sub-step to a coach key with no script entry, hitting the
+  hide-unknown-stage fallback — so the callout vanished the instant the player
+  had to assign guards. The sub-step now shares the "cpu" key so the lesson
+  persists through it.
+- **Two marketplace sell-form drifts and stale player-facing docs.** The sell
+  form invited a quantity above the 20-per-listing cap and a price above
+  1,000,000 that `create_listing` rejects outright, and showed a Duration picker
+  on fixed-price sales that the server ignores (fixed listings always run 14
+  days), so a seller who chose "6 hours" watched the card sit escrowed for two
+  weeks. The form now clamps to the caps and shows the picker only for auctions.
+  The manual's pack section still promised a copy-cap autosell removed in v7.8,
+  its footer read V7.7, and the in-app changelog was a release behind (the News
+  "Latest Update" banner reads from it) — all resynced.
+
+Left open, on the roadmap, as decisions or foundation work rather than defects:
+the attacker's own-clash reaction window is served non-interactively in the UI
+(the human is denied a response it is entitled to, and the CPU's post-guard
+reaction window is unreachable from a real match) — both live in the priority
+hand-off that the server-authoritative PvP work will rewrite; the bounty
+sell-tile still can't mirror the server's Serialized reservation exactly until
+`get_daily_bounties` returns the quantity/foil split (part of the sell-model
+decision already logged); and a latent Tidecaller/Doublestrike double-fire that
+no legal deck can currently field.
+
 ### v9.0 — Deep bug hunt: clash math, dead events, and a leaking Dusk
 
 Fifth bug-hunt sweep, run wide: five parallel audits over the engine, the CPU,
@@ -32,7 +111,7 @@ clashes.
   AI stops attacking into walls it thought it could break and declining blocks
   it thought would die. Found independently by two of the five audits.
 - **A clash hit fully absorbed by Hardened still "dealt clash damage."**
-  `resolveClash` recorded the source from the *pre*-mitigation packet, so a
+  `resolveClash` recorded the source from the _pre_-mitigation packet, so a
   1-Might Tidecaller into a Hardened guard drew a card despite marking nothing.
   `damageUnit`/`damagePlayer` now return the net damage that landed, and the
   `dealsClashDamage`/Tidecaller triggers fire only when a point actually
@@ -45,9 +124,9 @@ clashes.
   still goes to the Ash-pile." The riders are now gated on the Event actually
   resolving.
 - **Dusk-death triggers leaked past the turn boundary.** `runDusk` drains the
-  stack *before* the Entropic/Blighted/Scorched-Earth sweeps, then hands the turn
+  stack _before_ the Entropic/Blighted/Scorched-Earth sweeps, then hands the turn
   over without draining again — so a dies-trigger from a Scorched-Earth board
-  wipe resolved only during the *opponent's* Dawn, after it had recharged every
+  wipe resolved only during the _opponent's_ Dawn, after it had recharged every
   Unbreakable save and ticked Regenerate/Thriving. A martyr's death-shatter that
   should have killed a wall whose save was already spent instead hit a
   freshly-recharged shield and whiffed. A drain now runs after the Dusk sweeps,
@@ -66,7 +145,7 @@ clashes.
   day's reward (and the streak) could not be claimed until the panel remounted.
   The claim result now lapses when the day rolls over.
 - **First-time keyword teaching could be silently consumed.** The keyword
-  auto-introduce popover marked a keyword "seen" the moment it was *scheduled*,
+  auto-introduce popover marked a keyword "seen" the moment it was _scheduled_,
   but the open is deferred by a stagger; a chip that unmounted during the delay
   (card invoked, board unit shattered, hand redrawn) cancelled the popover yet
   left it marked seen forever. The "seen" mark is now deferred until the popover
@@ -83,7 +162,7 @@ clashes.
 Left open, on the roadmap, as decisions rather than defects: the mobile
 hand-card preview overflows a phone viewport (part of the responsive pass), the
 `record_match_result` reward is client-trusted (inherent to the client-side
-engine — the PvP/server-authority item), the Unbreakable save wipes *marked*
+engine — the PvP/server-authority item), the Unbreakable save wipes _marked_
 damage rather than only the prevented packet (a correct fix needs packet-level
 prevention, a combat refactor), and the bounty-sell reservation gate uses the
 authoritative server's independent-check reading while four other sell surfaces
@@ -109,16 +188,16 @@ every turn of every game. The two server-side items v7.9 found and left open
   rather than patched a third time by hand.
 - **Leader Resolve had no ceiling.** `activateLeaderAbility` applied its
   ability's `resolveDelta` with a bare `+=`. Every Leader in the pool prints a
-  `+1` builder as its second ability (`catalog.test.ts` *enforces* it: "second
+  `+1` builder as its second ability (`catalog.test.ts` _enforces_ it: "second
   ability must build Resolve"), and `runLeaderAbility` scores building Resolve
   as "free value", so the CPU fires that builder most turns it has nothing
   better to do — and Resolve climbed past the printed value without limit. A
-  printed-4 Leader sitting at 8 needs twice the removal to shatter *and* banks
+  printed-4 Leader sitting at 8 needs twice the removal to shatter _and_ banks
   twice as many `-2` activations as its pool is supposed to allow.
 
   Every other path already respected the printed value as a maximum:
   `Resolute` has read "up to its printed value" since v6.0, `invokeLeader`
-  sets `resolve` *to* the printed number, and `ResolveDots` models it as
+  sets `resolve` _to_ the printed number, and `ResolveDots` models it as
   `max`. The builder path was the only one that did not, which is why it
   survived — nothing in the game ever displayed the excess as wrong. Found by
   a soak invariant (`resolve <= def.resolve`) rather than by reading: it
@@ -133,17 +212,18 @@ every turn of every game. The two server-side items v7.9 found and left open
   measurably easier to shatter and every `-N` ability measurably scarcer, and
   the v7.7 standing rule says a rules change gets its own pass before balance
   trials resume.
+
 - **The Resolve meter told sighted and screen-reader users two different
   maxima.** `ResolveDots` set `title` to `Resolve {n} of {max}` but dropped the
   " of {max}" half entirely whenever `resolve > max`, while `aria-label` read
-  `Resolve {n} of {total}` — `total` being the *dot count*, which widens to
+  `Resolve {n} of {total}` — `total` being the _dot count_, which widens to
   `resolve` in exactly that case. So the one state where the numbers mattered
   was the state where the tooltip lost the maximum and the screen reader
   reported a different one. One label for both now.
 - **Deck locks meant two different things on the server (v7.9 carry-forward,
   now fixed).** `save_deck` and `get_listable_inventory` SUM a card's copies
   across every deck; `quicksell_cards` and `assert_cards_available` took
-  `max(per_deck)`. `save_deck` is the gate that *creates* decks and it only
+  `max(per_deck)`. `save_deck` is the gate that _creates_ decks and it only
   ever lets a deck take copies no other deck has claimed — so SUM is the
   invariant the stored data actually satisfies, and the permissive reading was
   winning at the point of sale. With 4 copies split 2/2 across two
@@ -160,7 +240,7 @@ every turn of every game. The two server-side items v7.9 found and left open
   decrement the non-foil count backing a Serialized print — both of which
   `quicksell_cards` explicitly refuses. Same two guards added, with the same
   error vocabulary, and the ownership decision now evaluated against the
-  *post*-sale counts so the checks see the truth. The StoreScreen bounty tile
+  _post_-sale counts so the checks see the truth. The StoreScreen bounty tile
   had no lock awareness at all (`get_daily_bounties` reports `owned` as the raw
   `quantity + foil_quantity`), so it would have offered SELL and collected a
   raw server error; it now disables the button and says which rule blocked it,
@@ -175,7 +255,7 @@ Verified and **not** bugs, recorded so the next sweep does not re-derive them:
   `ensure_daily_bounties` — already has `EXECUTE` revoked from `authenticated`,
   so Supabase's 66 `authenticated_security_definer_function_executable`
   advisories are all on genuinely player-facing RPCs. The one unguarded
-  helper players *can* call, `settle_expired_listings`, only touches listings
+  helper players _can_ call, `settle_expired_listings`, only touches listings
   with `ends_at <= now()`, which is a lazy cron and not an exploit.
 - Every client mirror of a server constant agrees with its source:
   `QUICKSELL_PRICES` vs `card_sell_price`, `maxCopiesForRarity` vs
@@ -311,7 +391,7 @@ interleaving content changes with balance trials.
   - The CPU could reserve essence for a response and then be unable to pay
     for it: `respondToStack` refused to tap reserved Locations while its
     affordability check counted them.
-  - Exhume's engine pick now matches its printed text — a *random* ash-pile
+  - Exhume's engine pick now matches its printed text — a _random_ ash-pile
     Unit via the seeded engine RNG, not deterministically the oldest.
   - Battle Pass / Achievements / News Center rendered network failures as
     "nothing here yet" — their fetchers swallowed errors so the RETRY path
