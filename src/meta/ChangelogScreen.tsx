@@ -12,6 +12,16 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Leader Resolve Fix (v8.0)',
+    date: 'July 2026',
+    items: [
+      "RULES FIX: a Leader's Resolve can no longer be built ABOVE its printed value. Every Leader has a “+1” ability alongside its spender, and that “+1” had no ceiling — a Leader could sit on far more Resolve than its card prints, which made it much harder to shatter and let it fire its expensive ability far more often than intended. Resolve now tops out at the number on the card, exactly like the RESOLUTE keyword has always said. The ability still resolves its effect at full Resolve; it just doesn’t bank anything.",
+      'The bounty shop now refuses to sell a card that is committed to one of your saved decks, or one backed by a Serialized print — the same two protections quick-sell has always had. The bounty tile tells you which rule is blocking the sale instead of letting you find out from an error.',
+      'Fixed a related hole in quick-sell and in marketplace/shop/trade listings: a card split across two saved decks could be sold or listed out from under BOTH of them, leaving decks reserving copies you no longer owned and unable to be saved again.',
+      'The Leader Resolve meter now reads the same maximum in its tooltip and to a screen reader; the two used to disagree.',
+    ],
+  },
+  {
     version: 'Balance Update (v7.7)',
     date: 'July 2026',
     items: [

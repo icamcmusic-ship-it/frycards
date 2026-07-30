@@ -583,7 +583,9 @@ function SellForm({
             { q: c.quantity, f: c.foil_quantity },
             locked.get(c.card_id) || 0,
           );
-          return Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0;
+          return (
+            Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0
+          );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),

@@ -543,7 +543,12 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
       const bigThreat = targetable.some((u) => effMight(state, u) >= 6);
       v -= bigThreat && isRemoval(eff) ? 6 : 20;
     }
-    if (ab.resolveDelta > 0) v += 1; // building resolve is free value
+    // Building Resolve is free value — but only while there is headroom to
+    // build into. `activateLeaderAbility` caps a builder at the printed value,
+    // so at full Resolve the `+1` half of the ability does nothing and this
+    // bonus was buying a wasted once-per-turn activation (it is enough on its
+    // own to beat a genuine `v = 0` alternative).
+    if (ab.resolveDelta > 0 && L.resolve < (L.def.resolve ?? 0)) v += 1;
     if (v > bestVal) {
       bestVal = v;
       bestIdx = i;
@@ -867,9 +872,7 @@ function pickInstantAnswer(state: GameState, pid: PlayerId) {
       // and essence without even stripping the save.
       .filter((c) => {
         const isShatter = c.def.onInvoke?.action === 'shatter';
-        return enemyField.some(
-          (u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)),
-        );
+        return enemyField.some((u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)));
       })
       // Affordability is measured against Locations the CPU could still tap —
       // it holds them untapped until it decides to answer.

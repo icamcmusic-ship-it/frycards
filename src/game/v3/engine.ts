@@ -1743,7 +1743,22 @@ export function activateLeaderAbility(
   if (!ability) return false;
   if (ability.resolveDelta < 0 && L.resolve + ability.resolveDelta < 0) return false;
   L.abilityUsedThisTurn = true;
-  L.resolve += ability.resolveDelta;
+  // A builder ability can never take Resolve ABOVE the Leader's printed value.
+  // `Resolute` has always said "up to its printed value" and the UI models the
+  // printed number as the maximum (`ResolveDots`' `max`), but this line was a
+  // bare `+=`: every Leader in the pool prints a `+1` builder as its second
+  // ability (catalog.test.ts enforces it), the CPU scores building Resolve as
+  // "free value" and fires it most turns, so Resolve ratcheted up without any
+  // ceiling — a printed-4 Leader sitting at 8 needs twice the removal to
+  // shatter AND banks twice as many `-2` activations as its pool should allow.
+  // The cap is `max(printed, current)` rather than a bare `printed` so a
+  // builder can only ever raise Resolve or leave it alone — it must never
+  // *reduce* a Leader already sitting above its printed value.
+  const printed = L.def.resolve ?? 0;
+  L.resolve =
+    ability.resolveDelta > 0
+      ? Math.min(Math.max(printed, L.resolve), L.resolve + ability.resolveDelta)
+      : L.resolve + ability.resolveDelta;
   applyEffect(state, pid, ability.effect, targetIid);
   if (L.resolve <= 0) {
     L.shattered = true;

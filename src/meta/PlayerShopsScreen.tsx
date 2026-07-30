@@ -660,7 +660,9 @@ function CardStackPicker({
             { q: c.quantity, f: c.foil_quantity },
             locked.get(c.card_id) || 0,
           );
-          return Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0;
+          return (
+            Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0
+          );
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
@@ -2873,67 +2875,67 @@ function MysteryBuilderPanel({
               pack_size (the server rejects it). Advanced mode uses `minimum`
               slots to express the same floor. */}
           {tMode === 'simple' && (
-          <div className="ink-border-sm p-2 mb-2 bg-[var(--c-yellow)]/10">
-            <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" /> GUARANTEED PER PACK
+            <div className="ink-border-sm p-2 mb-2 bg-[var(--c-yellow)]/10">
+              <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5" /> GUARANTEED PER PACK
+              </div>
+              <div className="text-[9px] font-bold text-[var(--c-steel)] mb-1.5">
+                Every pack will contain at least this many cards of each rarity (or better). Totals
+                can't exceed the pack size ({guaranteedTotal}/{tSize} used).
+              </div>
+              <div className="flex flex-col gap-1 mb-1.5">
+                {guarantees.map((g, i) => (
+                  <div key={i} className="flex items-center gap-2 flex-wrap">
+                    <select
+                      aria-label={`Guarantee ${i + 1} rarity`}
+                      className="px-1 py-1 ink-border-sm text-[10px] font-bold"
+                      value={g.rarity}
+                      onChange={(e) => {
+                        const next = [...guarantees];
+                        next[i] = { ...g, rarity: e.target.value };
+                        setGuarantees(next);
+                      }}
+                    >
+                      {RARITIES.map((r) => (
+                        <option key={r} value={r}>
+                          {r} or better
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      aria-label={`Guarantee ${i + 1} count`}
+                      min={1}
+                      max={tSize}
+                      value={g.count}
+                      onChange={(e) => {
+                        const next = [...guarantees];
+                        next[i] = {
+                          ...g,
+                          count: Math.max(1, Math.min(tSize, Number(e.target.value) || 1)),
+                        };
+                        setGuarantees(next);
+                      }}
+                      className="w-14 px-1 py-0.5 ink-border-sm text-[10px] font-bold"
+                    />
+                    <button
+                      onClick={() => setGuarantees(guarantees.filter((_, idx) => idx !== i))}
+                      aria-label="Remove guarantee"
+                      className="w-10 h-10 -my-2 flex items-center justify-center text-[var(--c-red)]"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <PopButton
+                color="steel"
+                disabled={guaranteedTotal >= tSize}
+                onClick={() => setGuarantees([...guarantees, { rarity: 'Rare', count: 1 }])}
+              >
+                + ADD GUARANTEE
+              </PopButton>
             </div>
-            <div className="text-[9px] font-bold text-[var(--c-steel)] mb-1.5">
-              Every pack will contain at least this many cards of each rarity (or better). Totals
-              can't exceed the pack size ({guaranteedTotal}/{tSize} used).
-            </div>
-            <div className="flex flex-col gap-1 mb-1.5">
-              {guarantees.map((g, i) => (
-                <div key={i} className="flex items-center gap-2 flex-wrap">
-                  <select
-                    aria-label={`Guarantee ${i + 1} rarity`}
-                    className="px-1 py-1 ink-border-sm text-[10px] font-bold"
-                    value={g.rarity}
-                    onChange={(e) => {
-                      const next = [...guarantees];
-                      next[i] = { ...g, rarity: e.target.value };
-                      setGuarantees(next);
-                    }}
-                  >
-                    {RARITIES.map((r) => (
-                      <option key={r} value={r}>
-                        {r} or better
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    aria-label={`Guarantee ${i + 1} count`}
-                    min={1}
-                    max={tSize}
-                    value={g.count}
-                    onChange={(e) => {
-                      const next = [...guarantees];
-                      next[i] = {
-                        ...g,
-                        count: Math.max(1, Math.min(tSize, Number(e.target.value) || 1)),
-                      };
-                      setGuarantees(next);
-                    }}
-                    className="w-14 px-1 py-0.5 ink-border-sm text-[10px] font-bold"
-                  />
-                  <button
-                    onClick={() => setGuarantees(guarantees.filter((_, idx) => idx !== i))}
-                    aria-label="Remove guarantee"
-                    className="w-10 h-10 -my-2 flex items-center justify-center text-[var(--c-red)]"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <PopButton
-              color="steel"
-              disabled={guaranteedTotal >= tSize}
-              onClick={() => setGuarantees([...guarantees, { rarity: 'Rare', count: 1 }])}
-            >
-              + ADD GUARANTEE
-            </PopButton>
-          </div>
           )}
           <PopButton
             color="red"

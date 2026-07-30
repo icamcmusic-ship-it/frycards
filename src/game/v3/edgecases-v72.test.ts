@@ -30,6 +30,16 @@ import {
   summonUnit,
 } from './engine';
 import { POOL_BY_ID } from './cardpool';
+import { playTurn } from './ai';
+import { buildDeck, randomArchetype } from './decks';
+
+/** A real-catalog match, for the soak-style assertions at the bottom. */
+function createGameFromCatalog(seed: number, rng: () => number): GameState {
+  return createGame(buildDeck(randomArchetype(rng)), buildDeck(randomArchetype(rng)), POOL_BY_ID, {
+    rng: mulberry32(seed * 104729),
+    firstPlayer: seed % 2 === 0 ? 'P1' : 'P2',
+  });
+}
 
 const U = (
   id: string,
@@ -420,4 +430,77 @@ describe('v7.2 Leader kits', () => {
     expect(activateLeaderAbility(s, 'P1', 0, b.iid)).toBe(false);
     expect(findUnit(s, b.iid)!.permGrit).toBe(0);
   });
+});
+
+// ---------------------------------------------------------------------------
+// v8.0: Leader Resolve has a ceiling
+// ---------------------------------------------------------------------------
+describe('v8.0 — a builder ability cannot take Resolve above the printed value', () => {
+  test('the +1 builder stops at the printed maximum instead of ratcheting up', () => {
+    const s = game();
+    s.active = 'P1';
+    s.phase = 'Main1';
+    fieldLeader(s, 'P1');
+    const L = s.players.P1.leader;
+    expect(L.resolve).toBe(4); // printed
+
+    // A target for the builder's effect, so the ability itself is legal.
+    summonUnit(s, 'P2', U('dummy', 2, 2));
+
+    // At full Resolve the builder still resolves its effect, but banks nothing.
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(true);
+    expect(L.resolve).toBe(4);
+
+    // And from below the cap it climbs by one, never past it.
+    L.resolve = 3;
+    L.abilityUsedThisTurn = false;
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(true);
+    expect(L.resolve).toBe(4);
+    L.abilityUsedThisTurn = false;
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(true);
+    expect(L.resolve).toBe(4);
+  });
+
+  test('a spender still moves Resolve down normally', () => {
+    const s = game();
+    s.active = 'P1';
+    s.phase = 'Main1';
+    fieldLeader(s, 'P1');
+    const victim = summonUnit(s, 'P2', U('vic', 9, 9));
+    expect(activateLeaderAbility(s, 'P1', 0, victim.iid)).toBe(true);
+    expect(s.players.P1.leader.resolve).toBe(3);
+  });
+
+  test('a Leader already above its printed value is never pushed back DOWN', () => {
+    // Defensive: the cap is max(printed, current), so a state that somehow
+    // holds excess Resolve keeps it rather than being silently truncated.
+    const s = game();
+    s.active = 'P1';
+    s.phase = 'Main1';
+    fieldLeader(s, 'P1');
+    const L = s.players.P1.leader;
+    L.resolve = 7;
+    summonUnit(s, 'P2', U('dummy2', 2, 2));
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(true);
+    expect(L.resolve).toBe(7);
+  });
+
+  test('Resolve never exceeds the printed value across a full CPU-vs-CPU match', () => {
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const rng = mulberry32(seed * 7919);
+      const g = createGameFromCatalog(seed, rng);
+      let turns = 0;
+      while (!g.winner && turns < 300) {
+        playTurn(g, g.active);
+        turns += 1;
+        for (const pid of ['P1', 'P2'] as const) {
+          const L = g.players[pid].leader;
+          expect(
+            L.resolve,
+            `seed ${seed} turn ${turns}: ${pid} Resolve ${L.resolve} > printed ${L.def.resolve}`,
+          ).toBeLessThanOrEqual(L.def.resolve ?? 0);
+        }
+      }
+    }
+  }, 120_000);
 });

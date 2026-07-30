@@ -778,13 +778,16 @@ function PhaseStepper({
 /** Leader Resolve as filled dots rather than a bare number — the resource is
  * spent and regained in ones, so a countable row reads faster than digits. */
 function ResolveDots({ resolve, max, mine }: { resolve: number; max: number; mine: boolean }) {
+  // `total` is the number of dots drawn; it stays defensive against a Resolve
+  // above the printed maximum even though `activateLeaderAbility` now caps
+  // builders there. The LABEL must read the printed maximum either way: the
+  // tooltip used to drop " of N" entirely whenever resolve exceeded max while
+  // the aria-label reported " of {total}", so a sighted player and a screen
+  // reader were told two different maxima for the same Leader.
   const total = Math.max(1, Math.min(10, Math.max(max, resolve)));
+  const label = `Resolve ${resolve} of ${Math.max(max, resolve)}`;
   return (
-    <span
-      className="flex gap-[3px] items-center"
-      title={`Resolve ${resolve}${max > resolve ? ` of ${max}` : ''}`}
-      aria-label={`Resolve ${resolve} of ${total}`}
-    >
+    <span className="flex gap-[3px] items-center" title={label} aria-label={label}>
       {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
@@ -1665,7 +1668,7 @@ export function GameV4({
   // clash before it's resolved (resolveClash nulls g.clash).
   const unguardedVitKey = (): string | null => {
     if (!g.clash) return null;
-    const anyUnguarded = g.clash.attackers.some((a) => !(g.clash!.guards[a]?.length));
+    const anyUnguarded = g.clash.attackers.some((a) => !g.clash!.guards[a]?.length);
     if (!anyUnguarded) return null;
     return `vit:${g.active === HUMAN ? CPU : HUMAN}`;
   };
