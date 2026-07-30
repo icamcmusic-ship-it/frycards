@@ -12,6 +12,28 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Bug Hunt (v10)',
+    date: 'July 2026',
+    items: [
+      'SECURITY FIX: a paid, season-pass-exclusive profile banner could be equipped without owning it, because the server mistook a “0 vouchers” price column for “free”. Only cosmetics that truly cost nothing are free now.',
+      'The daily-login panel no longer gets stuck on yesterday’s “CLAIMED” summary if you leave the menu open past midnight — the new day’s reward button appears on its own.',
+      'On phones, the enlarged hand-card preview now fits the screen: the CLOSE and INVOKE buttons used to be clipped off the right edge. The card scales down and the controls stack below it on narrow screens.',
+      'The CPU plays clashes more accurately: it no longer donates blockers to Doublestrike attackers, walks its units into Quickstrike guards for nothing, mis-reads Venomous/Hardened combat, wastes removal on an empty or already-tapped board, or sits on a useful creature because its bonus effect had no target.',
+      'In-app rules and manual text brought back in sync with the current game (Exhume returns a RANDOM unit; there is no pack copy-cap autosell).',
+    ],
+  },
+  {
+    version: 'Deep Bug Hunt (v9.0)',
+    date: 'July 2026',
+    items: [
+      'RULES FIX: a Hardened guard is no longer unkillable in combat — “damage reduced by 1” means a bigger body still gets through, so a high-Might attacker shatters it as the card implies (and the CPU stops attacking into, and declining, walls it misjudged).',
+      'A clash hit fully absorbed by Hardened no longer counts as “dealt damage”, so triggers that key off connecting (like a card draw) only fire when a point actually lands.',
+      'An Event whose target is removed in response now correctly fizzles — its rider effects (a bonus draw, a banish, an ash-pile return) no longer fire off a countered spell.',
+      'End-of-turn board sweeps (Entropic/Blighted/Scorched-Earth) resolve their death triggers inside the same turn instead of leaking into the opponent’s, so a save that was already spent stays spent.',
+      'Fixed a daily-login panel that could brick across midnight, a first-time keyword tutorial that could be silently skipped, and two smaller match-view display glitches.',
+    ],
+  },
+  {
     version: 'Leader Resolve Fix (v8.0)',
     date: 'July 2026',
     items: [

@@ -8,53 +8,53 @@ for the digital client; digital adaptations are marked **[digital]**.
 
 ### Core actions
 
-| Term | Meaning |
-|---|---|
-| Invoke | Play a spell from hand |
-| Exhaust | Turn a card sideways to use its ability or pay a cost |
-| Recover | Return a card to an upright, ready state |
-| Deal | Take a card from your deck (draw) |
-| Shed | Put a card from hand into the ash-pile (discard) |
-| Forfeit | Put your own permanent into the ash-pile as a cost |
-| Shatter | Send a permanent to the ash-pile (destroy) |
-| Banish | Remove a card from the game (to The Void) |
-| Erode | Put cards from deck to ash-pile without drawing (mill) |
-| Bond | Link a Charm to a unit (attach) |
+| Term    | Meaning                                                |
+| ------- | ------------------------------------------------------ |
+| Invoke  | Play a spell from hand                                 |
+| Exhaust | Turn a card sideways to use its ability or pay a cost  |
+| Recover | Return a card to an upright, ready state               |
+| Deal    | Take a card from your deck (draw)                      |
+| Shed    | Put a card from hand into the ash-pile (discard)       |
+| Forfeit | Put your own permanent into the ash-pile as a cost     |
+| Shatter | Send a permanent to the ash-pile (destroy)             |
+| Banish  | Remove a card from the game (to The Void)              |
+| Erode   | Put cards from deck to ash-pile without drawing (mill) |
+| Bond    | Link a Charm to a unit (attach)                        |
 
 ### Keyword abilities
 
 Unit keywords (rulebook §1):
 
-| Keyword | Meaning |
-|---|---|
-| Aerial | Can only be guarded by other Aerial or Skywatch units |
-| Overrun | Excess clash damage carries through to the defending player |
-| Quickstrike | Deals damage before normal clash damage |
-| Doublestrike | Deals both quickstrike and normal damage |
-| Venomous | Any damage dealt is lethal |
-| Siphon | Damage dealt also gains you that much Vitality (never above 20) |
-| Alert | Doesn't exhaust when attacking |
-| Reckless | Can act the turn it enters the field |
-| Swarmproof | Must be guarded by two or more units |
-| Skywatch | Can guard Aerial units |
-| Warded | Can't be targeted by an opponent |
-| Unbreakable | Once per turn, prevent the first effect that would shatter this or deal it lethal damage |
-| Ambush | Can be invoked at any time, even outside your main phase |
-| Immobile | Can't attack |
-| Regenerate | At Dawn, heal all damage marked on this unit |
-| Hardened | Damage dealt to this unit is reduced by 1 |
+| Keyword      | Meaning                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| Aerial       | Can only be guarded by other Aerial or Skywatch units                                    |
+| Overrun      | Excess clash damage carries through to the defending player                              |
+| Quickstrike  | Deals damage before normal clash damage                                                  |
+| Doublestrike | Deals both quickstrike and normal damage                                                 |
+| Venomous     | Any damage dealt is lethal                                                               |
+| Siphon       | Damage dealt also gains you that much Vitality (never above 20)                          |
+| Alert        | Doesn't exhaust when attacking                                                           |
+| Reckless     | Can act the turn it enters the field                                                     |
+| Swarmproof   | Must be guarded by two or more units                                                     |
+| Skywatch     | Can guard Aerial units                                                                   |
+| Warded       | Can't be targeted by an opponent                                                         |
+| Unbreakable  | Once per turn, prevent the first effect that would shatter this or deal it lethal damage |
+| Ambush       | Can be invoked at any time, even outside your main phase                                 |
+| Immobile     | Can't attack                                                                             |
+| Regenerate   | At Dawn, heal all damage marked on this unit                                             |
+| Hardened     | Damage dealt to this unit is reduced by 1                                                |
 
 **v6.9:** one new Unit keyword per Essence Type:
 
-| Keyword (Essence Type) | Meaning |
-|---|---|
-| Wildfire (Ember) | When this unit dies, deal 2 damage to the enemy player |
-| Tidecaller (Tide) | Whenever this unit deals clash damage, Deal a card |
-| Thriving (Root) | At your Dawn, this unit gets +1/+1 permanently |
-| Nimble (Gale) | Can only be guarded by units with strictly less Might |
-| Radiant (Light) | At your Dawn, restore 1 Vitality |
-| Withering (Shadow) | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
-| Entropic (Void) | At your Dusk, the enemy erodes 1 |
+| Keyword (Essence Type) | Meaning                                                                     |
+| ---------------------- | --------------------------------------------------------------------------- |
+| Wildfire (Ember)       | When this unit dies, deal 2 damage to the enemy player                      |
+| Tidecaller (Tide)      | Whenever this unit deals clash damage, Deal a card                          |
+| Thriving (Root)        | At your Dawn, this unit gets +1/+1 permanently                              |
+| Nimble (Gale)          | Can only be guarded by units with strictly less Might                       |
+| Radiant (Light)        | At your Dawn, restore 1 Vitality                                            |
+| Withering (Shadow)     | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
+| Entropic (Void)        | At your Dusk, the enemy erodes 1                                            |
 
 Wildfire and Withering fire on banish as well as shatter, and a Charm that
 grants either still grants it at the moment its bearer leaves the field.
@@ -63,37 +63,37 @@ restore it, and a unit withered to 0 Grit is shattered by the state checks.
 
 **v6.0:** every other card type has its own keyword pair:
 
-| Keyword (type) | Meaning |
-|---|---|
-| Surge (Event) | Costs 1 less if you already invoked another card this turn |
-| Resonant (Event) | Its effect resolves twice |
-| Runic (Charm) | When it bonds to a unit from your hand, Deal a card |
-| Soulbound (Charm) | When the bonded unit leaves the field, return this Charm to your hand |
-| Bountiful (Location) | Exhausts for 2 essence instead of 1 |
-| Sacred (Location) | At your Dawn, restore 1 Vitality |
-| Commander (Leader) | While your Leader is on the field, your units get +1 Might |
-| Resolute (Leader) | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
-| Echoing (Event) | When this Event resolves, Deal a card |
-| Ritual (Event) | Costs 1 less if you control 3 or more Sanctums |
-| Empowering (Charm) | At your Dawn, the bonded unit gets +1/+0 permanently |
-| Tethered (Charm) | When this Charm bonds to a unit from your hand, recover that unit |
-| Bulwark (Location) | Damage dealt to you is reduced by 1 |
-| Blighted (Location) | At your Dusk, the enemy erodes 1 |
-| Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums |
-| Warlord (Leader) | While your Leader is on the field, your units get +0/+1 |
+| Keyword (type)       | Meaning                                                                        |
+| -------------------- | ------------------------------------------------------------------------------ |
+| Surge (Event)        | Costs 1 less if you already invoked another card this turn                     |
+| Resonant (Event)     | Its effect resolves twice                                                      |
+| Runic (Charm)        | When it bonds to a unit from your hand, Deal a card                            |
+| Soulbound (Charm)    | When the bonded unit leaves the field, return this Charm to your hand          |
+| Bountiful (Location) | Exhausts for 2 essence instead of 1                                            |
+| Sacred (Location)    | At your Dawn, restore 1 Vitality                                               |
+| Commander (Leader)   | While your Leader is on the field, your units get +1 Might                     |
+| Resolute (Leader)    | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
+| Echoing (Event)      | When this Event resolves, Deal a card                                          |
+| Ritual (Event)       | Costs 1 less if you control 3 or more Sanctums                                 |
+| Empowering (Charm)   | At your Dawn, the bonded unit gets +1/+0 permanently                           |
+| Tethered (Charm)     | When this Charm bonds to a unit from your hand, recover that unit              |
+| Bulwark (Location)   | Damage dealt to you is reduced by 1                                            |
+| Blighted (Location)  | At your Dusk, the enemy erodes 1                                               |
+| Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums                    |
+| Warlord (Leader)     | While your Leader is on the field, your units get +0/+1                        |
 
 **v7.5:** six more, filling the colours each type still had nothing printable
 in — Events had no Shadow or Void text, Charms none in Tide or Light,
 Locations none in Ember or Gale:
 
-| Keyword (type — Essence Type) | Meaning |
-|---|---|
-| Fate (Event — Void) | When this Event resolves, banish the top card of the opponent's deck |
-| Exhume (Event — Shadow) | When this Event resolves, return a Unit from your ash-pile to your hand |
-| Freeze-Dry (Charm — Tide) | When this Charm bonds to a unit from your hand, exhaust a target enemy unit |
-| Blessed (Charm — Light) | When this Charm bonds to a unit from your hand, restore 3 Vitality |
+| Keyword (type — Essence Type)     | Meaning                                                                           |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| Fate (Event — Void)               | When this Event resolves, banish the top card of the opponent's deck              |
+| Exhume (Event — Shadow)           | When this Event resolves, return a random Unit from your ash-pile to your hand    |
+| Freeze-Dry (Charm — Tide)         | When this Charm bonds to a unit from your hand, exhaust a target enemy unit       |
+| Blessed (Charm — Light)           | When this Charm bonds to a unit from your hand, restore 3 Vitality                |
 | Scorched-Earth (Location — Ember) | At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit |
-| Glaciate (Location — Gale) | At every other Dawn, exhaust a target enemy unit |
+| Glaciate (Location — Gale)        | At every other Dawn, exhaust a target enemy unit                                  |
 
 Fate and Erode are deliberately different sizes of the same idea: Erode puts
 the card in the ash-pile, where Exhume and the rest of Shadow can still reach
@@ -119,18 +119,18 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 
 - **Unit** — has Might (power) and Grit (toughness); attacks and guards.
 - **Location** — exhausts to produce Essence.
-  - *Wellspring* — essence only. **[digital]** Basic Wellsprings take no
+  - _Wellspring_ — essence only. **[digital]** Basic Wellsprings take no
     deck slots: once per turn you may play one basic Wellspring of any
     Essence Type in your Leader's identity (the rulebook's "unlimited basic
     Wellspring copies" exception, digital form).
-  - *Sanctum* — produces essence AND carries an ability; invoked from hand.
+  - _Sanctum_ — produces essence AND carries an ability; invoked from hand.
 - **Charm** — bonds to a unit.
-  - *Bound* — stays; goes to the Ash-pile if its unit leaves the field.
-  - *Worn* — survives its unit and may re-bond to another unit later by
+  - _Bound_ — stays; goes to the Ash-pile if its unit leaves the field.
+  - _Worn_ — survives its unit and may re-bond to another unit later by
     paying its re-bond cost.
 - **Event** — resolves once, then Ash-pile.
-  - *Quick* — invokable any time you have a priority window.
-  - *Slow* — own main phases only.
+  - _Quick_ — invokable any time you have a priority window.
+  - _Slow_ — own main phases only.
 - **Leader** — one per deck, starts in the Leader zone, always available to
   invoke once you can afford it. Has **Resolve** instead of Might/Grit; its
   abilities cost (or build) Resolve; at 0 Resolve it is shattered.
@@ -147,7 +147,7 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   instead offsets the first-mover advantage on their opening turn, when they
   may play **two** basic Wellsprings — the second one enters **exhausted**,
   so it ramps them into turn 2 rather than handing them a turn-1 swing.
-  (Sims located the first-mover edge as a *tempo* lead that decays in long
+  (Sims located the first-mover edge as a _tempo_ lead that decays in long
   games, so the previous 8th-card compensation was on the wrong axis and
   measured worth under a point.)
 - **Mulligan** (rulebook §3): before the first turn you may shuffle your
@@ -197,7 +197,7 @@ to respond.
 - **Order of priority is APNAP** — Active Player, then Non-Active Player. The
   player whose turn it is always speaks first in a round.
 - **Both players passing in succession** resolves the top item of the stack —
-  **last in, first out**, so a response resolves *before* the thing it
+  **last in, first out**, so a response resolves _before_ the thing it
   answers. With an empty stack, passing simply closes the window.
 - **Only instant-speed cards can be played into an open stack**: Quick Events
   and Ambush units. Everything else waits for your own main phase with the
@@ -250,9 +250,9 @@ Charms stay on the field unbonded, and Soulbound Charms return to their
 owner's hand.
 
 **Effect vocabulary.** Card and Leader abilities are written from a fixed
-set of actions: *deal damage*, *heal*, *Deal* (draw), *buff* (+X/+X),
-*shatter*, *banish*, *erode* (mill), *recover* (ready a friendly unit), and
-as of v6.9 *exhaust* and *weaken*.
+set of actions: _deal damage_, _heal_, _Deal_ (draw), _buff_ (+X/+X),
+_shatter_, _banish_, _erode_ (mill), _recover_ (ready a friendly unit), and
+as of v6.9 _exhaust_ and _weaken_.
 
 - **Exhaust** taps a target enemy unit. It cannot attack on its controller's
   turn or guard on yours until it recovers at their next Dawn. Exhausting an
@@ -264,15 +264,15 @@ as of v6.9 *exhaust* and *weaken*.
 
 ## 9. Essence Identity (the seven colors)
 
-| Essence Type | Theme |
-|---|---|
-| Ember | Aggression, direct damage, haste |
-| Tide | Card draw, bounce, tempo |
-| Root | Big stats, essence ramp, growth |
-| Gale | Evasion (Aerial/Alert), small fast units |
-| Light | Protection, lifegain (Siphon), buffs |
-| Shadow | Removal, Forfeit synergy, ash-pile recursion |
-| Void | Banish effects, denial, high-cost payoffs |
+| Essence Type | Theme                                        |
+| ------------ | -------------------------------------------- |
+| Ember        | Aggression, direct damage, haste             |
+| Tide         | Card draw, bounce, tempo                     |
+| Root         | Big stats, essence ramp, growth              |
+| Gale         | Evasion (Aerial/Alert), small fast units     |
+| Light        | Protection, lifegain (Siphon), buffs         |
+| Shadow       | Removal, Forfeit synergy, ash-pile recursion |
+| Void         | Banish effects, denial, high-cost payoffs    |
 
 A card's color identity is the colored pips in its Essence Cost. Deck
 legality: every colored pip must fall within your Leader's two-color
@@ -285,10 +285,10 @@ the field) · "**At**" = phase trigger ("At Dawn", "At Dusk").
 
 ## Quick reference
 
-| Phase | What happens |
-|---|---|
-| Dawn | Recover, Regenerate/Sacred/Resolute/Archivist/Empowering, triggers, Deal one card |
-| Main I | Invoke spells, play one Wellspring |
-| Clash | Attack, guard, priority round, deal damage |
-| Main II | Invoke spells |
-| Dusk | Triggers, shed to 7, pass turn |
+| Phase   | What happens                                                                      |
+| ------- | --------------------------------------------------------------------------------- |
+| Dawn    | Recover, Regenerate/Sacred/Resolute/Archivist/Empowering, triggers, Deal one card |
+| Main I  | Invoke spells, play one Wellspring                                                |
+| Clash   | Attack, guard, priority round, deal damage                                        |
+| Main II | Invoke spells                                                                     |
+| Dusk    | Triggers, shed to 7, pass turn                                                    |

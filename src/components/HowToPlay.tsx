@@ -238,7 +238,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'No dupe protection',
-        'Every slot is a straight random pull — packs can repeat cards you already own. The copy-cap payout still applies: any pull past your per-rarity copy cap auto-converts to credits instead of dead inventory.',
+        'Every slot is a straight random pull — packs can repeat cards you already own. Duplicates are always kept; there is no per-rarity copy cap, so extra copies stack in your collection to quick-sell or trade whenever you like.',
       ],
       [
         'Daily freebies',
@@ -390,7 +390,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          FRY CARDS RULEBOOK V7.7
+          FRY CARDS RULEBOOK V9.0
         </div>
       </div>
     </div>
