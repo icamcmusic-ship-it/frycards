@@ -471,8 +471,7 @@ export function mulliganHand(state: GameState, pid: PlayerId): boolean {
   if (state.active !== state.firstPlayer) return false;
   if (state.phase !== 'Dawn' && state.phase !== 'Main1') return false;
   for (const q of [state.players.P1, state.players.P2]) {
-    if (q.invokedCardThisTurn || q.leader.invoked || q.wellspringsPlayedThisTurn > 0)
-      return false;
+    if (q.invokedCardThisTurn || q.leader.invoked || q.wellspringsPlayedThisTurn > 0) return false;
   }
   const n = p.hand.length - 1;
   if (n < 0) return false;

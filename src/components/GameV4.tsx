@@ -198,6 +198,41 @@ function targetsFor(g: GameState, pid: PlayerId, eff: Effect): string[] {
   return cands.filter((iid) => canTarget(g, pid, eff, iid));
 }
 
+/**
+ * Why can't `pid` activate Leader ability `idx` right now? (undefined = they
+ * can.) Pure so it can be unit-tested; the component passes its own
+ * `inOwnMain` flag since that also depends on UI stage.
+ *
+ * The last check is the one that matters: `activateLeaderAbility` spends the
+ * ability's Resolve — and shatters the Leader outright at zero — whether or
+ * not the effect finds anything to resolve against. A targeted ability
+ * pointed at an empty (or entirely Warded) enemy board therefore used to cost
+ * Resolve for literally nothing, and could kill the player's own Leader doing
+ * it. The CPU has guarded itself against exactly this since v6.9 (see
+ * `runLeaderAbility` in ai.ts, "burned Resolve on guaranteed whiffs"); the
+ * human's pill was still enabled. Abilities that can legally hit a PLAYER
+ * ('anyTarget' damage, 'friendlyAny' heal) are unaffected — `targetsFor`
+ * counts player targets, so those keep a legal target on an empty board.
+ */
+export function leaderAbilityWhy(
+  g: GameState,
+  pid: PlayerId,
+  idx: number,
+  inOwnMain: boolean,
+): string | undefined {
+  const L = g.players[pid].leader;
+  if (!L.invoked || L.shattered) return 'Leader not on the field';
+  if (!inOwnMain) return 'Leader abilities resolve during your main phases';
+  if (L.abilityUsedThisTurn) return 'One Leader ability per turn — already used';
+  const ab = L.def.leaderAbilities?.[idx];
+  if (!ab) return 'No such ability';
+  if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0)
+    return `Needs ${-ab.resolveDelta} Resolve (has ${L.resolve})`;
+  if (needsTarget(ab.effect) && targetsFor(g, pid, ab.effect).length === 0)
+    return 'No legal target right now — using it would spend Resolve for nothing';
+  return undefined;
+}
+
 /** Could this cost be paid if we tapped Locations for it? */
 function canAfford(p: PlayerState, cost?: EssenceCost): boolean {
   return canPayCost(potentialEssence(p), cost);
@@ -376,9 +411,7 @@ function Tip({
     >
       {children}
       {open && (
-        <span
-          className="absolute z-[9995] top-full right-0 mt-1 w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
-        >
+        <span className="absolute z-[9995] top-full right-0 mt-1 w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none">
           {text}
         </span>
       )}
@@ -475,9 +508,12 @@ function LocationTile({
   // While a Sanctum is tappable, click is tap-for-essence — which used to
   // leave no way at all to READ your own Sanctum without first spending its
   // tap. Long-press (touch) and right-click both inspect instead.
-  const inspectPress = useLongPress(() => {
-    if (sanctum) onInspect?.();
-  }, () => {});
+  const inspectPress = useLongPress(
+    () => {
+      if (sanctum) onInspect?.();
+    },
+    () => {},
+  );
   return (
     <button
       onClick={action}
@@ -1290,8 +1326,7 @@ export function GameV4({
         // a second Escape closes the picker entirely.
         if (shedPick.length > 0) setShedPick([]);
         else setShedPick(null);
-      }
-      else if (logExpanded) setLogExpanded(false);
+      } else if (logExpanded) setLogExpanded(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
       // Symmetric with attacker selection: Escape clears an in-progress
       // guard assignment too (previously the only way to undo a guard was
@@ -1458,20 +1493,10 @@ export function GameV4({
     } else say("Can't invoke your Leader right now.");
   };
 
-  const leaderAbilityWhy = (idx: number): string | undefined => {
-    const L = me.leader;
-    if (!L.invoked || L.shattered) return 'Leader not on the field';
-    if (!inMyMain) return 'Leader abilities resolve during your main phases';
-    if (L.abilityUsedThisTurn) return 'One Leader ability per turn — already used';
-    const ab = L.def.leaderAbilities?.[idx];
-    if (!ab) return 'No such ability';
-    if (ab.resolveDelta < 0 && L.resolve + ab.resolveDelta < 0)
-      return `Needs ${-ab.resolveDelta} Resolve (has ${L.resolve})`;
-    return undefined;
-  };
+  const abilityWhy = (idx: number): string | undefined => leaderAbilityWhy(g, HUMAN, idx, inMyMain);
 
   const tryLeaderAbility = (idx: number) => {
-    const why = leaderAbilityWhy(idx);
+    const why = abilityWhy(idx);
     if (why) {
       say(why);
       return;
@@ -2567,7 +2592,7 @@ export function GameV4({
         onInvoke={tryInvokeLeader}
         invokeWhy={leaderInvokeWhy}
         onAbility={tryLeaderAbility}
-        abilityWhy={leaderAbilityWhy}
+        abilityWhy={abilityWhy}
         onInspect={() => setInspect(me.leader.def)}
         floats={floatsFor(`vit:${HUMAN}`)}
         flash={flashIids.has(`vit:${HUMAN}`)}

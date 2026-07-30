@@ -159,7 +159,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   }, [serializedCards]);
 
   // Copies locked into any of the player's decks can't be quicksold until
-  // they're removed from every deck — mirrors the quicksell_cards RPC check.
+  // they're removed from every deck.
+  //
+  // This SUMS across decks, matching `save_deck` (which refuses to save a deck
+  // needing copies another deck already reserves) and `get_listable_inventory`.
+  // It deliberately does NOT match `quicksell_cards`/`assert_cards_available`,
+  // which take max(per_deck) on the theory that decks share physical copies —
+  // those two are the outliers, and they are more permissive than save_deck,
+  // so following them here would let a player sell a collection down to a
+  // state their own saved decks can no longer be re-saved from. Being the
+  // stricter of the two is the safe direction; see the bug-hunt notes in
+  // CHANGELOG for the server-side alignment this is waiting on.
   const lockedByDecks = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of decks) for (const id of d.card_ids) m.set(id, (m.get(id) || 0) + 1);

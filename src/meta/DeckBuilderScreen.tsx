@@ -879,9 +879,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   <div
                     className={cn(
                       'text-[7px] font-black',
-                      b.status === 'ok'
-                        ? 'text-[var(--c-paper)]/60'
-                        : 'text-[var(--c-yellow)]',
+                      b.status === 'ok' ? 'text-[var(--c-paper)]/60' : 'text-[var(--c-yellow)]',
                     )}
                   >
                     {b.status === 'low' ? '▼ UNDER' : b.status === 'high' ? '▲ OVER' : '✓ ON CURVE'}

@@ -7,14 +7,7 @@
 export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
 
 export type Rarity =
-  | 'Common'
-  | 'Uncommon'
-  | 'Rare'
-  | 'Super-Rare'
-  | 'Ultra-Rare'
-  | 'Full-Art'
-  | 'Alt-Art'
-  | 'Mythic';
+  'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Alt-Art' | 'Mythic';
 
 /** Ladder order, low to high — kept in sync with `RARITY_ORDER` in meta/rarity.ts. */
 export const RARITIES: Rarity[] = [

@@ -937,7 +937,12 @@ function TradeComposerModal({
             TRADE WITH {(partner.username || 'PLAYER').toUpperCase()}
             <RoleBadge role={partner.role} />
           </div>
-          <PopButton color="yellow" onClick={onClose} className="shrink-0" ariaLabel="Close trade composer">
+          <PopButton
+            color="yellow"
+            onClick={onClose}
+            className="shrink-0"
+            ariaLabel="Close trade composer"
+          >
             ✕
           </PopButton>
         </div>

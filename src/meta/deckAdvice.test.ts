@@ -67,10 +67,7 @@ describe('deriveDeckAdvice', () => {
   it('matches an aggro deck to the Aggro profile', () => {
     const advice = deriveDeckAdvice([
       e(unit('rush', 1, { keywords: ['Reckless', 'Quickstrike'] }), 24),
-      e(
-        unit('bolt', 2, { onInvoke: { action: 'damage', value: 3, target: 'anyTarget' } }),
-        24,
-      ),
+      e(unit('bolt', 2, { onInvoke: { action: 'damage', value: 3, target: 'anyTarget' } }), 24),
       e(unit('mid', 4), 12),
     ]);
     expect(advice.archetype?.profile.id).toBe('aggro');
