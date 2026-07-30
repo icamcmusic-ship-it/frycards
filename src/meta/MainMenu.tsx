@@ -62,6 +62,12 @@ function DailyLoginPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [claimed, setClaimed] = useState<DailyLoginResult | null>(null);
+  // The UTC day the local `claimed` result belongs to. Without this the panel
+  // stays stuck on the "CLAIMED" summary after the minute ticker rolls `today`
+  // past UTC midnight: `lastClaim !== today` goes true but `!claimed` keeps
+  // `claimable` false, so the new day's reward can never be claimed until the
+  // panel remounts. Scoping `claimed` to its own day lets it lapse on rollover.
+  const [claimedDay, setClaimedDay] = useState<string | null>(null);
   // Ticks once a minute so "today" rolls over on its own — same fix as the
   // Store's daily-pack countdown: a menu left open across UTC midnight used
   // to keep showing "CLAIMED TODAY ✓" until something else re-rendered.
@@ -76,7 +82,10 @@ function DailyLoginPanel() {
     ? new Date(profile.last_login_claim_at).toISOString().slice(0, 10)
     : null;
   const today = new Date(nowTs).toISOString().slice(0, 10);
-  const claimable = lastClaim !== today && !claimed;
+  // Only treat the local claim result as current if it was earned today (UTC);
+  // it lapses once the ticker crosses midnight so the next day is claimable.
+  const claimedToday = claimed !== null && claimedDay === today;
+  const claimable = lastClaim !== today && !claimedToday;
   // Projected streak for the "next claim" preview — the server only continues
   // a streak when the last claim was exactly yesterday (UTC); a lapsed streak
   // restarts at day 1. Without the yesterday check this panel highlighted
@@ -102,6 +111,7 @@ function DailyLoginPanel() {
         setError(error || 'Claim failed.');
         return;
       }
+      setClaimedDay(today);
       setClaimed(data);
       refreshProfile();
       if (data.pack_awarded) refreshInventory();

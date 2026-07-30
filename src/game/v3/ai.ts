@@ -524,8 +524,14 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     // `opp.field.length > 0` check burned Resolve on guaranteed whiffs
     // (and could shatter our own Leader for zero value, see below).
     const targetable = opp.field.filter((u) => !unitHasKw(u, 'Warded'));
+    // A shatter also whiffs on an Unbreakable unit whose once-per-turn save is
+    // still up — autoTarget excludes those, so valuing removal against the full
+    // targetable list burned Resolve on a guaranteed no-op against an
+    // all-Unbreakable board (the invoke/instant shatter sites already guard it).
+    const isShatter = eff.action === 'shatter';
+    const removalTargets = isShatter ? targetable.filter((u) => !unbreakableUp(u)) : targetable;
     let v: number;
-    if (isRemoval(eff)) v = targetable.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
+    if (isRemoval(eff)) v = removalTargets.length > 0 ? 8 : eff.target === 'anyTarget' ? 3 : 0;
     else if (eff.action === 'draw') v = p.hand.length <= 5 ? 5 : 1;
     else if (eff.action === 'buff') v = p.field.length > 0 ? 4 : 0;
     else if (eff.action === 'heal')
@@ -540,7 +546,7 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     // scary board (a Might-6+ unit we can actually TARGET) can justify
     // going to zero.
     if (L.resolve + ab.resolveDelta <= 0) {
-      const bigThreat = targetable.some((u) => effMight(state, u) >= 6);
+      const bigThreat = removalTargets.some((u) => effMight(state, u) >= 6);
       v -= bigThreat && isRemoval(eff) ? 6 : 20;
     }
     // Building Resolve is free value — but only while there is headroom to

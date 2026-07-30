@@ -1846,6 +1846,11 @@ export function GameV4({
 
   /** Pick the CPU's turn back up where a response window paused it. */
   const resumeCpuTurn = () => {
+    // Drop any half-built target pick from the response window — control is
+    // passing to the CPU, so a lingering `pending` would leave the red
+    // "PICK A TARGET" bar and target rings up through the CPU's whole turn
+    // (and any tap there would fail the engine's timing check).
+    setPending(null);
     setStage('cpu');
     resolveCpuTurn();
   };
@@ -1990,8 +1995,10 @@ export function GameV4({
     }
     // The clash is over — drop the stale guard picks so units stop rendering
     // guard rings / "guards #1" notes during the CPU's remaining beats and any
-    // response window opened there.
+    // response window opened there. Same for a half-built target pick made in
+    // the reaction step, which would otherwise strand the "PICK A TARGET" bar.
     setGuardSel({});
+    setPending(null);
     if (checkWinner()) return;
     continueCpuAfterClash();
   };

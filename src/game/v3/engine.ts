@@ -818,13 +818,16 @@ function siphonGain(state: GameState, source: UnitInst, amount: number): void {
   if (gained > 0) telemetry.onKeywordProc?.('Siphon', gained);
 }
 
-function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): void {
-  if (amount <= 0) return;
+// Returns the net damage that actually landed after mitigation — callers use
+// it to decide whether the source "dealt clash damage" (a hit fully absorbed by
+// Hardened or Bulwark deals none and must not fire dealsClashDamage/Tidecaller).
+function damageUnit(state: GameState, u: UnitInst, amount: number, source?: UnitInst): number {
+  if (amount <= 0) return 0;
   // v6.0 Hardened: every packet of damage dealt to this unit is reduced by 1.
   if (unitHasKw(u, 'Hardened')) {
     amount -= 1;
     telemetry.onKeywordProc?.('Hardened', 1);
-    if (amount <= 0) return; // fully absorbed: no venom mark, no siphon
+    if (amount <= 0) return 0; // fully absorbed: no venom mark, no siphon
   }
   u.damage += amount;
   if (source && unitHasKw(source, 'Venomous')) u.venomed = true;
@@ -836,17 +839,19 @@ function damageUnit(state: GameState, u: UnitInst, amount: number, source?: Unit
     u.permGrit -= 1;
     telemetry.onKeywordProc?.('Withering', 1);
   }
+  return amount;
 }
 
-function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: UnitInst): void {
-  if (amount <= 0) return;
+function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: UnitInst): number {
+  if (amount <= 0) return 0;
   // v7.3 Bulwark: reduce before anything else reads the number, so Siphon
   // gains only what actually landed.
   const reduced = Math.max(0, amount - bulwarkReduction(state.players[pid]));
-  if (reduced <= 0) return;
+  if (reduced <= 0) return 0;
   if (reduced < amount) telemetry.onKeywordProc?.('Bulwark', amount - reduced);
   state.players[pid].vitality -= reduced;
   if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, reduced);
+  return reduced;
 }
 
 /**
@@ -1270,6 +1275,13 @@ function runDusk(state: GameState): void {
       target: 'allEnemyUnits',
     });
   }
+  // The Dusk sweeps above (Entropic/Blighted/Scorched-Earth) can kill units and
+  // push their dies-triggers onto the stack. §6 requires anything put on the
+  // stack inside a step to resolve before the step continues — without this
+  // drain those triggers leak past the turn boundary and resolve only in the
+  // opponent's Dawn, AFTER it has reset Unbreakable saves, Regenerate, and
+  // Thriving, silently changing their targets and outcomes.
+  drainStack(state);
   // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
   // the player reorder/pre-shed before ending Main II).
   while (p.hand.length > MAX_HAND) {
@@ -1566,7 +1578,13 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // An Event is nothing but its effect, so a target that died in response
       // fizzles the whole card — it still goes to the ash-pile.
       const eff = def.onInvoke;
-      if (eff && fizzles(state, item, eff)) {
+      // A targeted Event whose target is gone fizzles: §6 says it "does nothing
+      // and still goes to the Ash-pile". That has to suppress the Echoing/Fate/
+      // Exhume riders too — they used to fire unconditionally, so a countered
+      // Event still drew, banished, or exhumed. An Event with no targeted
+      // onInvoke (eff undefined, or an untargeted effect) never fizzles.
+      const fizzled = !!eff && fizzles(state, item, eff);
+      if (fizzled) {
         state.log.push(`${def.name} fizzles — its target is gone.`);
       } else if (eff) {
         for (let i = 0; i < (item.resolveTimes ?? 1); i++) {
@@ -1578,7 +1596,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       }
       // v7.3 Echoing: the Event replaces itself. Draws once however many
       // times its effect resolved — Resonant doubles the effect, not the card.
-      if (hasKw(def, 'Echoing')) {
+      if (!fizzled && hasKw(def, 'Echoing')) {
         telemetry.onKeywordProc?.('Echoing', 1);
         dealCards(state, pid, 1);
       }
@@ -1586,7 +1604,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // where Exhume and the rest of Shadow can still reach it; Fate puts it
       // in The Void, where nothing can. Same size, strictly harder to answer,
       // which is the difference the two colours are supposed to have.
-      if (hasKw(def, 'Fate')) {
+      if (!fizzled && hasKw(def, 'Fate')) {
         const top = state.players[opponentOf(pid)].deck.pop();
         if (top) {
           state.players[opponentOf(pid)].voidPile.push(top);
@@ -1598,7 +1616,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // promised since v5.0 and no keyword implemented. Units only — a
       // recursion loop that can return the Event itself is a different card
       // and a much harder one to price.
-      if (hasKw(def, 'Exhume')) {
+      if (!fizzled && hasKw(def, 'Exhume')) {
         // Keyword text says a RANDOM Unit — seeded rng, so replays stay
         // deterministic. findIndex silently returned the oldest one instead.
         const unitIdxs = p.ashPile
@@ -1906,9 +1924,14 @@ export function resolveClash(state: GameState): boolean {
     const preFieldCount =
       step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;
     for (const pkt of packets) {
-      if (pkt.amount > 0) dealtBy.set(pkt.source.iid, pkt.source);
-      if (pkt.targetUnit) damageUnit(state, pkt.targetUnit, pkt.amount, pkt.source);
-      else if (pkt.targetPlayer) damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
+      // Record the source as having dealt clash damage only when a point
+      // actually lands — a hit fully absorbed by Hardened/Bulwark deals none,
+      // so it must not fire Tidecaller or dealsClashDamage triggers.
+      let net = 0;
+      if (pkt.targetUnit) net = damageUnit(state, pkt.targetUnit, pkt.amount, pkt.source);
+      else if (pkt.targetPlayer)
+        net = damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
+      if (net > 0) dealtBy.set(pkt.source.iid, pkt.source);
     }
     stateBasedChecks(state);
     drainStack(state); // death triggers land before the normal-damage sub-step
@@ -1973,7 +1996,15 @@ function collectStepWithHistory(
     const venom = unitHasKw(attacker, 'Venomous');
     for (const g of guards) {
       if (might <= 0) break;
-      const need = venom ? 1 : Math.max(1, remainingGrit(state, g));
+      // Hardened shaves 1 off every packet (see damageUnit), so lethal
+      // assignment has to account for it — a 3-grit Hardened guard needs 4
+      // marked to die, and Venom needs 2 for a point to survive the shave and
+      // carry the mark. Without this the attacker only ever assigned
+      // `remainingGrit`, which Hardened reduced below lethal, making Hardened
+      // guards unkillable in clash by any single attacker regardless of Might —
+      // and leaving the engine contradicting the AI's own kill model.
+      const hardened = unitHasKw(g, 'Hardened') ? 1 : 0;
+      const need = venom ? 1 + hardened : Math.max(1, remainingGrit(state, g)) + hardened;
       const dealt = Math.min(might, need);
       packets.push({ source: attacker, targetUnit: g, amount: dealt });
       absorbed.set(attackerIid, (absorbed.get(attackerIid) ?? 0) + dealt);
