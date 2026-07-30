@@ -609,9 +609,15 @@ function SellForm({
     ? spareSplit({ q: selected.quantity, f: selected.foil_quantity }, locked.get(cardId) || 0)
     : { normal: 0, foil: 0 };
   // Serialized prints are normal copies that can never be listed.
-  const maxQty = foil
+  const listable = foil
     ? spare.foil
     : Math.max(0, spare.normal - (serializedReserved.get(cardId) || 0));
+  // create_listing caps a single listing at 20 copies and a price of 1,000,000
+  // credits; the form must offer only what the RPC will accept rather than
+  // inviting a value that comes back as a bare "Invalid quantity/price" error.
+  const LISTING_MAX_QTY = 20;
+  const LISTING_MAX_PRICE = 1_000_000;
+  const maxQty = Math.min(LISTING_MAX_QTY, listable);
   const suggested = selected ? quicksellPrice(selected.def.rarity, foil) : 0;
 
   // Buyout only applies to auctions — a stale buyout value left over from
@@ -623,6 +629,7 @@ function SellForm({
     quantity >= 1 &&
     quantity <= maxQty &&
     price >= 1 &&
+    price <= LISTING_MAX_PRICE &&
     (effectiveBuyout === null || effectiveBuyout > price);
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
@@ -734,7 +741,14 @@ function SellForm({
                 type="number"
                 min={1}
                 value={price}
-                onChange={(e) => setPrice(Math.max(1, Math.round(Number(e.target.value) || 0)))}
+                onChange={(e) =>
+                  setPrice(
+                    Math.min(
+                      LISTING_MAX_PRICE,
+                      Math.max(1, Math.round(Number(e.target.value) || 0)),
+                    ),
+                  )
+                }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
               <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
@@ -764,20 +778,30 @@ function SellForm({
                 )}
               </label>
             )}
-            <label className="flex items-center gap-2 text-xs font-bold">
-              Duration
-              <select
-                className={select}
-                value={hours}
-                onChange={(e) => setHours(Number(e.target.value))}
-              >
-                <option value={6}>6 hours</option>
-                <option value={12}>12 hours</option>
-                <option value={24}>24 hours</option>
-                <option value={48}>2 days</option>
-                <option value={168}>7 days</option>
-              </select>
-            </label>
+            {/* create_listing only honors a duration for auctions; a fixed
+                listing always runs 14 days. Showing the picker on fixed sales
+                let the seller believe they'd chosen "6 hours" while the card
+                sat escrowed for two weeks. */}
+            {type === 'auction' ? (
+              <label className="flex items-center gap-2 text-xs font-bold">
+                Duration
+                <select
+                  className={select}
+                  value={hours}
+                  onChange={(e) => setHours(Number(e.target.value))}
+                >
+                  <option value={6}>6 hours</option>
+                  <option value={12}>12 hours</option>
+                  <option value={24}>24 hours</option>
+                  <option value={48}>2 days</option>
+                  <option value={168}>7 days</option>
+                </select>
+              </label>
+            ) : (
+              <span className="flex items-center gap-1 text-[9px] font-bold text-[var(--c-steel)]">
+                Fixed listings run 14 days.
+              </span>
+            )}
           </div>
 
           <PopButton
