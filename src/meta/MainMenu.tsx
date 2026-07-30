@@ -165,7 +165,7 @@ function DailyLoginPanel() {
           })}
         </div>
         {error && <Notice text={error} />}
-        {claimed ? (
+        {claimedToday ? (
           <div className="text-[10px] font-black text-[var(--c-steel)]">
             CLAIMED: {fmtCredits(claimed.credits_awarded)} credits
             {claimed.vouchers_awarded > 0 && ` · ${claimed.vouchers_awarded} vouchers`}

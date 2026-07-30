@@ -2131,6 +2131,19 @@ export function GameV4({
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
+  // The pinned hand-card preview lays a full card (240px at HOVER_PREVIEW_SCALE)
+  // beside a 160px control column that carries CLOSE and the primary mobile
+  // INVOKE button. At the printed scale that pair is ~552px wide and runs off
+  // both edges of a ~375px phone, clipping those controls with no way to reach
+  // them. Clamp the card scale so the card + column + chrome fit the viewport,
+  // exactly as Card3DInspector clamps its own zoom (INSPECT_SCALE is the same
+  // constant). On very narrow screens the column stacks below the card so the
+  // card need only fit the width on its own.
+  const previewStack = viewportW < 520;
+  const previewChrome = 16 + 8; // p-2 padding on both sides + the flex gap
+  const previewColW = previewStack ? 0 : 160;
+  const previewMaxCardW = Math.max(120, viewportW - 16 - previewChrome - previewColW);
+  const previewScale = Math.min(HOVER_PREVIEW_SCALE, previewMaxCardW / CARD_SIZES.full.w);
 
   const phaseButtonLabel =
     g.phase === 'Main1'
@@ -2654,22 +2667,27 @@ export function GameV4({
         }}
       >
         {previewCard && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-stretch gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs">
+          <div
+            className={cn(
+              'absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs',
+              previewStack ? 'flex-col items-center' : 'items-stretch',
+            )}
+          >
             <div
               className="relative shrink-0"
               style={{
-                width: CARD_SIZES.full.w * HOVER_PREVIEW_SCALE,
-                height: CARD_SIZES.full.h * HOVER_PREVIEW_SCALE,
+                width: CARD_SIZES.full.w * previewScale,
+                height: CARD_SIZES.full.h * previewScale,
               }}
             >
               <div
                 className="absolute top-0 left-0"
-                style={{ transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
+                style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
               >
                 <CardFace def={previewCard.def} size="full" introduceKeywords />
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 w-[160px]">
+            <div className={cn('flex flex-col gap-1.5', previewStack ? 'w-full' : 'w-[160px]')}>
               <button
                 onClick={closePreview}
                 aria-label="Close preview"
