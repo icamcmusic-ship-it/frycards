@@ -886,8 +886,14 @@ export async function fetchTrades(): Promise<Trade[]> {
 
 export async function fetchFriendCollection(friendId: string): Promise<PlayerCard[]> {
   const { data, error } = await supabase.rpc('get_friend_collection', { p_friend: friendId });
-  if (error) console.error('fetchFriendCollection failed:', error.message);
-  if (error || !data) return [];
+  // Throw on failure like the sibling fetchers — returning [] made a network
+  // blip indistinguishable from a friend who owns zero cards, so the trade
+  // builder showed an empty pane with no error or retry.
+  if (error) {
+    console.error('fetchFriendCollection failed:', error.message);
+    throw error;
+  }
+  if (!data) return [];
   return (data as { card_id: string; quantity: number; foil_quantity: number }[]).map((r) => ({
     card_id: r.card_id,
     quantity: r.quantity,

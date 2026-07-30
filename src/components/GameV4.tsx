@@ -711,6 +711,9 @@ function AbilityPill({
       onClick={onClick}
       onKeyDown={(e) => {
         if (!onClick) return;
+        // The description renders nested keyword-link buttons; let their own
+        // Enter/Space fire instead of triggering the ability.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();
@@ -1657,11 +1660,22 @@ export function GameV4({
     checkWinner();
   };
 
+  // The defending (non-active) player's vitality plate should flash when at
+  // least one attacker is unguarded and hits face. Compute the key from the
+  // clash before it's resolved (resolveClash nulls g.clash).
+  const unguardedVitKey = (): string | null => {
+    if (!g.clash) return null;
+    const anyUnguarded = g.clash.attackers.some((a) => !(g.clash!.guards[a]?.length));
+    if (!anyUnguarded) return null;
+    return `vit:${g.active === HUMAN ? CPU : HUMAN}`;
+  };
+
   const resolveMyClash = () => {
     if (!g.clash) return;
     const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
+    const vitKey = unguardedVitKey();
     if (resolveClash(g)) {
-      flashUnits(participants);
+      flashUnits(vitKey ? [...participants, vitKey] : participants);
       bump();
       say('Clash resolves!');
     }
@@ -1966,10 +1980,15 @@ export function GameV4({
   const resolveCpuClash = () => {
     if (!g.clash) return;
     const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
+    const vitKey = unguardedVitKey();
     if (resolveClash(g)) {
-      flashUnits(participants);
+      flashUnits(vitKey ? [...participants, vitKey] : participants);
       bump();
     }
+    // The clash is over — drop the stale guard picks so units stop rendering
+    // guard rings / "guards #1" notes during the CPU's remaining beats and any
+    // response window opened there.
+    setGuardSel({});
     if (checkWinner()) return;
     continueCpuAfterClash();
   };
@@ -2215,6 +2234,9 @@ export function GameV4({
           tabIndex={0}
           onClick={skipCpuBeats}
           onKeyDown={(e) => {
+            // The narration renders nested keyword-link buttons; let their own
+            // Enter/Space open the glossary instead of skipping the CPU beats.
+            if (e.target !== e.currentTarget) return;
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               skipCpuBeats();
@@ -2744,6 +2766,9 @@ export function GameV4({
                   }}
                   onClick={activate}
                   onKeyDown={(e) => {
+                    // Nested cost/keyword chips inside the card handle their
+                    // own Enter/Space — don't pin the preview on their behalf.
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       activate();
@@ -2851,6 +2876,9 @@ export function GameV4({
                     tabIndex={0}
                     onClick={toggle}
                     onKeyDown={(e) => {
+                      // Nested cost/keyword chips inside the card handle their
+                      // own Enter/Space — don't toggle shed selection for them.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         toggle();

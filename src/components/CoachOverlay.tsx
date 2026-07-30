@@ -27,6 +27,13 @@ function markCoachDone(): void {
 
 type CoachStage = 'main1' | 'clash' | 'main2' | 'cpu' | 'respond';
 
+// The 'respond' step only appears if the CPU's play leaves the human holding
+// priority with an instant answer in hand — a window that never opens with
+// many decks. Completion must not depend on it, or the tutorial (whose
+// progress ref resets each match) replays steps 1-4 in every match forever.
+// These four stages always occur in a first turn cycle.
+const REQUIRED_STAGES: CoachStage[] = ['main1', 'clash', 'main2', 'cpu'];
+
 const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'main1',
@@ -66,10 +73,10 @@ export function CoachOverlay({ stage }: { stage: string }) {
     if (next) {
       shown.current.add(next.stage);
       setStep(next);
-    } else if (shown.current.size >= SCRIPT.length) {
-      // Every step has been shown at least once — treat it as a completion
-      // even if the final step's own button was never clicked (the 'cpu'
-      // stage advances itself on timers with no player input required).
+    } else if (REQUIRED_STAGES.every((s) => shown.current.has(s))) {
+      // Every always-occurring step has been shown at least once — treat it as
+      // a completion even if the final step's own button was never clicked (the
+      // 'cpu' stage advances itself on timers with no player input required).
       markCoachDone();
       setDismissed(true);
       setStep(null);

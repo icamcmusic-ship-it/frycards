@@ -98,7 +98,10 @@ import {
   reportListing,
 } from '../lib/supabase';
 
-const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
+// Mirror rarity.ts's ladder — a local copy drifted once already (missing
+// 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
+// the mystery builder even though the server's validate_mystery_pool accepts them.
+const RARITIES = RARITY_ORDER;
 
 function defFor(cardId: string): CardDef {
   return (
@@ -648,13 +651,16 @@ function CardStackPicker({
         .filter((c) => {
           const def = POOL_BY_ID[c.card_id];
           if (!def || def.type === 'Leader') return false;
-          return (
-            c.quantity +
-              c.foil_quantity -
-              (locked.get(c.card_id) || 0) -
-              (serializedReserved.get(c.card_id) || 0) >
-            0
+          // Same per-variant math as totalSpare below: deck locks consume
+          // normal copies first (spilling into foil) and the serialized
+          // reservation only holds back normal copies. A flat sum here
+          // double-counted locks + serialized against the same physical
+          // copies and hid cards whose foil was genuinely listable.
+          const spare = spareSplit(
+            { q: c.quantity, f: c.foil_quantity },
+            locked.get(c.card_id) || 0,
           );
+          return Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0;
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),
@@ -2410,6 +2416,17 @@ function NewCardListingForm({
   const [price, setPrice] = useState(100);
   const [reference, setReference] = useState(0);
 
+  // The slot list can change while this form is open (e.g. a mystery-pool
+  // submission or another tab fills a slot and the realtime reload lands).
+  // Without re-syncing, the <select> keeps a stale slotId that is no longer
+  // among its options and LIST FOR SALE submits against an occupied slot.
+  // Same fallback MysteryBuilderPanel applies to its template/slot selects.
+  useEffect(() => {
+    if (!slotId || !emptySlots.some((s) => s.id === slotId)) {
+      setSlotId(emptySlots[0]?.id || '');
+    }
+  }, [emptySlots, slotId]);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all(
@@ -2851,7 +2868,11 @@ function MysteryBuilderPanel({
           {/* Rarity guarantees — the seller's promise about what is in EVERY
               pack, enforced at pool-submission time and honoured first by the
               draw. Without these a pack could advertise odds its pool could
-              never pay out. */}
+              never pay out. Simple mode only: advanced slots already fill the
+              whole pack, so a guarantee would be granted on top and overflow
+              pack_size (the server rejects it). Advanced mode uses `minimum`
+              slots to express the same floor. */}
+          {tMode === 'simple' && (
           <div className="ink-border-sm p-2 mb-2 bg-[var(--c-yellow)]/10">
             <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" /> GUARANTEED PER PACK
@@ -2913,6 +2934,7 @@ function MysteryBuilderPanel({
               + ADD GUARANTEE
             </PopButton>
           </div>
+          )}
           <PopButton
             color="red"
             disabled={
@@ -2929,7 +2951,10 @@ function MysteryBuilderPanel({
                 tMode,
                 {
                   ...(tMode === 'simple' ? { rarity_weights: weights } : { slots: slotSpecs }),
-                  ...(guarantees.length > 0 ? { guarantees } : {}),
+                  // Guarantees are simple-mode only — advanced slots already
+                  // fill the pack, so a guarantee would overflow pack_size and
+                  // the server rejects it.
+                  ...(tMode === 'simple' && guarantees.length > 0 ? { guarantees } : {}),
                 },
                 // Clear the form on success — otherwise a double-click (or
                 // re-click before the reload lands) creates a duplicate

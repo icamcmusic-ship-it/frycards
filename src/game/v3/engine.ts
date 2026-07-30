@@ -1055,7 +1055,18 @@ export function stateBasedChecks(state: GameState): void {
   for (const pid of ['P1', 'P2'] as PlayerId[]) {
     const p = state.players[pid];
     for (const u of [...p.field]) {
-      const lethal = u.damage >= effGrit(state, u) || u.venomed;
+      const eff = effGrit(state, u);
+      // A unit whose Grit has been weakened to 0 dies as a state-based rule
+      // regardless of Unbreakable — that keyword saves from damage/shatter, not
+      // a Grit deficit — and, critically, must NOT consume the once-per-turn
+      // save. Handling it before the Unbreakable branch avoids burning the save
+      // on a death it can't prevent (the deficit persists, so the next SBC
+      // would kill the unit anyway a tick later within the same action).
+      if (eff <= 0) {
+        removeUnit(state, u, 'ash');
+        continue;
+      }
+      const lethal = u.damage >= eff || u.venomed;
       if (!lethal) continue;
       if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
         // v7.5: the save is spent for the turn, and the damage it absorbed is
@@ -1072,7 +1083,7 @@ export function stateBasedChecks(state: GameState): void {
         telemetry.onKeywordProc?.('Unbreakable', 1);
         continue;
       }
-      const byVenom = u.venomed && u.damage < effGrit(state, u);
+      const byVenom = u.venomed && u.damage < eff;
       removeUnit(state, u, 'ash');
       if (byVenom) telemetry.onKeywordProc?.('Venomous', 1);
     }
@@ -1315,6 +1326,18 @@ function inOwnMain(state: GameState, pid: PlayerId): boolean {
   );
 }
 
+/**
+ * Sorcery-speed timing: own main phase AND an empty stack. Sorcery-speed cards
+ * already enforce this via timingLegal (inOwnMain && stack empty). The other
+ * sorcery-speed actions (Wellspring, re-bond, Leader invoke/ability) checked
+ * only inOwnMain, so while the active player held a card on the stack and the
+ * opponent had a legal response pending, they could still fire — jumping the
+ * queue over that response (and activateLeaderAbility would drainStack it away).
+ */
+function inOwnMainClear(state: GameState, pid: PlayerId): boolean {
+  return inOwnMain(state, pid) && state.stack.length === 0;
+}
+
 function reactionOpenFor(state: GameState, _pid: PlayerId): boolean {
   // Rulebook: the guard-step reaction window is open to EITHER player — the
   // engine only validates legality; turn order is the callers' concern.
@@ -1351,7 +1374,7 @@ export function wellspringAllowance(state: GameState, pid: PlayerId): number {
  * turn's allowance, type must be inside the Leader's identity. */
 export function playWellspring(state: GameState, pid: PlayerId, type: EssenceType): boolean {
   const p = state.players[pid];
-  if (state.winner || !inOwnMain(state, pid) || p.wellspringPlayedThisTurn) return false;
+  if (state.winner || !inOwnMainClear(state, pid) || p.wellspringPlayedThisTurn) return false;
   if (!wellspringChoices(state, pid).includes(type)) return false;
   // The second player's bonus opening Wellspring enters EXHAUSTED: it ramps
   // them into turn 2 rather than handing them a turn-1 tempo swing. A ready
@@ -1655,7 +1678,7 @@ export function rebondCharm(
   unitIid: string,
 ): boolean {
   const p = state.players[pid];
-  if (!inOwnMain(state, pid) || state.winner) return false;
+  if (!inOwnMainClear(state, pid) || state.winner) return false;
   const idx = p.wornCharms.findIndex((c) => c.iid === charmIid);
   if (idx < 0) return false;
   const charm = p.wornCharms[idx];
@@ -1677,7 +1700,7 @@ export function canInvokeLeader(state: GameState, pid: PlayerId): boolean {
   const p = state.players[pid];
   return (
     !state.winner &&
-    inOwnMain(state, pid) &&
+    inOwnMainClear(state, pid) &&
     !p.leader.invoked &&
     !p.leader.shattered &&
     canPayCost(p.essence, p.leader.def.cost)
@@ -1709,7 +1732,7 @@ export function activateLeaderAbility(
 ): boolean {
   const p = state.players[pid];
   const L = p.leader;
-  if (state.winner || !inOwnMain(state, pid)) return false;
+  if (state.winner || !inOwnMainClear(state, pid)) return false;
   if (!L.invoked || L.shattered || L.abilityUsedThisTurn) return false;
   // Array indexing coerces, so a caller passing the string '0' (or any other
   // stringified index) reached a real ability and spent Resolve on it. Every
@@ -1748,6 +1771,9 @@ export function legalAttackers(state: GameState, pid: PlayerId): UnitInst[] {
 export function declareAttackers(state: GameState, iids: string[]): boolean {
   if (state.winner || state.phase !== 'Clash' || state.clash) return false;
   if (iids.length === 0) return false;
+  // Reject duplicate iids — a unit listed twice would otherwise be pushed into
+  // clash.attackers twice and deal its damage once per occurrence.
+  if (new Set(iids).size !== iids.length) return false;
   const legal = new Set(legalAttackers(state, state.active).map((u) => u.iid));
   for (const iid of iids) if (!legal.has(iid)) return false;
   for (const iid of iids) {
