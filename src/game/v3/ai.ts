@@ -861,7 +861,16 @@ function pickInstantAnswer(state: GameState, pid: PlayerId) {
     state.players[pid].hand
       .filter((c) => c.def.type === 'Event' && c.def.subtype === 'Quick')
       .filter((c) => isRemoval(c.def.onInvoke))
-      .filter(() => enemyField.some((u) => !unitHasKw(u, 'Warded')))
+      // Require a target this card can actually hit. A shatter has no legal
+      // target on an Unbreakable-with-save unit (autoTarget excludes it), so
+      // without this the CPU would cast the Event for a no-op, burning the card
+      // and essence without even stripping the save.
+      .filter((c) => {
+        const isShatter = c.def.onInvoke?.action === 'shatter';
+        return enemyField.some(
+          (u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)),
+        );
+      })
       // Affordability is measured against Locations the CPU could still tap —
       // it holds them untapped until it decides to answer.
       .filter((c) =>

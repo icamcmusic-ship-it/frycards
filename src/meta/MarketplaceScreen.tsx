@@ -19,7 +19,7 @@ import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace } from '../components/CardFaceV4';
-import { RARITY_CHIP } from './rarity';
+import { RARITY_CHIP, RARITY_ORDER } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import { spareSplit } from './CollectionScreen';
@@ -403,16 +403,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 value={rarityFilter}
                 onChange={(e) => setRarityFilter(e.target.value)}
               >
-                {[
-                  'All',
-                  'Common',
-                  'Uncommon',
-                  'Rare',
-                  'Super-Rare',
-                  'Ultra-Rare',
-                  'Full-Art',
-                  'Mythic',
-                ].map((r) => (
+                {['All', ...RARITY_ORDER].map((r) => (
                   <option key={r}>{r}</option>
                 ))}
               </select>
@@ -583,12 +574,16 @@ function SellForm({
         .filter((c) => {
           const def = POOL_BY_ID[c.card_id];
           if (!def || def.type === 'Leader') return false;
-          const spare =
-            c.quantity +
-            c.foil_quantity -
-            (locked.get(c.card_id) || 0) -
-            (serializedReserved.get(c.card_id) || 0);
-          return spare > 0;
+          // Same per-variant math as maxQty below: deck locks consume normal
+          // copies first (spilling into foil), and the serialized reservation
+          // only holds back normal copies. A flat sum here double-counted
+          // locks + serialized against the same physical copies and hid
+          // cards whose foil was genuinely listable.
+          const spare = spareSplit(
+            { q: c.quantity, f: c.foil_quantity },
+            locked.get(c.card_id) || 0,
+          );
+          return Math.max(0, spare.normal - (serializedReserved.get(c.card_id) || 0)) + spare.foil > 0;
         })
         .map((c) => ({ ...c, def: POOL_BY_ID[c.card_id]! }))
         .filter((c) => !search || c.def.name.toLowerCase().includes(search.toLowerCase())),

@@ -28,6 +28,7 @@ import {
   playWellspring,
   rebondCharm,
   resolveClash,
+  stateBasedChecks,
   summonUnit,
   tapLocationForEssence,
 } from './engine';
@@ -742,5 +743,70 @@ describe('win conditions', () => {
     expect(canInvoke(s, 'P1', u)).toBe(false);
     expect(playWellspring(s, 'P1', 'Shadow')).toBe(false);
     expect(endPhase(s)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug-hunt regressions (feature-testing sweep)
+// ---------------------------------------------------------------------------
+describe('Unbreakable vs a Grit deficit', () => {
+  test('a unit weakened to 0 Grit dies without consuming the Unbreakable save', () => {
+    const s = game();
+    const u = summonUnit(s, 'P1', U('rock', 3, 1, ['Unbreakable']));
+    // Weaken it to 0 effective Grit (no damage dealt).
+    u.permGrit = -1;
+    expect(effGrit(s, u)).toBe(0);
+    stateBasedChecks(s);
+    // It dies (0-Grit state rule), but the save was never spent — Unbreakable
+    // guards against damage/shatter, not a Grit deficit.
+    expect(findUnit(s, u.iid)).toBeUndefined();
+    expect(u.unbreakableSpent).toBeFalsy();
+  });
+
+  test('actual lethal damage still triggers and spends the save', () => {
+    const s = game();
+    const u = summonUnit(s, 'P1', U('rock', 3, 4, ['Unbreakable']));
+    u.damage = 4; // lethal by damage, Grit is a healthy 4
+    stateBasedChecks(s);
+    expect(findUnit(s, u.iid)).toBeDefined();
+    expect(u.unbreakableSpent).toBe(true);
+    expect(u.damage).toBe(0);
+  });
+});
+
+describe('declareAttackers rejects duplicate iids', () => {
+  test('the same unit listed twice is rejected (and cannot double its damage)', () => {
+    const s = game();
+    const a = summonUnit(s, 'P1', U('striker', 3, 3));
+    s.phase = 'Clash';
+    expect(declareAttackers(s, [a.iid, a.iid])).toBe(false);
+    expect(s.clash).toBeFalsy();
+    // A legitimate single declaration still works and lists the attacker once.
+    expect(declareAttackers(s, [a.iid])).toBe(true);
+    expect(s.clash!.attackers).toEqual([a.iid]);
+  });
+});
+
+describe('sorcery-speed actions require an empty stack', () => {
+  test('a Leader ability cannot be fired while the stack is non-empty', () => {
+    const s = game();
+    s.phase = 'Main1';
+    s.active = 'P1';
+    fund(s, 'P1');
+    expect(invokeLeader(s, 'P1')).toBe(true);
+    // Simulate a pending item on the stack (an opponent response window).
+    s.stack.push({
+      id: 'stub',
+      kind: 'trigger',
+      controller: 'P2',
+      sourceName: 'pending',
+      effect: { action: 'draw', value: 1, target: 'none' },
+    });
+    // The ability must not jump the queue over the pending stack.
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(false);
+    expect(s.stack.length).toBe(1);
+    // With the stack clear it is legal again.
+    s.stack.pop();
+    expect(activateLeaderAbility(s, 'P1', 1)).toBe(true);
   });
 });

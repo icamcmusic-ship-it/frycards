@@ -500,7 +500,12 @@ function baseTotal(seed: string, rt: number): number {
 function keywordCostAdj(keywords: string[]): number {
   let w = 0;
   for (const kw of keywords) if (isKeyword(kw)) w += KEYWORD_COST[kw];
-  return Math.round(w / 2);
+  // Round the magnitude and reapply the sign — plain Math.round() rounds
+  // halves toward +∞ (Math.round(-0.5) === -0), so a negative-weight keyword
+  // like Warded (-1) rounded to 0 and never printed its documented discount,
+  // while a +1 keyword rounded to a full point. Symmetric rounding keeps the
+  // discount and charge sides consistent.
+  return Math.sign(w) * Math.round(Math.abs(w) / 2);
 }
 
 function buildCost(seed: string, colors: Color[], total: number, rt: number): EssenceCost {

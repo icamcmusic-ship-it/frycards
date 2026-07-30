@@ -6,7 +6,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-import { CardFace, CardSize } from './components/CardFaceV4';
+import { CardFace, CardSize, CARD_SIZES } from './components/CardFaceV4';
 import { POOL_V4 } from './game/v3/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
 import type { CardDef, CardType } from './game/v3/cards';
@@ -132,7 +132,9 @@ function Gallery() {
 
 const params = new URLSearchParams(window.location.search);
 const allRarity = params.get('all');
-const allSize = (params.get('size') as CardSize) || 'full';
+const sizeParam = params.get('size');
+const allSize: CardSize =
+  sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
 createRoot(document.getElementById('root')!).render(
   allRarity ? <AllOfRarity rarity={allRarity} size={allSize} /> : <Gallery />,
 );

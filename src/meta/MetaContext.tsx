@@ -330,31 +330,28 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // the filter keeps the socket quiet.
   useEffect(() => {
     if (!userId) return;
-    let profileTimer: number | undefined;
-    let collectionTimer: number | undefined;
-    const debounced = (ref: 'profile' | 'collection', fn: () => void): (() => void) => {
+    // Each subscription gets its own debounce timer — sharing one would let a
+    // player_inventory event cancel a pending player_cards refresh (and vice
+    // versa) when both tables change in the same transaction, leaving one of
+    // them stale.
+    const timers: Record<string, number | undefined> = {};
+    const debounced = (ref: string, fn: () => void): (() => void) => {
       return () => {
-        if (ref === 'profile') {
-          window.clearTimeout(profileTimer);
-          profileTimer = window.setTimeout(fn, 350);
-        } else {
-          window.clearTimeout(collectionTimer);
-          collectionTimer = window.setTimeout(fn, 350);
-        }
+        window.clearTimeout(timers[ref]);
+        timers[ref] = window.setTimeout(fn, 350);
       };
     };
     const offProfile = subscribeTable('profiles', debounced('profile', refreshProfile), {
       filter: `id=eq.${userId}`,
     });
-    const offCards = subscribeTable('player_cards', debounced('collection', refreshCollection), {
+    const offCards = subscribeTable('player_cards', debounced('cards', refreshCollection), {
       filter: `user_id=eq.${userId}`,
     });
-    const offInv = subscribeTable('player_inventory', debounced('collection', refreshInventory), {
+    const offInv = subscribeTable('player_inventory', debounced('inventory', refreshInventory), {
       filter: `user_id=eq.${userId}`,
     });
     return () => {
-      window.clearTimeout(profileTimer);
-      window.clearTimeout(collectionTimer);
+      for (const t of Object.values(timers)) window.clearTimeout(t);
       offProfile();
       offCards();
       offInv();
