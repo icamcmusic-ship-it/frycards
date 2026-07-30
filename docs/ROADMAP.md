@@ -37,6 +37,21 @@ dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
   cannot see a keyword with fewer than ~6 carriers), and **never interleave
   content changes with balance trials in one pass**.
 
+  **The next pass owes a Leader re-baseline before anything else.** v8.0 capped
+  Leader Resolve at its printed value — it had been unbounded, and the CPU
+  builds Resolve most turns it has nothing better to do, so *every* Leader
+  reading taken before v8.0 was taken against Leaders that were harder to
+  shatter and firing their `-N` abilities more often than the cards print. That
+  includes v7.7's pinned-suite numbers and its Kuro cost cut. Treat the
+  pre-v8.0 Leader table as stale rather than as a baseline to compare against.
+- **Make CI's own gate un-skippable.** This is now a three-time finding, not a
+  bug: v7.9 found CI red on `main` for ten runs, fixed `format:check`, and the
+  very merge that shipped that fix put `format:check` red again on five files.
+  Nothing in the loop runs Prettier before a merge, so hand-patching the
+  formatting is a treadmill. The fix is tooling — a pre-commit hook, a
+  `format`-on-save contract, or a CI step that pushes the reformat instead of
+  failing on it. Cheap, and it retires a recurring class of red build.
+
 ## Next — the things players will notice
 
 Ordered by how much they change what it feels like to own and play the game.
@@ -68,6 +83,25 @@ Ordered by how much they change what it feels like to own and play the game.
   what makes a deck work (`archetypes`, `essenceCurve`, `costTiers`,
   `colorMatchups`) and the deck editor tells the player none of it. The
   cheapest large win in the meta game.
+
+- **Two economy/product calls left open by the bug hunts.** Both are decisions
+  rather than defects, which is why neither has been patched unilaterally:
+  - **The bounty shop's round trip is a guaranteed profit.** `buy_bounty_card`
+    charges 3x a card's base sell price and `sell_bounty_card` pays 5x, and the
+    buy/sell block is *same-day only* (`player_bounty_activity` is keyed on
+    `bounty_date`). So buying a bounty card today and selling it on any later
+    day the same card recurs in the list is a risk-free +2x, bounded only by
+    the three-sales-per-day cap — up to roughly 18,000 credits a day on a
+    Mythic. `ensure_daily_bounties` picks deterministically per date from each
+    rarity band, so recurrence is certain given enough days. Options: make the
+    "bought" record permanent per card rather than per day, price the buy above
+    the sell, or accept it as an intended slow faucet. Wants a decision, not a
+    guess.
+  - **Guest quick match is still unreachable** (found v7.9). `PlayScreen` has a
+    guest branch and `MainMenu` gates every other tile on `guest`, but `App`'s
+    `case 'play'` requires `profile?.role === 'creator'` and a guest has no
+    profile — so the whole branch plus its comments is dead code. Enabling it
+    vs. deleting it is a product call.
 
 ## Later — needs a foundation first
 

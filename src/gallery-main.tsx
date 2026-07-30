@@ -133,8 +133,7 @@ function Gallery() {
 const params = new URLSearchParams(window.location.search);
 const allRarity = params.get('all');
 const sizeParam = params.get('size');
-const allSize: CardSize =
-  sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
+const allSize: CardSize = sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
 createRoot(document.getElementById('root')!).render(
   allRarity ? <AllOfRarity rarity={allRarity} size={allSize} /> : <Gallery />,
 );

@@ -1071,6 +1071,39 @@ function BountiesTab({
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
+  // `get_daily_bounties` reports `owned` as the raw quantity + foil_quantity,
+  // with no notion of deck locks or Serialized prints — so the tile happily
+  // offered SELL on a card whose every copy is committed to a saved deck.
+  // `sell_bounty_card` now refuses both (matching `quicksell_cards`), and this
+  // is the client mirror of those two guards, on the same SUM-across-decks
+  // reading every other sell surface uses (Collection, Marketplace, Player
+  // Shops, Social).
+  const { decks, serializedCards } = useMeta();
+  const lockedByDecks = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of decks) {
+      for (const id of d.card_ids ?? []) m.set(id, (m.get(id) || 0) + 1);
+      // A Leader is stored in `leader_id`, never in `card_ids`, and the bounty
+      // list can name one — each deck fielding it reserves its own copy.
+      if (d.leader_id) m.set(d.leader_id, (m.get(d.leader_id) || 0) + 1);
+    }
+    return m;
+  }, [decks]);
+  const serializedReserved = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of serializedCards) m.set(s.card_id, (m.get(s.card_id) || 0) + 1);
+    return m;
+  }, [serializedCards]);
+  /** Why this bounty card can't be sold, or null when it can. */
+  const sellBlockedWhy = (card: BountyCard): string | null => {
+    const locked = lockedByDecks.get(card.card_id) || 0;
+    if (card.owned - 1 < locked) return 'In use by one of your decks — remove it first';
+    const reserved = serializedReserved.get(card.card_id) || 0;
+    if (reserved > 0 && card.owned - 1 < reserved)
+      return "You own a Serialized copy — it can't be sold";
+    return null;
+  };
+
   const load = async () => {
     const { data, error } = await getDailyBounties();
     if (error) setError(error);
@@ -1179,12 +1212,14 @@ function BountiesTab({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {bounties.map((card) => {
+          const blockedWhy = card.owned >= 1 ? sellBlockedWhy(card) : null;
           const sellDisabled =
             !profile ||
             !!busyId ||
             card.owned < 1 ||
             card.already_sold ||
             card.already_bought ||
+            !!blockedWhy ||
             (soldToday >= 3 && !card.already_sold);
           const buyDisabled =
             !profile || !!busyId || card.already_bought || profile.credits < card.buy_price;
@@ -1214,6 +1249,11 @@ function BountiesTab({
                     YOU DON'T OWN THIS
                   </div>
                 )}
+                {blockedWhy && !card.already_sold && (
+                  <div className="mt-1 text-[9px] font-black text-[var(--c-red)] leading-snug">
+                    {blockedWhy.toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="flex gap-1.5 p-3">
                 <PopButton
@@ -1221,9 +1261,11 @@ function BountiesTab({
                   className="flex-1"
                   disabled={sellDisabled}
                   title={
-                    soldToday >= 3 && !card.already_sold
-                      ? 'Daily sell limit reached (3/day)'
-                      : undefined
+                    blockedWhy && !card.already_sold
+                      ? blockedWhy
+                      : soldToday >= 3 && !card.already_sold
+                        ? 'Daily sell limit reached (3/day)'
+                        : undefined
                   }
                   onClick={() => handleSell(card)}
                 >

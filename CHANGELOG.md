@@ -8,6 +8,107 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v8.0 — Bug hunt: the resource with no ceiling
+
+Fourth bug-hunt sweep. The headline finding is a rules bug the engine has
+carried since Leaders got their two-ability kits: **Leader Resolve had no upper
+bound**, so the resource that doubles as a Leader's hit points ratcheted up
+every turn of every game. The two server-side items v7.9 found and left open
+("the remedy is a server migration") are also closed here.
+
+- **CI was red on `main` again, the same way, one merge later.** v7.9's own
+  headline was that CI had been failing on `main` for ten runs; PR #118 — the
+  commit that shipped that finding — merged five files that
+  `npm run format:check` rejects (`GameV4.tsx`, `gallery-main.tsx`, `ai.ts`,
+  `MarketplaceScreen.tsx`, `PlayerShopsScreen.tsx`), so run 742bfee went red
+  on the step v7.9 had just fixed. Reformatted; every CI step passes again.
+  The diffs are entirely cosmetic (line wrapping and one redundant paren
+  group), which is the point: nothing in the loop runs Prettier before a merge,
+  so this recurs until something does. Recorded on the roadmap as tooling
+  rather than patched a third time by hand.
+- **Leader Resolve had no ceiling.** `activateLeaderAbility` applied its
+  ability's `resolveDelta` with a bare `+=`. Every Leader in the pool prints a
+  `+1` builder as its second ability (`catalog.test.ts` *enforces* it: "second
+  ability must build Resolve"), and `runLeaderAbility` scores building Resolve
+  as "free value", so the CPU fires that builder most turns it has nothing
+  better to do — and Resolve climbed past the printed value without limit. A
+  printed-4 Leader sitting at 8 needs twice the removal to shatter *and* banks
+  twice as many `-2` activations as its pool is supposed to allow.
+
+  Every other path already respected the printed value as a maximum:
+  `Resolute` has read "up to its printed value" since v6.0, `invokeLeader`
+  sets `resolve` *to* the printed number, and `ResolveDots` models it as
+  `max`. The builder path was the only one that did not, which is why it
+  survived — nothing in the game ever displayed the excess as wrong. Found by
+  a soak invariant (`resolve <= def.resolve`) rather than by reading: it
+  reproduces at seed 1 turn 15 and in every one of the 40 catalog matches the
+  new regression test walks. Capped at `max(printed, current)` so a builder can
+  only raise Resolve or leave it alone, never truncate a Leader already above
+  its printed value. The CPU no longer scores a builder as value at full
+  Resolve either — that bonus alone was enough to beat a genuine zero, buying
+  a wasted once-per-turn activation.
+
+  **This wants a balance re-baseline.** It makes every Leader in the format
+  measurably easier to shatter and every `-N` ability measurably scarcer, and
+  the v7.7 standing rule says a rules change gets its own pass before balance
+  trials resume.
+- **The Resolve meter told sighted and screen-reader users two different
+  maxima.** `ResolveDots` set `title` to `Resolve {n} of {max}` but dropped the
+  " of {max}" half entirely whenever `resolve > max`, while `aria-label` read
+  `Resolve {n} of {total}` — `total` being the *dot count*, which widens to
+  `resolve` in exactly that case. So the one state where the numbers mattered
+  was the state where the tooltip lost the maximum and the screen reader
+  reported a different one. One label for both now.
+- **Deck locks meant two different things on the server (v7.9 carry-forward,
+  now fixed).** `save_deck` and `get_listable_inventory` SUM a card's copies
+  across every deck; `quicksell_cards` and `assert_cards_available` took
+  `max(per_deck)`. `save_deck` is the gate that *creates* decks and it only
+  ever lets a deck take copies no other deck has claimed — so SUM is the
+  invariant the stored data actually satisfies, and the permissive reading was
+  winning at the point of sale. With 4 copies split 2/2 across two
+  legally-saved decks, quicksell saw a lock of 2, sold 2, and left both decks
+  reserving copies the player no longer owned and neither one re-saveable.
+  Migration aligns both outliers to SUM, matching `save_deck` and all five
+  client mirrors. A read-only census found **one real card belonging to one
+  real user** already in the divergent state, with no collection yet
+  oversubscribed — the fix landed before anything was corrupted, so no repair
+  migration is needed.
+- **The daily bounty shop ignored deck locks and Serialized prints (v7.9
+  carry-forward, now fixed).** `sell_bounty_card` checked only that the player
+  owned a copy, so it would sell a card straight out of a saved deck and would
+  decrement the non-foil count backing a Serialized print — both of which
+  `quicksell_cards` explicitly refuses. Same two guards added, with the same
+  error vocabulary, and the ownership decision now evaluated against the
+  *post*-sale counts so the checks see the truth. The StoreScreen bounty tile
+  had no lock awareness at all (`get_daily_bounties` reports `owned` as the raw
+  `quantity + foil_quantity`), so it would have offered SELL and collected a
+  raw server error; it now disables the button and says which rule blocked it,
+  on the same SUM reading as every other sell surface.
+
+Verified and **not** bugs, recorded so the next sweep does not re-derive them:
+
+- All four `admin_*` RPCs gate on `assert_creator()`. Every dangerous internal
+  helper — `transfer_cards`, `grant_xp`, `grant_bp_xp`, `grant_inventory_pack`,
+  `grant_pack_contents`, `finalize_sale`, `track_stat`,
+  `assert_cards_available`, `recompute_shop_rating`, `settle_shop_maintenance`,
+  `ensure_daily_bounties` — already has `EXECUTE` revoked from `authenticated`,
+  so Supabase's 66 `authenticated_security_definer_function_executable`
+  advisories are all on genuinely player-facing RPCs. The one unguarded
+  helper players *can* call, `settle_expired_listings`, only touches listings
+  with `ends_at <= now()`, which is a lazy cron and not an exploit.
+- Every client mirror of a server constant agrees with its source:
+  `QUICKSELL_PRICES` vs `card_sell_price`, `maxCopiesForRarity` vs
+  `rarity_copy_cap`, `xpForLevel` vs `xp_for_level` (and it is the exact
+  inverse of `level_for_xp`), and all five `shop_*` constants.
+- Card instances are conserved: no zone leaks or duplicates across 120 full
+  AI-vs-AI catalog matches, checking every instance in deck, hand, ash, void,
+  field, bonded charms, worn charms and Sanctums after every turn.
+- `decodeDeckCode` refuses every malformed, over-cap and aggregate-over-cap
+  input constructible against it, including Leader ids smuggled into the body.
+- Alt-Art's absence from the collection progress breakdown is a `total > 0`
+  filter over a live pool that currently prints zero Alt-Art cards, not a
+  missing row.
+
 ### v7.9 — Bug hunt: the checks that were not running
 
 Third bug-hunt sweep. The headline finding is that CI has been failing on
