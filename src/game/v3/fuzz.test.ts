@@ -5,7 +5,7 @@
  * This suite instead tries to BREAK the engine two other ways:
  *
  *  1. Soak: play hundreds of complete AI-vs-AI matches over randomized decks
- *     drawn from the real 292-card catalog, checking a set of hard invariants
+ *     drawn from the real 297-card catalog, checking a set of hard invariants
  *     after every single turn. A rules bug that only shows up in an unusual
  *     board state has to survive thousands of turns here to stay hidden.
  *  2. Hostile input: throw malformed, adversarial and out-of-turn arguments at

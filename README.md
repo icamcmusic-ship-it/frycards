@@ -67,11 +67,14 @@ balance change, not just an economy one. `npm run verify:pool` diffs
 `cards.rarity`, `cards.template` and the bundled `generated-cards.ts` and
 exits non-zero on any drift between them; run it after any rarity edit.
 
-There are 8 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
-Legendary Diver, Crimson Vector Commander, Apex Nanite Shinobi, Ruin-Walker
-Overseer and Sovereign of the Dying Star — each with a fixed two-color
+There are 9 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
+Legendary Diver, Sentinel of the Nether Pit (`crimson_vector_commander`),
+Kuro the Unseen (`apex_nanite_shinobi`), Ruin-Walker Overseer, Sovereign of the
+Dying Star and Void Mother — each with a fixed two-color
 Essence identity, Resolve, and two Leader abilities (a Resolve-spending
-ability and a small Resolve-building one). A randomized-deck generator lives
+ability and a small Resolve-building one). Two of them were renamed after their
+card ids were minted, so the id and the printed name differ; `LEADER_COLORS`
+(`src/game/v3/colors.ts`) keys off the id. A randomized-deck generator lives
 in `src/game/v3/decks.ts` (used for guest play and the Starter Box); players
 build their own 60+-card decks (max 4 copies per card, tighter caps at
 higher rarity) in the Deck Builder, backed by the `decks` table.

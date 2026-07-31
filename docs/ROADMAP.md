@@ -18,15 +18,28 @@ it is.
 
 Everything here has a started implementation and a visible seam.
 
-- **Mobile/responsive, third pass.** v7.4 did the match board and v7.5 the card
-  views around it (collection, deck editor, pack opening, mulligan, hand
-  strip). Still unmeasured on a phone: the store, marketplace, player shops,
-  social and profile screens, and the 3D card inspector. Harness is `npm run
-dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
-  screens are covered. **The v9-named hand-card preview overflow is fixed (v10):**
-  the pinned preview now clamps its card scale to the viewport and stacks the
-  control column below the card under 520px, the way `Card3DInspector` clamps —
-  so `✕ CLOSE` and INVOKE stay on-screen on a phone.
+- **Mobile/responsive — the measurement half is done; the audit half is not.**
+  v7.4 did the match board, v7.5 the card views around it, and **v11 finally
+  closed the "still unmeasured" list**: `meta-preview.html` now mounts every
+  meta screen (`store`, `market`, `shops`, `battlepass`, `achievements`, `news`,
+  `settings`, `menu`, `howtoplay`, `changelog` on top of the six it already
+  had), with stubbed `pack_types` / `shop_items` rows so the Store shelf and its
+  odds modal lay out at full size instead of as an empty state.
+
+  What that measurement found: **nothing**. All sixteen screens render at 375px
+  with `documentElement.scrollWidth === innerWidth` and zero interactive
+  elements outside the viewport, and the same holds after clicking each screen's
+  visible controls one at a time (~100 controls, each on a fresh load, checked
+  for overflow and for a thrown render). The match board also plays a full
+  narrated game end-to-end at 1280px with no console error. So the remaining
+  mobile work is **not** layout overflow — it is the things a geometry check
+  cannot see: tap-target sizes, text scaling, and real-device scroll/keyboard
+  behaviour. Re-run the harness before assuming a phone regression exists.
+
+  **The v9-named hand-card preview overflow is fixed (v10):** the pinned preview
+  clamps its card scale to the viewport and stacks the control column below the
+  card under 520px, the way `Card3DInspector` clamps — so `✕ CLOSE` and INVOKE
+  stay on-screen on a phone.
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
@@ -47,6 +60,17 @@ dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
   shatter and firing their `-N` abilities more often than the cards print. That
   includes v7.7's pinned-suite numbers and its Kuro cost cut. Treat the
   pre-v8.0 Leader table as stale rather than as a baseline to compare against.
+
+  **v11 moved the CPU's combat model, so it owes a re-baseline too.** Three
+  numbers the CPU decides from were wrong against what the engine actually
+  deals: an unguardable Doublestrike attacker's face damage was counted once
+  where the engine deals it twice, neither the attack model nor the guard model
+  subtracted the defender's Bulwark Sanctums, and the engine itself carried
+  Overrun's guard absorption across both clash sub-steps. The first two make the
+  CPU attack and block differently on any board with a Doublestrike or Bulwark
+  card in it (two and three carriers respectively), so every keyword reading
+  taken before v11 was taken against a CPU that misjudged those boards. Do not
+  compare a v11+ carrier delta against a pre-v11 one without saying so.
 
 - **Make CI's own gate un-skippable.** This is now a three-time finding, not a
   bug: v7.9 found CI red on `main` for ten runs, fixed `format:check`, and the
@@ -69,7 +93,7 @@ Ordered by how much they change what it feels like to own and play the game.
   stepping stone to real matchmaking. Blocked on nothing; wants match history
   first so a rating has evidence behind it.
 - **Volume #2.** The content pipeline supports further drops on top of the live
-  292-card pool. The v7.7 rule bites here: a new set is a **content** change, so
+  297-card pool. The v7.7 rule bites here: a new set is a **content** change, so
   it lands in its own pass, the pool re-baselines, and only then do balance
   trials resume. The v7.6 Glaciate result was erased exactly this way.
 - **Custom fonts as first-class assets.** Currently two Google Fonts pulled at
@@ -120,6 +144,20 @@ Ordered by how much they change what it feels like to own and play the game.
     exactly instead of guessing from a combined `owned`.
 
 ## Later — needs a foundation first
+
+- **`Alt-Art` is a fully-plumbed rarity with no cards behind it** (found v11).
+  It sits between Full-Art and Mythic in `RARITY_ORDER`, `rarity_tier`,
+  `rarity_copy_cap` (1), `card_sell_price` (1800) and `QUICKSELL_PRICES`; it has
+  a card template (`isAltArt` → the "Prism Ink" holo wash), a chip colour, a
+  glow and a border. `select rarity, count(*) from cards` returns **zero**
+  Alt-Art rows, and no live `pack_types.slot_config` weights it, so no player
+  can ever obtain one. Nothing is broken today — every code path degrades
+  cleanly — but the tier is either a Volume #2 deliverable (print the alternate
+  arts, add the pack weight) or dead plumbing to strip. It belongs here rather
+  than in "Now" because printing Alt-Art is a content change and takes the
+  content-change rule with it. Note `random_card_of_rarity`'s ladder falls
+  DOWNWARD, so an Alt-Art roll would silently pay out a Full-Art until the rows
+  exist.
 
 - **The attacker's own-clash reaction window is served non-interactively in the
   UI** (found v10). The rulebook opens a reaction window to _either_ player after

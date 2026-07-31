@@ -8,6 +8,93 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v11.0 — Deep bug hunt: three numbers the engine and the CPU disagreed about, and a layout audit that found nothing
+
+Seventh bug-hunt sweep. Run differently from the last six, because the six
+before it had already taken the easy ground: instead of reading for defects, this
+pass tried to _measure_ them, and only read where a measurement pointed.
+
+What was measured, and what it said:
+
+- **The match board, played end to end in a real browser.** `board-preview.html`
+  driven by Playwright through complete narrated matches — mulligan, wellsprings,
+  invokes, the shed picker, guard assignment, clash resolution, game over — at
+  1280×900. Zero console errors, zero unhandled rejections, no stuck states.
+- **Every meta screen, at phone width, twice.** See the harness note below.
+  Sixteen screens, `documentElement.scrollWidth === innerWidth` on all of them,
+  zero interactive elements outside the viewport — and the same after clicking
+  each screen's ~100 visible controls one at a time on a fresh load.
+- **The whole server surface.** All 110 `public` functions read against their
+  client callers: every `.rpc()` name and argument set in `src/lib/supabase.ts`
+  resolves to a live signature, every `admin_*` entry point gates on
+  `assert_creator()`, and the client's mirrored constants (`QUICKSELL_PRICES`,
+  the `SHOP_*` economy numbers, `BP_XP_PER_TIER`, `minBidFor`, the daily-pack
+  cooldown) all still equal the SQL they mirror. The 66 `authenticated`-callable
+  `SECURITY DEFINER` advisories are the app's design, not findings.
+- **Card conservation across 120 full AI matches.** Every card instance
+  accounted for in exactly one zone at the end of every turn — no leaks through
+  the stack, the ash-pile, the void, worn Charms or the Location row.
+
+The actual finds were all in one place: **three numbers where the engine and the
+CPU's combat model gave different answers for the same board.** That class does
+not crash, does not violate an invariant, and does not show up in the soak fuzz,
+because each side is internally consistent — it only shows up if you compute
+both and compare them, which is what `bughunt-v11.test.ts` now does.
+
+- **Overrun's guard absorption was charged across BOTH clash sub-steps.**
+  `resolveClash` kept one `absorbed` map for the whole clash, and the only
+  attacker that can assign damage in one sub-step and spill in the next is a
+  Doublestrike one. So a Doublestrike + Overrun attacker whose guard died to its
+  first strike computed its normal-step spill as `Might - Might` = 0: the entire
+  second strike vanished. A 5/5 Doublestrike/Overrun into a 5-Grit wall dealt
+  **0** to the defender's Vitality where the CPU's own guard model had budgeted
+  for 5. The map is now per sub-step — blocked is still blocked, but a strike
+  already paid for does not pay for the next one. Behaviour is byte-identical
+  for every non-Doublestrike attacker (they only ever participate in one
+  sub-step, so the map was always empty when read).
+- **`chooseAttackers` counted a Doublestrike attacker's face damage once.**
+  The engine sends an unguarded Doublestrike unit into the defender's Vitality
+  in _both_ sub-steps; the all-in lethal check added its Might a single time.
+  `chooseGuards` has priced the hit at ×2 since v10, so the two halves of the
+  CPU disagreed: it would decline a swing its own defensive model knew was
+  lethal. Two live carriers in the pool (`familiar_in_the_dark`,
+  `phosphor_lich`).
+- **Neither CPU model subtracted the defender's Bulwark Sanctums.**
+  `damagePlayer` shaves 1 per Bulwark Sanctum off every face packet, floored at
+  0. Attacking, that made an "exactly lethal" all-in read as won when it was
+  not, and dragged the rest of the board into a losing attack behind it.
+  Defending, it made a survivable attack read as lethal and forced a chump block
+  to prevent damage the Sanctum was already preventing. Three carriers in the
+  pool. Applied per packet on both sides now, which is how the engine applies it.
+
+Also in this pass:
+
+- **The offline layout harness covers the whole app.** `meta-preview.html` now
+  mounts `store`, `market`, `shops`, `battlepass`, `achievements`, `news`,
+  `settings`, `menu`, `howtoplay` and `changelog` alongside the six screens it
+  already had, with stubbed `pack_types` / `shop_items` rows so the Store shelf
+  and its odds modal render at full size rather than as an empty state. This is
+  the roadmap's own "extend the harness as screens are covered" item, and it
+  retires the "still unmeasured on a phone" list outright — the answer turned
+  out to be that there was nothing there.
+- **Manual corrections.** The README said the game has 8 Leaders; it has 9
+  (Void Mother was missing), and two of the eight it did list were named by
+  their card _id_ rather than their printed name — `crimson_vector_commander`
+  prints as **Sentinel of the Nether Pit** and `apex_nanite_shinobi` prints as
+  **Kuro, the Unseen**. The id/name split is now called out, since
+  `LEADER_COLORS` keys off the id. The "292-card pool" figure was stale in four
+  places (roadmap, fuzz suite, sim harness ×3); the live catalog and the bundled
+  fallback both hold **297**.
+- **`chooseAttackers` is exported.** For the same reason `chooseGuards` already
+  was: it is a damage model, and the only way to pin it against what the engine
+  deals is to call it on a built board.
+
+Carried forward, not fixed: `Alt-Art` is a fully-plumbed rarity — ladder
+position, copy cap, sell price, its own card template — with **zero** rows in
+`public.cards` and no pack weighting it, so no player can obtain one. Nothing
+misbehaves today, but the tier is either a Volume #2 deliverable or dead
+plumbing, and printing cards is a content change. See the roadmap.
+
 ### v10.0 — Deep bug hunt: a cosmetic entitlement, a mis-modelled clash, and legality that stopped at card count
 
 Sixth bug-hunt sweep, run the same way — six audits in parallel over the engine,

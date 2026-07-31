@@ -2,7 +2,7 @@
  * Fry Cards v5 balance & CPU-quality sim harness (essence engine).
  *
  * Runs seeded CPU-vs-CPU games across randomized coherent archetypes over
- * the FULL 292-card catalog (bundled fallback == live Supabase pool, parity
+ * the FULL 297-card catalog (bundled fallback == live Supabase pool, parity
  * verified by scripts/fetch-cards.ts, and re-verified live for v6.2 — see
  * v6.2 balance pass) and reports:
  *
@@ -192,7 +192,7 @@
  *    units) and which of those additionally pass ai.ts's isReactionCandidate
  *    filter (cost<=3), broken down per-Leader by that Leader's own producible
  *    colors — quantifies exactly which archetypes are starved of reaction
- *    plays instead of restating the flat 26/292 -> 6 pool-wide numbers.
+ *    plays instead of restating the flat 26/297 -> 6 pool-wide numbers.
  *  - Printed-budget double-keyword-surcharge fix verification: the outlier
  *    list (`printedBudgetOutliers`) is unchanged in shape, but the underlying
  *    formula bug it was flagging (see cardpool.ts mapUnit) is fixed this
@@ -2465,7 +2465,7 @@ const carryForward = CARRY_FORWARD_IDS.map((id) => {
   };
 });
 
-// v6.1: full-pool coverage — how much of the 292-card catalog the random
+// v6.1: full-pool coverage — how much of the 297-card catalog the random
 // deck cohort actually exercised (never-decked / decked-but-never-played).
 const poolCoverage = (() => {
   const nonLeader = POOL_V4.filter((c: CardDef) => c.type !== 'Leader');
@@ -2490,7 +2490,7 @@ const poolCoverage = (() => {
 // v6.7 (carry-forward #2): reaction-window content audit. Static over the
 // pool (not per-run) — quantifies exactly which Leaders' own producible
 // colors are starved of reaction-legal cards, instead of only restating the
-// pool-wide 26/292 -> 6 numbers every pass since v6.5.
+// pool-wide 26/297 -> 6 numbers every pass since v6.5.
 function isRemovalLikeOnInvoke(def: CardDef): boolean {
   const eff = def.onInvoke;
   return (
