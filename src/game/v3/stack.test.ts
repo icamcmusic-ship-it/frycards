@@ -196,26 +196,26 @@ describe('responding on the stack', () => {
     expect(s.log.some((l) => l.includes('fizzles'))).toBe(true);
   });
 
-  test('a Charm whose bond target dies in response is not lost silently', () => {
+  test('an Item whose bond target dies in response is not lost silently', () => {
     const s = game();
     const host = summonUnit(s, 'P1', U('host', 2, 2));
-    const charm: CardDef = {
-      id: 'charm',
-      name: 'Charm',
-      type: 'Charm',
-      subtype: 'Worn',
+    const item: CardDef = {
+      id: 'item',
+      name: 'Item',
+      type: 'Item',
+      subtype: 'Weapon',
       cost: { generic: 0, pips: {} },
     };
-    const charmIid = toHand(s, 'P1', charm);
+    const itemIid = toHand(s, 'P1', item);
     const answer = toHand(s, 'P2', QUICK_KILL);
 
-    expect(invokeCard(s, 'P1', charmIid, { bondTargetIid: host.iid })).toBe(true);
+    expect(invokeCard(s, 'P1', itemIid, { bondTargetIid: host.iid })).toBe(true);
     expect(invokeCard(s, 'P2', answer, { targetIid: host.iid })).toBe(true);
     settleStack(s);
 
     expect(findUnit(s, host.iid)).toBeUndefined();
-    // Worn Charms survive their host, so it lands in the Worn row unbonded.
-    expect(s.players.P1.wornCharms.map((c) => c.iid)).toContain(charmIid);
+    // Worn Items survive their host, so it lands in the Worn row unbonded.
+    expect(s.players.P1.unbondedItems.map((c) => c.iid)).toContain(itemIid);
   });
 });
 

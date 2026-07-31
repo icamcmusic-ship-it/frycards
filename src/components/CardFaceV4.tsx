@@ -480,20 +480,23 @@ const TYPE_ICON: Record<CardType, React.ComponentType<{ className?: string }>> =
   Leader: Crown,
   Unit: Swords,
   Location: MapPin,
-  Charm: Wand2,
+  Item: Wand2,
   Event: Zap,
 };
 
 /** v5.0 glossary backing every clickable term on a card face: the full
  * Fry Cards keyword set (KEYWORD_TEXT) plus the subtype/frame terms a card
- * can print (Quick, Slow, Bound, Worn, Sanctum, Re-bond, Resolve, …). */
+ * can print (Quick, Slow, Charm, Weapon, Tool, Sanctum, Re-bond, Resolve, …). */
 export const KEYWORD_GLOSSARY: Record<string, string> = {
   ...KEYWORD_TEXT,
   Quick:
     'Quick Event — may be invoked in any priority window, including during the opponent’s turn or a Clash.',
   Slow: 'Slow Event — may only be invoked during your own main phase.',
-  Bound: 'Bound Charm — bonds to a unit and is shattered along with it.',
-  Worn: 'Worn Charm — survives its bonded unit; pay its Re-bond cost to bond it to another unit.',
+  Charm:
+    'Charm Item — bonds to a unit and is shattered along with it. It may also be cast on a player instead, restoring Vitality equal to its bond and going straight to the Ash-pile.',
+  Weapon:
+    'Weapon Item — buffs a friendly unit and survives it; pay its Re-bond cost to bond it to another unit.',
+  Tool: 'Tool Item — a Weapon that also weakens a target enemy unit as it bonds.',
   Sanctum: 'Sanctum Location — exhaust it for 1 essence of its type; it also carries an ability.',
   Wellspring:
     'Basic Location — exhausts for 1 essence of its type. Supplied automatically; takes no deck slots.',
@@ -1451,7 +1454,7 @@ const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard:
 /**
  * Bottom padding the text box reserves for the corner stat plate, so flavor
  * text can never render underneath it. Cards with no stat plate (Locations,
- * Charms, Events) don't need the clearance, but reserving it unconditionally
+ * Items, Events) don't need the clearance, but reserving it unconditionally
  * keeps every card's text box the same height within a tier.
  *
  * v7.5: these were 8/11/14/18, hand-estimated from StatChip's `textClass` /
@@ -1484,7 +1487,7 @@ const RIBBON: Record<CardSize, { top: number; left: number; font: number; padX: 
   full: { top: 9, left: -32, font: 8, padX: 38 },
 };
 
-/** A chip printed in the rules box — keywords, Charm bond/Re-bond, Location
+/** A chip printed in the rules box — keywords, Item bond/Re-bond, Location
  * passive/produce — each with its glossary/explainer popover text. */
 export interface FaceChip {
   kw: string;
@@ -1494,7 +1497,7 @@ export interface FaceChip {
 }
 
 /** All chips a card prints: one per keyword (KEYWORD_TEXT popover), plus
- * structured chips for Charm bond stats/grants, Worn Re-bond, and Sanctum
+ * structured chips for Item bond stats/grants, Worn Re-bond, and Sanctum
  * passives. */
 export function faceChips(def: CardDef): FaceChip[] {
   const chips: FaceChip[] = [];
@@ -1505,7 +1508,7 @@ export function faceChips(def: CardDef): FaceChip[] {
     chips.push({
       kw: 'Bond',
       label: `Bond +${def.bond.might ?? 0}/+${def.bond.grit ?? 0}`,
-      text: 'While this Charm is bonded to a unit, the unit gets these bonus stats (Might/Grit).',
+      text: 'While this Item is bonded to a unit, the unit gets these bonus stats (Might/Grit).',
       accent: '#0E7490',
     });
     for (const g of def.bond.grants ?? []) {
@@ -1519,9 +1522,9 @@ export function faceChips(def: CardDef): FaceChip[] {
   }
   if (def.rebondCost !== undefined) {
     chips.push({
-      kw: 'Worn',
+      kw: def.subtype === 'Tool' ? 'Tool' : 'Weapon',
       label: `Re-bond ${def.rebondCost}`,
-      text: `Worn Charm — survives its bonded unit. Pay ${def.rebondCost} essence to bond it to another unit.`,
+      text: `${def.subtype ?? 'Weapon'} — survives its bonded unit. Pay ${def.rebondCost} essence to bond it to another unit.`,
       accent: '#B45309',
     });
   }

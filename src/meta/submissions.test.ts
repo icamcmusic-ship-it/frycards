@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   DISALLOWED_THEMES,
+  SHOWCASE_MIN_CARDS,
   SHOWCASE_SET,
   SUBMISSION_LIMITS,
   SUBMITTABLE_TYPES,
   buildCardPayload,
+  describeOverrides,
+  formatCostInput,
   isValidCardId,
   isVideoUrl,
   mechanicsFor,
   parseBulkCards,
+  parseCostInput,
+  parseKeywordsInput,
+  pruneOverrides,
   slugifyCardId,
   validateSubmission,
 } from './submissions';
@@ -88,7 +94,10 @@ describe('validateSubmission', () => {
     expect(SUBMISSION_LIMITS.fullArtPerAccount).toBe(1);
     expect(SUBMISSION_LIMITS.videoMythicPerAccount).toBe(1);
     expect(DISALLOWED_THEMES.length).toBeGreaterThan(3);
-    expect(SHOWCASE_SET).toBe('Player Showcase');
+    // Pinned: `submit_card` hard-codes the same string server-side, so a
+    // rename here without a migration silently splits the set in two.
+    expect(SHOWCASE_SET).toBe('Players Showcase 2026');
+    expect(SHOWCASE_MIN_CARDS).toBe(100);
   });
 });
 
@@ -351,12 +360,12 @@ describe('parseBulkCards — JSON', () => {
           image_url: OK_IMAGE,
           flavor_text: 'one',
         },
-        { name: 'Tide Bell', type: 'Charm', rarity: 'Rare', image: OK_IMAGE, flavor: 'two' },
+        { name: 'Tide Bell', type: 'Item', rarity: 'Rare', image: OK_IMAGE, flavor: 'two' },
       ]),
     );
     expect(errors).toEqual([]);
     expect(rows.map((r) => r.id)).toEqual(['ashen_kite', 'tide_bell']);
-    expect(rows[1].type).toBe('Charm');
+    expect(rows[1].type).toBe('Item');
   });
 
   it('accepts a single object as a one-card batch', () => {
@@ -390,7 +399,7 @@ describe('parseBulkCards — JSON', () => {
     const { rows } = parseBulkCards(
       [
         `Ashen Kite | Unit | Uncommon | ${OK_IMAGE} | one`,
-        `Tide Bell | Charm | Rare | ${OK_IMAGE} | two`,
+        `Tide Bell | Item | Rare | ${OK_IMAGE} | two`,
       ].join('\n'),
     );
     const payloads = rows.map((r) =>
@@ -410,5 +419,77 @@ describe('parseBulkCards — JSON', () => {
       expect(p.set_name).toBe(SHOWCASE_SET);
       expect(p.mechanics.essence_types.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v13: Creator mechanics overrides
+// ---------------------------------------------------------------------------
+describe('mechanics overrides', () => {
+  const base = {
+    id: 'override_probe',
+    name: 'Override Probe',
+    type: 'Unit' as const,
+    rarity: 'Rare' as const,
+    set: SHOWCASE_SET,
+    flavor: 'probe',
+    image: OK_IMAGE,
+  };
+
+  it('leaves the payload untouched when nothing is overridden', () => {
+    const plain = buildCardPayload(base);
+    expect(plain.overrides).toBeUndefined();
+    expect(buildCardPayload({ ...base, overrides: {} }).overrides).toBeUndefined();
+    expect(buildCardPayload({ ...base, overrides: null }).overrides).toBeUndefined();
+  });
+
+  it('writes the overridden value into the derived mechanics the server stores', () => {
+    const generated = buildCardPayload(base);
+    const overridden = buildCardPayload({ ...base, overrides: { might: 9, grit: 9 } });
+    expect(overridden.overrides).toEqual({ might: 9, grit: 9 });
+    expect(overridden.mechanics.might).toBe(9);
+    expect(overridden.mechanics.grit).toBe(9);
+    // Untouched fields still come from the hash.
+    expect(overridden.mechanics.keywords).toBe(generated.mechanics.keywords);
+  });
+
+  it('overriding the cost also moves the essence types the server indexes', () => {
+    const overridden = buildCardPayload({
+      ...base,
+      overrides: { cost: { generic: 1, pips: { Void: 2 } } },
+    });
+    expect(overridden.mechanics.essence_cost).toEqual({ generic: 1, pips: { Void: 2 } });
+    expect(overridden.mechanics.essence_types).toEqual(['Void']);
+  });
+
+  it('prunes empty arrays and undefined entries', () => {
+    expect(pruneOverrides({ keywords: [], might: undefined })).toBeUndefined();
+    expect(pruneOverrides({ keywords: ['Aerial'] })).toEqual({ keywords: ['Aerial'] });
+  });
+
+  it('parses and re-renders a cost', () => {
+    expect(parseCostInput('2 ember, 1 void, 3')).toEqual({
+      generic: 3,
+      pips: { Ember: 2, Void: 1 },
+    });
+    expect(parseCostInput('')).toBeNull();
+    expect(parseCostInput('two ember')).toBeNull();
+    expect(parseCostInput('4 nonsense')).toBeNull();
+    expect(formatCostInput({ generic: 2, pips: { Tide: 1 } })).toBe('2 generic, 1 Tide');
+    expect(parseCostInput(formatCostInput({ generic: 2, pips: { Tide: 1 } }))).toEqual({
+      generic: 2,
+      pips: { Tide: 1 },
+    });
+  });
+
+  it('rejects keywords the engine does not implement', () => {
+    const { keywords, unknown } = parseKeywordsInput('aerial, Overrun, Sparkly');
+    expect(keywords).toEqual(['Aerial', 'Overrun']);
+    expect(unknown).toEqual(['Sparkly']);
+  });
+
+  it('describes what was overridden', () => {
+    expect(describeOverrides({ might: 3, text: 'x' })).toBe('might, rules text');
+    expect(describeOverrides(undefined)).toBe('');
   });
 });

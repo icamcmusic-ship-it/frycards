@@ -19,7 +19,7 @@ for the digital client; digital adaptations are marked **[digital]**.
 | Shatter | Send a permanent to the ash-pile (destroy)             |
 | Banish  | Remove a card from the game (to The Void)              |
 | Erode   | Put cards from deck to ash-pile without drawing (mill) |
-| Bond    | Link a Charm to a unit (attach)                        |
+| Bond    | Link an Item to a unit (attach)                        |
 
 ### Keyword abilities
 
@@ -56,7 +56,7 @@ Unit keywords (rulebook §1):
 | Withering (Shadow)     | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
 | Entropic (Void)        | At your Dusk, the enemy erodes 1                                            |
 
-Wildfire and Withering fire on banish as well as shatter, and a Charm that
+Wildfire and Withering fire on banish as well as shatter, and an Item that
 grants either still grants it at the moment its bearer leaves the field.
 Withering's Grit loss is permanent: unlike marked damage, healing does not
 restore it, and a unit withered to 0 Grit is shattered by the state checks.
@@ -67,31 +67,31 @@ restore it, and a unit withered to 0 Grit is shattered by the state checks.
 | -------------------- | ------------------------------------------------------------------------------ |
 | Surge (Event)        | Costs 1 less if you already invoked another card this turn                     |
 | Resonant (Event)     | Its effect resolves twice                                                      |
-| Runic (Charm)        | When it bonds to a unit from your hand, Deal a card                            |
-| Soulbound (Charm)    | When the bonded unit leaves the field, return this Charm to your hand          |
+| Runic (Item)         | When it bonds to a unit from your hand, Deal a card                            |
+| Soulbound (Item)     | When the bonded unit leaves the field, return this Item to your hand           |
 | Bountiful (Location) | Exhausts for 2 essence instead of 1                                            |
 | Sacred (Location)    | At your Dawn, restore 1 Vitality                                               |
 | Commander (Leader)   | While your Leader is on the field, your units get +1 Might                     |
 | Resolute (Leader)    | At your Dawn, your invoked Leader recovers 1 Resolve (up to its printed value) |
 | Echoing (Event)      | When this Event resolves, Deal a card                                          |
 | Ritual (Event)       | Costs 1 less if you control 3 or more Sanctums                                 |
-| Empowering (Charm)   | At your Dawn, the bonded unit gets +1/+0 permanently                           |
-| Tethered (Charm)     | When this Charm bonds to a unit from your hand, recover that unit              |
+| Empowering (Item)    | At your Dawn, the bonded unit gets +1/+0 permanently                           |
+| Tethered (Item)      | When this Item bonds to a unit from your hand, recover that unit               |
 | Bulwark (Location)   | Damage dealt to you is reduced by 1                                            |
 | Blighted (Location)  | At your Dusk, the enemy erodes 1                                               |
 | Archivist (Location) | At your Dawn, Deal a card if you control 3 or more Sanctums                    |
 | Warlord (Leader)     | While your Leader is on the field, your units get +0/+1                        |
 
 **v7.5:** six more, filling the colours each type still had nothing printable
-in — Events had no Shadow or Void text, Charms none in Tide or Light,
+in — Events had no Shadow or Void text, Items none in Tide or Light,
 Locations none in Ember or Gale:
 
 | Keyword (type — Essence Type)     | Meaning                                                                           |
 | --------------------------------- | --------------------------------------------------------------------------------- |
 | Fate (Event — Void)               | When this Event resolves, banish the top card of the opponent's deck              |
 | Exhume (Event — Shadow)           | When this Event resolves, return a random Unit from your ash-pile to your hand    |
-| Freeze-Dry (Charm — Tide)         | When this Charm bonds to a unit from your hand, exhaust a target enemy unit       |
-| Blessed (Charm — Light)           | When this Charm bonds to a unit from your hand, restore 3 Vitality                |
+| Freeze-Dry (Item — Tide)          | When this Item bonds to a unit from your hand, exhaust a target enemy unit        |
+| Blessed (Item — Light)            | When this Item bonds to a unit from your hand, restore 3 Vitality                 |
 | Scorched-Earth (Location — Ember) | At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit |
 | Glaciate (Location — Gale)        | At every other Dawn, exhaust a target enemy unit                                  |
 
@@ -124,10 +124,20 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
     Essence Type in your Leader's identity (the rulebook's "unlimited basic
     Wellspring copies" exception, digital form).
   - _Sanctum_ — produces essence AND carries an ability; invoked from hand.
-- **Charm** — bonds to a unit.
-  - _Bound_ — stays; goes to the Ash-pile if its unit leaves the field.
-  - _Worn_ — survives its unit and may re-bond to another unit later by
-    paying its re-bond cost.
+- **Item** — bonds to a unit. **(v13: this type was called _Charm_ until this
+  release; `Charm` is now one of its three subtypes.)**
+  - _Charm_ — goes to the Ash-pile if its unit leaves the field. A Charm is
+    also the one Item that may be **cast on a player** instead of a unit: it
+    resolves as Vitality equal to its whole bond (Might + Grit, never above
+    your starting Vitality) and goes straight to the Ash-pile, granting
+    nothing else. Choosing a player is a choice, not a fallback — but with no
+    friendly unit on the field it is the only legal line, which makes a Charm
+    the only Item playable on an empty board.
+  - _Weapon_ — buffs a friendly unit, survives that unit, and may re-bond to
+    another unit later by paying its re-bond cost.
+  - _Tool_ — a Weapon that points both ways: as it bonds it also **weakens a
+    target enemy unit** (a permanent -N/-N). It carries a smaller bond than a
+    Weapon of the same cost, which is what pays for the debuff.
 - **Event** — resolves once, then Ash-pile.
   - _Quick_ — invokable any time you have a priority window.
   - _Slow_ — own main phases only.
@@ -159,9 +169,9 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 
 1. **Dawn Phase** — Recover all your exhausted permanents; Regenerate units
    heal; Sacred Locations, Archivist Sanctums and Resolute Leaders tick;
-   Empowering Charms grow their bonded unit; "at Dawn" triggers;
+   Empowering Items grow their bonded unit; "at Dawn" triggers;
    Deal one card (the first player skips this on turn 1).
-2. **Main Phase I** — Invoke Units, Charms, Events, Sanctums, or your
+2. **Main Phase I** — Invoke Units, Items, Events, Sanctums, or your
    Leader; play one basic Wellspring (once per turn — the second player gets
    two on their opening turn, see §3).
 3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
@@ -182,7 +192,7 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   means a Location CARD — basic Wellsprings are not Sanctums and never count
   toward Ritual or Archivist.
 - A card carrying both Surge and Ritual still discounts only once.
-- Slow Events, Charms, Sanctums, and Leaders: own main phases only, and only
+- Slow Events, Items, Sanctums, and Leaders: own main phases only, and only
   with the stack empty (see §6).
 - Quick Events and Ambush cards: any priority window — your main phases, the
   guard-step reaction window of either player's Clash Phase, and any window
@@ -205,8 +215,10 @@ to respond.
 - **Targets are re-checked on resolution.** If the target is gone or has
   become illegal (a unit that died in response, or one that gained Warded),
   the item **fizzles**: an Event does nothing and still goes to the Ash-pile,
-  a Unit still enters the field and loses only its rider, and a Charm whose
-  host is gone goes to the Worn row (Worn) or the Ash-pile (Bound).
+  a Unit still enters the field and loses only its rider, and an Item whose
+  host is gone goes to the unbonded row (Weapon/Tool) or the Ash-pile (Charm).
+  A Charm aimed at a **player** cannot fizzle: the target is chosen when it is
+  invoked and a player is never an illegal target.
 - **Steps with no response window**: combat damage, Dawn and Dusk. Anything
   put on the stack inside them resolves before the step continues.
 
@@ -244,9 +256,9 @@ Before any player acts, the game automatically checks: 0-or-less Vitality
 loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
 shatters a unit (an Unbreakable unit with its once-per-turn save still
 unspent survives instead, and the damage is prevented); illegally bonded
-Charms unbond.
-When a unit leaves the field, its Bound Charms go to the Ash-pile, Worn
-Charms stay on the field unbonded, and Soulbound Charms return to their
+Items unbond.
+When a unit leaves the field, its Charms go to the Ash-pile, its Weapons and
+Tools stay on the field unbonded, and Soulbound Items return to their
 owner's hand.
 
 **Effect vocabulary.** Card and Leader abilities are written from a fixed

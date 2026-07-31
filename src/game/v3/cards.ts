@@ -1,6 +1,6 @@
 /**
  * Fry Cards v5.0 card data model. Essence-based costs, Might/Grit units,
- * Location/Charm/Event subtypes, Leaders with Resolve. Replaces the v4.x
+ * Location/Item/Event subtypes, Leaders with Resolve. Replaces the v4.x
  * dice-placement model (Cast Slots, thresholds, combos) entirely.
  *
  */
@@ -8,7 +8,7 @@ import type { EssenceType } from './colors';
 
 export type { EssenceType };
 
-export type CardType = 'Leader' | 'Unit' | 'Location' | 'Charm' | 'Event';
+export type CardType = 'Leader' | 'Unit' | 'Location' | 'Item' | 'Event';
 
 export type Rarity =
   'Common' | 'Uncommon' | 'Rare' | 'Super-Rare' | 'Ultra-Rare' | 'Full-Art' | 'Alt-Art' | 'Mythic';
@@ -16,11 +16,36 @@ export type Rarity =
 /** Location subtypes: Wellsprings are basic (essence only, auto-supplied by
  * the engine, not collectible); Sanctums are collectible utility Locations. */
 export type LocationSubtype = 'Wellspring' | 'Sanctum';
-/** Charm subtypes: Bound dies with its unit; Worn survives and can re-bond. */
-export type CharmSubtype = 'Bound' | 'Worn';
+/**
+ * Item subtypes (v13 — the type was called `Charm` until this release, and
+ * `Charm` is now one of its three subtypes rather than the whole type):
+ *
+ *  - `Charm`  — cast on a unit OR on a player. Bonded to a unit it dies with
+ *    it; cast on a player it is consumed for Vitality instead, which is the
+ *    only Item line playable with an empty field.
+ *  - `Weapon` — buffs a friendly unit and SURVIVES that unit's death, sitting
+ *    unbonded on the field until it is re-bonded for `rebondCost`.
+ *  - `Tool`   — a Weapon that also nerfs: bonding one weakens a target enemy
+ *    unit, which is why it carries a smaller stat bond than a Weapon does.
+ */
+export type ItemSubtype = 'Charm' | 'Weapon' | 'Tool';
+
 /** Event subtypes: Quick = any priority window; Slow = own main phase only. */
 export type EventSubtype = 'Quick' | 'Slow';
-export type CardSubtype = LocationSubtype | CharmSubtype | EventSubtype;
+export type CardSubtype = LocationSubtype | ItemSubtype | EventSubtype;
+
+/** Item subtypes that stay on the field when their unit leaves it (and so
+ * carry a `rebondCost`). A `Charm` does not — it goes to the ash-pile. */
+export function itemSurvives(subtype?: CardSubtype): boolean {
+  return subtype === 'Weapon' || subtype === 'Tool';
+}
+
+/** A Charm cast on a player instead of a unit is consumed for Vitality — its
+ * whole bond, since it grants nothing afterwards. Lives here so the engine
+ * and the printed rules text can never disagree about the number. */
+export function charmSelfHeal(bond?: { might?: number; grit?: number }): number {
+  return Math.max(1, (bond?.might ?? 0) + (bond?.grit ?? 0));
+}
 
 /** An Essence Cost: colored pips + a generic amount payable with anything. */
 export interface EssenceCost {
@@ -113,11 +138,13 @@ export interface CardDef {
   /** Sanctum static passive for the controller's units. */
   locPassive?: 'MIGHT_ALL' | 'GRIT_ALL';
 
-  // -- Charm --
+  // -- Item --
   /** Stat/keyword grants while bonded to a unit. */
   bond?: { might?: number; grit?: number; grants?: string[] };
-  /** Worn Charms: essence cost (generic) to re-bond to another unit. */
+  /** Weapons and Tools: essence cost (generic) to re-bond to another unit. */
   rebondCost?: number;
+  /** Tools only: how much a bonding Tool weakens a target enemy unit by. */
+  nerf?: number;
 
   // -- Leader --
   /** Starting Resolve (loyalty). Shattered at 0. */
@@ -243,21 +270,21 @@ export const CARDS_V3: CardDef[] = [
   {
     id: 'wardens_sigil',
     name: "Warden's Sigil",
-    type: 'Charm',
-    subtype: 'Bound',
+    type: 'Item',
+    subtype: 'Charm',
     cost: cost(1, { Light: 1 }),
     bond: { might: 1, grit: 2 },
-    text: 'Bound — bonded unit gets +1/+2.',
+    text: 'Charm — bonded unit gets +1/+2. Or cast it on yourself to restore 3 Vitality.',
   },
   {
     id: 'stormforged_blade',
     name: 'Stormforged Blade',
-    type: 'Charm',
-    subtype: 'Worn',
+    type: 'Item',
+    subtype: 'Weapon',
     cost: cost(2, { Ember: 1 }),
     rebondCost: 2,
     bond: { might: 2, grants: ['Quickstrike'] },
-    text: 'Worn — bonded unit gets +2/+0 and Quickstrike. Re-bond 2.',
+    text: 'Weapon — bonded unit gets +2/+0 and Quickstrike. Re-bond 2.',
   },
   {
     id: 'sanctum_of_embers',

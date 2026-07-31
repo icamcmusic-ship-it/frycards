@@ -26,7 +26,7 @@ import {
   mulberry32,
   mulliganHand,
   playWellspring,
-  rebondCharm,
+  rebondItem,
   resolveClash,
   stateBasedChecks,
   summonUnit,
@@ -313,56 +313,58 @@ describe('essence cannot be conjured', () => {
   test('a failed invoke spends nothing', () => {
     const s = game();
     s.players.P1.essence = { Ember: 2 };
-    // A Charm with no unit to bond to: canInvoke refuses, essence must stay.
-    const charm = toHand(s, 'P1', {
-      id: 'lone_charm',
-      name: 'charm',
-      type: 'Charm',
-      subtype: 'Bound',
+    // A Weapon with no unit to bond to: canInvoke refuses, essence must stay.
+    // (A Charm would be legal here — it can be cast on the player instead.)
+    const item = toHand(s, 'P1', {
+      id: 'lone_item',
+      name: 'item',
+      type: 'Item',
+      subtype: 'Weapon',
       cost: { generic: 1, pips: {} },
+      rebondCost: 1,
       bond: { might: 1 },
     });
-    expect(invokeCard(s, 'P1', charm)).toBe(false);
+    expect(invokeCard(s, 'P1', item)).toBe(false);
     expect(s.players.P1.essence.Ember).toBe(2);
     expect(s.players.P1.hand.length).toBe(1);
   });
 
-  test('a Charm cannot be bonded to an enemy unit', () => {
+  test('an Item cannot be bonded to an enemy unit', () => {
     const s = game();
     summonUnit(s, 'P1', VANILLA);
     const enemy = summonUnit(s, 'P2', VANILLA);
-    const charm = toHand(s, 'P1', {
-      id: 'charm2',
-      name: 'charm2',
-      type: 'Charm',
-      subtype: 'Bound',
+    const item = toHand(s, 'P1', {
+      id: 'item2',
+      name: 'item2',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       bond: { might: 5 },
     });
     fund(s, 'P1');
-    expect(invokeCard(s, 'P1', charm, { bondTargetIid: enemy.iid })).toBe(false);
+    expect(invokeCard(s, 'P1', item, { bondTargetIid: enemy.iid })).toBe(false);
     expect(effMight(s, enemy)).toBe(2);
   });
 
-  test('re-bonding a Worn Charm onto an enemy unit is refused', () => {
+  test('re-bonding a Worn Item onto an enemy unit is refused', () => {
     const s = game();
     const mine = summonUnit(s, 'P1', VANILLA);
     const enemy = summonUnit(s, 'P2', VANILLA);
-    const charm = {
+    const item = {
       iid: 'worn#1',
       def: {
         id: 'w',
         name: 'w',
-        type: 'Charm' as const,
-        subtype: 'Worn' as const,
+        type: 'Item' as const,
+        subtype: 'Weapon' as const,
         rebondCost: 1,
         bond: { might: 3 },
       },
     };
-    s.players.P1.wornCharms.push(charm);
+    s.players.P1.unbondedItems.push(item);
     fund(s, 'P1');
-    expect(rebondCharm(s, 'P1', charm.iid, enemy.iid)).toBe(false);
-    expect(rebondCharm(s, 'P1', charm.iid, mine.iid)).toBe(true);
+    expect(rebondItem(s, 'P1', item.iid, enemy.iid)).toBe(false);
+    expect(rebondItem(s, 'P1', item.iid, mine.iid)).toBe(true);
     expect(effMight(s, mine)).toBe(5);
   });
 

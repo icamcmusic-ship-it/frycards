@@ -1,5 +1,6 @@
 import { createClient, Session } from '@supabase/supabase-js';
 import { CardTemplate } from '../types';
+import { SHOWCASE_SET } from '../meta/submissions';
 
 // Public (publishable) credentials for the backend. Safe to ship in the
 // client; everything sensitive is protected by RLS + SECURITY DEFINER RPCs.
@@ -1831,7 +1832,7 @@ export async function setHideSerializedAnnouncements(hide: boolean): Promise<str
 }
 
 // ---------------------------------------------------------------------------
-// Player card submissions — the "Player Showcase" set.
+// Player card submissions — the "Players Showcase 2026" set.
 //
 // Players submit art + title + type + flavor; the Creator assigns rarity and
 // every other attribute, or denies (optionally with a submissions ban). An
@@ -1866,13 +1867,18 @@ export interface CardSubmissionForReview extends CardSubmission {
   submitter_banned: boolean;
 }
 
-/** Headline counts behind the "enough submissions to run the Ultra-Rare
- * community poll?" line on the submissions screen. */
+/** Headline counts behind the "is this set big enough to stand on its own?"
+ * line on the submissions screen. */
 export interface ShowcaseStats {
   set_name: string;
   pending: number;
   approved: number;
+  /** Pending + approved — every card still in the running for the set. */
+  submitted: number;
   submitters: number;
+  /** The server's own copy of SHOWCASE_MIN_CARDS, so the bar the screen shows
+   * is the bar the backend was configured with. */
+  cards_needed: number;
   /** Rows actually printed into `cards` for this set. */
   printed: number;
 }
@@ -1895,7 +1901,7 @@ export async function fetchMySubmissions(userId: string): Promise<CardSubmission
 
 export async function fetchShowcaseStats(): Promise<ShowcaseStats | null> {
   const { data, error } = await supabase.rpc('get_showcase_stats', {
-    p_set: 'Player Showcase',
+    p_set: SHOWCASE_SET,
   });
   if (error) {
     console.error('fetchShowcaseStats failed:', error.message);
@@ -1965,6 +1971,10 @@ export async function reviewSubmission(input: {
   flavor?: string | null;
   imageUrl?: string | null;
   mechanics?: CardMechanicsPayload | null;
+  /** Creator overrides layered over the derived mechanics, or null for none.
+   * Sent inside `p_mechanics`' sibling `p_card` payload by way of
+   * `creator_review_submission` -> `apply_card_upsert`. */
+  overrides?: Record<string, unknown> | null;
 }): Promise<{ data: CardSubmission | null; error: string | null }> {
   const { data, error } = await supabase.rpc('creator_review_submission', {
     p_id: input.id,
@@ -1977,6 +1987,7 @@ export async function reviewSubmission(input: {
     p_flavor: input.flavor ?? null,
     p_image_url: input.imageUrl ?? null,
     p_mechanics: input.mechanics ?? null,
+    p_overrides: input.overrides ?? null,
   });
   return { data: (data as CardSubmission) || null, error: rpcError(error) };
 }

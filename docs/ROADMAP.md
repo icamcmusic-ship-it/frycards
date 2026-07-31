@@ -2,8 +2,8 @@
 
 Prioritized direction for Frycards. Items move to `CHANGELOG.md` when shipped.
 
-Rewritten in v7.7. The previous version had drifted into being a copy of the
-balance doc's carry-forward list with the product work pushed to the margins —
+Rewritten in v7.7, revised in v13. The previous version had drifted into being
+a copy of the balance doc's carry-forward list with the product work pushed to the margins —
 nine of its thirteen items were individual card and keyword numbers that go
 stale every pass. Balance now gets **one** entry here that points at the
 findings doc, which is the thing that actually tracks it, and the rest of this
@@ -18,32 +18,59 @@ it is.
 
 Everything here has a started implementation and a visible seam.
 
-- **Player Showcase — the submission pipeline ships in v12; the set itself is
-  empty and the poll is a promise.** Players can submit (art link, title, type,
-  flavor), the Creator can approve at any rarity, deny, or deny-and-ban, and
-  approval mints the real `cards` row with client-derived mechanics. Three
-  things are deliberately *not* done yet and each is a decision, not a defect:
+- **Players Showcase 2026 — the pipeline and the Creator's tools ship; the set
+  itself is still empty and the poll is still a promise.** Players can submit
+  (art link, title, type, flavor), the Creator can approve at any rarity, deny,
+  or deny-and-ban, and approval mints the real `cards` row. v13 added the
+  Creator's **mechanics override** (generated values are the starting point,
+  not the verdict), renamed the set, put the **100-card viability bar** in front
+  of the copy, made every card preview full size and 3D-inspectable, and printed
+  the **art aspect ratios** submitters were previously left to guess. What is
+  still deliberately *not* done is a decision each, not a defect:
 
-  - **The `Player Showcase Booster` pack row exists but is `is_active = false`.**
-    It is set-restricted to `Player Showcase`, and `random_card_of_rarity`'s
+  - **The `Players Showcase 2026 Booster` pack row exists but is
+    `is_active = false`.** It is set-restricted, and `random_card_of_rarity`'s
     final fallback spills to the whole catalog only when the requested set is
     _completely_ empty — so it is safe to activate the moment the set has one
-    non-Leader card, and unsafe before that. Flip it when the set is worth
-    selling, not when the first card lands.
-  - **The Ultra-Rare community poll is announced, not built.** The submissions
-    screen tells players it will happen once enough people submit
-    (`POLL_THRESHOLD = 10` submitters is the number it quotes) and
-    `get_showcase_stats` returns the live submitter count that copy reads.
-    There is no ballot, no vote table and no tally — running the first one is
-    manual, and building it properly wants a `showcase_polls` /
-    `showcase_votes` pair plus one-vote-per-account enforcement.
+    non-Leader card, and unsafe before that. **Safe is not the same as worth
+    doing:** `SHOWCASE_MIN_CARDS = 100` is the bar the screen now quotes, and
+    below it a set-restricted booster hands out the same handful of cards over
+    and over. Flip the row when the set clears 100, not when it clears 1.
+  - **The Ultra-Rare community poll is announced, not built.** The screen now
+    frames it as part of the same 100-card threshold rather than as a submitter
+    count, and `get_showcase_stats` returns `submitted` / `printed` /
+    `cards_needed` for that meter. There is still no ballot, no vote table and
+    no tally — running the first one is manual, and building it properly wants a
+    `showcase_polls` / `showcase_votes` pair plus one-vote-per-account
+    enforcement.
   - **An approved card is live-only until the bundle is regenerated.**
-    `npm run verify:pool` will report every Player Showcase card as
+    `npm run verify:pool` will report every Showcase card as
     `live-only — missing from generated-cards.ts` until `npm run fetch:cards`
     is run and the result committed. That is correct (the bundle is the offline
     fallback and a build artefact), but it means an approval batch is not
     finished until the bundle is refreshed — otherwise the offline fallback and
     every balance sim run on a catalog the live game no longer matches.
+  - **`verify:pool` and `db:sync` need direct network access to Supabase**, so
+    neither runs from a sandboxed CI/agent session. v13 found live drift by
+    hashing the pool on both sides through the Supabase MCP instead (see the
+    v13 CHANGELOG entry for the exact query). Worth turning into a script that
+    can run without an egress allowlist — a drift guard that cannot run where
+    the work happens is a drift guard that runs late.
+
+- **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
+  to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
+  cost, colour and keywords are byte-identical — but the *subtypes* are not a
+  rename: the old Bound/Worn pair became Charm/Weapon/Tool, 15 of the 61 Items
+  became Tools, and a Tool trades one point of bond for a permanent -1/-1 (-2/-2
+  at Full-Art and up) on a target enemy unit as it lands. Charms also gained a
+  second mode — cast on a player for Vitality equal to the whole bond — which is
+  the first line in the game that turns a permanent into burst life, and the
+  first Item playable on an empty board. Nothing here has been through the sim.
+  The pass wants: Tool win-rate residual against the Weapons they were split
+  from, how often the CPU takes the self-cast Charm line and whether it should,
+  and whether `t + 1 - survives - isTool` is the right bond budget. Per the
+  standing rule this is a **content** change, so it re-baselines the pool and
+  balance trials resume after it, not during.
 
 - **Mobile/responsive — the measurement half is done; the audit half is not.**
   v7.4 did the match board, v7.5 the card views around it, and **v11 finally
@@ -70,7 +97,13 @@ Everything here has a started implementation and a visible seam.
   at 375px and 1280px, then each screen's visible controls clicked one at a
   time on a fresh load, checking for overflow, a thrown render and a real
   console error. It exits non-zero on any finding, so it can gate a release.
-  Latest run: seventeen screens, 144 control clicks, **zero findings**.
+
+  **v13 closed the last hole in it:** the harness always mounted a `player`
+  profile, so the Creator-only panels — the submission review queue, its
+  mechanics-override editor and the BULK ADD importer — had never been measured
+  at any width. A `SCREENS` entry may now carry extra query string, and
+  `submissions&role=creator` is in the list. Latest run: eighteen screens, 152
+  control clicks, **zero findings**.
 
   **The v9-named hand-card preview overflow is fixed (v10):** the pinned preview
   clamps its card scale to the viewport and stacks the control column below the
@@ -107,6 +140,18 @@ Everything here has a started implementation and a visible seam.
   card in it (two and three carriers respectively), so every keyword reading
   taken before v11 was taken against a CPU that misjudged those boards. Do not
   compare a v11+ carrier delta against a pre-v11 one without saying so.
+
+- **A live-vs-code drift guard that actually gates.** v13 found the database's
+  `cards.essence_cost` one generic higher than the shipped `cardpool.ts` on 16
+  cards — `apex_nanite_shinobi`, `astral_shoal`, `cruel_effervescence` and 13
+  others — because a balance pass moved `COST_ADJUST` in code and nothing ever
+  re-ran `db:sync`. Everything else (rarity, type, keywords, stats, subtype,
+  rules text) matched exactly, which is what makes it the dangerous shape of
+  drift: invisible in the game, wrong in `pick_deck_bucket`'s cheap-first
+  ordering and in every server-side price. Fixed in place, but the guard that
+  should have caught it (`verify:pool`) is a manual command nobody is obliged
+  to run. Either CI runs it with a Supabase key, or `db:sync` becomes part of
+  the release checklist and the checklist becomes a file.
 
 - **Make CI's own gate un-skippable.** This is now a three-time finding, not a
   bug: v7.9 found CI red on `main` for ten runs, fixed `format:check`, and the

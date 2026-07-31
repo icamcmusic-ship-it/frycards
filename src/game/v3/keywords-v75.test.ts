@@ -159,23 +159,23 @@ describe('v7.5 Event keywords', () => {
 });
 
 // ---------------------------------------------------------------------------
-describe('v7.5 Charm keywords', () => {
+describe('v7.5 Item keywords', () => {
   test('Freeze-Dry exhausts an enemy unit when it bonds from hand', () => {
     const s = game();
     const mine = summonUnit(s, 'P1', VANILLA);
     const theirs = summonUnit(s, 'P2', VANILLA);
     theirs.exhausted = false;
-    const charm: CardDef = {
-      id: 'freeze_charm',
-      name: 'Freeze Charm',
-      type: 'Charm',
-      subtype: 'Bound',
+    const item: CardDef = {
+      id: 'freeze_item',
+      name: 'Freeze Item',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Freeze-Dry'],
       bond: { might: 1, grit: 1 },
     };
-    POOL[charm.id] = charm;
-    s.players.P1.hand.push({ iid: 'fd#1', def: charm });
+    POOL[item.id] = item;
+    s.players.P1.hand.push({ iid: 'fd#1', def: item });
     s.phase = 'Main1';
     s.active = 'P1';
 
@@ -187,18 +187,18 @@ describe('v7.5 Charm keywords', () => {
   test('Blessed restores Vitality on bond, and never above the cap', () => {
     const s = game();
     const mine = summonUnit(s, 'P1', VANILLA);
-    const charm: CardDef = {
-      id: 'blessed_charm',
-      name: 'Blessed Charm',
-      type: 'Charm',
-      subtype: 'Bound',
+    const item: CardDef = {
+      id: 'blessed_item',
+      name: 'Blessed Item',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Blessed'],
       bond: { might: 1, grit: 1 },
     };
-    POOL[charm.id] = charm;
+    POOL[item.id] = item;
     s.players.P1.vitality = LEADER_HP - 5;
-    s.players.P1.hand.push({ iid: 'bl#1', def: charm });
+    s.players.P1.hand.push({ iid: 'bl#1', def: item });
     s.phase = 'Main1';
     s.active = 'P1';
     expect(invokeCard(s, 'P1', 'bl#1', { bondTargetIid: mine.iid })).toBe(true);
@@ -207,7 +207,7 @@ describe('v7.5 Charm keywords', () => {
     // At 1 below the cap it gains 1, not 3.
     const mine2 = summonUnit(s, 'P1', VANILLA);
     s.players.P1.vitality = LEADER_HP - 1;
-    s.players.P1.hand.push({ iid: 'bl#2', def: charm });
+    s.players.P1.hand.push({ iid: 'bl#2', def: item });
     expect(invokeCard(s, 'P1', 'bl#2', { bondTargetIid: mine2.iid })).toBe(true);
     expect(s.players.P1.vitality).toBe(LEADER_HP);
   });

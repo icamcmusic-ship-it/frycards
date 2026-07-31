@@ -237,7 +237,7 @@ export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
   const sanctums = entries.reduce((a, e) => a + (e.card.type === 'Location' ? e.n : 0), 0);
   const units = entries.reduce((a, e) => a + (e.card.type === 'Unit' ? e.n : 0), 0);
   const spells = entries.reduce(
-    (a, e) => a + (e.card.type === 'Charm' || e.card.type === 'Event' ? e.n : 0),
+    (a, e) => a + (e.card.type === 'Item' || e.card.type === 'Event' ? e.n : 0),
     0,
   );
   if (sanctums > SANCTUM_BAND[1])
@@ -261,7 +261,7 @@ export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
       );
     if (spells < SPELL_MIN)
       suggestions.push(
-        `Only ${spells} Charms/Events — the auto-builder keeps at least ${SPELL_MIN}.`,
+        `Only ${spells} Items/Events — the auto-builder keeps at least ${SPELL_MIN}.`,
       );
   }
 

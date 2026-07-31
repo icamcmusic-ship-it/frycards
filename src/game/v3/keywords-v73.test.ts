@@ -1,7 +1,7 @@
 /**
  * v7.3 content tests: the eight new NON-Unit keywords.
  *
- * Units carried 23 keywords while Event/Charm/Location/Leader had two apiece,
+ * Units carried 23 keywords while Event/Item/Location/Leader had two apiece,
  * so a non-Unit card's keyword slot was a coin flip between the same two
  * options pool-wide, and none of the four types had any colour identity in
  * its vocabulary. This suite pins the behaviour of each new keyword against
@@ -205,22 +205,22 @@ describe('v7.3 Event keywords', () => {
   });
 });
 
-describe('v7.3 Charm keywords', () => {
+describe('v7.3 Item keywords', () => {
   test('Tethered recovers the unit it bonds to', () => {
     const s = game();
     const u = summonUnit(s, 'P1', VANILLA);
     u.exhausted = true;
-    const charm: CardDef = {
+    const item: CardDef = {
       id: 'tether',
       name: 'Tether',
-      type: 'Charm',
-      subtype: 'Bound',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Tethered'],
       bond: { might: 1 },
     };
-    POOL[charm.id] = charm;
-    s.players.P1.hand.push({ iid: 'teth#1', def: charm });
+    POOL[item.id] = item;
+    s.players.P1.hand.push({ iid: 'teth#1', def: item });
     s.phase = 'Main1';
     s.active = 'P1';
 
@@ -231,16 +231,16 @@ describe('v7.3 Charm keywords', () => {
   test('Empowering grows its bonded unit every Dawn, permanently', () => {
     const s = game();
     const u = summonUnit(s, 'P1', VANILLA);
-    const charm: CardDef = {
+    const item: CardDef = {
       id: 'empower',
       name: 'Empower',
-      type: 'Charm',
-      subtype: 'Bound',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Empowering'],
       bond: {},
     };
-    u.charms.push({ iid: 'emp#1', def: charm });
+    u.items.push({ iid: 'emp#1', def: item });
 
     expect(u.permMight).toBe(0);
     toNextDawn(s);

@@ -1,14 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Check, RefreshCw, Upload, X } from 'lucide-react';
+import { AlertTriangle, Ban, Check, RefreshCw, Sliders, Upload, X } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice } from './ui';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
+import { Card3DInspector } from '../components/Card3DInspector';
 import { deriveCardMechanics } from '../game/v3/cardpool';
-import { CardType, Rarity, RARITIES } from '../types';
+import { CardDef, totalCost } from '../game/v3/cards';
+import { CardOverrides, CardType, Rarity, RARITIES } from '../types';
 import {
+  ART_SPECS,
   BulkRow,
   DISALLOWED_THEMES,
+  SHOWCASE_MIN_CARDS,
   SHOWCASE_SET,
   SUBMISSION_LIMITS,
   SUBMITTABLE_TYPES,
@@ -16,8 +20,13 @@ import {
   Treatment,
   treatmentName,
   buildCardPayload,
+  describeOverrides,
+  formatCostInput,
   isValidCardId,
   parseBulkCards,
+  parseCostInput,
+  parseKeywordsInput,
+  pruneOverrides,
   slugifyCardId,
   validateSubmission,
 } from './submissions';
@@ -35,12 +44,95 @@ import {
   withdrawSubmission,
 } from '../lib/supabase';
 
-/** How many distinct submitters the Showcase wants before the Ultra-Rare
- * community poll is worth running. Display-only — Fry decides. */
-const POLL_THRESHOLD = 10;
-
 const input = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs w-full';
 const label = 'flex flex-col gap-0.5 text-[9px] font-black text-[var(--c-steel)]';
+
+/** Subtypes the Creator may set per card type — the same values `cardpool.ts`
+ * generates, so an override can only ever pick a subtype the engine reads. */
+const SUBTYPES: Partial<Record<CardType, string[]>> = {
+  Item: ['Charm', 'Weapon', 'Tool'],
+  Event: ['Quick', 'Slow'],
+  Location: ['Sanctum'],
+};
+
+/**
+ * A card face you can click to open full-size in the 3D inspector — the same
+ * "hold the card in your hand" view the Collection uses, so a submitter sees
+ * exactly what they would own.
+ */
+function InspectableCard({
+  def,
+  size = 'standard',
+  meta,
+}: {
+  key?: React.Key;
+  def: CardDef;
+  size?: 'compact' | 'standard' | 'full';
+  meta?: { label: string; value: React.ReactNode }[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <CardFace def={def} size={size} onClick={() => setOpen(true)} />
+      {open && (
+        <Card3DInspector
+          def={def}
+          meta={
+            meta ?? [
+              { label: 'Type', value: def.subtype ? `${def.type} — ${def.subtype}` : def.type },
+              { label: 'Rarity', value: def.rarity || 'Common' },
+              { label: 'Set', value: def.set || SHOWCASE_SET },
+              { label: 'Cost', value: totalCost(def.cost) },
+              ...(def.might != null
+                ? [{ label: 'Might / Grit', value: `${def.might}/${def.grit}` }]
+                : []),
+            ]
+          }
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** The art-spec table both the submit form and the rules panel print. */
+function ArtSpecTable({ highlight }: { highlight?: Treatment }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[10px] font-bold border-collapse min-w-[420px]">
+        <thead>
+          <tr className="text-[var(--c-steel)] text-left">
+            <th className="py-1 pr-2">TREATMENT</th>
+            <th className="py-1 pr-2">ASPECT</th>
+            <th className="py-1 pr-2">RECOMMENDED</th>
+            <th className="py-1">WHY</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(Object.keys(ART_SPECS) as Treatment[]).map((t) => {
+            const spec = ART_SPECS[t];
+            return (
+              <tr
+                key={t}
+                className={cn(
+                  'align-top border-t border-[var(--c-ink)]/20',
+                  highlight === t && 'bg-[var(--c-yellow)]',
+                )}
+              >
+                <td className="py-1 pr-2 whitespace-nowrap">{treatmentName(t)}</td>
+                <td className="py-1 pr-2 whitespace-nowrap heading-font text-[11px]">
+                  {spec.ratio} <span className="font-bold text-[9px]">{spec.orientation}</span>
+                </td>
+                <td className="py-1 pr-2 whitespace-nowrap">{spec.recommended}</td>
+                <td className="py-1 text-[9px]">{spec.note}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 /** Rarity the live preview prints at, per requested treatment — the player
  * doesn't pick a rarity (Fry does), but the treatment does decide whether the
@@ -263,14 +355,45 @@ function SubmitPanel({ mine, reload }: { mine: CardSubmission[]; reload: () => P
 
       <div className="flex flex-col items-center gap-2 shrink-0">
         <div className="heading-font text-[10px] text-[var(--c-steel)]">LIVE PREVIEW</div>
-        <CardFace def={preview} size="standard" />
-        <div className="text-[9px] font-bold text-[var(--c-steel)] max-w-[220px] text-center">
-          Stats, cost and keywords are assigned by the game from the card’s id, type and rarity —
-          this preview shows the frame, not a promise.
+        {/* Full size, and clickable into the 3D inspector: the preview should
+            print everything the card prints in a collection, not a thumbnail
+            that hides the text box. */}
+        <InspectableCard def={preview} size="full" />
+        <div className="text-[9px] font-bold text-[var(--c-steel)] max-w-[240px] text-center">
+          Click the card to open it full-size in 3D. Stats, cost and keywords are generated by the
+          game from the card’s id, type and rarity — Fry can overwrite any of them when he prints
+          it, so treat this as the frame rather than a promise.
+        </div>
+        <div className="ink-border-sm bg-[var(--c-paper)] p-2 w-full max-w-[280px]">
+          <div className="heading-font text-[9px] mb-1">
+            ART FOR {treatmentName(treatment).toUpperCase()}
+          </div>
+          <div className="text-[10px] font-bold">
+            <span className="heading-font text-[12px]">{ART_SPECS[treatment].ratio}</span>{' '}
+            {ART_SPECS[treatment].orientation} · {ART_SPECS[treatment].recommended}
+          </div>
+          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5">
+            {ART_SPECS[treatment].note}
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+/** Render a player's own submission the way it would print: at the rarity it
+ * was approved as when it has one, otherwise at the treatment's stand-in. */
+function submissionPreview(s: CardSubmission): CardDef {
+  const rarity = (s.approved_rarity as Rarity) || PREVIEW_RARITY[s.requested_treatment] || 'Rare';
+  return deriveCardMechanics({
+    id: s.approved_card_id || slugifyCardId(s.card_name) || 'preview_card',
+    name: s.card_name,
+    type: s.card_type as CardType,
+    rarity,
+    set: s.set_name,
+    image: s.image_url,
+    flavor: s.flavor_text,
+  });
 }
 
 function MySubmissions({
@@ -332,15 +455,19 @@ function MySubmissions({
           Mythic are capped.
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap gap-3">
           {mine.map((s) => (
             <div
               key={s.id}
-              className="flex flex-wrap items-center gap-2 ink-border-sm px-2 py-1.5 bg-[var(--c-paper)]"
+              className="flex flex-col items-center gap-1.5 ink-border-sm p-2 bg-[var(--c-paper)] w-[164px]"
             >
+              {/* The same card the Collection would show, at the size the
+                  Collection shows it, and clickable into the 3D inspector —
+                  a submission is a card, so it should read as one. */}
+              <InspectableCard def={submissionPreview(s)} size="standard" />
               <StatusChip status={s.status} />
-              <span className="text-xs font-black truncate max-w-[220px]">{s.card_name}</span>
-              <span className="text-[9px] font-bold text-[var(--c-steel)]">
+              <span className="text-xs font-black text-center leading-tight">{s.card_name}</span>
+              <span className="text-[9px] font-bold text-[var(--c-steel)] text-center">
                 {s.card_type} · {treatmentName(s.requested_treatment)}
               </span>
               {s.approved_rarity && (
@@ -349,17 +476,12 @@ function MySubmissions({
                 </span>
               )}
               {s.review_note && (
-                <span className="text-[9px] font-bold text-[var(--c-red)] basis-full">
+                <span className="text-[9px] font-bold text-[var(--c-red)] text-center">
                   Fry says: {s.review_note}
                 </span>
               )}
               {s.status === 'pending' && (
-                <PopButton
-                  color="steel"
-                  className="ml-auto"
-                  disabled={busyId === s.id}
-                  onClick={() => withdraw(s.id)}
-                >
+                <PopButton color="steel" disabled={busyId === s.id} onClick={() => withdraw(s.id)}>
                   {busyId === s.id ? 'WITHDRAWING…' : 'WITHDRAW'}
                 </PopButton>
               )}
@@ -373,6 +495,11 @@ function MySubmissions({
 
 function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
   const submitters = stats?.submitters ?? 0;
+  // Pending + approved + already-printed is the honest count of "cards this
+  // set would have", which is what the 100-card bar is about.
+  const cards = (stats?.submitted ?? 0) + (stats?.printed ?? 0);
+  const needed = stats?.cards_needed ?? SHOWCASE_MIN_CARDS;
+  const pct = Math.min(100, Math.round((cards / Math.max(1, needed)) * 100));
   return (
     <div className="flex flex-col gap-4">
       <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3">
@@ -393,8 +520,10 @@ function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
             and can deny any submission for any reason.
           </li>
           <li>
-            Mechanics — cost, Might/Grit, keywords — are assigned by the game from the card’s id,
-            type and rarity. Nobody, including Fry, hand-writes them.
+            Mechanics — cost, Might/Grit, keywords — are <strong>generated</strong> by the game from
+            the card’s id, type and rarity. <strong>Fry can overwrite any of them</strong> before
+            printing when the generated card doesn’t fit the art; anything he leaves alone stays
+            generated.
           </li>
           <li>
             A video Mythic needs an <code>.mp4</code>, <code>.webm</code> or <code>.mov</code> link;
@@ -403,19 +532,36 @@ function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
         </ul>
       </div>
 
-      <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-yellow)] p-3">
-        <div className="heading-font text-sm mb-1">COMMUNITY ULTRA-RARE POLL</div>
-        <p className="text-[11px] font-bold">
-          If enough players submit, Fry will pick a shortlist of his favourites and put them to a
-          community poll — the winners are printed at <strong>Ultra-Rare</strong>. It runs at Fry’s
-          discretion once the Showcase has the submitters to make a vote meaningful.
+      <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3">
+        <div className="heading-font text-sm mb-1">ART SIZES</div>
+        <p className="text-[11px] font-bold text-[var(--c-steel)] mb-2">
+          A Fry Card is a real trading card — 2.5″ × 3.5″, so <strong>5:7</strong>. The framed
+          template insets a <strong>4:3</strong> art window; the full-bleed treatments have no
+          window, so the art is the whole card. Submit at these ratios and nothing gets cropped away
+          at any card size.
         </p>
-        <p className="text-[10px] font-black mt-1.5">
-          {submitters} player{submitters === 1 ? '' : 's'} {submitters === 1 ? 'has' : 'have'}{' '}
-          submitted so far
-          {submitters < POLL_THRESHOLD
-            ? ` — around ${POLL_THRESHOLD} is where a poll starts being worth running.`
-            : ' — that’s enough for a poll whenever Fry calls it.'}
+        <ArtSpecTable />
+      </div>
+
+      <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-yellow)] p-3">
+        <div className="heading-font text-sm mb-1">WHEN THE SET GOES LIVE</div>
+        <p className="text-[11px] font-bold">
+          {SHOWCASE_SET} needs <strong>{needed} cards</strong> before it is worth standing up as its
+          own pool — its own booster, its own pack odds, and the community poll that prints a
+          shortlist of favourites at <strong>Ultra-Rare</strong>. Below that a set-restricted pack
+          just hands out the same handful of cards over and over.
+        </p>
+        <div className="mt-2 h-3 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
+          <div className="h-full bg-[var(--c-red)]" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-[10px] font-black mt-1">
+          {cards} / {needed} cards
+          {cards >= needed
+            ? ' — that’s a set. It launches whenever Fry calls it.'
+            : ` — ${needed - cards} to go.`}{' '}
+          <span className="font-bold">
+            ({submitters} player{submitters === 1 ? '' : 's'} submitting so far.)
+          </span>
         </p>
       </div>
 
@@ -435,6 +581,186 @@ function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
         <p className="text-[10px] font-bold mt-2 opacity-90">
           Borderline is not a defence. If you have to ask whether it qualifies, it does.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Creator: mechanics override editor
+// ---------------------------------------------------------------------------
+/** The editor's raw (string) form of every overridable field. */
+interface OverrideForm {
+  cost: string;
+  might: string;
+  grit: string;
+  keywords: string;
+  subtype: string;
+  rebondCost: string;
+  nerf: string;
+  resolve: string;
+  text: string;
+}
+
+/** The generated card, rendered into the editor's string form — the baseline
+ * every field is compared against to decide whether it is an override. */
+function formFor(def: CardDef): OverrideForm {
+  return {
+    cost: formatCostInput(def.cost),
+    might: def.might != null ? String(def.might) : '',
+    grit: def.grit != null ? String(def.grit) : '',
+    keywords: (def.keywords ?? []).join(', '),
+    subtype: (def.subtype as string) ?? '',
+    rebondCost: def.rebondCost != null ? String(def.rebondCost) : '',
+    nerf: def.nerf != null ? String(def.nerf) : '',
+    resolve: def.resolve != null ? String(def.resolve) : '',
+    text: def.text ?? '',
+  };
+}
+
+const numOrNull = (raw: string): number | null => {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Diff the editor's form against the generated card and return only what
+ * actually changed. `null` means "cleared" (the engine drops the field);
+ * an unparseable value is reported instead of silently dropped, because a
+ * cost box reading "two ember" must not quietly print the generated cost.
+ */
+function overridesFrom(
+  form: OverrideForm,
+  generated: CardDef,
+): { overrides?: CardOverrides; problems: string[] } {
+  const base = formFor(generated);
+  const out: CardOverrides = {};
+  const problems: string[] = [];
+
+  if (form.cost.trim() !== base.cost.trim()) {
+    const cost = parseCostInput(form.cost);
+    if (!cost) problems.push('Cost must read like "3 generic, 1 Ember".');
+    else out.cost = cost;
+  }
+  for (const key of ['might', 'grit', 'rebondCost', 'nerf', 'resolve'] as const) {
+    if (form[key].trim() === base[key].trim()) continue;
+    const n = numOrNull(form[key]);
+    if (form[key].trim() && n === null) problems.push(`${key} must be a number.`);
+    else if (n !== null && n < 0) problems.push(`${key} cannot be negative.`);
+    else (out as Record<string, unknown>)[key] = n;
+  }
+  if (form.keywords.trim() !== base.keywords.trim()) {
+    const { keywords, unknown } = parseKeywordsInput(form.keywords);
+    if (unknown.length) {
+      problems.push(`Not a keyword the engine implements: ${unknown.join(', ')}.`);
+    } else out.keywords = keywords;
+  }
+  if (form.subtype.trim() !== base.subtype.trim()) {
+    out.subtype = (form.subtype.trim() || null) as CardOverrides['subtype'];
+  }
+  if (form.text.trim() !== base.text.trim()) out.text = form.text.trim() || null;
+
+  return { overrides: pruneOverrides(out), problems };
+}
+
+function OverrideEditor({
+  generated,
+  form,
+  setForm,
+  type,
+  problems,
+  changed,
+}: {
+  generated: CardDef;
+  form: OverrideForm;
+  setForm: (f: OverrideForm) => void;
+  type: CardType;
+  problems: string[];
+  changed: string;
+}) {
+  const set = (k: keyof OverrideForm) => (v: string) => setForm({ ...form, [k]: v });
+  const subtypes = SUBTYPES[type];
+  const num = (k: keyof OverrideForm, title: string) => (
+    <label className={cn(label, 'w-24')}>
+      {title}
+      <input className={input} value={form[k]} onChange={(e) => set(k)(e.target.value)} />
+    </label>
+  );
+  return (
+    <div className="ink-border-sm bg-[var(--c-paper)] p-2 flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="heading-font text-[10px] flex items-center gap-1">
+          <Sliders className="w-3.5 h-3.5" /> MECHANICS
+        </span>
+        <span className="text-[9px] font-bold text-[var(--c-steel)]">
+          Generated from <code>id|type|rarity</code>. Edit any field to overwrite it — everything
+          left alone stays generated, and clearing a field back to its generated value drops the
+          override.
+        </span>
+        <PopButton color="steel" className="ml-auto" onClick={() => setForm(formFor(generated))}>
+          RESET TO GENERATED
+        </PopButton>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <label className={cn(label, 'flex-1 min-w-[180px]')}>
+          ESSENCE COST (e.g. “3 generic, 1 Ember”)
+          <input
+            className={input}
+            value={form.cost}
+            onChange={(e) => set('cost')(e.target.value)}
+          />
+        </label>
+        {num('might', 'MIGHT')}
+        {num('grit', 'GRIT')}
+        {type === 'Leader' && num('resolve', 'RESOLVE')}
+        {type === 'Item' && num('rebondCost', 'RE-BOND')}
+        {type === 'Item' && num('nerf', 'NERF')}
+        <label className={cn(label, 'w-32')}>
+          SUBTYPE
+          <select
+            className={input}
+            value={form.subtype}
+            onChange={(e) => set('subtype')(e.target.value)}
+            disabled={!subtypes}
+          >
+            <option value="">(none)</option>
+            {(subtypes ?? (form.subtype ? [form.subtype] : [])).map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className={label}>
+        KEYWORDS (comma-separated; must be keywords the engine implements)
+        <input
+          className={input}
+          value={form.keywords}
+          onChange={(e) => set('keywords')(e.target.value)}
+        />
+      </label>
+      <label className={label}>
+        RULES TEXT
+        <textarea
+          className={cn(input, 'h-14 resize-y')}
+          value={form.text}
+          onChange={(e) => set('text')(e.target.value)}
+        />
+      </label>
+      {problems.map((p) => (
+        <div key={p} className="text-[9px] font-bold text-[var(--c-red)]">
+          {p}
+        </div>
+      ))}
+      <div className="text-[9px] font-black">
+        {changed ? (
+          <span className="text-[var(--c-red)]">OVERRIDDEN: {changed}</span>
+        ) : (
+          <span className="text-[var(--c-steel)]">No overrides — this prints as generated.</span>
+        )}
       </div>
     </div>
   );
@@ -468,7 +794,9 @@ function ReviewCard({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const preview = useMemo(
+  // The card as the hash generates it — the baseline the override editor
+  // diffs against, and what gets printed when Fry changes nothing.
+  const generated = useMemo(
     () =>
       deriveCardMechanics({
         id: cardId || 'preview_card',
@@ -482,12 +810,45 @@ function ReviewCard({
     [cardId, name, type, rarity, sub.set_name, sub.card_name, imageUrl, flavor],
   );
 
+  const [form, setForm] = useState<OverrideForm>(() => formFor(generated));
+  // Changing the id, type or rarity re-rolls the whole card, so the editor's
+  // baseline moves with it. Anything Fry had typed was written against a card
+  // that no longer exists, which is why this resets rather than merges.
+  const [seed, setSeed] = useState(`${cardId}|${type}|${rarity}`);
+  const nextSeed = `${cardId}|${type}|${rarity}`;
+  if (seed !== nextSeed) {
+    setSeed(nextSeed);
+    setForm(formFor(generated));
+  }
+
+  const { overrides, problems } = useMemo(() => overridesFrom(form, generated), [form, generated]);
+  const changed = describeOverrides(overrides);
+  // What the card will actually print: generated, with the overrides on top.
+  const preview = useMemo(
+    () =>
+      deriveCardMechanics({
+        id: cardId || 'preview_card',
+        name: name.trim() || sub.card_name,
+        type,
+        rarity,
+        set: sub.set_name,
+        image: imageUrl.trim(),
+        flavor: flavor.trim(),
+        ...(overrides ? { overrides } : {}),
+      }),
+    [cardId, name, type, rarity, sub.set_name, sub.card_name, imageUrl, flavor, overrides],
+  );
+
   const idOk = isValidCardId(cardId);
 
   const act = async (action: 'approve' | 'deny' | 'deny_ban') => {
     if (busy) return;
     if (action === 'approve' && !idOk) {
       setError('Card id must be 3–64 characters of a-z, 0-9 or _.');
+      return;
+    }
+    if (action === 'approve' && problems.length > 0) {
+      setError(problems[0]);
       return;
     }
     if (
@@ -512,6 +873,7 @@ function ReviewCard({
               set: sub.set_name,
               flavor: flavor.trim(),
               image: imageUrl.trim(),
+              overrides,
             })
           : null;
       const { error: err } = await reviewSubmission({
@@ -525,12 +887,19 @@ function ReviewCard({
         flavor: payload?.flavor_text ?? null,
         imageUrl: payload?.image_url ?? null,
         mechanics: payload?.mechanics ?? null,
+        overrides: (payload?.overrides as Record<string, unknown>) ?? null,
       });
       if (err) {
         setError(err);
         return;
       }
-      setNotice(action === 'approve' ? 'Printed into the set.' : 'Denied.');
+      setNotice(
+        action === 'approve'
+          ? changed
+            ? `Printed into the set, overriding ${changed}.`
+            : 'Printed into the set as generated.'
+          : 'Denied.',
+      );
       await onDone();
     } catch {
       setError('Something went wrong — check your connection and try again.');
@@ -558,7 +927,7 @@ function ReviewCard({
 
       <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)] items-start">
         <div className="flex flex-col items-center gap-1 shrink-0">
-          <CardFace def={preview} size="standard" />
+          <InspectableCard def={preview} size="full" />
           <a
             href={sub.image_url}
             target="_blank"
@@ -634,19 +1003,33 @@ function ReviewCard({
             <input className={input} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
 
+          <OverrideEditor
+            generated={generated}
+            form={form}
+            setForm={setForm}
+            type={type}
+            problems={problems}
+            changed={changed}
+          />
+
           <div className="text-[9px] font-bold text-[var(--c-steel)] break-words">
-            Derived: {preview.keywords?.join(', ') || 'no keywords'} ·{' '}
-            {preview.might != null ? `${preview.might}/${preview.grit}` : 'no stats'} ·{' '}
-            {preview.text || 'no rules text'}
+            Printing: {preview.keywords?.join(', ') || 'no keywords'} ·{' '}
+            {preview.might != null ? `${preview.might}/${preview.grit}` : 'no stats'} · cost{' '}
+            {totalCost(preview.cost)} · {preview.text || 'no rules text'}
           </div>
 
           {error && <Notice text={error} />}
           {notice && <Notice text={notice} kind="success" />}
 
           <div className="flex flex-wrap gap-2">
-            <PopButton color="red" disabled={busy || !idOk} onClick={() => act('approve')}>
+            <PopButton
+              color="red"
+              disabled={busy || !idOk || problems.length > 0}
+              onClick={() => act('approve')}
+            >
               <span className="flex items-center gap-1">
                 <Check className="w-3.5 h-3.5" /> APPROVE AS {rarity.toUpperCase()}
+                {changed ? ' (OVERRIDDEN)' : ''}
               </span>
             </PopButton>
             <PopButton color="steel" disabled={busy} onClick={() => act('deny')}>
@@ -944,7 +1327,7 @@ export function BulkAddPanel() {
           <div className="heading-font text-sm mb-2">PREVIEW ({parsed.rows.length})</div>
           <div className="flex flex-wrap gap-3">
             {parsed.rows.slice(0, 24).map((r) => (
-              <CardFace
+              <InspectableCard
                 key={r.id}
                 def={deriveCardMechanics({
                   id: r.id,
@@ -955,7 +1338,7 @@ export function BulkAddPanel() {
                   image: r.image,
                   flavor: r.flavor,
                 })}
-                size="compact"
+                size="standard"
               />
             ))}
           </div>
@@ -1014,7 +1397,7 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <MetaHeader title="PLAYER SHOWCASE" onBack={onBack} />
+      <MetaHeader title={SHOWCASE_SET.toUpperCase()} onBack={onBack} />
       <div className="p-4 sm:p-5 max-w-6xl mx-auto flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <PopButton
@@ -1045,7 +1428,9 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
           {stats && (
             <span className="ml-auto text-[10px] font-bold text-[var(--c-steel)]">
               {stats.printed} printed · {stats.pending} awaiting review · {stats.submitters}{' '}
-              submitter{stats.submitters === 1 ? '' : 's'}
+              submitter{stats.submitters === 1 ? '' : 's'} ·{' '}
+              {stats.printed + (stats.submitted ?? 0)}/{stats.cards_needed ?? SHOWCASE_MIN_CARDS} to
+              a set
             </span>
           )}
         </div>

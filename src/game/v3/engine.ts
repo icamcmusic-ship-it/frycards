@@ -7,7 +7,16 @@
  * Replaces the v4.x dice-placement engine (dice, rolls, combos, Cast Slots)
  * entirely.
  */
-import { CardDef, Effect, EssenceCost, LEADER_HP, MAX_HAND, hasKw } from './cards';
+import {
+  CardDef,
+  Effect,
+  EssenceCost,
+  LEADER_HP,
+  MAX_HAND,
+  charmSelfHeal,
+  hasKw,
+  itemSurvives,
+} from './cards';
 import { COLORS, EssenceType, LEADER_COLORS } from './colors';
 
 // ---------------------------------------------------------------------------
@@ -37,8 +46,8 @@ export interface CardInst {
   def: CardDef;
 }
 
-/** A Charm on the field, bonded or (Worn only) unbonded. */
-export interface CharmInst {
+/** An Item on the field, bonded or (Weapon/Tool only) unbonded. */
+export interface ItemInst {
   iid: string;
   def: CardDef;
 }
@@ -56,8 +65,8 @@ export interface UnitInst {
   /** Permanent +might/+grit from buffs. */
   permMight: number;
   permGrit: number;
-  /** Charms bonded to this unit. */
-  charms: CharmInst[];
+  /** Items bonded to this unit. */
+  items: ItemInst[];
   /** Hit by Venomous damage this clash — lethal unless Unbreakable. */
   venomed?: boolean;
   /**
@@ -101,8 +110,8 @@ export interface PlayerState {
   voidPile: CardInst[];
   field: UnitInst[];
   locations: LocationInst[];
-  /** Worn Charms whose unit left the field — on the field, unbonded. */
-  wornCharms: CharmInst[];
+  /** Weapons and Tools whose unit left the field — on the field, unbonded. */
+  unbondedItems: ItemInst[];
   leader: LeaderZone;
   /** Essence pool — empties at the end of every phase. */
   essence: Partial<Record<EssenceType, number>>;
@@ -238,7 +247,7 @@ export function summonUnit(
     enteredThisTurn: opts.sick ?? false,
     permMight: 0,
     permGrit: 0,
-    charms: [],
+    items: [],
   };
   state.players[pid].field.push(u);
   return u;
@@ -247,10 +256,10 @@ export function summonUnit(
 // ---------------------------------------------------------------------------
 // Derived stats & keywords
 // ---------------------------------------------------------------------------
-/** All keywords a unit currently has: printed + granted by bonded Charms. */
+/** All keywords a unit currently has: printed + granted by bonded Items. */
 export function effKeywords(u: UnitInst): string[] {
   const out = [...(u.def.keywords ?? [])];
-  for (const c of u.charms) for (const kw of c.def.bond?.grants ?? []) out.push(kw);
+  for (const c of u.items) for (const kw of c.def.bond?.grants ?? []) out.push(kw);
   return out;
 }
 
@@ -295,19 +304,19 @@ export function bulwarkReduction(p: PlayerState): number {
 
 export function effMight(state: GameState, u: UnitInst): number {
   const p = state.players[u.owner];
-  const charm = u.charms.reduce((s, c) => s + (c.def.bond?.might ?? 0), 0);
+  const item = u.items.reduce((s, c) => s + (c.def.bond?.might ?? 0), 0);
   return Math.max(
     0,
-    (u.def.might ?? 0) + u.permMight + charm + sanctumBonus(p, 'MIGHT_ALL') + commanderBonus(p),
+    (u.def.might ?? 0) + u.permMight + item + sanctumBonus(p, 'MIGHT_ALL') + commanderBonus(p),
   );
 }
 
 export function effGrit(state: GameState, u: UnitInst): number {
   const p = state.players[u.owner];
-  const charm = u.charms.reduce((s, c) => s + (c.def.bond?.grit ?? 0), 0);
+  const item = u.items.reduce((s, c) => s + (c.def.bond?.grit ?? 0), 0);
   return Math.max(
     0,
-    (u.def.grit ?? 0) + u.permGrit + charm + sanctumBonus(p, 'GRIT_ALL') + warlordBonus(p),
+    (u.def.grit ?? 0) + u.permGrit + item + sanctumBonus(p, 'GRIT_ALL') + warlordBonus(p),
   );
 }
 
@@ -413,7 +422,7 @@ export function createGame(
       voidPile: [],
       field: [],
       locations: [],
-      wornCharms: [],
+      unbondedItems: [],
       leader: {
         def: leaderDef,
         invoked: false,
@@ -1001,25 +1010,25 @@ export function applyEffect(
 // Leaving the field / state-based checks
 // ---------------------------------------------------------------------------
 /** Remove a unit from the field to the ash-pile ('ash') or The Void ('void').
- * Bound Charms go to the ash-pile; Worn Charms stay on the field unbonded. */
+ * Charms go to the ash-pile; Weapons and Tools stay on the field unbonded. */
 function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   const p = state.players[u.owner];
   const idx = p.field.indexOf(u);
   if (idx < 0) return;
-  // Read leave-the-field keywords BEFORE the bonded Charms are unhooked —
-  // a Charm-granted Wildfire is still granted at the moment of death.
+  // Read leave-the-field keywords BEFORE the bonded Items are unhooked —
+  // an Item-granted Wildfire is still granted at the moment of death.
   const wildfire = unitHasKw(u, 'Wildfire');
   p.field.splice(idx, 1);
-  for (const charm of u.charms) {
-    // v6.0 Soulbound: the Charm returns to its owner's hand instead of dying
+  for (const item of u.items) {
+    // v6.0 Soulbound: the Item returns to its owner's hand instead of dying
     // with (or outliving) its unit.
-    if (hasKw(charm.def, 'Soulbound')) {
+    if (hasKw(item.def, 'Soulbound')) {
       telemetry.onKeywordProc?.('Soulbound', 1);
-      p.hand.push({ iid: charm.iid, def: charm.def });
-    } else if (charm.def.subtype === 'Worn') p.wornCharms.push(charm);
-    else p.ashPile.push({ iid: charm.iid, def: charm.def });
+      p.hand.push({ iid: item.iid, def: item.def });
+    } else if (itemSurvives(item.def.subtype)) p.unbondedItems.push(item);
+    else p.ashPile.push({ iid: item.iid, def: item.def });
   }
-  u.charms = [];
+  u.items = [];
   const inst: CardInst = { iid: u.iid, def: u.def };
   if (dest === 'void') p.voidPile.push(inst);
   else p.ashPile.push(inst);
@@ -1142,8 +1151,8 @@ function runDawn(state: GameState): void {
       p.vitality += 1;
       telemetry.onKeywordProc?.('Radiant', 1);
     }
-    // v7.3 Empowering: each Empowering Charm grows the unit it is bonded to.
-    const empowering = u.charms.filter((c) => hasKw(c.def, 'Empowering')).length;
+    // v7.3 Empowering: each Empowering Item grows the unit it is bonded to.
+    const empowering = u.items.filter((c) => hasKw(c.def, 'Empowering')).length;
     if (empowering > 0) {
       u.permMight += empowering;
       telemetry.onKeywordProc?.('Empowering', empowering);
@@ -1471,8 +1480,13 @@ function timingLegal(state: GameState, pid: PlayerId, def: CardDef): boolean {
   return inOwnMain(state, pid) && state.stack.length === 0;
 }
 
+/** The sentinel `bondTargetIid` that casts a Charm on its controller instead
+ * of on one of their units (rulebook §7: "cast on players or units"). */
+export const BOND_TARGET_SELF = 'self';
+
 /** Can this hand card be invoked right now (timing + current essence pool +
- * a bond target existing for Charms)? */
+ * a bond target existing for Items)? A Charm needs no unit — it can be cast
+ * on its controller — so only Weapons and Tools are gated on the field. */
 export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boolean {
   const p = state.players[pid];
   const card = p.hand.find((c) => c.iid === cardIid);
@@ -1481,7 +1495,7 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
   if (def.type === 'Leader') return false;
   if (!timingLegal(state, pid, def)) return false;
   if (!canPayCost(p.essence, effectiveCost(state, pid, def))) return false;
-  if (def.type === 'Charm' && p.field.length === 0) return false;
+  if (def.type === 'Item' && p.field.length === 0 && itemSurvives(def.subtype)) return false;
   return true;
 }
 
@@ -1506,11 +1520,20 @@ export function invokeCard(
   const def = card.def;
 
   let bondTargetIid: string | undefined;
-  if (def.type === 'Charm') {
-    const iid = opts.bondTargetIid ?? opts.targetIid ?? p.field[0]?.iid;
-    const bondTarget = iid ? findUnit(state, iid) : undefined;
-    if (!bondTarget || bondTarget.owner !== pid) return false;
-    bondTargetIid = bondTarget.iid;
+  if (def.type === 'Item') {
+    // A Charm may be aimed at its controller — explicitly, or implicitly when
+    // there is no unit to bond to. Weapons and Tools still need a body.
+    const selfCast =
+      !itemSurvives(def.subtype) &&
+      (opts.bondTargetIid === BOND_TARGET_SELF || p.field.length === 0);
+    if (selfCast) {
+      bondTargetIid = BOND_TARGET_SELF;
+    } else {
+      const iid = opts.bondTargetIid ?? opts.targetIid ?? p.field[0]?.iid;
+      const bondTarget = iid ? findUnit(state, iid) : undefined;
+      if (!bondTarget || bondTarget.owner !== pid) return false;
+      bondTargetIid = bondTarget.iid;
+    }
   }
   if (
     def.onInvoke &&
@@ -1519,7 +1542,7 @@ export function invokeCard(
   ) {
     if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
   }
-  if (!['Unit', 'Event', 'Charm', 'Location'].includes(def.type)) return false;
+  if (!['Unit', 'Event', 'Item', 'Location'].includes(def.type)) return false;
 
   const cost = effectiveCost(state, pid, def);
   if (hasKw(def, 'Surge') && cost !== def.cost) telemetry.onKeywordProc?.('Surge', 1);
@@ -1549,7 +1572,7 @@ export function invokeCard(
  * - Units enter the field (summoning sick unless Reckless), run onInvoke and
  *   'enters' triggers.
  * - Events resolve onInvoke then go to the ash-pile.
- * - Charms bond to their unit; Sanctums enter the Location row ready.
+ * - Items bond to their unit; Sanctums enter the Location row ready.
  */
 function resolveInvokedCard(state: GameState, item: StackItem): void {
   const pid = item.controller;
@@ -1568,7 +1591,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         enteredThisTurn: !hasKw(def, 'Reckless'),
         permMight: 0,
         permGrit: 0,
-        charms: [],
+        items: [],
       };
       p.field.push(u);
       // The body still enters when the rider's target is gone — only the
@@ -1638,23 +1661,40 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       p.ashPile.push(card);
       break;
     }
-    case 'Charm': {
+    case 'Item': {
+      // A Charm aimed at its controller is consumed for Vitality instead of
+      // bonding. Locked in at invoke time, so nothing the opponent does in
+      // the response window can turn it back into a bond (or vice versa).
+      if (item.bondTargetIid === BOND_TARGET_SELF) {
+        const gained = Math.min(charmSelfHeal(def.bond), LEADER_HP - p.vitality);
+        p.vitality += Math.max(0, gained);
+        state.log.push(
+          `${pid} casts ${def.name} on themselves${gained > 0 ? ` and restores ${gained} Vitality` : ''}.`,
+        );
+        p.ashPile.push(card);
+        break;
+      }
       const bondTarget = item.bondTargetIid ? findUnit(state, item.bondTargetIid) : undefined;
-      // The unit it was aimed at can die in response; the Charm is then a Worn
-      // Charm with nothing to bond to, or ash.
+      // The unit it was aimed at can die in response; the Item is then a
+      // Weapon/Tool with nothing to bond to, or ash.
       if (!bondTarget || bondTarget.owner !== pid) {
         state.log.push(`${def.name} fizzles — nothing left to bond to.`);
-        if (def.subtype === 'Worn') p.wornCharms.push({ iid: card.iid, def });
+        if (itemSurvives(def.subtype)) p.unbondedItems.push({ iid: card.iid, def });
         else p.ashPile.push(card);
         break;
       }
-      bondTarget.charms.push({ iid: card.iid, def });
-      // v6.0 Runic: bonding this Charm from hand Deals its controller a card.
+      bondTarget.items.push({ iid: card.iid, def });
+      // v13 Tool: the subtype that points both ways — the friendly buff above
+      // plus a permanent shrink on a target enemy unit as it lands.
+      if (def.subtype === 'Tool' && def.nerf) {
+        applyEffect(state, pid, { action: 'weaken', value: def.nerf, target: 'enemyUnit' });
+      }
+      // v6.0 Runic: bonding this Item from hand Deals its controller a card.
       if (hasKw(def, 'Runic')) {
         telemetry.onKeywordProc?.('Runic', 1);
         dealCards(state, pid, 1);
       }
-      // v7.3 Tethered: bonding untaps the unit it lands on, so a Charm can
+      // v7.3 Tethered: bonding untaps the unit it lands on, so an Item can
       // buy back an attack or a guard the turn it is played.
       if (hasKw(def, 'Tethered') && bondTarget.exhausted) {
         telemetry.onKeywordProc?.('Tethered', 1);
@@ -1692,27 +1732,28 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
   }
 }
 
-/** Re-bond a Worn Charm from the field to a friendly unit for its re-bond
+/** Re-bond an unbonded Weapon or Tool from the field to a friendly unit for
+ * its re-bond
  * cost (generic essence). Own main phase only. */
-export function rebondCharm(
+export function rebondItem(
   state: GameState,
   pid: PlayerId,
-  charmIid: string,
+  itemIid: string,
   unitIid: string,
 ): boolean {
   const p = state.players[pid];
   if (!inOwnMainClear(state, pid) || state.winner) return false;
-  const idx = p.wornCharms.findIndex((c) => c.iid === charmIid);
+  const idx = p.unbondedItems.findIndex((c) => c.iid === itemIid);
   if (idx < 0) return false;
-  const charm = p.wornCharms[idx];
+  const item = p.unbondedItems[idx];
   const unit = findUnit(state, unitIid);
   if (!unit || unit.owner !== pid) return false;
-  const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
+  const cost: EssenceCost = { generic: item.def.rebondCost ?? 0, pips: {} };
   if (!canPayCost(p.essence, cost)) return false;
   payCost(p.essence, cost);
-  p.wornCharms.splice(idx, 1);
-  unit.charms.push(charm);
-  state.log.push(`${pid} re-bonds ${charm.def.name} to ${unit.def.name}.`);
+  p.unbondedItems.splice(idx, 1);
+  unit.items.push(item);
+  state.log.push(`${pid} re-bonds ${item.def.name} to ${unit.def.name}.`);
   return true;
 }
 

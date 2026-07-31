@@ -165,7 +165,7 @@
  *    the edge accrues instead of restating that it exists.
  *  - Five new CPU reasoning-lapse counters: reservationWasted (the reaction
  *    hold that never cashed in — reactionPlays reads ~0 despite the whole
- *    reservation machinery), charmOnDoomedUnit, leaderShatterBlunder,
+ *    reservation machinery), itemOnDoomedUnit, leaderShatterBlunder,
  *    wellspringMisplay, removalOnNonThreat.
  *
  * v6.5 additions:
@@ -203,7 +203,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { totalCost, CardDef, LEADER_HP } from '../src/game/v3/cards';
+import { totalCost, itemSurvives, CardDef, LEADER_HP } from '../src/game/v3/cards';
 import { COLORS } from '../src/game/v3/colors';
 import { KEYWORDS } from '../src/game/v3/keywords';
 import {
@@ -548,7 +548,7 @@ const mech = {
   rebonds: 0,
   reactionPlays: 0,
   sanctumPlays: 0,
-  charmPlays: 0,
+  itemPlays: 0,
   quickEventPlays: 0,
   slowEventPlays: 0,
   wastedEssenceTotal: 0,
@@ -588,10 +588,10 @@ const lapses = {
   reservationWasted: 0,
   /** Reservations made at all, the denominator for the above. */
   reservationsMade: 0,
-  /** A Charm was bonded to a unit that left the field the same turn — the
-   * Charm's essence bought nothing (Soulbound charms excluded: they come
+  /** An Item was bonded to a unit that left the field the same turn — the
+   * Item's essence bought nothing (Soulbound items excluded: they come
    * back to hand, so this is not a loss for them). */
-  charmOnDoomedUnit: 0,
+  itemOnDoomedUnit: 0,
   /** A minus Leader ability was activated that shattered the CPU's own
    * Leader while the board held no Might-6+ threat — the ai.ts guard for
    * this exists but only weights it, so it can still fire on marginal
@@ -707,7 +707,7 @@ telemetry.onEssenceCleared = (state) => {
         (c) =>
           c.def.type !== 'Leader' &&
           canPayCost(p.essence, c.def.cost) &&
-          !(c.def.type === 'Charm' && p.field.length === 0),
+          !(c.def.type === 'Item' && p.field.length === 0 && itemSurvives(c.def.subtype)),
       )
     ) {
       lapses.wastedEssenceWithPlay++;
@@ -1111,7 +1111,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
             mech.sanctumPlays++;
             locTurns[actor].add(turns);
           }
-          if (def.type === 'Charm') mech.charmPlays++;
+          if (def.type === 'Item') mech.itemPlays++;
           if (def.type === 'Event' && def.subtype === 'Quick') mech.quickEventPlays++;
           if (def.type === 'Event' && def.subtype === 'Slow') mech.slowEventPlays++;
         }
@@ -1159,15 +1159,15 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     if (!preLeaderShattered && p.leader.shattered && !preOppBigThreat) {
       lapses.leaderShatterBlunder++;
     }
-    // Charm on a doomed unit: a Charm invoked this turn that is bonded to
-    // nothing by end of turn (its unit left the field). Soulbound charms
+    // Item on a doomed unit: an Item invoked this turn that is bonded to
+    // nothing by end of turn (its unit left the field). Soulbound items
     // return to hand, so they lose nothing and are excluded.
     for (const ev of events) {
       if (ev.kind !== 'invoke' || ev.by) continue;
       const def = POOL_BY_ID[ev.iid.split('#')[0]];
-      if (def?.type !== 'Charm' || def.keywords?.includes('Soulbound')) continue;
-      const stillBonded = p.field.some((u) => u.charms.some((ch) => ch.iid === ev.iid));
-      if (!stillBonded) lapses.charmOnDoomedUnit++;
+      if (def?.type !== 'Item' || def.keywords?.includes('Soulbound')) continue;
+      const stillBonded = p.field.some((u) => u.items.some((ch) => ch.iid === ev.iid));
+      if (!stillBonded) lapses.itemOnDoomedUnit++;
     }
 
     // v5.3: erode = the opponent's deck shrink during the acting player's
@@ -2562,7 +2562,7 @@ const report = {
     leaderShatters: mech.leaderShatters,
     rebonds: mech.rebonds,
     sanctumPlays: mech.sanctumPlays,
-    charmPlays: mech.charmPlays,
+    itemPlays: mech.itemPlays,
     quickEventPlays: mech.quickEventPlays,
     slowEventPlays: mech.slowEventPlays,
     reactionPlays: mech.reactionPlays,
@@ -2680,7 +2680,7 @@ const report = {
    *   type     flat   ramp        flat   ramp
    *   Unit     +3.00  +3.20       +2.89  +3.08
    *   Location +3.29  +3.28       +3.48  +3.27
-   *   Charm    +2.01  +2.30       +2.43  +2.66
+   *   Item    +2.01  +2.30       +2.43  +2.66
    *   Event    -0.89  -0.53       -0.53  -0.71
    *
    *   Location minus Unit: +0.28 -> +0.07 (A), +0.59 -> +0.20 (B)
@@ -2718,7 +2718,7 @@ const report = {
      * instead of against a mixture that is a fifth Events.
      */
     residualByType: Object.fromEntries(
-      ['Unit', 'Location', 'Charm', 'Event'].map((t) => {
+      ['Unit', 'Location', 'Item', 'Event'].map((t) => {
         const all = cardReport.filter((c) => c.type === t);
         const matched = byRampResidual.filter((c) => c.type === t);
         return [

@@ -36,7 +36,12 @@ import { chromium } from 'playwright';
 const BASE = `${process.env.AUDIT_BASE ?? 'http://localhost:3000'}/meta-preview.html`;
 const CLICK_CAP = Number(process.env.CLICK_CAP ?? 40);
 
-/** Keep in sync with the `screen=` branches in src/meta-preview.tsx. */
+/**
+ * Keep in sync with the `screen=` branches in src/meta-preview.tsx. An entry
+ * may carry extra query string (`'submissions&role=creator'`) — the harness
+ * appends it verbatim, which is how the Creator-only panels get measured: with
+ * the default player profile they never mount at all.
+ */
 const SCREENS = [
   'collection',
   'decks',
@@ -55,6 +60,9 @@ const SCREENS = [
   'howtoplay',
   'changelog',
   'submissions',
+  // v13: the review queue's mechanics-override editor and the BULK ADD
+  // importer only exist for the Creator.
+  'submissions&role=creator',
 ];
 
 const WIDTHS = [375, 1280];

@@ -128,12 +128,12 @@ describe('Ember — Wildfire', () => {
     expect(s.players.P2.vitality).toBe(before - 2);
   });
 
-  test('a Charm-granted Wildfire still fires as the Charm comes off', () => {
+  test('an Item-granted Wildfire still fires as the Item comes off', () => {
     const s = game();
     const u = summonUnit(s, 'P1', U('bearer', 1, 1));
-    u.charms.push({
+    u.items.push({
       iid: 'c#1',
-      def: { id: 'c', name: 'c', type: 'Charm', subtype: 'Bound', bond: { grants: ['Wildfire'] } },
+      def: { id: 'c', name: 'c', type: 'Item', subtype: 'Charm', bond: { grants: ['Wildfire'] } },
     });
     const before = s.players.P2.vitality;
     applyEffect(s, 'P2', { action: 'shatter', target: 'enemyUnit' }, u.iid);

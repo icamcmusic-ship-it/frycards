@@ -9,6 +9,12 @@
  * whenever generated-cards.ts changes so the live catalog and the offline
  * fallback stay byte-identical.
  *
+ * v13: this is override-aware without needing to know about overrides. The
+ * `template` column is written verbatim from the bundled template (which
+ * carries any `overrides` object), and the mechanics columns come from
+ * `POOL_BY_ID`, which is the pool AFTER `mapCard` has layered them on — so a
+ * Creator-overridden card syncs as the card the game actually prints.
+ *
  * Usage: npx tsx scripts/sync-cards-db.ts > cards-sync.sql
  */
 import { GENERATED_CARDS } from '../src/game/generated-cards';
