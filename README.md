@@ -67,6 +67,21 @@ balance change, not just an economy one. `npm run verify:pool` diffs
 `cards.rarity`, `cards.template` and the bundled `generated-cards.ts` and
 exits non-zero on any drift between them; run it after any rarity edit.
 
+Cards can also be minted from inside the app by the Creator — approving a
+player submission, or a `BULK ADD` paste (see **Player Showcase** below). Those
+paths derive the mechanics with `deriveCardMechanics()` (the single-card export
+of the same `cardpool.ts` assignment) and write all sixteen `cards` columns in
+one call, so a freshly printed card is never left with the null mechanics
+columns that `pick_deck_bucket` reads as "colourless, cost 0". They do *not*
+touch `generated-cards.ts`: re-run `npm run fetch:cards` and commit the result
+after a batch, or `verify:pool` will (correctly) report every new card as
+`live-only`, and the sims will keep running on the old catalog.
+
+**Sets.** Every `pack_types` row pins its own `allowed_sets`; a null there means
+"draw from the whole table", which is not what any shipped pack wants once more
+than one set exists. `random_card_of_rarity`, `grant_pack_contents` and
+`pick_deck_bucket` all honour it.
+
 There are 9 Leaders — Avatar of the Abyss, Ethereal Sea Witch, Mer-King,
 Legendary Diver, Sentinel of the Nether Pit (`crimson_vector_commander`),
 Kuro the Unseen (`apex_nanite_shinobi`), Ruin-Walker Overseer, Sovereign of the
@@ -89,6 +104,35 @@ RPCs), foils — the 8-card booster carries one guaranteed foil slot plus a
 ~8%-per-pack chance of another, and the 49-card box guarantees a foil
 Super-Rare-or-better topper — cosmetics (card backs, banners, avatars), a collection
 browser and match rewards.
+
+## Player Showcase (player-submitted cards)
+
+Players design cards from the main menu (`CARD SUBMISSIONS`,
+[`src/meta/CardSubmissionsScreen.tsx`](src/meta/CardSubmissionsScreen.tsx)):
+an art link, a title, a card type (Unit/Charm/Event/Location) and flavor text.
+Approved cards are printed into the **Player Showcase** set and become ordinary
+collectible, deck-legal cards.
+
+- Unlimited submissions per account, but **one full art and one video Mythic
+  per account per set** — held by a pending request, freed by withdrawing it,
+  and re-checked at approval time against what actually got printed.
+- The Creator assigns the rarity and every other attribute and may deny
+  anything; a submission whose theme is on the disallowed list is a **ban** from
+  the Showcase (`profiles.submissions_banned`), which also clears that
+  account's remaining queue.
+- If enough players submit, a shortlist goes to a community poll and the winners
+  print at Ultra-Rare. **The ballot is not built yet** — see `docs/ROADMAP.md`.
+- The Creator's `BULK ADD` tab imports many cards at once (JSON array, or
+  `name | type | rarity | image url | flavor` per line). Rows are validated in
+  the client and written one at a time server-side, so a bad row reports itself
+  instead of rolling back the batch.
+- Pure validation/parsing lives in
+  [`src/meta/submissions.ts`](src/meta/submissions.ts) and is unit-tested; the
+  server re-validates everything in `submit_card` / `apply_card_upsert`.
+- The `Player Showcase Booster` pack row exists but ships **inactive**: a
+  set-restricted pack falls back to the whole catalog only when its set is
+  completely empty, so it is safe to activate once the set has cards and unsafe
+  before that.
 
 ## Engine & Balance
 

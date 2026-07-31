@@ -101,6 +101,11 @@ export interface Profile {
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
+  /** Banned from the Player Showcase card-submission queue (see the
+   * disallowed-themes disclaimer on the submissions screen). Does not affect
+   * anything else the account can do. */
+  submissions_banned: boolean;
+  submissions_ban_reason: string | null;
   /** Consecutive daily-login-reward days (resets after a missed UTC day). */
   login_streak: number;
   /** When the daily login reward was last claimed (one claim per UTC day). */
@@ -1823,6 +1828,193 @@ export async function fetchMySerializedCards(userId: string): Promise<OwnedSeria
 export async function setHideSerializedAnnouncements(hide: boolean): Promise<string | null> {
   const { error } = await supabase.rpc('set_hide_serialized_announcements', { p_hide: hide });
   return rpcError(error);
+}
+
+// ---------------------------------------------------------------------------
+// Player card submissions — the "Player Showcase" set.
+//
+// Players submit art + title + type + flavor; the Creator assigns rarity and
+// every other attribute, or denies (optionally with a submissions ban). An
+// approval mints the real `cards` row, which is why the approve call carries
+// the client-derived mechanics: they are hashed from `id|type|rarity` in
+// cardpool.ts and the server has no way to compute them.
+// ---------------------------------------------------------------------------
+export type SubmissionTreatment = 'standard' | 'full_art' | 'video_mythic';
+export type SubmissionStatus = 'pending' | 'approved' | 'denied' | 'withdrawn';
+
+export interface CardSubmission {
+  id: string;
+  submitter: string;
+  set_name: string;
+  card_name: string;
+  card_type: string;
+  flavor_text: string;
+  image_url: string;
+  requested_treatment: SubmissionTreatment;
+  status: SubmissionStatus;
+  review_note: string | null;
+  approved_card_id: string | null;
+  approved_rarity: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+/** A submission as the Creator's review queue sees it — same row plus who
+ * sent it, which RLS alone can't join (profiles are self-readable only). */
+export interface CardSubmissionForReview extends CardSubmission {
+  submitter_username: string | null;
+  submitter_banned: boolean;
+}
+
+/** Headline counts behind the "enough submissions to run the Ultra-Rare
+ * community poll?" line on the submissions screen. */
+export interface ShowcaseStats {
+  set_name: string;
+  pending: number;
+  approved: number;
+  submitters: number;
+  /** Rows actually printed into `cards` for this set. */
+  printed: number;
+}
+
+/** The caller's own submissions (RLS-scoped), newest first. */
+export async function fetchMySubmissions(userId: string): Promise<CardSubmission[]> {
+  const { data, error } = await supabase
+    .from('card_submissions')
+    .select('*')
+    .eq('submitter', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    // Thrown (not []) — the same contract as every other fetcher here: an
+    // outage must not render as "you have submitted nothing".
+    console.error('fetchMySubmissions failed:', error.message);
+    throw error;
+  }
+  return (data as CardSubmission[]) || [];
+}
+
+export async function fetchShowcaseStats(): Promise<ShowcaseStats | null> {
+  const { data, error } = await supabase.rpc('get_showcase_stats', {
+    p_set: 'Player Showcase',
+  });
+  if (error) {
+    console.error('fetchShowcaseStats failed:', error.message);
+    return null;
+  }
+  return (data as ShowcaseStats) || null;
+}
+
+export async function submitCard(input: {
+  name: string;
+  type: string;
+  flavor: string;
+  imageUrl: string;
+  treatment: SubmissionTreatment;
+}): Promise<{ data: CardSubmission | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('submit_card', {
+    p_name: input.name,
+    p_type: input.type,
+    p_flavor: input.flavor,
+    p_image_url: input.imageUrl,
+    p_treatment: input.treatment,
+  });
+  return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+export async function withdrawSubmission(id: string): Promise<string | null> {
+  const { error } = await supabase.rpc('withdraw_card_submission', { p_id: id });
+  return rpcError(error);
+}
+
+/** Creator-only review queue. `status` null returns every submission. */
+export async function fetchSubmissionsForReview(
+  status: SubmissionStatus | null = null,
+  limit = 200,
+): Promise<CardSubmissionForReview[]> {
+  const { data, error } = await supabase.rpc('get_card_submissions', {
+    p_status: status,
+    p_limit: limit,
+  });
+  if (error) {
+    console.error('fetchSubmissionsForReview failed:', error.message);
+    throw error;
+  }
+  return (data as CardSubmissionForReview[]) || [];
+}
+
+/** Mechanics derived client-side by `mechanicsFor` (see meta/submissions.ts). */
+export interface CardMechanicsPayload {
+  keywords: string | null;
+  essence_cost: unknown | null;
+  essence_types: string[];
+  might: number | null;
+  grit: number | null;
+  card_subtype: string | null;
+  resolve: number | null;
+  rules_text: string | null;
+}
+
+export async function reviewSubmission(input: {
+  id: string;
+  action: 'approve' | 'deny' | 'deny_ban';
+  note?: string | null;
+  cardId?: string | null;
+  rarity?: string | null;
+  name?: string | null;
+  type?: string | null;
+  flavor?: string | null;
+  imageUrl?: string | null;
+  mechanics?: CardMechanicsPayload | null;
+}): Promise<{ data: CardSubmission | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('creator_review_submission', {
+    p_id: input.id,
+    p_action: input.action,
+    p_note: input.note ?? null,
+    p_card_id: input.cardId ?? null,
+    p_rarity: input.rarity ?? null,
+    p_name: input.name ?? null,
+    p_type: input.type ?? null,
+    p_flavor: input.flavor ?? null,
+    p_image_url: input.imageUrl ?? null,
+    p_mechanics: input.mechanics ?? null,
+  });
+  return { data: (data as CardSubmission) || null, error: rpcError(error) };
+}
+
+export async function setSubmissionBan(
+  userId: string,
+  banned: boolean,
+  reason?: string | null,
+): Promise<string | null> {
+  const { error } = await supabase.rpc('creator_set_submission_ban', {
+    p_user: userId,
+    p_banned: banned,
+    p_reason: reason ?? null,
+  });
+  return rpcError(error);
+}
+
+export interface BulkAddResult {
+  inserted: number;
+  updated: number;
+  failed: number;
+  errors: { row: number; id: string; message: string }[];
+}
+
+/**
+ * Creator-only bulk import. Rows are validated and written one at a time
+ * server-side, so a bad row reports itself instead of rolling back the batch —
+ * `failed`/`errors` describe exactly which ones didn't land.
+ */
+export async function bulkAddCards(
+  cards: unknown[],
+  overwrite = false,
+): Promise<{ data: BulkAddResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('creator_bulk_add_cards', {
+    p_cards: cards,
+    p_overwrite: overwrite,
+  });
+  return { data: (data as BulkAddResult) || null, error: rpcError(error) };
 }
 
 export async function adminResolveShopReport(

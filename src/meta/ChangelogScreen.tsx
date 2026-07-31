@@ -12,6 +12,19 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Player Showcase (v12)',
+    date: 'July 2026',
+    items: [
+      'NEW: design your own cards. Send Fry a Midjourney art link, a title, a card type and flavor text, and he prints the ones he likes into a brand-new set called PLAYER SHOWCASE. Submit as many as you like — find it on the main menu under CARD SUBMISSIONS.',
+      'You get ONE full art and ONE video Mythic per account for the set — everything else is unlimited. A pending submission holds your slot; withdraw it if you change your mind.',
+      'Fry chooses the rarity and every other attribute at his own discretion, and can deny any submission. Mechanics (cost, Might/Grit, keywords) are assigned by the game itself, so there is no rules text to write.',
+      'If enough players submit, Fry will shortlist his favourites and put them to a community vote — the winners print at ULTRA-RARE.',
+      'Read the disallowed-themes list before you submit. Those submissions are not denied, they are a ban from the Showcase (your account is otherwise untouched).',
+      'FIX: every pack in the store was drawing from the whole card table rather than from its own set, so the new set would have started showing up inside Volume #1 boosters and quietly moved their published odds. Every pack is now pinned to the set on its label — and so is the starter Deck Box.',
+      'The Collection browser has a SET filter now that new sets exist, and it clears with the rest of the filters.',
+    ],
+  },
+  {
     version: 'Deep Bug Hunt (v11)',
     date: 'July 2026',
     items: [

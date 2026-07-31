@@ -91,6 +91,11 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [color, setColor] = useState('All');
+  // Set filter. Derived from the live pool rather than a constant so the
+  // Player Showcase set (and any later volume) shows up the moment its first
+  // card is printed — the browser was single-set until v12 and had no way to
+  // tell community cards from Volume #1 ones.
+  const [setName, setSetName] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('Name');
@@ -108,6 +113,12 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [selling, setSelling] = useState(false);
   const [showcaseBusy, setShowcaseBusy] = useState(false);
   const [showcaseError, setShowcaseError] = useState('');
+
+  const setFilters = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of POOL_V4) if (c.set) names.add(c.set);
+    return ['All', ...[...names].sort()];
+  }, []);
 
   const showcase = profile?.showcase_cards || [];
 
@@ -259,6 +270,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     if (ownedOnly && total === 0) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
+    if (setName !== 'All' && (c.set || '') !== setName) return false;
     if (color !== 'All') {
       // Leaders carry no essence pips of their own (cardColors would always
       // read them as colorless) — their real identity lives in LEADER_COLORS,
@@ -493,6 +505,20 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
               <option key={r}>{r}</option>
             ))}
           </select>
+          {setFilters.length > 2 && (
+            <select
+              className={select}
+              aria-label="Filter by set"
+              value={setName}
+              onChange={(e) => setSetName(e.target.value)}
+            >
+              {setFilters.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'All' ? 'All sets' : s}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             className={select}
             aria-label="Filter by color"
@@ -590,8 +616,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   setType('All');
                   setRarity('All');
                   // Color was missing from this reset — a color-filtered
-                  // empty grid stayed empty after "clearing" filters.
+                  // empty grid stayed empty after "clearing" filters. Set had
+                  // the same hole the moment a second set existed.
                   setColor('All');
+                  setSetName('All');
                   setSearch('');
                   setOwnedOnly(true);
                 }}

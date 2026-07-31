@@ -17,6 +17,7 @@ import {
   Newspaper,
   CalendarCheck,
   Flame,
+  Palette,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
@@ -40,6 +41,7 @@ export type MetaScreen =
   | 'settings'
   | 'changelog'
   | 'news'
+  | 'submissions'
   | 'howtoplay';
 
 /** The 7-day login reward cycle — mirrors claim_daily_login's CASE table.
@@ -274,6 +276,14 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       desc: guest ? 'Requires an account' : 'Friends & card trading',
       icon: <Users className="w-8 h-8" />,
       color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+      disabled: guest,
+    },
+    {
+      key: 'submissions',
+      label: 'CARD SUBMISSIONS',
+      desc: guest ? 'Requires an account' : 'Design a Player Showcase card',
+      icon: <Palette className="w-8 h-8" />,
+      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       disabled: guest,
     },
     {
