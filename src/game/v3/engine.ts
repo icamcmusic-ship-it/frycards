@@ -283,8 +283,13 @@ function sanctumCount(p: PlayerState): number {
 }
 
 /** v7.3 Bulwark: each Bulwark Sanctum shaves 1 off every point of damage
- * dealt to its controller. Stacks, but can never reduce a hit below 0. */
-function bulwarkReduction(p: PlayerState): number {
+ * dealt to its controller. Stacks, but can never reduce a hit below 0.
+ *
+ * Exported because the CPU has to price face damage the same way `damagePlayer`
+ * pays it out: `chooseAttackers`' all-in check and `chooseGuards`' lethal check
+ * both ask "how much Vitality is this attack worth", and a model that ignores
+ * Bulwark answers a question the engine never asks. */
+export function bulwarkReduction(p: PlayerState): number {
   return p.locations.filter((l) => l.def && hasKw(l.def, 'Bulwark')).length;
 }
 
@@ -1915,11 +1920,20 @@ export function resolveClash(state: GameState): boolean {
   // Looking the iid up on the field afterwards silently dropped exactly
   // those procs.
   const dealtBy = new Map<string, UnitInst>();
-  // Damage each attacker has assigned to its guards across BOTH sub-steps —
-  // Overrun only ever spills (Might - total guard absorption) to the face.
-  const absorbed = new Map<string, number>();
   for (const step of ['first', 'normal'] as const) {
     if (state.winner || !state.clash) break;
+    // Guard absorption is per SUB-STEP, not per clash. It exists for one case:
+    // an attacker that reaches a sub-step with every guard already dead still
+    // only spills (Might - what it assigned to those guards) — and the only
+    // body that can assign in one sub-step and spill in the next is a
+    // Doublestrike one. Carrying the map across the two steps made a
+    // Doublestrike + Overrun attacker whose guard died to the first strike
+    // spill `Might - Might` = 0 in the normal step, i.e. its entire second
+    // strike vanished — while the CPU's own guard model (ai.ts
+    // `unguardedDamage`, which prices a Doublestrike hit twice) budgeted for
+    // the full spill. Blocked is blocked, but a strike already paid for does
+    // not pay for the next one.
+    const absorbed = new Map<string, number>();
     const packets = collectStepWithHistory(state, step, everGuarded, absorbed);
     const preFieldCount =
       step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;

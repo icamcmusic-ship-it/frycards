@@ -13,8 +13,23 @@
 //   /meta-preview.html?screen=pack
 //   /meta-preview.html?screen=profile
 //   /meta-preview.html?screen=inspect
-//   /meta-preview.html?screen=social   (network calls fail offline — renders
-//                                       the layout with its error/empty states)
+//
+// v11 added the rest of the meta screens, which the roadmap's mobile item had
+// listed as "still unmeasured on a phone". The ones below reach the network on
+// mount; offline they render their own loading/error/empty states, which is
+// still the real layout and is what the measurement needs.
+//
+//   /meta-preview.html?screen=social
+//   /meta-preview.html?screen=store
+//   /meta-preview.html?screen=market
+//   /meta-preview.html?screen=shops
+//   /meta-preview.html?screen=battlepass
+//   /meta-preview.html?screen=achievements
+//   /meta-preview.html?screen=news
+//   /meta-preview.html?screen=settings
+//   /meta-preview.html?screen=menu
+//   /meta-preview.html?screen=howtoplay
+//   /meta-preview.html?screen=changelog
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -24,9 +39,19 @@ import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { PackOpening } from './meta/PackOpening';
 import { ProfileScreen } from './meta/ProfileScreen';
 import { SocialScreen } from './meta/SocialScreen';
+import { StoreScreen } from './meta/StoreScreen';
+import { MarketplaceScreen } from './meta/MarketplaceScreen';
+import { PlayerShopsScreen } from './meta/PlayerShopsScreen';
+import { BattlePassScreen } from './meta/BattlePassScreen';
+import { AchievementsScreen } from './meta/AchievementsScreen';
+import { NewsCenterScreen } from './meta/NewsCenterScreen';
+import { SettingsScreen } from './meta/SettingsScreen';
+import { MainMenu } from './meta/MainMenu';
+import { ChangelogScreen } from './meta/ChangelogScreen';
+import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
-import type { PackPull, Profile } from './lib/supabase';
+import type { PackPull, PackType, Profile, ShopItem } from './lib/supabase';
 
 const profile: Profile = {
   id: 'preview',
@@ -85,6 +110,134 @@ const pulls: PackPull[] = POOL_V4.filter((c) => c.type !== 'Leader')
     credit_value: 0,
   }));
 
+// Store shelf stand-ins. The real rows come from `pack_types` / `shop_items`,
+// which need the network; these mirror the live shapes closely enough for the
+// shelf, the odds modal and the cosmetics grid to lay out at full size.
+const packTypes: PackType[] = [
+  {
+    id: 'preview-booster',
+    name: 'Volume #1 Booster Pack',
+    description: 'Eight cards, one guaranteed foil.',
+    card_count: 8,
+    guaranteed_rarity: 'Rare',
+    image_url: null,
+    open_image_url: null,
+    foil_chance: 0.0118,
+    has_foil_slot: true,
+    price_credits: 499,
+    price_vouchers: 5,
+    pack_tier: 'standard',
+    slot_config: [
+      {
+        slot_type: 'foundation',
+        count: 4,
+        foil_eligible: true,
+        rarity_weights: { Common: 0.78, Uncommon: 0.22 },
+        guaranteed_min_rarity: 'Common',
+      },
+      {
+        slot_type: 'synergy',
+        count: 2,
+        foil_eligible: true,
+        rarity_weights: { Uncommon: 0.68, Rare: 0.28, 'Super-Rare': 0.04 },
+        guaranteed_min_rarity: 'Uncommon',
+      },
+      {
+        slot_type: 'chase',
+        count: 1,
+        foil_eligible: true,
+        rarity_weights: {
+          Rare: 0.7705,
+          'Super-Rare': 0.13,
+          'Ultra-Rare': 0.082,
+          'Full-Art': 0.013,
+          Mythic: 0.0045,
+        },
+        guaranteed_min_rarity: 'Rare',
+      },
+      {
+        slot_type: 'foil',
+        count: 1,
+        foil_eligible: true,
+        foil_chance_override: 1,
+        rarity_weights: {
+          Common: 0.34,
+          Uncommon: 0.36,
+          Rare: 0.22,
+          'Super-Rare': 0.055,
+          'Ultra-Rare': 0.02,
+          'Full-Art': 0.004,
+          Mythic: 0.001,
+        },
+        guaranteed_min_rarity: 'Common',
+      },
+    ],
+    is_active: true,
+    acquisition: 'purchase',
+    time_limited: false,
+    pity_note: null,
+    allowed_sets: null,
+    pack_group: null,
+    set_name: null,
+  },
+  {
+    id: 'preview-daily',
+    name: 'Daily Free Pack',
+    description: 'One free pack every 20 hours.',
+    card_count: 5,
+    guaranteed_rarity: 'Uncommon',
+    image_url: null,
+    open_image_url: null,
+    foil_chance: 0.0164,
+    has_foil_slot: false,
+    price_credits: null,
+    price_vouchers: null,
+    pack_tier: 'daily',
+    slot_config: [
+      {
+        slot_type: 'foundation',
+        count: 4,
+        foil_eligible: true,
+        rarity_weights: { Common: 0.75, Uncommon: 0.25 },
+        guaranteed_min_rarity: 'Common',
+      },
+      {
+        slot_type: 'synergy',
+        count: 1,
+        foil_eligible: true,
+        rarity_weights: { Uncommon: 0.7, Rare: 0.28, 'Super-Rare': 0.02 },
+        guaranteed_min_rarity: 'Uncommon',
+      },
+    ],
+    is_active: true,
+    acquisition: 'daily_free',
+    time_limited: false,
+    pity_note: null,
+    allowed_sets: null,
+    pack_group: null,
+    set_name: null,
+  },
+];
+
+const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar'] as const).map(
+  (item_type, i) => ({
+    id: `preview-cosmetic-${i}`,
+    name: `Preview ${item_type.replace('_', ' ')}`,
+    description: 'A stand-in cosmetic for the offline harness.',
+    item_type,
+    image_url: null,
+    cost_credits: 750 * (i + 1),
+    cost_vouchers: i === 0 ? null : 4,
+    rarity: ['Rare', 'Super-Rare', 'Mythic'][i],
+    has_foil_variant: i !== 2,
+    foil_cost_multiplier: 2,
+    is_season_pass_exclusive: false,
+    aspect_ratio: item_type === 'profile_banner' ? '16/5' : '1/1',
+    author: 'Preview',
+    is_limited: false,
+  }),
+);
+
 const noop = async () => undefined;
 const meta: MetaState = {
   session: { user: { id: 'preview' } } as MetaState['session'],
@@ -94,8 +247,8 @@ const meta: MetaState = {
   retryBoot: () => undefined,
   dataLoading: false,
   profile,
-  shopItems: [],
-  packTypes: [],
+  shopItems,
+  packTypes,
   collection,
   cosmetics: [],
   decks,
@@ -143,6 +296,30 @@ createRoot(document.getElementById('root')!).render(
         pulls={pulls}
         onDone={() => undefined}
       />
+    ) : screen === 'store' ? (
+      <StoreScreen onBack={() => undefined} />
+    ) : screen === 'market' ? (
+      <MarketplaceScreen onBack={() => undefined} />
+    ) : screen === 'shops' ? (
+      <PlayerShopsScreen onBack={() => undefined} />
+    ) : screen === 'battlepass' ? (
+      <BattlePassScreen onBack={() => undefined} />
+    ) : screen === 'achievements' ? (
+      <AchievementsScreen onBack={() => undefined} />
+    ) : screen === 'news' ? (
+      <NewsCenterScreen onBack={() => undefined} onOpenChangelog={() => undefined} />
+    ) : screen === 'settings' ? (
+      <SettingsScreen
+        currentTheme="classic"
+        onThemeChange={() => undefined}
+        onBack={() => undefined}
+      />
+    ) : screen === 'menu' ? (
+      <MainMenu onNavigate={() => undefined} />
+    ) : screen === 'howtoplay' ? (
+      <HowToPlayScreen onBack={() => undefined} />
+    ) : screen === 'changelog' ? (
+      <ChangelogScreen onBack={() => undefined} />
     ) : (
       <CollectionScreen onBack={() => undefined} />
     )}

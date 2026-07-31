@@ -12,6 +12,17 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Deep Bug Hunt (v11)',
+    date: 'July 2026',
+    items: [
+      'RULES FIX: a Doublestrike attacker with Overrun no longer loses its entire second strike. If its guard died to the first strike, the follow-up hit had nothing left to spill past and dealt nothing at all — the excess damage from one strike was being charged against the other. Each strike now pays for its own blockers.',
+      'The CPU counts an unguardable Doublestrike attacker for BOTH of its hits when deciding whether it has lethal on board, so it stops declining winning attacks it could actually see through.',
+      'The CPU also finally accounts for BULWARK Sanctums when it does that arithmetic — on both sides. It no longer throws its board into an "exactly lethal" attack that your Bulwark quietly turns into a survivable one, and it no longer chump-blocks with a unit to prevent damage its own Bulwark was already preventing.',
+      'The offline layout harness now covers every screen in the game (store, marketplace, player shops, battle pass, achievements, news, settings, main menu, how-to-play and the changelog, on top of the six it already had), so phone layout can be checked without a live account. Every screen measured clean at phone width, before and after tapping each of its controls.',
+      'Manual corrections: the game has 9 Leaders, not 8, and two of them were listed under their internal code names rather than the names printed on the cards (Sentinel of the Nether Pit and Kuro, the Unseen). The card pool is 297 cards, not 292.',
+    ],
+  },
+  {
     version: 'Bug Hunt (v10)',
     date: 'July 2026',
     items: [

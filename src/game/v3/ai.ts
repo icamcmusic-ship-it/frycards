@@ -9,6 +9,7 @@ import { CardDef, Effect, EssenceCost, LEADER_HP, hasKw, totalCost } from './car
 import { EssenceType } from './colors';
 import {
   unbreakableUp,
+  bulwarkReduction,
   GameState,
   GuardAssignments,
   PlayerId,
@@ -590,8 +591,12 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
 }
 
 /** Pick profitable attackers: always attack when unguardable damage helps;
- * otherwise attack with units that win or force bad trades. */
-function chooseAttackers(state: GameState, pid: PlayerId): string[] {
+ * otherwise attack with units that win or force bad trades.
+ *
+ * Exported for the same reason `chooseGuards` is: it is a damage MODEL, and the
+ * only way to pin it against what the engine actually deals is to call it
+ * directly on a built board (see bughunt-v11.test.ts). */
+export function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
   const candidates = legalAttackers(state, pid);
@@ -648,6 +653,18 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   // (mirrors chooseGuards' unguardedDamage, which sums actual remaining grit
   // rather than guard count).
   const guardPool = [...defenders];
+  // v11: what a face packet from `src` is actually WORTH in Vitality, the way
+  // the engine pays it (`damagePlayer` — each packet is shaved by the
+  // defender's Bulwark Sanctums, floored at 0), times how many face packets it
+  // throws. Doublestrike lands in both the first-strike and the normal
+  // sub-step, so an unguarded one hits the face TWICE — `chooseGuards`'
+  // `unguardedDamage` has priced it that way since v10 and this side counted
+  // it once, so the CPU could not see a lethal all-in it actually had. Bulwark
+  // was missed on both sides: with a Bulwark Sanctum out, an "exactly lethal"
+  // all-in isn't.
+  const bulwark = bulwarkReduction(opp);
+  const faceDamage = (src: UnitInst, raw: number) =>
+    Math.max(0, raw - bulwark) * (unitHasKw(src, 'Doublestrike') ? 2 : 1);
   let throughDamage = 0;
   for (const u of sorted) {
     const m = effMight(state, u);
@@ -657,7 +674,7 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const needed = swarm ? 2 : 1;
     const guardable = eligible.length >= needed;
     if (!guardable) {
-      throughDamage += m;
+      throughDamage += faceDamage(u, m);
     } else {
       // Assume the toughest eligible defenders block (worst case for the
       // attacker), then spill past their actual remaining grit — using guard
@@ -681,7 +698,15 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
           const hard = unitHasKw(g, 'Hardened') ? 1 : 0;
           return s + (venom ? 1 + hard : Math.max(1, remainingGrit(state, g)) + hard);
         }, 0);
-        throughDamage += Math.max(0, m - absorbed);
+        // Guard absorption is spent once, on the sub-step that assigns it — a
+        // Doublestrike body's second strike meets a dead guard and spills in
+        // full (engine `collectStepWithHistory`, whose `absorbed` map is
+        // per-sub-step). So the spill is (Might - absorption) + Might, not
+        // (Might - absorption) twice.
+        const spill = Math.max(0, m - absorbed);
+        throughDamage +=
+          Math.max(0, spill - bulwark) +
+          (unitHasKw(u, 'Doublestrike') ? Math.max(0, m - bulwark) : 0);
       }
     }
   }
@@ -742,11 +767,18 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     .sort((a, b) => effMight(state, b) - effMight(state, a));
   // Damage the defender is on track to take: unguarded attackers hit face
   // (Doublestrike twice); guarded Overrun attackers spill past guard grit.
+  //
+  // v11: every face packet is shaved by our own Bulwark Sanctums before it
+  // lands (engine `damagePlayer`), so a model that ignores them reads a
+  // survivable attack as lethal and chump-blocks a board that was never in
+  // danger. Applied per PACKET, which is how the engine applies it.
+  const bulwark = bulwarkReduction(me);
+  const net = (raw: number) => Math.max(0, raw - bulwark);
   const unguardedDamage = () =>
     attackers.reduce((s, a) => {
       const hits = unitHasKw(a, 'Doublestrike') ? 2 : 1;
       const guards = assignments[a.iid] ?? [];
-      if (guards.length === 0) return s + effMight(state, a) * hits;
+      if (guards.length === 0) return s + net(effMight(state, a)) * hits;
       if (!unitHasKw(a, 'Overrun')) return s;
       // A Venomous attacker marks only 1 per guard (+1 for Hardened) before it
       // spills, not the guard's full grit — so crediting full grit here made
@@ -759,7 +791,14 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         const hard = unitHasKw(u, 'Hardened') ? 1 : 0;
         return g + (venom ? 1 + hard : Math.max(1, remainingGrit(state, u)) + hard);
       }, 0);
-      return s + Math.max(0, effMight(state, a) * hits - guardGrit);
+      // One spill packet per sub-step, netted separately (Bulwark is per
+      // packet). Only the FIRST strike pays the guards: the engine's
+      // absorption map resets between sub-steps, so a Doublestrike body's
+      // second strike meets a guard that its first one already killed and
+      // spills its whole Might.
+      const might = effMight(state, a);
+      const spills = hits === 2 ? [Math.max(0, might - guardGrit), might] : [might - guardGrit];
+      return s + spills.reduce((t, r) => t + net(Math.max(0, r)), 0);
     }, 0);
 
   for (const attacker of attackers) {
