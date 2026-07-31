@@ -1775,6 +1775,22 @@ function mapCard(c: CardTemplate): CardDef {
   }
 }
 
+/**
+ * Derive one card's v5 mechanics from its universal identity, without touching
+ * the live pool.
+ *
+ * The server cannot compute these — they are hashed from `id|type|rarity` by
+ * the code above — so the `cards.essence_cost/might/grit/keywords/...` columns
+ * every server RPC reads have to be written by a client that ran this. That is
+ * what `scripts/sync-cards-db.ts` does in bulk for the bundled catalog, and
+ * what the Creator's card tools (approve a submission, bulk add) do for a
+ * single new card, so a freshly printed card is never left with the null
+ * mechanics columns that `pick_deck_bucket` and `verify:pool` read as drift.
+ */
+export function deriveCardMechanics(t: CardTemplate): CardDef {
+  return mapCard(t);
+}
+
 export const POOL_V4: CardDef[] = [];
 export const POOL_BY_ID: Record<string, CardDef> = {};
 export const POOL_LEADERS: CardDef[] = [];

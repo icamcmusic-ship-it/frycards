@@ -18,6 +18,33 @@ it is.
 
 Everything here has a started implementation and a visible seam.
 
+- **Player Showcase — the submission pipeline ships in v12; the set itself is
+  empty and the poll is a promise.** Players can submit (art link, title, type,
+  flavor), the Creator can approve at any rarity, deny, or deny-and-ban, and
+  approval mints the real `cards` row with client-derived mechanics. Three
+  things are deliberately *not* done yet and each is a decision, not a defect:
+
+  - **The `Player Showcase Booster` pack row exists but is `is_active = false`.**
+    It is set-restricted to `Player Showcase`, and `random_card_of_rarity`'s
+    final fallback spills to the whole catalog only when the requested set is
+    _completely_ empty — so it is safe to activate the moment the set has one
+    non-Leader card, and unsafe before that. Flip it when the set is worth
+    selling, not when the first card lands.
+  - **The Ultra-Rare community poll is announced, not built.** The submissions
+    screen tells players it will happen once enough people submit
+    (`POLL_THRESHOLD = 10` submitters is the number it quotes) and
+    `get_showcase_stats` returns the live submitter count that copy reads.
+    There is no ballot, no vote table and no tally — running the first one is
+    manual, and building it properly wants a `showcase_polls` /
+    `showcase_votes` pair plus one-vote-per-account enforcement.
+  - **An approved card is live-only until the bundle is regenerated.**
+    `npm run verify:pool` will report every Player Showcase card as
+    `live-only — missing from generated-cards.ts` until `npm run fetch:cards`
+    is run and the result committed. That is correct (the bundle is the offline
+    fallback and a build artefact), but it means an approval batch is not
+    finished until the bundle is refreshed — otherwise the offline fallback and
+    every balance sim run on a catalog the live game no longer matches.
+
 - **Mobile/responsive — the measurement half is done; the audit half is not.**
   v7.4 did the match board, v7.5 the card views around it, and **v11 finally
   closed the "still unmeasured" list**: `meta-preview.html` now mounts every
@@ -35,6 +62,15 @@ Everything here has a started implementation and a visible seam.
   mobile work is **not** layout overflow — it is the things a geometry check
   cannot see: tap-target sizes, text scaling, and real-device scroll/keyboard
   behaviour. Re-run the harness before assuming a phone regression exists.
+
+  **v12 made "re-run the harness" possible.** The v11 measurement was ad hoc and
+  was never committed, so the instruction above pointed at nothing. It is now
+  `scripts/audit-meta-screens.ts` / `npm run audit:screens` (dev server up
+  first, same contract as `audit:cardface`): every screen in `meta-preview.tsx`
+  at 375px and 1280px, then each screen's visible controls clicked one at a
+  time on a fresh load, checking for overflow, a thrown render and a real
+  console error. It exits non-zero on any finding, so it can gate a release.
+  Latest run: seventeen screens, 144 control clicks, **zero findings**.
 
   **The v9-named hand-card preview overflow is fixed (v10):** the pinned preview
   clamps its card scale to the viewport and stacks the control column below the
@@ -96,6 +132,17 @@ Ordered by how much they change what it feels like to own and play the game.
   297-card pool. The v7.7 rule bites here: a new set is a **content** change, so
   it lands in its own pass, the pool re-baselines, and only then do balance
   trials resume. The v7.6 Glaciate result was erased exactly this way.
+
+  Two pieces of this got built early by the v12 submission work and are worth
+  reusing rather than rediscovering: **(1)** the Creator's `BULK ADD` panel
+  takes a JSON array or a `name | type | rarity | image url | flavor` paste,
+  derives each card's mechanics with the same `cardpool.ts` code the client
+  runs, and writes all sixteen `cards` columns in one call — which is the whole
+  of "import a set" minus the art; **(2)** every `pack_types` row now pins its
+  own `allowed_sets`, so a new set no longer silently re-weights the packs that
+  already shipped. Before v12 every pack row had `allowed_sets = null`, which
+  `grant_pack_contents` reads as "draw from the entire table" — Volume #2 would
+  have appeared inside Volume #1 boosters on the day its first card landed.
 - **Custom fonts as first-class assets.** Currently two Google Fonts pulled at
   runtime by an `@import` at the top of `src/index.css` — a third-party
   request on first paint and a hard dependency on a CDN. Two things worth
@@ -112,8 +159,22 @@ Ordered by how much they change what it feels like to own and play the game.
   `colorMatchups`) and the deck editor tells the player none of it. The
   cheapest large win in the meta game.
 
-- **Two economy/product calls left open by the bug hunts.** Both are decisions
-  rather than defects, which is why neither has been patched unilaterally:
+- **Three economy/product calls left open by the bug hunts.** All are decisions
+  rather than defects, which is why none has been patched unilaterally:
+  - **Packs never apply the per-rarity copy cap, and roughly a screen's worth of
+    UI is waiting for them to** (found v12). `PackPull` documents
+    `converted_to_credits` / `credit_value` as "past the player's per-rarity
+    copy cap — no card was granted, it was auto-converted to credits instead",
+    and `PackOpening.tsx` branches on it in fifteen places (dimmed tile, the
+    "+N CREDITS" plate, the summary's converted count, the sell-value maths).
+    `grant_pack_contents` does none of it: `rarity_copy_cap` is called from
+    exactly one function in the whole database (`save_deck`), the pack grant
+    always inserts the card, always reports `converted_to_credits: false`, and
+    `credits_gained` is hard-wired to 0. So a player can own five Mythics they
+    can only ever play one of, and every one of those UI branches is dead code.
+    Wiring it up is a real payout change (duplicates above the cap stop being
+    cards and start being credits), which is why it is a call and not a patch.
+    The cheap alternative is to delete the plumbing and the type fields.
   - **The bounty shop's round trip is a guaranteed profit.** `buy_bounty_card`
     charges 3x a card's base sell price and `sell_bounty_card` pays 5x, and the
     buy/sell block is _same-day only_ (`player_bounty_activity` is keyed on

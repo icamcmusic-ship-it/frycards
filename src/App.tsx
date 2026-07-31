@@ -24,6 +24,7 @@ import { ProfileScreen } from './meta/ProfileScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { ChangelogScreen } from './meta/ChangelogScreen';
 import { NewsCenterScreen } from './meta/NewsCenterScreen';
+import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
@@ -405,6 +406,8 @@ function AppInner() {
           onBack={() => setScreen('menu')}
         />
       );
+    case 'submissions':
+      return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
     case 'changelog':
       return <ChangelogScreen onBack={() => setScreen('menu')} />;
     case 'news':

@@ -8,6 +8,154 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v12.0 — Player Showcase: players design the cards, and the set that holds them stops leaking into the ones that shipped
+
+Two things at once: a **player card-submission pipeline** with a Creator review
+queue and a bulk importer behind it, and the eighth bug-hunt sweep — which this
+time was driven by the feature, because building a second set is what finally
+exercised every code path that had quietly assumed there was only one.
+
+#### Player Showcase (new)
+
+Reachable from the main menu (`CARD SUBMISSIONS`).
+
+- **Players submit as many cards as they like.** Each submission is an art link
+  (a Midjourney URL or any https image), a card title, a card type — Unit,
+  Charm, Event or Location — and flavor text. No rules text: mechanics are
+  assigned by the game, not written by hand, so there is nothing to write.
+- **One full art per account, per set. One video Mythic per account, per set.**
+  Enforced twice, on purpose. `submit_card` counts a pending *or* approved
+  request as holding the slot, so the form can grey the option out before the
+  player fills it in; and `creator_review_submission` re-checks it against what
+  actually got **printed**, which is the check that matters — the Creator picks
+  the rarity, so a cap on what was _asked for_ would not be a cap at all.
+  Withdrawing a pending submission frees the slot.
+- **Fry picks the rarity and every other attribute, and can deny anything.**
+  The review queue prints a live card preview at the rarity being considered —
+  a real one, run through the same `cardpool.ts` assignment every client uses,
+  not a mock-up — and approving mints the actual `cards` row: id, name, type,
+  rarity, set, art, flavor, plus all eight derived mechanics columns.
+- **Video Mythics need video.** A `video Mythic` submission must point at an
+  `.mp4`, `.webm` or `.mov`; every other treatment must not. `CardFaceV4`
+  decides between `<img>` and `<video>` on the file extension, so the mismatched
+  case is not a policy question — it is a blank card face.
+- **A disallowed-theme submission is a ban, not a denial.** The rules panel
+  lists what qualifies in plain language, submitting requires ticking that you
+  have read it, and `DENY + BAN` sets `profiles.submissions_banned`, records the
+  reason, and denies the rest of that account's queue in the same transaction so
+  nothing slips through behind the offending card. The ban is scoped to
+  submissions — everything else about the account is untouched — and is
+  liftable from the same panel.
+- **The Ultra-Rare community poll is announced, not built.** If enough players
+  submit, Fry picks a shortlist of favourites and puts them to a vote, and the
+  winners print at Ultra-Rare. The screen says so and shows the live submitter
+  count from `get_showcase_stats`; the ballot itself is roadmap work, and the
+  roadmap says so rather than the UI implying a feature that does not exist.
+- **Bulk add (Creator).** Paste a JSON array or one card per line as
+  `name | type | rarity | image url | flavor` (optional 6th column set, 7th id).
+  Tabs and pipes beat commas — flavor text is full of commas and a comma split
+  shears it in half. Types and rarities normalise across casing and
+  hyphen/space/underscore; ids default to a slug of the name; a header row is
+  skipped; `#` comments and blank lines are ignored. Every row is validated
+  client-side first, then **written one at a time server-side**, so one bad row
+  in two hundred reports itself by row number and the other 199 still land. 34
+  unit tests cover the parser and the payload builder; the server path was
+  exercised live against the real project (batch of ten with seven deliberate
+  failures: bad id case, unknown type, unknown rarity, `http://` art, missing
+  set, an id that collides with a shipped card, and a duplicate inside the
+  batch — three inserted, seven reported, nothing rolled back).
+
+#### The bug hunt: one set was load-bearing in four places
+
+None of these were reachable before there was a second set. All four were live
+the moment one existed.
+
+- **Every pack drew from the entire card table.** All seven `pack_types` rows
+  shipped with `allowed_sets = null`, which `grant_pack_contents` reads as "the
+  whole catalog" — so the first approved Player Showcase card would have started
+  appearing in Volume #1 boosters, box toppers and the Daily Free Pack, silently
+  re-weighting the published odds of every pack in the store. Each row is now
+  pinned to the set it is named after. Verified with 400 set-restricted draws
+  across all seven rarities: zero leaks in either direction.
+- **The Deck Box built out of every set too.** `pick_deck_bucket` had no set
+  filter at all, so a starter Deck Box would have handed new accounts
+  community cards. It takes a `p_sets` argument now, and `claim_deck_box` passes
+  the Deck Box pack row's own `allowed_sets` rather than a hard-coded name.
+- **The Collection browser had no way to tell the two sets apart.** It filters
+  by type, rarity, colour and text, and printed the set only inside the card
+  inspector. There is a set filter now, and it appears only once more than one
+  set actually exists. It is also included in CLEAR FILTERS, which is the same
+  hole the colour filter had in v10.
+- **`ALL_SET_NAMES` was a one-element constant** feeding the Store's
+  "Includes: …" line for packs with a null `allowed_sets`. With every pack now
+  pinned that fallback should be unreachable, and the constant says so.
+
+Three more, found while writing the feature rather than by reading:
+
+- **`jsonb_typeof(NULL)` is `NULL`, not `'null'`.** The first version of
+  `apply_card_upsert`'s "mechanics are required" guard was
+  `jsonb_typeof(v_mech->'essence_types') <> 'array'`, which is `NULL` — and an
+  `IF` reads `NULL` as false — for the exact payload it existed to catch: one
+  that omits the key. A card written with no `essence_types` is legal in every
+  Leader's colour identity, because `pick_deck_bucket` and `save_deck` both
+  grade legality with `coalesce(essence_types,'{}') <@ identity` and the empty
+  set is a subset of everything. Caught by the test that was supposed to prove
+  the guard worked; the comparison is coalesced now.
+- **…and the fix immediately over-corrected.** Requiring `rules_text` on every
+  card would have refused to print a vanilla Unit — 29 of the 131 live Units
+  print with no rules text, and `scripts/audit-blank.ts` states the rule
+  outright ("Units are allowed to be vanilla; every other type is not"). Caught
+  by deriving 25,600 cards across every type/rarity pair and checking the
+  invariant: blank text appears for Units and nothing else. The requirement is
+  now per-type.
+- **Packs never apply the per-rarity copy cap** — `rarity_copy_cap` is called
+  from exactly one function in the entire database (`save_deck`), yet
+  `PackPull.converted_to_credits` / `credit_value` document a
+  convert-to-credits path and `PackOpening.tsx` branches on it in fifteen
+  places. `grant_pack_contents` always grants the card and hard-wires
+  `credits_gained` to 0, so all of that UI is unreachable and a player can hold
+  five copies of a Mythic they may only ever play one of. **Not patched**: 
+  wiring it up changes what packs pay out, so it is filed with the other open
+  economy calls in `docs/ROADMAP.md` rather than decided here.
+
+#### The harness the last pass told you to re-run did not exist
+
+v11's roadmap entry ends "re-run the harness before assuming a phone regression
+exists". There was no harness to re-run — the v11 measurement was ad hoc and was
+never committed, so the instruction pointed at nothing and the next pass would
+have had to rebuild it from the prose. It is a script now:
+`scripts/audit-meta-screens.ts`, wired up as `npm run audit:screens`, same
+dev-server contract as `audit:cardface`. Every screen `meta-preview.tsx` mounts,
+at 375px and 1280px, then each screen's visible controls clicked one at a time
+on a fresh page load, checking for horizontal overflow, a render that threw and
+a console error that is not merely the offline preview's dropped socket. Exits
+non-zero on any finding.
+
+This pass's run: **seventeen screens** (the sixteen from v11 plus the new
+submissions screen), both widths, **144 individual control clicks**, and
+**zero findings** — no overflow, no thrown render, no blank page.
+
+#### Notes
+
+- `submissions_banned` / `submissions_ban_reason` are new on `profiles`.
+- New table `public.card_submissions` (RLS: a player reads their own rows, the
+  Creator reads all; every write goes through an RPC — verified by attempting
+  direct INSERT/UPDATE/DELETE as the `authenticated` role).
+- New RPCs: `submit_card`, `withdraw_card_submission`, `get_showcase_stats`,
+  `get_card_submissions`, `creator_review_submission`,
+  `creator_set_submission_ban`, `creator_bulk_add_cards`, and the internal
+  `apply_card_upsert` (EXECUTE revoked from `anon`, `authenticated` and
+  `public`; it is only ever called by the two Creator RPCs above).
+- `deriveCardMechanics(template)` is now exported from `cardpool.ts` — the
+  single-card counterpart to `applyCardPool`, and the reason a server-minted
+  card arrives with its mechanics columns already filled instead of waiting on
+  the next `npm run db:sync`.
+- **An approval is not finished until `npm run fetch:cards` is re-run and the
+  bundle committed.** Until then `npm run verify:pool` correctly reports every
+  new card as `live-only — missing from generated-cards.ts`, and the offline
+  fallback plus every balance sim are running on a catalog the live game no
+  longer matches.
+
 ### v11.0 — Deep bug hunt: three numbers the engine and the CPU disagreed about, and a layout audit that found nothing
 
 Seventh bug-hunt sweep. Run differently from the last six, because the six

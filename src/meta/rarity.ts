@@ -1,9 +1,16 @@
 /** The live card pool's sets — single source of truth for "Includes: ..."
  * lines on packs whose `allowed_sets` is null (i.e. draws from everything).
- * Every card was consolidated into the single "Volume #1" set (the old
- * Blue Coral / Crimson Circuit / Dragonbone Wastes / Full Arts Collection 1
- * split is gone from the live catalog). */
-export const ALL_SET_NAMES: string[] = ['Volume #1'];
+ * Volume #1 is the launch set (the old Blue Coral / Crimson Circuit /
+ * Dragonbone Wastes / Full Arts Collection 1 split is gone from the live
+ * catalog); "Player Showcase" is the community set fed by the card-submission
+ * queue (see `meta/submissions.ts`).
+ *
+ * NOTE: every live `pack_types` row now pins its own `allowed_sets`, so this
+ * fallback should never actually be reached — a pack that draws from "all
+ * sets" would silently start paying out Player Showcase cards the moment the
+ * first one is approved, which is exactly what the v12 set-isolation
+ * migration existed to prevent. It stays as a display default only. */
+export const ALL_SET_NAMES: string[] = ['Volume #1', 'Player Showcase'];
 
 /**
  * Global rarity color code — fixed across every theme, since rarity is a

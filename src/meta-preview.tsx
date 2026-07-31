@@ -30,6 +30,10 @@
 //   /meta-preview.html?screen=menu
 //   /meta-preview.html?screen=howtoplay
 //   /meta-preview.html?screen=changelog
+//   /meta-preview.html?screen=submissions
+//
+// Append `&role=creator` to any of the above to mount the Creator-only panels
+// (Profile's CREATOR TOOLS, the submission review queue and BULK ADD).
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -48,6 +52,7 @@ import { NewsCenterScreen } from './meta/NewsCenterScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
+import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
@@ -68,6 +73,8 @@ const profile: Profile = {
   equipped_banner: null,
   equipped_avatar: null,
   last_free_pack_at: null,
+  submissions_banned: false,
+  submissions_ban_reason: null,
   showcase_cards: [],
   hide_serialized_announcements: false,
   login_streak: 3,
@@ -265,7 +272,12 @@ const meta: MetaState = {
   signOut: noop,
 };
 
-const screen = new URLSearchParams(window.location.search).get('screen') ?? 'collection';
+const params = new URLSearchParams(window.location.search);
+const screen = params.get('screen') ?? 'collection';
+// `?role=creator` mounts the Creator-only panels (Profile's CREATOR TOOLS, the
+// submission review queue, BULK ADD) so they can be measured too — they were
+// invisible to the harness while the stub profile was always a plain player.
+if (params.get('role') === 'creator') profile.role = 'creator';
 
 // A non-Leader card with some metadata rows, for the 3D inspector preview.
 const inspectDef = POOL_V4.find((c) => c.type !== 'Leader')!;
@@ -320,6 +332,8 @@ createRoot(document.getElementById('root')!).render(
       <HowToPlayScreen onBack={() => undefined} />
     ) : screen === 'changelog' ? (
       <ChangelogScreen onBack={() => undefined} />
+    ) : screen === 'submissions' ? (
+      <CardSubmissionsScreen onBack={() => undefined} />
     ) : (
       <CollectionScreen onBack={() => undefined} />
     )}
