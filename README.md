@@ -9,17 +9,20 @@ decks, open packs and grow a collection.
 
 ## The Game (v5, one paragraph)
 
-Two players duel with 60+-card decks of Units, Charms, Events and Locations,
+Two players duel with 60+-card decks of Units, Items, Events and Locations,
 each led by a Leader with **Resolve**-fueled abilities and 20 starting
 **Vitality**. Locations exhaust for **Essence** of one of seven types (Ember,
 Tide, Root, Gale, Light, Shadow, Void); a card's Essence Cost is paid with
 colored pips of matching Essence plus a generic amount from anything. Each
 turn runs Dawn (untap, draw) → Main Phase I → Clash → Main Phase II → Dusk
 (shed to 7). Who takes the first turn is a coin flip; the player on the draw
-plays a second (exhausted) Wellspring on their opening turn to offset it. In
-Clash, attackers are declared, the defender assigns
-Guards, and a reaction window lets Quick Events and Ambush units respond
-before damage resolves. Keywords include Aerial, Overrun, Quickstrike,
+plays a second (exhausted) Wellspring on their opening turn to offset it.
+**Items** bond to a unit and come in three subtypes: a **Charm** dies with its
+unit and may instead be cast on a *player* for Vitality; a **Weapon** survives
+its unit and re-bonds to another for a cost; a **Tool** is a Weapon that also
+weakens a target enemy unit as it bonds. In Clash, attackers are declared, the
+defender assigns Guards, and a reaction window lets Quick Events and Ambush
+units respond before damage resolves. Keywords include Aerial, Overrun, Quickstrike,
 Doublestrike, Venomous, Siphon, Alert, Reckless, Swarmproof, Skywatch,
 Warded, Unbreakable, Ambush and Immobile. Reduce the opponent's Vitality to 0,
 or make them draw from an empty deck, to win.
@@ -52,6 +55,19 @@ Resolve/abilities) are assigned **deterministically client-side** by
 [`src/game/v3/cardpool.ts`](src/game/v3/cardpool.ts) from a hash of each
 card's id plus its type and rarity — identical on every client, and rebalance
 ships as a code change, not a data migration.
+
+Generated mechanics can be **overridden per card** (v13). A `template.overrides`
+object — written by the Creator's review/bulk-add tools — is layered over the
+generated `CardDef` by `mapCard`, so a card whose generated cost or keywords do
+not suit its art can be corrected without breaking determinism: every field left
+alone is still generated, and deleting the override restores the generated card
+exactly. Overrides live on the template because the template is the only thing
+the game client loads; the `cards` mechanics columns exist for the server's own
+queries and are written from the *overridden* card so the two agree.
+
+**v13 renamed the `Charm` card type to `Item`**, with `Charm`, `Weapon` and
+`Tool` as its subtypes. The mechanics hash keeps seeding Items as `Charm`
+(`SEED_TYPE` in `cardpool.ts`) — a rename must not reprint 61 cards.
 
 **Rarities:** Common, Uncommon, Rare, Super-Rare, Ultra-Rare, Full-Art,
 Alt-Art, Mythic — low to high (v6.8 moved Full-Art ABOVE Ultra-Rare; v7.0
@@ -105,23 +121,42 @@ RPCs), foils — the 8-card booster carries one guaranteed foil slot plus a
 Super-Rare-or-better topper — cosmetics (card backs, banners, avatars), a collection
 browser and match rewards.
 
-## Player Showcase (player-submitted cards)
+## Players Showcase 2026 (player-submitted cards)
 
 Players design cards from the main menu (`CARD SUBMISSIONS`,
 [`src/meta/CardSubmissionsScreen.tsx`](src/meta/CardSubmissionsScreen.tsx)):
-an art link, a title, a card type (Unit/Charm/Event/Location) and flavor text.
-Approved cards are printed into the **Player Showcase** set and become ordinary
-collectible, deck-legal cards.
+an art link, a title, a card type (Unit/Item/Event/Location) and flavor text.
+Approved cards are printed into the **Players Showcase 2026** set and become
+ordinary collectible, deck-legal cards. The set name is pinned in exactly two
+places and they must move together: `SHOWCASE_SET` in
+[`src/meta/submissions.ts`](src/meta/submissions.ts) and the `v_set` constant
+inside the `submit_card` RPC.
 
 - Unlimited submissions per account, but **one full art and one video Mythic
   per account per set** — held by a pending request, freed by withdrawing it,
   and re-checked at approval time against what actually got printed.
+- **Art aspect ratios** (`ART_SPECS`, printed in the submit form and the rules
+  panel): standard frame **4:3 landscape** (~1600x1200) for the framed art
+  window; full art **5:7 portrait** (~1500x2100), because a full-bleed card is
+  the card's own 2.5in x 3.5in; video Mythic the same **5:7 portrait**, as a
+  short silent `.mp4`/`.webm`/`.mov` loop.
 - The Creator assigns the rarity and every other attribute and may deny
   anything; a submission whose theme is on the disallowed list is a **ban** from
   the Showcase (`profiles.submissions_banned`), which also clears that
   account's remaining queue.
-- If enough players submit, a shortlist goes to a community poll and the winners
-  print at Ultra-Rare. **The ballot is not built yet** — see `docs/ROADMAP.md`.
+- **Mechanics are generated, and Fry can overwrite them.** The review queue's
+  mechanics panel starts from the generated cost/stats/keywords/subtype/rules
+  text and diffs anything he edits into a `CardOverrides` object stored on the
+  card's template. Only changed fields are written; a keyword the engine does
+  not implement is rejected rather than printed as a dead chip.
+- Every card preview on the screen — the live submit preview, each row of MY
+  SUBMISSIONS, the review card and each bulk-add row — is a full-size card face
+  and **opens in the 3D inspector on click**, the same view the Collection uses.
+- **The set stands up at 100 cards.** `SHOWCASE_MIN_CARDS` (and the server's
+  `get_showcase_stats.cards_needed`) is the bar the screen's progress meter and
+  copy quote: below it a set-restricted booster just hands out the same handful
+  of cards, so the Showcase booster and the Ultra-Rare community poll both wait
+  for it. **The ballot is not built yet** — see `docs/ROADMAP.md`.
 - The Creator's `BULK ADD` tab imports many cards at once (JSON array, or
   `name | type | rarity | image url | flavor` per line). Rows are validated in
   the client and written one at a time server-side, so a bad row reports itself
@@ -129,10 +164,11 @@ collectible, deck-legal cards.
 - Pure validation/parsing lives in
   [`src/meta/submissions.ts`](src/meta/submissions.ts) and is unit-tested; the
   server re-validates everything in `submit_card` / `apply_card_upsert`.
-- The `Player Showcase Booster` pack row exists but ships **inactive**: a
+- The `Players Showcase 2026 Booster` pack row exists but ships **inactive**: a
   set-restricted pack falls back to the whole catalog only when its set is
   completely empty, so it is safe to activate once the set has cards and unsafe
-  before that.
+  before that. The 100-card bar above is the point at which activating it is
+  worth doing rather than merely safe.
 
 ## Engine & Balance
 

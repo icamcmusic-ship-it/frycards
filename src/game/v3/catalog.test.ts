@@ -15,7 +15,7 @@ import {
   poolByType,
   applyCardPool,
 } from './cardpool';
-import { totalCost } from './cards';
+import { itemSurvives, totalCost } from './cards';
 import { GENERATED_CARDS } from '../generated-cards';
 import { KEYWORDS } from './keywords';
 import { LEADER_COLORS, cardColors, isColorLegal } from './colors';
@@ -117,7 +117,7 @@ test('leaders have resolve and exactly 2 abilities with text', () => {
   }
 });
 
-test('subtypes: Locations are Sanctums with produces; Charms/Events typed', () => {
+test('subtypes: Locations are Sanctums with produces; Items/Events typed', () => {
   for (const c of POOL_V4) {
     if (c.type === 'Location') {
       expect(c.subtype, `${c.id}: Location subtype`).toBe('Sanctum');
@@ -148,11 +148,18 @@ test('subtypes: Locations are Sanctums with produces; Charms/Events typed', () =
         ).toBe(true);
       }
     }
-    if (c.type === 'Charm') {
-      expect(['Bound', 'Worn']).toContain(c.subtype);
-      expect(c.bond, `${c.id}: Charm needs bond stats`).toBeTruthy();
-      if (c.subtype === 'Worn') {
-        expect(c.rebondCost ?? 0, `${c.id}: Worn needs rebondCost`).toBeGreaterThanOrEqual(1);
+    if (c.type === 'Item') {
+      expect(['Charm', 'Weapon', 'Tool']).toContain(c.subtype);
+      expect(c.bond, `${c.id}: Item needs bond stats`).toBeTruthy();
+      if (itemSurvives(c.subtype)) {
+        expect(c.rebondCost ?? 0, `${c.id}: ${c.subtype} needs rebondCost`).toBeGreaterThanOrEqual(
+          1,
+        );
+      } else {
+        expect(c.rebondCost, `${c.id}: a Charm never re-bonds`).toBeUndefined();
+      }
+      if (c.subtype === 'Tool') {
+        expect(c.nerf ?? 0, `${c.id}: a Tool needs a nerf value`).toBeGreaterThanOrEqual(1);
       }
     }
     if (c.type === 'Event') {
@@ -236,7 +243,7 @@ test('v7.3: no Rare-or-better card prints an empty rules box', () => {
 });
 
 // Every non-Unit type carries a mechanic by construction at EVERY rarity —
-// Events an onInvoke, Charms a bond, Locations a Sanctum tap, Leaders their
+// Events an onInvoke, Items a bond, Locations a Sanctum tap, Leaders their
 // two abilities. Only Units may be vanilla.
 test('v7.3: every non-Unit card carries a mechanic at any rarity', () => {
   const empty = POOL_V4.filter((c) => {

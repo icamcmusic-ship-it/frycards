@@ -31,7 +31,8 @@ import {
   invokeCard,
   invokeLeader,
   activateLeaderAbility,
-  rebondCharm,
+  rebondItem,
+  BOND_TARGET_SELF,
   declareAttackers,
   declareGuards,
   resolveClash,
@@ -62,7 +63,15 @@ import {
   reactionPlays,
   respondToStack,
 } from '../game/v3/ai';
-import { CardDef, Effect, EssenceCost, MAX_HAND, totalCost, hasKw } from '../game/v3/cards';
+import {
+  CardDef,
+  Effect,
+  EssenceCost,
+  MAX_HAND,
+  totalCost,
+  hasKw,
+  itemSurvives,
+} from '../game/v3/cards';
 import { COLORS, EssenceType } from '../game/v3/colors';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { COLOR_PIP } from '../meta/colors';
@@ -647,12 +656,12 @@ function BoardUnit({
             🛡
           </Tip>
         )}
-        {u.charms.length > 0 && (
+        {u.items.length > 0 && (
           <Tip
-            text={`Bonded Charms: ${u.charms.map((c) => c.def.name).join(', ')}`}
+            text={`Bonded Items: ${u.items.map((c) => c.def.name).join(', ')}`}
             className="text-[10px] bg-[#8E44AD] text-white ink-border-sm px-0.5"
           >
-            💠{u.charms.length}
+            💠{u.items.length}
           </Tip>
         )}
         {sick && (
@@ -1005,7 +1014,7 @@ type Pending =
   | { kind: 'invoke'; cardIid: string; effect: Effect; bondTargetIid?: string }
   | { kind: 'bond'; cardIid: string }
   | { kind: 'leaderAbility'; idx: number; effect: Effect }
-  | { kind: 'rebond'; charmIid: string };
+  | { kind: 'rebond'; itemIid: string };
 
 /** The human's rulebook mulligan: shuffle the hand back and draw one card
  * FEWER (engine mulliganHand) — repeatable until the player keeps.
@@ -1393,7 +1402,9 @@ export function GameV4({
         ? `Needs ${missing.join(' + ')} essence your Locations can't produce yet`
         : 'Not enough essence (even tapping every Location)';
     }
-    if (def.type === 'Charm' && me.field.length === 0) return 'Needs a friendly unit to bond to';
+    if (def.type === 'Item' && me.field.length === 0 && itemSurvives(def.subtype)) {
+      return 'Needs a friendly unit to bond to';
+    }
     return undefined;
   };
 
@@ -1442,9 +1453,21 @@ export function GameV4({
       return;
     }
     closePreview();
-    if (card.def.type === 'Charm') {
+    if (card.def.type === 'Item') {
+      // v13: a Charm can also be cast on YOU, for Vitality. With no unit on
+      // the field that is the only line, so take it without a pick; with one,
+      // your own Vitality plate joins the highlighted targets.
+      const selfOk = !itemSurvives(card.def.subtype);
+      if (selfOk && me.field.length === 0) {
+        doInvoke(cardIid, { bondTargetIid: BOND_TARGET_SELF });
+        return;
+      }
       setPending({ kind: 'bond', cardIid });
-      say('Pick a friendly unit to bond the Charm to.');
+      say(
+        selfOk
+          ? 'Pick a friendly unit to bond the Charm to — or your own Vitality to cast it on yourself.'
+          : 'Pick a friendly unit to bond the Item to.',
+      );
       return;
     }
     if (needsTarget(card.def.onInvoke)) {
@@ -1456,7 +1479,7 @@ export function GameV4({
       }
       // No legal target and the card is a pure Event: don't let it
       // fizzle-waste itself (the effect resolves into nothing while the
-      // cost and card are still spent). Units/Charms keep their body/bond
+      // cost and card are still spent). Units/Items keep their body/bond
       // value, so they stay playable and just lose the rider.
       if (card.def.type === 'Event') {
         say('No legal target for its effect — invoking now would waste the card.');
@@ -1520,30 +1543,37 @@ export function GameV4({
     checkWinner();
   };
 
-  const tryRebond = (charmIid: string) => {
+  const tryRebond = (itemIid: string) => {
     if (!inMyMain) {
       say('Re-bond during your own main phases.');
       return;
     }
-    const charm = me.wornCharms.find((c) => c.iid === charmIid);
-    if (!charm) return;
+    const item = me.unbondedItems.find((c) => c.iid === itemIid);
+    if (!item) return;
     if (me.field.length === 0) {
       say('No friendly unit to re-bond to.');
       return;
     }
-    const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
+    const cost: EssenceCost = { generic: item.def.rebondCost ?? 0, pips: {} };
     if (!canAfford(me, cost)) {
       say(`Re-bond costs ${cost.generic} essence.`);
       return;
     }
-    setPending({ kind: 'rebond', charmIid });
-    say('Pick a friendly unit to re-bond the Charm to.');
+    setPending({ kind: 'rebond', itemIid });
+    say('Pick a friendly unit to re-bond the Item to.');
   };
 
   // ---- pending-target resolution ------------------------------------------
   const isPendingTarget = (iid: string): boolean => {
     if (!pending) return false;
     if (pending.kind === 'bond' || pending.kind === 'rebond') {
+      if (iid === HUMAN) {
+        // Only a Charm being invoked (never a re-bond, which always needs a
+        // body) may be aimed at the player themselves.
+        if (pending.kind !== 'bond') return false;
+        const card = me.hand.find((c) => c.iid === pending.cardIid);
+        return !!card && !itemSurvives(card.def.subtype);
+      }
       const u = findUnit(g, iid);
       return !!u && u.owner === HUMAN;
     }
@@ -1559,7 +1589,13 @@ export function GameV4({
         doInvoke(p.cardIid, { targetIid, bondTargetIid: p.bondTargetIid });
         return;
       case 'bond': {
-        // v5.1: a Charm whose on-invoke effect needs a target now chains to
+        // Aimed at the player: a self-cast Charm, which resolves as Vitality
+        // and never carries its bond's rider with it.
+        if (targetIid === HUMAN) {
+          doInvoke(p.cardIid, { bondTargetIid: BOND_TARGET_SELF });
+          return;
+        }
+        // v5.1: an Item whose on-invoke effect needs a target now chains to
         // a second pick instead of silently auto-targeting.
         const card = me.hand.find((c) => c.iid === p.cardIid);
         const eff = card?.def.onInvoke;
@@ -1579,11 +1615,11 @@ export function GameV4({
         checkWinner();
         return;
       case 'rebond': {
-        const charm = me.wornCharms.find((c) => c.iid === p.charmIid);
-        autoTapFor(g, HUMAN, { generic: charm?.def.rebondCost ?? 0, pips: {} });
-        if (rebondCharm(g, HUMAN, p.charmIid, targetIid)) {
+        const item = me.unbondedItems.find((c) => c.iid === p.itemIid);
+        autoTapFor(g, HUMAN, { generic: item?.def.rebondCost ?? 0, pips: {} });
+        if (rebondItem(g, HUMAN, p.itemIid, targetIid)) {
           bump();
-          say('Charm re-bonded.');
+          say('Item re-bonded.');
         } else say('Illegal re-bond.');
         return;
       }
@@ -2085,7 +2121,7 @@ export function GameV4({
   const hint = (() => {
     if (pending) {
       if (pending.kind === 'bond' || pending.kind === 'rebond')
-        return 'Pick a highlighted friendly unit for the Charm (✕ or Esc to cancel).';
+        return 'Pick a highlighted friendly unit for the Item — a Charm can also take your own Vitality plate (✕ or Esc to cancel).';
       return 'Pick a highlighted target for the effect (✕ or Esc to cancel).';
     }
     if (stage === 'cpuGuard') {
@@ -2298,7 +2334,9 @@ export function GameV4({
       {pending && (
         <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
           {pending.kind === 'bond'
-            ? 'BOND — pick a friendly unit'
+            ? isPendingTarget(HUMAN)
+              ? 'BOND — pick a friendly unit, or your Vitality'
+              : 'BOND — pick a friendly unit'
             : pending.kind === 'rebond'
               ? 'RE-BOND — pick a friendly unit'
               : `PICK A TARGET — ${describeEffect(pending.effect)}`}
@@ -2630,7 +2668,7 @@ export function GameV4({
             ))}
           </span>
         )}
-        {me.wornCharms.map((c) => (
+        {me.unbondedItems.map((c) => (
           <button
             key={c.iid}
             onClick={() => tryRebond(c.iid)}
@@ -2725,7 +2763,7 @@ export function GameV4({
                     : 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]',
                 )}
               >
-                {previewCard.def.type === 'Charm'
+                {previewCard.def.type === 'Item'
                   ? 'INVOKE — BOND'
                   : needsTarget(previewCard.def.onInvoke)
                     ? 'INVOKE — PICK TARGET'

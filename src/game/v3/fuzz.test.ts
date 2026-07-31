@@ -31,7 +31,7 @@ import {
   passPriority,
   playWellspring,
   settleStack,
-  rebondCharm,
+  rebondItem,
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
@@ -96,13 +96,13 @@ function checkInvariants(g: GameState, where: string): void {
           `${where}: dead unit ${u.def.name} still on the field`,
         ).toBeGreaterThan(0);
       }
-      for (const c of u.charms) note(c.iid, `${pid}.charms(${u.def.name})`);
+      for (const c of u.items) note(c.iid, `${pid}.items(${u.def.name})`);
     }
     for (const c of p.hand) note(c.iid, `${pid}.hand`);
     for (const c of p.deck) note(c.iid, `${pid}.deck`);
     for (const c of p.ashPile) note(c.iid, `${pid}.ash`);
     for (const c of p.voidPile) note(c.iid, `${pid}.void`);
-    for (const c of p.wornCharms) note(c.iid, `${pid}.wornCharms`);
+    for (const c of p.unbondedItems) note(c.iid, `${pid}.unbondedItems`);
     for (const l of p.locations) note(l.iid, `${pid}.locations`);
 
     expect(p.hand.length, `${where}: ${pid} hand is negative`).toBeGreaterThanOrEqual(0);
@@ -242,11 +242,11 @@ describe('hostile input — malformed arguments are refused without side effects
           leader: p.leader,
           hand: p.hand.map((c) => c.iid),
           deck: p.deck.map((c) => c.iid),
-          field: p.field.map((u) => [u.iid, u.damage, u.exhausted, u.charms.map((c) => c.iid)]),
+          field: p.field.map((u) => [u.iid, u.damage, u.exhausted, u.items.map((c) => c.iid)]),
           locations: p.locations.map((l) => [l.iid, l.exhausted]),
           ash: p.ashPile.map((c) => c.iid),
           void: p.voidPile.map((c) => c.iid),
-          worn: p.wornCharms.map((c) => c.iid),
+          worn: p.unbondedItems.map((c) => c.iid),
         };
       }),
     });
@@ -288,13 +288,13 @@ describe('hostile input — malformed arguments are refused without side effects
     checkInvariants(g, 'invokeCard fuzz');
   });
 
-  test('tapLocationForEssence and rebondCharm reject every malformed id', () => {
+  test('tapLocationForEssence and rebondItem reject every malformed id', () => {
     const g = midGame(99);
     const before = snapshot(g);
     for (const pid of SEATS) {
       for (const id of NASTY_IDS) {
         expect(tapLocationForEssence(g, pid, id as string)).toBe(false);
-        expect(rebondCharm(g, pid, id as string, id as string)).toBe(false);
+        expect(rebondItem(g, pid, id as string, id as string)).toBe(false);
       }
     }
     expect(snapshot(g)).toBe(before);

@@ -40,7 +40,7 @@ const EXPECTED = [
   'Surge',
   'Resonant', // Event
   'Runic',
-  'Soulbound', // Charm
+  'Soulbound', // Item
   'Bountiful',
   'Sacred', // Location
   'Commander',
@@ -57,7 +57,7 @@ const EXPECTED = [
   'Echoing',
   'Ritual', // Event
   'Empowering',
-  'Tethered', // Charm
+  'Tethered', // Item
   'Bulwark',
   'Blighted',
   'Archivist', // Location
@@ -67,7 +67,7 @@ const EXPECTED = [
   'Fate',
   'Exhume', // Event — Void, Shadow
   'Freeze-Dry',
-  'Blessed', // Charm — Tide, Light
+  'Blessed', // Item — Tide, Light
   'Scorched-Earth',
   'Glaciate', // Location — Ember, Gale
 ];
@@ -85,13 +85,13 @@ describe('keyword set', () => {
     // purpose — there are only 9 Leaders in the pool, so a Leader-only
     // keyword is thinly printed by construction (which is why Archivist was
     // moved to Location, where ~50 cards can carry it).
-    // v7.5 adds two apiece to Event, Charm and Location. Leader is the one
+    // v7.5 adds two apiece to Event, Item and Location. Leader is the one
     // type it deliberately skipped: its keyword roll (`roll(seed,'ldr-kw6',6)`)
     // has no free band, so any addition re-rolls existing Leaders — a balance
     // change disguised as a content one, over a 9-card type.
     const counts: Record<string, number> = {
       Event: 6,
-      Charm: 6,
+      Item: 6,
       Location: 7,
       Leader: 3,
     };

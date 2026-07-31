@@ -12,7 +12,7 @@ import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { fmtCredits, quicksellPrice } from './economy';
 import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
 
-const TYPES = ['All', 'Leader', 'Unit', 'Charm', 'Event', 'Location'];
+const TYPES = ['All', 'Leader', 'Unit', 'Item', 'Event', 'Location'];
 const RARITY_FILTERS = ['All', ...RARITIES];
 const COLOR_FILTERS = ['All', ...COLORS, 'Colorless'];
 const SORTS = ['Name', 'Rarity', 'Type', 'Cost'] as const;

@@ -20,7 +20,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck',
-        'At least 60 cards (Units, Sanctums, Charms, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic exactly 1.',
+        'At least 60 cards (Units, Sanctums, Items, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic exactly 1.',
       ],
       [
         'Color legality',
@@ -45,7 +45,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Main Phase I',
-        'Invoke Units, Charms, Events, Sanctums, or your Leader — and play one basic Wellspring (once per turn, free, any Essence Type in your Leader’s identity).',
+        'Invoke Units, Items, Events, Sanctums, or your Leader — and play one basic Wellspring (once per turn, free, any Essence Type in your Leader’s identity).',
       ],
       [
         'Clash',
@@ -72,7 +72,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Timing',
-        'Slow Events, Charms, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases, the guard-step reaction window of either player’s Clash, and whenever an opponent’s card is on the stack waiting to resolve.',
+        'Slow Events, Items, Sanctums, and Leaders: your own main phases only. Quick Events and Ambush units: any priority window — your main phases, the guard-step reaction window of either player’s Clash, and whenever an opponent’s card is on the stack waiting to resolve.',
       ],
       [
         'Responding (the stack)',
@@ -92,8 +92,8 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Wellspring (basic, essence-only) or Sanctum (essence + a static/triggered ability, invoked from hand).',
       ],
       [
-        'Charm',
-        'Bonds to one of your units and grants stats/keywords. Bound Charms go to the Ash-pile when their unit leaves; Worn Charms survive and can later re-bond to another unit for their re-bond cost.',
+        'Item',
+        'Bonds to one of your units and grants stats/keywords. Three subtypes: a Charm goes to the Ash-pile when its unit leaves the field, and may instead be cast on YOU for Vitality; a Weapon survives its unit and can re-bond to another for its re-bond cost; a Tool is a Weapon that also weakens a target enemy unit as it bonds.',
       ],
       [
         'Event',
@@ -140,7 +140,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     // one more per Essence Type, which made a single flat A-to-Z list of 31
     // entries hard to read. Grouped under a heading per card type instead,
     // in the order a player meets them.
-    body: (['Unit', 'Event', 'Charm', 'Location', 'Leader'] as const).flatMap((type) => [
+    body: (['Unit', 'Event', 'Item', 'Location', 'Leader'] as const).flatMap((type) => [
       [`— ${type} keywords —`, ''] as [string, string],
       ...KEYWORDS.filter((kw) => KEYWORD_TYPES[kw] === type).map(
         (kw) => [kw, KEYWORD_TEXT[kw]] as [string, string],

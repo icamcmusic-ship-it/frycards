@@ -1,11 +1,12 @@
 /**
  * Fry Cards v5.0 engine tests: essence payment (colored pips + generic),
  * wellsprings, phase flow + dusk shed, clash math per keyword, leader
- * resolve/shatter, charm bond/re-bond, and both win conditions.
+ * resolve/shatter, item bond/re-bond, and both win conditions.
  */
 import { describe, expect, test } from 'vitest';
-import { CardDef, LEADER_HP, MAX_HAND } from './cards';
+import { CardDef, LEADER_HP, MAX_HAND, charmSelfHeal } from './cards';
 import {
+  BOND_TARGET_SELF,
   DeckDef,
   GameState,
   activateLeaderAbility,
@@ -29,7 +30,7 @@ import {
   mulberry32,
   playWellspring,
   wellspringAllowance,
-  rebondCharm,
+  rebondItem,
   resolveClash,
   summonUnit,
   tapLocationForEssence,
@@ -557,27 +558,27 @@ describe('leader', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Charms
+// Items
 // ---------------------------------------------------------------------------
 const BOUND_CHARM: CardDef = {
-  id: 'bound_charm',
-  name: 'Bound Charm',
-  type: 'Charm',
-  subtype: 'Bound',
+  id: 'bound_item',
+  name: 'Bound Item',
+  type: 'Item',
+  subtype: 'Charm',
   cost: { generic: 0, pips: {} },
   bond: { might: 1, grit: 2 },
 };
 const WORN_CHARM: CardDef = {
-  id: 'worn_charm',
-  name: 'Worn Charm',
-  type: 'Charm',
-  subtype: 'Worn',
+  id: 'worn_item',
+  name: 'Worn Item',
+  type: 'Item',
+  subtype: 'Weapon',
   cost: { generic: 0, pips: {} },
   rebondCost: 2,
   bond: { might: 2, grants: ['Quickstrike'] },
 };
 
-describe('charms', () => {
+describe('items', () => {
   test('bond applies stats and granted keywords', () => {
     const s = game();
     const u = summonUnit(s, 'P1', VANILLA);
@@ -599,25 +600,74 @@ describe('charms', () => {
     invokeCard(s, 'P1', w, { bondTargetIid: u.iid });
     applyEffect(s, 'P2', { action: 'damage', value: 99, target: 'enemyUnit' }, u.iid);
     expect(findUnit(s, u.iid)).toBeUndefined();
-    expect(s.players.P1.ashPile.some((c) => c.def.id === 'bound_charm')).toBe(true);
-    expect(s.players.P1.wornCharms.some((c) => c.def.id === 'worn_charm')).toBe(true);
-    // Re-bond the Worn charm for its generic re-bond cost.
+    expect(s.players.P1.ashPile.some((c) => c.def.id === 'bound_item')).toBe(true);
+    expect(s.players.P1.unbondedItems.some((c) => c.def.id === 'worn_item')).toBe(true);
+    // Re-bond the Worn item for its generic re-bond cost.
     const u2 = summonUnit(s, 'P1', VANILLA);
-    const charmIid = s.players.P1.wornCharms[0].iid;
-    expect(rebondCharm(s, 'P1', charmIid, u2.iid)).toBe(false); // can't pay
+    const itemIid = s.players.P1.unbondedItems[0].iid;
+    expect(rebondItem(s, 'P1', itemIid, u2.iid)).toBe(false); // can't pay
     s.players.P1.essence = { Tide: 2 };
-    expect(rebondCharm(s, 'P1', charmIid, u2.iid)).toBe(true);
+    expect(rebondItem(s, 'P1', itemIid, u2.iid)).toBe(true);
     expect(effMight(s, u2)).toBe(4);
-    expect(s.players.P1.wornCharms.length).toBe(0);
+    expect(s.players.P1.unbondedItems.length).toBe(0);
   });
 
-  test('charms need a friendly unit to bond', () => {
+  test('Weapons and Tools need a friendly unit; nothing bonds to an enemy', () => {
     const s = game();
-    const b = toHand(s, 'P1', BOUND_CHARM);
-    expect(canInvoke(s, 'P1', b)).toBe(false); // empty field
+    const w = toHand(s, 'P1', WORN_CHARM);
+    expect(canInvoke(s, 'P1', w)).toBe(false); // empty field
     const enemy = summonUnit(s, 'P2', VANILLA);
     summonUnit(s, 'P1', VANILLA);
-    expect(invokeCard(s, 'P1', b, { bondTargetIid: enemy.iid })).toBe(false);
+    expect(invokeCard(s, 'P1', w, { bondTargetIid: enemy.iid })).toBe(false);
+  });
+
+  // v13: a Charm is the one Item line that can be aimed at a player, which
+  // makes it the one Item line playable with an empty field.
+  test('a Charm can be cast on its controller for Vitality', () => {
+    const s = game();
+    s.players.P1.vitality = 10;
+    const b = toHand(s, 'P1', BOUND_CHARM);
+    expect(canInvoke(s, 'P1', b)).toBe(true); // empty field is fine
+    expect(invokeCard(s, 'P1', b)).toBe(true);
+    expect(s.players.P1.vitality).toBe(10 + charmSelfHeal(BOUND_CHARM.bond)); // 1 + 2
+    expect(s.players.P1.ashPile.some((c) => c.def.id === 'bound_item')).toBe(true);
+  });
+
+  test('a self-cast Charm is chosen over a live unit, and never overheals', () => {
+    const s = game();
+    const u = summonUnit(s, 'P1', VANILLA);
+    s.players.P1.vitality = LEADER_HP - 1;
+    const b = toHand(s, 'P1', BOUND_CHARM);
+    expect(invokeCard(s, 'P1', b, { bondTargetIid: BOND_TARGET_SELF })).toBe(true);
+    expect(s.players.P1.vitality).toBe(LEADER_HP);
+    expect(findUnit(s, u.iid)!.items.length).toBe(0);
+  });
+
+  test('a Weapon cannot be self-cast, even with an empty field', () => {
+    const s = game();
+    const w = toHand(s, 'P1', WORN_CHARM);
+    expect(invokeCard(s, 'P1', w, { bondTargetIid: BOND_TARGET_SELF })).toBe(false);
+    expect(s.players.P1.hand.length).toBe(1);
+  });
+
+  test('bonding a Tool weakens a target enemy unit', () => {
+    const s = game();
+    const u = summonUnit(s, 'P1', VANILLA);
+    const foe = summonUnit(s, 'P2', VANILLA);
+    const tool = toHand(s, 'P1', {
+      id: 'tool_item',
+      name: 'Tool Item',
+      type: 'Item',
+      subtype: 'Tool',
+      cost: { generic: 0, pips: {} },
+      rebondCost: 1,
+      nerf: 1,
+      bond: { might: 1 },
+    });
+    expect(invokeCard(s, 'P1', tool, { bondTargetIid: u.iid })).toBe(true);
+    expect(effMight(s, u)).toBe(3);
+    expect(effMight(s, foe)).toBe(1);
+    expect(effGrit(s, foe)).toBe(1);
   });
 });
 

@@ -285,7 +285,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
-const TYPE_FILTERS = ['All', 'Unit', 'Charm', 'Event', 'Location'];
+const TYPE_FILTERS = ['All', 'Unit', 'Item', 'Event', 'Location'];
 // Total-essence-cost buckets (Fry Cards v5.0); everything 7+ shares a bucket.
 const COST_FILTERS = ['All', '0', '1', '2', '3', '4', '5', '6', '7+'];
 const COST_BUCKETS = ['0', '1', '2', '3', '4', '5', '6', '7+'];
@@ -400,7 +400,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       return;
     const identity = leaderId ? LEADER_COLORS[leaderId] : undefined;
     const eligible = poolByType('Unit')
-      .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
+      .concat(poolByType('Item'), poolByType('Event'), poolByType('Location'))
       .filter((c) => (availableQty.get(c.id) || 0) > 0)
       .filter((c) => !identity || isColorLegal(c, identity));
     const shuffled = shuffleArr(eligible);
@@ -437,7 +437,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   // pool itself is pre-filtered to what's actually legal for this deck.
   const colorIdentity = leaderId ? LEADER_COLORS[leaderId] : undefined;
   const pool = poolByType('Unit')
-    .concat(poolByType('Charm'), poolByType('Event'), poolByType('Location'))
+    .concat(poolByType('Item'), poolByType('Event'), poolByType('Location'))
     .filter((c) => {
       if ((availableQty.get(c.id) || 0) === 0) return false;
       if (typeFilter !== 'All' && c.type !== typeFilter) return false;
@@ -467,7 +467,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   }, [cardIds, db]);
 
   const typeCounts = useMemo(() => {
-    const m: Record<string, number> = { Unit: 0, Charm: 0, Event: 0, Location: 0 };
+    const m: Record<string, number> = { Unit: 0, Item: 0, Event: 0, Location: 0 };
     for (const { card, n } of grouped) m[card.type] = (m[card.type] || 0) + n;
     return m;
   }, [grouped]);

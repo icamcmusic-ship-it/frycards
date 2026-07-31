@@ -11,7 +11,7 @@ import { POOL_V4 } from './game/v3/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
 import type { CardDef, CardType } from './game/v3/cards';
 
-const TYPES: CardType[] = ['Unit', 'Location', 'Charm', 'Event', 'Leader'];
+const TYPES: CardType[] = ['Unit', 'Location', 'Item', 'Event', 'Leader'];
 
 function pickBy(pred: (c: CardDef) => boolean): CardDef | undefined {
   return POOL_V4.find(pred);

@@ -7,17 +7,33 @@
  * it in `submit_card` / `apply_card_upsert`; these are the client-side mirror
  * that keeps a player from round-tripping just to be told the URL was wrong.
  */
-import { CardType, Rarity, RARITIES, CardTemplate } from '../types';
+import { CardOverrides, CardType, Rarity, RARITIES, CardTemplate } from '../types';
+import { EssenceCost } from '../game/v3/cards';
+import { KEYWORDS } from '../game/v3/keywords';
+import { COLORS as ESSENCE_TYPES } from '../game/v3/colors';
 import { deriveCardMechanics } from '../game/v3/cardpool';
 import { cardColors } from '../game/v3/colors';
 
-/** The set every player submission lands in. */
-export const SHOWCASE_SET = 'Player Showcase';
+/** The set every player submission lands in. Renamed in v13; the server's
+ * `submit_card` pins the same string, so the two must move together. */
+export const SHOWCASE_SET = 'Players Showcase 2026';
+
+/**
+ * How many cards the Showcase needs before it is worth standing up as its own
+ * pool — its own booster, its own poll, its own place in the pack odds.
+ *
+ * This used to be "10 distinct submitters", which measured interest rather
+ * than content: ten players submitting one card each is not a set, it is a
+ * shelf. A hundred printed-or-pending cards is roughly a third of Volume #1
+ * and is the point at which a set-restricted pack stops handing out the same
+ * six cards.
+ */
+export const SHOWCASE_MIN_CARDS = 100;
 
 /** Types a player may submit. Leaders are Creator-authored only: their colour
  * identity, Resolve and two abilities are fixed per-Leader data in
  * `colors.ts`/`cardpool.ts`, not something a submission can carry. */
-export const SUBMITTABLE_TYPES: CardType[] = ['Unit', 'Charm', 'Event', 'Location'];
+export const SUBMITTABLE_TYPES: CardType[] = ['Unit', 'Item', 'Event', 'Location'];
 
 export type Treatment = 'standard' | 'full_art' | 'video_mythic';
 
@@ -33,6 +49,40 @@ export const TREATMENT_LABEL: Record<Treatment, string> = {
 export function treatmentName(t: string): string {
   return (TREATMENT_LABEL[t as Treatment] ?? t).split(' (')[0];
 }
+
+/**
+ * Art aspect ratios, per treatment. The card itself is a real trading card —
+ * 2.5" x 3.5", i.e. 5:7 — and the framed template insets a 4:3 art window;
+ * a full-bleed treatment (Full-Art, Alt-Art, video Mythic) has no window and
+ * the art IS the card, so it wants the card's own 5:7.
+ *
+ * These are what CardFaceV4 actually renders (`aspect-[4/3]` on the art box,
+ * `CARD_SIZES.full` = 240x336 = 5:7), so a submitter cropping to them sees no
+ * surprise crop at any card size.
+ */
+export const ART_SPECS: Record<
+  Treatment,
+  { ratio: string; orientation: string; recommended: string; note: string }
+> = {
+  standard: {
+    ratio: '4:3',
+    orientation: 'landscape',
+    recommended: '1600 x 1200',
+    note: 'Sits in the framed art window. Anything off-ratio is centre-cropped to 4:3.',
+  },
+  full_art: {
+    ratio: '5:7',
+    orientation: 'portrait',
+    recommended: '1500 x 2100',
+    note: 'Edge-to-edge — the art IS the card. Keep faces and focal points clear of the outer ~8%, where the name, cost and stat plate print over it.',
+  },
+  video_mythic: {
+    ratio: '5:7',
+    orientation: 'portrait',
+    recommended: '1500 x 2100, ≤ 10s, silent loop',
+    note: 'Same full-bleed frame as full art, as .mp4/.webm/.mov. It autoplays muted and loops, so it should cut cleanly back to its first frame.',
+  },
+};
 
 /** Mirrors the limits enforced by `submit_card`. */
 export const SUBMISSION_LIMITS = {
@@ -167,6 +217,8 @@ export interface CardUpsertPayload {
   flavor_text: string;
   image_url: string;
   mechanics: MechanicsPayload;
+  /** Present only when Fry actually changed something — see CardOverrides. */
+  overrides?: CardOverrides;
 }
 
 /** Assemble one row for `creator_bulk_add_cards` / `creator_review_submission`. */
@@ -178,7 +230,9 @@ export function buildCardPayload(input: {
   set: string;
   flavor: string;
   image: string;
+  overrides?: CardOverrides | null;
 }): CardUpsertPayload {
+  const overrides = pruneOverrides(input.overrides);
   const template: CardTemplate = {
     id: input.id,
     name: input.name,
@@ -187,6 +241,7 @@ export function buildCardPayload(input: {
     set: input.set,
     image: input.image,
     flavor: input.flavor,
+    ...(overrides ? { overrides } : {}),
   };
   return {
     id: input.id,
@@ -196,8 +251,93 @@ export function buildCardPayload(input: {
     set_name: input.set,
     flavor_text: input.flavor,
     image_url: input.image,
+    // The derived columns are written from the OVERRIDDEN card, so the
+    // server's own reads (deck legality, pack odds, market pricing) agree with
+    // what the game prints rather than with what the hash first produced.
     mechanics: mechanicsFor(template),
+    ...(overrides ? { overrides } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Creator mechanics overrides
+// ---------------------------------------------------------------------------
+
+/** Drop empty/undefined entries so "opened the editor and changed nothing"
+ * never writes an override object (and so removing every field removes it). */
+export function pruneOverrides(o?: CardOverrides | null): CardOverrides | undefined {
+  if (!o) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === undefined) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? (out as CardOverrides) : undefined;
+}
+
+/** Parse the editor's "2 Ember, 1 Void, 3 generic" cost box. Returns null on
+ * anything it can't read, so the caller can keep the generated cost. */
+export function parseCostInput(raw: string): EssenceCost | null {
+  const text = raw.trim();
+  if (!text) return null;
+  const cost: EssenceCost = { generic: 0, pips: {} };
+  let sawSomething = false;
+  for (const part of text.split(/[,+]/)) {
+    const m = part.trim().match(/^(\d+)\s*([a-z]*)$/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    const word = m[2].toLowerCase();
+    if (!word || word === 'generic' || word === 'g') {
+      cost.generic += n;
+      sawSomething = true;
+      continue;
+    }
+    const color = ESSENCE_TYPES.find((c) => c.toLowerCase().startsWith(word));
+    if (!color) return null;
+    cost.pips[color] = (cost.pips[color] ?? 0) + n;
+    sawSomething = true;
+  }
+  return sawSomething ? cost : null;
+}
+
+/** Render a cost back into the editor's input format. */
+export function formatCostInput(cost?: EssenceCost): string {
+  if (!cost) return '';
+  const parts = Object.entries(cost.pips)
+    .filter(([, n]) => n)
+    .map(([c, n]) => `${n} ${c}`);
+  if (cost.generic > 0 || parts.length === 0) parts.unshift(`${cost.generic} generic`);
+  return parts.join(', ');
+}
+
+/** Split the editor's comma-separated keyword box, rejecting anything the
+ * engine has never heard of — an invented keyword prints a chip with no rules
+ * text and does nothing at all in a match. */
+export function parseKeywordsInput(raw: string): { keywords: string[]; unknown: string[] } {
+  const wanted = raw
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  const keywords: string[] = [];
+  const unknown: string[] = [];
+  for (const w of wanted) {
+    const match = (KEYWORDS as readonly string[]).find((k) => k.toLowerCase() === w.toLowerCase());
+    if (match) {
+      if (!keywords.includes(match)) keywords.push(match);
+    } else unknown.push(w);
+  }
+  return { keywords, unknown };
+}
+
+/** Human summary of what an override actually changes, for the review row and
+ * the confirmation prompt. */
+export function describeOverrides(o?: CardOverrides): string {
+  const pruned = pruneOverrides(o);
+  if (!pruned) return '';
+  return Object.keys(pruned)
+    .map((k) => (k === 'text' ? 'rules text' : k))
+    .join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +360,7 @@ export interface BulkParseResult {
   errors: { line: number; message: string }[];
 }
 
-const ALL_TYPES: CardType[] = ['Leader', 'Unit', 'Charm', 'Event', 'Location'];
+const ALL_TYPES: CardType[] = ['Leader', 'Unit', 'Item', 'Event', 'Location'];
 
 /** Accepts a type in any casing; returns the canonical spelling or null. */
 function normalizeType(raw: string): CardType | null {

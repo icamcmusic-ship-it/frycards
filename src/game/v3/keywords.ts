@@ -41,7 +41,7 @@ export const KEYWORDS = [
   // -- v6.0 Event keywords --
   'Surge',
   'Resonant',
-  // -- v6.0 Charm keywords --
+  // -- v6.0 Item keywords --
   'Runic',
   'Soulbound',
   // -- v6.0 Location keywords --
@@ -51,15 +51,15 @@ export const KEYWORDS = [
   'Commander',
   'Resolute',
   // -- v7.3: a second keyword pair for every NON-Unit type. Units had 23
-  // keywords and the other four types had two apiece, so an Event/Charm/
+  // keywords and the other four types had two apiece, so an Event/Item/
   // Location/Leader's keyword slot was a coin flip between the same two
   // options on every card in the pool. Each new keyword is themed to one
   // Essence Type (see KEYWORD_COLOR) so all seven colours gain printable
   // non-Unit text, the same way v6.9 did for Units. --
   'Echoing', // Event — Tide
   'Ritual', // Event — Root
-  'Empowering', // Charm — Ember
-  'Tethered', // Charm — Gale
+  'Empowering', // Item — Ember
+  'Tethered', // Item — Gale
   'Bulwark', // Location — Light
   'Blighted', // Location — Void
   'Warlord', // Leader — Shadow
@@ -68,12 +68,12 @@ export const KEYWORDS = [
   // They were listed as "implement when cards using them are printed", which
   // is a deadlock — nothing prints a keyword the engine does not have. Each
   // is placed where the vocabulary was actually thin rather than where the
-  // name first suggests: Events, Charms and Locations all had colours with no
+  // name first suggests: Events, Items and Locations all had colours with no
   // printable text, and all three have a free roll band (see V75_KEYWORDS).
   'Fate', // Event — Void
   'Exhume', // Event — Shadow
-  'Freeze-Dry', // Charm — Tide
-  'Blessed', // Charm — Light
+  'Freeze-Dry', // Item — Tide
+  'Blessed', // Item — Light
   'Scorched-Earth', // Location — Ember
   'Glaciate', // Location — Gale
 ] as const;
@@ -133,24 +133,24 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Entropic: 'Unit',
   Surge: 'Event',
   Resonant: 'Event',
-  Runic: 'Charm',
-  Soulbound: 'Charm',
+  Runic: 'Item',
+  Soulbound: 'Item',
   Bountiful: 'Location',
   Sacred: 'Location',
   Commander: 'Leader',
   Resolute: 'Leader',
   Echoing: 'Event',
   Ritual: 'Event',
-  Empowering: 'Charm',
-  Tethered: 'Charm',
+  Empowering: 'Item',
+  Tethered: 'Item',
   Bulwark: 'Location',
   Blighted: 'Location',
   Warlord: 'Leader',
   Archivist: 'Location',
   Fate: 'Event',
   Exhume: 'Event',
-  'Freeze-Dry': 'Charm',
-  Blessed: 'Charm',
+  'Freeze-Dry': 'Item',
+  Blessed: 'Item',
   'Scorched-Earth': 'Location',
   Glaciate: 'Location',
 };
@@ -177,7 +177,7 @@ export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
   Warlord: 'Shadow',
   Archivist: 'Tide',
   // v7.5. Placed to fill colour holes: Events had nothing in Shadow or Void,
-  // Charms nothing in Tide or Light, Locations nothing in Ember or Gale.
+  // Items nothing in Tide or Light, Locations nothing in Ember or Gale.
   Fate: 'Void',
   Exhume: 'Shadow',
   'Freeze-Dry': 'Tide',
@@ -219,8 +219,8 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Entropic: 'At your Dusk, the enemy erodes 1.',
   Surge: 'Costs 1 less if you already invoked another card this turn.',
   Resonant: 'Its effect resolves twice.',
-  Runic: 'When this Charm bonds to a unit from your hand, Deal a card.',
-  Soulbound: 'When the bonded unit leaves the field, return this Charm to your hand.',
+  Runic: 'When this Item bonds to a unit from your hand, Deal a card.',
+  Soulbound: 'When the bonded unit leaves the field, return this Item to your hand.',
   Bountiful: 'Exhausts for 2 essence instead of 1.',
   Sacred: 'At your Dawn, restore 1 Vitality.',
   Commander: 'While your Leader is on the field, your units get +1 Might.',
@@ -228,15 +228,15 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Echoing: 'When this Event resolves, Deal a card.',
   Ritual: 'Costs 1 less if you control 3 or more Sanctums.',
   Empowering: 'At your Dawn, the bonded unit gets +1/+0 permanently.',
-  Tethered: 'When this Charm bonds to a unit from your hand, recover that unit.',
+  Tethered: 'When this Item bonds to a unit from your hand, recover that unit.',
   Bulwark: 'Damage dealt to you is reduced by 1.',
   Blighted: 'At your Dusk, the enemy erodes 1.',
   Warlord: 'While your Leader is on the field, your units get +0/+1.',
   Archivist: 'At your Dawn, Deal a card if you control 3 or more Sanctums.',
   Fate: "When this Event resolves, banish the top card of the opponent's deck.",
   Exhume: 'When this Event resolves, return a random Unit from your ash-pile to your hand.',
-  'Freeze-Dry': 'When this Charm bonds to a unit from your hand, exhaust a target enemy unit.',
-  Blessed: 'When this Charm bonds to a unit from your hand, restore 3 Vitality.',
+  'Freeze-Dry': 'When this Item bonds to a unit from your hand, exhaust a target enemy unit.',
+  Blessed: 'When this Item bonds to a unit from your hand, restore 3 Vitality.',
   'Scorched-Earth':
     'At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit.',
   Glaciate: 'At every other Dawn, exhaust a target enemy unit.',
@@ -360,7 +360,7 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // candidates for the next balance run. Note keywordCostAdj is
   // Math.round(w / 2), so this table's effective resolution is TWO: a 1 -> 2
   // step is a no-op on a single-keyword carrier (see the Sacred note above).
-  Echoing: 2, // a cantrip on an Event — Runic (1) on the Charm side, one step up
+  Echoing: 2, // a cantrip on an Event — Runic (1) on the Item side, one step up
   Ritual: 0, // conditional discount, same shape and same price as Surge
   Empowering: 3, // compounding growth, priced with Thriving
   Tethered: 1, // one-shot tempo, priced with Ambush

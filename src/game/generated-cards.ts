@@ -45,7 +45,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "alchemists_vial_belt",
       "set": "Volume #1",
       "name": "Alchemist's Vial Belt",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_leather_belt_holding_three_glass_vials_filled_with_glowing__f2c154b7-3e30-451d-93e3-ea57f2dd1485_3.png",
       "flavor": "Three colors of trouble, worn at the hip.",
       "rarity": "Common"
@@ -54,7 +54,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "algal_veil",
       "set": "Volume #1",
       "name": "Algal Veil",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_curtain_of_glowing_silk-like_algae_hanging_from_a_trench_ce_5d030bc5-90c0-424e-80d2-dfd980605736_3_result.webp",
       "flavor": "A shimmering barrier hiding terrible secrets.",
       "rarity": "Uncommon"
@@ -63,7 +63,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "amber_sphere",
       "set": "Volume #1",
       "name": "Amber Sphere",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_sphere_of_polished_amber_containing_a_perfectly_preserved_g_5381c256-0b07-4479-aa8c-6d8f573c34cc_3_result.webp",
       "flavor": "Preserved perfectly for millennia.",
       "rarity": "Common"
@@ -180,7 +180,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "barrier_projection_field",
       "set": "Volume #1",
       "name": "Barrier Projection Field",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Compact_device_projecting_flat_red_protective_barrier._--no_t_6e57d670-bfff-4e8f-a04e-801fddca8ac6_2.png",
       "flavor": "A wall of light, folded to pocket size.",
       "rarity": "Rare"
@@ -315,7 +315,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "bone_splinter_quill",
       "set": "Volume #1",
       "name": "Bone Splinter Quill",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_quill_made_from_a_sharp_white_splinter_of_bone._The_tip_is__18fcbc9b-4fea-443f-983a-3df7cc8c362b_2.png",
       "flavor": "Every letter it writes tastes faintly of marrow.",
       "rarity": "Common"
@@ -414,7 +414,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "celestial_attunement",
       "set": "Volume #1",
       "name": "Celestial Attunement",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20full%20arts/Celestial%20Attunement%3AWith%20a%20single%20tap%20of%20his%20ancient%20staff%2C%20he%20tethers%20the%20wandering%20spirits%20of%20the%20wild%20to%20the%20constellation%20above.png",
       "flavor": "With a single tap of his ancient staff, he tethers the wandering spirits of the wild to the constellation above.",
       "rarity": "Full-Art"
@@ -432,7 +432,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "chalice_of_quicksilver",
       "set": "Volume #1",
       "name": "Chalice of Quicksilver",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_silver_chalice_overflowing_with_liquid_mercury_that_doesnt__f6a17126-acad-4fa9-bd2e-f87533ddc2bb_2_result.webp",
       "flavor": "A drink that shifts the odds in your favor.",
       "rarity": "Rare"
@@ -468,7 +468,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "chrysalis_of_the_departed",
       "set": "Volume #1",
       "name": "Chrysalis of the Departed",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20full%20arts/Chrysalis%20of%20the%20Departed%3AA%20quiet%20exit%2C%20leaving%20nothing%20behind%20but%20the%20gentle%2C%20silent%20flutter%20of%20paper%20wings.mp4",
       "flavor": "A quiet exit, leaving nothing behind but the gentle, silent flutter of paper wings.",
       "rarity": "Mythic"
@@ -486,7 +486,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "clam_chest",
       "set": "Volume #1",
       "name": "Clam Chest",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_cursed_treasure_chest_its_lid_made_of_a_giant_gaping_clam_m_646b1a5b-c10e-42d9-88cd-4be885f6351f_2_result.webp",
       "flavor": "A trap for the greedy.",
       "rarity": "Uncommon"
@@ -504,7 +504,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "clawblade_greatsword",
       "set": "Volume #1",
       "name": "Clawblade Greatsword",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_greatsword_where_the_blade_is_a_singular_massive_dragon_cla_20fd83e3-d48d-4c6f-82be-cbca17eb44b2_2.png",
       "flavor": "One swing, and the claw remembers what it was for.",
       "rarity": "Common"
@@ -612,7 +612,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "crown_of_the_reef",
       "set": "Volume #1",
       "name": "Crown of the Reef",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/An_intricate_crown_made_of_polished_red_coral_branching_into__3a3ea0a6-ea7c-4649-92e9-ad7054106425_0_result.webp",
       "flavor": "Worn by the true ruler of the coral kingdom.",
       "rarity": "Super-Rare"
@@ -639,7 +639,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "crystalline_flower",
       "set": "Volume #1",
       "name": "Crystalline Flower",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_crystalline_flower_growing_out_of_a_rusted_anchor_chain._--_6de8e75d-5a4d-45d3-82e1-2b93c3d66a5c_2_result.webp",
       "flavor": "A fragile beauty.",
       "rarity": "Common"
@@ -675,7 +675,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "diamond_anchor",
       "set": "Volume #1",
       "name": "Diamond Anchor",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_massive_anchor_made_of_solid_diamond_hooked_into_a_glowing__902455aa-dc5a-4112-8e50-c8a1aeb941a7_1_result.webp",
       "flavor": "It holds more than just ships.",
       "rarity": "Uncommon"
@@ -693,7 +693,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "diver_s_lantern",
       "set": "Volume #1",
       "name": "Diver's Lantern",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_divers_lantern_sitting_on_a_rock_casting_a_warm_yellow_circ_8f5a3b08-5be6-40b0-b41d-b3afb290fb0d_2_result.webp",
       "flavor": "A light in the crushing dark.",
       "rarity": "Common"
@@ -720,7 +720,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "dragonclaw_gauntlet",
       "set": "Volume #1",
       "name": "Dragonclaw Gauntlet",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_heavy_stone-and-metal_gauntlet_that_looks_like_a_dragons_cl_d0cd5a4f-bdbc-4b1b-86fe-a234245fdc8b_2.png",
       "flavor": "The fingers still twitch toward something to grip.",
       "rarity": "Common"
@@ -729,7 +729,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "driftwood_harp",
       "set": "Volume #1",
       "name": "Driftwood Harp",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_musical_instrument_resembling_a_harp_made_of_driftwood_and__c99a707b-c281-4602-81e0-ac22a0785214_1_result.webp",
       "flavor": "Music that calms the savage beasts.",
       "rarity": "Common"
@@ -738,7 +738,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "eel_s_weave",
       "set": "Volume #1",
       "name": "Eel's Weave",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_magical_ritual_where_a_group_of_eels_weave_themselves_toget_4f318a23-e2a0-447e-8b22-6b966bf4161e_2_result.webp",
       "flavor": "A spell woven from living bodies.",
       "rarity": "Uncommon"
@@ -783,7 +783,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "fangblade_dagger",
       "set": "Volume #1",
       "name": "Fangblade Dagger",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_sleek_curved_dagger_that_looks_like_a_sharpened_fang_with_f_139657da-dd9f-45f1-b827-2f28fca222b9_3.png",
       "flavor": "Small enough to hide. Sharp enough not to need to.",
       "rarity": "Common"
@@ -810,7 +810,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "filigree_nautilus",
       "set": "Volume #1",
       "name": "Filigree Nautilus",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_nautilus_shell_with_silver_filigree_patterns_floating_near__9743f9ec-196b-4de0-b0d9-428c7bb0a512_1_result.webp",
       "flavor": "A masterpiece of natural engineering.",
       "rarity": "Rare"
@@ -864,7 +864,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "fossil_fangtrap",
       "set": "Volume #1",
       "name": "Fossil Fangtrap",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_primitive_but_glowing_bear-trap_made_of_fossilized_dragon_t_32153abf-3fb3-45c0-8a8b-3a2098d18582_0.png",
       "flavor": "Old enough to be stone. Sharp enough to still matter.",
       "rarity": "Common"
@@ -963,7 +963,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "glassmote_construct",
       "set": "Volume #1",
       "name": "Glassmote Construct",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_small_bizarre_magical_construct_made_entirely_of_floating_g_d72b94f8-6a19-48f5-a859-660b5ff24244_0.png",
       "flavor": "A thousand shards agreed to be one shape, for now.",
       "rarity": "Common"
@@ -972,7 +972,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "glowing_glyph_tablet",
       "set": "Volume #1",
       "name": "Glowing Glyph Tablet",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_fractured_ancient_stone_tablet_etched_with_glowing_blue_gly_6667b0eb-723e-473c-ab81-ff549b2d3875_1_result.webp",
       "flavor": "Words of power lost to the sea.",
       "rarity": "Rare"
@@ -1026,7 +1026,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "grafted_steamwings",
       "set": "Volume #1",
       "name": "Grafted Steamwings",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_massive_steampunk-inspired_set_of_mechanical_wings_grafted__220a940e-05b5-4476-930f-6138ed5fca97_2.png",
       "flavor": "Steam where feathers should whistle.",
       "rarity": "Common"
@@ -1125,7 +1125,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "hive_power_cell",
       "set": "Volume #1",
       "name": "Hive Power Cell",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Concentrated_power_source_for_nanite_hives._--chaos_5_--ar_43_101eca08-185a-46c7-82af-a028eac8f693_2.png",
       "flavor": "Concentrated appetite in a bottle.",
       "rarity": "Common"
@@ -1179,7 +1179,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "jagged_dragonfang_blade",
       "set": "Volume #1",
       "name": "Jagged Dragonfang Blade",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_jagged_shortsword._Where_it_touches_an_object_glowing_drago_24d3914c-3292-4bf4-b108-dd789f5993fe_2.png",
       "flavor": "It doesn't cut. It ignites.",
       "rarity": "Common"
@@ -1188,7 +1188,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "jarred_sunspark",
       "set": "Volume #1",
       "name": "Jarred Sunspark",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_glass_jar_containing_a_miniature_swirling_sun_of_orange_ene_fa6aec6c-4ef1-4609-8717-6d38fb1c78d0_2.png",
       "flavor": "A whole sunrise, corked and shelved.",
       "rarity": "Common"
@@ -1224,7 +1224,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "kinetic_piercer",
       "set": "Volume #1",
       "name": "Kinetic Piercer",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Piercing_ninja_weapon_--chaos_5_--ar_43_--raw_--sref_22084965_b7d23660-c9f0-4299-9796-b2bb3dcec398_1.png",
       "flavor": "It doesn't stop at the first thing it hits.",
       "rarity": "Common"
@@ -1233,7 +1233,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "kinetic_siphon_swarm",
       "set": "Volume #1",
       "name": "Kinetic Siphon Swarm",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Swarm_Drains_kinetic_energy_instantly._--ar_43_--raw_--sref_2_080e2c82-4605-4624-b485-9489582867a9_0.png",
       "flavor": "They do not steal your strength. They just borrow it forever.",
       "rarity": "Rare"
@@ -1242,7 +1242,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "kinetic_storage_gauntlet",
       "set": "Volume #1",
       "name": "Kinetic Storage Gauntlet",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/High-tech_metal_glove_glowing_with_stored_energy._--no_text_w_76e853bc-0374-4637-8ff1-ea4a9c78ee56_1.png",
       "flavor": "Every blow you land is a deposit.",
       "rarity": "Common"
@@ -1269,7 +1269,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "kraken_s_monolith",
       "set": "Volume #1",
       "name": "Kraken's Monolith",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_monolithic_shard_of_black_rock_covered_in_suction-cup_marks_dcc69ff6-c44d-433d-b958-60fa8d43ea1d_2_result.webp",
       "flavor": "Marked by the beast that rules the depths.",
       "rarity": "Rare"
@@ -1377,7 +1377,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "map_pearl",
       "set": "Volume #1",
       "name": "Map Pearl",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_giant_iridescent_pearl_that_contains_a_map_of_the_entire_oc_70ccb525-3214-4694-92ef-98d830751f6f_0_result.webp",
       "flavor": "The world inside a shell.",
       "rarity": "Common"
@@ -1404,7 +1404,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "mausoleum_edge",
       "set": "Volume #1",
       "name": "Mausoleum Edge",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20full%20arts/Mausoleum%20Edge%3AHeavy%20to%20lift%20at%20first%2C%20but%20it%20grows%20lighter%20with%20every%20soul%20it%20claims.png",
       "flavor": "Heavy to lift at first, but it grows lighter with every soul it claims.",
       "rarity": "Full-Art"
@@ -1440,7 +1440,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "merfolk_ritual",
       "set": "Volume #1",
       "name": "Merfolk Ritual",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_ritual_dance_of_Merfolk_surrounding_a_massive_floating_bubb_0717ce3c-5805-4cef-94bf-e4dff324ba2a_0_result.webp",
       "flavor": "A dance to summon the tide.",
       "rarity": "Uncommon"
@@ -1449,7 +1449,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "mermaid_statue",
       "set": "Volume #1",
       "name": "Mermaid Statue",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_stone_statue_of_a_mermaid_whose_tail_is_made_of_real_shimme_2bccb89d-300d-4407-a41d-7e33ab1b7e82_3_result.webp",
       "flavor": "A silent watcher of the depths.",
       "rarity": "Common"
@@ -1494,7 +1494,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "molten_camo_weave",
       "set": "Volume #1",
       "name": "Molten Camo Weave",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Ninja_Camouflage_gear_utilizing_molten_environment_colors._--_c3073159-f89c-4bf9-9341-e6f68c215272_1.png",
       "flavor": "Dress for the terrain you want to disappear into.",
       "rarity": "Common"
@@ -1539,7 +1539,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "narwhal_staff",
       "set": "Volume #1",
       "name": "Narwhal Staff",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_staff_made_of_narwhal_tusk_wrapped_in_copper_wire_and_toppe_642e4745-1fd2-4f06-b0d5-78edf967c08b_1_result.webp",
       "flavor": "Channeling the energy of the deep.",
       "rarity": "Rare"
@@ -1548,7 +1548,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "nebula_clutch",
       "set": "Volume #1",
       "name": "Nebula Clutch",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_cluster_of_eggs_that_look_like_glowing_nebula_clouds_inside_72f7f85f-bfe9-43fa-9c4e-ad1923daf616_2_result.webp",
       "flavor": "The birthplace of cosmic horrors.",
       "rarity": "Rare"
@@ -1611,7 +1611,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "obsidian_dice",
       "set": "Volume #1",
       "name": "Obsidian Dice",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_set_of_obsidian_dice_the_pips_glowing_red_resting_on_a_velv_6a03eb4e-ecd9-423e-804f-b6127e0e331d_0_result.webp",
       "flavor": "Loaded, but only in the ways that matter.",
       "rarity": "Common"
@@ -1629,7 +1629,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "obsidian_scalpel",
       "set": "Volume #1",
       "name": "Obsidian Scalpel",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_surgical_knife_made_of_volcanic_glass._The_handle_is_wrappe_923a9552-8d1c-468d-993e-2e947057e152_3.png",
       "flavor": "Sharper than intent. Colder than mercy.",
       "rarity": "Common"
@@ -1647,7 +1647,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "obsidian_trident",
       "set": "Volume #1",
       "name": "Obsidian Trident",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_trident_forged_from_obsidian_its_points_dripping_with_cold__6870a022-aa83-4909-9b92-f7af6f2fa303_0_result.webp",
       "flavor": "A weapon of dark tides.",
       "rarity": "Ultra-Rare"
@@ -1683,7 +1683,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "pearl_of_the_deep",
       "set": "Volume #1",
       "name": "Pearl of the Deep",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/The_Birth_of_a_Pearl--a_clam_opening_to_reveal_a_pearl_that_i_c023b563-fafe-4f6b-a2bf-f00ea151b68a_0_result.webp",
       "flavor": "A treasure worth risking it all.",
       "rarity": "Super-Rare"
@@ -1692,7 +1692,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "perpetual_dynamo",
       "set": "Volume #1",
       "name": "Perpetual Dynamo",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Generates_endless_kinetic_current._--chaos_5_--ar_43_--raw_--_e152a325-58a9-46a0-bec3-6ca458c0ec53_0.png",
       "flavor": "Every deployment feeds the current; the current feeds the next.",
       "rarity": "Common"
@@ -1764,7 +1764,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "polished_waystone",
       "set": "Volume #1",
       "name": "Polished Waystone",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_large_spherical_rock_that_has_been_polished_to_reveal_a_sli_33bd6d5e-68b6-4a85-94d1-aabf8ae35f8b_1.png",
       "flavor": "Turn it to the light and the road finds you.",
       "rarity": "Common"
@@ -1791,7 +1791,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "pufferfish_lantern",
       "set": "Volume #1",
       "name": "Pufferfish Lantern",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_lantern_made_from_a_dried_pufferfish_containing_a_pulsating_0f791616-9d72-4791-a835-3220c5494046_1_result.webp",
       "flavor": "A macabre source of light.",
       "rarity": "Uncommon"
@@ -1809,7 +1809,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "pulsing_heartstone",
       "set": "Volume #1",
       "name": "Pulsing Heartstone",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_massive_pulsing_ruby-like_organ_encased_in_translucent_ston_f7084090-36a7-4b60-975e-08d30d438a27_1.png",
       "flavor": "It beats in time with something that isn't in the room.",
       "rarity": "Common"
@@ -1818,7 +1818,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "purple_lensed_goggles",
       "set": "Volume #1",
       "name": "Purple-Lensed Goggles",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/Steampunk-style_goggles_with_glowing_purple_lenses._The_leath_33b40940-1c7b-464d-afa4-a0f7826ea304_0.png",
       "flavor": "Everything looks like a threat through these. Usually, it is.",
       "rarity": "Common"
@@ -1845,7 +1845,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "resonant_shuriken",
       "set": "Volume #1",
       "name": "Resonant Shuriken",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Sharp_throwing_star_emitting_sound_waves._--no_text_words_--c_2010384a-a332-4ab5-87c7-441b9fc6892e_1.png",
       "flavor": "You hear it twice: once going in, once in your dreams.",
       "rarity": "Common"
@@ -1854,7 +1854,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "ribbone_longbow",
       "set": "Volume #1",
       "name": "Ribbone Longbow",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_longbow_made_from_a_single_curved_dragon_rib._The_bowstring_8700ebbf-3f58-4749-b595-06adf047cf04_2.png",
       "flavor": "Drawn taut, the whole bow hums like something breathing.",
       "rarity": "Common"
@@ -1899,7 +1899,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "rune_etched_tablet",
       "set": "Volume #1",
       "name": "Rune-Etched Tablet",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_heavy_rectangular_stone_tablet_with_a_single_glowing_dragon_05a4d41f-a57a-4c32-b36a-5fa803d157bc_0.png",
       "flavor": "Read it once. It reads you back.",
       "rarity": "Common"
@@ -1980,7 +1980,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "scallop_map",
       "set": "Volume #1",
       "name": "Scallop Map",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/An_ancient_brine-stained_map_etched_onto_a_giant_scallop_shel_cb52efc4-52bd-4893-8b69-cef0d12560de_2_result.webp",
       "flavor": "The path to the sunken treasure.",
       "rarity": "Uncommon"
@@ -1989,7 +1989,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "scorched_bone_standard",
       "set": "Volume #1",
       "name": "Scorched Bone Standard",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_tattered_scorched_flag_hanging_from_a_bone_pole._The_image__00afbaaa-2830-4536-b589-d2635f452473_2.png",
       "flavor": "Nobody remembers the banner. Everyone remembers who carried it.",
       "rarity": "Common"
@@ -2043,7 +2043,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "shimmering_statue",
       "set": "Volume #1",
       "name": "Shimmering Statue",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_stone_statue_of_a_mermaid_whose_tail_is_made_of_real_shimme_2bccb89d-300d-4407-a41d-7e33ab1b7e82_1_result.webp",
       "flavor": "A beautiful monument.",
       "rarity": "Common"
@@ -2268,7 +2268,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "sunken_bounty",
       "set": "Volume #1",
       "name": "Sunken Bounty",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_sunken_chest_overflowing_with_gold_coins_and_colorful_tropi_fac78884-25c5-4b3d-9d68-23e0e846bea6_3_result.webp",
       "flavor": "Riches beyond imagination.",
       "rarity": "Rare"
@@ -2286,7 +2286,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "sunken_timepiece",
       "set": "Volume #1",
       "name": "Sunken Timepiece",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/An_ornate_pocket_watch_with_a_cracked_crystal_the_hands_indic_914062f7-eafc-4237-aef0-5a62dbfd1a6e_0_result.webp",
       "flavor": "Time stopped when the ship went down.",
       "rarity": "Uncommon"
@@ -2313,7 +2313,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "symbiotic_scan_swarm",
       "set": "Volume #1",
       "name": "Symbiotic Scan-Swarm",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20pt2/Tiny_metallic_insect_swarm_scanning_dark_caverns._--chaos_5_-_3476861c-8815-48bd-b547-3f0d287cf3ea_0.png",
       "flavor": "It maps the caverns and feeds on what it finds.",
       "rarity": "Uncommon"
@@ -2412,7 +2412,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "the_garden_variety_glock",
       "set": "Volume #1",
       "name": "The Garden-Variety Glock",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20full%20arts/The%20Garden%20Variety%20Glock%3APeace%20was%20never%20an%20option%2C%20but%20a%20lovely%20arrangement%20of%20chrysanthemums%20certainly%20is.png",
       "flavor": "Peace was never an option, but a lovely arrangement of chrysanthemums certainly is.",
       "rarity": "Full-Art"
@@ -2421,7 +2421,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "the_locksmiths_regret",
       "set": "Volume #1",
       "name": "The Locksmith's Regret",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201%20full%20arts/The%20Locksmiths%20Regret%3ATo%20open%20the%20chest%20you%20must%20look%20it%20dead%20in%20the%20eye%20and%20tell%20it%20a%20truth%20you%27ve%20never%20told%20another%20living%20soul.png",
       "flavor": "To open the chest, you must look it dead in the eye and tell it a truth you've never told another living soul.",
       "rarity": "Full-Art"
@@ -2466,7 +2466,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "thornfang_vine",
       "set": "Volume #1",
       "name": "Thornfang Vine",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_twisted_black_vine_with_thorns_that_look_like_tiny_dragon_t_a962f390-f732-4e0e-b6fe-84a9563383f8_2.png",
       "flavor": "Every thorn remembers a mouth it used to be.",
       "rarity": "Common"
@@ -2475,7 +2475,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "threefold_bone_shield",
       "set": "Volume #1",
       "name": "Threefold Bone Shield",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_heavy_crude_shield_made_entirely_from_three_interlocking_fo_352b639d-42fd-4b5e-9b5b-7ce533e22b4f_1.png",
       "flavor": "Three skulls agreed to disagree with the enemy.",
       "rarity": "Common"
@@ -2547,7 +2547,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "victorian_helmet",
       "set": "Volume #1",
       "name": "Victorian Helmet",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/Volume%201/A_rusted_Victorian_diving_helmet_overgrown_with_iridescent_ba_573ec635-6a35-46a9-a6be-f0ac4390534d_1_result.webp",
       "flavor": "A relic of surface explorers.",
       "rarity": "Common"
@@ -2664,7 +2664,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "id": "wraithlight_lantern",
       "set": "Volume #1",
       "name": "Wraithlight Lantern",
-      "type": "Charm",
+      "type": "Item",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/A_gothic_iron_lantern._Inside_instead_of_a_candle_is_a_swirli_1100dca6-06e6-473c-b2fc-156bce6dae32_3.png",
       "flavor": "The flame inside has opinions about the dark.",
       "rarity": "Common"

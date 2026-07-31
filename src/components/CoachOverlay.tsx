@@ -38,7 +38,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'main1',
     title: '1. MAIN PHASE — ESSENCE & INVOKING',
-    body: 'Essence is your mana: play one free Wellspring per turn (pick a color of your Leader), and exhaust Locations to produce it. Just hit INVOKE on a hand card — the Locations tap themselves to pay. Invoke Units, Charms, Events, Sanctums, or your Leader.',
+    body: 'Essence is your mana: play one free Wellspring per turn (pick a color of your Leader), and exhaust Locations to produce it. Just hit INVOKE on a hand card — the Locations tap themselves to pay. Invoke Units, Items, Events, Sanctums, or your Leader.',
   },
   {
     stage: 'clash',

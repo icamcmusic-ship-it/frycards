@@ -5,7 +5,16 @@
  * when profitable, and (as defender) guard to survive lethal. Returns a
  * CpuTurnEvent log the UI replays as animations.
  */
-import { CardDef, Effect, EssenceCost, LEADER_HP, hasKw, totalCost } from './cards';
+import {
+  CardDef,
+  Effect,
+  EssenceCost,
+  LEADER_HP,
+  charmSelfHeal,
+  hasKw,
+  itemSurvives,
+  totalCost,
+} from './cards';
 import { EssenceType } from './colors';
 import {
   unbreakableUp,
@@ -37,7 +46,8 @@ import {
   legalGuardsFor,
   opponentOf,
   playWellspring,
-  rebondCharm,
+  BOND_TARGET_SELF,
+  rebondItem,
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
@@ -278,17 +288,17 @@ function needsEnemyUnit(eff?: Effect): boolean {
 }
 
 /**
- * Best friendly unit to hang a Charm on. Picking the biggest Might (the old
- * rule) puts every Charm on the unit the opponent most wants to remove and
- * most profitably blocks: the v6.6 sims measured 2,769 Charms bonded to a
+ * Best friendly unit to hang an Item on. Picking the biggest Might (the old
+ * rule) puts every Item on the unit the opponent most wants to remove and
+ * most profitably blocks: the v6.6 sims measured 2,769 Items bonded to a
  * unit that left the field the same turn, buying nothing. Durability is
- * weighted above raw Might, and a body already carrying Charms is
+ * weighted above raw Might, and a body already carrying Items is
  * de-prioritised so a single removal spell can't two-for-one (or worse).
  */
 function bestBondTarget(state: GameState, pid: PlayerId): UnitInst | undefined {
   const p = state.players[pid];
   const opp = state.players[opponentOf(pid)];
-  // v7.2: durability alone was not enough. `charmOnDoomedUnit` sat at
+  // v7.2: durability alone was not enough. `itemOnDoomedUnit` sat at
   // ~2,200-2,350 a cohort for five passes — the largest CPU lapse counter on
   // the board and the only one never targeted — because "sturdiest body" and
   // "body that survives the turn" are different questions. The sturdiest body
@@ -311,26 +321,26 @@ function bestBondTarget(state: GameState, pid: PlayerId): UnitInst | undefined {
       const safe = unbreakableUp(u) || (grit > enemyReach && !(enemyVenom && grit > 0));
       return {
         u,
-        score: grit * 2 + effMight(state, u) - u.charms.length * 3 + (safe ? 6 : 0),
+        score: grit * 2 + effMight(state, u) - u.items.length * 3 + (safe ? 6 : 0),
       };
     })
     .sort((a, b) => b.score - a.score)[0]?.u;
 }
 
-/** Re-bond loose Worn Charms onto the sturdiest friendly unit when affordable. */
-function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
+/** Re-bond loose Weapons/Tools onto the sturdiest friendly unit when affordable. */
+function rebondUnbondedItems(state: GameState, pid: PlayerId, observe?: CpuTurnObserver): void {
   const p = state.players[pid];
-  if (p.wornCharms.length === 0 || p.field.length === 0) return;
+  if (p.unbondedItems.length === 0 || p.field.length === 0) return;
   const target = bestBondTarget(state, pid);
   if (!target) return;
-  for (const charm of [...p.wornCharms]) {
-    const cost: EssenceCost = { generic: charm.def.rebondCost ?? 0, pips: {} };
+  for (const item of [...p.unbondedItems]) {
+    const cost: EssenceCost = { generic: item.def.rebondCost ?? 0, pips: {} };
     // Only tap once the re-bond is sure to go through — a failed attempt
     // after tapping would strand the essence.
     if (!canAffordPotential(state, pid, cost)) continue;
     if (!tapForCost(state, pid, cost)) continue;
-    if (rebondCharm(state, pid, charm.iid, target.iid)) {
-      observe?.({ kind: 'rebond', name: charm.def.name, targetIid: target.iid });
+    if (rebondItem(state, pid, item.iid, target.iid)) {
+      observe?.({ kind: 'rebond', name: item.def.name, targetIid: target.iid });
     }
   }
 }
@@ -379,7 +389,15 @@ function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   if (def.type === 'Event' && hasKw(def, 'Resonant')) v += 4; // double value
   if (def.type === 'Location' && hasKw(def, 'Bountiful')) v += 3; // ramp
   if (eff?.target === 'allEnemyUnits' && opp.field.length < 2 && !effectDead) v -= 60;
-  if (def.type === 'Charm' && state.players[pid].field.length === 0) v -= 200;
+  if (def.type === 'Item' && state.players[pid].field.length === 0) {
+    // v13: a Charm with no body to bond to is not dead — it can be cast on
+    // the player for Vitality. That is worth doing when the Vitality is
+    // actually missing and worth nothing at all when it is not, so the CPU
+    // prices it as a small heal rather than as an unplayable card.
+    const me = state.players[pid];
+    const heal = Math.min(charmSelfHeal(def.bond), LEADER_HP - me.vitality);
+    v += itemSurvives(def.subtype) ? -200 : heal * 3 - 20;
+  }
   return v;
 }
 
@@ -478,14 +496,15 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
           c.iid !== reservedIid &&
           invokePriority(state, pid, c.def) >= -50 &&
           canAffordPotential(state, pid, effectiveCost(state, pid, c.def)) &&
-          !(c.def.type === 'Charm' && p.field.length === 0),
+          !(c.def.type === 'Item' && p.field.length === 0 && itemSurvives(c.def.subtype)),
       )
       .sort((a, b) => invokePriority(state, pid, b.def) - invokePriority(state, pid, a.def));
     for (const c of playable) {
       if (!tapForCost(state, pid, effectiveCost(state, pid, c.def))) continue;
       if (!canInvoke(state, pid, c.iid)) continue;
       const targetIid = chooseTarget(state, pid, c.def);
-      const bondTargetIid = c.def.type === 'Charm' ? bestBondTarget(state, pid)?.iid : undefined;
+      const bondTargetIid =
+        c.def.type === 'Item' ? (bestBondTarget(state, pid)?.iid ?? BOND_TARGET_SELF) : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
         settleAfterPlay(state, pid);
@@ -521,8 +540,8 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
     }
   }
 
-  // Re-bond loose Worn Charms with leftover potential essence.
-  rebondWornCharms(state, pid, observe);
+  // Re-bond loose Weapons/Tools with leftover potential essence.
+  rebondUnbondedItems(state, pid, observe);
 
   // Leader ability: once per turn, pick the most useful one.
   runLeaderAbility(state, pid, observe);
@@ -735,15 +754,15 @@ export function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     const survives = attackerSurvives(u, worst);
     const safeVsAll = possibleGuards.every((g) => attackerSurvives(u, g));
     const notBehind = me.field.length >= opp.field.length;
-    // v7.2: a unit that dies in a "favorable" trade takes its bonded Charms
+    // v7.2: a unit that dies in a "favorable" trade takes its bonded Items
     // with it, so the trade is only favorable if it beats the unit AND the
-    // cards stapled to it. Soulbound Charms return to hand and cost nothing.
-    // This is the other half of the charmOnDoomedUnit fix in bestBondTarget:
-    // that one stops the CPU hanging a Charm on a body the enemy can kill,
-    // this one stops it throwing a charmed body away itself.
-    const charmTax = u.charms.filter((ch) => !hasKw(ch.def, 'Soulbound')).length;
+    // cards stapled to it. Soulbound Items return to hand and cost nothing.
+    // This is the other half of the itemOnDoomedUnit fix in bestBondTarget:
+    // that one stops the CPU hanging an Item on a body the enemy can kill,
+    // this one stops it throwing an item-carrying body away itself.
+    const itemTax = u.items.filter((ch) => !hasKw(ch.def, 'Soulbound')).length;
     const favorableTrade =
-      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost) + charmTax;
+      kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost) + itemTax;
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
   telemetry.onAttackDecision?.(state, pid, picked);

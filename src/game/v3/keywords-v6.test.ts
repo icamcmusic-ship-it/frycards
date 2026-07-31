@@ -1,6 +1,6 @@
 /**
  * v6.0 type-keyword engine tests: the two new keywords for every card type
- * (Unit Regenerate/Hardened, Event Surge/Resonant, Charm Runic/Soulbound,
+ * (Unit Regenerate/Hardened, Event Surge/Resonant, Item Runic/Soulbound,
  * Location Bountiful/Sacred, Leader Commander/Resolute) plus the rulebook
  * mulligan (draw one fewer each time).
  */
@@ -136,40 +136,40 @@ describe('Event — Surge / Resonant', () => {
 });
 
 // ---------------------------------------------------------------------------
-describe('Charm — Runic / Soulbound', () => {
-  test('Runic deals a card when the charm bonds from hand', () => {
+describe('Item — Runic / Soulbound', () => {
+  test('Runic deals a card when the item bonds from hand', () => {
     const s = game();
     stockDeck(s, 'P1', 3);
     summonUnit(s, 'P1', U('bearer', 2, 2));
-    const charm: CardDef = {
+    const item: CardDef = {
       id: 'rune_sigil',
       name: 'Rune Sigil',
-      type: 'Charm',
-      subtype: 'Bound',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Runic'],
       bond: { might: 1 },
     };
-    const iid = toHand(s, 'P1', charm);
+    const iid = toHand(s, 'P1', item);
     const handBefore = s.players.P1.hand.length;
     expect(invokeCard(s, 'P1', iid)).toBe(true);
-    // -1 (charm left hand) +1 (Runic draw)
+    // -1 (item left hand) +1 (Runic draw)
     expect(s.players.P1.hand.length).toBe(handBefore);
   });
 
-  test('Soulbound charms return to hand when the bonded unit dies', () => {
+  test('Soulbound items return to hand when the bonded unit dies', () => {
     const s = game();
     const bearer = summonUnit(s, 'P1', U('bearer2', 2, 2));
-    const charm: CardDef = {
+    const item: CardDef = {
       id: 'soul_locket',
       name: 'Soul Locket',
-      type: 'Charm',
-      subtype: 'Bound',
+      type: 'Item',
+      subtype: 'Charm',
       cost: { generic: 0, pips: {} },
       keywords: ['Soulbound'],
       bond: { grit: 1 },
     };
-    const iid = toHand(s, 'P1', charm);
+    const iid = toHand(s, 'P1', item);
     expect(invokeCard(s, 'P1', iid, { bondTargetIid: bearer.iid })).toBe(true);
     applyEffect(s, 'P2', { action: 'shatter', target: 'enemyUnit' }, bearer.iid);
     expect(s.players.P1.field.length).toBe(0);

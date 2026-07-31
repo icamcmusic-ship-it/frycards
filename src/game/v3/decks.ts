@@ -146,7 +146,7 @@ export function buildDeck(arch: Archetype): DeckDef {
   };
   const units = legalPoolByType('Unit', arch.leaderId);
   const spells = [
-    ...legalPoolByType('Charm', arch.leaderId),
+    ...legalPoolByType('Item', arch.leaderId),
     ...legalPoolByType('Event', arch.leaderId),
   ];
   const sanctums = legalPoolByType('Location', arch.leaderId);

@@ -13,14 +13,14 @@
  */
 import type {
   CardDef,
-  CharmSubtype,
+  ItemSubtype,
   Effect,
   EssenceCost,
   EventSubtype,
   LeaderAbility,
   TriggeredAbility,
 } from './cards';
-import { totalCost } from './cards';
+import { charmSelfHeal, itemSurvives, totalCost } from './cards';
 import type { CardTemplate } from '../../types';
 import { GENERATED_CARDS } from '../generated-cards';
 import { COLORS, KEYWORDS_OF_COLOR, LEADER_COLORS, NEW_KEYWORD_OF_COLOR, Color } from './colors';
@@ -65,8 +65,22 @@ const RARITY_TIER: Record<string, number> = {
   Mythic: 6,
 };
 
+/**
+ * v13 renamed the `Charm` card type to `Item`. The mechanics hash is
+ * `id|type|rarity`, so taking the new spelling into the seed would have
+ * reprinted all 61 Items — different cost, different colours, different
+ * keywords — which is a set-wide rebalance, not a rename. The seed therefore
+ * keeps the ORIGINAL type spelling: an Item hashes as `Charm` forever.
+ *
+ * Do not "clean this up". Removing the mapping silently reprints every Item
+ * in the pool and puts the bundled catalog, the live database and every sim
+ * reading out of parity at once.
+ */
+const SEED_TYPE: Record<string, string> = { Item: 'Charm' };
+
 /** Per-card hash seed: id + type + rarity, per the spec. */
-const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Common'}`;
+const seedOf = (c: CardTemplate): string =>
+  `${c.id}|${SEED_TYPE[c.type] ?? c.type}|${c.rarity ?? 'Common'}`;
 
 /**
  * Per-card total-cost adjustments derived from sim outliers.
@@ -74,7 +88,7 @@ const seedOf = (c: CardTemplate): string => `${c.id}|${c.type}|${c.rarity ?? 'Co
  * v6.6 RESET. Every entry here is a single point, in the direction the sims
  * measured. The multi-point stacks this table carried through v6.2-v6.5 were
  * compensating for a lever that did not work: COST_ADJUST fed the same cost
- * figure that Units/Events/Charms derive their stat budget and effect
+ * figure that Units/Events/Items derive their stat budget and effect
  * magnitude from, so an adjustment moved a card's power in lockstep with its
  * price and barely changed its win rate (see naturalTotalFor below for the
  * full mechanism and the evidence). Adjustments were therefore stacked to two
@@ -149,8 +163,8 @@ const COST_ADJUST: Record<string, number> = {
   neon_moray: +1,
   phosphor_lich: +1,
   pufferfish_lantern: +1,
-  // v6.9: +1 -> +2. The pool's strongest per-cost Charm and an outlier in
-  // both cohorts (+16.5 n=232 / +17.3 n=357) — a cost-2 Worn Charm granting
+  // v6.9: +1 -> +2. The pool's strongest per-cost Item and an outlier in
+  // both cohorts (+16.5 n=232 / +17.3 n=357) — a cost-2 re-bondable Item granting
   // +1/+0 AND Aerial, re-bondable for 1.
   resonant_shuriken: +2,
   ribcage_titan: +1,
@@ -291,7 +305,7 @@ const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
  *
  * Units derive their stat budget from their cost (`statBase` in mapUnit),
  * Events derive their effect magnitude from it (`eventEffect`'s `v`), and
- * Charms derive their bond stats from it. Until v6.6 the adjusted cost fed
+ * Items derive their bond stats from it. Until v6.6 the adjusted cost fed
  * those derivations, so a COST_ADJUST moved the card's POWER in lockstep
  * with its price and was close to balance-neutral in both directions:
  *
@@ -974,13 +988,13 @@ function mapEvent(c: CardTemplate): CardDef {
   // bands are untouched, so every existing Surge/Resonant carrier re-prints
   // byte-identically and only cards that previously rolled NO keyword pick
   // one up — priced, as always, through KEYWORD_COST.
-  // v7.5 adds a FOURTH band (42..62) for Fate/Exhume — wider than the Charm
+  // v7.5 adds a FOURTH band (42..62) for Fate/Exhume — wider than the Item
   // and Location bands because there are only 41 Events in the pool, and a
   // 12-point band put just two of them in range, on the same rule: the
   // 0..42 bands are untouched, so every existing carrier re-prints
   // byte-identically and only cards that previously rolled nothing pick one up.
   //
-  // v7.6 widens it again, 62 -> 76, and the Charm band 52 -> 70. That is v7.5
+  // v7.6 widens it again, 62 -> 76, and the Item band 52 -> 70. That is v7.5
   // carry-forward #9: `Blessed` printed on ONE card and `Exhume` on two, which
   // is the Doublestrike width — a delta at that sample is a fact about two
   // cards' Leader cohorts, not about the keyword, and v7.5 correctly refused
@@ -1020,7 +1034,7 @@ function mapEvent(c: CardTemplate): CardDef {
   // (see mapUnit) — when base + kwAdj exceeds naturalTotalFor's 7-clamp the
   // full kwAdj is subtracted from a total that never collected it, shrinking
   // the effect for a surcharge never charged. Fixing it reprints every
-  // affected Event/Charm (content-scale), so it belongs to the same
+  // affected Event/Item (content-scale), so it belongs to the same
   // dedicated pass as the Unbreakable/cost-cap carry-forward, not a bug fix.
   const t = Math.max(1, naturalT - kwAdj);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
@@ -1043,14 +1057,21 @@ function mapEvent(c: CardTemplate): CardDef {
 }
 
 // ---------------------------------------------------------------------------
-// Charm mapping
+// Item mapping
 // ---------------------------------------------------------------------------
-function mapCharm(c: CardTemplate): CardDef {
+function mapItem(c: CardTemplate): CardDef {
   const seed = seedOf(c);
   const rt = RARITY_TIER[c.rarity || 'Common'] ?? 0;
   const colors = pickColors(seed, rt);
-  const subtype: CharmSubtype = roll(seed, 'ch-sub', 100) < 60 ? 'Bound' : 'Worn';
-  // v6.0 Charm keywords: ~12% Runic (bond cantrip); ~12% of BOUND charms
+  // v13 subtype split. The old roll was a two-way Bound(60)/Worn(40) on this
+  // same salt; the three-way keeps the SAME salt and the same 60/40 cut point
+  // so a Charm is exactly the old Bound band and Weapon+Tool are exactly the
+  // old Worn band — only the 78..100 slice of what used to be Worn becomes a
+  // Tool. Re-salting here would re-roll all 61 Items for no reason.
+  const subRoll = roll(seed, 'ch-sub', 100);
+  const subtype: ItemSubtype = subRoll < 60 ? 'Charm' : subRoll < 78 ? 'Weapon' : 'Tool';
+  const survives = itemSurvives(subtype);
+  // v6.0 Item keywords: ~12% Runic (bond cantrip); ~12% of CHARM items
   // Soulbound (returns to hand when its unit dies). Surcharges come from
   // KEYWORD_COST via keywordCostAdj.
   // v7.5 adds a fourth band (40..52) for Freeze-Dry/Blessed, widened to 40..70
@@ -1059,18 +1080,18 @@ function mapCharm(c: CardTemplate): CardDef {
   const kwRoll = roll(seed, 'ch-kw2', 100);
   const chFresh =
     kwRoll >= 24 && kwRoll < 40
-      ? freshKeywordFor(seed, 'Charm', colors[0])
+      ? freshKeywordFor(seed, 'Item', colors[0])
       : kwRoll >= 40 && kwRoll < 70
-        ? freshKeywordV75For(seed, 'Charm', colors[0])
+        ? freshKeywordV75For(seed, 'Item', colors[0])
         : undefined;
-  const charmKws: string[] = chFresh
+  const itemKws: string[] = chFresh
     ? [chFresh]
     : kwRoll < 12
       ? ['Runic']
-      : kwRoll < 24 && subtype === 'Bound'
+      : kwRoll < 24 && subtype === 'Charm'
         ? ['Soulbound']
         : [];
-  const kwAdj = keywordCostAdj(charmKws);
+  const kwAdj = keywordCostAdj(itemKws);
   const base = baseTotal(seed, rt);
   const total = Math.max(1, Math.min(7, base + adjustFor(c.id) + kwAdj));
   const cost = buildCost(seed, colors, total, rt);
@@ -1084,7 +1105,10 @@ function mapCharm(c: CardTemplate): CardDef {
   // Unbreakable/cost-cap pass.
   const t = Math.max(1, naturalT - kwAdj);
 
-  const statBudget = Math.max(1, t + 1 - (subtype === 'Worn' ? 1 : 0));
+  // A Charm pays nothing for permanence it does not have, a Weapon pays one
+  // point of bond for surviving its unit, and a Tool pays a second for the
+  // enemy it weakens on the way in.
+  const statBudget = Math.max(1, t + 1 - (survives ? 1 : 0) - (subtype === 'Tool' ? 1 : 0));
   const mShare = roll(seed, 'ch-split', 3); // 0 mighty, 1 even, 2 gritty
   const might =
     mShare === 0
@@ -1097,14 +1121,14 @@ function mapCharm(c: CardTemplate): CardDef {
   if (might > 0) bond.might = might;
   if (grit > 0) bond.grit = grit;
 
-  // Some charms (~40%) grant an on-color keyword to the bonded unit.
+  // Some items (~40%) grant an on-color keyword to the bonded unit.
   let grantText = '';
   if (roll(seed, 'ch-kw', 5) < 2) {
     const list = (colors[0] ? KEYWORDS_OF_COLOR[colors[0]] : NEUTRAL_KEYWORDS).filter(
       (kw) => (!PREMIUM.has(kw) || rt >= 4) && kw !== 'Immobile',
     );
     if (list.length) {
-      // v6.9: same substitution rule as pickUnitKeywords — a share of Charms
+      // v6.9: same substitution rule as pickUnitKeywords — a share of Items
       // now grant their colour's new-generation keyword instead of a legacy one.
       const fresh = colors[0] ? NEW_KEYWORD_OF_COLOR[colors[0]] : undefined;
       const kw =
@@ -1117,7 +1141,7 @@ function mapCharm(c: CardTemplate): CardDef {
   const def: CardDef = {
     id: c.id,
     name: c.name,
-    type: 'Charm',
+    type: 'Item',
     subtype,
     cost,
     bond,
@@ -1126,13 +1150,22 @@ function mapCharm(c: CardTemplate): CardDef {
     image: c.image,
     flavor: c.flavor,
   };
-  if (charmKws.length) def.keywords = charmKws;
+  if (itemKws.length) def.keywords = itemKws;
   const statText = `+${bond.might ?? 0}/+${bond.grit ?? 0}`;
-  if (subtype === 'Worn') {
+  if (survives) {
     def.rebondCost = Math.max(1, Math.ceil(t / 2));
-    def.text = `Worn — bonded unit gets ${statText}${grantText}. Re-bond ${def.rebondCost}.`;
+  }
+  if (subtype === 'Tool') {
+    def.nerf = 1 + (rt >= 4 ? 1 : 0);
+    def.text =
+      `Tool — bonded unit gets ${statText}${grantText}; a target enemy unit gets ` +
+      `-${def.nerf}/-${def.nerf}. Re-bond ${def.rebondCost}.`;
+  } else if (subtype === 'Weapon') {
+    def.text = `Weapon — bonded unit gets ${statText}${grantText}. Re-bond ${def.rebondCost}.`;
   } else {
-    def.text = `Bound — bonded unit gets ${statText}${grantText}.`;
+    def.text =
+      `Charm — bonded unit gets ${statText}${grantText}. ` +
+      `Or cast it on yourself to restore ${charmSelfHeal(bond)} Vitality.`;
   }
   return def;
 }
@@ -1417,7 +1450,7 @@ const LEADER_RESOLVE_OVERRIDE: Record<string, number> = { void_mother: 5 };
  *
  * Price-only by construction: nothing in `mapLeader` derives from `total`
  * (Resolve comes from rarity, both abilities from the colour identity), so
- * unlike the Unit/Event/Charm mappers there is no power term to keep in step.
+ * unlike the Unit/Event/Item mappers there is no power term to keep in step.
  */
 const LEADER_COST_OVERRIDE: Record<string, number> = { apex_nanite_shinobi: 4 };
 
@@ -1758,7 +1791,34 @@ function mapLeader(c: CardTemplate): CardDef {
 // ---------------------------------------------------------------------------
 // Build the pool
 // ---------------------------------------------------------------------------
+/**
+ * Layer the Creator's overrides (if any) over a generated card.
+ *
+ * Deliberately shallow and deliberately last: every mechanic is still
+ * GENERATED from `id|type|rarity`, and an override replaces the finished
+ * value rather than feeding back into the roll — so overriding a card's cost
+ * cannot silently move its stats, its keywords or anything else, and removing
+ * the override restores exactly the generated card.
+ *
+ * `undefined` entries are ignored (they mean "not overridden"); an explicit
+ * `null` clears the field, which is how the editor un-prints a rules line.
+ */
+function applyOverrides(def: CardDef, overrides?: CardTemplate['overrides']): CardDef {
+  if (!overrides) return def;
+  const out = { ...def } as unknown as Record<string, unknown>;
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === undefined) continue;
+    if (v === null) delete out[k];
+    else out[k] = v;
+  }
+  return out as unknown as CardDef;
+}
+
 function mapCard(c: CardTemplate): CardDef {
+  return applyOverrides(mapGeneratedCard(c), c.overrides);
+}
+
+function mapGeneratedCard(c: CardTemplate): CardDef {
   switch (c.type) {
     case 'Leader':
       return mapLeader(c);
@@ -1766,8 +1826,8 @@ function mapCard(c: CardTemplate): CardDef {
       return mapUnit(c);
     case 'Location':
       return mapLocation(c);
-    case 'Charm':
-      return mapCharm(c);
+    case 'Item':
+      return mapItem(c);
     case 'Event':
       return mapEvent(c);
     default:

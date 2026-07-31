@@ -3,7 +3,7 @@
  * RANDOM legal actions — random Wellspring colours, random taps, random
  * invokes with random (often nonsensical) targets and bond targets, random
  * attacker sets, random guard assignments, and reaction-window plays by either
- * side. That reaches board states the CPU never builds on purpose: charms
+ * side. That reaches board states the CPU never builds on purpose: items
  * bonded to about-to-die bodies, mass-weakened fields, clashes resolved with
  * essence still floating, Leaders shattered mid-combat.
  *
@@ -35,7 +35,7 @@ import {
   wellspringChoices,
   effGrit,
   effMight,
-  rebondCharm,
+  rebondItem,
   mulliganHand,
   opponentOf,
 } from './engine';
@@ -74,7 +74,7 @@ function check(g: GameState, where: string) {
           `${where} zombie unit ${u.def.name}`,
         ).toBe(true);
       }
-      expect(u.charms.length, `${where} charm runaway`).toBeLessThan(30);
+      expect(u.items.length, `${where} item runaway`).toBeLessThan(30);
     }
     expect(p.leader.resolve, `${where} resolve`).toBeGreaterThanOrEqual(0);
   }
@@ -174,8 +174,8 @@ describe('chaos monkey — random legal actions', () => {
                 : undefined,
             });
           }
-          if (p.wornCharms.length && p.field.length)
-            rebondCharm(g, pid, p.wornCharms[0].iid, p.field[0].iid);
+          if (p.unbondedItems.length && p.field.length)
+            rebondItem(g, pid, p.unbondedItems[0].iid, p.field[0].iid);
         } else {
           endPhase(g);
         }

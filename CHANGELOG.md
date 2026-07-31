@@ -8,6 +8,140 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v13.0 — Charms become Items, Fry gets the last word on mechanics, and the database quietly disagreed with the game about 16 cards
+
+Three strands. A **card-type rename with real mechanics behind it** (`Charm` →
+`Item`, with Charm/Weapon/Tool as subtypes); the **Players Showcase 2026**
+pass — Creator mechanics overrides, a 100-card viability bar, 3D card previews
+and the art specs submitters were left guessing at; and the ninth bug-hunt
+sweep, whose headline finding was in the live database rather than in the code.
+
+#### Charms are now Items (rules change)
+
+- **The `Charm` card type is renamed `Item`,** and `Charm` becomes one of its
+  three subtypes. Everything that used to be a Charm is now an Item; nothing
+  changed hands, changed colour, changed cost or changed keywords.
+- **The mechanics hash was deliberately NOT re-seeded.** Mechanics come from a
+  hash of `id|type|rarity`, so taking the new spelling into the seed would have
+  reprinted all 61 Items with different costs, colours and keywords — a set-wide
+  rebalance disguised as a rename. `SEED_TYPE` in `cardpool.ts` maps `Item`
+  back to `Charm` for hashing purposes, forever, and says so in a comment that
+  asks the next person not to "clean it up".
+- **Three subtypes, and they are not cosmetic:**
+  - **Charm** — the old `Bound`. Goes to the Ash-pile with its unit. New: a
+    Charm may be **cast on a player** instead of a unit, resolving as Vitality
+    equal to its whole bond (Might + Grit, never above your starting Vitality)
+    and going straight to the Ash-pile. That makes a Charm the only Item
+    playable with no friendly unit on the field, and gives every Charm in the
+    pool a floor it did not have — a dead card in an empty-board hand is now a
+    small heal.
+  - **Weapon** — the old `Worn`. Survives its unit, sits unbonded on the field,
+    re-bonds to another unit for its re-bond cost.
+  - **Tool** — new. A Weapon that also **weakens a target enemy unit** as it
+    bonds (a permanent -1/-1, -2/-2 at Full-Art and up). It carries one less
+    point of bond than a Weapon of the same cost, which is what pays for it.
+    15 of the pool's 61 Items are Tools.
+  - The three-way subtype roll reuses the old two-way roll's salt and its 60/40
+    cut point, so a Charm is *exactly* the old Bound band and Weapon+Tool are
+    *exactly* the old Worn band. Only the 78..100 slice of the old Worn band is
+    new behaviour.
+- **The CPU plays both new lines.** It prices a self-cast Charm as the heal it
+  is (worth it when the Vitality is actually missing, worth nothing when it is
+  not) instead of treating an empty board as making the card unplayable, and it
+  aims Tools like the Weapons they are.
+- **The database moved with the code** — `card_type`, `card_subtype`,
+  `rules_text` and `template.type` for all 61 rows, plus the Deck Box's fill
+  bucket, `apply_card_upsert`'s type whitelist and `submit_card`'s. Verified by
+  hashing all ten mechanics fields of all 297 cards on both sides: identical.
+
+#### Players Showcase 2026
+
+- **The set is renamed `Players Showcase 2026`,** in the client
+  (`SHOWCASE_SET`), in `submit_card`, in `get_showcase_stats`, and on the pack
+  row (`Players Showcase 2026 Booster`). Nothing had been submitted or printed
+  under the old name, but the migration moves rows anyway so the rename can
+  never split the set in two.
+- **Mechanics are generated, and Fry can overwrite them.** The review queue now
+  carries a mechanics panel pre-filled with the generated cost, Might/Grit,
+  keywords, subtype, re-bond/nerf/Resolve and rules text. Editing any field
+  diffs it against the generated card and stores only what actually changed as
+  a `CardOverrides` object on `cards.template`; the live preview updates to the
+  overridden card, and the approve button says `(OVERRIDDEN)` and names the
+  fields. Nothing edited back to its generated value is stored, so "opened the
+  panel and changed nothing" writes no override, and deleting an override
+  restores the generated card exactly.
+  - Overrides live on the **template** because the template is the only thing
+    the game client loads — writing them to the `cards` mechanics columns would
+    have produced a card the server priced one way and the game printed another.
+    The derived columns are written from the *overridden* card for the same
+    reason.
+  - A keyword the engine does not implement is **rejected**, not printed: an
+    invented keyword renders a chip with no rules text and does nothing at all
+    in a match. Same for an unparseable cost — the approve button stays
+    disabled rather than silently printing the generated one.
+  - `creator_bulk_add_cards` gets this for free: it hands each row straight to
+    `apply_card_upsert`, which now reads `overrides`.
+- **The bar for the set is 100 cards, not 10 submitters.** The old copy quoted
+  `POLL_THRESHOLD = 10` *submitters*, which measures interest rather than
+  content — ten players submitting one card each is a shelf, not a set. The
+  screen now shows a progress meter against `SHOWCASE_MIN_CARDS = 100`
+  (pending + approved + printed), and `get_showcase_stats` returns `submitted`
+  and `cards_needed` so the bar the screen draws is the bar the backend was
+  configured with. The Showcase booster and the Ultra-Rare community poll are
+  both framed against it.
+- **Every card on the screen is a real, full-size, inspectable card.** The live
+  submit preview and the review card print at `full` instead of `standard`, the
+  bulk-add grid at `standard` instead of `compact`, and MY SUBMISSIONS stopped
+  being a text list — each entry is now the card it would print as, at the same
+  size the Collection shows. All of them **open in the 3D inspector on click**,
+  the same tilt/glare/flip view the Collection uses.
+- **The art specs are printed instead of guessed.** A Fry Card is 2.5in x 3.5in
+  (5:7) and the framed template insets a 4:3 art window, so: standard frame
+  **4:3 landscape** (~1600x1200); full art **5:7 portrait** (~1500x2100);
+  video Mythic the same **5:7 portrait**, short, silent and loop-clean. The
+  submit form shows the spec for the treatment selected, and the rules panel
+  prints the whole table with the reason for each.
+
+#### Bug hunt v13
+
+- **The live database's `essence_cost` disagreed with the shipped game on 16
+  cards.** `apex_nanite_shinobi`, `ashen_circle_rite`, `astral_shoal`,
+  `blind_colossus`, `bubble_harvest`, `cruel_effervescence`, `flesh_to_bone`,
+  `goldstream_conjurer`, `kinetic_overflow`, `obsidian_swordfish`,
+  `shattered_horizon_protagonist`, `slate_scaled_serpent`, `submerged_starfall`,
+  `swirling_ink_cloud`, `the_chimney_snacker` and `whale_fall_ceremony` were
+  each stored one generic essence more expensive than `cardpool.ts` derives —
+  a `COST_ADJUST` balance pass that shipped in code and never ran `db:sync`.
+  Every other mechanics field on every one of the 297 cards matched exactly,
+  which is what made it invisible: the *game* was right, and only the server's
+  own reads (`pick_deck_bucket`'s cheap-first ordering for Deck Box builds, and
+  anything pricing off `essence_cost`) were wrong. Corrected in place, and the
+  whole-pool hash now matches the bundle field for field.
+- **Seven RPCs were executable by `anon`.** `submit_card`,
+  `withdraw_card_submission`, `get_card_submissions`, `get_showcase_stats`,
+  `creator_review_submission`, `creator_bulk_add_cards` and
+  `creator_set_submission_ban` still carried Postgres' default
+  `EXECUTE TO PUBLIC`, which `anon` inherits — every other RPC in the schema had
+  had it dropped years of migrations ago. Each of them starts by requiring
+  `auth.uid()` (or `assert_creator()`), so an anonymous call could only ever
+  raise, but being reachable at all is the finding. Note that revoking from
+  `anon` by name does nothing here: the grant is on `PUBLIC`.
+- **`deck_card_cost` had a role-mutable `search_path`** — the one function in
+  the schema that did. It touches only `pg_catalog` jsonb functions, so it is
+  pinned to the empty path.
+- **Both foreign keys on `card_submissions` were uncovered by an index**
+  (`reviewed_by`, `approved_card_id`), so the review-queue join and any delete
+  on either parent had to seq-scan. Indexed.
+- **The layout harness had never seen the Creator's panels.** `meta-preview`
+  always mounted a `player` profile, so the review queue, the new override
+  editor and BULK ADD were invisible to `audit:screens` at every width. A
+  `SCREENS` entry may now carry extra query string and
+  `submissions&role=creator` is in the list. Eighteen screens, 152 control
+  clicks at 375px and 1280px: zero findings.
+- Not fixed, and outside anything reachable from here: Supabase Auth's
+  **leaked-password protection** (HaveIBeenPwned) is still off. It is a project
+  auth setting rather than a schema object, so it wants a dashboard toggle.
+
 ### v12.0 — Player Showcase: players design the cards, and the set that holds them stops leaking into the ones that shipped
 
 Two things at once: a **player card-submission pipeline** with a Creator review
