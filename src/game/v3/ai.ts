@@ -337,27 +337,47 @@ function rebondWornCharms(state: GameState, pid: PlayerId, observe?: CpuTurnObse
 /** Value of invoking this card right now. */
 function invokePriority(state: GameState, pid: PlayerId, def: CardDef): number {
   const opp = state.players[opponentOf(pid)];
+  const eff = def.onInvoke;
+  // Does this card's effect have a legal target right now? A removal/exhaust/
+  // sweep with nothing to point at resolves to the ash-pile for zero value.
+  const isShatter = eff?.action === 'shatter';
+  const hasRemovalTarget = opp.field.some(
+    (u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)),
+  );
+  const hasExhaustTarget = opp.field.some(
+    (u) => !unitHasKw(u, 'Warded') && !(eff?.action === 'exhaust' && u.exhausted),
+  );
+  const effectDead =
+    (isRemoval(eff) && !hasRemovalTarget && eff?.target !== 'anyTarget') ||
+    // v10: exhaust wants a READY enemy; re-exhausting a tapped unit does
+    // nothing (mirrors the v6.9 Leader-ability guard, which the invoke path
+    // had missed). weaken still works on an exhausted body, so it only checks
+    // Warded via the shared needsEnemyUnit filter below.
+    (needsEnemyUnit(eff) && !(eff?.action === 'exhaust' ? hasExhaustTarget : hasRemovalTarget)) ||
+    (eff?.target === 'allEnemyUnits' && opp.field.length === 0);
+  // A non-Unit card whose whole payoff is a dead effect is a strictly wasted
+  // invoke — disqualify it regardless of cost. The old additive penalties
+  // (-100/-60) were swamped by the cost*10 base, so a cost-5 dead spell scored
+  // exactly -50 and slipped past the >= -50 play gate; a cost-1 sweep sailed
+  // into an empty board. A Unit is never disqualified for a dead ENTERS rider —
+  // its body still has value — so it falls through to normal body scoring.
+  if (effectDead && def.type !== 'Unit') return -1000;
   // Effective cost (not printed) so Surge discounts are seen by the curve.
   let v = totalCost(effectiveCost(state, pid, def)) * 10; // biggest affordable first
   if (def.type === 'Unit') v += 5;
-  if (isRemoval(def.onInvoke)) {
-    const isShatter = def.onInvoke?.action === 'shatter';
-    const biggest = [...opp.field]
-      .filter((u) => !unitHasKw(u, 'Warded') && !(isShatter && unbreakableUp(u)))
-      .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
-    // Removal wants a live target; anyTarget damage can still go face.
-    if (biggest) v += 20;
-    else v += def.onInvoke?.target === 'anyTarget' ? -5 : -100;
+  if (isRemoval(eff)) {
+    // Reached only when a target exists (or anyTarget can go face).
+    if (hasRemovalTarget) v += 20;
+    else if (eff?.target === 'anyTarget') v -= 5;
   }
-  if (needsEnemyUnit(def.onInvoke)) {
-    const live = opp.field.filter((u) => !unitHasKw(u, 'Warded'));
+  if (needsEnemyUnit(eff) && !effectDead) {
     // Worth a real premium against a developed board (exhausting or shrinking
-    // the biggest body swings a whole clash), worthless into an empty one.
-    v += live.length > 0 ? 12 : -100;
+    // the biggest body swings a whole clash).
+    v += 12;
   }
   if (def.type === 'Event' && hasKw(def, 'Resonant')) v += 4; // double value
   if (def.type === 'Location' && hasKw(def, 'Bountiful')) v += 3; // ramp
-  if (def.onInvoke?.target === 'allEnemyUnits' && opp.field.length < 2) v -= 60;
+  if (eff?.target === 'allEnemyUnits' && opp.field.length < 2 && !effectDead) v -= 60;
   if (def.type === 'Charm' && state.players[pid].field.length === 0) v -= 200;
   return v;
 }
@@ -585,15 +605,34 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
     if (unitHasKw(a, 'Nimble') && effMight(state, g) >= effMight(state, a)) return false;
     return true;
   };
+  // Damage one body marks onto another over a full clash. Doublestrike lands
+  // in BOTH the first-strike and normal sub-steps, so its packet counts twice
+  // (each shaved by Hardened independently) — matching the engine's
+  // collectStep/participates loop. Without this the model saw a DS body deal
+  // its Might once, so the CPU donated guards to Doublestrike attackers.
+  const clashDamage = (src: UnitInst, target: UnitInst) => {
+    const packet = packetDamage(target, effMight(state, src));
+    return unitHasKw(src, 'Doublestrike') ? packet * 2 : packet;
+  };
   const attackerKills = (a: UnitInst, g: UnitInst) => {
-    const hit = packetDamage(g, effMight(state, a));
-    return (
-      hit >= remainingGrit(state, g) || (unitHasKw(a, 'Venomous') && hit > 0 && !unbreakableUp(g))
-    );
+    const hit = clashDamage(a, g);
+    let kills =
+      hit >= remainingGrit(state, g) || (unitHasKw(a, 'Venomous') && hit > 0 && !unbreakableUp(g));
+    // A first-striking guard that kills our attacker before it swings takes
+    // nothing back — the mirror of chooseGuards' pre-kill check. Without it
+    // the CPU declared "favorable trades" into Quickstrike guards that leave
+    // the attacker dead and the guard untouched (a one-for-zero).
+    if (kills && firstStriker(g) && !firstStriker(a) && !unbreakableUp(a)) {
+      const back = clashDamage(g, a);
+      const attackerDiesFirst =
+        back >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && back > 0);
+      if (attackerDiesFirst) kills = false;
+    }
+    return kills;
   };
   const attackerSurvives = (a: UnitInst, g: UnitInst) => {
     if (unbreakableUp(a)) return true;
-    const hit = packetDamage(a, effMight(state, g));
+    const hit = clashDamage(g, a);
     const dies = hit >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && hit > 0);
     if (!dies) return true;
     // Quickstrike pre-kill: a dead guard never strikes back.
@@ -630,7 +669,18 @@ function chooseAttackers(state: GameState, pid: PlayerId): string[] {
         .slice(0, needed);
       for (const g of used) guardPool.splice(guardPool.indexOf(g), 1);
       if (unitHasKw(u, 'Overrun')) {
-        const absorbed = used.reduce((s, g) => s + Math.max(1, remainingGrit(state, g)), 0);
+        // Each guard absorbs what the engine assigns it before Overrun spills:
+        // a Venomous attacker only ever marks 1 (its point is lethal, so it
+        // spends no more), everyone else marks the guard's grit — and Hardened
+        // costs one extra marked point on top of either (engine collectStep).
+        // Crediting full grit against a Venomous attacker, or omitting the
+        // Hardened surcharge, both under-counted spill and false-flagged
+        // non-lethal all-ins as lethal.
+        const venom = unitHasKw(u, 'Venomous');
+        const absorbed = used.reduce((s, g) => {
+          const hard = unitHasKw(g, 'Hardened') ? 1 : 0;
+          return s + (venom ? 1 + hard : Math.max(1, remainingGrit(state, g)) + hard);
+        }, 0);
         throughDamage += Math.max(0, m - absorbed);
       }
     }
@@ -698,9 +748,16 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       const guards = assignments[a.iid] ?? [];
       if (guards.length === 0) return s + effMight(state, a) * hits;
       if (!unitHasKw(a, 'Overrun')) return s;
+      // A Venomous attacker marks only 1 per guard (+1 for Hardened) before it
+      // spills, not the guard's full grit — so crediting full grit here made
+      // the CPU think one wall stopped an Overrun+Venomous attacker it did not,
+      // and skip the extra chump blocks that would have absorbed the spill.
+      const venom = unitHasKw(a, 'Venomous');
       const guardGrit = guards.reduce((g, iid) => {
         const u = findUnit(state, iid);
-        return g + (u ? Math.max(1, remainingGrit(state, u)) : 0);
+        if (!u) return g;
+        const hard = unitHasKw(u, 'Hardened') ? 1 : 0;
+        return g + (venom ? 1 + hard : Math.max(1, remainingGrit(state, u)) + hard);
       }, 0);
       return s + Math.max(0, effMight(state, a) * hits - guardGrit);
     }, 0);
@@ -715,8 +772,13 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     const scored = legal
       .map((g) => {
         const gFirst = unitHasKw(g, 'Quickstrike') || unitHasKw(g, 'Doublestrike');
-        const hitOnAttacker = packetDamage(attacker, effMight(state, g));
-        const hitOnGuard = packetDamage(g, effMight(state, attacker));
+        // Doublestrike lands twice (first-strike + normal sub-steps); count the
+        // packet twice on whichever body carries it, matching the engine.
+        const hitOnAttacker =
+          packetDamage(attacker, effMight(state, g)) * (unitHasKw(g, 'Doublestrike') ? 2 : 1);
+        const hitOnGuard =
+          packetDamage(g, effMight(state, attacker)) *
+          (unitHasKw(attacker, 'Doublestrike') ? 2 : 1);
         // Venomous attacker: any contact kills the guard unless Unbreakable.
         const guardDies =
           !unbreakableUp(g) &&

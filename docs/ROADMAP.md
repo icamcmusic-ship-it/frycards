@@ -23,13 +23,10 @@ Everything here has a started implementation and a visible seam.
   strip). Still unmeasured on a phone: the store, marketplace, player shops,
   social and profile screens, and the 3D card inspector. Harness is `npm run
 dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
-  screens are covered. **Named by the v9 hunt:** the pinned hand-card preview
-  scales the card 1.55x with a fixed 160px control column and no viewport clamp
-  (the 3D inspector already clamps for exactly this), so on a ~375px phone the
-  `✕ CLOSE` and half the INVOKE button are clipped off-screen with no
-  outside-tap dismiss — and INVOKE only exists inside that preview, making it
-  the primary invoke path on mobile. Clamp the preview scale/position to the
-  viewport the way `Card3DInspector` does.
+  screens are covered. **The v9-named hand-card preview overflow is fixed (v10):**
+  the pinned preview now clamps its card scale to the viewport and stacks the
+  control column below the card under 520px, the way `Card3DInspector` clamps —
+  so `✕ CLOSE` and INVOKE stay on-screen on a phone.
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
@@ -45,11 +42,12 @@ dev` plus `meta-preview.html` / `board-preview.html`; extend the latter as
 
   **The next pass owes a Leader re-baseline before anything else.** v8.0 capped
   Leader Resolve at its printed value — it had been unbounded, and the CPU
-  builds Resolve most turns it has nothing better to do, so *every* Leader
+  builds Resolve most turns it has nothing better to do, so _every_ Leader
   reading taken before v8.0 was taken against Leaders that were harder to
   shatter and firing their `-N` abilities more often than the cards print. That
   includes v7.7's pinned-suite numbers and its Kuro cost cut. Treat the
   pre-v8.0 Leader table as stale rather than as a baseline to compare against.
+
 - **Make CI's own gate un-skippable.** This is now a three-time finding, not a
   bug: v7.9 found CI red on `main` for ten runs, fixed `format:check`, and the
   very merge that shipped that fix put `format:check` red again on five files.
@@ -94,7 +92,7 @@ Ordered by how much they change what it feels like to own and play the game.
   rather than defects, which is why neither has been patched unilaterally:
   - **The bounty shop's round trip is a guaranteed profit.** `buy_bounty_card`
     charges 3x a card's base sell price and `sell_bounty_card` pays 5x, and the
-    buy/sell block is *same-day only* (`player_bounty_activity` is keyed on
+    buy/sell block is _same-day only_ (`player_bounty_activity` is keyed on
     `bounty_date`). So buying a bounty card today and selling it on any later
     day the same card recurs in the list is a risk-free +2x, bounded only by
     the three-sales-per-day cap — up to roughly 18,000 credits a day on a
@@ -110,11 +108,11 @@ Ordered by how much they change what it feels like to own and play the game.
     vs. deleting it is a product call.
   - **The sell-reservation model is not the same across surfaces** (found v9).
     `sell_bounty_card` (the authoritative server) and the bounty tile's client
-    gate treat a deck lock and a Serialized-print reserve as *independent*
+    gate treat a deck lock and a Serialized-print reserve as _independent_
     checks: one physical copy can satisfy both, so a player holding two copies —
     one Serialized, one deck-locked — can sell down to one. The other four sell
     surfaces (Collection, Marketplace, Player Shops, Social) treat them as
-    *additive* (that player sees zero sellable). Both are defensible; the game
+    _additive_ (that player sees zero sellable). Both are defensible; the game
     should pick one. If additive is correct, the RPCs (`sell_bounty_card`,
     `quicksell_cards`, `assert_cards_available`) are what enforce it and so are
     where the change belongs. A clean fix also wants `get_daily_bounties` to
@@ -123,11 +121,29 @@ Ordered by how much they change what it feels like to own and play the game.
 
 ## Later — needs a foundation first
 
+- **The attacker's own-clash reaction window is served non-interactively in the
+  UI** (found v10). The rulebook opens a reaction window to _either_ player after
+  guards are set, and the engine and the sim CPU both use it — but in a real
+  match the match view only serves the window one direction. When the human
+  attacks and the CPU answers with a reaction, priority comes back to the human
+  and `reactionPlays` is called outside `playTurn`, so `yieldPriority` is
+  undefined and the stack force-drains without ever opening the human's respond
+  bar (`GameV4.tsx` `declareMyAttack`); and the CPU's own post-guard reaction
+  window (`ai.ts` `playTurnBody` → `reactionPlays`) is unreachable because the
+  UI's `resolveCpuClash` calls `resolveClash` directly and never runs it. Both
+  are latent today — the instant-speed pool is removal/Ambush only, so ordering
+  rarely changes an outcome — but the moment a counter- or fizzle-relevant
+  instant is printed, the human denial is game-losing. The honest fix is to route
+  both clash-reaction windows through the same priority hand-off the rest of the
+  response system uses, which is the same plumbing the server-authoritative PvP
+  work has to build; parking it here rather than bolting a second ad-hoc window
+  onto the client reducer.
+
 - **Unbreakable's save heals marked damage instead of only preventing the
   packet** (found v9). `stateBasedChecks` catches a lethal Unbreakable unit and
   sets `u.damage = 0`, so a wall carrying pre-existing marked damage that then
   survives a lethal hit walks away fully healed. Rulebook §8 prevents the
-  *incoming packet*, not the marked damage already on the body. A correct fix
+  _incoming packet_, not the marked damage already on the body. A correct fix
   can't be done at the state-based check, which no longer knows the packet size —
   it means moving Unbreakable's prevention into `damageUnit` (packet-level),
   which changes combat's simultaneous-damage sequencing and so is a combat

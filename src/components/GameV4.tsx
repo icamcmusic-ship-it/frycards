@@ -1665,10 +1665,16 @@ export function GameV4({
 
   // The defending (non-active) player's vitality plate should flash when at
   // least one attacker is unguarded and hits face. Compute the key from the
-  // clash before it's resolved (resolveClash nulls g.clash).
+  // clash before it's resolved (resolveClash nulls g.clash). Read the
+  // declare-time `guardedOnce` snapshot, NOT the live guards map: the engine's
+  // "blocked is blocked" rule means an attacker whose guard was killed in the
+  // reaction window still deals no face damage, and stateBasedChecks has
+  // already pruned that dead guard from `guards`, so keying off the live map
+  // flashed the plate for a hit that never lands.
   const unguardedVitKey = (): string | null => {
     if (!g.clash) return null;
-    const anyUnguarded = g.clash.attackers.some((a) => !g.clash!.guards[a]?.length);
+    const guardedOnce = g.clash.guardedOnce ?? [];
+    const anyUnguarded = g.clash.attackers.some((a) => !guardedOnce.includes(a));
     if (!anyUnguarded) return null;
     return `vit:${g.active === HUMAN ? CPU : HUMAN}`;
   };
@@ -2057,12 +2063,16 @@ export function GameV4({
     return Math.round(Math.min(w - 20, Math.max(46, needed)));
   })();
 
-  // Coach stage: coarse key for the first-match walkthrough.
+  // Coach stage: coarse key for the first-match walkthrough. The CPU's attack
+  // and the guard-assignment sub-step it opens are one coach beat ("4.
+  // OPPONENT'S TURN", whose body covers guarding), so cpuGuard keeps the 'cpu'
+  // key — the CoachOverlay script has no 'guard' step, and mapping to a
+  // phantom key made that callout vanish exactly when guards had to be picked.
   const coachStage =
     stage === 'cpu'
       ? 'cpu'
       : stage === 'cpuGuard'
-        ? 'guard'
+        ? 'cpu'
         : stage === 'play'
           ? g.phase === 'Clash'
             ? 'clash'
@@ -2099,7 +2109,10 @@ export function GameV4({
       // opens it to EITHER player, the engine and the CPU both use it, but
       // the old hint only mentioned resolving — so a player never learned
       // they could answer the guards before damage.
-      if (g.clash) {
+      // step 'done' means the clash already resolved and is only lingering
+      // until endPhase nulls it — the RESOLVE CLASH button is already gone, so
+      // this hint must stop telling the player to press it.
+      if (g.clash && g.clash.step !== 'done') {
         return inMyReaction
           ? 'Guards are set — invoke Quick Events / Ambush units to answer them, then RESOLVE CLASH.'
           : 'Guards are set — RESOLVE CLASH to deal damage.';
@@ -2131,6 +2144,19 @@ export function GameV4({
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
+  // The pinned hand-card preview lays a full card (240px at HOVER_PREVIEW_SCALE)
+  // beside a 160px control column that carries CLOSE and the primary mobile
+  // INVOKE button. At the printed scale that pair is ~552px wide and runs off
+  // both edges of a ~375px phone, clipping those controls with no way to reach
+  // them. Clamp the card scale so the card + column + chrome fit the viewport,
+  // exactly as Card3DInspector clamps its own zoom (INSPECT_SCALE is the same
+  // constant). On very narrow screens the column stacks below the card so the
+  // card need only fit the width on its own.
+  const previewStack = viewportW < 520;
+  const previewChrome = 16 + 8; // p-2 padding on both sides + the flex gap
+  const previewColW = previewStack ? 0 : 160;
+  const previewMaxCardW = Math.max(120, viewportW - 16 - previewChrome - previewColW);
+  const previewScale = Math.min(HOVER_PREVIEW_SCALE, previewMaxCardW / CARD_SIZES.full.w);
 
   const phaseButtonLabel =
     g.phase === 'Main1'
@@ -2286,8 +2312,9 @@ export function GameV4({
         </div>
       )}
 
-      {/* Clash bar — attacker → guard lines (both directions) */}
-      {g.clash && (stage === 'play' || stage === 'cpuGuard') && (
+      {/* Clash bar — attacker → guard lines (both directions). Drops at step
+          'done': the clash has resolved and only lingers until endPhase. */}
+      {g.clash && g.clash.step !== 'done' && (stage === 'play' || stage === 'cpuGuard') && (
         <div className="absolute left-1/2 top-[4.6rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
           <span className="heading-font text-[9px] text-[var(--c-red)]">
             {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
@@ -2389,7 +2416,9 @@ export function GameV4({
         )}
         {foe.field.map((u) => {
           const targetable = !!pending && isPendingTarget(u.iid);
-          const attacking = cpuAttackerIids.includes(u.iid) || g.clash?.attackers.includes(u.iid);
+          const attacking =
+            cpuAttackerIids.includes(u.iid) ||
+            (g.clash?.step !== 'done' && g.clash?.attackers.includes(u.iid));
           const focusLine = guardStep && guardFocus === u.iid;
           return (
             <BoardUnit
@@ -2527,6 +2556,7 @@ export function GameV4({
           const isDeclaredGuard =
             !!g.clash &&
             g.clash.step !== 'guards' &&
+            g.clash.step !== 'done' &&
             Object.values(g.clash.guards).some((gs: string[]) => gs.includes(u.iid));
           const canGuardNow =
             guardStep && !!guardFocus && legalGuardsFor(g, guardFocus).some((x) => x.iid === u.iid);
@@ -2535,7 +2565,10 @@ export function GameV4({
               key={u.iid}
               g={g}
               u={u}
-              isAttacker={atkSel.has(u.iid) || (!!g.clash && g.clash.attackers.includes(u.iid))}
+              isAttacker={
+                atkSel.has(u.iid) ||
+                (!!g.clash && g.clash.step !== 'done' && g.clash.attackers.includes(u.iid))
+              }
               isGuard={!!guardAssigned || isDeclaredGuard}
               highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
               flash={flashIids.has(u.iid)}
@@ -2654,22 +2687,27 @@ export function GameV4({
         }}
       >
         {previewCard && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex items-stretch gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs">
+          <div
+            className={cn(
+              'absolute bottom-full left-1/2 -translate-x-1/2 mb-1 z-40 flex gap-2 bg-[var(--c-ink)]/95 ink-border-md p-2 shadow-hard-black-xs',
+              previewStack ? 'flex-col items-center' : 'items-stretch',
+            )}
+          >
             <div
               className="relative shrink-0"
               style={{
-                width: CARD_SIZES.full.w * HOVER_PREVIEW_SCALE,
-                height: CARD_SIZES.full.h * HOVER_PREVIEW_SCALE,
+                width: CARD_SIZES.full.w * previewScale,
+                height: CARD_SIZES.full.h * previewScale,
               }}
             >
               <div
                 className="absolute top-0 left-0"
-                style={{ transform: `scale(${HOVER_PREVIEW_SCALE})`, transformOrigin: 'top left' }}
+                style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}
               >
                 <CardFace def={previewCard.def} size="full" introduceKeywords />
               </div>
             </div>
-            <div className="flex flex-col gap-1.5 w-[160px]">
+            <div className={cn('flex flex-col gap-1.5', previewStack ? 'w-full' : 'w-[160px]')}>
               <button
                 onClick={closePreview}
                 aria-label="Close preview"
