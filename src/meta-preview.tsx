@@ -32,6 +32,12 @@
 //   /meta-preview.html?screen=changelog
 //   /meta-preview.html?screen=submissions
 //
+// v15 added the "there is a new version — refresh" banner, which is docked over
+// whatever screen the player is on rather than being a screen of its own. It is
+// measured over the main menu:
+//
+//   /meta-preview.html?screen=update
+//
 // Append `&role=creator` to any of the above to mount the Creator-only panels
 // (Profile's CREATOR TOOLS, the submission review queue and BULK ADD).
 import React from 'react';
@@ -53,6 +59,7 @@ import { SettingsScreen } from './meta/SettingsScreen';
 import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
 import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
+import { UpdateBanner } from './meta/UpdateBanner';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
@@ -334,6 +341,11 @@ createRoot(document.getElementById('root')!).render(
       <ChangelogScreen onBack={() => undefined} />
     ) : screen === 'submissions' ? (
       <CardSubmissionsScreen onBack={() => undefined} />
+    ) : screen === 'update' ? (
+      <>
+        <MainMenu onNavigate={() => undefined} />
+        <UpdateBanner kind="build" onRefresh={() => undefined} onDismiss={() => undefined} />
+      </>
     ) : (
       <CollectionScreen onBack={() => undefined} />
     )}

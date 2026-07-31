@@ -29,6 +29,8 @@ import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
+import { useAppUpdate } from './lib/useAppUpdate';
+import { UpdateBanner } from './meta/UpdateBanner';
 
 // ---------------------------------------------------------------------------
 // Error boundary — a render crash anywhere below used to white-screen the
@@ -305,6 +307,9 @@ function BootSplash({ onRetry }: { onRetry: () => void }) {
 function AppInner() {
   const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
+  // Watches for a newer deploy or a changed card catalog so a long-lived tab
+  // can be told to refresh instead of quietly playing an old version.
+  const update = useAppUpdate();
   // First-ever visit auto-opens the How to Play page — previously this was
   // 100% opt-in (only reachable via the Main Menu button), so a new player
   // could start a real match having never seen the turn structure or any
@@ -351,9 +356,25 @@ function AppInner() {
 
   if (loading || !themeLoaded) return <BootSplash onRetry={retryBoot} />;
 
-  if (!session && !guest) return <AuthScreen />;
+  if (!session && !guest) {
+    return (
+      <>
+        <AuthScreen />
+        {update.kind && (
+          <UpdateBanner
+            kind={update.kind}
+            onRefresh={update.refreshNow}
+            onDismiss={update.dismiss}
+          />
+        )}
+      </>
+    );
+  }
 
   if (match) {
+    // No update banner during a match on purpose: a refresh mid-match throws
+    // the match away, and there is nothing the player can do about a new build
+    // until they are out of it. It reappears the moment they leave.
     return (
       <div key={gameKey} className="contents">
         <Game
@@ -368,67 +389,78 @@ function AppInner() {
     );
   }
 
-  switch (screen) {
-    case 'play':
-      // CPU battles are Creator-only while the mode is finished (the menu
-      // tile shows COMING SOON! for everyone else) — this guard covers any
-      // other path that could set the screen to 'play'.
-      if (profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
-      return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
-    case 'store':
-      return <StoreScreen onBack={() => setScreen('menu')} />;
-    case 'battlepass':
-      return <BattlePassScreen onBack={() => setScreen('menu')} />;
-    case 'achievements':
-      return <AchievementsScreen onBack={() => setScreen('menu')} />;
-    case 'social':
-      return <SocialScreen onBack={() => setScreen('menu')} />;
-    case 'market':
-      return <MarketplaceScreen onBack={() => setScreen('menu')} />;
-    case 'shops':
-      return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
-    case 'collection':
-      return <CollectionScreen onBack={() => setScreen('menu')} />;
-    case 'decks':
-      return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
-    case 'profile':
-      return (
-        <ProfileScreen
-          onBack={() => setScreen('menu')}
-          onManageShowcase={() => setScreen('collection')}
-        />
-      );
-    case 'settings':
-      return (
-        <SettingsScreen
-          currentTheme={currentTheme}
-          onThemeChange={changeTheme}
-          onBack={() => setScreen('menu')}
-        />
-      );
-    case 'submissions':
-      return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
-    case 'changelog':
-      return <ChangelogScreen onBack={() => setScreen('menu')} />;
-    case 'news':
-      return (
-        <NewsCenterScreen
-          onBack={() => setScreen('menu')}
-          onOpenChangelog={() => setScreen('changelog')}
-        />
-      );
-    case 'howtoplay':
-      return (
-        <HowToPlayScreen
-          onBack={() => {
-            markHelpSeen();
-            setScreen('menu');
-          }}
-        />
-      );
-    default:
-      return <MainMenu onNavigate={setScreen} />;
-  }
+  const screenBody = (() => {
+    switch (screen) {
+      case 'play':
+        // CPU battles are Creator-only while the mode is finished (the menu
+        // tile shows COMING SOON! for everyone else) — this guard covers any
+        // other path that could set the screen to 'play'.
+        if (profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
+        return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
+      case 'store':
+        return <StoreScreen onBack={() => setScreen('menu')} />;
+      case 'battlepass':
+        return <BattlePassScreen onBack={() => setScreen('menu')} />;
+      case 'achievements':
+        return <AchievementsScreen onBack={() => setScreen('menu')} />;
+      case 'social':
+        return <SocialScreen onBack={() => setScreen('menu')} />;
+      case 'market':
+        return <MarketplaceScreen onBack={() => setScreen('menu')} />;
+      case 'shops':
+        return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
+      case 'collection':
+        return <CollectionScreen onBack={() => setScreen('menu')} />;
+      case 'decks':
+        return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
+      case 'profile':
+        return (
+          <ProfileScreen
+            onBack={() => setScreen('menu')}
+            onManageShowcase={() => setScreen('collection')}
+          />
+        );
+      case 'settings':
+        return (
+          <SettingsScreen
+            currentTheme={currentTheme}
+            onThemeChange={changeTheme}
+            onBack={() => setScreen('menu')}
+          />
+        );
+      case 'submissions':
+        return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
+      case 'changelog':
+        return <ChangelogScreen onBack={() => setScreen('menu')} />;
+      case 'news':
+        return (
+          <NewsCenterScreen
+            onBack={() => setScreen('menu')}
+            onOpenChangelog={() => setScreen('changelog')}
+          />
+        );
+      case 'howtoplay':
+        return (
+          <HowToPlayScreen
+            onBack={() => {
+              markHelpSeen();
+              setScreen('menu');
+            }}
+          />
+        );
+      default:
+        return <MainMenu onNavigate={setScreen} />;
+    }
+  })();
+
+  return (
+    <>
+      {screenBody}
+      {update.kind && (
+        <UpdateBanner kind={update.kind} onRefresh={update.refreshNow} onDismiss={update.dismiss} />
+      )}
+    </>
+  );
 }
 
 export default function App() {

@@ -110,6 +110,27 @@ in `src/game/v3/decks.ts` (used for guest play and the Starter Box); players
 build their own 60+-card decks (max 4 copies per card, tighter caps at
 higher rarity) in the Deck Builder, backed by the `decks` table.
 
+## Telling a Running Client It Is Out of Date
+
+Fry Cards is a single-page app people leave open for days, so two things go
+stale in a tab that never reloads: the **build** (a deploy replaces the bundle;
+the open tab keeps running the one it loaded) and the **card catalog**
+(`App.tsx` fetches `public.cards` once at boot and derives the whole pool from
+it, so any catalog change — a balance pass, a Creator override, a `db:sync` —
+is invisible until a reload).
+
+`vite.config.ts` stamps a build id into the bundle as `__APP_BUILD__` and writes
+the same id to `version.json` beside it; `cards` carries its own version in
+`max(updated_at)`. `src/lib/useAppUpdate.ts` polls both every five minutes and
+whenever the tab is foregrounded or the connection returns, and
+`src/meta/UpdateBanner.tsx` offers the refresh. The banner is suppressed during
+a match, and a dismissal is remembered per build id. Measure its layout with
+`/meta-preview.html?screen=update`.
+
+Nothing about this needs configuring per deploy — the build id comes from
+`GITHUB_SHA` when it is set, so redeploying the same commit correctly announces
+nothing.
+
 ## Meta-game
 
 Accounts (Supabase auth), profiles with gold/gems, a one-time Starter Box

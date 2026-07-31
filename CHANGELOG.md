@@ -8,6 +8,76 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v15.0 — An open tab had no way to know the game had moved on, and one card was live as two different cards at once
+
+Baseline was green before this pass — 332 tests, `tsc --noEmit`, `eslint` (27
+pre-existing warnings, 0 errors), a clean `npm run audit:screens` (18 screens,
+two widths, 143 control clicks) and a 40-game CPU-vs-CPU sim with no invariant
+violation. Two of the three findings below are things a green run cannot catch:
+one lives in the database, and one is about what happens to a client that has
+been open for a week.
+
+#### Nothing ever told a running client it was out of date
+
+Fry Cards is a single-page app people leave open on a phone. Two separate
+things go stale in that tab and both need a reload:
+
+- the **build** — a deploy replaces the bundle on the server, and the open tab
+  keeps running the one it loaded;
+- the **card catalog** — `App.tsx` fetches `public.cards` exactly once at boot
+  and derives the entire pool from it, so a balance pass, a Creator override or
+  a catalog fix (like the one below) lands with no deploy at all and every open
+  client keeps printing the old card, costs and rules text included.
+
+Neither had any signal. `vite.config.ts` now stamps a build id into the bundle
+(`__APP_BUILD__`) and writes the same id to `version.json` beside it, so a
+client can ask "is what you are serving still what I am running?". `cards`
+carries its own version in `max(updated_at)`. `useAppUpdate` polls both every
+five minutes and — the case that actually matters on a phone — whenever the tab
+returns to the foreground or the connection comes back, which is exactly when a
+client that has been asleep for a day is most likely to be stale. A dismissible
+banner offers a REFRESH.
+
+The comparison is a pure function with its own tests because both ways of
+getting it wrong are bad and neither is obvious: an unreachable server reads as
+`null`, and `null !== 'abc123'` would have announced a phantom update on every
+poll for as long as the player was offline; and the catalog has no baseline
+until the first successful poll, which would otherwise have fired on the very
+first reading for everybody. Both are `null` cases now, and both are asserted.
+The banner is suppressed during a match — a refresh mid-match throws the match
+away, and there is nothing useful the player can do about a new build until
+they are out of it.
+
+#### `blossom_veiled_refuge` was live as two different cards
+
+The previous release moved Blossom-Veiled Refuge to Full-Art in
+`generated-cards.ts` and in the `cards.rarity` column, but not in
+`cards.template` — the jsonb the live client actually loads, which still said
+Super-Rare. Because a card's mechanics are hashed from `id|type|rarity`, the
+two rarities are not a cosmetic difference: the game printed a 1-cost Root
+Sanctum with "At Dusk, a friendly unit gets +1/+1", while the shop price, pack
+odds and deck copy limit all read the Full-Art. The derived mechanics columns
+the server answers card queries from agreed with the wrong one too
+(`essence_cost`, `rules_text`, `card_subtype`, `essence_types`).
+
+`scripts/verify-pool.ts` exists precisely to catch this and was not run on that
+release. It found it immediately here, and the row has been re-synced from
+`scripts/sync-cards-db.ts` — template, rarity, cost, subtype, rules text and
+essence types now all print the Full-Art: a 3-cost Shadow Sanctum giving your
+units +1 Grit. Re-verified across the whole catalog afterwards: 297 rows, zero
+drift on any of the three sources or any of the ten mechanics fields.
+
+#### `main` was failing its own CI
+
+The guest-mode release merged two files Prettier had never seen, so
+`npm run format:check` — a required CI step — was red on `main` for every
+branch cut from it, in code nobody had touched. Formatted; the check passes.
+
+#### Housekeeping
+
+The in-app Changelog screen now carries only the two most recent updates.
+This file remains the full history.
+
 ### v14.0 — Bug hunt: the override editor could not clear a keyword, offered stats to cards that have none, and the screen audit was quietly skipping three screens
 
 The tenth bug-hunt sweep. Baseline was green — 329 tests, `tsc --noEmit`,

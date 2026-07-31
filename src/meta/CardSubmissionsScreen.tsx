@@ -1507,7 +1507,12 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
                 </p>
               </div>
             ) : (
-              <SubmitPanel mine={mine} reload={reload} guest={guest} onSignIn={() => setGuest(false)} />
+              <SubmitPanel
+                mine={mine}
+                reload={reload}
+                guest={guest}
+                onSignIn={() => setGuest(false)}
+              />
             )}
             {userId ? (
               <MySubmissions mine={mine} reload={reload} loading={loading} failed={!!loadError} />

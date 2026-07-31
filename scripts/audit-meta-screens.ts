@@ -58,6 +58,7 @@ const SCREENS = [
   'settings',
   'menu',
   'howtoplay',
+  'update',
   'changelog',
   'submissions',
   // v13: the review queue's mechanics-override editor and the BULK ADD
