@@ -88,6 +88,35 @@ const browser = await chromium.launch(
   process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {},
 );
 
+/**
+ * Wait for the control count to stop moving before anyone reads it.
+ *
+ * A fixed 700ms sleep is not enough for the screens that mount their panels
+ * after a fetch settles, and BOTH passes below depend on the count: the load
+ * pass reports it, and the click sweep uses it as its stop condition. Sampling
+ * it too early made the sweep decide a screen had *no* controls and stop at
+ * index 0 — which prints as "clicked 0 control(s)" and reads exactly like
+ * "checked, nothing to click". Three screens (howtoplay, changelog,
+ * submissions — including `submissions&role=creator`, the Creator panels v13
+ * added the harness entry for) were never clicked at all under that race while
+ * the run still reported a clean pass.
+ *
+ * Two consecutive equal samples, or the cap, whichever comes first.
+ */
+async function settledControlCount(page: import('playwright').Page): Promise<number> {
+  let last = -1;
+  for (let i = 0; i < 12; i++) {
+    const n = await page
+      .$$(CONTROLS)
+      .then((c) => c.length)
+      .catch(() => 0);
+    if (n === last && n > 0) return n;
+    last = n;
+    await page.waitForTimeout(250);
+  }
+  return Math.max(0, last);
+}
+
 async function check(screen: string, width: number, clickIndex?: number) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
@@ -98,9 +127,15 @@ async function check(screen: string, width: number, clickIndex?: number) {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   await page.goto(`${BASE}?screen=${screen}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.waitForTimeout(700);
+  const settled = await settledControlCount(page);
 
   let clicked = '';
   if (clickIndex !== undefined) {
+    // Bound on the SETTLED count, not on a fresh query — see settledControlCount.
+    if (clickIndex >= settled) {
+      await ctx.close();
+      return { done: true, count: settled };
+    }
     const controls = await page.$$(CONTROLS).catch(() => []);
     if (clickIndex >= controls.length) {
       await ctx.close();
@@ -139,12 +174,8 @@ async function check(screen: string, width: number, clickIndex?: number) {
     problems.push({ where, width, kind: 'blank', detail: `body text length ${bodyText.length}` });
   }
 
-  const count = await page
-    .$$(CONTROLS)
-    .then((c) => c.length)
-    .catch(() => 0);
   await ctx.close();
-  return { done: false, count };
+  return { done: false, count: settled };
 }
 
 for (const screen of SCREENS) {

@@ -60,7 +60,7 @@ Everything here has a started implementation and a visible seam.
 - **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
   cost, colour and keywords are byte-identical — but the *subtypes* are not a
-  rename: the old Bound/Worn pair became Charm/Weapon/Tool, 15 of the 61 Items
+  rename: the old Bound/Worn pair became Charm/Weapon/Tool, 11 of the 61 Items
   became Tools, and a Tool trades one point of bond for a permanent -1/-1 (-2/-2
   at Full-Art and up) on a target enemy unit as it lands. Charms also gained a
   second mode — cast on a player for Vitality equal to the whole bond — which is
@@ -102,8 +102,18 @@ Everything here has a started implementation and a visible seam.
   profile, so the Creator-only panels — the submission review queue, its
   mechanics-override editor and the BULK ADD importer — had never been measured
   at any width. A `SCREENS` entry may now carry extra query string, and
-  `submissions&role=creator` is in the list. Latest run: eighteen screens, 152
-  control clicks, **zero findings**.
+  `submissions&role=creator` is in the list.
+
+  **v14 found that the entry above was measuring less than it claimed.** The
+  click sweep sampled the control count at a fixed 700ms and used it as its
+  stop condition, so a screen that mounts its panels after a fetch settles was
+  read as having *no* controls and skipped at index 0 — which prints as
+  `clicked 0 control(s)` and reads like "checked, nothing to click". Four
+  screens were never clicked at all, `submissions&role=creator` — the very one
+  v13 added — among them, while the run still exited 0. Both passes now share a
+  `settledControlCount` helper that waits for two equal consecutive samples.
+  Quote the per-screen click counts from an actual run rather than a total:
+  a total cannot show which screens contributed zero to it.
 
   **The v9-named hand-card preview overflow is fixed (v10):** the pinned preview
   clamps its card scale to the viewport and stacks the control column below the

@@ -57,6 +57,9 @@ export const OVERRIDABLE_FIELDS = [
   'cost',
   'might',
   'grit',
+  // An Item's stats are its `bond`, not might/grit — the editor shows the two
+  // halves as separate boxes and writes them back as one object.
+  'bond',
   'keywords',
   'subtype',
   'rebondCost',

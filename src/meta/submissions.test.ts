@@ -18,9 +18,10 @@ import {
   slugifyCardId,
   validateSubmission,
 } from './submissions';
-import { POOL_BY_ID } from '../game/v3/cardpool';
-import { RARITIES } from '../types';
+import { POOL_BY_ID, POOL_V4, deriveCardMechanics } from '../game/v3/cardpool';
+import { RARITIES, Rarity } from '../types';
 import { COLORS } from '../game/v3/colors';
+import { ALL_SET_NAMES } from './rarity';
 
 const OK_IMAGE = 'https://cdn.midjourney.com/abc-123/0_0.png';
 const OK_VIDEO = 'https://cdn.example.com/art/loop.mp4';
@@ -462,9 +463,58 @@ describe('mechanics overrides', () => {
     expect(overridden.mechanics.essence_types).toEqual(['Void']);
   });
 
-  it('prunes empty arrays and undefined entries', () => {
-    expect(pruneOverrides({ keywords: [], might: undefined })).toBeUndefined();
+  it('prunes undefined entries but KEEPS an empty keyword list', () => {
+    expect(pruneOverrides({ might: undefined })).toBeUndefined();
     expect(pruneOverrides({ keywords: ['Aerial'] })).toEqual({ keywords: ['Aerial'] });
+    // `keywords: []` is the Creator clearing a card's generated keywords, not
+    // an absent override. Pruning it made emptying the KEYWORDS box a silent
+    // no-op — the card printed with its generated keywords intact.
+    expect(pruneOverrides({ keywords: [] })).toEqual({ keywords: [] });
+    expect(pruneOverrides({ keywords: [], might: undefined })).toEqual({ keywords: [] });
+  });
+
+  it('an empty keyword override actually strips the generated keywords', () => {
+    // Find a card the hash gives keywords to, then clear them.
+    const withKw = POOL_V4.find((c) => c.type === 'Unit' && (c.keywords?.length ?? 0) > 0);
+    expect(withKw).toBeDefined();
+    const cleared = buildCardPayload({
+      id: withKw!.id,
+      name: withKw!.name,
+      type: 'Unit',
+      rarity: (withKw!.rarity as Rarity) ?? 'Common',
+      set: SHOWCASE_SET,
+      flavor: 'x',
+      image: OK_IMAGE,
+      overrides: { keywords: [] },
+    });
+    expect(cleared.overrides).toEqual({ keywords: [] });
+    expect(cleared.mechanics.keywords).toBeNull();
+    // …and the layered CardDef the game renders really has none.
+    expect(deriveCardMechanics({ ...withKw!, overrides: { keywords: [] } }).keywords).toEqual([]);
+  });
+
+  it('an Item carries its stats in bond, not in might/grit', () => {
+    // The override editor used to offer MIGHT/GRIT on every card type. Only
+    // Units have them, so on an Item the boxes wrote a field nothing renders
+    // while `cards.might/grit` came back disagreeing with the printed card.
+    const items = POOL_V4.filter((c) => c.type === 'Item');
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((c) => c.might == null && c.grit == null)).toBe(true);
+    expect(items.every((c) => c.bond != null)).toBe(true);
+
+    const item = items[0];
+    const bonded = deriveCardMechanics({
+      ...item,
+      overrides: { bond: { might: 4, grit: 2 } },
+    });
+    expect(bonded.bond).toEqual({ might: 4, grit: 2 });
+  });
+
+  it('ALL_SET_NAMES names the real showcase set', () => {
+    // Two pinned copies of the set name (README: they must move together).
+    // v13 renamed SHOWCASE_SET and left this one behind, so the Store's
+    // "Includes: …" line advertised a set with no rows in `cards`.
+    expect(ALL_SET_NAMES).toContain(SHOWCASE_SET);
   });
 
   it('parses and re-renders a cost', () => {
