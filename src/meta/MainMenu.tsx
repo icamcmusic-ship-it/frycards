@@ -273,18 +273,16 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
     {
       key: 'social',
       label: 'FRIENDS',
-      desc: guest ? 'Requires an account' : 'Friends & card trading',
+      desc: guest ? 'View the leaderboard' : 'Friends & card trading',
       icon: <Users className="w-8 h-8" />,
       color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
-      disabled: guest,
     },
     {
       key: 'submissions',
       label: 'CARD SUBMISSIONS',
-      desc: guest ? 'Requires an account' : 'Design a Player Showcase card',
+      desc: guest ? 'Design a card — sign in to submit' : 'Design a Player Showcase card',
       icon: <Palette className="w-8 h-8" />,
       color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-      disabled: guest,
     },
     {
       key: 'profile',

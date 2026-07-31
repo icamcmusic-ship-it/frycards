@@ -166,7 +166,17 @@ function StatusChip({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 // Player: submit a card + track your own queue
 // ---------------------------------------------------------------------------
-function SubmitPanel({ mine, reload }: { mine: CardSubmission[]; reload: () => Promise<void> }) {
+function SubmitPanel({
+  mine,
+  reload,
+  guest,
+  onSignIn,
+}: {
+  mine: CardSubmission[];
+  reload: () => Promise<void>;
+  guest: boolean;
+  onSignIn: () => void;
+}) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<CardType>('Unit');
   const [treatment, setTreatment] = useState<Treatment>('standard');
@@ -218,6 +228,10 @@ function SubmitPanel({ mine, reload }: { mine: CardSubmission[]; reload: () => P
 
   const submit = async () => {
     if (busy) return;
+    if (guest) {
+      onSignIn();
+      return;
+    }
     if (validation) {
       setError(validation);
       return;
@@ -333,7 +347,10 @@ function SubmitPanel({ mine, reload }: { mine: CardSubmission[]; reload: () => P
           </label>
           {error && <Notice text={error} />}
           {notice && <Notice text={notice} kind="success" />}
-          {queueFull && (
+          {guest && (
+            <Notice text="Design your card freely — sign in when you're ready to submit it." />
+          )}
+          {!guest && queueFull && (
             <Notice
               text={`You already have ${SUBMISSION_LIMITS.maxPending} submissions awaiting review — withdraw one to make room.`}
             />
@@ -341,12 +358,12 @@ function SubmitPanel({ mine, reload }: { mine: CardSubmission[]; reload: () => P
           <div className="flex items-center gap-2">
             <PopButton
               color="red"
-              disabled={busy || !agreed || !!validation || queueFull}
+              disabled={!guest && (busy || !agreed || !!validation || queueFull)}
               onClick={submit}
             >
-              {busy ? 'SUBMITTING…' : 'SUBMIT CARD ▸'}
+              {guest ? 'SIGN IN TO SUBMIT ▸' : busy ? 'SUBMITTING…' : 'SUBMIT CARD ▸'}
             </PopButton>
-            {validation && title.trim() !== '' && (
+            {!guest && validation && title.trim() !== '' && (
               <span className="text-[9px] font-bold text-[var(--c-red)]">{validation}</span>
             )}
           </div>
@@ -1388,7 +1405,7 @@ export function BulkAddPanel() {
 
 // ---------------------------------------------------------------------------
 export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
-  const { session, profile } = useMeta();
+  const { session, guest, setGuest, profile } = useMeta();
   const userId = session?.user?.id;
   const isCreator = profile?.role === 'creator';
   const [tab, setTab] = useState<'submit' | 'review' | 'bulk'>('submit');
@@ -1401,21 +1418,23 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
   // every submit/withdraw, so only the newest response may write state.
   const seq = React.useRef(0);
   const reload = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
     const call = ++seq.current;
     setLoading(true);
     setLoadError('');
     try {
-      const [subs, s] = await Promise.all([fetchMySubmissions(userId), fetchShowcaseStats()]);
+      // Guests have no submissions of their own to fetch, but the showcase
+      // stats and rules are public — they can still browse and build a
+      // preview, they just can't submit until they sign in.
+      const [subs, s] = await Promise.all([
+        userId ? fetchMySubmissions(userId) : Promise.resolve([]),
+        fetchShowcaseStats(),
+      ]);
       if (seq.current !== call) return;
       setMine(subs);
       setStats(s);
     } catch {
       if (seq.current === call) {
-        setLoadError('Could not load your submissions — check your connection and try again.');
+        setLoadError('Could not load — check your connection and try again.');
       }
     } finally {
       if (seq.current === call) setLoading(false);
@@ -1488,9 +1507,20 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
                 </p>
               </div>
             ) : (
-              <SubmitPanel mine={mine} reload={reload} />
+              <SubmitPanel mine={mine} reload={reload} guest={guest} onSignIn={() => setGuest(false)} />
             )}
-            <MySubmissions mine={mine} reload={reload} loading={loading} failed={!!loadError} />
+            {userId ? (
+              <MySubmissions mine={mine} reload={reload} loading={loading} failed={!!loadError} />
+            ) : (
+              <div className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3 flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-[11px] font-bold text-[var(--c-steel)]">
+                  Sign in to submit your card and track it through review.
+                </span>
+                <PopButton color="black" onClick={() => setGuest(false)}>
+                  SIGN IN
+                </PopButton>
+              </div>
+            )}
             <RulesPanel stats={stats} />
           </>
         )}
