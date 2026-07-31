@@ -8,6 +8,89 @@ version of this history also powers the in-app Changelog screen
 
 ## Unreleased
 
+### v14.0 — Bug hunt: the override editor could not clear a keyword, offered stats to cards that have none, and the screen audit was quietly skipping three screens
+
+The tenth bug-hunt sweep. Baseline was green — 329 tests, `tsc --noEmit`,
+`eslint` (27 pre-existing warnings, 0 errors), a 144-game CPU-vs-CPU sim with
+no invariant violation, and a clean `npm run audit:screens`. Four of the five
+findings below were things a green run does not catch, and one of them was in
+the green run itself.
+
+#### The Creator's mechanics override (v13) had two holes
+
+- **Emptying the KEYWORDS box did nothing.** `overridesFrom` correctly diffed
+  the cleared box into `keywords: []`, and then `pruneOverrides` threw it away
+  — it treated every empty array as "not overridden". So a card whose generated
+  keywords Fry deliberately removed printed with them intact, the panel
+  reported "No overrides — this prints as generated", and the `cards.keywords`
+  column agreed with the wrong card. `pruneOverrides` now prunes `undefined`
+  only. Nothing else regresses on that: `overridesFrom` never emits a field
+  equal to the generated one in the first place, so an override that reaches
+  `pruneOverrides` is always a real edit. The old test asserted the bug
+  (`pruneOverrides({ keywords: [] })` → `undefined`); it now asserts the fix,
+  end to end through `deriveCardMechanics`.
+- **MIGHT and GRIT were offered on all five card types, and only Units have
+  them.** Verified against the pool: 0 of 61 Items, 41 Events, 55 Locations and
+  9 Leaders carry `might`/`grit`. Typing a number into those boxes on anything
+  but a Unit wrote an override the card face never reads, while
+  `mechanicsFor` dutifully wrote it into the `cards.might`/`grit` columns the
+  server queries — so the database and the printed card disagreed, silently, in
+  the one tool built to make them agree. The boxes are now Unit-only.
+- **An Item's stats had no editor at all.** All 61 Items keep their stats in
+  `bond`, which the editor never exposed, so the one card type whose bond
+  budget the roadmap has flagged for a balance pass was the one type whose
+  stats Fry could not touch. Added `BOND +MIGHT` / `BOND +GRIT` (Item-only),
+  written back as the whole `bond` object since it is one field; clearing both
+  clears the bond the way the rules-text box clears text. `bond` joins
+  `OVERRIDABLE_FIELDS`.
+
+#### The screen audit was under-testing and reporting a pass
+
+- **`npm run audit:screens` never clicked a control on `howtoplay`,
+  `changelog`, `submissions` or `submissions&role=creator`** — including the
+  Creator panels the v13 entry added the harness entry for, and whose "152
+  control clicks, zero findings" line is what the roadmap cites. The click
+  sweep sampled the control count at a fixed 700ms and used it as its stop
+  condition; on screens that mount their panels after a fetch settles it read
+  0 and stopped at index 0, which prints as `clicked 0 control(s)` and reads
+  exactly like "checked, nothing to click". The load pass sampled the same
+  count a few hundred milliseconds later and saw 6–13, which is why the two
+  numbers in the output disagreed and nobody noticed. Both passes now share a
+  `settledControlCount` helper that waits for two equal consecutive samples.
+
+#### Drift and documentation
+
+- **`ALL_SET_NAMES` still said `'Player Showcase'`.** v13 renamed the set to
+  `Players Showcase 2026` in `SHOWCASE_SET` and in `submit_card` but missed
+  this third copy, so the Store's "Includes: …" line on any pack with a null
+  `allowed_sets` advertised a set with no rows in `cards`. Fixed, with a test
+  pinning `ALL_SET_NAMES` to `SHOWCASE_SET` so the two cannot drift again.
+- **The Item subtype split is 11 Tools, not 15.** Both the v13 changelog entry
+  and the roadmap's balance-pass scope said 15; the pool and the live `cards`
+  table both say 37 Charms / 13 Weapons / 11 Tools. Corrected in both.
+
+#### Verified clean (no change needed)
+
+- **Live catalog vs. the bundled fallback: identical.** SHA-256 over
+  `id|name|type|rarity|set|image|flavor|overrides` for all 297 rows matches
+  `generated-cards.ts` exactly, and a second hash over all ten derived
+  mechanics fields (cost, pips, essence types, might, grit, keywords, resolve,
+  subtype, rules text) matches what `mechanicsFor` derives client-side for
+  every card. This is the check `verify:pool` cannot run from a sandboxed
+  session; run through the Supabase MCP instead, the way v13 did.
+- **Every `admin_*` / `creator_*` RPC calls `assert_creator()`.** All 73 of the
+  Supabase linter's `authenticated_security_definer_function_executable`
+  warnings were read; each function either gates on `assert_creator()` or is
+  legitimately per-caller (`auth.uid()`-scoped). The one non-RPC advisor is
+  `auth_leaked_password_protection`, a project setting, still off.
+- **Client/server constant mirrors agree**: `QUICKSELL_PRICES` vs
+  `card_sell_price`, `maxCopiesForRarity` vs `rarity_copy_cap`, and all six
+  `SHOP_*` constants vs `shop_setup_fee` / `shop_base_slots` / `shop_max_slots`
+  / `shop_slot_cost` / `shop_maintenance_fee_per_slot` / `shop_min_pool_size`.
+- **Engine Vitality is clamped at every gain site** (Siphon, Radiant, Sacred,
+  Blessed, heal, self-cast Charm) — checked because the v13 self-cast Charm was
+  the newest of them.
+
 ### v13.0 — Charms become Items, Fry gets the last word on mechanics, and the database quietly disagreed with the game about 16 cards
 
 Three strands. A **card-type rename with real mechanics behind it** (`Charm` →
@@ -40,7 +123,9 @@ sweep, whose headline finding was in the live database rather than in the code.
   - **Tool** — new. A Weapon that also **weakens a target enemy unit** as it
     bonds (a permanent -1/-1, -2/-2 at Full-Art and up). It carries one less
     point of bond than a Weapon of the same cost, which is what pays for it.
-    15 of the pool's 61 Items are Tools.
+    11 of the pool's 61 Items are Tools (37 Charms, 13 Weapons, 11 Tools —
+    the v13 entry first said 15, corrected in v14 against both the pool and
+    the live `cards` table).
   - The three-way subtype roll reuses the old two-way roll's salt and its 60/40
     cut point, so a Charm is *exactly* the old Bound band and Weapon+Tool are
     *exactly* the old Worn band. Only the 78..100 slice of the old Worn band is

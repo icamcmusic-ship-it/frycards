@@ -12,6 +12,18 @@ interface ChangelogEntry {
 // internal playtest data point tracked in the full file.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'Deep Bug Hunt (v14)',
+    date: 'July 2026',
+    items: [
+      'FIX: the store listed a set that does not exist. Any pack that draws from every set was printing "Player Showcase" in its Includes line — the set was renamed to PLAYERS SHOWCASE 2026 last release and this one copy of the old name was missed.',
+      "FIX (card submissions): when Fry cleared a card's keywords before printing it, the change was thrown away and the card printed with its generated keywords anyway — and the review panel told him nothing had been overridden. Clearing the box now actually clears the keywords.",
+      'FIX (card submissions): the mechanics editor offered MIGHT and GRIT on every card type, but only Units have them. On an Item, an Event, a Location or a Leader the number went nowhere on the card and into the database anyway, so the two disagreed. Those boxes are Unit-only now.',
+      "NEW (card submissions): Items can finally have their bond edited. An Item's stats live in its bond rather than in Might/Grit, so until now it was the one card type whose numbers could not be corrected at all.",
+      'The offline layout harness was quietly skipping four screens — including the Creator-only submission panels — because it decided they had no buttons before they had finished loading. It waits for them now. Every screen still measures clean at phone width.',
+      'Checked and clean: the live card database matches the game exactly — all 297 cards, all ten mechanics fields, byte for byte. Same for shop prices, quick-sell prices and deck copy limits against their server-side originals.',
+    ],
+  },
+  {
     version: 'Items & the Showcase (v13)',
     date: 'July 2026',
     items: [

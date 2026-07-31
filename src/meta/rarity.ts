@@ -2,15 +2,22 @@
  * lines on packs whose `allowed_sets` is null (i.e. draws from everything).
  * Volume #1 is the launch set (the old Blue Coral / Crimson Circuit /
  * Dragonbone Wastes / Full Arts Collection 1 split is gone from the live
- * catalog); "Player Showcase" is the community set fed by the card-submission
+ * catalog); "Players Showcase 2026" is the community set fed by the card-submission
  * queue (see `meta/submissions.ts`).
  *
  * NOTE: every live `pack_types` row now pins its own `allowed_sets`, so this
  * fallback should never actually be reached — a pack that draws from "all
- * sets" would silently start paying out Player Showcase cards the moment the
+ * sets" would silently start paying out Players Showcase 2026 cards the moment the
  * first one is approved, which is exactly what the v12 set-isolation
- * migration existed to prevent. It stays as a display default only. */
-export const ALL_SET_NAMES: string[] = ['Volume #1', 'Player Showcase'];
+ * migration existed to prevent. It stays as a display default only.
+ *
+ * v13 renamed the community set to "Players Showcase 2026"; this list kept the
+ * old "Player Showcase" string for a release, so the Store's "Includes: …"
+ * line named a set that does not exist in `cards`. It has to stay equal to
+ * `SHOWCASE_SET` in `meta/submissions.ts` — see the drift test in
+ * `submissions.test.ts`. It is NOT imported from there: `submissions.ts` pulls
+ * in the whole card pool, and `rarity.ts` is imported by every card face. */
+export const ALL_SET_NAMES: string[] = ['Volume #1', 'Players Showcase 2026'];
 
 /**
  * Global rarity color code — fixed across every theme, since rarity is a

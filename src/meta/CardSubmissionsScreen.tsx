@@ -594,6 +594,10 @@ interface OverrideForm {
   cost: string;
   might: string;
   grit: string;
+  /** An Item's stats live in `bond`, not in might/grit. Held as two boxes and
+   * written back as one `bond` object — see `overridesFrom`. */
+  bondMight: string;
+  bondGrit: string;
   keywords: string;
   subtype: string;
   rebondCost: string;
@@ -609,6 +613,8 @@ function formFor(def: CardDef): OverrideForm {
     cost: formatCostInput(def.cost),
     might: def.might != null ? String(def.might) : '',
     grit: def.grit != null ? String(def.grit) : '',
+    bondMight: def.bond?.might != null ? String(def.bond.might) : '',
+    bondGrit: def.bond?.grit != null ? String(def.bond.grit) : '',
     keywords: (def.keywords ?? []).join(', '),
     subtype: (def.subtype as string) ?? '',
     rebondCost: def.rebondCost != null ? String(def.rebondCost) : '',
@@ -650,6 +656,27 @@ function overridesFrom(
     if (form[key].trim() && n === null) problems.push(`${key} must be a number.`);
     else if (n !== null && n < 0) problems.push(`${key} cannot be negative.`);
     else (out as Record<string, unknown>)[key] = n;
+  }
+  // An Item's stats live in `bond`, and `bond` is one object — so an edit to
+  // either half has to be written as the whole thing, rebuilt from both boxes
+  // rather than from a single changed field.
+  if (
+    form.bondMight.trim() !== base.bondMight.trim() ||
+    form.bondGrit.trim() !== base.bondGrit.trim()
+  ) {
+    const m = numOrNull(form.bondMight);
+    const g = numOrNull(form.bondGrit);
+    const bad = (raw: string, n: number | null) => (raw.trim() && n === null) || (n ?? 0) < 0;
+    if (bad(form.bondMight, m) || bad(form.bondGrit, g)) {
+      problems.push('Bond Might/Grit must be whole numbers of 0 or more.');
+    } else {
+      const bond: NonNullable<CardDef['bond']> = {};
+      if (m) bond.might = m;
+      if (g) bond.grit = g;
+      // A bond with nothing in it is not a bond — clear the field instead, the
+      // way the rules-text box does, rather than printing an empty object.
+      out.bond = (Object.keys(bond).length ? bond : null) as CardOverrides['bond'];
+    }
   }
   if (form.keywords.trim() !== base.keywords.trim()) {
     const { keywords, unknown } = parseKeywordsInput(form.keywords);
@@ -712,8 +739,14 @@ function OverrideEditor({
             onChange={(e) => set('cost')(e.target.value)}
           />
         </label>
-        {num('might', 'MIGHT')}
-        {num('grit', 'GRIT')}
+        {/* Only Units carry might/grit. Offering the boxes on the other four
+            types wrote an override the card face never reads — the printed
+            card came out unchanged while the `cards.might/grit` columns the
+            server queries disagreed with it. An Item's stats are its bond. */}
+        {type === 'Unit' && num('might', 'MIGHT')}
+        {type === 'Unit' && num('grit', 'GRIT')}
+        {type === 'Item' && num('bondMight', 'BOND +MIGHT')}
+        {type === 'Item' && num('bondGrit', 'BOND +GRIT')}
         {type === 'Leader' && num('resolve', 'RESOLVE')}
         {type === 'Item' && num('rebondCost', 'RE-BOND')}
         {type === 'Item' && num('nerf', 'NERF')}

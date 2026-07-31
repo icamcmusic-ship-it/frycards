@@ -263,14 +263,21 @@ export function buildCardPayload(input: {
 // Creator mechanics overrides
 // ---------------------------------------------------------------------------
 
-/** Drop empty/undefined entries so "opened the editor and changed nothing"
- * never writes an override object (and so removing every field removes it). */
+/** Drop undefined entries so "opened the editor and changed nothing" never
+ * writes an override object (and so removing every field removes it).
+ *
+ * An EMPTY ARRAY is kept, and that is the whole point: `keywords: []` is the
+ * Creator clearing a card's generated keywords, not an absent override.
+ * Pruning it (as this did until the v14 bug hunt) made emptying the KEYWORDS
+ * box a silent no-op — the card printed with its generated keywords intact and
+ * the review panel reported "No overrides". `overridesFrom` only ever emits a
+ * field that actually differs from the generated card, so an override equal to
+ * the generated value cannot reach here in the first place. */
 export function pruneOverrides(o?: CardOverrides | null): CardOverrides | undefined {
   if (!o) return undefined;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(o)) {
     if (v === undefined) continue;
-    if (Array.isArray(v) && v.length === 0) continue;
     out[k] = v;
   }
   return Object.keys(out).length > 0 ? (out as CardOverrides) : undefined;
