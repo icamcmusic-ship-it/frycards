@@ -55,8 +55,13 @@ the green run itself.
   0 and stopped at index 0, which prints as `clicked 0 control(s)` and reads
   exactly like "checked, nothing to click". The load pass sampled the same
   count a few hundred milliseconds later and saw 6–13, which is why the two
-  numbers in the output disagreed and nobody noticed. Both passes now share a
+  numbers in the output disagreed and nobody noticed. `menu` was truncated the
+  same way, at 5 of its 17 controls. Both passes now share a
   `settledControlCount` helper that waits for two equal consecutive samples.
+  Measured before and after on the same tree: **113 clicks → 153**, and every
+  screen's click count now equals the control count its load pass reports —
+  which is the invariant that was being violated. Still zero findings, so the
+  fix bought coverage rather than bugs.
 
 #### Drift and documentation
 

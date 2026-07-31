@@ -590,7 +590,7 @@ function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
 // Creator: mechanics override editor
 // ---------------------------------------------------------------------------
 /** The editor's raw (string) form of every overridable field. */
-interface OverrideForm {
+export interface OverrideForm {
   cost: string;
   might: string;
   grit: string;
@@ -606,9 +606,12 @@ interface OverrideForm {
   text: string;
 }
 
-/** The generated card, rendered into the editor's string form — the baseline
+/** Exported for `CardSubmissionsScreen.test.ts` — the editor's two pure
+ * halves (baseline + diff) are where the override rules actually live.
+ *
+ * The generated card, rendered into the editor's string form — the baseline
  * every field is compared against to decide whether it is an override. */
-function formFor(def: CardDef): OverrideForm {
+export function formFor(def: CardDef): OverrideForm {
   return {
     cost: formatCostInput(def.cost),
     might: def.might != null ? String(def.might) : '',
@@ -637,7 +640,7 @@ const numOrNull = (raw: string): number | null => {
  * an unparseable value is reported instead of silently dropped, because a
  * cost box reading "two ember" must not quietly print the generated cost.
  */
-function overridesFrom(
+export function overridesFrom(
   form: OverrideForm,
   generated: CardDef,
 ): { overrides?: CardOverrides; problems: string[] } {

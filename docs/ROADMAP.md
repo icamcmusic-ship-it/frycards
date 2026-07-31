@@ -110,10 +110,14 @@ Everything here has a started implementation and a visible seam.
   read as having *no* controls and skipped at index 0 — which prints as
   `clicked 0 control(s)` and reads like "checked, nothing to click". Four
   screens were never clicked at all, `submissions&role=creator` — the very one
-  v13 added — among them, while the run still exited 0. Both passes now share a
-  `settledControlCount` helper that waits for two equal consecutive samples.
-  Quote the per-screen click counts from an actual run rather than a total:
-  a total cannot show which screens contributed zero to it.
+  v13 added — among them, and `menu` stopped at 5 of its 17, while the run
+  still exited 0. Both passes now share a `settledControlCount` helper that
+  waits for two equal consecutive samples: 113 clicks became 153, and every
+  screen's click count now matches the control count its load pass reports.
+  Latest run: eighteen screens, two widths, 153 control clicks, **zero
+  findings**. Quote the per-screen counts rather than the total — a total
+  cannot show which screens contributed zero to it, which is exactly how this
+  went unnoticed for a release.
 
   **The v9-named hand-card preview overflow is fixed (v10):** the pinned preview
   clamps its card scale to the viewport and stacks the control column below the
