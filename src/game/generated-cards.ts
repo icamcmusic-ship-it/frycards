@@ -300,7 +300,7 @@ export const GENERATED_CARDS: CardTemplate[] = [
       "type": "Location",
       "image": "https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images/VOlume%201%20pt3/Blossom-Veiled%20Refuge.png",
       "flavor": "The mountains keep the outside world's harsh winds at bay, preserving a spring that has lasted three centuries.",
-      "rarity": "Super-Rare"
+      "rarity": "Full-Art"
     },
     {
       "id": "blue_ringed_octopus",

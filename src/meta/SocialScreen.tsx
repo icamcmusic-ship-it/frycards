@@ -83,9 +83,9 @@ function TradeSide({
 }
 
 export function SocialScreen({ onBack }: { onBack: () => void }) {
-  const { session, profile, refreshProfile, refreshCollection } = useMeta();
+  const { session, guest, setGuest, profile, refreshProfile, refreshCollection } = useMeta();
   const userId = session?.user?.id;
-  const [tab, setTab] = useState<Tab>('friends');
+  const [tab, setTab] = useState<Tab>(guest ? 'leaderboard' : 'friends');
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [profiles, setProfiles] = useState<Map<string, PublicProfile>>(new Map());
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -160,6 +160,13 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
   );
 
   useEffect(() => {
+    // Guests have no Supabase session, so friendships/trades would just fail
+    // RLS and permanently show the "couldn't load" banner — skip it entirely
+    // and let them use the (session-free) leaderboard tab only.
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     // Guards a stale in-flight reload() (e.g. from a fast sign-out/sign-in)
     // from clobbering friendships/trades/profiles state after userId changes.
     let cancelled = false;
@@ -177,13 +184,14 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [reload, loadAttempt]);
+  }, [reload, loadAttempt, userId]);
 
   // Friend requests and trade offers arrive from the other side of the
   // relationship, so nothing local triggers a refresh. RLS on both tables is
   // already "either party only", so these subscriptions can't leak anyone
   // else's requests.
   useEffect(() => {
+    if (!userId) return;
     let timer: number | undefined;
     const bump = () => {
       window.clearTimeout(timer);
@@ -198,7 +206,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       offFriends();
       offTrades();
     };
-  }, [reload]);
+  }, [reload, userId]);
 
   const nameOf = (id: string) => profiles.get(id)?.username || 'Unknown player';
 
@@ -265,20 +273,27 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="FRIENDS & TRADING" onBack={onBack} />
       <div className="p-3 sm:p-5 max-w-5xl mx-auto">
         <div className="flex flex-wrap gap-2 mb-4">
-          <PopButton
-            color={tab === 'friends' ? 'black' : 'yellow'}
-            onClick={() => setTab('friends')}
-          >
-            <span className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5" /> FRIENDS ({friendProfiles.length})
-            </span>
-          </PopButton>
-          <PopButton color={tab === 'trades' ? 'black' : 'yellow'} onClick={() => setTab('trades')}>
-            <span className="flex items-center gap-1">
-              <ArrowLeftRight className="w-3.5 h-3.5" /> TRADES
-              {pendingTrades.length > 0 ? ` (${pendingTrades.length})` : ''}
-            </span>
-          </PopButton>
+          {!guest && (
+            <>
+              <PopButton
+                color={tab === 'friends' ? 'black' : 'yellow'}
+                onClick={() => setTab('friends')}
+              >
+                <span className="flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5" /> FRIENDS ({friendProfiles.length})
+                </span>
+              </PopButton>
+              <PopButton
+                color={tab === 'trades' ? 'black' : 'yellow'}
+                onClick={() => setTab('trades')}
+              >
+                <span className="flex items-center gap-1">
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> TRADES
+                  {pendingTrades.length > 0 ? ` (${pendingTrades.length})` : ''}
+                </span>
+              </PopButton>
+            </>
+          )}
           <PopButton
             color={tab === 'leaderboard' ? 'black' : 'yellow'}
             onClick={() => setTab('leaderboard')}
@@ -289,7 +304,18 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
           </PopButton>
         </div>
 
-        {loadError && (
+        {guest && (
+          <div className="mb-4 bg-[var(--c-yellow)] ink-border-md shadow-hard-black-sm p-3 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-[11px] font-bold">
+              Sign in to add friends and trade cards.
+            </span>
+            <PopButton color="black" onClick={() => setGuest(false)}>
+              SIGN IN
+            </PopButton>
+          </div>
+        )}
+
+        {!guest && loadError && (
           <div className="mb-4 bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex items-center justify-between gap-3">
             <span className="text-[11px] font-bold text-[var(--c-steel)]">
               Couldn't load your friends & trades. Check your connection and try again.
