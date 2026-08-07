@@ -1224,7 +1224,11 @@ export function GameV4({
   // speed captured when it started.
   const [cpuSpeedIdx, setCpuSpeedIdx] = useState<number>(() => {
     if (typeof window === 'undefined') return 1;
-    const stored = Number(window.localStorage.getItem(CPU_SPEED_KEY));
+    // getItem returns null when unset, and Number(null) is 0 — which would
+    // silently make SLOW the default. Only trust a real stored string.
+    const raw = window.localStorage.getItem(CPU_SPEED_KEY);
+    if (raw === null) return 1;
+    const stored = Number(raw);
     return Number.isInteger(stored) && stored >= 0 && stored < CPU_SPEEDS.length ? stored : 1;
   });
   const cpuSpeedRef = useRef(cpuSpeedIdx);
