@@ -125,31 +125,23 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v7.7.md` carry-forward. Top of it is
-  `Unbreakable` and the cost cap, which is the first keyword-mechanism item the
-  project has had rather than a per-card one. Standing rules that came out of
-  v7.7 and should not be relearned: **four deck cohorts, not two** (two cohorts
+  list is `docs/BALANCE_SIM_FINDINGS_v16.md` carry-forward. The v16 pass was
+  the dedicated `Unbreakable`/cost-cap pass v7.7 queued: the keyword closed IN
+  BAND for the first time (once per game, surviving at the brink, full
+  surcharge charged above the old cap), every other v7.7 item was closed or
+  retired, and the pinned Leader suite now runs THREE decks per Leader so kit
+  and deck-roll luck finally separate. Top of the new list: Sentinel of the
+  Nether Pit, first in all four cohorts on the cleaned instrument — one watch
+  pass, then its `-2` reach ability or Resolve 5 is the lever. Standing rules
+  that should not be relearned: **four deck cohorts, not two** (two cohorts
   cannot see a keyword with fewer than ~6 carriers), and **never interleave
   content changes with balance trials in one pass**.
 
-  **The next pass owes a Leader re-baseline before anything else.** v8.0 capped
-  Leader Resolve at its printed value — it had been unbounded, and the CPU
-  builds Resolve most turns it has nothing better to do, so _every_ Leader
-  reading taken before v8.0 was taken against Leaders that were harder to
-  shatter and firing their `-N` abilities more often than the cards print. That
-  includes v7.7's pinned-suite numbers and its Kuro cost cut. Treat the
-  pre-v8.0 Leader table as stale rather than as a baseline to compare against.
-
-  **v11 moved the CPU's combat model, so it owes a re-baseline too.** Three
-  numbers the CPU decides from were wrong against what the engine actually
-  deals: an unguardable Doublestrike attacker's face damage was counted once
-  where the engine deals it twice, neither the attack model nor the guard model
-  subtracted the defender's Bulwark Sanctums, and the engine itself carried
-  Overrun's guard absorption across both clash sub-steps. The first two make the
-  CPU attack and block differently on any board with a Doublestrike or Bulwark
-  card in it (two and three carriers respectively), so every keyword reading
-  taken before v11 was taken against a CPU that misjudged those boards. Do not
-  compare a v11+ carrier delta against a pre-v11 one without saying so.
+  **The Leader re-baseline debt is paid.** v8.0 (Resolve cap) and v11 (CPU
+  combat model) had made every earlier Leader and keyword reading stale;
+  every number in the v16 findings doc was taken fresh under both, on the
+  three-deck suite. Pre-v16 Leader tables are historical only — do not
+  compare against them without saying so.
 
 - **A live-vs-code drift guard that actually gates.** v13 found the database's
   `cards.essence_cost` one generic higher than the shipped `cardpool.ts` on 16
@@ -293,17 +285,6 @@ Ordered by how much they change what it feels like to own and play the game.
   work has to build; parking it here rather than bolting a second ad-hoc window
   onto the client reducer.
 
-- **Unbreakable's save heals marked damage instead of only preventing the
-  packet** (found v9). `stateBasedChecks` catches a lethal Unbreakable unit and
-  sets `u.damage = 0`, so a wall carrying pre-existing marked damage that then
-  survives a lethal hit walks away fully healed. Rulebook §8 prevents the
-  _incoming packet_, not the marked damage already on the body. A correct fix
-  can't be done at the state-based check, which no longer knows the packet size —
-  it means moving Unbreakable's prevention into `damageUnit` (packet-level),
-  which changes combat's simultaneous-damage sequencing and so is a combat
-  refactor, not a one-liner. Belongs with the clash-math work, behind a balance
-  pass, since it makes the most expensive keyword in the pool strictly weaker.
-
 - **Multiplayer (PvP).** Requires a server-authoritative engine; design spike
   is in `docs/PVP_DESIGN.md`. Real blocker is that `engine.ts` is a
   client-side pure reducer with no notion of hidden information across a wire.
@@ -314,16 +295,15 @@ Ordered by how much they change what it feels like to own and play the game.
   per-Leader adjustment in `cardpool.ts` at a stroke — the same trap the v7.3
   colour-pair note and the v7.5 `V75_KEYWORDS` split both record. Needs the roll
   restructured onto its own band first, then a balance pass.
-- **Raise the Unit cost ceiling for keyword surcharges.** The v7.7 top
-  carry-forward, listed here as well because it is a **rules** change and not a
-  number: three Unbreakable bodies all print at the cost cap of 7, so the pool's
-  heaviest keyword weight is only partly collected, and no per-card lever can
-  reach them. Fixing it means the cap stops being a silent balance ceiling —
-  which touches the printed cost of every expensive keyworded Unit, so it is a
-  content-scale change that needs its own pass.
-- **Make the pinned Leader suite the primary Leader instrument.** v7.7 found
-  its decks had been re-rolling with the cohort seed since v6.2, which is why
-  four passes of random-cohort Leader readings disagreed with each other. Now
-  that it is fixed and stable to within a point across cohorts, the random-deck
-  Leader table should probably be demoted to a deck-composition diagnostic
-  rather than the number Leader balance is judged on.
+- ~~Raise the Unit cost ceiling for keyword surcharges~~ — **shipped in v16**
+  (surcharge charges in full above the base cap, ceiling 9), together with the
+  v9 "Unbreakable's save heals marked damage" item: the save now leaves the
+  unit at the brink (Grit − 1) instead of fully healed, which honoured the
+  rulebook without the packet-level combat refactor this file predicted. The
+  keyword itself is once per game and, for the first time, reads in band. See
+  `docs/BALANCE_SIM_FINDINGS_v16.md`.
+- ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
+  v7.8 (random table demoted to a deck-composition diagnostic) and finished in
+  v16: the suite runs three pinned decks per Leader and reports the per-deck
+  spread, so a kit reading and a deck-luck reading are no longer the same
+  number.

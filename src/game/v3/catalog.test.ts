@@ -36,12 +36,15 @@ test('every canonical leader id is in the pool as a Leader', () => {
   }
 });
 
-test('every card has a legal essence cost (total 0-8, non-negative parts)', () => {
+// v16: ceiling raised 8 -> 9 with the Unbreakable/cost-cap pass — the keyword
+// surcharge now rides above the base price's 7-cap up to KW_SURCHARGE_CEILING
+// (9), so premium-keyword carriers legally print at 8-9.
+test('every card has a legal essence cost (total 0-9, non-negative parts)', () => {
   for (const c of POOL_V4) {
     expect(c.cost, `${c.id}: missing cost`).toBeTruthy();
     const t = totalCost(c.cost);
     expect(t, `${c.id}: total cost ${t} out of range`).toBeGreaterThanOrEqual(0);
-    expect(t, `${c.id}: total cost ${t} out of range`).toBeLessThanOrEqual(8);
+    expect(t, `${c.id}: total cost ${t} out of range`).toBeLessThanOrEqual(9);
     expect(c.cost!.generic, `${c.id}: negative generic`).toBeGreaterThanOrEqual(0);
     for (const [type, n] of Object.entries(c.cost!.pips)) {
       expect(n ?? 0, `${c.id}: bad pip count for ${type}`).toBeGreaterThanOrEqual(1);

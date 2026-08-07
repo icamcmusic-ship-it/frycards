@@ -161,7 +161,13 @@ const COST_ADJUST: Record<string, number> = {
   nebula_clutch: +1,
   needle_seamstress: +1,
   neon_moray: +1,
-  phosphor_lich: +1,
+  // v16: `phosphor_lich`'s +1 is RETIRED, not carried. It was documented at
+  // its STAT_ADJUST entry as INERT ("prints at the cap of 7, so that entry
+  // has never changed anything") and the point was explicitly re-actioned
+  // through STAT_ADJUST -2 instead. The v16 surcharge-outside-the-clamp rule
+  // would have silently brought it back to life ON TOP of both the stat trim
+  // that replaced it and the two newly-collected Doublestrike surcharge
+  // points (8 -> 9) — three stacked nerfs where one was earned.
   pufferfish_lantern: +1,
   // v6.9: +1 -> +2. The pool's strongest per-cost Item and an outlier in
   // both cohorts (+16.5 n=232 / +17.3 n=357) — a cost-2 re-bondable Item granting
@@ -326,9 +332,35 @@ const adjustFor = (id: string): number => COST_ADJUST[id] ?? 0;
  * adjustment, and every stat/magnitude derivation now uses it. COST_ADJUST
  * therefore changes only what the card costs, making it monotonic: a cut is
  * always a buff, a raise is always a nerf.
+ *
+ * v16 — the Unbreakable/cost-cap pass (v7.7 carry-forward #1). The cap now
+ * applies to the BASE price only; a positive keyword surcharge is charged in
+ * full ON TOP of the capped base, up to KW_SURCHARGE_CEILING. Before this,
+ * `Unbreakable` carried KEYWORD_COST 7 (a +4 surcharge, the heaviest in the
+ * file) while all three of its carriers landed ON the old all-in cap of 7 —
+ * so the printed price collected only part of the surcharge and the keyword
+ * was, at the ceiling, free. Four independent per-card levers (cost, keyword
+ * bound, effect, stats) were spent on two of the three carriers across
+ * v7.4-v7.6 without bringing the keyword into band (+14.6/+12.7/+13.9/+12.9
+ * on four cohorts in v7.7), which is what identified the CAP as the
+ * mechanism rather than any card.
+ *
+ * This is also the at-the-cap DOUBLE-PENALTY fix for Events and Items
+ * (KNOWN ISSUE marked in v7.8): their effect magnitude is `naturalT - kwAdj`,
+ * and with `base + kwAdj` clamped to 7 that subtraction docked the effect
+ * for a surcharge the printed price never collected. With the surcharge
+ * outside the clamp, subtracting it recovers the base exactly — the same
+ * shape as the v6.7 `statBase` fix in mapUnit, finally ported.
+ *
+ * The ceiling is 9, not unbounded, on the "priced out rather than balanced"
+ * record this file keeps re-learning: a cost the format cannot reach does
+ * not balance a card, it deletes it. At 9 a mid-base Unbreakable body
+ * collects its full surcharge and the two biggest bases (printed base 7)
+ * still concede at most 2 points of it.
  */
+const KW_SURCHARGE_CEILING = 9;
 function naturalTotalFor(base: number, kwAdj: number, lo = 1, hi = 7): number {
-  return Math.max(lo, Math.min(hi, base + kwAdj));
+  return Math.max(lo, Math.min(KW_SURCHARGE_CEILING, Math.min(hi, Math.max(lo, base)) + kwAdj));
 }
 
 /** v5.3: per-card STAT-budget adjustments, for overperformers already at the
@@ -384,6 +416,14 @@ const STAT_ADJUST: Record<string, number> = {
   // those as the live baselines. Do NOT derive the next lever from the
   // arrow targets; the v7.7 carry-forward (Unbreakable and the cost cap)
   // owns whether these move at all.
+  //
+  // v16 — that pass ran, and these trims STAY as shipped. The carriers now
+  // also pay the full (ceiling-9) keyword surcharge and Unbreakable itself
+  // is once per game at the brink; with all of that stacked the keyword
+  // reads +9.7/+8.8/+8.6/+8.6 — in band on four cohorts for the first time —
+  // and neither carrier shows the priced-out signature (plays held). If a
+  // future pass finds these cards NEGATIVE, unwind these stat trims first:
+  // they were earned as substitutes for a surcharge the price now collects.
   //
   // So Unbreakable is not uniformly underpriced: two of its three bodies are,
   // and the keyword's own number was reading their average. The third is
@@ -451,6 +491,24 @@ export const PRINTED_EFFECT_ADJUST: Record<string, number> = {
   // and it is the first time it has shown up on an EFFECT lever rather than a
   // cost one. Stays at -2 (its `enters: deal 1 damage`).
   the_pier_side_menace: -2,
+  // v16 (v7.7 carry-forward #4): Amethyst Starfish, the biggest un-actioned
+  // single-card outlier in the file — +9.1/+11.7/+8.4/+9.9 ramp-state residual
+  // on four cohorts at n=490-1,543, reproducing in every run since v7.5 and
+  // never moved. Cost is refuted on it (the v7.5 +1 trial cut its play count
+  // 3x — priced out, not balanced). Its print is a 5/3 Reckless for 5 with
+  // `At Dawn, deal 3 damage to any target`: free recurring any-target reach,
+  // the exact shape the Wolf and Stone Bubbles findings keep converging on —
+  // the ability beside the keyword is the card. Sentinel's whole -2 Leader
+  // ability is 2 damage to any target ONCE; this did 3 every Dawn. First
+  // step on the effect lever: -1, printing `At Dawn, deal 2 damage to any
+  // target`, measured +9.5/+10.1/+6.8/+9.6 -> +8.7/+9.2/+6.1/+8.7 (four
+  // cohorts, play counts held) — real but only about a point. Second step,
+  // -2, printing `At Dawn, deal 1 damage to any target`: +7.0/+7.4/+4.8/+7.6,
+  // in band in all four with the play counts still held (n=1560/512/538/1096
+  // against baseline 1532/510/490/1078). Ships at -2 — the first lever ever
+  // to move this card without deleting it from decks (the v7.5 cost point
+  // cut its plays 3x and was reverted).
+  amethyst_starfish: -2,
   // v7.6: Stone Bubbles, the top carry-forward for three passes and the item
   // six cost trials and two Sacred EFFECT trials had all failed to move. It
   // prints `At Dusk, a target enemy unit gets -1/-1` — recurring, unconditional,
@@ -838,7 +896,16 @@ function mapUnit(c: CardTemplate): CardDef {
   const keywords = pickUnitKeywords(seed, colors, rt);
   const base = baseTotal(seed, rt);
   const kwAdj = keywordCostAdj(keywords);
-  const total = Math.max(1, Math.min(7, base + kwAdj + adjustFor(c.id)));
+  // v16: the keyword surcharge rides OUTSIDE the base's 7-clamp (up to
+  // KW_SURCHARGE_CEILING) so a premium keyword is actually charged for at the
+  // ceiling — see naturalTotalFor. COST_ADJUST stays INSIDE the clamp: its
+  // no-op-at-the-cap behaviour is load-bearing (several entries above are
+  // documented as inert signposts and re-pricing them here would silently
+  // stack them onto the STAT_ADJUST that replaced them).
+  const total = Math.max(
+    1,
+    Math.min(KW_SURCHARGE_CEILING, Math.min(7, Math.max(1, base + adjustFor(c.id))) + kwAdj),
+  );
   const cost = buildCost(seed, colors, total, rt);
 
   // Stats: might+grit ≈ 2*(natural total MINUS the keyword surcharge) +
@@ -847,7 +914,15 @@ function mapUnit(c: CardTemplate): CardDef {
   // carriers at 80% win). Ember/Gale lean might, Root/Light lean grit.
   // v6.6: derived from the NATURAL (pre-COST_ADJUST) cost so a balance cut
   // lowers only the price, never the body — see naturalTotalFor.
-  const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
+  // v16: pinned to the OLD 7-capped total, deliberately NOT naturalTotalFor's
+  // new surcharge-above-the-cap rule. naturalT feeds the printed EFFECT
+  // magnitude below, and letting it ride up with the raised price ceiling
+  // would grow the printed ability of the exact cards the ceiling exists to
+  // nerf (measured before pinning: the Menace's enters-damage went 1 -> 2 and
+  // the Wolf's v7.6-deleted Dawn weaken reprinted itself). The cost-cap
+  // change is a pure price lever; every unit's rules text is byte-identical
+  // to the v7.7 pool.
+  const naturalT = totalCost(buildCost(seed, colors, Math.max(1, Math.min(7, base + kwAdj)), rt));
   // v6.7 fix: statBase used to be `naturalT - max(0, kwAdj)`, which is only
   // equal to `base` when `base + kwAdj` doesn't hit naturalTotalFor's 1..7
   // clamp. On a two-keyword card whose surcharge pushes base+kwAdj PAST 7,
@@ -1029,13 +1104,11 @@ function mapEvent(c: CardTemplate): CardDef {
   // a balance cut makes the Event cheaper without shrinking its effect (and a
   // raise makes it pricier without growing it) — see naturalTotalFor.
   const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
-  // KNOWN ISSUE (v7.8 bug hunt, deferred): this still carries the double
-  // penalty at the cost cap that the v6.7 statBase fix removed for Units
-  // (see mapUnit) — when base + kwAdj exceeds naturalTotalFor's 7-clamp the
-  // full kwAdj is subtracted from a total that never collected it, shrinking
-  // the effect for a surcharge never charged. Fixing it reprints every
-  // affected Event/Item (content-scale), so it belongs to the same
-  // dedicated pass as the Unbreakable/cost-cap carry-forward, not a bug fix.
+  // v16: the v7.8 KNOWN ISSUE here is fixed — naturalTotalFor now carries the
+  // surcharge outside the base clamp, so subtracting kwAdj recovers the base
+  // instead of docking the effect for a surcharge the (still 7-capped)
+  // printed price never collected. The at-the-cap double penalty the v6.7
+  // statBase fix removed for Units is finally gone here too.
   const t = Math.max(1, naturalT - kwAdj);
   const subtype: EventSubtype = roll(seed, 'ev-sub', 100) < 45 ? 'Quick' : 'Slow';
   const fx = eventEffect(seed, colors[0], t, subtype === 'Slow');
@@ -1099,10 +1172,9 @@ function mapItem(c: CardTemplate): CardDef {
   // stats). v6.6: and from the NATURAL (pre-COST_ADJUST) cost, so a balance
   // cut lowers only the price, never the bond — see naturalTotalFor.
   const naturalT = totalCost(buildCost(seed, colors, naturalTotalFor(base, kwAdj), rt));
-  // KNOWN ISSUE (v7.8 bug hunt, deferred): same cost-cap double penalty as
-  // mapEvent above — see the note there; fixed for Units in v6.7 (mapUnit's
-  // statBase), never ported here. Content-scale to fix, so deferred to the
-  // Unbreakable/cost-cap pass.
+  // v16: same at-the-cap double-penalty fix as mapEvent above — see the note
+  // there and naturalTotalFor. The Item's printed price keeps its 7-cap; only
+  // the bond derivation stops paying for a surcharge never charged.
   const t = Math.max(1, naturalT - kwAdj);
 
   // A Charm pays nothing for permanence it does not have, a Weapon pays one

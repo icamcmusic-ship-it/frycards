@@ -585,9 +585,26 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     // Never shatter our own Leader for marginal value — only a genuinely
     // scary board (a Might-6+ unit we can actually TARGET) can justify
     // going to zero.
+    // v16 (the v7.7 Sentinel-shatter carry-forward): the discount also
+    // requires the ability to actually ANSWER the threat. `isRemoval` counts
+    // any unit damage as removal, so Sentinel of the Nether Pit — whose
+    // Resolve-5 / -2-spender parity walks it to 2 via the +1 builder — kept
+    // trading its whole Leader for a 2-damage ping into a Might-6+ body that
+    // survived it: a 7.8-10.4% shatter rate against <=1.2% for every other
+    // Leader, all of it "justified" by a threat the ping never removed. A
+    // damage ability now only earns the discount when its value covers the
+    // big threat's remaining Grit (shatter/banish always answer; the
+    // removalTargets list already excludes Warded and save-up Unbreakable
+    // bodies).
     if (L.resolve + ab.resolveDelta <= 0) {
-      const bigThreat = removalTargets.some((u) => effMight(state, u) >= 6);
-      v -= bigThreat && isRemoval(eff) ? 6 : 20;
+      const answersBigThreat =
+        isRemoval(eff) &&
+        removalTargets.some(
+          (u) =>
+            effMight(state, u) >= 6 &&
+            (eff.action !== 'damage' || (eff.value ?? 0) >= remainingGrit(state, u)),
+        );
+      v -= answersBigThreat ? 6 : 20;
     }
     // Building Resolve is free value — but only while there is headroom to
     // build into. `activateLeaderAbility` caps a builder at the printed value,

@@ -9,6 +9,70 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v16.0 — The Unbreakable pass: the cap was raised and it wasn't the mechanism, the save was a secret heal, and once-per-game finally prints a priceable keyword
+
+The dedicated balance pass v7.7 queued as its top carry-forward and v7.8
+deferred. Full findings: `docs/BALANCE_SIM_FINDINGS_v16.md` (supersedes the
+v7.7 doc, deleted this pass). Ran as sequential measured trials — baseline,
+then one lever at a time, each on four 5,952-game deck cohorts (seeds
+1337/42/7/99), zero invariant violations on every run. Every item on the
+v7.7 carry-forward list was actioned, closed, or explicitly retired; the
+details live in the findings doc, the headlines here.
+
+- **The Unit cost cap now charges for premium keywords — and that alone was
+  not the fix.** The base price still clamps at 7, but a positive keyword
+  surcharge is charged in full on top, to a ceiling of 9. Twelve cards
+  reprinted (audited by before/after pool diff): nine Units price-only —
+  the three `Unbreakable` carriers, `familiar_in_the_dark` and
+  `vlad_from_accounting` to 9; `phosphor_lich`, `blight_snarler`,
+  `grit_and_halftones`, `urnbearer_of_blight` to 8 — and three Events/Items
+  recovered the point the old clamp double-docked from their effects
+  (`chrysalis_of_the_departed` +2/+5→+2/+6, `the_garden_variety_glock`
+  +5/+2→+6/+2, `ruthless_succession` Deal 3→4), closing the v7.8 KNOWN
+  ISSUE. Measured with the full surcharge collecting, the Unbreakable delta
+  did not move — the v7.7 "the cap is the mechanism" hypothesis is refuted
+  on four cohorts, and recorded as such.
+- **Unbreakable's save no longer heals the wall.** The v7.5 implementation
+  reset marked damage to 0 on every save — a full heal per proc that the
+  printed text never promised and that five levers across four passes could
+  not price. A saved unit now survives **at the brink** (damage = Grit − 1):
+  the killing blow is still defeated, the wound stays.
+- **Unbreakable is once per GAME** (was: once per turn). With the price
+  collecting, the heal gone, and the text bounded, the keyword reads
+  **+9.7/+8.8/+8.6/+8.6 — in band on all four cohorts for the first time in
+  its history — with carrier play counts held** (no priced-out signature).
+  Rulebook, How to Play, and all three carrier prints updated.
+- **Amethyst Starfish closes at Dawn-ping 1** (was 3). The biggest
+  un-actioned card outlier (+9.1/+11.7/+8.4/+9.9, cost-refuted) turned out
+  to be the recurring `At Dawn, deal 3 damage to any target` beside the
+  Reckless — the Wolf/Stone-Bubbles shape again. Two measured steps land it
+  at +7.0/+7.4/+4.8/+7.6 with plays held.
+- **Sentinel's shatter rate was the CPU donating its Leader.** Resolve 5
+  with a -2 spender walks 5→3→1, the +1 builder lifts to 2, and the CPU's
+  self-shatter discount fired on any Might-6+ target even when the ability
+  was a 2-damage ping that couldn't kill it — 7.8-15.9% of games, and the
+  new `shatteredWinPct` diagnostic shows those games won BELOW Sentinel's
+  own average (28% vs 46.6% in cohort C). The discount now requires the
+  ability to actually answer the threat; shatter rates read 2.2-5.7% and
+  the remaining shatters are genuine kill-trades.
+- **The pinned Leader suite runs three decks per Leader** (deck #0 keeps the
+  v7.7 seed), reporting a per-deck split — and it un-inverts v7.7's
+  Legendary Diver verdict: its "last in the suite" was one bad deck roll
+  (decks read 39.3/46.4/70.5); the kit is mid-field in all four cohorts.
+  Sentinel survives the tougher instrument (first in all four, worst deck
+  ≥55%) and goes on the carry-forward list as a real kit outlier.
+- **Watch items settled**: `Fate` in band at weight 0 (-1.1 to -3.0, item
+  closed); `Scorched-Earth`'s buff candidacy refused (the keyword delta
+  swings 34 points between cohorts on three carriers; its dominant carrier
+  reads +2-5 everywhere it is drafted); `Sacred` carried, still the most
+  cohort-dependent keyword in the file. **Reservation waste retired by
+  arithmetic** after five carried passes: ~0.5 essence-turns per game of
+  exposure against ~90 spent — noise, and every gating idea risks the
+  reaction plays earlier passes fought to create.
+- Checked green before and after every trial: typecheck, lint, format, 335
+  tests, and the four-cohort sim suite. Live `cards` rows for the 13
+  reprinted cards resynced to the database.
+
 ### v15.0 — Bug hunt: editing an Item's bond deleted the keyword it grants, and How to Play named a feature-less feature list, a one-set catalog and a rulebook that does not exist
 
 The eleventh bug-hunt sweep. Baseline was green before any change — 332 tests,

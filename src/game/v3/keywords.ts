@@ -205,7 +205,7 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Skywatch: 'Can guard Aerial units.',
   Warded: "Can't be targeted by an opponent.",
   Unbreakable:
-    'Once per turn, prevent the first effect that would shatter this or deal it lethal damage.',
+    'Once per game, prevent the first effect that would shatter this or deal it lethal damage.',
   Ambush: 'Can be invoked at any time, even outside your main phase.',
   Immobile: "Can't attack.",
   Regenerate: 'At Dawn, heal all damage marked on this unit.',
@@ -299,6 +299,15 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Swarmproof: 1,
   Skywatch: 0,
   Warded: -1,
+  // v16: the text weakened (once per GAME, surviving at the brink — see
+  // engine.ts) while the weight stays 7 and, for the first time, actually
+  // collects: the Unit price cap now lets the surcharge ride above 7 (see
+  // cardpool.ts naturalTotalFor). Measured at that combination the keyword
+  // reads +9.7/+8.8/+8.6/+8.6 on four cohorts — in band — with carrier play
+  // counts held. If a future pass finds the carriers NEGATIVE, this weight
+  // is the suspect: 7 was priced against the per-turn save, and a
+  // once-per-game save at the same surcharge is the steepest price-per-text
+  // in the file.
   Unbreakable: 7,
   Ambush: 1,
   Immobile: -2,

@@ -18,6 +18,17 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Unbreakable Pass (v16)',
+    date: 'August 2026',
+    items: [
+      'BALANCE: UNBREAKABLE now saves its unit once per GAME (was once per turn), and the survivor comes back wounded — at one Grit — instead of fully healed. Four passes of price and stat changes could not tame a wall that shrugged off one kill every single turn and healed while doing it; this finally prints a keyword the game can price.',
+      'BALANCE: premium keywords now cost what they say. A big keyword surcharge used to vanish on expensive bodies (the price capped at 7 no matter what the keyword was worth) — it now charges in full, up to 9. Nine Units got pricier (The Pier-Side Menace, The Wolf of Wall Street and Skyborne Skeleton Dragon print at 9), and three Events/Items got back a point of effect an old bug had docked from them.',
+      'BALANCE: Amethyst Starfish’s free "At Dawn, deal 3 damage to any target" — stronger than most Leader abilities, every turn, on a 5-cost body — is now 1 damage. The card had topped the overperformer list for four straight measurement passes.',
+      'CPU: Sentinel of the Nether Pit stops throwing its own Leader away. The computer was trading the whole Leader for a 2-damage ping into a big unit that survived it, in up to one game in six — those trades now only happen when the ability actually kills the threat.',
+      'Measured across 23,808 CPU-vs-CPU games per trial (four independent deck cohorts), zero rules violations, before and after every change. Full numbers in docs/BALANCE_SIM_FINDINGS_v16.md.',
+    ],
+  },
+  {
     version: 'Bug Hunt (v15)',
     date: 'August 2026',
     items: [
@@ -27,18 +38,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'HOW TO PLAY: the footer credited “RULEBOOK V9.0”. There has never been a v9 rulebook — the rules you are playing are v6.0, which is what the deck-select screen has said all along.',
       'The changelog now keeps only the two most recent updates. The full history lives in CHANGELOG.md alongside the code.',
       'Checked and clean: 332 engine and rules tests, a 144-game CPU-vs-CPU simulation with no invariant violation, and every screen measured at phone width with 153 control clicks and no layout or console problem.',
-    ],
-  },
-  {
-    version: 'Deep Bug Hunt (v14)',
-    date: 'July 2026',
-    items: [
-      'FIX: the store listed a set that does not exist. Any pack that draws from every set was printing "Player Showcase" in its Includes line — the set was renamed to PLAYERS SHOWCASE 2026 last release and this one copy of the old name was missed.',
-      "FIX (card submissions): when Fry cleared a card's keywords before printing it, the change was thrown away and the card printed with its generated keywords anyway — and the review panel told him nothing had been overridden. Clearing the box now actually clears the keywords.",
-      'FIX (card submissions): the mechanics editor offered MIGHT and GRIT on every card type, but only Units have them. On an Item, an Event, a Location or a Leader the number went nowhere on the card and into the database anyway, so the two disagreed. Those boxes are Unit-only now.',
-      "NEW (card submissions): Items can finally have their bond edited. An Item's stats live in its bond rather than in Might/Grit, so until now it was the one card type whose numbers could not be corrected at all.",
-      'The offline layout harness was quietly skipping four screens — including the Creator-only submission panels — because it decided they had no buttons before they had finished loading. It waits for them now. Every screen still measures clean at phone width.',
-      'Checked and clean: the live card database matches the game exactly — all 297 cards, all ten mechanics fields, byte for byte. Same for shop prices, quick-sell prices and deck copy limits against their server-side originals.',
     ],
   },
 ];

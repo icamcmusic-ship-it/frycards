@@ -38,7 +38,7 @@ Unit keywords (rulebook §1):
 | Swarmproof   | Must be guarded by two or more units                                                     |
 | Skywatch     | Can guard Aerial units                                                                   |
 | Warded       | Can't be targeted by an opponent                                                         |
-| Unbreakable  | Once per turn, prevent the first effect that would shatter this or deal it lethal damage |
+| Unbreakable  | Once per game, prevent the first effect that would shatter this or deal it lethal damage |
 | Ambush       | Can be invoked at any time, even outside your main phase                                 |
 | Immobile     | Can't attack                                                                             |
 | Regenerate   | At Dawn, heal all damage marked on this unit                                             |
@@ -254,9 +254,9 @@ not only in your own main phase — an answer you cannot pay for is no answer.
 
 Before any player acts, the game automatically checks: 0-or-less Vitality
 loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
-shatters a unit (an Unbreakable unit with its once-per-turn save still
-unspent survives instead, and the damage is prevented); illegally bonded
-Items unbond.
+shatters a unit (an Unbreakable unit with its once-per-game save still
+unspent survives instead — wounded, at one below its effective Grit);
+illegally bonded Items unbond.
 When a unit leaves the field, its Charms go to the Ash-pile, its Weapons and
 Tools stay on the field unbonded, and Soulbound Items return to their
 owner's hand.

@@ -70,7 +70,7 @@ export interface UnitInst {
   /** Hit by Venomous damage this clash — lethal unless Unbreakable. */
   venomed?: boolean;
   /**
-   * v7.5: Unbreakable is once per turn, and this is the turn's charge being
+   * v16: Unbreakable is once per game, and this is the game's charge being
    * spent. Cleared for BOTH players at every Dawn, so a unit gets one save
    * per turn of the game rather than one per turn cycle.
    */
@@ -1045,17 +1045,17 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
 }
 
 /**
- * v7.5: is this unit's Unbreakable save actually up right now? Unbreakable is
- * once per turn, so "has the keyword" and "cannot be killed this instant" are
- * different questions, and every caller that used to ask the first one wants
- * this one.
+ * v7.5: is this unit's Unbreakable save actually up right now? The save is
+ * spendable (once per game as of v16), so "has the keyword" and "cannot be
+ * killed this instant" are different questions, and every caller that used to
+ * ask the first one wants this one.
  */
 export function unbreakableUp(u: UnitInst): boolean {
   return unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent;
 }
 
 /**
- * Shatter a unit. Unbreakable prevents it, but only once per turn (v7.5 — see
+ * Shatter a unit. Unbreakable prevents it, but only once per game (v16 — see
  * `unbreakableSpent`). Returns true if it was shattered.
  */
 export function shatterUnit(state: GameState, u: UnitInst): boolean {
@@ -1088,12 +1088,27 @@ export function stateBasedChecks(state: GameState): void {
       const lethal = u.damage >= eff || u.venomed;
       if (!lethal) continue;
       if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
-        // v7.5: the save is spent for the turn, and the damage it absorbed is
-        // prevented rather than left marked — otherwise the state-based check
-        // would re-fire on the same marked damage a tick later and kill the
-        // unit through a shield it had just paid for.
+        // v7.5: the save is spent for the turn. v16: the unit survives AT THE
+        // BRINK — marked damage is set to one below its effective Grit — where
+        // v7.5 reset it to 0. The 0 was only ever there to stop this check
+        // re-firing on the same marked damage a tick later, but it
+        // over-delivered: every proc was also a free full heal, so chip
+        // damage never accumulated on a wall and the save was worth its own
+        // Grit in healing every single turn — a power the printed text
+        // ("prevent the first effect that would... deal it lethal damage")
+        // never promised. That unprinted heal is what five levers across
+        // v7.4-v16 (cost, keyword bound, printed effect, stats, and the v16
+        // surcharge ceiling) could not price: the keyword read
+        // +14.6/+12.7/+13.9/+12.9 across four cohorts in v7.7 and the two
+        // big carriers held ~+10 ramp-state residual even printed at cost 9.
+        // At the brink the save still defeats the killing blow — the text is
+        // honoured — but the wall stays wounded: with the save spent (once
+        // per game, see nextTurn's Dawn comment), any single later ping
+        // finishes it. eff >= 1 is guaranteed here (the 0-Grit deficit rule
+        // above already removed eff <= 0 bodies), so this never marks
+        // negative damage.
         u.unbreakableSpent = true;
-        u.damage = 0;
+        u.damage = eff - 1;
         u.venomed = false;
         // Every other keyword reports its procs, so the balance harness can
         // price it. This one never did — it read as 0 activations however many
@@ -1127,11 +1142,16 @@ export function stateBasedChecks(state: GameState): void {
 function runDawn(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dawn';
-  // v7.5: Unbreakable's once-per-turn save recharges at every Dawn, for both
-  // players — a unit gets one save per TURN OF THE GAME, not one per turn
-  // cycle, so a defender is not immune for a whole round on its own turn.
-  for (const pid of ['P1', 'P2'] as PlayerId[])
-    for (const u of state.players[pid].field) u.unbreakableSpent = false;
+  // v16: Unbreakable is ONCE PER GAME — the spent save never recharges. The
+  // v7.5 every-Dawn reset (one save per turn of the game) survived the whole
+  // lever ladder: cost, keyword bound, printed-effect and stat trims on its
+  // carriers (v7.4-v7.6), then this pass's surcharge-above-the-cap pricing
+  // (carriers reprinted at 8-9) and the brink rule (the save stopped healing
+  // the wall) — and the keyword STILL read +14.0/+13.6/+13.7/+12.7 across
+  // four cohorts with carriers winning 59-70% of their games. A save that
+  // returns every turn forces the opponent to overcommit every turn, and no
+  // price in a 9-ceiling format covers an arbitrary number of forced
+  // overcommits. One save per game is priceable text.
   for (const u of p.field) {
     u.exhausted = false;
     u.enteredThisTurn = false;
