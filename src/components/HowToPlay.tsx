@@ -222,7 +222,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     body: [
       [
         'Pack anatomy',
-        'Every card in the game is part of the "Volume #1" set, and every pack rolls slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The standard booster is 8 cards, and one of them is ALWAYS a foil — with about an 8% chance of a second foil elsewhere in the pack.',
+        'Every pack is pinned to one set — today that is "Volume #1", the launch set every printed card belongs to, with "Players Showcase 2026" (the community set fed by CARD SUBMISSIONS) getting its own booster once it is big enough. Packs roll slot by slot: foundation slots (Commons/Uncommons in bulk), synergy slots (Uncommon-to-Super-Rare), and chase slots (Rare floor, small shot at the top end). The standard booster is 8 cards, and one of them is ALWAYS a foil — with about an 8% chance of a second foil elsewhere in the pack.',
       ],
       [
         'Booster Box',
@@ -301,6 +301,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       [
         'Friends & Trading',
         'Search players, send friend requests, and propose direct card-and-credits trades.',
+      ],
+      [
+        'Card Submissions',
+        'Design your own card: send Fry a title, a card type, flavor text and an art link, and he prints the ones he likes into the PLAYERS SHOWCASE 2026 set. One full art and one video Mythic per account; everything else is unlimited. Mechanics are assigned by the game itself, so there is no rules text to write.',
       ],
       [
         'News Center',
@@ -390,7 +394,12 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
           </div>
         ))}
         <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
-          FRY CARDS RULEBOOK V9.0
+          {/* Kept equal to the version `docs/RULEBOOK.md` actually prints
+              (and to PlayScreen's "Fry Cards rules v6.0" strip) — this had
+              drifted to a V9.0 that no rulebook has ever carried, so the one
+              page telling a player which rules they are reading named a
+              document that does not exist. */}
+          FRY CARDS RULEBOOK V6.0
         </div>
       </div>
     </div>

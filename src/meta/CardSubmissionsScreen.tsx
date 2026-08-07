@@ -606,8 +606,13 @@ function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
 // ---------------------------------------------------------------------------
 // Creator: mechanics override editor
 // ---------------------------------------------------------------------------
-/** The editor's raw (string) form of every overridable field. */
-interface OverrideForm {
+/** The editor's raw (string) form of every overridable field.
+ *
+ * Exported (with `formFor`/`overridesFrom` below) the same way
+ * `DeckBuilderScreen` exports `validateDeckList`: this is pure diffing logic
+ * that decides what actually gets written into `cards.*`, and it is worth
+ * testing without mounting the panel. */
+export interface OverrideForm {
   cost: string;
   might: string;
   grit: string;
@@ -625,7 +630,7 @@ interface OverrideForm {
 
 /** The generated card, rendered into the editor's string form — the baseline
  * every field is compared against to decide whether it is an override. */
-function formFor(def: CardDef): OverrideForm {
+export function formFor(def: CardDef): OverrideForm {
   return {
     cost: formatCostInput(def.cost),
     might: def.might != null ? String(def.might) : '',
@@ -654,7 +659,7 @@ const numOrNull = (raw: string): number | null => {
  * an unparseable value is reported instead of silently dropped, because a
  * cost box reading "two ember" must not quietly print the generated cost.
  */
-function overridesFrom(
+export function overridesFrom(
   form: OverrideForm,
   generated: CardDef,
 ): { overrides?: CardOverrides; problems: string[] } {
@@ -690,6 +695,17 @@ function overridesFrom(
       const bond: NonNullable<CardDef['bond']> = {};
       if (m) bond.might = m;
       if (g) bond.grit = g;
+      // `bond.grants` is the third thing living in this object — the keyword the
+      // Item hands to the unit it bonds to, printed on 28 of the pool's 61
+      // Items — and it has no box in this editor. Rebuilding `bond` from the two
+      // stat boxes alone therefore OVERWROTE it with nothing: nudging an Item's
+      // BOND +MIGHT by one silently stripped its granted keyword off every unit
+      // it would ever bond to (`effKeywords` in engine.ts reads exactly this
+      // field), while the panel reported the override as a stats-only edit.
+      // Carried through from the generated card, which is the only place it
+      // exists.
+      const grants = generated.bond?.grants;
+      if (grants?.length) bond.grants = [...grants];
       // A bond with nothing in it is not a bond — clear the field instead, the
       // way the rules-text box does, rather than printing an empty object.
       out.bond = (Object.keys(bond).length ? bond : null) as CardOverrides['bond'];
@@ -1507,7 +1523,12 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
                 </p>
               </div>
             ) : (
-              <SubmitPanel mine={mine} reload={reload} guest={guest} onSignIn={() => setGuest(false)} />
+              <SubmitPanel
+                mine={mine}
+                reload={reload}
+                guest={guest}
+                onSignIn={() => setGuest(false)}
+              />
             )}
             {userId ? (
               <MySubmissions mine={mine} reload={reload} loading={loading} failed={!!loadError} />

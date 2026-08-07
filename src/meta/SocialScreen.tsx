@@ -306,9 +306,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
 
         {guest && (
           <div className="mb-4 bg-[var(--c-yellow)] ink-border-md shadow-hard-black-sm p-3 flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-[11px] font-bold">
-              Sign in to add friends and trade cards.
-            </span>
+            <span className="text-[11px] font-bold">Sign in to add friends and trade cards.</span>
             <PopButton color="black" onClick={() => setGuest(false)}>
               SIGN IN
             </PopButton>

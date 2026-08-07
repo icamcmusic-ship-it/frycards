@@ -4,9 +4,92 @@ Product-level changes to FryCards (formerly "Shifting Multiverse TCG").
 `docs/RULEBOOK.md` always reflects the CURRENT rules only (no changelog of
 its own) — this file is the history of how it got there. A condensed
 version of this history also powers the in-app Changelog screen
-(`src/meta/ChangelogScreen.tsx`).
+(`src/meta/ChangelogScreen.tsx`) — which, since v15, carries only the TWO most
+recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
+
+### v15.0 — Bug hunt: editing an Item's bond deleted the keyword it grants, and How to Play named a feature-less feature list, a one-set catalog and a rulebook that does not exist
+
+The eleventh bug-hunt sweep. Baseline was green before any change — 332 tests,
+`tsc --noEmit`, `eslint` (27 pre-existing warnings, 0 errors), a 144-game
+CPU-vs-CPU sim with an empty `invariantViolations`, and `npm run audit:screens`
+clean across 18 screens at both widths with 153 control clicks. Nothing in the
+green run pointed at any of the four findings below, which is the usual shape:
+three of them are text that no assertion reads, and the fourth is a field with
+no test and no editor box.
+
+#### The Creator's mechanics override editor silently stripped `bond.grants`
+
+`bond` is one object holding three things: `might`, `grit`, and `grants` — the
+keyword the Item hands to whatever unit it bonds to. **28 of the pool's 61 Items
+print one** (Aerial, Nimble, Skywatch, …), it is what `effKeywords` in
+`engine.ts` reads to give the bonded unit that keyword, and the v14 editor has
+boxes for the first two fields only.
+
+`overridesFrom` correctly writes `bond` back as a whole object — it has to,
+since it is one field — but it rebuilt that object from the two stat boxes
+alone. So `grants` was overwritten with nothing. Nudging an Item's `BOND +MIGHT`
+by one deleted its granted keyword from the printed card AND from the
+`cards.keywords`-adjacent `mechanics` payload the server stores, while the panel
+reported the edit as `OVERRIDDEN: bond` — a stats-only change, which is what it
+looked like and not what it was.
+
+This is the same shape as the v14 `pruneOverrides` finding and it is worth
+naming: the failure mode of an editor that writes back a COMPOSITE field is
+losing the parts of the composite it has no box for. `bond` was the only such
+field when it joined `OVERRIDABLE_FIELDS` in v14, and it went in without one.
+`grants` is now carried through from the generated card (the only place it
+exists — the editor still has no box for it, deliberately: choosing which
+keyword an Item grants is a design decision, not a numbers correction). Two
+tests cover it end to end through `deriveCardMechanics`: the keyword survives a
+bond edit, and clearing both boxes still clears the bond outright.
+
+#### How to Play was wrong in three places, all of them load-bearing
+
+- **§12 calls itself "Using Fry Cards — Every Feature" and did not list CARD
+  SUBMISSIONS.** That is the v12 headline feature, a main-menu tile
+  (`MainMenu.tsx`), the only screen a player can design a card from, and the
+  thing the whole PLAYERS SHOWCASE 2026 set is fed by. A section that promises
+  every feature and omits one is worse than a section that promises a summary.
+  Added, with the one-full-art/one-video-Mythic per-account limits.
+- **§10 claimed "Every card in the game is part of the 'Volume #1' set".** True
+  of `cards` today (297 rows, all Volume #1) and false about the game: v12
+  pinned every pack to its own `allowed_sets` precisely so a second set could
+  exist, `pack_types` already holds an inactive `Players Showcase 2026 Booster`
+  waiting on `SHOWCASE_MIN_CARDS`, the Collection has a SET filter, and the
+  submissions screen prints a progress bar toward it. Reworded to describe the
+  rule (one set per pack) rather than a card count that is about to change.
+- **The footer credited "FRY CARDS RULEBOOK V9.0".** There has never been a v9:
+  `docs/RULEBOOK.md` prints `v6.0`, the file's own header comment says v6.0, and
+  `PlayScreen`'s deck-select strip says "Fry Cards rules v6.0". The one page
+  that tells a player which rules they are reading named a document that does
+  not exist.
+
+#### The in-app changelog is now a two-entry board
+
+`ChangelogScreen`'s `ENTRIES` carried 33 releases back to "V1.9 and earlier" —
+a 610-line file, most of it describing a game (dice placement, Cast Slots,
+Shards, Momentum) that no longer exists. It is trimmed to the two most recent
+updates and documented as a "what changed since you last played" board rather
+than an archive. This file remains the complete history, and
+`NewsCenterScreen`'s headline still derives from `ENTRIES[0]`, so the pointer
+cannot drift.
+
+#### Checked and clean
+
+- `verify:pool` could not run (the sandbox's egress allowlist blocks
+  `*.supabase.co` for direct clients), so the catalog was checked through the
+  Supabase API instead: 297 cards, one set, and `serialized_supply` at
+  Full-Art 75 / Ultra-Rare 100 / Mythic 50 — which is what How to Play §9 already
+  said, so that line needed no change.
+- All 73 `SECURITY DEFINER` functions the security advisor flags as
+  `authenticated`-executable were checked for a role guard. Every Creator-only
+  one (`admin_*`, `creator_*`, `create_news_post`, `delete_news_post`,
+  `get_card_submissions`) opens with `perform assert_creator()`. No finding.
+- The three inactive `pack_types` rows (including the Showcase booster, which
+  would draw from a set with zero cards) are correctly filtered out of the shelf
+  by `StoreScreen`'s `is_active && acquisition === 'purchase'` gate.
 
 ### v14.0 — Bug hunt: the override editor could not clear a keyword, offered stats to cards that have none, and the screen audit was quietly skipping three screens
 
