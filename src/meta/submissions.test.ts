@@ -18,6 +18,7 @@ import {
   slugifyCardId,
   validateSubmission,
 } from './submissions';
+import { formFor, overridesFrom } from './CardSubmissionsScreen';
 import { POOL_BY_ID, POOL_V4, deriveCardMechanics } from '../game/v3/cardpool';
 import { RARITIES, Rarity } from '../types';
 import { COLORS } from '../game/v3/colors';
@@ -508,6 +509,40 @@ describe('mechanics overrides', () => {
       overrides: { bond: { might: 4, grit: 2 } },
     });
     expect(bonded.bond).toEqual({ might: 4, grit: 2 });
+  });
+
+  it('editing an Item bond keeps the keyword that bond grants', () => {
+    // `bond` holds three things — might, grit and `grants`, the keyword the
+    // Item hands to the unit it bonds to (28 of the 61 Items print one) — and
+    // the editor only has boxes for the first two. Rebuilding the object from
+    // those boxes alone overwrote `grants` with nothing, so nudging BOND
+    // +MIGHT by one silently stripped the keyword off every unit the Item
+    // would ever bond to, while the panel called it a stats-only edit.
+    const granter = POOL_V4.find((c) => c.type === 'Item' && (c.bond?.grants?.length ?? 0) > 0);
+    expect(granter).toBeDefined();
+    const form = formFor(granter!);
+    const { overrides, problems } = overridesFrom(
+      { ...form, bondMight: String((granter!.bond?.might ?? 0) + 1) },
+      granter!,
+    );
+    expect(problems).toEqual([]);
+    expect(overrides?.bond?.might).toBe((granter!.bond?.might ?? 0) + 1);
+    expect(overrides?.bond?.grants).toEqual(granter!.bond!.grants);
+    // …and the card the game actually prints still grants it.
+    const printed = deriveCardMechanics({ ...granter!, overrides });
+    expect(printed.bond?.grants).toEqual(granter!.bond!.grants);
+  });
+
+  it('clearing both bond boxes clears the bond outright', () => {
+    const item = POOL_V4.find((c) => c.type === 'Item' && !c.bond?.grants?.length);
+    expect(item).toBeDefined();
+    const { overrides, problems } = overridesFrom(
+      { ...formFor(item!), bondMight: '', bondGrit: '' },
+      item!,
+    );
+    expect(problems).toEqual([]);
+    expect(overrides?.bond).toBeNull();
+    expect(deriveCardMechanics({ ...item!, overrides }).bond).toBeUndefined();
   });
 
   it('ALL_SET_NAMES names the real showcase set', () => {
