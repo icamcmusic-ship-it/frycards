@@ -1911,7 +1911,8 @@ export function activateLeaderAbility(
   // opponent's Resolve changed and units took damage "from nowhere".
   {
     const targetUnit = targetIid ? findUnit(state, targetIid) : undefined;
-    const abilityNote = ability.text ?? `${ability.resolveDelta > 0 ? '+' : ''}${ability.resolveDelta}`;
+    const abilityNote =
+      ability.text ?? `${ability.resolveDelta > 0 ? '+' : ''}${ability.resolveDelta}`;
     const targetNote = targetUnit
       ? ` on ${targetUnit.def.name}`
       : targetIid === 'P1' || targetIid === 'P2'

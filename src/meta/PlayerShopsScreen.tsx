@@ -1947,7 +1947,19 @@ function MyShopTab() {
                 'Close your shop? Half of each slot’s remaining collateral is refunded and the rest is burned — closing again later returns nothing.',
               )
             )
-              run(() => closeShop().then((r) => r.error), 'Shop closed.', true);
+              run(
+                async () => {
+                  const { data, error } = await closeShop();
+                  if (error) return error;
+                  // Say how much actually came back — after a warning about
+                  // half the collateral burning, "Shop closed." alone left the
+                  // player guessing at the refund.
+                  setNotice(`Shop closed — ${fmtCredits(data?.refunded ?? 0)} credits refunded.`);
+                  return null;
+                },
+                undefined,
+                true,
+              );
           }}
         >
           CLOSE SHOP

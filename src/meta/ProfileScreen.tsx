@@ -322,10 +322,19 @@ export function ProfileScreen({
                       </div>
                       <div className="px-2 py-1 flex justify-between items-center gap-1">
                         <span className="text-[9px] font-black truncate">{item.name}</span>
-                        {isEquipped && (
-                          <span className="text-[8px] font-black bg-[var(--c-red)] text-[var(--c-paper)] px-1 shrink-0">
-                            ON
+                        {/* The tile being equipped shows its own busy chip —
+                            previously every OTHER tile dimmed while the
+                            clicked one gave no feedback at all. */}
+                        {equippingId === item.id ? (
+                          <span className="text-[8px] font-black bg-[var(--c-yellow)] text-[var(--c-ink)] px-1 shrink-0 animate-pulse">
+                            …
                           </span>
+                        ) : (
+                          isEquipped && (
+                            <span className="text-[8px] font-black bg-[var(--c-red)] text-[var(--c-paper)] px-1 shrink-0">
+                              ON
+                            </span>
+                          )
                         )}
                       </div>
                     </button>

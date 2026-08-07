@@ -534,6 +534,18 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     onDone();
   };
 
+  // The in-app BACK button asks before discarding, but a browser refresh /
+  // tab close / swipe threw an unsaved (or freshly imported) deck away
+  // silently — mirror the same dirty check onto beforeunload.
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
   // Leader pick step
   if (!leader) {
     return (

@@ -1507,9 +1507,8 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
           {stats && (
             <span className="ml-auto text-[10px] font-bold text-[var(--c-steel)]">
               {stats.printed} printed · {stats.pending} awaiting review · {stats.submitters}{' '}
-              submitter{stats.submitters === 1 ? '' : 's'} ·{' '}
-              {stats.printed + (stats.pending ?? 0)}/{stats.cards_needed ?? SHOWCASE_MIN_CARDS} to a
-              set
+              submitter{stats.submitters === 1 ? '' : 's'} · {stats.printed + (stats.pending ?? 0)}/
+              {stats.cards_needed ?? SHOWCASE_MIN_CARDS} to a set
             </span>
           )}
         </div>

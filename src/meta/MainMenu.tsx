@@ -422,7 +422,12 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
           <button
             key={t.key}
             onClick={() => !t.disabled && onNavigate(t.key)}
-            disabled={t.disabled}
+            // aria-disabled instead of disabled: a disabled button drops out
+            // of the tab order, so keyboard/switch users could never reach
+            // the tile to hear WHY it's off. The onClick guard above keeps it
+            // inert either way, and aria-label carries the reason.
+            aria-disabled={t.disabled || undefined}
+            aria-label={t.disabled ? `${t.label} — ${t.desc}` : undefined}
             title={t.disabled ? (t.badge ? t.desc : 'Create an account to unlock') : undefined}
             className={`btn-pop relative w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? (t.badge ? 'opacity-70 cursor-not-allowed' : 'opacity-40 cursor-not-allowed') : 'hover:-translate-y-1'}`}
           >

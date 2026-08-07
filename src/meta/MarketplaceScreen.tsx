@@ -369,8 +369,21 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {error && (
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
             <Notice text={error} />
+            {/* A failed INITIAL load used to render this notice above a
+                misleading "No active listings match" empty state with no way
+                to retry — every sibling screen has an explicit retry path. */}
+            <PopButton
+              color="yellow"
+              onClick={() => {
+                setError('');
+                setLoading(true);
+                void reload();
+              }}
+            >
+              RETRY
+            </PopButton>
           </div>
         )}
         {notice && (

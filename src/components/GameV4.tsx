@@ -2196,13 +2196,10 @@ export function GameV4({
     setStage('cpu');
     setCpuBeat(null);
     cpuResumeCountRef.current = 0;
-    cpuThinkTimeoutRef.current = window.setTimeout(
-      () => {
-        cpuThinkTimeoutRef.current = null;
-        resolveCpuTurn();
-      },
-      CPU_PACE.THINK_MS * CPU_SPEEDS[cpuSpeedRef.current].mult,
-    );
+    cpuThinkTimeoutRef.current = window.setTimeout(() => {
+      cpuThinkTimeoutRef.current = null;
+      resolveCpuTurn();
+    }, CPU_PACE.THINK_MS * CPU_SPEEDS[cpuSpeedRef.current].mult);
   };
 
   /** After the human's guard step + reaction window resolve the clash, the

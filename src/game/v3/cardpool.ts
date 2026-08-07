@@ -1462,7 +1462,14 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
   // full removals per tank with the +1 builder refilling it; at -4 it buys
   // one, and rebuilding to a second costs four turns of not removing
   // anything. Same lever as v6.3, one point, price-only.
-  avatar_of_the_abyss: -4,
+  //
+  // v17: -4 -> -3, the walk-back the v16 carry-forward scheduled after its
+  // watch pass. The -2 -> -3 -> -4 ladder was measured on the pre-v8,
+  // pre-three-deck instruments; on the clean instrument Avatar reads last or
+  // next-to-last in all four cohorts (34.5-42.3 pinned) with small deck
+  // spreads — an over-nerf reading, not a deck roll. One point back,
+  // price-only, measured alone.
+  avatar_of_the_abyss: -3,
   // v6.9: Crimson Vector Commander is the v6.7 carry-forward #2 coming due.
   // That doc applied the Commander strip, said cohort B still read it on top,
   // and named the exact next lever ("the same minus-ability resolve-cost bump
@@ -1473,7 +1480,14 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
   // spike, driven by an Ember `-1: 2 damage to any target` that Resolve 6
   // pays for six times over. At -2 it gets three, which is still the most
   // reach of any kit but no longer an every-turn faucet.
-  crimson_vector_commander: -2,
+  //
+  // v17: -2 -> -3. The v16 carry-forward's condition came due: on the
+  // three-deck pinned suite (the clean instrument), Sentinel finished FIRST
+  // in all four cohorts for the second consecutive pass (64.9/69.6/63.7/65.5,
+  // worst deck >= 54.8%), and the doc named this exact lever. Resolve 5
+  // against -3 buys one removal with change; the +1 builder buys a second
+  // every three turns instead of every other turn.
+  crimson_vector_commander: -3,
   void_mother: -4,
 };
 

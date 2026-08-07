@@ -8,6 +8,7 @@ import {
   NewsPost,
   SerializedFeedEntry,
   createNewsPost,
+  deleteNewsPost,
   subscribeTable,
 } from '../lib/supabase';
 import { ENTRIES } from './ChangelogScreen';
@@ -242,10 +243,30 @@ export function NewsCenterScreen({
                 key={p.id}
                 className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)] p-4"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="heading-font text-sm">{p.title}</h3>
-                  <span className="text-[10px] font-bold text-[var(--c-steel)]">
-                    {timeAgo(p.published_at)}
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                      {timeAgo(p.published_at)}
+                    </span>
+                    {/* deleteNewsPost existed server-side with no UI — a
+                        typo'd post was previously permanent. */}
+                    {isCreator && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Delete the post "${p.title}"?`)) return;
+                          const err = await deleteNewsPost(p.id).catch(
+                            () => 'Delete failed — check your connection.',
+                          );
+                          if (err) setPublishErr(err);
+                          else load();
+                        }}
+                        aria-label={`Delete post: ${p.title}`}
+                        className="btn-pop heading-font text-[9px] bg-[var(--c-red)] text-white px-1.5 py-0.5 ink-border-sm"
+                      >
+                        ✕ DELETE
+                      </button>
+                    )}
                   </span>
                 </div>
                 <p className="text-[12px] font-medium mt-1.5 whitespace-pre-wrap leading-snug">

@@ -9,6 +9,100 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v17.0 — The interactive-seam pass: the windows the sims never opened, watching the CPU actually play, and both scheduled Leader levers
+
+Five-part pass: a four-agent bug audit of every non-gameplay screen, an
+engine/AI audit aimed at the interactive pause/resume seams the headless
+sims never exercise, a CPU-visibility/QoL rework of the match screen, and
+the two Leader levers the v16 carry-forward scheduled — run as sequential
+measured trials on the standing four 5,952-game cohorts. Full balance
+numbers: `docs/BALANCE_SIM_FINDINGS_v17.md` (supersedes the v16 doc, deleted
+this pass). **0 invariant violations across 71,424 games**; 344 tests (9 new
+`interactive-v17` seam tests); a Playwright drive of a full offline match
+end-to-end.
+
+**Engine & rules — the interactive seams.** All found by auditing paths the
+CPU-vs-CPU sims can never reach, all pinned by the new test suite:
+
+- **A response window could freeze the human's own card on the stack.**
+  Closing a window (PASS or a resolved answer) can leave the CPU holding
+  priority; nothing drove its window from there, so the player's card sat
+  unresolved — no PASS button, every sorcery-speed action refused — until a
+  phase change silently discarded it. The UI now drives the CPU through its
+  window, exactly as invoking already did.
+- **Two missing rulebook-§6 reaction windows.** The CPU's clash reactions
+  were force-resolved straight through the human's response window when the
+  human attacked, and the attacking CPU never got its own reaction window at
+  all when the human defended — the one place interactive play measurably
+  diverged from what every balance sim assumes. `reactionPlays` now honors
+  the same pause contract as `playTurn`, in both clash directions.
+- **"At Dusk" draws were auto-shed with no choice.** The shed used to run
+  from the end of the hand AFTER Dusk triggers drew, so a card drawn at Dusk
+  was always the card discarded — and a pre-picked shed was silently
+  invalidated. Dusk now asks (engine `chooseShed` hook + `finishDuskShed`):
+  the picker opens on the post-trigger hand when it must, and the END TURN
+  pre-pick stays cancellable and is honored when it still fits.
+- **A Tool "weakens a TARGET enemy unit" — the player now picks it.** The
+  bond flow chains to the enemy pick and the engine honors it; autoTarget
+  remains the CPU's (unchanged) fallback.
+- **The match no longer double-pays on a lost reply.** `record_match_result`
+  takes a per-match idempotency UUID (server `match_receipts` dedupe; the
+  5-second throttle now returns null instead of raising), so the client's
+  reward retry can never record the same match twice.
+
+**Match screen — you can SEE what the CPU is doing.** The audit's brief:
+"make sure the user can know what the CPU is doing at all times."
+
+- The CPU's narration beats now light up the board: the acting card pulses
+  yellow and its target pulses red while each line shows — wired from the
+  AI's structured event stream (the rings' CSS had shipped in v11 but was
+  never connected). The Leader thumbnail and both Vitality plates join in
+  when they're the actor/target.
+- The engine log finally records leader ability uses (with target), invoke
+  targets, and per-packet clash damage — so the battle log and narration
+  say what actually happened instead of leaving Resolve and damage to move
+  "from nowhere".
+- Narration speed control — SLOW / NORMAL / FAST, persisted — on the
+  narration bubble and the clash divider, with the think-delay scaled to
+  match. Narration, battle log and the game-over line are humanized ("You
+  invoke…", the opponent by name — not "P1"/"P2").
+- Response windows the player can't act in (no castable Quick/Ambush even
+  tapping everything) auto-pass with a banner instead of demanding a dead
+  PASS click. The guard step shows a live "unguarded hits incoming: N
+  Vitality (you have M)" readout, and the confirm button reads "NO GUARDS —
+  TAKE N" when that's what it means. Units pop onto the field with an
+  enter animation instead of teleporting.
+
+**Balance (the two scheduled levers, one at a time, four cohorts each):**
+
+- **Sentinel of the Nether Pit's minus goes -2 → -3** — the v16 condition
+  (first in all four cohorts on the three-deck suite, second consecutive
+  pass) came due. Down 2-6 points to 61.0/61.9/58.0/62.2, no longer first
+  everywhere; Resolve 5 → 4 is the named next lever if it holds again.
+- **Avatar of the Abyss's minus walks back -4 → -3** — the scheduled
+  over-nerf correction after its watch pass. From last (35-42%) to
+  mid-field (44.9-53.3) on all four cohorts without topping any. Closes;
+  the bottom cluster is now Sovereign and Void Mother, with Sovereign next
+  in line for a first-ever dedicated look.
+
+**Meta screens — 17 confirmed bugs fixed** (four-agent audit; highlights):
+guest quick match enabled (the PLAY AS GUEST button finally leads to the
+match it promises; non-creator accounts keep COMING SOON), the daily-login
+streak no longer shows a stale count across two midnights, Deck Box claim
+failures now show inside the picker dialog instead of under it, the
+showcase progress meter stops double-counting approved cards, a mid-flight
+pool edit no longer wedges PREVIEW POOL at "CHECKING…", serialized prints
+stop stacking premium overlays in the inspector (and its fit-clamp works on
+landscape phones), collection counts exclude serialized copies everywhere
+the grid already did, network blips stop rendering as confident zeros
+("0/100 cards", sold-out mystery listings), BULK ADD no longer opens with a
+rejection banner, and the override editor rejects the fractional stats it
+always claimed to. Plus the QoL round: marketplace RETRY, close-shop refund
+figure, per-rarity bulk-sell busy states, a Deck Builder `beforeunload`
+guard, News Center post deletion for the Creator, equip busy chips,
+keyboard-reachable disabled menu tiles, and honest deck-curve advice when a
+deck is top-heavy AND thin in the midgame at once.
+
 ### v16.0 — The Unbreakable pass: the cap was raised and it wasn't the mechanism, the save was a secret heal, and once-per-game finally prints a priceable keyword
 
 The dedicated balance pass v7.7 queued as its top carry-forward and v7.8

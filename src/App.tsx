@@ -289,6 +289,14 @@ function BootSplash({ onRetry }: { onRetry: () => void }) {
     const t = setInterval(() => setElapsed((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
+  // Reset the clock when the player retries — otherwise the splash keeps
+  // saying "still connecting — your network looks slow" (with the RETRY
+  // button still up) the instant after they clicked it, as if nothing
+  // happened.
+  const retry = () => {
+    setElapsed(0);
+    onRetry();
+  };
   return (
     <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
@@ -307,7 +315,7 @@ function BootSplash({ onRetry }: { onRetry: () => void }) {
       )}
       {elapsed >= 10 && (
         <button
-          onClick={onRetry}
+          onClick={retry}
           className="btn-pop heading-font text-xs px-4 py-1.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
         >
           RETRY NOW

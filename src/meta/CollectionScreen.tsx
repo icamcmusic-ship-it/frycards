@@ -217,7 +217,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     }
     return m;
   }, [owned, lockedByDecks, serializedByCard]);
-  const [bulkBusy, setBulkBusy] = useState(false);
+  // Which rarity's bulk sell is running (null = idle) — keyed so the OTHER
+  // rarity's button doesn't also read "SELLING…" while one runs.
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   // Live "SELLING i/N…" progress while the bulk loop runs — a long loop
   // previously sat on a static "SELLING…" with no sign it was advancing.
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -226,7 +228,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
 
   const bulkQuicksell = async (targetRarity: string) => {
     if (bulkBusy) return;
-    setBulkBusy(true);
+    setBulkBusy(targetRarity);
     setBulkError('');
     setBulkNotice('');
     setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
@@ -257,7 +259,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     } catch {
       setBulkError('Something went wrong — check your connection and try again.');
     } finally {
-      setBulkBusy(false);
+      setBulkBusy(null);
       setBulkProgress(null);
       refreshCollection();
       refreshProfile();
@@ -573,13 +575,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   <PopButton
                     key={r}
                     color="yellow"
-                    disabled={bulkBusy}
+                    disabled={!!bulkBusy}
                     onClick={() => {
                       const n = spareByRarity.get(r) || 0;
                       if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
                     }}
                   >
-                    {bulkBusy
+                    {bulkBusy === r
                       ? bulkProgress
                         ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
                         : 'SELLING…'
