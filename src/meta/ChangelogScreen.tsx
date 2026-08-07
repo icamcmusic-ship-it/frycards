@@ -18,6 +18,18 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Interactive-Seam Pass (v17)',
+    date: 'August 2026',
+    items: [
+      'YOU CAN SEE WHAT THE CPU IS DOING: while the opponent plays, the card it is acting with pulses yellow and whatever it is acting on pulses red, beat by beat — including its Leader and your Vitality. The battle log finally records Leader ability uses, spell targets and every point of clash damage, in plain language ("You invoke…", the opponent by name). New speed control: SLOW / NORMAL / FAST, remembered between matches.',
+      'FIX: three rules windows the game owed you. Your card could freeze on the stack after you passed a response window; the opponent’s clash tricks resolved straight through your answer window when you attacked; and the attacking CPU never took its own reaction window when you defended. All three now play out exactly as the rulebook says.',
+      'FIX: a card drawn by an "At Dusk" effect was always the card auto-discarded to the hand limit, with no say. The shed choice now happens after Dusk draws, so you pick from your real final hand.',
+      'A Tool now lets you PICK the enemy unit it weakens, response windows you cannot act in pass themselves, the guard step shows exactly how much damage is coming through, and guest players can finally hit PLAY — the quick match the guest button always promised.',
+      'BALANCE: Sentinel of the Nether Pit’s reach ability now costs -3 Resolve (was -2) — it had finished first on every measured table two passes running. Avatar of the Abyss gets a point BACK (-4 → -3): three stacked nerfs from an older measuring stick had buried it at the bottom. Measured one at a time across 23,808 games each on four deck cohorts, zero rules violations; full numbers in docs/BALANCE_SIM_FINDINGS_v17.md.',
+      'Plus 17 fixed bugs across the menus, store, collection, marketplace, shops and submissions — from a double-paid match reward on a flaky connection to a progress meter that counted approved showcase cards twice.',
+    ],
+  },
+  {
     version: 'The Unbreakable Pass (v16)',
     date: 'August 2026',
     items: [
@@ -25,19 +37,7 @@ export const ENTRIES: ChangelogEntry[] = [
       'BALANCE: premium keywords now cost what they say. A big keyword surcharge used to vanish on expensive bodies (the price capped at 7 no matter what the keyword was worth) — it now charges in full, up to 9. Nine Units got pricier (The Pier-Side Menace, The Wolf of Wall Street and Skyborne Skeleton Dragon print at 9), and three Events/Items got back a point of effect an old bug had docked from them.',
       'BALANCE: Amethyst Starfish’s free "At Dawn, deal 3 damage to any target" — stronger than most Leader abilities, every turn, on a 5-cost body — is now 1 damage. The card had topped the overperformer list for four straight measurement passes.',
       'CPU: Sentinel of the Nether Pit stops throwing its own Leader away. The computer was trading the whole Leader for a 2-damage ping into a big unit that survived it, in up to one game in six — those trades now only happen when the ability actually kills the threat.',
-      'Measured across 23,808 CPU-vs-CPU games per trial (four independent deck cohorts), zero rules violations, before and after every change. Full numbers in docs/BALANCE_SIM_FINDINGS_v16.md.',
-    ],
-  },
-  {
-    version: 'Bug Hunt (v15)',
-    date: 'August 2026',
-    items: [
-      "FIX (card submissions): correcting an Item's bond stats wiped the keyword that Item grants. Nearly half the Items in the game hand a keyword (Aerial, Nimble, Skywatch…) to whatever unit they bond to, and that keyword lives in the same place as the bond numbers — so nudging BOND +MIGHT by one quietly deleted it, from the card and from the database, while the panel reported a stats-only edit. The keyword now survives the edit.",
-      'HOW TO PLAY: the feature guide, which calls itself “Every Feature”, never mentioned CARD SUBMISSIONS — the one screen where you design your own cards, on the main menu since v12. It is in there now, with the treatment limits.',
-      'HOW TO PLAY: the pack section still claimed every card in the game belongs to Volume #1. Packs have been pinned to a single set since v12 and PLAYERS SHOWCASE 2026 is a real set with its own booster waiting on 100 cards. Reworded to say what actually happens.',
-      'HOW TO PLAY: the footer credited “RULEBOOK V9.0”. There has never been a v9 rulebook — the rules you are playing are v6.0, which is what the deck-select screen has said all along.',
-      'The changelog now keeps only the two most recent updates. The full history lives in CHANGELOG.md alongside the code.',
-      'Checked and clean: 332 engine and rules tests, a 144-game CPU-vs-CPU simulation with no invariant violation, and every screen measured at phone width with 153 control clicks and no layout or console problem.',
+      'Measured across 23,808 CPU-vs-CPU games per trial (four independent deck cohorts), zero rules violations, before and after every change. Full numbers now live in docs/BALANCE_SIM_FINDINGS_v17.md (which superseded this pass’s findings doc).',
     ],
   },
 ];

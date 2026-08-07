@@ -217,7 +217,9 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     }
     return m;
   }, [owned, lockedByDecks, serializedByCard]);
-  const [bulkBusy, setBulkBusy] = useState(false);
+  // Which rarity's bulk sell is running (null = idle) — keyed so the OTHER
+  // rarity's button doesn't also read "SELLING…" while one runs.
+  const [bulkBusy, setBulkBusy] = useState<string | null>(null);
   // Live "SELLING i/N…" progress while the bulk loop runs — a long loop
   // previously sat on a static "SELLING…" with no sign it was advancing.
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -226,7 +228,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
 
   const bulkQuicksell = async (targetRarity: string) => {
     if (bulkBusy) return;
-    setBulkBusy(true);
+    setBulkBusy(targetRarity);
     setBulkError('');
     setBulkNotice('');
     setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
@@ -257,7 +259,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     } catch {
       setBulkError('Something went wrong — check your connection and try again.');
     } finally {
-      setBulkBusy(false);
+      setBulkBusy(null);
       setBulkProgress(null);
       refreshCollection();
       refreshProfile();
@@ -369,6 +371,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   // versa.
   const { normal: spareNormal, foil: spareFoil } = spareSplit(inspectOwned, inspectLocked);
   const normalSellable = Math.max(0, spareNormal - inspectSerializedReserved);
+  // `q` (player_cards.quantity) INCLUDES serialized copies — the grid
+  // subtracts them for the normal tile's count, and the inspector must agree
+  // or "Normal ×3" appears beside sell buttons that can only move 1.
+  const inspectNormalQty = Math.max(0, (inspectOwned?.q || 0) - inspectSerializedReserved);
   const foilSellable = spareFoil;
 
   const handleSell = async (foil: boolean, quantity: number) => {
@@ -569,13 +575,13 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   <PopButton
                     key={r}
                     color="yellow"
-                    disabled={bulkBusy}
+                    disabled={!!bulkBusy}
                     onClick={() => {
                       const n = spareByRarity.get(r) || 0;
                       if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
                     }}
                   >
-                    {bulkBusy
+                    {bulkBusy === r
                       ? bulkProgress
                         ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
                         : 'SELLING…'
@@ -649,7 +655,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   },
                 ]
               : []),
-            { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
+            {
+              label: 'Owned',
+              value: `×${inspectNormalQty}${inspectSerializedReserved > 0 ? ` (+${inspectSerializedReserved} serialized)` : ''}`,
+            },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
             ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
           ]}
@@ -709,7 +718,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     )}
                     {sellError && <Notice text={sellError} />}
                     <div className="flex items-center justify-between text-[10px] font-bold">
-                      <span>Normal ×{inspectOwned?.q || 0}</span>
+                      <span>Normal ×{inspectNormalQty}</span>
                       <Credits amount={quicksellPrice(inspect.def.rarity, false)} />
                     </div>
                     <PopButton
@@ -721,7 +730,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     >
                       QUICKSELL 1
                     </PopButton>
-                    {(inspectOwned?.q || 0) > 1 && (
+                    {inspectNormalQty > 1 && (
                       <PopButton
                         color="black"
                         className="w-full"

@@ -45,6 +45,7 @@ import {
   canTarget,
   effectiveCost,
   mulliganHand,
+  finishDuskShed,
   legalAttackers,
   legalGuardsFor,
   wellspringAllowance,
@@ -55,6 +56,7 @@ import {
   unitHasKw,
   essenceTotal,
   findUnit,
+  hasInstantResponse,
 } from '../game/v3/engine';
 import {
   playTurn,
@@ -62,6 +64,7 @@ import {
   maybeMulliganPlayer,
   reactionPlays,
   respondToStack,
+  CpuTurnEvent,
 } from '../game/v3/ai';
 import {
   CardDef,
@@ -164,6 +167,14 @@ const GAME_CSS = `
   border-radius: 4px;
   animation: gv4-act-ring 0.8s ease-in-out infinite;
 }
+/* Units popping onto the battlefield — a quick settle-in so an entering body
+ * reads as an arrival instead of teleporting into the row. */
+@keyframes gv4-unit-enter {
+  0% { opacity: 0; transform: translateY(10px) scale(0.7); }
+  60% { opacity: 1; transform: translateY(-2px) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.gv4-unit-enter { animation: gv4-unit-enter 0.35s ease-out; }
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
@@ -626,7 +637,7 @@ function BoardUnit({
       onMouseLeave={hoverHide}
       {...longPress}
       className={cn(
-        'relative shrink-0',
+        'relative shrink-0 gv4-unit-enter',
         flash && 'gv4-attack-flash',
         highlight && 'ring-4 ring-[var(--c-red)] -translate-y-1 rounded-[4px]',
         isAttacker && 'ring-4 ring-[var(--c-yellow)] -translate-y-1 rounded-[4px]',
@@ -829,6 +840,8 @@ function LeaderLane({
   onInspect,
   floats,
   flash,
+  cpuActing,
+  cpuVitTarget,
   right,
 }: {
   p: PlayerState;
@@ -843,6 +856,12 @@ function LeaderLane({
   onInspect?: () => void;
   floats?: DmgFloat[];
   flash?: boolean;
+  /** Pulsing yellow ring on the Leader thumbnail — the CPU's Leader is the
+   * actor of the narration beat on screen. */
+  cpuActing?: boolean;
+  /** Pulsing red ring on the Vitality plate — the current CPU action is
+   * aimed at this player. */
+  cpuVitTarget?: boolean;
   /** Extra content pinned to the right end of the lane (piles, log toggle). */
   right?: React.ReactNode;
 }) {
@@ -863,7 +882,13 @@ function LeaderLane({
         flash && 'gv4-attack-flash',
       )}
     >
-      <div className={cn('shrink-0 relative', L.shattered && 'grayscale opacity-60')}>
+      <div
+        className={cn(
+          'shrink-0 relative',
+          L.shattered && 'grayscale opacity-60',
+          cpuActing && 'gv4-cpu-actor',
+        )}
+      >
         <CardFace
           def={L.def}
           size="micro"
@@ -893,6 +918,7 @@ function LeaderLane({
         className={cn(
           'relative flex items-center gap-1 px-2 py-0.5 ink-border-sm heading-font bg-[var(--c-paper)] text-[var(--c-red)] shrink-0',
           vitTargetable && 'ring-4 ring-[var(--c-red)] cursor-pointer',
+          cpuVitTarget && 'gv4-cpu-target',
         )}
       >
         <span className="text-[13px] leading-none">♥</span>
@@ -1002,11 +1028,68 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 };
 const PHASE_ORDER: GameState['phase'][] = ['Dawn', 'Main1', 'Clash', 'Main2', 'Dusk'];
 
-/** Pacing for the narrated replay of the CPU's turn. */
+/** Pacing for the narrated replay of the CPU's turn (at NORMAL speed). */
 const CPU_PACE = {
   THINK_MS: 900,
-  BEAT_MS: 1000,
+  BEAT_MS: 1150,
 } as const;
+
+/** Narration speed settings — SLOW for reading every line, FAST for skimming.
+ * Persisted so the choice survives matches. */
+const CPU_SPEEDS = [
+  { label: 'SLOW', mult: 1.7 },
+  { label: 'NORMAL', mult: 1 },
+  { label: 'FAST', mult: 0.55 },
+] as const;
+const CPU_SPEED_KEY = 'frycards:cpu-speed';
+
+/** One narration beat: a log line plus the board objects it involves, so the
+ * acting card (yellow ring) and its target (red ring) pulse while the line is
+ * on screen — the player can SEE what the CPU is doing, not just read it. */
+interface CpuBeat {
+  text: string;
+  /** Unit iids the CPU is acting WITH (yellow pulse). */
+  actors: string[];
+  /** Unit iids — or 'P1'/'P2' — the action is aimed AT (red pulse). */
+  targets: string[];
+  /** The CPU's Leader itself is the actor (rings the Leader thumbnail). */
+  leaderActing?: boolean;
+}
+
+/** Line up the engine-log lines of a CPU turn with the AI's structured event
+ * stream. Events are stamped with the log length at the moment they fired
+ * (`logAt`), so a log line at absolute index L belongs to the first event
+ * whose `logAt` exceeds L. */
+function buildCpuBeats(lines: string[], logStart: number, events: CpuTurnEvent[]): CpuBeat[] {
+  return lines.map((text, i) => {
+    const abs = logStart + i;
+    const ev = events.find((e) => (e.logAt ?? Infinity) > abs);
+    const beat: CpuBeat = { text, actors: [], targets: [] };
+    if (!ev) return beat;
+    switch (ev.kind) {
+      case 'invoke':
+        beat.actors.push(ev.iid);
+        if (ev.targetIid) beat.targets.push(ev.targetIid);
+        break;
+      case 'attack':
+        beat.actors.push(...ev.iids);
+        break;
+      case 'rebond':
+        beat.targets.push(ev.targetIid);
+        break;
+      case 'leaderAbility':
+        beat.leaderActing = true;
+        if (ev.targetIid) beat.targets.push(ev.targetIid);
+        break;
+      case 'leaderInvoke':
+        beat.leaderActing = true;
+        break;
+      default:
+        break;
+    }
+    return beat;
+  });
+}
 
 /** A targeting/bonding choice in progress — resolved by clicking a
  * highlighted card (or Vitality plate). */
@@ -1033,6 +1116,11 @@ const CLASH_PAUSE: object = { clashPause: true };
  * hook so the CPU's turn halts with the human holding priority over whatever
  * the CPU just played (see resolveCpuTurn / respond stage). */
 const PRIORITY_PAUSE: object = { priorityPause: true };
+
+/** The dusk-pause sentinel: thrown out of the engine's chooseShed hook when
+ * the human must pick shed cards mid-Dusk (after "At Dusk" triggers have
+ * drawn). The UI opens the shed picker and resumes via finishDuskShed. */
+const DUSK_PAUSE: object = { duskPause: true };
 
 /** Backstop on response windows per CPU turn. Well above any real game (each
  * one costs the player a card), low enough that a resume loop that stops
@@ -1067,6 +1155,14 @@ export function GameV4({
   /** True while the parent's recordMatchResult() call is still in flight. */
   rewardPending?: boolean;
 }) {
+  // The pre-picked shed (chosen before ending the turn) handed to the
+  // engine's chooseShed hook; consumed on use. Declared before `g` so the
+  // hook installed in its initializer can close over them.
+  const prepickRef = useRef<string[] | null>(null);
+  /** Seed for a re-opened (forced) picker when a Dusk draw invalidated the
+   * pre-pick — keeps the player's earlier choices selected. */
+  const duskSeedRef = useRef<string[]>([]);
+
   // The engine GameState is mutated in place by engine actions; it lives in
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
@@ -1083,6 +1179,22 @@ export function GameV4({
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
     maybeMulliganPlayer(game, CPU, game.rng);
+    // The human's Dusk shed choice must happen AFTER "At Dusk" triggers
+    // resolve (they can draw), so the engine calls back here mid-Dusk. A
+    // pre-pick made before ending the turn is honored when it still fits;
+    // otherwise the hook throws DUSK_PAUSE and finishTurn opens the picker
+    // on the post-trigger hand.
+    game.chooseShed = (state, pid, count) => {
+      if (pid !== HUMAN) return undefined; // CPU sheds from the end, as ever
+      const pre = prepickRef.current;
+      prepickRef.current = null;
+      const hand = state.players[pid].hand;
+      if (pre && pre.length === count && pre.every((iid) => hand.some((c) => c.iid === iid))) {
+        return pre;
+      }
+      duskSeedRef.current = pre ?? [];
+      throw DUSK_PAUSE;
+    };
     return game;
   });
 
@@ -1103,11 +1215,43 @@ export function GameV4({
   // Clash (defending, stage 'cpuGuard'): guard assignment under construction.
   const [guardSel, setGuardSel] = useState<GuardAssignments>({});
   const [guardFocus, setGuardFocus] = useState<string | null>(null);
-  // CPU-turn narration: one log line at a time.
+  // CPU-turn narration: one log line at a time, with the cards it involves.
   const [cpuBeat, setCpuBeat] = useState<{ text: string; idx: number; total: number } | null>(null);
+  /** The beat currently on screen — its actors/targets get pulsing rings. */
+  const [cpuFocus, setCpuFocus] = useState<CpuBeat | null>(null);
+  // Narration speed (persisted). The ref mirrors the state for the timer
+  // chain — a running chain of setTimeout closures would otherwise keep the
+  // speed captured when it started.
+  const [cpuSpeedIdx, setCpuSpeedIdx] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    // getItem returns null when unset, and Number(null) is 0 — which would
+    // silently make SLOW the default. Only trust a real stored string.
+    const raw = window.localStorage.getItem(CPU_SPEED_KEY);
+    if (raw === null) return 1;
+    const stored = Number(raw);
+    return Number.isInteger(stored) && stored >= 0 && stored < CPU_SPEEDS.length ? stored : 1;
+  });
+  const cpuSpeedRef = useRef(cpuSpeedIdx);
+  const cycleCpuSpeed = () => {
+    setCpuSpeedIdx((i) => {
+      const next = (i + 1) % CPU_SPEEDS.length;
+      cpuSpeedRef.current = next;
+      try {
+        window.localStorage.setItem(CPU_SPEED_KEY, String(next));
+      } catch {
+        /* private mode — the choice just won't persist */
+      }
+      return next;
+    });
+  };
+  const beatMs = () => CPU_PACE.BEAT_MS * CPU_SPEEDS[cpuSpeedRef.current].mult;
   const [showAsh, setShowAsh] = useState<false | 'me' | 'foe'>(false);
   /** Dusk shed picker: null = closed; array = card iids chosen to shed. */
   const [shedPick, setShedPick] = useState<string[] | null>(null);
+  /** True when the picker opened MID-Dusk (an "At Dusk" trigger drew past the
+   * hand limit): the turn is already ending, so there's no BACK — confirming
+   * resumes the paused Dusk via finishDuskShed. */
+  const [shedForced, setShedForced] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     text: string;
     onConfirm: () => void;
@@ -1140,7 +1284,7 @@ export function GameV4({
   const phaseTimeoutRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<number | null>(null);
   const floatTimeoutsRef = useRef<Set<number>>(new Set());
-  const cpuBeatsRef = useRef<string[]>([]);
+  const cpuBeatsRef = useRef<CpuBeat[]>([]);
   const cpuBeatIdxRef = useRef(0);
   const cpuDoneRef = useRef<(() => void) | null>(null);
   /** What to do once the human's response window closes. Set whenever the
@@ -1149,6 +1293,21 @@ export function GameV4({
   const respondResumeRef = useRef<(() => void) | null>(null);
   /** Response windows opened during the current CPU turn (loop backstop). */
   const cpuResumeCountRef = useRef(0);
+
+  /** The engine log speaks in seat ids ("P2 invokes…"); the narration bubble
+   * and battle log should speak in names. Verb agreement is fixed for the
+   * second person ("You invoke", not "You invokes"). */
+  const humanize = (s: string) => {
+    const out = s
+      .replace(/\bP1's\b/g, 'your')
+      .replace(/\bP2's\b/g, `${cpuLabel}'s`)
+      .replace(/\bP1 (invokes|plays|attacks|sheds|mulligans|re-bonds|must)\b/g, (_, v: string) =>
+        v === 'must' ? 'You must' : `You ${v.slice(0, -1)}`,
+      )
+      .replace(/\bP1\b/g, 'you')
+      .replace(/\bP2\b/g, cpuLabel);
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  };
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -1338,9 +1497,10 @@ export function GameV4({
       else if (showAsh) setShowAsh(false);
       else if (shedPick !== null) {
         // Same as the picker's ✕ BACK: clear a partial selection first, then
-        // a second Escape closes the picker entirely.
+        // a second Escape closes the picker entirely — unless the picker is
+        // a mid-Dusk resume (shedForced), which has no way back.
         if (shedPick.length > 0) setShedPick([]);
-        else setShedPick(null);
+        else if (!shedForced) setShedPick(null);
       } else if (logExpanded) setLogExpanded(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
       // Symmetric with attacker selection: Escape clears an in-progress
@@ -1350,7 +1510,18 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmDialog, inspect, preview, pending, showAsh, atkSel, shedPick, logExpanded, guardSel]);
+  }, [
+    confirmDialog,
+    inspect,
+    preview,
+    pending,
+    showAsh,
+    atkSel,
+    shedPick,
+    shedForced,
+    logExpanded,
+    guardSel,
+  ]);
 
   useEffect(() => {
     const onResize = () => setViewportW(window.innerWidth);
@@ -1604,6 +1775,26 @@ export function GameV4({
           say('Bond set — now pick a target for its effect.');
           return;
         }
+        // v17: a Tool's printed text is "weakens a TARGET enemy unit" — chain
+        // to that pick too (the engine honors it), instead of silently
+        // auto-targeting the biggest enemy.
+        if (card && card.def.subtype === 'Tool' && card.def.nerf) {
+          const nerfEff: Effect = {
+            action: 'weaken',
+            value: card.def.nerf,
+            target: 'enemyUnit',
+          };
+          if (targetsFor(g, HUMAN, nerfEff).length > 0) {
+            setPending({
+              kind: 'invoke',
+              cardIid: p.cardIid,
+              effect: nerfEff,
+              bondTargetIid: targetIid,
+            });
+            say('Bond set — now pick the enemy unit the Tool weakens.');
+            return;
+          }
+        }
         doInvoke(p.cardIid, { bondTargetIid: targetIid });
         return;
       }
@@ -1630,9 +1821,23 @@ export function GameV4({
   const myAttackers = stage === 'play' ? legalAttackers(g, HUMAN) : [];
 
   const finishTurn = () => {
-    // Ends the turn: Dusk (sheds from the END of the hand) → pass → CPU's
-    // Dawn → its Main I.
-    endPhase(g);
+    // Ends the turn: Dusk (triggers, then shed) → pass → CPU's Dawn → its
+    // Main I. The engine's chooseShed hook can THROW mid-Dusk when an
+    // "At Dusk" draw pushed the hand over the limit (or the pre-pick no
+    // longer fits) — reopen the picker on the post-trigger hand and resume
+    // via finishDuskShed once the player confirms.
+    try {
+      endPhase(g);
+    } catch (e) {
+      if (e !== DUSK_PAUSE) throw e;
+      bump();
+      const hand = new Set(me.hand.map((c) => c.iid));
+      setShedPick(duskSeedRef.current.filter((iid) => hand.has(iid)));
+      duskSeedRef.current = [];
+      setShedForced(true);
+      say('An At Dusk draw put you over the hand limit — pick what to shed.');
+      return;
+    }
     bump();
     if (checkWinner()) return;
     runCpuTurn();
@@ -1643,10 +1848,11 @@ export function GameV4({
     setAtkSel(new Set());
     closePreview();
     if (g.phase === 'Main2') {
-      // v5.1: over the hand limit — let the player CHOOSE what to shed
-      // (the engine sheds from the end of the hand, so the picker just
-      // reorders the chosen cards to the back before ending the turn).
+      // v5.1: over the hand limit — let the player CHOOSE what to shed.
+      // This pre-pick is handed to the engine's chooseShed hook; it stays
+      // cancellable (BACK returns to Main II) because Dusk hasn't run yet.
       if (me.hand.length > MAX_HAND) {
+        setShedForced(false);
         setShedPick([]);
         return;
       }
@@ -1670,6 +1876,66 @@ export function GameV4({
     });
   };
 
+  /** Names of the CPU's reaction plays in the current clash window —
+   * accumulated across pause/resume rounds for the summary banner. */
+  const cpuReactionNamesRef = useRef<string[]>([]);
+
+  /**
+   * Run the CPU's clash reaction plays (Quick Events / Ambush units) with the
+   * same pause contract playTurn uses: a reaction the human can answer THROWS,
+   * we open the response window, and the window's close resumes right here
+   * (reactionPlays is re-entrant). `which` picks what happens after the CPU
+   * is done: finish declaring the human's attack, or resolve the CPU's clash.
+   * Without this the CPU's reactions were force-resolved straight through the
+   * human's rulebook-§6 response window (human attacking), and the attacking
+   * CPU never got its own reaction window at all (human defending) — the one
+   * place interactive play silently diverged from the balance sims.
+   */
+  const runCpuClashReactions = (which: 'myAttack' | 'cpuClash') => {
+    let paused = false;
+    try {
+      reactionPlays(
+        g,
+        CPU,
+        (ev) => {
+          if (ev.kind === 'invoke') cpuReactionNamesRef.current.push(ev.name);
+        },
+        {
+          onOpponentPriority: () => {
+            throw PRIORITY_PAUSE;
+          },
+        },
+      );
+    } catch (e) {
+      if (e !== PRIORITY_PAUSE) throw e;
+      paused = true;
+    }
+    bump();
+    if (checkWinner()) return;
+    if (paused) {
+      openResponseWindow(() => runCpuClashReactions(which));
+      return;
+    }
+    if (which === 'myAttack') finishMyAttackDeclaration();
+    else finishCpuClashResolve();
+  };
+
+  /** After the CPU's guards + reactions are in: back to the human's clash. */
+  const finishMyAttackDeclaration = () => {
+    setStage('play');
+    const reactions = cpuReactionNamesRef.current;
+    cpuReactionNamesRef.current = [];
+    const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
+      (v: string[]) => v.length > 0,
+    ).length;
+    const guardMsg =
+      guarded > 0
+        ? `${cpuLabel} assigns ${guarded} guard line(s).`
+        : `${cpuLabel} lets it through!`;
+    say(reactions.length > 0 ? `${guardMsg} Reaction: ${reactions.join(', ')}!` : guardMsg);
+    checkWinner();
+  };
+
   const declareMyAttack = () => {
     if (atkSel.size === 0) return;
     if (!declareAttackers(g, [...atkSel])) {
@@ -1682,21 +1948,9 @@ export function GameV4({
     const guards = chooseGuards(g, CPU);
     if (!declareGuards(g, guards)) declareGuards(g, {});
     // The defending CPU gets its clash reaction window (Quick Events /
-    // Ambush units) before damage — same as the sim harness gives it.
-    const reactions: string[] = [];
-    reactionPlays(g, CPU, (ev) => {
-      if (ev.kind === 'invoke') reactions.push(ev.name);
-    });
-    bump();
-    const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
-      (v: string[]) => v.length > 0,
-    ).length;
-    const guardMsg =
-      guarded > 0
-        ? `${cpuLabel} assigns ${guarded} guard line(s).`
-        : `${cpuLabel} lets it through!`;
-    say(reactions.length > 0 ? `${guardMsg} Reaction: ${reactions.join(', ')}!` : guardMsg);
-    checkWinner();
+    // Ambush units) before damage — pause-capable, so the human can answer.
+    cpuReactionNamesRef.current = [];
+    runCpuClashReactions('myAttack');
   };
 
   // The defending (non-active) player's vitality plate should flash when at
@@ -1743,17 +1997,29 @@ export function GameV4({
       const done = cpuDoneRef.current;
       cpuDoneRef.current = null;
       setCpuBeat(null);
+      setCpuFocus(null);
       done?.();
       return;
     }
     cpuBeatIdxRef.current = i + 1;
-    setCpuBeat({ text: beats[i], idx: i, total: beats.length });
-    cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, CPU_PACE.BEAT_MS);
+    setCpuBeat({ text: beats[i].text, idx: i, total: beats.length });
+    setCpuFocus(beats[i]);
+    cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, beatMs());
   };
 
-  /** Replay `lines` as staggered narration beats, then call `onDone`. */
-  const narrate = (lines: string[], onDone: () => void) => {
-    cpuBeatsRef.current = lines;
+  /** Replay a CPU turn's log lines as staggered narration beats — each one
+   * ringing the cards it involves — then call `onDone`. */
+  const narrate = (
+    lines: string[],
+    logStart: number,
+    events: CpuTurnEvent[],
+    onDone: () => void,
+  ) => {
+    cpuBeatsRef.current = buildCpuBeats(
+      lines.map((l) => humanize(l)),
+      logStart,
+      events,
+    );
     cpuBeatIdxRef.current = 0;
     cpuDoneRef.current = onDone;
     if (lines.length === 0) {
@@ -1782,6 +2048,7 @@ export function GameV4({
 
   const beginHumanTurn = () => {
     setCpuBeat(null);
+    setCpuFocus(null);
     respondResumeRef.current = null;
     cpuResumeCountRef.current = 0;
     bump();
@@ -1801,11 +2068,21 @@ export function GameV4({
    * they could respond with) and the stack has settled past them.
    */
   const openResponseWindow = (onClose: () => void) => {
+    const top = g.stack[g.stack.length - 1];
+    // Nothing to respond WITH (no Quick Event / Ambush unit castable even
+    // tapping every Location): opening the window would only make the player
+    // click PASS to continue. Pass for them and say so — the stack display
+    // still shows what resolved.
+    if (!hasInstantResponse(g, HUMAN)) {
+      respondResumeRef.current = onClose;
+      say(top ? `${top.sourceName} resolves — nothing you can respond with.` : 'Play continues.');
+      passMyPriority();
+      return;
+    }
     respondResumeRef.current = onClose;
     setPending(null);
     closePreview();
     setStage('respond');
-    const top = g.stack[g.stack.length - 1];
     say(top ? `${top.sourceName} is on the stack — respond or pass.` : 'Respond or pass.');
   };
 
@@ -1816,9 +2093,23 @@ export function GameV4({
    */
   const afterResponseAction = () => {
     settleStack(g);
+    // The interactive settleStack can HALT with the CPU holding priority
+    // (it has an affordable instant answer to something of ours still on the
+    // stack). Nothing else drives the CPU's window from here, so without
+    // this loop the human's own card froze on the stack — no PASS button,
+    // sorcery-speed plays refused — until a phase change discarded it.
+    // Drive the CPU through its window exactly like doInvoke does.
+    let guard = 8;
+    let cpuPlays = 0;
+    while (!g.winner && hasPriority(g, CPU) && guard-- > 0) {
+      cpuPlays += respondToStack(g, CPU);
+    }
     bump();
     if (checkWinner()) return;
-    if (hasPriority(g, HUMAN)) return; // still their window
+    if (hasPriority(g, HUMAN)) {
+      if (cpuPlays > 0) say(`${cpuLabel} responds — answer it or pass.`);
+      return; // still their window
+    }
     const resume = respondResumeRef.current;
     respondResumeRef.current = null;
     if (resume) resume();
@@ -1838,9 +2129,13 @@ export function GameV4({
   const resolveCpuTurn = () => {
     cpuTimeoutRef.current = null;
     const logStart = g.log.length;
+    // Collected via opts.observe rather than playTurn's return value: a pause
+    // handler exits by THROWING, which would lose the returned array.
+    const events: CpuTurnEvent[] = [];
     let pause: object | null = null;
     try {
       playTurn(g, CPU, {
+        observe: (ev) => events.push(ev),
         chooseGuardsFor: () => {
           throw CLASH_PAUSE;
         },
@@ -1861,7 +2156,7 @@ export function GameV4({
       pause = e as object;
     }
     bump();
-    narrate(g.log.slice(logStart), () => {
+    narrate(g.log.slice(logStart), logStart, events, () => {
       if (checkWinner()) return;
       if (pause === CLASH_PAUSE && g.clash && g.clash.step === 'guards') {
         setGuardSel({});
@@ -1904,7 +2199,7 @@ export function GameV4({
     cpuThinkTimeoutRef.current = window.setTimeout(() => {
       cpuThinkTimeoutRef.current = null;
       resolveCpuTurn();
-    }, CPU_PACE.THINK_MS);
+    }, CPU_PACE.THINK_MS * CPU_SPEEDS[cpuSpeedRef.current].mult);
   };
 
   /** After the human's guard step + reaction window resolve the clash, the
@@ -1926,9 +2221,11 @@ export function GameV4({
    * this must never re-do the phase change that got us here. */
   const playCpuRemainder = () => {
     const logStart = g.log.length;
+    const events: CpuTurnEvent[] = [];
     let paused = false;
     try {
       playTurn(g, CPU, {
+        observe: (ev) => events.push(ev),
         onOpponentPriority: () => {
           throw PRIORITY_PAUSE;
         },
@@ -1944,7 +2241,7 @@ export function GameV4({
     }
     bump();
     setStage('cpu');
-    narrate(g.log.slice(logStart), () => {
+    narrate(g.log.slice(logStart), logStart, events, () => {
       if (checkWinner()) return;
       if (!paused) {
         beginHumanTurn();
@@ -2014,6 +2311,18 @@ export function GameV4({
     return null;
   })();
 
+  /** Vitality the player stands to lose to attackers left unguarded by the
+   * CURRENT (in-progress) guard selection — shown live so "how bad is
+   * letting this through?" never needs mental arithmetic. */
+  const incomingIfConfirmed = ((): number => {
+    if (!guardStep || !g.clash) return 0;
+    return g.clash.attackers.reduce((sum, aIid) => {
+      if ((guardSel[aIid] ?? []).length > 0) return sum;
+      const a = findUnit(g, aIid);
+      return sum + (a ? effMight(g, a) : 0);
+    }, 0);
+  })();
+
   const confirmGuards = () => {
     if (guardProblem) {
       say(guardProblem);
@@ -2029,6 +2338,20 @@ export function GameV4({
 
   const resolveCpuClash = () => {
     if (!g.clash) return;
+    // The attacking CPU's own reaction window comes first (the sim gives it
+    // one at exactly this point; the interactive path used to skip it).
+    cpuReactionNamesRef.current = [];
+    runCpuClashReactions('cpuClash');
+  };
+
+  const finishCpuClashResolve = () => {
+    if (!g.clash) {
+      continueCpuAfterClash();
+      return;
+    }
+    const reactions = cpuReactionNamesRef.current;
+    cpuReactionNamesRef.current = [];
+    if (reactions.length > 0) say(`${cpuLabel} reacts: ${reactions.join(', ')}!`);
     const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
     const vitKey = unguardedVitKey();
     if (resolveClash(g)) {
@@ -2130,7 +2453,11 @@ export function GameV4({
       // hover — invisible on touch. Put it in the hint bar instead.
       if (guardStep && guardProblem) return `⚠ ${guardProblem}`;
       if (guardStep)
-        return 'Select an attacker line, then click your units to guard it (multiple guards OK). Unguarded attackers hit your Vitality.';
+        return `Select an attacker line, then click your units to guard it (multiple guards OK). ${
+          incomingIfConfirmed > 0
+            ? `Unguarded hits incoming: ${incomingIfConfirmed} Vitality (you have ${Math.max(0, me.vitality)}).`
+            : 'Every attacker is guarded.'
+        }`;
       return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
     }
     if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
@@ -2327,6 +2654,17 @@ export function GameV4({
           ) : (
             <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
           )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              cycleCpuSpeed();
+            }}
+            title="Narration speed — click to cycle Slow / Normal / Fast"
+            aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
+            className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
+          >
+            ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
+          </button>
         </div>
       )}
 
@@ -2421,6 +2759,8 @@ export function GameV4({
         onInspect={() => setInspect(foe.leader.def)}
         floats={floatsFor(`vit:${CPU}`)}
         flash={flashIids.has(`vit:${CPU}`)}
+        cpuActing={stage === 'cpu' && !!cpuFocus?.leaderActing}
+        cpuVitTarget={stage === 'cpu' && !!cpuFocus?.targets.includes(CPU)}
         right={
           <>
             {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={13} />}
@@ -2466,6 +2806,8 @@ export function GameV4({
               highlight={targetable || !!focusLine}
               isAttacker={!!attacking}
               flash={flashIids.has(u.iid)}
+              acting={stage === 'cpu' && !!cpuFocus?.actors.includes(u.iid)}
+              acted={stage === 'cpu' && !!cpuFocus?.targets.includes(u.iid)}
               floats={floatsFor(u.iid)}
               guardNote={
                 attacking ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING` : undefined
@@ -2512,7 +2854,11 @@ export function GameV4({
                 : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
             )}
           >
-            🛡 CONFIRM GUARDS
+            {Object.keys(guardSel).length > 0
+              ? '🛡 CONFIRM GUARDS'
+              : incomingIfConfirmed > 0
+                ? `🛡 NO GUARDS — TAKE ${incomingIfConfirmed}`
+                : '🛡 CONFIRM GUARDS'}
           </button>
         ) : reactionStep ? (
           <button
@@ -2541,12 +2887,21 @@ export function GameV4({
             {phaseButtonLabel}
           </button>
         ) : stage === 'cpu' ? (
-          <button
-            onClick={skipCpuBeats}
-            className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
-          >
-            SKIP ▸▸
-          </button>
+          <>
+            <button
+              onClick={cycleCpuSpeed}
+              title="Narration speed — click to cycle Slow / Normal / Fast"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+            >
+              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
+            </button>
+            <button
+              onClick={skipCpuBeats}
+              className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
+            >
+              SKIP ▸▸
+            </button>
+          </>
         ) : (
           <span className="heading-font text-[9px] text-[var(--c-paper)]/35 tracking-[2px] py-2">
             — CLASH LINE —
@@ -2569,7 +2924,7 @@ export function GameV4({
             Battle Log
           </div>
           {g.log.slice(-160).map((l, i, arr) => (
-            <div key={g.log.length - arr.length + i}>· {renderKeywordText(l, true)}</div>
+            <div key={g.log.length - arr.length + i}>· {renderKeywordText(humanize(l), true)}</div>
           ))}
         </div>
       )}
@@ -2610,6 +2965,7 @@ export function GameV4({
               isGuard={!!guardAssigned || isDeclaredGuard}
               highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
               flash={flashIids.has(u.iid)}
+              acted={stage === 'cpu' && !!cpuFocus?.targets.includes(u.iid)}
               floats={floatsFor(u.iid)}
               guardNote={
                 guardAssigned
@@ -2699,6 +3055,7 @@ export function GameV4({
         onInspect={() => setInspect(me.leader.def)}
         floats={floatsFor(`vit:${HUMAN}`)}
         flash={flashIids.has(`vit:${HUMAN}`)}
+        cpuVitTarget={stage === 'cpu' && !!cpuFocus?.targets.includes(HUMAN)}
         right={
           <>
             <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
@@ -2926,13 +3283,15 @@ export function GameV4({
                 >
                   ✦ SUGGEST
                 </button>
-                <button
-                  onClick={() => setShedPick(null)}
-                  aria-label="Back — cancel shedding"
-                  className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
-                >
-                  ✕ BACK
-                </button>
+                {!shedForced && (
+                  <button
+                    onClick={() => setShedPick(null)}
+                    aria-label="Back — cancel shedding"
+                    className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
+                  >
+                    ✕ BACK
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
@@ -2991,12 +3350,22 @@ export function GameV4({
               <button
                 disabled={shedPick.length !== me.hand.length - MAX_HAND}
                 onClick={() => {
-                  // Engine sheds from the END of the hand: move the chosen
-                  // cards to the back, keeping everything else in order.
-                  const chosen = new Set(shedPick);
-                  const keep = me.hand.filter((c) => !chosen.has(c.iid));
-                  const shed = me.hand.filter((c) => chosen.has(c.iid));
-                  me.hand.splice(0, me.hand.length, ...keep, ...shed);
+                  if (shedForced) {
+                    // Mid-Dusk pause (an At Dusk draw went over the limit):
+                    // resume the engine's Dusk with the chosen cards.
+                    const picks = shedPick;
+                    setShedPick(null);
+                    setShedForced(false);
+                    finishDuskShed(g, picks);
+                    bump();
+                    if (checkWinner()) return;
+                    runCpuTurn();
+                    return;
+                  }
+                  // Pre-pick: handed to the engine's chooseShed hook, which
+                  // sheds exactly these unless an At Dusk draw intervenes
+                  // (then the picker reopens on the post-trigger hand).
+                  prepickRef.current = shedPick;
                   setShedPick(null);
                   finishTurn();
                 }}
@@ -3193,7 +3562,10 @@ export function GameV4({
               {g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
             </div>
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
-              {g.log.slice(-2).join(' · ')}
+              {g.log
+                .slice(-2)
+                .map((l) => humanize(l))
+                .join(' · ')}
             </div>
             {reward != null && (
               <div className="flex flex-col items-center gap-1 mb-4">

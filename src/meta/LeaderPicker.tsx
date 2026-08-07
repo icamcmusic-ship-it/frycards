@@ -23,10 +23,15 @@ const DECK_BOX_MAX_RARITY_IDX = RARITIES.indexOf('Rare');
  */
 export function LeaderPicker({
   busy,
+  error,
   onPick,
   onClose,
 }: {
   busy: boolean;
+  /** Claim failure to show INSIDE the dialog — the Store's own error Notice
+   * renders underneath this opaque full-screen overlay, so without this a
+   * failed claim looked like the picker silently ignoring the tap. */
+  error?: string;
   onPick: (leaderId: string) => void;
   onClose: () => void;
 }) {
@@ -88,6 +93,14 @@ export function LeaderPicker({
         </div>
 
         <div className="p-4">
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 bg-[var(--c-red)] text-[var(--c-paper)] font-bold text-[11px] px-3 py-2 ink-border-sm"
+            >
+              {error}
+            </div>
+          )}
           {deckBoxLeaders.length === 0 ? (
             <div className="text-center font-bold text-[var(--c-steel)] py-10">
               Leaders are still loading — try again in a moment.

@@ -56,8 +56,10 @@ import {
   wellspringChoices,
 } from './engine';
 
-/** Event log entries the UI animates while replaying the CPU's turn. */
-export type CpuTurnEvent =
+/** Event log entries the UI animates while replaying the CPU's turn.
+ * `logAt` (stamped by playTurn's observer) is the engine-log length at the
+ * moment the event fired, so the UI can line events up with log lines. */
+export type CpuTurnEvent = { logAt?: number } & (
   | { kind: 'wellspring'; essence: EssenceType }
   | {
       kind: 'invoke';
@@ -74,7 +76,8 @@ export type CpuTurnEvent =
   | { kind: 'attack'; iids: string[]; names: string[] }
   | { kind: 'guard'; assignments: GuardAssignments }
   | { kind: 'clash' }
-  | { kind: 'phase'; phase: GameState['phase'] };
+  | { kind: 'phase'; phase: GameState['phase'] }
+);
 
 export type CpuTurnObserver = (ev: CpuTurnEvent) => void;
 
@@ -1035,8 +1038,28 @@ export function reactionPlays(
   state: GameState,
   defender: PlayerId,
   observe?: CpuTurnObserver,
+  /** UI callers pass `onOpponentPriority` so a reaction the opponent can
+   * answer pauses (by throwing) instead of force-resolving through their
+   * window — the same contract playTurn installs. Inside playTurn the hook
+   * is already installed and this stays undefined. Re-entrant: after the
+   * window closes, call reactionPlays again to continue where it left off. */
+  opts: { onOpponentPriority?: YieldPriority } = {},
 ): number {
   if (state.clash?.step !== 'reaction') return 0;
+  const prevYield = yieldPriority;
+  if (opts.onOpponentPriority) yieldPriority = opts.onOpponentPriority;
+  try {
+    return reactionPlaysBody(state, defender, observe);
+  } finally {
+    yieldPriority = prevYield;
+  }
+}
+
+function reactionPlaysBody(
+  state: GameState,
+  defender: PlayerId,
+  observe?: CpuTurnObserver,
+): number {
   const p = state.players[defender];
   let plays = 0;
   // The reaction window is what the reserved locations were saved for — but
@@ -1111,6 +1134,10 @@ export interface PlayTurnOptions {
   /** Hand response windows to the opponent instead of resolving through them.
    * Omitted by sims and tests, where nobody is there to answer. */
   onOpponentPriority?: YieldPriority;
+  /** Live event tap. `playTurn` RETURNS its events, but a pause handler exits
+   * by throwing, which loses the return value — the UI passes this to keep
+   * the events it needs for narration highlights across pauses. */
+  observe?: CpuTurnObserver;
 }
 
 /** Installed for the duration of a `playTurn` call — the CPU's play sites are
@@ -1128,7 +1155,11 @@ export function playTurn(
   opts: PlayTurnOptions = {},
 ): CpuTurnEvent[] {
   const events: CpuTurnEvent[] = [];
-  const observe: CpuTurnObserver = (ev) => events.push(ev);
+  const observe: CpuTurnObserver = (ev) => {
+    ev.logAt = state.log.length;
+    events.push(ev);
+    opts.observe?.(ev);
+  };
   if (state.winner || state.active !== pid) return events;
   yieldPriority = opts.onOpponentPriority;
   try {

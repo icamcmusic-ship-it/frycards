@@ -1947,7 +1947,19 @@ function MyShopTab() {
                 'Close your shop? Half of each slot’s remaining collateral is refunded and the rest is burned — closing again later returns nothing.',
               )
             )
-              run(() => closeShop().then((r) => r.error), 'Shop closed.', true);
+              run(
+                async () => {
+                  const { data, error } = await closeShop();
+                  if (error) return error;
+                  // Say how much actually came back — after a warning about
+                  // half the collateral burning, "Shop closed." alone left the
+                  // player guessing at the refund.
+                  setNotice(`Shop closed — ${fmtCredits(data?.refunded ?? 0)} credits refunded.`);
+                  return null;
+                },
+                undefined,
+                true,
+              );
           }}
         >
           CLOSE SHOP
@@ -2757,7 +2769,11 @@ function MysteryBuilderPanel({
       if (checkRequestId.current !== requestId) return;
       setCheckError('Could not check this pool — check your connection and try again.');
     } finally {
-      if (checkRequestId.current === requestId) setChecking(false);
+      // Cleared UNCONDITIONALLY: the token guard protects validation state,
+      // but gating the busy flag on it meant an edit made mid-flight (which
+      // bumps the token) left `checking` stuck true forever — PREVIEW POOL
+      // wedged at "CHECKING…" until the panel was closed and reopened.
+      setChecking(false);
     }
   };
 

@@ -24,9 +24,10 @@ export const ALL_SET_NAMES: string[] = ['Volume #1', 'Players Showcase 2026'];
  * collection/economy signal players learn to recognize, not app chrome.
  * Gray -> Green -> Blue -> Purple -> Gold -> Teal -> Pink -> Red, low to high.
  *
- * v6.8: Full-Art moved back ABOVE Ultra-Rare — it is now the second-rarest
- * tier, behind Mythic only. Prices, shard costs, pack odds, serialized supply
- * and the deterministic stat budget all follow this order.
+ * v6.8: Full-Art moved back ABOVE Ultra-Rare. (It was briefly the
+ * second-rarest tier; since v7.0 Alt-Art sits above it — see below.) Prices,
+ * shard costs, pack odds, serialized supply and the deterministic stat
+ * budget all follow this order.
  *
  * v7.0: Alt-Art added between Full-Art and Mythic — a separately-illustrated
  * alternate printing of a hand-picked existing card (same identity/stats,

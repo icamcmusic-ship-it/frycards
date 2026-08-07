@@ -224,7 +224,9 @@ export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
     suggestions.push(
       `Top-heavy: ${bucketCounts[2]} cards cost 5+ (the builder targets ~${curve[2].target} of ${ref}).`,
     );
-  else if (curve[1].status === 'low' && total > 0)
+  // Not an else-if: a deck can be over on 5+ AND under on 3–4 at the same
+  // time, and hearing only about the top-heaviness hid the midgame hole.
+  if (curve[1].status === 'low' && total > 0)
     suggestions.push(
       `Thin midgame: ${bucketCounts[1]} cards at cost 3–4 (target ~${curve[1].target} of ${ref}).`,
     );

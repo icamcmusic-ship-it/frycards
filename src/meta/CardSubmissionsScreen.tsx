@@ -512,9 +512,11 @@ function MySubmissions({
 
 function RulesPanel({ stats }: { stats: ShowcaseStats | null }) {
   const submitters = stats?.submitters ?? 0;
-  // Pending + approved + already-printed is the honest count of "cards this
-  // set would have", which is what the 100-card bar is about.
-  const cards = (stats?.submitted ?? 0) + (stats?.printed ?? 0);
+  // Pending + already-printed is the honest count of "cards this set would
+  // have". NOT `submitted + printed`: `submitted` includes approved rows and
+  // approving a submission is what prints it, so that sum counted every
+  // approved card twice and inflated the meter as approvals accumulated.
+  const cards = (stats?.pending ?? 0) + (stats?.printed ?? 0);
   const needed = stats?.cards_needed ?? SHOWCASE_MIN_CARDS;
   const pct = Math.min(100, Math.round((cards / Math.max(1, needed)) * 100));
   return (
@@ -650,7 +652,11 @@ const numOrNull = (raw: string): number | null => {
   const t = raw.trim();
   if (!t) return null;
   const n = Number(t);
-  return Number.isFinite(n) ? n : null;
+  // Integers only: `Number()` happily accepts "2.5" and "1e3", which the
+  // panel's own copy ("must be whole numbers") promises to reject — and a
+  // fractional stat would either print a 2.5/3 unit or bounce off the
+  // server's integer columns as a raw Postgres error.
+  return Number.isInteger(n) ? n : null;
 };
 
 /**
@@ -675,7 +681,7 @@ export function overridesFrom(
   for (const key of ['might', 'grit', 'rebondCost', 'nerf', 'resolve'] as const) {
     if (form[key].trim() === base[key].trim()) continue;
     const n = numOrNull(form[key]);
-    if (form[key].trim() && n === null) problems.push(`${key} must be a number.`);
+    if (form[key].trim() && n === null) problems.push(`${key} must be a whole number.`);
     else if (n !== null && n < 0) problems.push(`${key} cannot be negative.`);
     else (out as Record<string, unknown>)[key] = n;
   }
@@ -1345,7 +1351,12 @@ export function BulkAddPanel() {
               : `ADD ${parsed.rows.length} CARD${parsed.rows.length === 1 ? '' : 'S'} ▸`}
           </PopButton>
           <span className="text-[10px] font-bold text-[var(--c-steel)]">
-            {parsed.rows.length} ready · {parsed.errors.length} rejected
+            {/* An empty textarea is "nothing typed yet", not "1 rejected" —
+                parseBulkCards('') returns a synthetic 'Nothing to import.'
+                error that must not render as a pre-typed failure state. */}
+            {text.trim() === ''
+              ? 'Paste JSON or one card per line to begin'
+              : `${parsed.rows.length} ready · ${parsed.errors.length} rejected`}
           </span>
         </div>
         {error && (
@@ -1360,7 +1371,7 @@ export function BulkAddPanel() {
         )}
       </div>
 
-      {parsed.errors.length > 0 && (
+      {text.trim() !== '' && parsed.errors.length > 0 && (
         <div className="ink-border-sm bg-[var(--c-red)] text-[var(--c-paper)] p-2">
           <div className="heading-font text-[10px] mb-1">REJECTED BEFORE SENDING</div>
           <ul className="text-[10px] font-bold flex flex-col gap-0.5">
@@ -1496,9 +1507,8 @@ export function CardSubmissionsScreen({ onBack }: { onBack: () => void }) {
           {stats && (
             <span className="ml-auto text-[10px] font-bold text-[var(--c-steel)]">
               {stats.printed} printed · {stats.pending} awaiting review · {stats.submitters}{' '}
-              submitter{stats.submitters === 1 ? '' : 's'} ·{' '}
-              {stats.printed + (stats.submitted ?? 0)}/{stats.cards_needed ?? SHOWCASE_MIN_CARDS} to
-              a set
+              submitter{stats.submitters === 1 ? '' : 's'} · {stats.printed + (stats.pending ?? 0)}/
+              {stats.cards_needed ?? SHOWCASE_MIN_CARDS} to a set
             </span>
           )}
         </div>

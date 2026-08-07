@@ -115,7 +115,10 @@ export function Card3DInspector({
   const scale = useMemo(() => {
     const { w, h } = CARD_SIZES.full;
     const heightBudget = viewport.h * (narrow ? 0.6 : 0.72);
-    return Math.max(1, Math.min(INSPECT_SCALE, heightBudget / h, (viewport.w * 0.92) / w));
+    // Floored at 0.5, NOT 1 — a 1 floor defeated the whole fit-clamp on
+    // short viewports (every landscape phone), pushing the meta column and
+    // CLOSE/FLIP below the fold.
+    return Math.max(0.5, Math.min(INSPECT_SCALE, heightBudget / h, (viewport.w * 0.92) / w));
   }, [viewport, narrow]);
   const { w, h } = CARD_SIZES.full;
 
@@ -150,7 +153,17 @@ export function Card3DInspector({
   // top of CardFace's always-on inspector treatment (see premium-boost):
   // Ultra-Rare a gold-leaf glint that sweeps with the tilt angle, Mythic a
   // molten ember glow that pools under the pointer.
-  const premium = def.rarity === 'Ultra-Rare' ? 'ultra' : def.rarity === 'Mythic' ? 'mythic' : null;
+  // Gated on !serial like everywhere else: the serialized prismatic frame
+  // REPLACES the rarity treatment (CardFaceV4 gates mythic/ultra/altArt the
+  // same way), so a serialized print must not stack the gold-leaf glint or
+  // ember glow on top of it.
+  const premium = serial
+    ? null
+    : def.rarity === 'Ultra-Rare'
+      ? 'ultra'
+      : def.rarity === 'Mythic'
+        ? 'mythic'
+        : null;
 
   return (
     <div

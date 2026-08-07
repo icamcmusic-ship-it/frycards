@@ -180,7 +180,10 @@ export function ProgressBar({
   /** Accessible name for the bar (e.g. "Battle pass progress"). */
   ariaLabel?: string;
 }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  // Clamped at BOTH ends: a negative value (reachable when the server's
+  // level/xp pair runs ahead of the client's xpForLevel mirror) produced an
+  // invalid negative CSS width and an aria-valuenow below aria-valuemin.
+  const pct = max > 0 ? Math.min(100, Math.max(0, Math.round((value / max) * 100))) : 0;
   return (
     <div
       className={cn('h-2.5 ink-border-sm bg-[var(--c-ink)]/10 overflow-hidden', className)}
@@ -188,7 +191,7 @@ export function ProgressBar({
       aria-label={ariaLabel}
       aria-valuemin={0}
       aria-valuemax={max}
-      aria-valuenow={Math.min(value, max)}
+      aria-valuenow={Math.min(Math.max(0, value), max)}
     >
       <div
         className={cn('h-full bg-[var(--c-yellow)] transition-all', barClassName)}

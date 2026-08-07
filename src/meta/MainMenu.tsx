@@ -98,8 +98,14 @@ function DailyLoginPanel() {
     .slice(0, 10);
   const streakContinues = lastClaim === yesterday;
   // A lapsed streak also shows as 0 (not the stale pre-lapse count) until
-  // the next claim starts a new one.
-  const streak = claimed?.streak ?? (claimable && !streakContinues ? 0 : profile.login_streak);
+  // the next claim starts a new one. The local claim result only speaks for
+  // ITS day — after the panel lives across 2+ midnights, `claimed.streak` is
+  // two days stale and must not override the lapsed-streak display.
+  const streak = claimedToday
+    ? claimed!.streak
+    : claimable && !streakContinues
+      ? 0
+      : profile.login_streak;
   const projectedStreak = claimable ? (streakContinues ? streak + 1 : 1) : streak;
   const cycleDay = ((Math.max(1, projectedStreak) - 1) % 7) + 1;
 
@@ -192,9 +198,12 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
 
-  // CPU battles are gated to the Creator account (Fry) while the mode is
-  // being finished — everyone else sees the tile with a COMING SOON! tag.
-  const cpuLocked = profile?.role !== 'creator';
+  // CPU battles are gated to the Creator account (Fry) for ACCOUNTS while
+  // the mode is being finished — those see the tile with a COMING SOON! tag.
+  // Guests get the random-deck QUICK MATCH (it's what the PLAY AS GUEST
+  // button on the Auth screen promises); gating them on a role they can
+  // never hold made the guest branch of PlayScreen unreachable dead code.
+  const cpuLocked = !guest && profile?.role !== 'creator';
 
   const tiles: {
     key: MetaScreen;
@@ -413,7 +422,12 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
           <button
             key={t.key}
             onClick={() => !t.disabled && onNavigate(t.key)}
-            disabled={t.disabled}
+            // aria-disabled instead of disabled: a disabled button drops out
+            // of the tab order, so keyboard/switch users could never reach
+            // the tile to hear WHY it's off. The onClick guard above keeps it
+            // inert either way, and aria-label carries the reason.
+            aria-disabled={t.disabled || undefined}
+            aria-label={t.disabled ? `${t.label} — ${t.desc}` : undefined}
             title={t.disabled ? (t.badge ? t.desc : 'Create an account to unlock') : undefined}
             className={`btn-pop relative w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? (t.badge ? 'opacity-70 cursor-not-allowed' : 'opacity-40 cursor-not-allowed') : 'hover:-translate-y-1'}`}
           >

@@ -70,9 +70,11 @@ export interface UnitInst {
   /** Hit by Venomous damage this clash — lethal unless Unbreakable. */
   venomed?: boolean;
   /**
-   * v16: Unbreakable is once per game, and this is the game's charge being
-   * spent. Cleared for BOTH players at every Dawn, so a unit gets one save
-   * per turn of the game rather than one per turn cycle.
+   * v16: Unbreakable is once per GAME, and this is the charge being spent.
+   * Never cleared — the v7.5 every-Dawn reset is gone (§3 of the v16
+   * findings). Per-INSTANCE by design: a spent unit that dies and is later
+   * Exhumed re-enters as a fresh UnitInst, i.e. a fresh printing of the card
+   * with its printed save intact.
    */
   unbreakableSpent?: boolean;
 }
@@ -202,6 +204,16 @@ export interface GameState {
   priority: PriorityState | null;
   log: string[];
   rng: Rng;
+  /**
+   * Optional Dusk shed chooser, installed by an interactive UI. Called during
+   * Dusk — AFTER "At Dusk" triggers (which can draw) have resolved — whenever
+   * the turn player's hand exceeds MAX_HAND. Returns the iids to shed, or
+   * undefined to fall back to the default shed-from-the-end. It may THROW to
+   * pause the turn mid-Dusk; the thrower must later call `finishDuskShed` to
+   * complete the turn. Headless callers (sims, tests) leave this unset, so
+   * their behavior is byte-identical to before.
+   */
+  chooseShed?: (state: GameState, pid: PlayerId, count: number) => string[] | undefined;
 }
 
 /** A deck definition: a Leader id plus a flat card-id list (one per copy). */
@@ -1316,8 +1328,39 @@ function runDusk(state: GameState): void {
   // opponent's Dawn, AFTER it has reset Unbreakable saves, Regenerate, and
   // Thriving, silently changing their targets and outcomes.
   drainStack(state);
-  // Shed to MAX_HAND (from the end of the hand, deterministic; the UI can let
-  // the player reorder/pre-shed before ending Main II).
+  // Shed to MAX_HAND. The chooser (installed by the UI) decides WHICH cards
+  // go — it runs HERE, after the Dusk triggers above, because those triggers
+  // can draw: a pick made before ending the turn couldn't include a card
+  // drawn at Dusk, and the old shed-from-the-end always discarded exactly
+  // that card with no player input. The chooser may throw to pause (the UI's
+  // picker); the UI then resumes via finishDuskShed with the chosen iids.
+  if (p.hand.length > MAX_HAND && state.chooseShed) {
+    const picked = state.chooseShed(state, state.active, p.hand.length - MAX_HAND);
+    finishDuskShed(state, picked);
+    return;
+  }
+  finishDuskShed(state);
+}
+
+/** Move `picked` cards to the back of the turn player's hand so the
+ * shed-from-the-end loop discards exactly those. Unknown iids are ignored. */
+function applyShedOrder(state: GameState, picked: string[]): void {
+  const p = state.players[state.active];
+  const chosen = new Set(picked);
+  const keep = p.hand.filter((c) => !chosen.has(c.iid));
+  const shed = p.hand.filter((c) => chosen.has(c.iid));
+  p.hand.splice(0, p.hand.length, ...keep, ...shed);
+}
+
+/**
+ * Complete Dusk from the shed step on: shed to MAX_HAND (the `picked` cards
+ * first, then from the end), clear the clash, pass the turn and run the next
+ * player's Dawn. Exported so a UI whose `chooseShed` hook paused the turn
+ * (by throwing) can resume it once the player has picked.
+ */
+export function finishDuskShed(state: GameState, picked?: string[]): void {
+  const p = state.players[state.active];
+  if (picked) applyShedOrder(state, picked);
   while (p.hand.length > MAX_HAND) {
     const c = p.hand.pop()!;
     p.ashPile.push(c);
@@ -1569,7 +1612,18 @@ export function invokeCard(
   payCost(p.essence, cost);
   p.hand.splice(p.hand.indexOf(card), 1);
   p.invokedCardThisTurn = true;
-  state.log.push(`${pid} invokes ${def.name}.`);
+  // Name the target in the log line — the battle log and the CPU-turn
+  // narration are built from these lines, and "invokes X" alone left the
+  // player guessing what X was pointed at.
+  const targetNote =
+    opts.targetIid && SINGLE_TARGETS.includes(def.onInvoke?.target ?? '')
+      ? opts.targetIid === 'P1' || opts.targetIid === 'P2'
+        ? ` targeting ${opts.targetIid}`
+        : findUnit(state, opts.targetIid)
+          ? ` targeting ${findUnit(state, opts.targetIid)!.def.name}`
+          : ''
+      : '';
+  state.log.push(`${pid} invokes ${def.name}${targetNote}.`);
 
   // v6.0 Resonant: the Event's effect resolves twice.
   const times = def.type === 'Event' && hasKw(def, 'Resonant') ? 2 : 1;
@@ -1705,9 +1759,18 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       }
       bondTarget.items.push({ iid: card.iid, def });
       // v13 Tool: the subtype that points both ways — the friendly buff above
-      // plus a permanent shrink on a target enemy unit as it lands.
+      // plus a permanent shrink on a TARGET enemy unit as it lands. The text
+      // says "target": when the invoke carried an explicit target and the
+      // card has no onInvoke of its own competing for it, the player's pick
+      // is honored; otherwise autoTarget picks (the CPU's path, unchanged).
       if (def.subtype === 'Tool' && def.nerf) {
-        applyEffect(state, pid, { action: 'weaken', value: def.nerf, target: 'enemyUnit' });
+        const nerfEff: Effect = { action: 'weaken', value: def.nerf, target: 'enemyUnit' };
+        const wantsOwnTarget = !!def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target);
+        const chosen =
+          !wantsOwnTarget && item.targetIid && canTarget(state, pid, nerfEff, item.targetIid)
+            ? item.targetIid
+            : undefined;
+        applyEffect(state, pid, nerfEff, chosen);
       }
       // v6.0 Runic: bonding this Item from hand Deals its controller a card.
       if (hasKw(def, 'Runic')) {
@@ -1843,6 +1906,20 @@ export function activateLeaderAbility(
     ability.resolveDelta > 0
       ? Math.min(Math.max(printed, L.resolve), L.resolve + ability.resolveDelta)
       : L.resolve + ability.resolveDelta;
+  // Leader ability uses were the one class of play the log never recorded —
+  // the CPU narration and battle log had no line for them at all, so the
+  // opponent's Resolve changed and units took damage "from nowhere".
+  {
+    const targetUnit = targetIid ? findUnit(state, targetIid) : undefined;
+    const abilityNote =
+      ability.text ?? `${ability.resolveDelta > 0 ? '+' : ''}${ability.resolveDelta}`;
+    const targetNote = targetUnit
+      ? ` on ${targetUnit.def.name}`
+      : targetIid === 'P1' || targetIid === 'P2'
+        ? ` on ${targetIid}`
+        : '';
+    state.log.push(`${pid}'s Leader ${L.def.name} uses "${abilityNote}"${targetNote}.`);
+  }
   applyEffect(state, pid, ability.effect, targetIid);
   if (L.resolve <= 0) {
     L.shattered = true;
@@ -2006,6 +2083,17 @@ export function resolveClash(state: GameState): boolean {
       if (pkt.targetUnit) net = damageUnit(state, pkt.targetUnit, pkt.amount, pkt.source);
       else if (pkt.targetPlayer)
         net = damagePlayer(state, pkt.targetPlayer, pkt.amount, pkt.source);
+      // Per-packet log lines — clash damage was invisible in the battle log
+      // and the CPU-turn narration (only the resulting shatters were logged).
+      if (pkt.targetUnit) {
+        state.log.push(
+          net > 0
+            ? `${pkt.source.def.name} hits ${pkt.targetUnit.def.name} for ${net}.`
+            : `${pkt.targetUnit.def.name} absorbs ${pkt.source.def.name}'s hit.`,
+        );
+      } else if (pkt.targetPlayer && net > 0) {
+        state.log.push(`${pkt.source.def.name} hits ${pkt.targetPlayer} for ${net} Vitality.`);
+      }
       if (net > 0) dealtBy.set(pkt.source.iid, pkt.source);
     }
     stateBasedChecks(state);

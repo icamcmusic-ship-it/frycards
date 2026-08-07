@@ -510,11 +510,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       color="red"
                       className="flex-1"
                       disabled={!!busyId}
-                      onClick={() =>
-                        pack.acquisition === 'deck_box_grant'
-                          ? setPickingLeaderFor(pack)
-                          : handleOpenFromInventory(pack)
-                      }
+                      onClick={() => {
+                        if (pack.acquisition === 'deck_box_grant') {
+                          // Stale errors from earlier store actions must not
+                          // show inside the freshly-opened picker dialog.
+                          setError('');
+                          setPickingLeaderFor(pack);
+                        } else {
+                          handleOpenFromInventory(pack);
+                        }
+                      }}
                     >
                       {busyId === 'open:' + pack.id ? 'OPENING…' : 'OPEN PACK ▸'}
                     </PopButton>
@@ -692,6 +697,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       {pickingLeaderFor && (
         <LeaderPicker
           busy={claimingBox}
+          error={error || undefined}
           onPick={handlePickDeckBoxLeader}
           onClose={() => {
             if (!claimingBox) setPickingLeaderFor(null);

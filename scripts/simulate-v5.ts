@@ -14,7 +14,7 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    the v7.7 findings pass (see `docs/BALANCE_SIM_FINDINGS_v16.md`, the
+ *    the v7.7 findings pass (see `docs/BALANCE_SIM_FINDINGS_v17.md`, the
  *    current doc), which adds a THIRD residual
  *    (`rampStateMatchedBaseline`) matching on ramp ACCESS rather than game
  *    length — the one to read for anything essence-gated.

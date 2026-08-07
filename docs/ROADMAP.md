@@ -125,17 +125,17 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v16.md` carry-forward. The v16 pass was
-  the dedicated `Unbreakable`/cost-cap pass v7.7 queued: the keyword closed IN
-  BAND for the first time (once per game, surviving at the brink, full
-  surcharge charged above the old cap), every other v7.7 item was closed or
-  retired, and the pinned Leader suite now runs THREE decks per Leader so kit
-  and deck-roll luck finally separate. Top of the new list: Sentinel of the
-  Nether Pit, first in all four cohorts on the cleaned instrument — one watch
-  pass, then its `-2` reach ability or Resolve 5 is the lever. Standing rules
-  that should not be relearned: **four deck cohorts, not two** (two cohorts
-  cannot see a keyword with fewer than ~6 carriers), and **never interleave
-  content changes with balance trials in one pass**.
+  list is `docs/BALANCE_SIM_FINDINGS_v17.md` carry-forward. The v17 pass
+  spent both scheduled v16 levers: Sentinel's minus went -2 → -3 (down 2-6
+  points, no longer first everywhere; Resolve 5 → 4 is the named next lever
+  if it still tops 3+ cohorts on a fresh baseline) and Avatar's -4 walked
+  back to -3 (out of the cellar to mid-field on all four cohorts — closed).
+  The bottom cluster is now Sovereign of the Dying Star and Void Mother;
+  Sovereign has never had a dedicated look and is next in line after one
+  watch pass. Standing rules that should not be relearned: **four deck
+  cohorts, not two** (two cohorts cannot see a keyword with fewer than ~6
+  carriers), and **never interleave content changes with balance trials in
+  one pass**.
 
   **The Leader re-baseline debt is paid.** v8.0 (Resolve cap) and v11 (CPU
   combat model) had made every earlier Leader and keyword reading stale;
@@ -233,11 +233,11 @@ Ordered by how much they change what it feels like to own and play the game.
     "bought" record permanent per card rather than per day, price the buy above
     the sell, or accept it as an intended slow faucet. Wants a decision, not a
     guess.
-  - **Guest quick match is still unreachable** (found v7.9). `PlayScreen` has a
-    guest branch and `MainMenu` gates every other tile on `guest`, but `App`'s
-    `case 'play'` requires `profile?.role === 'creator'` and a guest has no
-    profile — so the whole branch plus its comments is dead code. Enabling it
-    vs. deleting it is a product call.
+  - ~~Guest quick match is still unreachable~~ (found v7.9) — **resolved in
+    v17 by enabling it**: guests pass the PLAY gate and get the random-deck
+    QUICK MATCH branch that was written for them (the Auth screen's PLAY AS
+    GUEST button has advertised exactly this since it shipped). Non-creator
+    ACCOUNTS keep the COMING SOON tile while CPU battles are finished.
   - **The sell-reservation model is not the same across surfaces** (found v9).
     `sell_bounty_card` (the authoritative server) and the bounty tile's client
     gate treat a deck lock and a Serialized-print reserve as _independent_
@@ -301,7 +301,7 @@ Ordered by how much they change what it feels like to own and play the game.
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v16.md`.
+  `docs/BALANCE_SIM_FINDINGS_v17.md` (v16's doc superseded and deleted).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
   v7.8 (random table demoted to a deck-composition diagnostic) and finished in
   v16: the suite runs three pinned decks per Leader and reports the per-deck
