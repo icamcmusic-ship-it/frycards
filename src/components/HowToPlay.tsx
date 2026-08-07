@@ -130,7 +130,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'State checks',
-        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — an Unbreakable unit shrugs off the FIRST such effect each turn (once per turn, not always). A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
+        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — an Unbreakable unit shrugs off the FIRST such effect of the game (once per game, and it survives wounded, at 1 effective Grit). A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
       ],
     ],
   },

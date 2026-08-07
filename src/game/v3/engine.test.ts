@@ -472,11 +472,12 @@ describe('clash', () => {
     expect(findUnit(s, a.iid)?.damage).toBe(4); // both guards hit back
   });
 
-  // v7.5: Unbreakable is once per turn. It still walks away from the first
-  // lethal thing that happens to it — and the damage is PREVENTED rather than
-  // left marked, or the state-based check would re-fire on it a tick later —
-  // but the save is spent, so the second one in the same turn kills it.
-  test('Unbreakable absorbs the first lethal hit of a turn, and the save is spent', () => {
+  // v16: Unbreakable is once per GAME (v7.5 had it once per turn). It still
+  // walks away from the first lethal thing that happens to it, but the save
+  // is spent, so the second one kills it. It also survives AT THE BRINK —
+  // marked damage becomes Grit − 1 instead of the v7.5 full wipe to 0, so the
+  // save is no longer also a free heal of everything the wall had taken.
+  test('Unbreakable absorbs the first lethal hit at the brink, and the save is spent', () => {
     const s = clashSetup();
     const a = summonUnit(s, 'P1', U('smasher', 9, 9));
     const g = summonUnit(s, 'P2', U('unb', 2, 3, ['Unbreakable']));
@@ -484,10 +485,29 @@ describe('clash', () => {
     declareGuards(s, { [a.iid]: [g.iid] });
     resolveClash(s);
     expect(findUnit(s, g.iid)).toBeDefined();
-    expect(findUnit(s, g.iid)!.damage).toBe(0); // prevented, not marked
+    expect(findUnit(s, g.iid)!.damage).toBe(2); // at the brink: Grit 3 − 1
     expect(findUnit(s, g.iid)!.unbreakableSpent).toBe(true);
     // Second removal the same turn gets through.
     applyEffect(s, 'P1', { action: 'shatter', target: 'enemyUnit' }, g.iid);
+    expect(findUnit(s, g.iid)).toBeUndefined();
+  });
+
+  // v16: the save never recharges (once per GAME) and the brink carries
+  // across turns — after the save is spent, a single later ping finishes the
+  // wounded wall. Under v7.5's per-turn reset plus full wipe, the same
+  // sequence needed full lethal damage twice in one turn, every turn.
+  test('a brink-surviving Unbreakable dies to one ping in a later turn — the save is per game', () => {
+    const s = clashSetup();
+    const a = summonUnit(s, 'P1', U('smasher', 9, 9));
+    const g = summonUnit(s, 'P2', U('unb', 2, 3, ['Unbreakable']));
+    declareAttackers(s, [a.iid]);
+    declareGuards(s, { [a.iid]: [g.iid] });
+    resolveClash(s);
+    expect(findUnit(s, g.iid)!.damage).toBe(2);
+    expect(findUnit(s, g.iid)!.unbreakableSpent).toBe(true);
+    // Turns pass; nothing recharges the save. The brink wound remains, so a
+    // single point of damage kills through the spent save.
+    applyEffect(s, 'P1', { action: 'damage', value: 1, target: 'enemyUnit' }, g.iid);
     expect(findUnit(s, g.iid)).toBeUndefined();
   });
 

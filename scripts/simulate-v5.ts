@@ -14,7 +14,8 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    `docs/BALANCE_SIM_FINDINGS_v7.7.md` §1, which adds a THIRD residual
+ *    the v7.7 findings pass (see `docs/BALANCE_SIM_FINDINGS_v16.md`, the
+ *    current doc), which adds a THIRD residual
  *    (`rampStateMatchedBaseline`) matching on ramp ACCESS rather than game
  *    length — the one to read for anything essence-gated.
  *  - keyword health: carrier win-rate deltas + activation counts
@@ -369,7 +370,17 @@ for (const kw of KEYWORDS) kwStats[kw] = { carrierGames: 0, carrierWins: 0, acti
 
 const leaderStats: Record<
   string,
-  { games: number; wins: number; invoked: number; shattered: number; abilityUses: number }
+  {
+    games: number;
+    wins: number;
+    invoked: number;
+    shattered: number;
+    // v16 (v7.7 carry-forward #5): wins among the games this Leader was
+    // shattered in — the direct read on whether a high shatter rate is a
+    // winning trade or the CPU donating its Leader.
+    shatteredWins: number;
+    abilityUses: number;
+  }
 > = {};
 
 // v6.7 (carry-forward #1): per-Leader kit diagnostics — turn of first
@@ -1739,6 +1750,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       wins: 0,
       invoked: 0,
       shattered: 0,
+      shatteredWins: 0,
       abilityUses: 0,
     });
     ls.games++;
@@ -1746,6 +1758,7 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     if (p.leader.invoked || p.leader.shattered) ls.invoked++;
     if (p.leader.shattered) {
       ls.shattered++;
+      if (won) ls.shatteredWins++;
       mech.leaderShatters++;
     }
     ls.abilityUses += perGame.leaderAbilityUses[pid];
@@ -1861,13 +1874,13 @@ function strHash(s: string): number {
   }
   return h >>> 0;
 }
-function pinnedDeckForLeader(leaderId: string): DeckDef {
+function pinnedDeckForLeader(leaderId: string, deckIx = 0): DeckDef {
   const identity = LEADER_COLORS[leaderId] ?? [];
   const themePool = identity.flatMap((c) => KEYWORDS_OF_COLOR[c]);
   const keywords = [...new Set(themePool)];
   const effects = ['damage', 'shatter', 'draw', 'buff'];
   return buildDeck({
-    label: `${POOL_BY_ID[leaderId]?.name ?? leaderId} — Pinned`,
+    label: `${POOL_BY_ID[leaderId]?.name ?? leaderId} — Pinned #${deckIx}`,
     leaderId,
     keywords,
     effects,
@@ -1886,29 +1899,58 @@ function pinnedDeckForLeader(leaderId: string): DeckDef {
     // thing a second cohort varies is the game RNG (`pairRng` below still
     // takes DECK_SEED), so two runs are two independent samples of the SAME
     // matchup and the spread between them is honest sampling error.
-    seed: strHash(leaderId),
+    //
+    // v16: the suite now builds THREE pinned decks per Leader. One fixed deck
+    // per Leader made the instrument reproducible but left kit and deck-roll
+    // luck CONFOUNDED — "Sentinel is the strongest pinned kit" (v7.7 §2) was
+    // really "Sentinel's kit plus the one deck strHash dealt it". Deck #0
+    // keeps the exact v7.7 seed so that reading stays comparable; #1 and #2
+    // are salted variants. Pairs play deck k against deck k, and the summary
+    // reports the per-deck split — a Leader whose three decks agree is a kit
+    // reading, one whose decks span 20 points is a deck-luck reading.
+    seed: deckIx === 0 ? strHash(leaderId) : strHash(`${leaderId}#${deckIx}`),
   });
 }
-const LEADER_PAIR_SEAT_GAMES = 20; // per ordered pair, per seat orientation
+const LEADER_PAIR_DECKS = 3; // v16: pinned decks per Leader (see above)
+const LEADER_PAIR_SEAT_GAMES = 7; // per ordered pair, per seat, per deck index
 const leaderPairSuite: Record<string, Record<string, { games: number; wins: number }>> = {};
+const leaderPairByDeck: Record<string, { games: number; wins: number }[]> = {};
 {
   const leaderIds = POOL_LEADERS.map((l) => l.id);
-  const pinnedDecks: Record<string, DeckDef> = {};
-  for (const lid of leaderIds) pinnedDecks[lid] = pinnedDeckForLeader(lid);
+  const pinnedDecks: Record<string, DeckDef[]> = {};
+  for (const lid of leaderIds) {
+    pinnedDecks[lid] = [];
+    leaderPairByDeck[lid] = [];
+    for (let k = 0; k < LEADER_PAIR_DECKS; k++) {
+      pinnedDecks[lid].push(pinnedDeckForLeader(lid, k));
+      leaderPairByDeck[lid].push({ games: 0, wins: 0 });
+    }
+  }
   const pairRng = mulberry32((DECK_SEED ^ 0x1ead9f) >>> 0);
   for (const a of leaderIds) {
     for (const b of leaderIds) {
       if (a === b) continue;
       const cell = ((leaderPairSuite[a] ??= {})[b] ??= { games: 0, wins: 0 });
-      for (let g = 0; g < LEADER_PAIR_SEAT_GAMES; g++) {
-        const seed1 = Math.floor(pairRng() * 1e9) + 1;
-        const w1 = seatSwapGame(pinnedDecks[a], pinnedDecks[b], seed1);
-        cell.games++;
-        if (w1 === 'P1') cell.wins++;
-        const seed2 = Math.floor(pairRng() * 1e9) + 1;
-        const w2 = seatSwapGame(pinnedDecks[b], pinnedDecks[a], seed2);
-        cell.games++;
-        if (w2 === 'P2') cell.wins++;
+      for (let k = 0; k < LEADER_PAIR_DECKS; k++) {
+        const byDeck = leaderPairByDeck[a][k];
+        for (let g = 0; g < LEADER_PAIR_SEAT_GAMES; g++) {
+          const seed1 = Math.floor(pairRng() * 1e9) + 1;
+          const w1 = seatSwapGame(pinnedDecks[a][k], pinnedDecks[b][k], seed1);
+          cell.games++;
+          byDeck.games++;
+          if (w1 === 'P1') {
+            cell.wins++;
+            byDeck.wins++;
+          }
+          const seed2 = Math.floor(pairRng() * 1e9) + 1;
+          const w2 = seatSwapGame(pinnedDecks[b][k], pinnedDecks[a][k], seed2);
+          cell.games++;
+          byDeck.games++;
+          if (w2 === 'P2') {
+            cell.wins++;
+            byDeck.wins++;
+          }
+        }
       }
     }
   }
@@ -2639,6 +2681,10 @@ const report = {
         games: s.games,
         invokeRate: pct(s.invoked, s.games),
         shatterRate: pct(s.shattered, s.games),
+        // v16: win rate of the shattered games themselves (n = shattered
+        // count) — reads whether the shatters are a winning trade.
+        shatteredWinPct: pct(s.shatteredWins, s.shattered),
+        shatteredGames: s.shattered,
         abilityUsesPerGame: +(s.abilityUses / Math.max(1, s.games)).toFixed(2),
       },
     ]),
@@ -2938,11 +2984,19 @@ const report = {
       const ranked = cells
         .map(([b, v]) => ({ vs: POOL_BY_ID[b]?.name ?? b, winPct: pct(v.wins, v.games) }))
         .sort((x, y) => y.winPct - x.winPct);
+      // v16: the per-deck split. Three pinned decks per Leader; a wide spread
+      // here means the aggregate row is reading deck luck, not the kit —
+      // Legendary Diver's v7.7 "last in the pinned suite" was exactly that
+      // (its single pinned deck was a bad roll; with three decks it reads
+      // mid-field in all four cohorts).
+      const byDeck = (leaderPairByDeck[a] ?? []).map((d) => pct(d.wins, d.games));
       return {
         id: a,
         name: POOL_BY_ID[a]?.name ?? a,
         winPct: pct(wins, games),
         games,
+        byDeck,
+        deckSpread: byDeck.length ? +(Math.max(...byDeck) - Math.min(...byDeck)).toFixed(1) : 0,
         best: ranked[0],
         worst: ranked[ranked.length - 1],
       };
@@ -3000,6 +3054,14 @@ const report = {
   printedBudgetOutliers,
   eventEffectProfile,
   keywordCarrierDetail,
+  // v16: the reservation-waste carry-forward (open since v7.2, #10 in v7.7)
+  // is RETIRED rather than actioned, on arithmetic: ~0.6 reservations/game,
+  // ~0.17 of them wasted, each holding <= 3 essence for one turn, is ~0.5
+  // essence-turns per game against ~90 essence spent and ~41 floated — under
+  // 1% of throughput, noise inside the existing float. Every gating idea
+  // (tighter oppCanAttack, threat thresholds) risks the ~2,700 reaction
+  // plays per run that v5.2-v6.6 fought to make exist at all. The counter
+  // stays published; it is a health gauge now, not an open item.
   reservationEfficiency: {
     reservationsMade: lapses.reservationsMade,
     wasted: lapses.reservationWasted,
@@ -3105,10 +3167,13 @@ console.log(
 // v7.8: the pinned suite is the PRIMARY Leader section (v7.7 §2 — the random
 // table moves with cohort deck composition, and the pinned decks had been
 // seeded with the cohort seed since v6.2), so it prints first, here.
-console.log('\nLeaders — PRIMARY (pinned-deck suite, one row per Leader; v7.7):');
+console.log(
+  '\nLeaders — PRIMARY (pinned-deck suite, one row per Leader; v7.7, 3 decks/Leader since v16):',
+);
 for (const l of report.leaderPairSuiteSummary)
   console.log(
     `  ${String(l.name).padEnd(28)} ${String(l.winPct).padStart(5)}%  n=${l.games}   ` +
+      `decks [${l.byDeck.join(' / ')}] spread ${l.deckSpread}   ` +
       `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}`,
   );
 console.log(

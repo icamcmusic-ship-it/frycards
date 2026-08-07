@@ -772,7 +772,8 @@ describe('Unbreakable vs a Grit deficit', () => {
     stateBasedChecks(s);
     expect(findUnit(s, u.iid)).toBeDefined();
     expect(u.unbreakableSpent).toBe(true);
-    expect(u.damage).toBe(0);
+    // v16: survives at the brink (Grit − 1), not healed to 0 — see engine.ts.
+    expect(u.damage).toBe(3);
   });
 });
 
