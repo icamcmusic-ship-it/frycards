@@ -403,8 +403,15 @@ export async function setShowcaseCards(cardIds: string[]): Promise<string | null
 
 export async function recordMatchResult(
   won: boolean,
+  /** Client-generated idempotency key (one UUID per match). The server keeps
+   * a receipt per id, so retrying after a lost reply can never double-pay
+   * the same match — the retry returns null data instead. */
+  matchId?: string,
 ): Promise<{ data: MatchResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('record_match_result', { p_won: won });
+  const { data, error } = await supabase.rpc('record_match_result', {
+    p_won: won,
+    p_match_id: matchId ?? null,
+  });
   return { data: (data as MatchResult) || null, error: rpcError(error) };
 }
 
@@ -1506,8 +1513,14 @@ export async function browseShops(
 
 export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryLiveStats> {
   const { data, error } = await supabase.rpc('get_mystery_live_stats', { p_listing_id: listingId });
-  if (error) console.error('fetchMysteryLiveStats failed:', error.message);
-  if (error || !data) return { remaining_packs: 0, live_ev_per_pack: null };
+  if (error) {
+    // Thrown — the caller's .catch keeps the last-known stats. The old
+    // `remaining_packs: 0` error sentinel overwrote good state and made an
+    // in-stock mystery listing render sold-out after one failed 30s poll.
+    console.error('fetchMysteryLiveStats failed:', error.message);
+    throw error;
+  }
+  if (!data) throw new Error('get_mystery_live_stats returned no data');
   return data as MysteryLiveStats;
 }
 
@@ -1904,8 +1917,11 @@ export async function fetchShowcaseStats(): Promise<ShowcaseStats | null> {
     p_set: SHOWCASE_SET,
   });
   if (error) {
+    // Thrown — the same contract as every other fetcher here. Returning null
+    // made an outage render as a confidently-wrong "0 / 100 cards" progress
+    // meter with no error and no retry.
     console.error('fetchShowcaseStats failed:', error.message);
-    return null;
+    throw error;
   }
   return (data as ShowcaseStats) || null;
 }

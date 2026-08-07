@@ -209,6 +209,15 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
   // show a "calculating…" placeholder instead of a blank gap.
   const [rewardPending, setRewardPending] = useState(false);
 
+  // One idempotency key per mounted match: retries reuse it, so the server
+  // can tell "same match, reply got lost" from a genuinely new match and
+  // never double-pays (the receipt lives in match_receipts server-side).
+  const [matchId] = useState(() =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`.replace('.', ''),
+  );
+
   // recordMatchResult used to return bare `null` on both "no reward data"
   // and an outright RPC failure, so a transient network/server error meant
   // the player's win/loss, credits and XP were silently dropped with zero
@@ -220,7 +229,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-        const { data, error } = await recordMatchResult(won);
+        const { data, error } = await recordMatchResult(won, matchId);
         if (data) {
           setReward(data);
           // Fire-and-forget with an explicit catch: a rejected refresh here
@@ -229,8 +238,15 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
           refreshProfile().catch(() => {});
           return;
         }
-        if (!error) return; // legitimately no reward to report (e.g. cooldown)
+        if (!error) return; // already recorded, or legitimately no reward
       }
+      setRewardError(
+        "Couldn't record this match's result — check your connection and try again from the menu.",
+      );
+    } catch {
+      // A thrown rejection here used to escape as an unhandled promise
+      // rejection: rewardPending cleared, rewardError never set, and the
+      // game-over screen showed neither a reward nor an error.
       setRewardError(
         "Couldn't record this match's result — check your connection and try again from the menu.",
       );
@@ -370,10 +386,14 @@ function AppInner() {
 
   switch (screen) {
     case 'play':
-      // CPU battles are Creator-only while the mode is finished (the menu
-      // tile shows COMING SOON! for everyone else) — this guard covers any
-      // other path that could set the screen to 'play'.
-      if (profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
+      // CPU battles are Creator-only for ACCOUNTS while the mode is finished
+      // (the menu tile shows COMING SOON! for them) — but guests get the
+      // random-deck QUICK MATCH: the Auth screen's PLAY AS GUEST button has
+      // always advertised "play vs the CPU with prebuilt decks", PlayScreen
+      // carries a dedicated guest branch, and gating guests on a Creator
+      // role they can never hold made that whole path dead code (the
+      // long-standing "guest quick match is unreachable" roadmap item).
+      if (!guest && profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
       return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
     case 'store':
       return <StoreScreen onBack={() => setScreen('menu')} />;

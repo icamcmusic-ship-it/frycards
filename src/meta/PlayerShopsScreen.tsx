@@ -2757,7 +2757,11 @@ function MysteryBuilderPanel({
       if (checkRequestId.current !== requestId) return;
       setCheckError('Could not check this pool — check your connection and try again.');
     } finally {
-      if (checkRequestId.current === requestId) setChecking(false);
+      // Cleared UNCONDITIONALLY: the token guard protects validation state,
+      // but gating the busy flag on it meant an edit made mid-flight (which
+      // bumps the token) left `checking` stuck true forever — PREVIEW POOL
+      // wedged at "CHECKING…" until the panel was closed and reopened.
+      setChecking(false);
     }
   };
 

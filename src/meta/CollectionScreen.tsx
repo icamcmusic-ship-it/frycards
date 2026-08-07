@@ -369,6 +369,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   // versa.
   const { normal: spareNormal, foil: spareFoil } = spareSplit(inspectOwned, inspectLocked);
   const normalSellable = Math.max(0, spareNormal - inspectSerializedReserved);
+  // `q` (player_cards.quantity) INCLUDES serialized copies — the grid
+  // subtracts them for the normal tile's count, and the inspector must agree
+  // or "Normal ×3" appears beside sell buttons that can only move 1.
+  const inspectNormalQty = Math.max(0, (inspectOwned?.q || 0) - inspectSerializedReserved);
   const foilSellable = spareFoil;
 
   const handleSell = async (foil: boolean, quantity: number) => {
@@ -649,7 +653,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                   },
                 ]
               : []),
-            { label: 'Owned', value: `×${inspectOwned?.q || 0}` },
+            {
+              label: 'Owned',
+              value: `×${inspectNormalQty}${inspectSerializedReserved > 0 ? ` (+${inspectSerializedReserved} serialized)` : ''}`,
+            },
             { label: 'Foil owned', value: `✦ ${inspectOwned?.f || 0}` },
             ...(inspectLocked > 0 ? [{ label: 'Locked in decks', value: `${inspectLocked}` }] : []),
           ]}
@@ -709,7 +716,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     )}
                     {sellError && <Notice text={sellError} />}
                     <div className="flex items-center justify-between text-[10px] font-bold">
-                      <span>Normal ×{inspectOwned?.q || 0}</span>
+                      <span>Normal ×{inspectNormalQty}</span>
                       <Credits amount={quicksellPrice(inspect.def.rarity, false)} />
                     </div>
                     <PopButton
@@ -721,7 +728,7 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
                     >
                       QUICKSELL 1
                     </PopButton>
-                    {(inspectOwned?.q || 0) > 1 && (
+                    {inspectNormalQty > 1 && (
                       <PopButton
                         color="black"
                         className="w-full"

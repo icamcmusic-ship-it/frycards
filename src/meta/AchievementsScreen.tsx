@@ -41,7 +41,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   const userId = session?.user?.id;
   const packById = useMemo(() => new Map(packTypes.map((p) => [p.id, p])), [packTypes]);
 
-  const reload = async (isCancelled?: () => boolean) => {
+  const reload = async (isCancelled?: () => boolean, opts?: { background?: boolean }) => {
     // A guest (no userId) previously returned here without ever clearing
     // `loading`, leaving the screen stuck on "LOADING…" forever if this tab
     // were ever reachable without a session.
@@ -60,7 +60,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       // A network failure previously escaped as an unhandled rejection and
       // fell through to the "No missions available" / "No achievements"
       // empty states — misleading, and with no way to retry.
-      if (!isCancelled?.())
+      // A BACKGROUND refresh (the one after a successful claim) must not
+      // replace data already on screen with the full-screen load-error state
+      // — the claim itself landed; the list is merely a fetch behind.
+      if (!isCancelled?.() && !opts?.background)
         setLoadError("Couldn't load missions & achievements. Check your connection and try again.");
     } finally {
       // Runs even if either fetch throws — otherwise a network hiccup would
@@ -100,7 +103,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       // Awaited — otherwise busyId clears (re-enabling this CLAIM button)
       // before `mine` reflects the claim, opening a window for a double
       // claim attempt on the same achievement.
-      await reload();
+      await reload(undefined, { background: true });
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {
@@ -122,7 +125,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       setNotice(`"${m.name}" complete — rewards collected!`);
       await refreshProfile();
       // Awaited — same double-claim race as handleClaimAchievement above.
-      await reload();
+      await reload(undefined, { background: true });
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {

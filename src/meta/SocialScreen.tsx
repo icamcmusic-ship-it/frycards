@@ -196,7 +196,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     const bump = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void reload();
+        // reload() throws on network failure by design (the mount effect
+        // wants it) — a background realtime refresh failing must not become
+        // an unhandled rejection; surface it as the load-error banner so the
+        // player knows the list may be stale and has a RETRY.
+        reload().catch(() => setLoadError(true));
       }, 400);
     };
     const offFriends = subscribeTable('friendships', bump);
@@ -755,7 +759,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
             setTradePartner(null);
             setTab('trades');
             setNotice('Trade offer sent!');
-            reload();
+            // Same contract as the realtime bump above: reload() throws on
+            // failure, and an unhandled rejection here left the just-sent
+            // trade invisible with no error and no retry.
+            reload().catch(() => setLoadError(true));
           }}
         />
       )}
