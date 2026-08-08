@@ -117,6 +117,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'The defender assigns any of their un-exhausted units to guard attackers — several guards may gang up on one attacker. Unguarded attackers deal their Might straight to the defender’s Vitality.',
       ],
       [
+        'Guard shortcuts',
+        'Pick an attacker line in the clash bar, then click your units to guard it. The bar shows live how much Vitality is coming through if you confirm as-is, and ✦ SUGGEST fills the lines with the same blocking heuristic the CPU uses — a starting point you can then edit. Escape clears the whole assignment.',
+      ],
+      [
         'Guard restrictions',
         'Aerial attackers can only be guarded by Aerial or Skywatch units. Nimble attackers can only be guarded by a unit with LESS Might. Swarmproof attackers must be guarded by two or more units, or not at all. Once an attacker is guarded it stays guarded — removing the blocker mid-clash does not let the attack through (only Overrun spills).',
       ],
@@ -312,7 +316,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Profile & Settings',
-        'Track your stats, equip cosmetics, pick a color theme, and (Settings) opt out of username recognition in the Serialized feed.',
+        'Track your stats, equip cosmetics, pick a color theme, set how fast the opponent’s turn is narrated (SLOW / NORMAL / FAST), and opt out of username recognition in the Serialized feed.',
       ],
     ],
   },

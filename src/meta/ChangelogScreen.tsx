@@ -18,6 +18,18 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Watch-the-CPU Pass (v18)',
+    date: 'August 2026',
+    items: [
+      'THE OPPONENT’S CLASH TRICKS ARE NO LONGER INVISIBLE. Its Quick Events and Ambush units used to resolve in total silence during a Clash — cards played, units died, and the board just changed between two of your clicks. Every one of those now plays out beat by beat with the same rings and pacing as its main turn, and the card it plays is held up in the middle of the board so you can actually read it. Attackers lean across the clash line as they are declared.',
+      'GUARDS GOT EASIER: ✦ SUGGEST fills your guard lines with the same blocking heuristic the CPU uses, as a starting point you can edit. The attack button now reads how much Might you are sending ("⚔ DECLARE ATTACK — 3 · 11 MIGHT"), and ALL ×N sends everything that is ready.',
+      'Narration speed (SLOW / NORMAL / FAST) is now in SETTINGS, not only on the bubble that appears mid-turn — so you can pick it before a match instead of during one.',
+      'FIX: a response window could hang a match outright, with no button anywhere that resumed it. FIX: the battle log said "you casts Fry’s Charm on themselves". FIX: the previous turn’s highlight rings stayed pulsing into the next turn. FIX: a failed News Center post deletion reported nothing at all.',
+      'BALANCE: Sovereign of the Dying Star costs one less essence to invoke. It had finished last or next-to-last on every measured table and its kit was never the problem — it simply arrived on turn 8 and got too few turns to use it. It now lands on turn 7 and reads mid-field on all four cohorts without topping any. Sentinel of the Nether Pit’s scheduled follow-up nerf was measured and REVERTED: it changed nothing at all, and shipping a strictly worse card for no measured gain is not a balance change. Measured across 23,808 games per trial on four deck cohorts, zero rules violations; full numbers in docs/BALANCE_SIM_FINDINGS_v18.md.',
+      'Under the hood: a new stress harness plays whole matches through the real match UI in a browser, taking every action the board offers — ten matches at phone and desktop width, zero problems found.',
+    ],
+  },
+  {
     version: 'The Interactive-Seam Pass (v17)',
     date: 'August 2026',
     items: [
@@ -25,19 +37,8 @@ export const ENTRIES: ChangelogEntry[] = [
       'FIX: three rules windows the game owed you. Your card could freeze on the stack after you passed a response window; the opponent’s clash tricks resolved straight through your answer window when you attacked; and the attacking CPU never took its own reaction window when you defended. All three now play out exactly as the rulebook says.',
       'FIX: a card drawn by an "At Dusk" effect was always the card auto-discarded to the hand limit, with no say. The shed choice now happens after Dusk draws, so you pick from your real final hand.',
       'A Tool now lets you PICK the enemy unit it weakens, response windows you cannot act in pass themselves, the guard step shows exactly how much damage is coming through, and guest players can finally hit PLAY — the quick match the guest button always promised.',
-      'BALANCE: Sentinel of the Nether Pit’s reach ability now costs -3 Resolve (was -2) — it had finished first on every measured table two passes running. Avatar of the Abyss gets a point BACK (-4 → -3): three stacked nerfs from an older measuring stick had buried it at the bottom. Measured one at a time across 23,808 games each on four deck cohorts, zero rules violations; full numbers in docs/BALANCE_SIM_FINDINGS_v17.md.',
+      'BALANCE: Sentinel of the Nether Pit’s reach ability now costs -3 Resolve (was -2) — it had finished first on every measured table two passes running. Avatar of the Abyss gets a point BACK (-4 → -3): three stacked nerfs from an older measuring stick had buried it at the bottom. Measured one at a time across 23,808 games each on four deck cohorts, zero rules violations; full numbers now live in docs/BALANCE_SIM_FINDINGS_v18.md (which superseded this pass’s findings doc).',
       'Plus 17 fixed bugs across the menus, store, collection, marketplace, shops and submissions — from a double-paid match reward on a flaky connection to a progress meter that counted approved showcase cards twice.',
-    ],
-  },
-  {
-    version: 'The Unbreakable Pass (v16)',
-    date: 'August 2026',
-    items: [
-      'BALANCE: UNBREAKABLE now saves its unit once per GAME (was once per turn), and the survivor comes back wounded — at one Grit — instead of fully healed. Four passes of price and stat changes could not tame a wall that shrugged off one kill every single turn and healed while doing it; this finally prints a keyword the game can price.',
-      'BALANCE: premium keywords now cost what they say. A big keyword surcharge used to vanish on expensive bodies (the price capped at 7 no matter what the keyword was worth) — it now charges in full, up to 9. Nine Units got pricier (The Pier-Side Menace, The Wolf of Wall Street and Skyborne Skeleton Dragon print at 9), and three Events/Items got back a point of effect an old bug had docked from them.',
-      'BALANCE: Amethyst Starfish’s free "At Dawn, deal 3 damage to any target" — stronger than most Leader abilities, every turn, on a 5-cost body — is now 1 damage. The card had topped the overperformer list for four straight measurement passes.',
-      'CPU: Sentinel of the Nether Pit stops throwing its own Leader away. The computer was trading the whole Leader for a 2-damage ping into a big unit that survived it, in up to one game in six — those trades now only happen when the ability actually kills the threat.',
-      'Measured across 23,808 CPU-vs-CPU games per trial (four independent deck cohorts), zero rules violations, before and after every change. Full numbers now live in docs/BALANCE_SIM_FINDINGS_v17.md (which superseded this pass’s findings doc).',
     ],
   },
 ];

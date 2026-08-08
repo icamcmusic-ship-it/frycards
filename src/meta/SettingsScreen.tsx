@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Palette, Sparkles } from 'lucide-react';
+import { Palette, Sparkles, Timer } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
 import { setHideSerializedAnnouncements } from '../lib/supabase';
+import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed } from './matchPrefs';
 
 export function SettingsScreen({
   currentTheme,
@@ -18,6 +19,16 @@ export function SettingsScreen({
   const { profile, refreshProfile, guest } = useMeta();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Narration speed used to be reachable ONLY from the bubble that appears
+  // mid-CPU-turn, so a player had to sit through a turn at the wrong speed to
+  // find the control that changes it — and nothing outside a match said it
+  // existed. Guests get it too: it's a localStorage preference, not a profile
+  // field.
+  const [cpuSpeed, setCpuSpeed] = useState(loadCpuSpeed);
+  const pickSpeed = (idx: number) => {
+    setCpuSpeed(idx);
+    saveCpuSpeed(idx);
+  };
 
   const toggleHideSerialized = async () => {
     if (!profile || busy) return;
@@ -92,6 +103,33 @@ export function SettingsScreen({
                 )}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Match pacing */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Timer className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">OPPONENT NARRATION SPEED</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How long each line of the CPU's turn stays on screen while its cards and targets light
+              up on the board. You can also change this mid-match from the ⏱ button on the narration
+              bubble — and SKIP ▸▸ always fast-forwards the rest of a turn.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CPU_SPEEDS.map((s, i) => (
+                <PopButton
+                  key={s.label}
+                  color={cpuSpeed === i ? 'black' : 'yellow'}
+                  ariaPressed={cpuSpeed === i}
+                  onClick={() => pickSpeed(i)}
+                >
+                  {s.label} — {s.blurb}
+                </PopButton>
+              ))}
+            </div>
           </div>
         </div>
 

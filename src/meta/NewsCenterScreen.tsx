@@ -54,6 +54,12 @@ export function NewsCenterScreen({
   // banner (with a useless RETRY button) after closing the composer.
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [publishErr, setPublishErr] = useState<string | null>(null);
+  // Delete failures need their own slot: `publishErr` only renders INSIDE the
+  // composer, which is closed whenever a Creator deletes a post from the list
+  // — so a failed delete reported nothing at all and the post just stayed put
+  // as if the button were dead. (Same shape as the v17 Deck Box finding.)
+  const [postErr, setPostErr] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
 
   // A rejected fetch (network failure) here used to leave `loading` stuck
@@ -227,6 +233,9 @@ export function NewsCenterScreen({
             </div>
           )}
 
+          {postErr && (
+            <div className="text-[11px] font-bold text-[var(--c-red)] mb-2">⚠ {postErr}</div>
+          )}
           {loading && (
             <div className="text-center font-bold text-[var(--c-steel)] py-8 animate-pulse text-[12px]">
               LOADING…
@@ -254,17 +263,25 @@ export function NewsCenterScreen({
                     {isCreator && (
                       <button
                         onClick={async () => {
+                          if (deletingId) return;
                           if (!confirm(`Delete the post "${p.title}"?`)) return;
-                          const err = await deleteNewsPost(p.id).catch(
-                            () => 'Delete failed — check your connection.',
-                          );
-                          if (err) setPublishErr(err);
-                          else load();
+                          setPostErr(null);
+                          setDeletingId(p.id);
+                          try {
+                            const err = await deleteNewsPost(p.id).catch(
+                              () => 'Delete failed — check your connection.',
+                            );
+                            if (err) setPostErr(err);
+                            else load();
+                          } finally {
+                            setDeletingId(null);
+                          }
                         }}
+                        disabled={deletingId !== null}
                         aria-label={`Delete post: ${p.title}`}
-                        className="btn-pop heading-font text-[9px] bg-[var(--c-red)] text-white px-1.5 py-0.5 ink-border-sm"
+                        className="btn-pop heading-font text-[9px] bg-[var(--c-red)] text-white px-1.5 py-0.5 ink-border-sm disabled:opacity-40"
                       >
-                        ✕ DELETE
+                        {deletingId === p.id ? '…' : '✕ DELETE'}
                       </button>
                     )}
                   </span>

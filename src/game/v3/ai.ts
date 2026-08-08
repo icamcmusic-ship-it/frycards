@@ -65,6 +65,9 @@ export type CpuTurnEvent = { logAt?: number } & (
       kind: 'invoke';
       name: string;
       iid: string;
+      /** Catalog id of the card played — the UI spotlights the actual card
+       * face so the player SEES what the CPU just cast, not only its name. */
+      defId?: string;
       targetIid?: string;
       targetName?: string;
       /** Set when the DEFENDER invoked this during the clash reaction window. */
@@ -511,7 +514,14 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
         settleAfterPlay(state, pid);
-        observe?.({ kind: 'invoke', name: c.def.name, iid: c.iid, targetIid, targetName });
+        observe?.({
+          kind: 'invoke',
+          name: c.def.name,
+          defId: c.def.id,
+          iid: c.iid,
+          targetIid,
+          targetName,
+        });
         progress = true;
         break;
       }
@@ -534,6 +544,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
           observe?.({
             kind: 'invoke',
             name: reserved.def.name,
+            defId: reserved.def.id,
             iid: reserved.iid,
             targetIid,
             targetName,
@@ -991,6 +1002,7 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
     observe?.({
       kind: 'invoke',
       name: answer.def.name,
+      defId: answer.def.id,
       iid: answer.iid,
       targetIid,
       targetName: targetIid ? findUnit(state, targetIid)?.def.name : undefined,
@@ -1101,6 +1113,7 @@ function reactionPlaysBody(
         observe?.({
           kind: 'invoke',
           name: c.def.name,
+          defId: c.def.id,
           iid: c.iid,
           targetIid,
           targetName: targetIid ? findUnit(state, targetIid)?.def.name : undefined,

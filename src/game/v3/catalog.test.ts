@@ -120,6 +120,23 @@ test('leaders have resolve and exactly 2 abilities with text', () => {
   }
 });
 
+/**
+ * v18 §2: Sovereign of the Dying Star's invoke cost, the only lever this pass
+ * shipped. It is a LEADER_COST_OVERRIDE entry, which is a hand-written table —
+ * pin the resulting print so a later edit to `mapLeader`'s pricing (or a
+ * dropped table entry) can't quietly hand the arrival turn back.
+ */
+test('v18: Sovereign of the Dying Star invokes for 4, not 5', () => {
+  const sov = POOL_BY_ID['sovereign_of_the_dying_star'];
+  expect(sov, 'Sovereign must be in the pool').toBeTruthy();
+  expect(totalCost(sov.cost)).toBe(4);
+  // The lever is price-only: Resolve and both abilities come from rarity and
+  // colour identity, and none of them may have moved with it.
+  expect(sov.resolve).toBe(3);
+  expect(sov.leaderAbilities?.[0].resolveDelta).toBe(-1);
+  expect(sov.leaderAbilities?.[1].resolveDelta).toBe(1);
+});
+
 test('subtypes: Locations are Sanctums with produces; Items/Events typed', () => {
   for (const c of POOL_V4) {
     if (c.type === 'Location') {

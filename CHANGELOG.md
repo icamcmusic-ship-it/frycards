@@ -9,6 +9,123 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v18.0 — The watch-the-CPU pass: the opponent's clash tricks played out in silence, a stress driver that plays the real UI, and one scheduled lever that turned out to do nothing
+
+Five-part pass, in the order the brief asked for: a non-gameplay bug hunt, a
+gameplay stress test built as a new harness, a QoL round on the match screen, a
+CPU-visibility/flow audit, and the two v17 carry-forward balance items run as
+sequential measured trials on the standing four 5,952-game cohorts. Full
+balance numbers: `docs/BALANCE_SIM_FINDINGS_v18.md` (supersedes the v17 doc,
+deleted this pass). **0 invariant violations across 95,232 games**; 359 tests
+(15 new, in two new suites); 10 full matches driven end-to-end through the real
+match UI by the new harness, at phone and desktop width, with zero findings.
+
+**A new harness: `npm run drive:match`.** The balance sim plays tens of
+thousands of games straight through the engine and never touches a single
+button, so every defect living in the React seam between a click and an engine
+call is invisible to it — v17 found five of those by reading. This plays them
+instead: Playwright drives `board-preview.html` through whole matches, taking
+every action the board offers (mulligan, wellsprings, Leader invokes and
+abilities, targeting picks, attacks, guards, both reaction windows, response
+windows, the shed picker, the ash drawer, the battle log) and reporting
+crashes, console errors, dead ends, and horizontal overflow. It reports a HANG
+when the board stops moving with no action offered, which is the interactive
+equivalent of the sim's invariant canary. `board-preview.html` now takes
+`?seed=` (deck roll AND match RNG, so a run reproduces) and `?speed=`.
+
+**Match screen — the CPU's clash tricks are no longer invisible.** The v17 pass
+made the CPU's TURN legible. The audit's brief this pass was the rest of the
+sentence, and it found the hole:
+
+- **The CPU's clash reactions played out in total silence.** Its Quick Events
+  and Ambush units inside the human's own clash — and inside its own, the
+  window v17 had just created — produced engine log lines but no narration and
+  no rings: cards resolved, units died, and the board simply changed between
+  two of the player's clicks, with one after-the-fact summary banner naming
+  what had happened. Those beats now narrate exactly like a CPU turn, with the
+  same rings and pacing, because narration is driven by a narration flag
+  instead of by "is it the CPU's turn".
+- **The card the opponent plays is now held up mid-board while its beat is on
+  screen** ("MER-KING PLAYS ⟨card⟩"), with an entrance animation. A name in a
+  log line is easy to skim past; the face is not. Card-play and attack beats
+  hold ~45% longer than a plain line for the same reason.
+- **Declared attackers lean across the clash line** for the length of the
+  attack beat, so an incoming attack reads as movement rather than as a ring
+  that appeared.
+- The board is inert while a narration run is playing (Locations, hand cards
+  and the divider's action buttons), so the player cannot fire a Quick Event
+  into the middle of a replay of moves they have not been shown yet. SKIP ▸▸
+  and the speed control are live throughout.
+- **FIX: a response window could hang the match.** `openResponseWindow`'s
+  auto-pass path (nothing castable, so pass for the player) bails when the
+  player does not hold priority — and one of its four callers did not check
+  first, which would have left whatever was paused paused forever with no
+  button anywhere that resumed it. The check now belongs to the window.
+- **FIX: "you casts Fry's Charm on themselves".** The log humanizer's verb
+  table was missing `casts`, so the v13 self-cast Charm line fell through to
+  the bare seat-id rule and printed third person against a second-person
+  subject. The table (and the reflexive) are now pinned by a test that
+  enumerates every `${pid} <verb>` line the engine emits.
+- **FIX: stale pulsing rings.** The previous turn's last beat kept its
+  actor/target rings on the board right through the next turn's think delay.
+
+**Match screen — QoL.**
+
+- **✦ SUGGEST on the guard step.** Assigning guards by hand is the fiddliest
+  thing the board asks for, and the engine already ships the defender-side
+  solver the CPU blocks with. That solver now fills the player's guard lines
+  as an editable starting point.
+- **ALL ×N on the attack step**, and DECLARE ATTACK reads **"⚔ DECLARE ATTACK
+  — 3 · 11 MIGHT"** instead of a bare count: whether an attack is lethal was
+  arithmetic the player was doing off the cards.
+- **Narration speed is in SETTINGS.** It shipped in v17 as a control that only
+  existed ON the narration bubble, which only exists mid-CPU-turn — so finding
+  it required sitting through a turn at the wrong speed. Guests get it too;
+  it is a local preference, not a profile field.
+- Tapping an already-pinned hand card closes its preview (it was a one-way
+  door for touch), and the Main II hint stops promising "NEXT ends your turn"
+  when the button actually reads END TURN (shed N).
+- **FIX: `Number('')` is 0.** The narration-speed preference's parser rejected
+  a `null` key (the v17 bug) but not an empty string, which is also 0 and also
+  a valid index — a cleared key silently selected SLOW. Parsing now lives in
+  one tested module shared by the match screen and Settings.
+
+**Meta screens.** `npm run audit:screens` is clean across 18 screens at both
+widths. One real bug: **a failed News Center post deletion reported nothing.**
+The Creator's delete button wrote its error into the composer's error slot,
+which only renders while the composer is OPEN — so deleting from the list and
+failing looked exactly like a dead button. Delete now has its own error line
+next to the DEV BLOG heading, plus a busy state and a double-click guard.
+(Same shape as v17's Deck Box finding.)
+
+**Balance (two carry-forward items, one lever at a time, four cohorts each):**
+
+- **Sentinel of the Nether Pit: the scheduled lever was spent, measured, and
+  REFUTED.** v17 named Resolve 5 → 4 if the fresh baseline still had it first
+  in 3+ cohorts. It did, so the lever was spent — and it moved the kit −0.75
+  points on average, with one cohort going up, while `abilityUsesPerGame`
+  did not fall at all (7.95→8.19, 7.24→7.63, 8.53→8.59, 7.65→7.61). The
+  Resolve ceiling is not the binding constraint: the kit spends at 3 and
+  rebuilds with its +1, so it never banks near the ceiling. **Reverted rather
+  than printed**, and recorded in the override table so nobody spends it
+  twice. The next lever is named and it is the effect, not the price: bounding
+  the Ember minus to `enemyUnit` (dropping the face reach), on the v7.5
+  Ethereal precedent.
+- **Sovereign of the Dying Star's invoke cost goes 5 → 4 — the first dedicated
+  look it has ever had.** Last or next-to-last in all four cohorts (38.1 /
+  35.7 / 39.6 / 35.1) with the tightest deck spreads in the suite. Its kit is
+  fine — the same `Deal 2 damage to any target` reach Sentinel tops three
+  cohorts with, at a third of the price, plus Commander — but it pays a
+  Commander cost surcharge on top of an Uncommon's rarity-floor Resolve 3, so
+  it carries the joint-highest invoke cost in the pool and arrives on turn
+  8.3. Kuro's v7.7 case, feature for feature, and the same price-only lever
+  answers it: **44.3 / 45.8 / 50.9 / 41.7**, arrival 8.3-8.5 → 6.7-7.0,
+  activations 6.3-8.4 → 7.3-9.0, and it tops no table. Closes. Void Mother is
+  now the bottom of the table on its own.
+- Sentinel's cohort-C self-shatter donations are promoted from a watch item to
+  a named carry-forward: 23.4% win rate in shattered games at n=77 against a
+  42.1% average, which is no longer a small-sample caveat.
+
 ### v17.0 — The interactive-seam pass: the windows the sims never opened, watching the CPU actually play, and both scheduled Leader levers
 
 Five-part pass: a four-agent bug audit of every non-gameplay screen, an

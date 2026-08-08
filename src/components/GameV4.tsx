@@ -85,6 +85,7 @@ import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
+import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed } from '../meta/matchPrefs';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -175,6 +176,22 @@ const GAME_CSS = `
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 .gv4-unit-enter { animation: gv4-unit-enter 0.35s ease-out; }
+/* The card the opponent is playing, held in the middle of the board while its
+ * narration beat is on screen. Named cards in a log line are easy to skim
+ * past; the face itself is not. */
+@keyframes gv4-cpu-play {
+  0% { opacity: 0; transform: translateY(-26px) scale(0.72) rotate(-6deg); }
+  55% { opacity: 1; transform: translateY(4px) scale(1.04) rotate(1deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+}
+.gv4-cpu-play { animation: gv4-cpu-play 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+/* An attacking body leans across the clash line for the duration of the
+ * attack beat, so a declared attack reads as movement and not as a ring. */
+@keyframes gv4-lunge-down {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(12px); }
+}
+.gv4-lunge-down { animation: gv4-lunge-down 0.9s ease-in-out infinite; }
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
@@ -597,6 +614,7 @@ function BoardUnit({
   flash,
   acting,
   acted,
+  lunge,
   floats,
   guardNote,
 }: {
@@ -614,6 +632,9 @@ function BoardUnit({
   flash?: boolean;
   acting?: boolean;
   acted?: boolean;
+  /** The opponent just declared this unit as an attacker — it leans across
+   * the clash line for the length of the beat. */
+  lunge?: boolean;
   floats?: DmgFloat[];
   /** Small label under the status badges (e.g. "guards #2"). */
   guardNote?: string;
@@ -644,6 +665,7 @@ function BoardUnit({
         isGuard && 'ring-4 ring-[#29B6F6] -translate-y-1 rounded-[4px]',
         acting && 'gv4-cpu-actor -translate-y-1',
         acted && 'gv4-cpu-target',
+        lunge && 'gv4-lunge-down',
         (u.exhausted || sick) && 'saturate-50',
       )}
     >
@@ -1034,19 +1056,13 @@ const CPU_PACE = {
   BEAT_MS: 1150,
 } as const;
 
-/** Narration speed settings — SLOW for reading every line, FAST for skimming.
- * Persisted so the choice survives matches. */
-const CPU_SPEEDS = [
-  { label: 'SLOW', mult: 1.7 },
-  { label: 'NORMAL', mult: 1 },
-  { label: 'FAST', mult: 0.55 },
-] as const;
-const CPU_SPEED_KEY = 'frycards:cpu-speed';
+// Narration speed (SLOW / NORMAL / FAST) — shared with the Settings screen,
+// which is where a player looks for it when no match is running.
 
 /** One narration beat: a log line plus the board objects it involves, so the
  * acting card (yellow ring) and its target (red ring) pulse while the line is
  * on screen — the player can SEE what the CPU is doing, not just read it. */
-interface CpuBeat {
+export interface CpuBeat {
   text: string;
   /** Unit iids the CPU is acting WITH (yellow pulse). */
   actors: string[];
@@ -1054,13 +1070,21 @@ interface CpuBeat {
   targets: string[];
   /** The CPU's Leader itself is the actor (rings the Leader thumbnail). */
   leaderActing?: boolean;
+  /** Catalog id of the card being played — spotlit mid-board for this beat. */
+  cardId?: string;
+  /** This beat is a declared attack: the attackers lunge across the line. */
+  attacking?: boolean;
 }
 
 /** Line up the engine-log lines of a CPU turn with the AI's structured event
  * stream. Events are stamped with the log length at the moment they fired
  * (`logAt`), so a log line at absolute index L belongs to the first event
  * whose `logAt` exceeds L. */
-function buildCpuBeats(lines: string[], logStart: number, events: CpuTurnEvent[]): CpuBeat[] {
+export function buildCpuBeats(
+  lines: string[],
+  logStart: number,
+  events: CpuTurnEvent[],
+): CpuBeat[] {
   return lines.map((text, i) => {
     const abs = logStart + i;
     const ev = events.find((e) => (e.logAt ?? Infinity) > abs);
@@ -1069,10 +1093,12 @@ function buildCpuBeats(lines: string[], logStart: number, events: CpuTurnEvent[]
     switch (ev.kind) {
       case 'invoke':
         beat.actors.push(ev.iid);
+        beat.cardId = ev.defId;
         if (ev.targetIid) beat.targets.push(ev.targetIid);
         break;
       case 'attack':
         beat.actors.push(...ev.iids);
+        beat.attacking = true;
         break;
       case 'rebond':
         beat.targets.push(ev.targetIid);
@@ -1089,6 +1115,31 @@ function buildCpuBeats(lines: string[], logStart: number, events: CpuTurnEvent[]
     }
     return beat;
   });
+}
+
+/**
+ * The engine log speaks in seat ids ("P2 invokes…"); the narration bubble and
+ * the battle log should speak in names. Verb agreement is fixed for the second
+ * person ("You invoke", not "You invokes").
+ *
+ * Exported and pure so the verb table can be pinned by a test: a verb missing
+ * from it falls through to the bare `\bP1\b` rule and prints third person
+ * against a second-person subject, which is invisible in review and reads as
+ * broken English in play.
+ */
+export function humanizeLog(s: string, cpuLabel: string): string {
+  const out = s
+    .replace(/\bP1's\b/g, 'your')
+    .replace(/\bP2's\b/g, `${cpuLabel}'s`)
+    .replace(
+      /\bP1 (invokes|plays|attacks|sheds|mulligans|re-bonds|casts|must)\b/g,
+      (_, v: string) => (v === 'must' ? 'You must' : `You ${v.slice(0, -1)}`),
+    )
+    .replace(/\bP1\b/g, 'you')
+    .replace(/\bP2\b/g, cpuLabel);
+  // "You cast X on themselves" — the reflexive has to follow the subject.
+  const fixed = out.startsWith('You cast ') ? out.replace(/\bthemselves\b/, 'yourself') : out;
+  return fixed.charAt(0).toUpperCase() + fixed.slice(1);
 }
 
 /** A targeting/bonding choice in progress — resolved by clicking a
@@ -1133,6 +1184,7 @@ export function GameV4({
   humanLabel,
   cpuLabel,
   playerName,
+  seed,
   onExit,
   onResult,
   reward,
@@ -1145,6 +1197,10 @@ export function GameV4({
   humanLabel: string;
   cpuLabel: string;
   playerName: string;
+  /** Fixed RNG seed — the offline harnesses (`board-preview`, the Playwright
+   * match driver) pass one so a run is reproducible. Real matches omit it and
+   * get a clock-derived seed. */
+  seed?: number;
   onExit: () => void;
   onResult?: (won: boolean) => void;
   /** Post-match rewards from recordMatchResult(), shown on the game-over
@@ -1167,7 +1223,7 @@ export function GameV4({
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
   const [g] = useState<GameState>(() => {
-    const rng = mulberry32(Date.now() % 2147483647);
+    const rng = mulberry32(seed ?? Date.now() % 2147483647);
     const game = createGame(humanDeck, cpuDeck, POOL_BY_ID, {
       rng,
       // Coin-flip for the first turn. The human seat is fixed at P1, so
@@ -1219,32 +1275,36 @@ export function GameV4({
   const [cpuBeat, setCpuBeat] = useState<{ text: string; idx: number; total: number } | null>(null);
   /** The beat currently on screen — its actors/targets get pulsing rings. */
   const [cpuFocus, setCpuFocus] = useState<CpuBeat | null>(null);
+  /**
+   * True while a narration run is on screen. Distinct from `stage === 'cpu'`:
+   * the CPU also acts inside the human's OWN clash (its guard-step reaction
+   * plays) and inside a response window, and those used to happen in total
+   * silence — the board simply changed between one click and the next, with a
+   * single summary banner after the fact. Narration is driven by this flag, so
+   * those beats play out on the board like any other CPU action.
+   */
+  const [narrating, setNarrating] = useState(false);
   // Narration speed (persisted). The ref mirrors the state for the timer
   // chain — a running chain of setTimeout closures would otherwise keep the
   // speed captured when it started.
-  const [cpuSpeedIdx, setCpuSpeedIdx] = useState<number>(() => {
-    if (typeof window === 'undefined') return 1;
-    // getItem returns null when unset, and Number(null) is 0 — which would
-    // silently make SLOW the default. Only trust a real stored string.
-    const raw = window.localStorage.getItem(CPU_SPEED_KEY);
-    if (raw === null) return 1;
-    const stored = Number(raw);
-    return Number.isInteger(stored) && stored >= 0 && stored < CPU_SPEEDS.length ? stored : 1;
-  });
+  const [cpuSpeedIdx, setCpuSpeedIdx] = useState<number>(loadCpuSpeed);
   const cpuSpeedRef = useRef(cpuSpeedIdx);
   const cycleCpuSpeed = () => {
     setCpuSpeedIdx((i) => {
       const next = (i + 1) % CPU_SPEEDS.length;
       cpuSpeedRef.current = next;
-      try {
-        window.localStorage.setItem(CPU_SPEED_KEY, String(next));
-      } catch {
-        /* private mode — the choice just won't persist */
-      }
+      saveCpuSpeed(next);
       return next;
     });
   };
-  const beatMs = () => CPU_PACE.BEAT_MS * CPU_SPEEDS[cpuSpeedRef.current].mult;
+  /** How long the beat at `i` stays up. A beat that spotlights a card face
+   * (or declares an attack) holds longer — there is more to take in than a
+   * line of text, and "I could not tell what it played" is the complaint
+   * these beats exist to answer. */
+  const beatMs = (beat?: CpuBeat) => {
+    const weight = beat?.cardId || beat?.attacking ? 1.45 : 1;
+    return CPU_PACE.BEAT_MS * CPU_SPEEDS[cpuSpeedRef.current].mult * weight;
+  };
   const [showAsh, setShowAsh] = useState<false | 'me' | 'foe'>(false);
   /** Dusk shed picker: null = closed; array = card iids chosen to shed. */
   const [shedPick, setShedPick] = useState<string[] | null>(null);
@@ -1294,20 +1354,7 @@ export function GameV4({
   /** Response windows opened during the current CPU turn (loop backstop). */
   const cpuResumeCountRef = useRef(0);
 
-  /** The engine log speaks in seat ids ("P2 invokes…"); the narration bubble
-   * and battle log should speak in names. Verb agreement is fixed for the
-   * second person ("You invoke", not "You invokes"). */
-  const humanize = (s: string) => {
-    const out = s
-      .replace(/\bP1's\b/g, 'your')
-      .replace(/\bP2's\b/g, `${cpuLabel}'s`)
-      .replace(/\bP1 (invokes|plays|attacks|sheds|mulligans|re-bonds|must)\b/g, (_, v: string) =>
-        v === 'must' ? 'You must' : `You ${v.slice(0, -1)}`,
-      )
-      .replace(/\bP1\b/g, 'you')
-      .replace(/\bP2\b/g, cpuLabel);
-    return out.charAt(0).toUpperCase() + out.slice(1);
-  };
+  const humanize = (s: string) => humanizeLog(s, cpuLabel);
 
   const say = (msg: string) => {
     setBanner(msg);
@@ -1547,11 +1594,16 @@ export function GameV4({
    * is ours, so instant-speed cards — and the Locations to pay for them —
    * are live even on the opponent's turn. */
   const inMyResponse = stage === 'respond' && hasPriority(g, HUMAN);
-  const canTapNow = inMyMain || inMyReaction || inMyResponse;
+  // A narration run is the opponent acting: the reaction beats inside the
+  // human's OWN clash leave `inMyReaction` true underneath them, so without
+  // this the player could tap Locations and fire Quick Events into the middle
+  // of a replay of moves they have not finished being shown.
+  const canTapNow = (inMyMain || inMyReaction || inMyResponse) && !narrating;
 
   /** Why can't this hand card be invoked right now? (undefined = it can) */
   const invokeWhy = (c: { def: CardDef }): string | undefined => {
     const def = c.def;
+    if (narrating) return `${cpuLabel} is acting — SKIP ▸▸ to catch up`;
     const quick = def.type === 'Event' && def.subtype === 'Quick';
     const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
     if (!inMyMain) {
@@ -1867,6 +1919,13 @@ export function GameV4({
   };
 
   // ---- clash: human attacking ---------------------------------------------
+  /** Total Might currently selected to attack with — shown on the DECLARE
+   * button so "is this lethal?" is arithmetic the board does, not the player. */
+  const selectedMight = [...atkSel].reduce((sum, iid) => {
+    const u = findUnit(g, iid);
+    return sum + (u ? effMight(g, u) : 0);
+  }, 0);
+
   const toggleAttacker = (iid: string) => {
     setAtkSel((s) => {
       const n = new Set(s);
@@ -1875,10 +1934,6 @@ export function GameV4({
       return n;
     });
   };
-
-  /** Names of the CPU's reaction plays in the current clash window —
-   * accumulated across pause/resume rounds for the summary banner. */
-  const cpuReactionNamesRef = useRef<string[]>([]);
 
   /**
    * Run the CPU's clash reaction plays (Quick Events / Ambush units) with the
@@ -1893,12 +1948,23 @@ export function GameV4({
    */
   const runCpuClashReactions = (which: 'myAttack' | 'cpuClash') => {
     let paused = false;
+    // The CPU's clash reactions used to be the one place it acted with no
+    // narration at all: cards resolved, units died and the board simply
+    // changed between two of the player's own clicks, with a single
+    // after-the-fact summary banner. Narrate them exactly like a CPU turn —
+    // same beats, same rings, same card spotlight.
+    const logStart = g.log.length;
+    const events: CpuTurnEvent[] = [];
     try {
       reactionPlays(
         g,
         CPU,
         (ev) => {
-          if (ev.kind === 'invoke') cpuReactionNamesRef.current.push(ev.name);
+          // `logAt` is stamped by playTurn's own observer; reactionPlays has
+          // no such wrapper, so buildCpuBeats gets nothing to line up against
+          // unless we stamp it here.
+          ev.logAt = g.log.length;
+          events.push(ev);
         },
         {
           onOpponentPriority: () => {
@@ -1912,27 +1978,31 @@ export function GameV4({
     }
     bump();
     if (checkWinner()) return;
-    if (paused) {
-      openResponseWindow(() => runCpuClashReactions(which));
-      return;
-    }
-    if (which === 'myAttack') finishMyAttackDeclaration();
-    else finishCpuClashResolve();
+    narrate(g.log.slice(logStart), logStart, events, () => {
+      if (checkWinner()) return;
+      if (paused) {
+        openResponseWindow(() => runCpuClashReactions(which));
+        return;
+      }
+      if (which === 'myAttack') finishMyAttackDeclaration();
+      else finishCpuClashResolve();
+    });
   };
 
   /** After the CPU's guards + reactions are in: back to the human's clash. */
   const finishMyAttackDeclaration = () => {
     setStage('play');
-    const reactions = cpuReactionNamesRef.current;
-    cpuReactionNamesRef.current = [];
+    // The reaction plays themselves are narrated beat-by-beat now (see
+    // runCpuClashReactions) — repeating their names here just talked over the
+    // guard assignment, which is the part nothing else reports.
     const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
       (v: string[]) => v.length > 0,
     ).length;
-    const guardMsg =
+    say(
       guarded > 0
         ? `${cpuLabel} assigns ${guarded} guard line(s).`
-        : `${cpuLabel} lets it through!`;
-    say(reactions.length > 0 ? `${guardMsg} Reaction: ${reactions.join(', ')}!` : guardMsg);
+        : `${cpuLabel} lets it through!`,
+    );
     checkWinner();
   };
 
@@ -1949,7 +2019,6 @@ export function GameV4({
     if (!declareGuards(g, guards)) declareGuards(g, {});
     // The defending CPU gets its clash reaction window (Quick Events /
     // Ambush units) before damage — pause-capable, so the human can answer.
-    cpuReactionNamesRef.current = [];
     runCpuClashReactions('myAttack');
   };
 
@@ -1998,13 +2067,14 @@ export function GameV4({
       cpuDoneRef.current = null;
       setCpuBeat(null);
       setCpuFocus(null);
+      setNarrating(false);
       done?.();
       return;
     }
     cpuBeatIdxRef.current = i + 1;
     setCpuBeat({ text: beats[i].text, idx: i, total: beats.length });
     setCpuFocus(beats[i]);
-    cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, beatMs());
+    cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, beatMs(beats[i]));
   };
 
   /** Replay a CPU turn's log lines as staggered narration beats — each one
@@ -2023,9 +2093,11 @@ export function GameV4({
     cpuBeatIdxRef.current = 0;
     cpuDoneRef.current = onDone;
     if (lines.length === 0) {
+      setNarrating(false);
       onDone();
       return;
     }
+    setNarrating(true);
     tickCpuBeat();
   };
 
@@ -2049,6 +2121,7 @@ export function GameV4({
   const beginHumanTurn = () => {
     setCpuBeat(null);
     setCpuFocus(null);
+    setNarrating(false);
     respondResumeRef.current = null;
     cpuResumeCountRef.current = 0;
     bump();
@@ -2069,6 +2142,15 @@ export function GameV4({
    */
   const openResponseWindow = (onClose: () => void) => {
     const top = g.stack[g.stack.length - 1];
+    // Priority is NOT ours: there is no window to open, and the auto-pass
+    // path below would return without firing `onClose` (passMyPriority bails
+    // when the player doesn't hold priority) — leaving whatever was paused
+    // paused forever, with no button anywhere that resumes it. Every caller
+    // but one already checked; make the check belong to the window instead.
+    if (!hasPriority(g, HUMAN)) {
+      onClose();
+      return;
+    }
     // Nothing to respond WITH (no Quick Event / Ambush unit castable even
     // tapping every Location): opening the window would only make the player
     // click PASS to continue. Pass for them and say so — the stack display
@@ -2195,6 +2277,9 @@ export function GameV4({
   const runCpuTurn = () => {
     setStage('cpu');
     setCpuBeat(null);
+    // Cleared too, or the previous turn's last beat keeps its actor/target
+    // rings pulsing on the board right through the "thinking" delay.
+    setCpuFocus(null);
     cpuResumeCountRef.current = 0;
     cpuThinkTimeoutRef.current = window.setTimeout(() => {
       cpuThinkTimeoutRef.current = null;
@@ -2301,6 +2386,26 @@ export function GameV4({
     });
   };
 
+  /**
+   * Fill the guard step with the CPU's own guard heuristic. Assigning guards
+   * by hand is the fiddliest thing the board asks for — pick a line, pick the
+   * bodies, repeat, and re-do it all if one assignment turns out illegal —
+   * and the engine already ships a defender-side solver the CPU uses every
+   * time it blocks. This is that solver, pointed at the player's board: a
+   * starting point they can then edit, not an auto-play.
+   */
+  const suggestGuards = () => {
+    if (!guardStep) return;
+    const picked = chooseGuards(g, HUMAN);
+    setGuardSel(picked);
+    const lines = Object.values(picked).filter((v: string[]) => v.length > 0).length;
+    say(
+      lines > 0
+        ? `Suggested ${lines} guard line(s) — edit them or confirm.`
+        : 'Nothing worth guarding with — taking the hit is the suggestion.',
+    );
+  };
+
   const guardProblem = ((): string | null => {
     for (const [a, gs] of Object.entries(guardSel) as [string, string[]][]) {
       const attacker = findUnit(g, a);
@@ -2340,7 +2445,6 @@ export function GameV4({
     if (!g.clash) return;
     // The attacking CPU's own reaction window comes first (the sim gives it
     // one at exactly this point; the interactive path used to skip it).
-    cpuReactionNamesRef.current = [];
     runCpuClashReactions('cpuClash');
   };
 
@@ -2349,9 +2453,8 @@ export function GameV4({
       continueCpuAfterClash();
       return;
     }
-    const reactions = cpuReactionNamesRef.current;
-    cpuReactionNamesRef.current = [];
-    if (reactions.length > 0) say(`${cpuLabel} reacts: ${reactions.join(', ')}!`);
+    // The reactions themselves were narrated beat-by-beat by
+    // runCpuClashReactions — there is no summary left to print here.
     const participants = [...g.clash.attackers, ...Object.values(g.clash.guards).flat()];
     const vitKey = unguardedVitKey();
     if (resolveClash(g)) {
@@ -2442,6 +2545,11 @@ export function GameV4({
 
   // Contextual hint bar.
   const hint = (() => {
+    // Checked first: a narration run can be playing while the stage is still
+    // 'play' or 'cpuGuard' (the opponent's clash reactions), and telling the
+    // player to press RESOLVE CLASH while the board is mid-replay — with the
+    // button replaced by SKIP — is the opposite of what the bar is for.
+    if (narrating) return `${cpuLabel} is acting — watch the board, or SKIP ▸▸ to catch up.`;
     if (pending) {
       if (pending.kind === 'bond' || pending.kind === 'rebond')
         return 'Pick a highlighted friendly unit for the Item — a Charm can also take your own Vitality plate (✕ or Esc to cancel).';
@@ -2484,7 +2592,14 @@ export function GameV4({
         case 'Main1':
         case 'Main2':
           return `Play a Wellspring (once per turn), tap Locations for essence — or just INVOKE: the cost auto-taps. ${
-            g.phase === 'Main1' ? 'NEXT moves to the Clash.' : 'NEXT ends your turn.'
+            g.phase === 'Main1'
+              ? 'NEXT moves to the Clash.'
+              : me.hand.length > MAX_HAND
+                ? // The button already reads END TURN (shed N) — the hint used
+                  // to promise a plain "NEXT ends your turn" and then open a
+                  // full-screen picker instead.
+                  `END TURN asks you to shed ${me.hand.length - MAX_HAND} down to the ${MAX_HAND}-card limit first.`
+                : 'END TURN ends your turn.'
           }`;
         case 'Clash':
           return myAttackers.length === 0
@@ -2504,6 +2619,9 @@ export function GameV4({
   /** Wellsprings the player may still place this turn (2 on the opening turn
    * when on the draw — see engine `wellspringAllowance`). */
   const wellspringsLeft = Math.max(0, wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn);
+
+  /** The card face held mid-board for the current CPU narration beat. */
+  const cpuSpotlight = cpuFocus?.cardId ? (POOL_BY_ID[cpuFocus.cardId] ?? null) : null;
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
@@ -2626,8 +2744,25 @@ export function GameV4({
         </div>
       )}
 
+      {/* The card the opponent is playing right now, held mid-board for the
+          length of its beat. A name in a log line is easy to miss; the face
+          is not — this is the difference between "something happened" and
+          "it cast THAT". */}
+      {cpuSpotlight && (
+        <div className="absolute inset-0 z-[55] pointer-events-none flex items-center justify-center">
+          <div className="gv4-cpu-play flex flex-col items-center gap-1">
+            <span className="heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm">
+              {cpuLabel} PLAYS
+            </span>
+            <div className="drop-shadow-[0_10px_28px_rgba(0,0,0,0.7)]">
+              <CardFace def={cpuSpotlight} size="standard" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CPU turn narration */}
-      {stage === 'cpu' && (
+      {(stage === 'cpu' || narrating) && (
         <div
           role="button"
           tabIndex={0}
@@ -2759,8 +2894,8 @@ export function GameV4({
         onInspect={() => setInspect(foe.leader.def)}
         floats={floatsFor(`vit:${CPU}`)}
         flash={flashIids.has(`vit:${CPU}`)}
-        cpuActing={stage === 'cpu' && !!cpuFocus?.leaderActing}
-        cpuVitTarget={stage === 'cpu' && !!cpuFocus?.targets.includes(CPU)}
+        cpuActing={!!cpuFocus?.leaderActing}
+        cpuVitTarget={!!cpuFocus?.targets.includes(CPU)}
         right={
           <>
             {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={13} />}
@@ -2806,8 +2941,9 @@ export function GameV4({
               highlight={targetable || !!focusLine}
               isAttacker={!!attacking}
               flash={flashIids.has(u.iid)}
-              acting={stage === 'cpu' && !!cpuFocus?.actors.includes(u.iid)}
-              acted={stage === 'cpu' && !!cpuFocus?.targets.includes(u.iid)}
+              acting={!!cpuFocus?.actors.includes(u.iid)}
+              acted={!!cpuFocus?.targets.includes(u.iid)}
+              lunge={!!cpuFocus?.attacking && cpuFocus.actors.includes(u.iid)}
               floats={floatsFor(u.iid)}
               guardNote={
                 attacking ? `#${(g.clash?.attackers.indexOf(u.iid) ?? 0) + 1} ATTACKING` : undefined
@@ -2828,13 +2964,47 @@ export function GameV4({
           The one loud action on the whole board. Everything else stays
           ink-on-paper so whatever sits here always reads as the primary move. */}
       <div className="relative shrink-0 flex items-center justify-center gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35">
-        {stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 ? (
-          <button
-            onClick={declareMyAttack}
-            className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
-          >
-            ⚔ DECLARE ATTACK ({atkSel.size})
-          </button>
+        {/* Narration owns the divider whenever the opponent is acting — during
+            its whole turn AND during the reaction beats that play out inside
+            the human's own clash. Checked FIRST so those beats can't leave
+            RESOLVE CLASH live underneath a narration the player is watching. */}
+        {stage === 'cpu' || narrating ? (
+          <>
+            <button
+              onClick={cycleCpuSpeed}
+              title="Narration speed — click to cycle Slow / Normal / Fast"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+            >
+              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
+            </button>
+            <button
+              onClick={skipCpuBeats}
+              className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
+            >
+              SKIP ▸▸
+            </button>
+          </>
+        ) : stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 ? (
+          <>
+            {myAttackers.length > atkSel.size && (
+              <button
+                onClick={() => setAtkSel(new Set(myAttackers.map((u) => u.iid)))}
+                title="Send every ready unit"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+              >
+                ALL ×{myAttackers.length}
+              </button>
+            )}
+            <button
+              onClick={declareMyAttack}
+              className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+            >
+              {/* The Might going in, not just the head count: "3 units" says
+                  nothing about whether this is lethal, and the player was
+                  adding it up off the cards by hand. */}
+              ⚔ DECLARE ATTACK — {atkSel.size} · {selectedMight} MIGHT
+            </button>
+          </>
         ) : stage === 'play' && g.clash && g.clash.step !== 'done' ? (
           <button
             onClick={resolveMyClash}
@@ -2843,23 +3013,34 @@ export function GameV4({
             💥 RESOLVE CLASH
           </button>
         ) : guardStep ? (
-          <button
-            onClick={confirmGuards}
-            disabled={!!guardProblem}
-            title={guardProblem ?? undefined}
-            className={cn(
-              'heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
-              guardProblem
-                ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
-                : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
+          <>
+            {me.field.some((u) => !u.exhausted) && (
+              <button
+                onClick={suggestGuards}
+                title="Fill the guard lines with the CPU's own blocking heuristic — then edit or confirm"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-2 ink-border-md tracking-wide"
+              >
+                ✦ SUGGEST
+              </button>
             )}
-          >
-            {Object.keys(guardSel).length > 0
-              ? '🛡 CONFIRM GUARDS'
-              : incomingIfConfirmed > 0
-                ? `🛡 NO GUARDS — TAKE ${incomingIfConfirmed}`
-                : '🛡 CONFIRM GUARDS'}
-          </button>
+            <button
+              onClick={confirmGuards}
+              disabled={!!guardProblem}
+              title={guardProblem ?? undefined}
+              className={cn(
+                'heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
+                guardProblem
+                  ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
+                  : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
+              )}
+            >
+              {Object.keys(guardSel).length > 0
+                ? '🛡 CONFIRM GUARDS'
+                : incomingIfConfirmed > 0
+                  ? `🛡 NO GUARDS — TAKE ${incomingIfConfirmed}`
+                  : '🛡 CONFIRM GUARDS'}
+            </button>
+          </>
         ) : reactionStep ? (
           <button
             onClick={resolveCpuClash}
@@ -2886,22 +3067,6 @@ export function GameV4({
           >
             {phaseButtonLabel}
           </button>
-        ) : stage === 'cpu' ? (
-          <>
-            <button
-              onClick={cycleCpuSpeed}
-              title="Narration speed — click to cycle Slow / Normal / Fast"
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
-            >
-              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-            </button>
-            <button
-              onClick={skipCpuBeats}
-              className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
-            >
-              SKIP ▸▸
-            </button>
-          </>
         ) : (
           <span className="heading-font text-[9px] text-[var(--c-paper)]/35 tracking-[2px] py-2">
             — CLASH LINE —
@@ -2965,7 +3130,7 @@ export function GameV4({
               isGuard={!!guardAssigned || isDeclaredGuard}
               highlight={targetable || (canAtt && !atkSel.has(u.iid)) || canGuardNow}
               flash={flashIids.has(u.iid)}
-              acted={stage === 'cpu' && !!cpuFocus?.targets.includes(u.iid)}
+              acted={!!cpuFocus?.targets.includes(u.iid)}
               floats={floatsFor(u.iid)}
               guardNote={
                 guardAssigned
@@ -3055,7 +3220,7 @@ export function GameV4({
         onInspect={() => setInspect(me.leader.def)}
         floats={floatsFor(`vit:${HUMAN}`)}
         flash={flashIids.has(`vit:${HUMAN}`)}
-        cpuVitTarget={stage === 'cpu' && !!cpuFocus?.targets.includes(HUMAN)}
+        cpuVitTarget={!!cpuFocus?.targets.includes(HUMAN)}
         right={
           <>
             <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
@@ -3184,8 +3349,16 @@ export function GameV4({
               const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));
               const arcDrop = Math.abs(off) * 3;
               const isFocused = preview === c.iid;
+              // Tapping the card that is already pinned closes it again. It
+              // used to be a one-way door — the only ways out were ✕ CLOSE,
+              // Escape or moving the pointer off the whole dock, none of which
+              // is where a touch player's thumb already is.
               const activate = () => {
                 clearHoverIntent();
+                if (isFocused && previewPinned) {
+                  closePreview();
+                  return;
+                }
                 setPreview(c.iid);
                 setPreviewPinned(true);
               };
