@@ -20,7 +20,8 @@
     "audit:blank": "tsx scripts/audit-blank.ts",
     "sim:v4": "tsx scripts/simulate-v5.ts",
     "audit:cardface": "tsx scripts/audit-cardface.ts",
-    "audit:screens": "tsx scripts/audit-meta-screens.ts"
+    "audit:screens": "tsx scripts/audit-meta-screens.ts",
+    "drive:match": "tsx scripts/drive-match.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

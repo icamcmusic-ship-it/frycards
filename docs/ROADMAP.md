@@ -125,17 +125,26 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v17.md` carry-forward. The v17 pass
-  spent both scheduled v16 levers: Sentinel's minus went -2 → -3 (down 2-6
-  points, no longer first everywhere; Resolve 5 → 4 is the named next lever
-  if it still tops 3+ cohorts on a fresh baseline) and Avatar's -4 walked
-  back to -3 (out of the cellar to mid-field on all four cohorts — closed).
-  The bottom cluster is now Sovereign of the Dying Star and Void Mother;
-  Sovereign has never had a dedicated look and is next in line after one
-  watch pass. Standing rules that should not be relearned: **four deck
-  cohorts, not two** (two cohorts cannot see a keyword with fewer than ~6
-  carriers), and **never interleave content changes with balance trials in
-  one pass**.
+  list is `docs/BALANCE_SIM_FINDINGS_v18.md` carry-forward. The v18 pass
+  actioned both v17 items: Sovereign of the Dying Star got its first dedicated
+  look and its invoke cost went 5 → 4 (arrival turn 8.3 → 6.7, +6 to +11
+  points, mid-field on all four cohorts, tops none — closed), and Sentinel's
+  scheduled Resolve 5 → 4 was spent, measured, **refuted** (−0.75 mean, ability
+  cadence unmoved: the kit spends below its ceiling, so the ceiling was never
+  the constraint) and reverted. Sentinel's next lever is the EFFECT, not the
+  price — bound the Ember minus to `enemyUnit`, dropping the face reach, on the
+  v7.5 Ethereal precedent — if it still tops 3+ cohorts on a fresh baseline.
+  Void Mother is now the bottom of the table on its own, with both of its
+  levers already spent and its invoke turn already the earliest in the pool.
+  Standing rules that should not be relearned: **four deck cohorts, not two**
+  (two cohorts cannot see a keyword with fewer than ~6 carriers), and **never
+  interleave content changes with balance trials in one pass**.
+
+  **A lever that measures flat gets reverted, not shipped.** v18 is the
+  precedent: the named next lever was spent because the doc said to, produced
+  no movement in the win rate OR the mechanism it was supposed to act on, and
+  was reverted with the measurement recorded in the override table. Spending a
+  scheduled lever is an experiment, not a commitment to print its result.
 
   **The Leader re-baseline debt is paid.** v8.0 (Resolve cap) and v11 (CPU
   combat model) had made every earlier Leader and keyword reading stale;
@@ -301,7 +310,7 @@ Ordered by how much they change what it feels like to own and play the game.
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v17.md` (v16's doc superseded and deleted).
+  `docs/BALANCE_SIM_FINDINGS_v18.md` (v16's doc superseded and deleted).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
   v7.8 (random table demoted to a deck-composition diagnostic) and finished in
   v16: the suite runs three pinned decks per Leader and reports the per-deck

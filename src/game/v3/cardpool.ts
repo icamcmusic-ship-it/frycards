@@ -1504,7 +1504,23 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
  * (`seedOf` is `id|type|rarity`) and reprints its cost, keywords and kit.
  * This lever moves Resolve alone, leaving the print untouched.
  */
-const LEADER_RESOLVE_OVERRIDE: Record<string, number> = { void_mother: 5 };
+const LEADER_RESOLVE_OVERRIDE: Record<string, number> = {
+  void_mother: 5,
+  // v18, NOT SHIPPED — recorded so nobody spends it twice. The v17
+  // carry-forward scheduled `crimson_vector_commander: 4` (Sentinel's other
+  // half of the v16 lever pair) if the fresh baseline still had it first in
+  // 3+ cohorts. It did (61.0 / 61.9 / 58.0 / 62.2), so the lever was spent
+  // and measured on all four cohorts: **59.5 / 61.9 / 58.9 / 59.8** — a mean
+  // of -0.75 points, with cohort C going UP, and Sentinel still first in the
+  // same three tables. The diagnostic says why, and it is not noise:
+  // abilityUsesPerGame did not fall at all (7.95→8.19, 7.24→7.63,
+  // 8.53→8.59, 7.65→7.61). The Resolve CEILING is not the binding
+  // constraint — the kit spends at 3 and rebuilds with its +1, so it never
+  // banks near the ceiling and lowering it from 5 to 4 changes nothing it
+  // does. Reverted rather than printed: a price change that measurably moves
+  // neither the win rate nor the ability cadence is a strictly worse card
+  // for no gain. See docs/BALANCE_SIM_FINDINGS_v18.md §1 for the next lever.
+};
 
 /**
  * v7.7: Leader ESSENCE-COST override — the lever v7.6 carry-forward #5 said
@@ -1538,7 +1554,29 @@ const LEADER_RESOLVE_OVERRIDE: Record<string, number> = { void_mother: 5 };
  * (Resolve comes from rarity, both abilities from the colour identity), so
  * unlike the Unit/Event/Item mappers there is no power term to keep in step.
  */
-const LEADER_COST_OVERRIDE: Record<string, number> = { apex_nanite_shinobi: 4 };
+const LEADER_COST_OVERRIDE: Record<string, number> = {
+  apex_nanite_shinobi: 4,
+  // v18 — Sovereign of the Dying Star, 5 -> 4. The v17 carry-forward's #2
+  // ("Sovereign is the virgin case: it has never had a dedicated look") after
+  // its watch pass on the post-Avatar field, which confirmed the reading:
+  // 38.1 / 35.7 / 39.6 / 35.1, last or next-to-last in all four cohorts with
+  // deck spreads of 3.6 / 11.6 / 3.6 / 6.3 — a kit reading, not a deck roll.
+  //
+  // It is Kuro's case again, exactly, and the same lever answers it. Sovereign
+  // pays a Commander surcharge on top of an Uncommon's rarity-derived Resolve,
+  // so it carries the JOINT-HIGHEST invoke cost (5) and the LOWEST Resolve (3)
+  // in the pool, and it arrives at turn 8.3 — the latest of any Leader but
+  // Avatar, which has Resolve 6 and an unconditional Shatter to justify it.
+  // The kit is not idle or misplayed: its Ember minus is `-1: Deal 2 damage to
+  // any target`, the same reach Sentinel tops three cohorts with, at a THIRD
+  // of the price. It simply gets fewer turns to use it — 6.32 activations a
+  // game, the lowest of any Leader in the run. One point off the cost buys
+  // back the arrival turn without touching the ability economy.
+  //
+  // Price-only by construction (see the header above): nothing in `mapLeader`
+  // derives from `total`.
+  sovereign_of_the_dying_star: 4,
+};
 
 /**
  * v7.6 — Kuro, the Unseen (`apex_nanite_shinobi`) TRIED HERE AND REVERTED, and
