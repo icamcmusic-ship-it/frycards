@@ -50,12 +50,19 @@ Everything here has a started implementation and a visible seam.
     fallback and a build artefact), but it means an approval batch is not
     finished until the bundle is refreshed — otherwise the offline fallback and
     every balance sim run on a catalog the live game no longer matches.
-  - **`verify:pool` and `db:sync` need direct network access to Supabase**, so
-    neither runs from a sandboxed CI/agent session. v13 found live drift by
-    hashing the pool on both sides through the Supabase MCP instead (see the
-    v13 CHANGELOG entry for the exact query). Worth turning into a script that
-    can run without an egress allowlist — a drift guard that cannot run where
-    the work happens is a drift guard that runs late.
+  - **`db:sync` still needs direct network access to Supabase**, so it does not
+    run from a sandboxed CI/agent session. `verify:pool` no longer has that
+    excuse: **v20 gave it `POOL_SNAPSHOT`**, which runs its identical checks
+    against a JSON export of `public.cards` (the header carries the SELECT).
+    Use it — a drift guard that cannot run where the work happens is a drift
+    guard that runs late, and this one had not run since v17. When it was
+    finally run in v20 it found `cards.essence_cost` for
+    `sovereign_of_the_dying_star` still at the pre-v18 price, TWO passes after
+    the reprice shipped, while v18 and v19 both carried "no shipped change
+    touches a `cards` column" as the reason not to worry. One drift in 297
+    cards, invisible in the game and wrong in every server-side price.
+    **The write is still outstanding** — see `docs/BALANCE_SIM_FINDINGS_v20.md`
+    carry-forward #4 for the one-line statement.
 
 - **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
@@ -79,6 +86,19 @@ Everything here has a started implementation and a visible seam.
   `settings`, `menu`, `howtoplay`, `changelog` on top of the six it already
   had), with stubbed `pack_types` / `shop_items` rows so the Store shelf and its
   odds modal lay out at full size instead of as an empty state.
+
+  **v20: that stub covered the context, not the screens.** `MetaState` holds
+  seven things; everything else a screen shows it fetches for ITSELF on mount,
+  and offline those calls fail. So Battle Pass (1 control), Marketplace (4),
+  Friends (5), Missions (4), News (3) and Player Shops (8) were measured as
+  empty states for eight passes while the audit printed a clean pass — one of
+  those "controls" is the BACK button. `src/preview-fixtures.ts` answers those
+  reads offline and the same six now measure 28 / 51 / 11 / 7 / 2 / 13. Two
+  standing rules fall out of it: **a screen whose control count is in single
+  digits is a screen that is probably not being measured**, and a new fixture
+  must carry the FULL row shape — the first run crashed the mystery-pool viewer
+  on `pool.rarities` being undefined, which is a fixture defect that looks
+  exactly like a product one.
 
   What that measurement found: **nothing**. All sixteen screens render at 375px
   with `documentElement.scrollWidth === innerWidth` and zero interactive
@@ -125,28 +145,34 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v19.md` carry-forward. **v19 froze the
-  per-Leader levers**, and the reason is the most important thing on this
-  page: the v18 lever for Sentinel of the Nether Pit (bound the Ember minus to
-  `enemyUnit`) was spent on a baseline that met its condition in all four
-  cohorts, and measured **+0.9 mean, still first everywhere** — the third
-  consecutive lever on that Leader to measure nothing, after the v17 minus
-  reprice and the v18 Resolve trim. Differencing the sim's pinned suite against
-  its random-deck arm says why: Sentinel reads 62/61/58/62 pinned and
-  31/53/42/44 random — below the midpoint, and last in the pool in cohort A.
-  **Four passes of "Sentinel is first, nerf Sentinel" were reading its three
-  pinned decks, not its kit.** Void Mother is the same effect mirrored
-  (35/35/42/40 pinned, 54/43/50/62 random), so its scheduled dedicated look is
-  cancelled, not deferred.
+  list is `docs/BALANCE_SIM_FINDINGS_v20.md` carry-forward. **v19 froze the
+  per-Leader levers pending a widened instrument; v20 widened it, and the
+  result is the most important thing on this page.**
 
-  **The next balance work is on the instrument: widen the pinned suite past
-  three decks per Leader, then re-baseline.** No further per-Leader lever
-  anywhere in the pool until a kit reading can be told apart from a deck
-  reading. `simulate-v5.ts` now prints the pinned-vs-random divergence on every
-  run, flagged at `|gap| >= 10`; treat a flagged row as unmeasured. Standing
-  rules that should not be relearned: **four deck cohorts, not two** (two
-  cohorts cannot see a keyword with fewer than ~6 carriers), and **never
-  interleave content changes with balance trials in one pass**.
+  The pinned Leader suite gave each Leader three decks — and all three were the
+  SAME RECIPE with different jitter seeds. `randomArchetype` varies four things
+  per deck (a 2–3 keyword subset, a 1–3 effect subset, 32–40 units, 4–6
+  sanctums); the pinned builder varied none of them. So the pinned arm was
+  measuring one archetype, not a kit across deck-space. v20 rebuilt it as
+  **nine decks on nine recipes** sampling those same axes, still seeded on the
+  Leader id alone.
+
+  **Sentinel of the Nether Pit went 61.9 / 60.7 / 58.0 / 61.6 → 43.5 / 44.0 /
+  43.1 / 48.6** — first in all four cohorts for four passes, nerfed three times
+  for it, and near the bottom once the suite samples real decks. Its
+  pinned-vs-random gap collapses from a one-signed +18.1 mean to +2.5. Void
+  Mother comes off the floor and its cancelled rework stays cancelled. **Do not
+  re-derive the three spent Sentinel levers, and do not "restore" them on the
+  strength of the new table either.**
+
+  The corrected instrument's own answer is **Mer-King** — first in all four
+  cohorts at a 65.2% mean, nine clear of second, and the only Leader whose
+  random arm agrees on the finish. It is deliberately unspent: the suite it
+  tops has one pass of history. Standing rules that should not be relearned:
+  **four deck cohorts, not two** (two cohorts cannot see a keyword with fewer
+  than ~6 carriers), **never interleave content changes with balance trials in
+  one pass**, and **do not spend a lever against a one-pass-old instrument** —
+  that is the mistake the last four passes made in the other direction.
 
   **A lever that measures flat gets reverted, not shipped.** v18 is the
   precedent: the named next lever was spent because the doc said to, produced
@@ -284,8 +310,17 @@ Ordered by how much they change what it feels like to own and play the game.
   DOWNWARD, so an Alt-Art roll would silently pay out a Full-Art until the rows
   exist.
 
-- **The attacker's own-clash reaction window is served non-interactively in the
-  UI** (found v10). The rulebook opens a reaction window to _either_ player after
+- ~~**The attacker's own-clash reaction window is served non-interactively in
+  the UI**~~ — **resolved**, and noticed still-open here in v20's flow audit.
+  Both directions now route through `runCpuClashReactions` in `GameV4.tsx`,
+  which installs the same `onOpponentPriority` pause contract `playTurn` uses:
+  a CPU reaction the human can answer THROWS, the response window opens, and
+  its close re-enters `reactionPlays` where it left off. `resolveCpuClash` runs
+  it too, so the attacking CPU gets the post-guard window the sim always gave
+  it. Left below as written for the history — the diagnosis is still the
+  clearest description of what the seam was.
+
+  The original entry (found v10). The rulebook opens a reaction window to _either_ player after
   guards are set, and the engine and the sim CPU both use it — but in a real
   match the match view only serves the window one direction. When the human
   attacks and the CPU answers with a reaction, priority comes back to the human
@@ -318,9 +353,11 @@ Ordered by how much they change what it feels like to own and play the game.
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v19.md` (each pass's doc supersedes and deletes the last).
+  `docs/BALANCE_SIM_FINDINGS_v20.md` (each pass's doc supersedes and deletes the last).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
-  v7.8 (random table demoted to a deck-composition diagnostic) and finished in
-  v16: the suite runs three pinned decks per Leader and reports the per-deck
-  spread, so a kit reading and a deck-luck reading are no longer the same
+  v7.8 (random table demoted to a deck-composition diagnostic), extended in
+  v16 and finally made honest in **v20**, where the three "pinned decks" turned
+  out to be one recipe rolled three times and became nine decks on nine
+  recipes. It reports the per-deck spread and median, so a kit reading and a
+  deck-luck reading are no longer the same
   number.

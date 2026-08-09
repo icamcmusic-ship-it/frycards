@@ -1891,19 +1891,92 @@ function strHash(s: string): number {
   }
   return h >>> 0;
 }
-function pinnedDeckForLeader(leaderId: string, deckIx = 0): DeckDef {
+/**
+ * v20 — the recipe axes the pinned suite was holding constant.
+ *
+ * v19 carry-forward #1 blocked every further Leader lever on widening this
+ * suite, because a three-deck sample cannot separate "strong kit" from "three
+ * strong decks". Reading the two builders side by side says the sample was
+ * narrower than even that: `randomArchetype` varies FOUR things per deck —
+ * a 2-3 keyword subset of the Leader's colors, a 1-3 subset of the eight
+ * effect actions, a 32-40 unit count and a 4-6 sanctum count — and the pinned
+ * builder varied NONE of them. All three "pinned decks" were the same recipe
+ * (every on-color keyword at once, the same four effects, 34/21/5) rolled with
+ * three different jitter seeds.
+ *
+ * So the pinned arm was never measuring a Leader's kit across deck-space. It
+ * was measuring one specific archetype — maximum keyword spread, damage +
+ * shatter + draw + buff, one fixed curve — and a Leader whose kit happens to
+ * suit that archetype reads high in it whether or not the kit is strong.
+ * That is a much better explanation of a +18.1 / -14.1 divergence, in opposite
+ * directions, holding its sign across four independent cohorts, than sampling
+ * error on 336 games.
+ *
+ * The fix keeps everything the suite is FOR — decks pinned to the Leader id
+ * alone, identical every run, independent of DECK_SEED — and samples the same
+ * archetype space the random arm samples. Deck #0 is unchanged (same recipe,
+ * same seed) so the historical row stays comparable; #1..#N walk the axes.
+ */
+function pinnedArchetypeRecipe(
+  leaderId: string,
+  deckIx: number,
+): { keywords: string[]; effects: string[]; units: number; spells: number; sanctums: number } {
   const identity = LEADER_COLORS[leaderId] ?? [];
-  const themePool = identity.flatMap((c) => KEYWORDS_OF_COLOR[c]);
-  const keywords = [...new Set(themePool)];
-  const effects = ['damage', 'shatter', 'draw', 'buff'];
+  const themePool = [...new Set(identity.flatMap((c) => KEYWORDS_OF_COLOR[c]))];
+  // Deck #0: the v7.7/v16 recipe verbatim.
+  if (deckIx === 0) {
+    return {
+      keywords: themePool,
+      effects: ['damage', 'shatter', 'draw', 'buff'],
+      units: 34,
+      spells: 21,
+      sanctums: 5,
+    };
+  }
+  // Deterministic per (leader, deckIx) — the same axes randomArchetype rolls,
+  // drawn from a seeded stream instead of Math.random so the suite stays
+  // pinned. Not literally `randomArchetype`: that also rolls the Leader, and
+  // the whole point of this suite is that the Leader is the fixed variable.
+  const rng = mulberry32(strHash(`recipe:${leaderId}#${deckIx}`) >>> 0);
+  const shuffled = <T>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const pool = themePool.length > 0 ? themePool : ['Aerial', 'Overrun', 'Siphon'];
+  const keywords = shuffled(pool).slice(0, 2 + Math.floor(rng() * 2));
+  const effects = shuffled(PINNED_EFFECT_POOL).slice(0, 1 + Math.floor(rng() * 3));
+  const units = 32 + Math.floor(rng() * 9); // 32-40, as randomArchetype
+  const sanctums = 4 + Math.floor(rng() * 3); // 4-6, as randomArchetype
+  const spells = Math.max(8, 60 - units - sanctums);
+  return { keywords, effects, units, spells, sanctums };
+}
+
+/** Mirrors `ALL_EFFECTS` in src/game/v3/decks.ts (not exported from there). */
+const PINNED_EFFECT_POOL = [
+  'damage',
+  'heal',
+  'draw',
+  'buff',
+  'shatter',
+  'banish',
+  'erode',
+  'recover',
+];
+
+function pinnedDeckForLeader(leaderId: string, deckIx = 0): DeckDef {
+  const recipe = pinnedArchetypeRecipe(leaderId, deckIx);
   return buildDeck({
     label: `${POOL_BY_ID[leaderId]?.name ?? leaderId} — Pinned #${deckIx}`,
     leaderId,
-    keywords,
-    effects,
-    units: 34,
-    spells: 21,
-    sanctums: 5,
+    keywords: recipe.keywords,
+    effects: recipe.effects,
+    units: recipe.units,
+    spells: recipe.spells,
+    sanctums: recipe.sanctums,
     // v7.7: seeded from the LEADER ID ALONE. It used to be
     // `strHash(leaderId) ^ DECK_SEED`, which quietly defeated the whole point
     // of the suite: v6.2 built it (carry-forward #5) to give a Leader read
@@ -1925,11 +1998,27 @@ function pinnedDeckForLeader(leaderId: string, deckIx = 0): DeckDef {
     // are salted variants. Pairs play deck k against deck k, and the summary
     // reports the per-deck split — a Leader whose three decks agree is a kit
     // reading, one whose decks span 20 points is a deck-luck reading.
+    //
+    // v20: three decks per Leader, all on the same recipe (see
+    // `pinnedArchetypeRecipe`), is what v19 carry-forward #1 blocked further
+    // Leader levers on. It is now NINE, and they differ by recipe as well as
+    // by jitter seed.
     seed: deckIx === 0 ? strHash(leaderId) : strHash(`${leaderId}#${deckIx}`),
   });
 }
-const LEADER_PAIR_DECKS = 3; // v16: pinned decks per Leader (see above)
-const LEADER_PAIR_SEAT_GAMES = 7; // per ordered pair, per seat, per deck index
+/**
+ * v20 (v19 carry-forward #1): 3 -> 9 pinned decks per Leader, seat games
+ * 7 -> 3 per (pair, deck, seat).
+ *
+ * Per Leader that is 8 opponents x 9 decks x 3 games x 2 seats = 432 games,
+ * UP from 336, spread over three times as many distinct 60-card builds; per
+ * ordered pair the cell holds 54 games, up from 42. The suite as a whole goes
+ * 3,024 -> 3,888 games a run. Nothing else about it changes: the decks are
+ * still functions of the Leader id alone, so all four cohorts still run the
+ * identical suite and a second cohort still varies only the game RNG.
+ */
+const LEADER_PAIR_DECKS = 9;
+const LEADER_PAIR_SEAT_GAMES = 3; // per ordered pair, per seat, per deck index
 const leaderPairSuite: Record<string, Record<string, { games: number; wins: number }>> = {};
 const leaderPairByDeck: Record<string, { games: number; wins: number }[]> = {};
 {
@@ -3001,18 +3090,34 @@ const report = {
       const ranked = cells
         .map(([b, v]) => ({ vs: POOL_BY_ID[b]?.name ?? b, winPct: pct(v.wins, v.games) }))
         .sort((x, y) => y.winPct - x.winPct);
-      // v16: the per-deck split. Three pinned decks per Leader; a wide spread
-      // here means the aggregate row is reading deck luck, not the kit —
-      // Legendary Diver's v7.7 "last in the pinned suite" was exactly that
-      // (its single pinned deck was a bad roll; with three decks it reads
-      // mid-field in all four cohorts).
+      // v16: the per-deck split. A wide spread here means the aggregate row is
+      // reading deck luck, not the kit — Legendary Diver's v7.7 "last in the
+      // pinned suite" was exactly that (its single pinned deck was a bad roll;
+      // with three decks it reads mid-field in all four cohorts).
+      //
+      // v20: nine decks, on nine different RECIPES. The spread is now the
+      // honest quantity it always claimed to be — how much of the row is the
+      // build rather than the kit — because the builds finally differ in the
+      // ways builds differ. `deckMedian` is reported alongside the mean since
+      // one runaway recipe can carry a nine-deck mean the way it could not
+      // carry a nine-deck median.
       const byDeck = (leaderPairByDeck[a] ?? []).map((d) => pct(d.wins, d.games));
+      const sortedDecks = [...byDeck].sort((x, y) => x - y);
+      const deckMedian = sortedDecks.length
+        ? sortedDecks.length % 2 === 1
+          ? sortedDecks[(sortedDecks.length - 1) / 2]
+          : +(
+              (sortedDecks[sortedDecks.length / 2 - 1] + sortedDecks[sortedDecks.length / 2]) /
+              2
+            ).toFixed(1)
+        : 0;
       return {
         id: a,
         name: POOL_BY_ID[a]?.name ?? a,
         winPct: pct(wins, games),
         games,
         byDeck,
+        deckMedian,
         deckSpread: byDeck.length ? +(Math.max(...byDeck) - Math.min(...byDeck)).toFixed(1) : 0,
         best: ranked[0],
         worst: ranked[ranked.length - 1],
@@ -3185,13 +3290,14 @@ console.log(
 // table moves with cohort deck composition, and the pinned decks had been
 // seeded with the cohort seed since v6.2), so it prints first, here.
 console.log(
-  '\nLeaders — PRIMARY (pinned-deck suite, one row per Leader; v7.7, 3 decks/Leader since v16):',
+  `\nLeaders — PRIMARY (pinned-deck suite, one row per Leader; v7.7, ${LEADER_PAIR_DECKS} decks/Leader on ${LEADER_PAIR_DECKS} recipes since v20):`,
 );
 for (const l of report.leaderPairSuiteSummary)
   console.log(
     `  ${String(l.name).padEnd(28)} ${String(l.winPct).padStart(5)}%  n=${l.games}   ` +
-      `decks [${l.byDeck.join(' / ')}] spread ${l.deckSpread}   ` +
-      `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}`,
+      `median ${String(l.deckMedian).padStart(5)}%  spread ${String(l.deckSpread).padStart(4)}   ` +
+      `best ${l.best.winPct}% vs ${l.best.vs}   worst ${l.worst.winPct}% vs ${l.worst.vs}` +
+      `\n      decks [${l.byDeck.join(' / ')}]`,
   );
 console.log(
   '\nRandom-deck Leader table — deck-composition DIAGNOSTIC, not a balance read (v7.8):',
@@ -3238,7 +3344,7 @@ const divergence = Object.values(report.randomDeckLeaderDiagnostic)
   .filter((x): x is NonNullable<typeof x> => x !== null)
   .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
 console.log(
-  '\nPinned-vs-random divergence (v19) — |gap| >= 10 means the pinned row is largely a statement\nabout that Leader’s three pinned decks, not its kit. Not a balance number; a caution flag:',
+  `\nPinned-vs-random divergence (v19) — |gap| >= 10 means the pinned row is largely a statement\nabout that Leader’s ${LEADER_PAIR_DECKS} pinned decks, not its kit. Not a balance number; a caution flag.\nv20 widened the suite to ${LEADER_PAIR_DECKS} recipes; a gap that SHRANK against the v19 table was a\nrecipe artefact, and one that held is a genuine disagreement between the arms:`,
 );
 for (const d of divergence)
   console.log(

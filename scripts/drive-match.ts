@@ -39,7 +39,10 @@
  * first two matches), STEPS (default 1200 per match), SEED0 (default 1),
  * WATCH_EVERY (default 2 — every Nth match watches the narration instead of
  * skipping it; 0 disables watching, 1 watches every match),
- * PLAYWRIGHT_CHROMIUM to point at a preinstalled browser binary.
+ * STUDY_EVERY (default 2 — of the watching matches, every Nth one drives
+ * ❚❚ HOLD / ▸ STEP and checks that a held beat stays put and a step advances
+ * exactly one; 0 disables), PLAYWRIGHT_CHROMIUM to point at a preinstalled
+ * browser binary.
  *
  * Exits non-zero on any finding, so it can gate a release.
  */
@@ -52,6 +55,9 @@ const SEED0 = Number(process.env.SEED0 ?? 1);
 const WIDE = Number(process.env.WIDTH ?? 1280);
 const PHONE = 390;
 const WATCH_EVERY = Number(process.env.WATCH_EVERY ?? 2);
+/** Of the matches that WATCH, every Nth one studies instead — it drives
+ * ❚❚ HOLD and ▸ STEP and checks what they promise (v20). 0 disables. */
+const STUDY_EVERY = Number(process.env.STUDY_EVERY ?? 2);
 
 interface Finding {
   match: number;
@@ -226,44 +232,90 @@ async function clickRing(page: Page, which: 'red' | 'yellow' | 'blue', idx = 0):
   );
 }
 
-/** Open a hand card's preview and invoke it if the preview allows. */
-async function tryInvokeHand(page: Page, idx: number): Promise<boolean> {
-  const opened = await evalSafe(
+/**
+ * Open a hand card's preview and invoke it if the preview allows.
+ *
+ * v20 — `scan` walks the rest of the hand when the chosen card turns out to be
+ * uncastable, instead of giving up on the turn.
+ *
+ * The old behaviour picked ONE random hand index, and a hand is mostly
+ * uncastable early: too expensive, wrong colour, an Item with no body to bond
+ * to. A miss returned false, the caller fell through to its phase-advance
+ * ladder, and the turn ended having developed nothing. That is why every
+ * driven match died between turn 6 and turn 8 while the headless sim's average
+ * game runs to 21 — the driver was not losing to the CPU so much as passing
+ * its turns, and everything a real match reaches later (a hand over the shed
+ * limit, a full board, the long response chains) was outside the harness's
+ * reach on every run it has ever done.
+ */
+async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boolean> {
+  const count = await evalSafe<number>(
     page,
-    `(() => {
-      var cards = document.querySelectorAll('[aria-label$="— preview and invoke"]');
-      if (cards.length === 0) return false;
-      cards[${idx} % cards.length].click();
-      return true;
-    })()`,
-    false,
+    `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+    0,
   );
-  if (!opened) return false;
-  await page.waitForTimeout(60);
-  const invoked = await evalSafe(
-    page,
-    `(() => {
-      var els = Array.prototype.slice.call(document.querySelectorAll('button'));
-      for (var i = 0; i < els.length; i++) {
-        var t = (els[i].textContent || '').replace(/\\s+/g, ' ').trim();
-        if (t.indexOf('INVOKE') === 0 && !els[i].disabled) { els[i].click(); return true; }
-      }
-      return false;
-    })()`,
-    false,
-  );
-  if (!invoked) await clickText(page, '✕ CLOSE');
-  return !!invoked;
+  if (count === 0) return false;
+  const tries = scan ? count : 1;
+  for (let t = 0; t < tries; t++) {
+    const at = (idx + t) % count;
+    const opened = await evalSafe(
+      page,
+      `(() => {
+        var cards = document.querySelectorAll('[aria-label$="— preview and invoke"]');
+        if (!cards[${at}]) return false;
+        cards[${at}].click();
+        return true;
+      })()`,
+      false,
+    );
+    if (!opened) return false;
+    await page.waitForTimeout(60);
+    const invoked = await evalSafe(
+      page,
+      `(() => {
+        var els = Array.prototype.slice.call(document.querySelectorAll('button'));
+        for (var i = 0; i < els.length; i++) {
+          var t = (els[i].textContent || '').replace(/\\s+/g, ' ').trim();
+          if (t.indexOf('INVOKE') === 0 && !els[i].disabled) { els[i].click(); return true; }
+        }
+        return false;
+      })()`,
+      false,
+    );
+    if (invoked) return true;
+    await clickText(page, '✕ CLOSE');
+  }
+  return false;
 }
+
+/**
+ * v20 — what the driver does with the opponent's turn.
+ *
+ * v19 replaced "always SKIP" with "half the matches watch", on the reasoning
+ * that a control which turns the CPU's whole turn off is not an exercise of
+ * the narration path. The same pass then shipped ❚❚ HOLD and ▸ STEP onto the
+ * same divider and the driver never touched either of them — so the two
+ * newest controls on the match screen went out with exactly the coverage SKIP
+ * had before v19 noticed: none.
+ *
+ * `study` mode drives them, and checks the two things they claim:
+ *  - HOLD freezes the beat. The counter must NOT move while held.
+ *  - STEP advances exactly one beat, and RESUME hands the chain back.
+ * A HOLD that does not hold reads to a player as a frozen game; a STEP that
+ * skips two is a move they never saw. Neither is visible to any other check
+ * here, because both leave the board in a perfectly reachable state.
+ */
+type NarrationMode = 'skip' | 'watch' | 'study';
 
 async function driveMatch(
   browser: import('playwright').Browser,
   match: number,
   seed: number,
   width: number,
-  /** Let the CPU's narration play out instead of clicking SKIP through it. */
-  watch: boolean,
+  /** What to do with the CPU's narration — see NarrationMode. */
+  mode: NarrationMode,
 ) {
+  const watch = mode !== 'skip';
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -291,6 +343,20 @@ async function driveMatch(
   let sameBeatFor = 0;
   let lastBeat = '';
   let beatsWatched = 0;
+  // ---- study mode (v20): the HOLD / STEP walk, run once per match ----------
+  /** 'idle' → not started, 'freeze' → held, checking it stays put,
+   *  'stepping' → walking beats one at a time, 'release' → owed a ▶ RESUME,
+   *  'done' → handed back. */
+  let study: 'idle' | 'freeze' | 'stepping' | 'release' | 'done' =
+    mode === 'study' ? 'idle' : 'done';
+  /** The beat that was on screen when HOLD was clicked. */
+  let heldBeat = '';
+  let freezeReads = 0;
+  let stepsTaken = 0;
+  let studyReported = false;
+  const STUDY_FREEZE_READS = 12; // ~1.4s at the 120ms watch cadence
+  const STUDY_STEPS = 3;
+  const beatNum = (s: string) => Number(s.split('/')[0] || 0);
   let rng = seed >>> 0;
   const rand = () => (rng = (rng * 1664525 + 1013904223) >>> 0) / 0x100000000;
 
@@ -380,7 +446,14 @@ async function driveMatch(
       continue;
     }
     // 5. A targeting pick is open — take a legal target, or cancel it.
-    if (b.bodyText.includes('PICK A TARGET') || b.bodyText.includes('BOND — pick')) {
+    // Case-INSENSITIVE, and the same fix v19 made for the beat counter: the
+    // match screen is uppercased by CSS and `innerText` reflects that, so the
+    // literal on screen is "BOND — PICK A FRIENDLY UNIT". The bond branch of
+    // this rule was therefore dead from the day it was written — only the
+    // already-uppercase 'PICK A TARGET' half ever matched — and a bond pick
+    // left open is a state the driver could not leave, because the hand's
+    // INVOKE stayed live underneath it and simply re-armed the same pick.
+    if (/PICK A TARGET|BOND — pick/i.test(b.bodyText)) {
       const reds = b.rings.filter((r) => r.red).length;
       if (reds > 0 && (await clickRing(page, 'red', Math.floor(rand() * reds)))) continue;
       // By aria-label, never by the "✕" glyph: the first ✕ in the DOM is the
@@ -394,7 +467,9 @@ async function driveMatch(
     //    never opens a response window, a shed picker or a full board.
     if (has(B, 'CONFIRM GUARDS') || B.some((x) => x.text.includes('NO GUARDS — TAKE'))) {
       const reds = b.rings.filter((r) => r.red).length;
-      if (rand() < 0.6 && (await clickText(page, '✦ SUGGEST'))) continue;
+      // Blocking well is the single biggest thing keeping a driven match
+      // alive long enough to reach a late-game board (v20: 0.6 -> 0.85).
+      if (rand() < 0.85 && (await clickText(page, '✦ SUGGEST'))) continue;
       if (reds > 0 && rand() < 0.5) {
         await clickRing(page, 'red', Math.floor(rand() * reds));
         continue;
@@ -416,12 +491,129 @@ async function driveMatch(
       continue;
     }
     if (B.some((x) => x.text.includes('DECLARE ATTACK'))) {
-      if (rand() < 0.5 && (await clickText(page, 'ALL ×'))) continue;
+      // v20: ALL × was an even-money call, and an all-in attack every other
+      // clash is how the driver was throwing its board away — six of six runs
+      // ended in DEFEAT between turn 6 and turn 8 against a headless average
+      // of 21, so two thirds of every real match was outside the harness's
+      // reach. Alpha-striking is still worth exercising, just not as the
+      // default line.
+      if (rand() < 0.2 && (await clickText(page, 'ALL ×'))) continue;
       await clickText(page, 'DECLARE ATTACK');
       continue;
     }
     // 9. CPU narration.
     if (narrating) {
+      // Checked outside the `b.beat !== ''` guard below: the release is owed
+      // precisely because the run ended (no beat) while the hold survived.
+      if (study === 'release') {
+        if (await clickText(page, '▶ RESUME')) {
+          study = 'done';
+          continue;
+        }
+        // Not paused after all — the counter is moving on its own, so there is
+        // nothing left to release and waiting for a RESUME button that will
+        // never appear is its own hang.
+        if (b.beat !== '' && b.beat !== lastBeat) study = 'done';
+        lastBeat = b.beat;
+        await page.waitForTimeout(120);
+        continue;
+      }
+      // 9a. v20 — the HOLD / STEP walk, once per match in study mode. Runs
+      //     before the passive watch below and hands back to it when done.
+      if (study !== 'done' && b.beat !== '') {
+        if (study === 'idle') {
+          if (await clickText(page, '❚❚ HOLD')) {
+            heldBeat = b.beat;
+            freezeReads = 0;
+            study = 'freeze';
+          } else {
+            // The control is not on the divider at all — that is the v19
+            // feature missing, not a pacing quirk.
+            if (!studyReported) {
+              findings.push({
+                match,
+                seed,
+                width,
+                kind: 'narration',
+                detail: `❚❚ HOLD is not on the divider while a narration beat (${b.beat}) is on screen at step ${step}`,
+              });
+              studyReported = true;
+            }
+            study = 'done';
+          }
+          await page.waitForTimeout(120);
+          continue;
+        }
+        if (study === 'freeze') {
+          // The whole promise of HOLD: the beat stays put until the player
+          // says otherwise. A beat that moves on its own here is a hold that
+          // does not hold.
+          if (b.beat !== heldBeat) {
+            if (!studyReported) {
+              findings.push({
+                match,
+                seed,
+                width,
+                kind: 'narration',
+                detail: `❚❚ HOLD did not hold — beat moved ${heldBeat} → ${b.beat} after ${freezeReads} reads with no STEP or RESUME clicked (step ${step})`,
+              });
+              studyReported = true;
+            }
+            study = 'done';
+            continue;
+          }
+          if (++freezeReads >= STUDY_FREEZE_READS) {
+            study = 'stepping';
+            stepsTaken = 0;
+          }
+          await page.waitForTimeout(120);
+          continue;
+        }
+        // study === 'stepping'
+        const before = beatNum(b.beat);
+        if (!(await clickText(page, '▸ STEP'))) {
+          if (!studyReported) {
+            findings.push({
+              match,
+              seed,
+              width,
+              kind: 'narration',
+              detail: `▸ STEP is not on the divider while held on beat ${b.beat} at step ${step}`,
+            });
+            studyReported = true;
+          }
+          study = 'done';
+          await clickText(page, '▶ RESUME');
+          continue;
+        }
+        await page.waitForTimeout(150);
+        const after = await readBoard(page);
+        // An empty counter means the run ended on that step, which is a legal
+        // outcome of stepping off the last beat.
+        if (after.beat !== '' && beatNum(after.beat) !== before + 1 && !studyReported) {
+          findings.push({
+            match,
+            seed,
+            width,
+            kind: 'narration',
+            detail: `▸ STEP advanced ${before} → ${beatNum(after.beat)} (expected ${before + 1}) at step ${step}`,
+          });
+          studyReported = true;
+        }
+        beatsWatched++;
+        if (++stepsTaken >= STUDY_STEPS || after.beat === '') {
+          // Owed a ▶ RESUME, not necessarily able to click one yet: stepping
+          // off the LAST beat of a run ends it, so `narrating` goes false and
+          // the divider (and its RESUME) go with it — while the hold itself
+          // survives, by design, into the next run. Clicking once here and
+          // calling it done left the match held on the first beat of that next
+          // run with nobody to release it, which the watch branch then
+          // correctly reported as a stalled narration. Keep owing it until it
+          // lands.
+          study = 'release';
+        }
+        continue;
+      }
       if (watch) {
         // Sit through it, exactly as a player would. The only thing the driver
         // does here is check that the run is alive: the counter advances, and
@@ -465,7 +657,10 @@ async function driveMatch(
     // by turn 6 without ever reaching a big board.
     if (await clickText(page, 'INVOKE LEADER')) continue;
     if (await clickSelector(page, 'button[aria-label^="Play a "]')) continue;
-    if (b.handCards > 0 && (await tryInvokeHand(page, Math.floor(rand() * b.handCards)))) continue;
+    // `scan`: keep going through the hand rather than passing the turn on one
+    // uncastable card — see tryInvokeHand.
+    if (b.handCards > 0 && (await tryInvokeHand(page, Math.floor(rand() * b.handCards), true)))
+      continue;
 
     const roll = rand();
     if (roll < 0.3 && (await clickSelector(page, '[role="button"][aria-disabled="false"]'))) {
@@ -473,7 +668,13 @@ async function driveMatch(
       // on the board; a usable one resolves, an unusable one just says why.
       continue;
     }
-    if (roll < 0.38 && (await clickSelector(page, 'button[aria-label$="Wellspring"]'))) continue;
+    // v20: 0.08 -> 0.02. A manual Location tap is a control worth exercising
+    // and a play worth almost never making — the pool empties at the end of
+    // every PHASE while the Location stays exhausted until Dawn, so a pip
+    // tapped in Main I and not spent is a Location the driver has thrown away
+    // for Main II. At eight percent of a long turn it was doing that several
+    // times a turn, every turn.
+    if (roll < 0.32 && (await clickSelector(page, 'button[aria-label$="Wellspring"]'))) continue;
     if (roll < 0.62) {
       // Ash-pile drawer, battle log, inspector — read-only chrome that still
       // has to survive being opened mid-turn.
@@ -528,8 +729,26 @@ async function driveMatch(
       detail: 'watch mode saw zero narration beats — the run never detected a CPU turn',
     });
   }
+  // Same rule for study mode: a run that never got as far as clicking HOLD
+  // measured the two controls it exists to measure exactly as much as v19's
+  // always-SKIP driver measured the narration — not at all.
+  if (mode === 'study' && study === 'idle') {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'narration',
+      detail: 'study mode never reached a narration beat — ❚❚ HOLD / ▸ STEP went unexercised',
+    });
+  }
   console.log(
-    `match ${match} (seed ${seed}, ${width}px, ${watch ? `watched ${beatsWatched} beats` : 'skipped'}): ${outcome} · ${final.header} · ${errors.length} console error(s)${
+    `match ${match} (seed ${seed}, ${width}px, ${
+      mode === 'skip'
+        ? 'skipped'
+        : mode === 'study'
+          ? `studied (${stepsTaken} STEPs), ${beatsWatched} beats`
+          : `watched ${beatsWatched} beats`
+    }): ${outcome} · ${final.header} · ${errors.length} console error(s)${
       why ? `\n    ↳ ${why}` : ''
     }`,
   );
@@ -544,7 +763,17 @@ for (let m = 0; m < MATCHES; m++) {
   // The first two matches run at phone width — that is where a control
   // pushed off the side actually costs the player the game.
   const width = m < 2 ? PHONE : WIDE;
-  await driveMatch(browser, m, SEED0 + m, width, WATCH_EVERY > 0 && m % WATCH_EVERY === 0);
+  // Three-way split, in the order a player meets the controls: skip, watch,
+  // study. STUDY_EVERY carves the HOLD/STEP walk out of the watching half
+  // rather than out of the skipping one — a match that skips the CPU's turn
+  // has no beat to hold.
+  const watches = WATCH_EVERY > 0 && m % WATCH_EVERY === 0;
+  const mode: NarrationMode = !watches
+    ? 'skip'
+    : STUDY_EVERY > 0 && Math.floor(m / Math.max(1, WATCH_EVERY)) % STUDY_EVERY === 0
+      ? 'study'
+      : 'watch';
+  await driveMatch(browser, m, SEED0 + m, width, mode);
 }
 
 await browser.close();

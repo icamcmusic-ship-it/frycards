@@ -21,7 +21,36 @@
  *
  * Usage: npx tsx scripts/verify-pool.ts
  * Exits non-zero on any drift, so it can gate a release.
+ *
+ * v20 — OFFLINE MODE, and why it had to exist.
+ *
+ * This guard has not run since v17. v18 and v19 both recorded the same
+ * carry-forward: "`npm run verify:pool` still could not run — the Supabase
+ * host is outside this sandbox's network allowlist", and v19 argued from the
+ * code path instead ("no shipped change touches a `cards` column"). That
+ * argument was wrong about the pass before it. v18 repriced Sovereign of the
+ * Dying Star 5 -> 4 in `LEADER_COST_OVERRIDE`, which is exactly a `cards`
+ * column change, and `cards.essence_cost` still read `{generic: 3}` two passes
+ * later — the one drift in 297 cards, sitting in the column every server-side
+ * reader prices from, invisible for two passes because the check that finds it
+ * could not reach the network.
+ *
+ * A guard that only runs where there is egress is a guard that does not run.
+ * Set POOL_SNAPSHOT to a JSON file and this checks that instead of fetching:
+ *
+ *   POOL_SNAPSHOT=/tmp/cards.json npx tsx scripts/verify-pool.ts
+ *
+ * The file is the raw row array — exactly what the SELECT below returns — so
+ * it can be produced from any SQL console with:
+ *
+ *   select json_agg(t) from (
+ *     select id, rarity, card_type, template, keywords, essence_cost,
+ *            might, grit, resolve, card_subtype, rules_text
+ *     from cards order by id) t;
+ *
+ * The two paths run the identical checks; only the source of the rows differs.
  */
+import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { GENERATED_CARDS } from '../src/game/generated-cards';
 import { POOL_BY_ID } from '../src/game/v3/cardpool';
@@ -52,19 +81,42 @@ interface Row {
 const digest = (id: string, type?: string, rarity?: string): string =>
   `${id}|${type ?? ''}|${rarity ?? 'Common'}`;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const { data, error } = await supabase
-  .from('cards')
-  .select(
-    'id, rarity, card_type, template, keywords, essence_cost, might, grit, resolve, card_subtype, rules_text',
-  )
-  .order('id');
+const SNAPSHOT = process.env.POOL_SNAPSHOT;
 
-if (error) {
-  console.error('Failed to fetch cards from Supabase:', error.message);
-  process.exit(1);
+async function loadRows(): Promise<Row[]> {
+  if (SNAPSHOT) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(SNAPSHOT, 'utf8'));
+    } catch (e) {
+      console.error(`Could not read POOL_SNAPSHOT=${SNAPSHOT}:`, (e as Error).message);
+      process.exit(1);
+    }
+    if (!Array.isArray(parsed)) {
+      console.error(`POOL_SNAPSHOT=${SNAPSHOT} is not a JSON array of card rows.`);
+      process.exit(1);
+    }
+    console.log(`Reading the live catalog from a snapshot: ${SNAPSHOT}`);
+    return parsed as Row[];
+  }
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const { data, error } = await supabase
+    .from('cards')
+    .select(
+      'id, rarity, card_type, template, keywords, essence_cost, might, grit, resolve, card_subtype, rules_text',
+    )
+    .order('id');
+  if (error) {
+    console.error('Failed to fetch cards from Supabase:', error.message);
+    console.error(
+      'No egress to the Supabase host? Export a snapshot and re-run with POOL_SNAPSHOT — see the header.',
+    );
+    process.exit(1);
+  }
+  return (data ?? []) as Row[];
 }
-const rows = (data ?? []) as Row[];
+
+const rows = await loadRows();
 if (rows.length === 0) {
   console.error('Fetched zero cards — refusing to report parity on an empty result.');
   process.exit(1);

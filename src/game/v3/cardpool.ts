@@ -1519,8 +1519,12 @@ const LEADER_RESOLVE_OVERRIDE: Record<string, number> = {
   // banks near the ceiling and lowering it from 5 to 4 changes nothing it
   // does. Reverted rather than printed: a price change that measurably moves
   // neither the win rate nor the ability cadence is a strictly worse card
-  // for no gain. See docs/BALANCE_SIM_FINDINGS_v19.md §1 — which spent that
-  // "next lever" too, and refuted it.
+  // for no gain. v19 spent that "next lever" too, and refuted it — and v20
+  // then found the table all three were aimed at was reading ONE deck recipe:
+  // on a suite of nine real recipes Sentinel measures 43.5 / 44.0 / 43.1 /
+  // 48.6 and sits near the BOTTOM of the pool, not the top. See
+  // docs/BALANCE_SIM_FINDINGS_v20.md §3. The three spent levers stay spent —
+  // do not re-derive them, and do not "restore" them on the new table either.
 };
 
 /**
@@ -1782,7 +1786,18 @@ const LEADER_MINUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
   // pool. Three pinned decks are what finishes first; the kit does not.
   //
   // No further lever belongs on this card until the pinned suite can tell the
-  // two apart. See docs/BALANCE_SIM_FINDINGS_v19.md §1.
+  // two apart.
+  //
+  // v20 WIDENED THAT SUITE AND THE READING REVERSED. The three "pinned decks"
+  // were one recipe rolled three times — same keyword set, same four effects,
+  // same 34/21/5 curve, different jitter — so the pinned arm was measuring one
+  // archetype, not a kit. On nine decks across nine recipes Sentinel measures
+  // **43.5 / 44.0 / 43.1 / 48.6** and finishes near the bottom of the pool,
+  // and its pinned-vs-random gap collapses from a one-signed +18.1 mean to
+  // +2.5. Four passes of "Sentinel is first, nerf Sentinel" were reading the
+  // recipe. This card is DONE: it needs no lever, the three spent ones stay
+  // spent and refuted, and nothing here should be reverted on the strength of
+  // the new table either. See docs/BALANCE_SIM_FINDINGS_v20.md §3.
 };
 
 /** Does this ability actually reach across the table? */

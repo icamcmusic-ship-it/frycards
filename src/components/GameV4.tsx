@@ -1099,6 +1099,13 @@ export function buildCpuBeats(
       case 'attack':
         beat.actors.push(...ev.iids);
         beat.attacking = true;
+        // v20 — ring the human's Vitality plate too. The reverse case has done
+        // this since v19: when the CPU declines to guard, `buildGuardBeats`
+        // rings the CPU's OWN plate because that is what the unblocked Might
+        // is pointed at. Declaring an attack is the same statement in the
+        // other direction and was the half that said nothing — the attackers
+        // lunged and the player was left to infer where at.
+        beat.targets.push(HUMAN);
         break;
       case 'rebond':
         beat.targets.push(ev.targetIid);
@@ -1683,6 +1690,12 @@ export function GameV4({
   const invokeWhy = (c: { def: CardDef }): string | undefined => {
     const def = c.def;
     if (narrating) return `${cpuLabel} is acting — SKIP ▸▸ to catch up`;
+    // v20: a target/bond pick is already open. Invoking from the hand while
+    // one is in progress silently REPLACED it — the red PICK A TARGET bar
+    // stayed up, the rings moved to a different card's legal targets, and
+    // nothing said the first card had been put back. The board is in a modal
+    // state; say so and let ✕ / Esc out of it.
+    if (pending) return 'Finish the current pick first (✕ or Esc to cancel it)';
     const quick = def.type === 'Event' && def.subtype === 'Quick';
     const ambush = def.type === 'Unit' && hasKw(def, 'Ambush');
     if (!inMyMain) {
@@ -1710,39 +1723,80 @@ export function GameV4({
     return undefined;
   };
 
+  /**
+   * Run the CPU's priority window over whatever is on the stack, NARRATED.
+   *
+   * v18 gave the CPU's clash reactions beats and v19 gave its guard step beats.
+   * This was the last place it still acted in total silence, and the most
+   * confusing one: the player invokes a card, and between that click and the
+   * next frame the CPU can counter it, shatter the unit it was aimed at, or
+   * answer with a Quick Event of its own. All of that arrived as a single
+   * banner ("the CPU responds") over a board that had already changed — no
+   * beat, no ring, no card spotlight, and the stack display gone by the time
+   * anyone looked at it.
+   *
+   * `respondToStack` has taken an observer since the AI was written; the UI
+   * simply threw the events away. Same contract as `runCpuClashReactions`:
+   * stamp `logAt` ourselves (there is no `playTurn` wrapper doing it here),
+   * then hand the lines and events to `narrate` and continue in its `onDone`.
+   */
+  const narrateCpuStackAnswer = (onDone: (cpuPlays: number) => void) => {
+    const logStart = g.log.length;
+    const events: CpuTurnEvent[] = [];
+    let plays = 0;
+    let guard = 8;
+    // Loop, not a single call: the human's answer can hand priority back and
+    // forth, and settleStack halts whenever the CPU holds it.
+    while (!g.winner && hasPriority(g, CPU) && guard-- > 0) {
+      plays += respondToStack(g, CPU, (ev) => {
+        ev.logAt = g.log.length;
+        events.push(ev);
+      });
+    }
+    bump();
+    if (checkWinner()) return;
+    // `plays` is handed to the continuation rather than returned: with nothing
+    // to narrate the continuation runs SYNCHRONOUSLY, so a caller closing over
+    // this function's own return value would read it before it exists.
+    if (plays > 0) narrate(g.log.slice(logStart), logStart, events, () => onDone(plays));
+    else onDone(plays);
+  };
+
   /** Actually invoke a hand card (auto-taps Locations for its cost). */
   const doInvoke = (cardIid: string, opts: { targetIid?: string; bondTargetIid?: string }) => {
     const card = me.hand.find((c) => c.iid === cardIid);
     if (!card) return;
     autoTapFor(g, HUMAN, effectiveCost(g, HUMAN, card.def));
     const respondingAlready = stage === 'respond';
+    // Captured before the narration starts: `stage` is read in the
+    // continuation, which runs a second or two later.
+    const resumeStage = stage;
     if (invokeCard(g, HUMAN, cardIid, opts)) {
+      say(`${card.def.name} invoked.`);
       // The card is on the stack, not resolved: the CPU gets its priority
-      // window to answer before it takes effect.
-      const answers = respondToStack(g, CPU);
-      bump();
-      say(
-        answers > 0 ? `${card.def.name} invoked — the CPU responds.` : `${card.def.name} invoked.`,
-      );
-      if (respondingAlready) {
-        // Playing INTO an open window: it stays open only while priority is
-        // still ours, and closing it resumes whatever was paused.
-        afterResponseAction();
-      } else if (hasPriority(g, HUMAN)) {
-        // The CPU answered and handed priority back — counter it or pass.
-        // Resume to the stage this window opened FROM: invoking in the
-        // CPU-clash reaction window (stage 'cpuGuard') must come back to
-        // 'cpuGuard', not 'play' — resuming to 'play' mid-CPU-clash showed
-        // the human's RESOLVE CLASH, which never runs continueCpuAfterClash
-        // and abandoned the rest of the CPU's turn.
-        const resumeStage = stage;
-        openResponseWindow(() => setStage(resumeStage));
-      }
+      // window to answer before it takes effect — beat by beat, like every
+      // other thing it does.
+      narrateCpuStackAnswer(() => {
+        if (checkWinner()) return;
+        if (respondingAlready) {
+          // Playing INTO an open window: it stays open only while priority is
+          // still ours, and closing it resumes whatever was paused.
+          afterResponseAction();
+        } else if (hasPriority(g, HUMAN)) {
+          // The CPU answered and handed priority back — counter it or pass.
+          // Resume to the stage this window opened FROM: invoking in the
+          // CPU-clash reaction window (stage 'cpuGuard') must come back to
+          // 'cpuGuard', not 'play' — resuming to 'play' mid-CPU-clash showed
+          // the human's RESOLVE CLASH, which never runs continueCpuAfterClash
+          // and abandoned the rest of the CPU's turn.
+          openResponseWindow(() => setStage(resumeStage));
+        }
+      });
     } else {
       bump(); // taps may have happened
       say("Can't invoke that right now.");
+      checkWinner();
     }
-    checkWinner();
   };
 
   /** Click a hand card's INVOKE button: route through bond/target picking. */
@@ -2099,11 +2153,24 @@ export function GameV4({
     const guards = chooseGuards(g, CPU);
     if (!declareGuards(g, guards)) declareGuards(g, {});
     bump();
-    narrateBeats(buildGuardBeats(g, cpuLabel), () => {
-      // The defending CPU gets its clash reaction window (Quick Events /
-      // Ambush units) before damage — pause-capable, so the human can answer.
-      runCpuClashReactions('myAttack');
-    });
+    narrateBeats(
+      [
+        // v20: a beat for the DECISION, before the beats describing it. The
+        // CPU's blocking answer used to appear on the frame after DECLARE
+        // ATTACK was clicked — v19 gave it beats, but they still arrived with
+        // no gap, so the guards read as part of the player's own click rather
+        // than as the opponent's reply to it. Everything else the CPU does
+        // opens with a "thinking" pause; this is the same pause, in the same
+        // vocabulary.
+        { text: `🤔 ${cpuLabel} is choosing its guards…`, actors: [], targets: [] },
+        ...buildGuardBeats(g, cpuLabel),
+      ],
+      () => {
+        // The defending CPU gets its clash reaction window (Quick Events /
+        // Ambush units) before damage — pause-capable, so the human can answer.
+        runCpuClashReactions('myAttack');
+      },
+    );
   };
 
   // The defending (non-active) player's vitality plate should flash when at
@@ -2252,6 +2319,18 @@ export function GameV4({
   };
 
   const skipCpuBeats = () => {
+    // SKIP releases ❚❚ HOLD (v20). Held and skipping are contradictory
+    // instructions, and leaving the hold on turned SKIP into a per-segment
+    // button: a CPU turn is narrated as several runs back to back (the turn
+    // proper, its clash reactions, whatever follows a response window), each
+    // one calling narrateBeats, and a run that starts while paused parks on
+    // its own beat 0 with no timer. So a player who held to study one move and
+    // then pressed SKIP got the rest of THAT run and an immediate freeze on the
+    // next — and had to press SKIP again for every remaining segment.
+    if (cpuPausedRef.current) {
+      cpuPausedRef.current = false;
+      setCpuPaused(false);
+    }
     // Clicked during the initial "thinking" delay, before the CPU's turn has
     // even been computed yet: cpuTimeoutRef (the beat-ticker) is idle, so
     // stopCpuTimer()+tickCpuBeat() below would have nothing to do and the
@@ -2330,21 +2409,19 @@ export function GameV4({
     // stack). Nothing else drives the CPU's window from here, so without
     // this loop the human's own card froze on the stack — no PASS button,
     // sorcery-speed plays refused — until a phase change discarded it.
-    // Drive the CPU through its window exactly like doInvoke does.
-    let guard = 8;
-    let cpuPlays = 0;
-    while (!g.winner && hasPriority(g, CPU) && guard-- > 0) {
-      cpuPlays += respondToStack(g, CPU);
-    }
-    bump();
-    if (checkWinner()) return;
-    if (hasPriority(g, HUMAN)) {
-      if (cpuPlays > 0) say(`${cpuLabel} responds — answer it or pass.`);
-      return; // still their window
-    }
-    const resume = respondResumeRef.current;
-    respondResumeRef.current = null;
-    if (resume) resume();
+    // Drive the CPU through its window exactly like doInvoke does — narrated
+    // since v20, so an answer played here is seen rather than inferred from a
+    // board that changed while the player was not looking.
+    narrateCpuStackAnswer((cpuPlays) => {
+      if (checkWinner()) return;
+      if (hasPriority(g, HUMAN)) {
+        if (cpuPlays > 0) say(`${cpuLabel} responded — answer it or pass.`);
+        return; // still their window
+      }
+      const resume = respondResumeRef.current;
+      respondResumeRef.current = null;
+      if (resume) resume();
+    });
   };
 
   /** PASS button in a response window. */
@@ -2882,8 +2959,13 @@ export function GameV4({
       <PhaseStepper phase={g.phase} yours={g.active === HUMAN} />
 
       {/* Contextual hint bar */}
+      {/* v20: `truncate` clipped this to one line. At 9px on a 375px phone
+          that is ~60 characters, and the hint that matters most is the guard
+          one — "Unguarded hits incoming: 12 Vitality (you have 9)" sits at the
+          END of a ~150-character string, so the single number the bar exists
+          to deliver was the first thing cut. Two lines, then clip. */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
-        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 truncate">
+        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 line-clamp-2 sm:line-clamp-1">
           💡 {hint}
         </div>
       )}
@@ -3193,6 +3275,17 @@ export function GameV4({
                 ALL ×{myAttackers.length}
               </button>
             )}
+            {/* v20: Escape has cleared the selection since v17 and ALL ×N has
+                filled it since v16 — but there was no visible way to EMPTY it,
+                so a touch player who picked the wrong three attackers had to
+                find and re-tap each one. Undo belongs next to the commit. */}
+            <button
+              onClick={() => setAtkSel(new Set())}
+              title="Clear the attack selection (Esc)"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+            >
+              ✕ CLEAR
+            </button>
             <button
               onClick={declareMyAttack}
               className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
@@ -3219,6 +3312,18 @@ export function GameV4({
                 className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-2 ink-border-md tracking-wide"
               >
                 ✦ SUGGEST
+              </button>
+            )}
+            {/* Same gap as the attacker side, and worse here: ✦ SUGGEST fills
+                every line at once, so "not that — let me do it myself" is the
+                obvious next click and Escape was the only thing that did it. */}
+            {Object.keys(guardSel).length > 0 && (
+              <button
+                onClick={() => setGuardSel({})}
+                title="Clear every guard assignment (Esc)"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+              >
+                ✕ CLEAR
               </button>
             )}
             <button

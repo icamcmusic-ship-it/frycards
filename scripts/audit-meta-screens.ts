@@ -61,7 +61,7 @@ const PAIR_CAP = Number(process.env.PAIR_CAP ?? 24);
  * appends it verbatim, which is how the Creator-only panels get measured: with
  * the default player profile they never mount at all.
  */
-const SCREENS = [
+const ALL_SCREENS = [
   'collection',
   'decks',
   'pack',
@@ -83,6 +83,31 @@ const SCREENS = [
   // importer only exist for the Creator.
   'submissions&role=creator',
 ];
+
+/**
+ * v20: a full sweep is ~50 minutes, and confirming ONE fix on ONE screen used
+ * to cost all of it — so a fix landed mid-pass was either re-measured at that
+ * price or, in practice, not re-measured at all. `ONLY` narrows the run to the
+ * screens whose entry contains any of a comma-separated list of substrings:
+ *
+ *   ONLY=shops npm run audit:screens
+ *   ONLY=market,battlepass npm run audit:screens
+ *
+ * An unmatched filter exits non-zero rather than running clean over nothing —
+ * "0 problems" out of a run that measured nothing is the exact failure mode
+ * the rest of this file exists to avoid.
+ */
+const ONLY = (process.env.ONLY ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const SCREENS = ONLY.length
+  ? ALL_SCREENS.filter((s) => ONLY.some((f) => s.includes(f)))
+  : ALL_SCREENS;
+if (ONLY.length && SCREENS.length === 0) {
+  console.error(`ONLY=${process.env.ONLY} matched no screen. Known: ${ALL_SCREENS.join(', ')}`);
+  process.exit(2);
+}
 
 const WIDTHS = [375, 1280];
 const CONTROLS = 'button:visible, [role="button"]:visible';

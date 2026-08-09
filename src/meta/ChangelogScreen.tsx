@@ -18,27 +18,29 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Nothing-Happens-In-Silence Pass (v20)',
+    date: 'August 2026',
+    items: [
+      'THE OPPONENT’S ANSWERS NOW PLAY OUT TOO. Play a card and the CPU could counter it, shatter the unit you aimed at, or answer with a Quick Event of its own — and all of that arrived as one banner over a board that had already changed. Its response window is now narrated beat by beat like everything else it does: the card it played is held up in the middle of the board, and the unit it is aimed at pulses red. That was the last place the opponent still acted invisibly.',
+      'When the opponent declares an attack, YOUR Vitality plate now lights up with it — the attackers already leaned across the line, but nothing said where they were pointed. Its blocking decision also gets a beat of its own ("choosing its guards…") before the guard lines land, so the answer reads as a reply to your attack rather than part of your own click.',
+      'FIX: SKIP ▸▸ no longer leaves ❚❚ HOLD switched on. A turn is narrated as several runs back to back, so holding once and then pressing SKIP fast-forwarded the current run and froze on the next one — you had to press SKIP again for every remaining piece of the turn.',
+      'FIX: starting a new card while you were already picking a target silently threw the first pick away — same red bar, different rings, no word about it. The hand now says "finish the current pick first (✕ or Esc to cancel it)".',
+      'NEW: ✕ CLEAR next to DECLARE ATTACK and CONFIRM GUARDS. Escape has always cleared a selection; there was no visible way to do it, which matters most right after ✦ SUGGEST fills every guard line at once.',
+      'FIX: the hint bar was clipped to a single line, so on a phone the guard hint lost the one number it exists to deliver — how much Vitality is about to hit you. It now runs to two lines.',
+      'BALANCE: no card changed, and for the second pass running that IS the finding. v19 discovered the Leader table had been ranking three hand-built decks instead of the cards; this pass widened it from 3 decks to 9 REAL ones and re-measured. Sentinel of the Nether Pit — first in all four cohorts for four passes, and nerfed three times for it — drops to 43.5% and lands near the BOTTOM. Void Mother, the one scheduled for a rework, comes off the floor. Full numbers in docs/BALANCE_SIM_FINDINGS_v20.md.',
+      'Under the hood: six meta screens (Battle Pass, Marketplace, Player Shops, Friends, News, Missions) had been audited for eight passes with nothing on them — they fetch their own data and the audit runs offline, so it was measuring empty states and reporting a clean pass. They are populated now, which found a crash on the mystery-pack pool viewer the first time it was ever opened by a test.',
+    ],
+  },
+  {
     version: 'The Watch-It-Happen Pass (v19)',
     date: 'August 2026',
     items: [
       'THE OPPONENT’S BLOCKS NOW PLAY OUT INSTEAD OF JUST APPEARING. Declare an attack and its guard lines used to exist the very next instant, reported only as a count ("2 guard line(s)") that named neither the blocker nor what it stopped. Now each one is narrated: the blockers pulse yellow, the attacker they intercept pulses red, and a closing beat tells you exactly how much Might is still coming through — with the opponent’s own Vitality plate lit up, because that is what it is aimed at.',
       'NEW: ❚❚ HOLD and ▸ STEP, next to ⏱ and SKIP ▸▸. Freeze the opponent’s move on screen for as long as you like, then walk its turn one action at a time. SKIP still fast-forwards the rest.',
       'FIX: the Battle Log opened on its OLDEST line. It is five lines tall and holds the last 160, so opening it to see what just happened showed you ancient history. It now opens on the newest line — and marks where the opponent’s turn started with a "since your last turn" divider.',
-      'BALANCE: nothing on any card changed, and that is the finding. Sentinel of the Nether Pit’s scheduled nerf — the third in three passes — was measured and reverted like the last one, because the diagnostic finally showed why none of them worked: on randomly built decks Sentinel is a BELOW-average Leader, worst in the whole pool in one cohort. What has been finishing first for four passes was its three hand-built test decks, not the card. The planned Void Mother rework is cancelled on the same evidence. Full reasoning in docs/BALANCE_SIM_FINDINGS_v19.md.',
+      'BALANCE: nothing on any card changed, and that is the finding. Sentinel of the Nether Pit’s scheduled nerf — the third in three passes — was measured and reverted like the last one, because the diagnostic finally showed why none of them worked: on randomly built decks Sentinel is a BELOW-average Leader, worst in the whole pool in one cohort. What has been finishing first for four passes was its three hand-built test decks, not the card. The planned Void Mother rework is cancelled on the same evidence. (v20 widened that diagnostic and confirmed it — see above.)',
       'FIX: the CPU would trade its entire Leader — aura, abilities and all — to finish off a big unit that was already one hit from dying. It no longer does that at all; measured across four deck cohorts, its rate of doing it went to zero with nothing else moving.',
       'Under the hood: the screen audit only ever clicked one level deep, so nothing behind a click had ever been measured, and the match stress driver always pressed SKIP — meaning the narration everything above is built on was never once tested. Both now go where they were not looking, and three harness bugs that were hiding coverage are fixed.',
-    ],
-  },
-  {
-    version: 'The Watch-the-CPU Pass (v18)',
-    date: 'August 2026',
-    items: [
-      'THE OPPONENT’S CLASH TRICKS ARE NO LONGER INVISIBLE. Its Quick Events and Ambush units used to resolve in total silence during a Clash — cards played, units died, and the board just changed between two of your clicks. Every one of those now plays out beat by beat with the same rings and pacing as its main turn, and the card it plays is held up in the middle of the board so you can actually read it. Attackers lean across the clash line as they are declared.',
-      'GUARDS GOT EASIER: ✦ SUGGEST fills your guard lines with the same blocking heuristic the CPU uses, as a starting point you can edit. The attack button now reads how much Might you are sending ("⚔ DECLARE ATTACK — 3 · 11 MIGHT"), and ALL ×N sends everything that is ready.',
-      'Narration speed (SLOW / NORMAL / FAST) is now in SETTINGS, not only on the bubble that appears mid-turn — so you can pick it before a match instead of during one.',
-      'FIX: a response window could hang a match outright, with no button anywhere that resumed it. FIX: the battle log said "you casts Fry’s Charm on themselves". FIX: the previous turn’s highlight rings stayed pulsing into the next turn. FIX: a failed News Center post deletion reported nothing at all.',
-      'BALANCE: Sovereign of the Dying Star costs one less essence to invoke. It had finished last or next-to-last on every measured table and its kit was never the problem — it simply arrived on turn 8 and got too few turns to use it. It now lands on turn 7 and reads mid-field on all four cohorts without topping any. Sentinel of the Nether Pit’s scheduled follow-up nerf was measured and REVERTED: it changed nothing at all, and shipping a strictly worse card for no measured gain is not a balance change. Measured across 23,808 games per trial on four deck cohorts, zero rules violations; full numbers now live in docs/BALANCE_SIM_FINDINGS_v19.md (which superseded this pass’s findings doc).',
-      'Under the hood: a new stress harness plays whole matches through the real match UI in a browser, taking every action the board offers — ten matches at phone and desktop width, zero problems found.',
     ],
   },
 ];

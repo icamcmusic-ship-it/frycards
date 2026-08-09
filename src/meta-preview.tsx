@@ -34,9 +34,17 @@
 //
 // Append `&role=creator` to any of the above to mount the Creator-only panels
 // (Profile's CREATOR TOOLS, the submission review queue and BULK ADD).
+//
+// v20: the seven fields above are only the part of a screen's data that lives
+// in the context. Everything else each screen fetches for ITSELF on mount, and
+// offline those calls fail — which is why six screens (battlepass, market,
+// shops, social, news, achievements) had between 1 and 8 controls at both
+// widths and were measured as empty states for eight passes. `preview-fixtures`
+// answers those reads offline; see the header there.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { installPreviewFixtures } from './preview-fixtures';
 import { MetaContext, MetaState } from './meta/MetaContext';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
@@ -57,6 +65,9 @@ import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
 import type { PackPull, PackType, Profile, ShopItem } from './lib/supabase';
+
+// Before any screen mounts (and so before any screen's own fetch fires).
+installPreviewFixtures();
 
 const profile: Profile = {
   id: 'preview',
