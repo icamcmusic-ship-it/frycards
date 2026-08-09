@@ -82,8 +82,11 @@ export function validateDeckList(
       issues.push({ text: `${c.name}: Leaders cannot be in the main deck.` });
   }
   for (const [id, n] of byId) {
-    // v4.8: per-rarity caps (Mythic 1, Super-Rare/Full-Art/Ultra-Rare 2,
-    // else MAX_COPIES) — the UI previously only enforced the flat cap while
+    // v4.8: per-rarity caps (Alt-Art/Mythic 1, Super-Rare/Full-Art/Ultra-Rare
+    // 2, else MAX_COPIES — v7.0 added Alt-Art to the 1-copy tier and this
+    // comment kept naming only Mythic, which is the tier list HowToPlay §11
+    // and RULEBOOK §2 both print correctly)
+    // — the UI previously only enforced the flat cap while
     // HowToPlay §11 promised tighter caps; a later cleanup that unified the
     // MAX_COPIES constant across files accidentally reverted this back to
     // the flat check. Restored.

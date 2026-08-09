@@ -1118,6 +1118,59 @@ export function buildCpuBeats(
 }
 
 /**
+ * The CPU's blocking decision, as narration beats.
+ *
+ * `declareGuards` writes NOTHING to the engine log — it is pure state — so the
+ * one CPU decision the player most needs to read before committing to a clash
+ * was also the only one that arrived with no beat, no ring and no animation.
+ * The lines simply existed the instant DECLARE ATTACK was clicked, and the
+ * whole report was a `say()` line counting them ("Kuro assigns 2 guard
+ * line(s)") that named neither the blocker nor the attacker it stopped. This
+ * is the v18 clash-reaction fix applied to the step before it: one beat per
+ * guard line, the blockers ringed yellow and the attacker they intercept
+ * ringed red, then a closing beat for whatever is still coming through — with
+ * the CPU's own Vitality plate ringed, since that is what the unblocked Might
+ * is pointed at.
+ *
+ * Reads `state.clash.guards`, never the assignment the AI proposed: the caller
+ * falls back to an empty assignment when the engine rejects the heuristic's
+ * answer, and the narration has to describe what actually happened.
+ */
+export function buildGuardBeats(state: GameState, cpuLabel: string): CpuBeat[] {
+  if (!state.clash) return [];
+  const clash = state.clash;
+  const beats: CpuBeat[] = [];
+  const nameOf = (iid: string) => findUnit(state, iid)?.def.name ?? 'a unit';
+  for (const attackerIid of clash.attackers) {
+    const guards = clash.guards[attackerIid] ?? [];
+    if (guards.length === 0) continue;
+    beats.push({
+      text: `${cpuLabel} guards ${nameOf(attackerIid)} with ${guards.map(nameOf).join(' + ')}.`,
+      actors: [...guards],
+      targets: [attackerIid],
+    });
+  }
+  const unguarded = clash.attackers.filter((a) => (clash.guards[a] ?? []).length === 0);
+  if (unguarded.length > 0) {
+    const might = unguarded.reduce((sum, iid) => {
+      const u = findUnit(state, iid);
+      return sum + (u ? effMight(state, u) : 0);
+    }, 0);
+    beats.push({
+      text:
+        beats.length === 0
+          ? `${cpuLabel} declines to guard — ${might} Might is coming straight through.`
+          : `${cpuLabel} lets ${unguarded.map(nameOf).join(', ')} through — ${might} Might unguarded.`,
+      actors: [],
+      // The CPU's own Vitality plate: what the unblocked Might is aimed at,
+      // and the reason this beat is worth a player's attention.
+      targets: [CPU],
+    });
+  }
+  return beats;
+}
+
+/**
  * The engine log speaks in seat ids ("P2 invokes…"); the narration bubble and
  * the battle log should speak in names. Verb agreement is fixed for the second
  * person ("You invoke", not "You invokes").
@@ -1319,6 +1372,14 @@ export function GameV4({
   const [inspect, setInspect] = useState<CardDef | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
+  const logScrollRef = useRef<HTMLDivElement>(null);
+  /**
+   * Absolute log index where the opponent's most recent turn begins — stamped
+   * the moment the human hands the turn over. Renders a divider in the Battle
+   * Log so "what did it do while I was not driving" is one glance rather than
+   * a hunt through undifferentiated lines. `-1` until the first handoff.
+   */
+  const [handoffAt, setHandoffAt] = useState(-1);
   // Hand preview: the hand card currently enlarged above the bottom dock.
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
@@ -1347,6 +1408,13 @@ export function GameV4({
   const cpuBeatsRef = useRef<CpuBeat[]>([]);
   const cpuBeatIdxRef = useRef(0);
   const cpuDoneRef = useRef<(() => void) | null>(null);
+  /** Mirrors `narrating` for the timer chain and for `toggleCpuPause`, which
+   * both run outside the render that owns the state value. */
+  const narratingRef = useRef(false);
+  /** ❚❚ — hold the narration on the beat currently on screen (see
+   * `toggleCpuPause`). Mirrored into a ref for the same reason. */
+  const [cpuPaused, setCpuPaused] = useState(false);
+  const cpuPausedRef = useRef(false);
   /** What to do once the human's response window closes. Set whenever the
    * 'respond' stage is entered — the window can open from the player's own
    * turn (resume play) or from a paused CPU turn (resume the CPU). */
@@ -1569,6 +1637,17 @@ export function GameV4({
     logExpanded,
     guardSel,
   ]);
+
+  // The Battle Log renders oldest-first and is only ~5 lines tall, so it used
+  // to open scrolled to the TOP of the last 160 lines — i.e. on the oldest
+  // history it holds. Every player opening it wants the newest line, which is
+  // the one they just missed; pin it to the bottom on open and on every line
+  // that arrives while it is open.
+  useEffect(() => {
+    if (!logExpanded) return;
+    const el = logScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logExpanded, g.log.length]);
 
   useEffect(() => {
     const onResize = () => setViewportW(window.innerWidth);
@@ -1973,7 +2052,17 @@ export function GameV4({
         },
       );
     } catch (e) {
-      if (e !== PRIORITY_PAUSE) throw e;
+      if (e !== PRIORITY_PAUSE) {
+        // This now runs from the narration timer (the guard beats call it on
+        // their way out), not from a click handler, so an engine exception
+        // escaping here would land outside React entirely — white screen, and
+        // an unrecoverable match. Recover to the human's turn the same way
+        // resolveCpuTurn already does, and leave the details in the console.
+        console.error('CPU clash reactions crashed:', e);
+        say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
+        beginHumanTurn();
+        return;
+      }
       paused = true;
     }
     bump();
@@ -1992,17 +2081,9 @@ export function GameV4({
   /** After the CPU's guards + reactions are in: back to the human's clash. */
   const finishMyAttackDeclaration = () => {
     setStage('play');
-    // The reaction plays themselves are narrated beat-by-beat now (see
-    // runCpuClashReactions) — repeating their names here just talked over the
-    // guard assignment, which is the part nothing else reports.
-    const guarded = (g.clash ? Object.values(g.clash.guards) : []).filter(
-      (v: string[]) => v.length > 0,
-    ).length;
-    say(
-      guarded > 0
-        ? `${cpuLabel} assigns ${guarded} guard line(s).`
-        : `${cpuLabel} lets it through!`,
-    );
+    // Both halves of the CPU's answer are narrated beat-by-beat now — the
+    // guard lines by `guardBeats` and the reaction plays by
+    // runCpuClashReactions — so there is no summary left to print here.
     checkWinner();
   };
 
@@ -2017,9 +2098,12 @@ export function GameV4({
     // uses); the clash bar then shows the lines before damage resolves.
     const guards = chooseGuards(g, CPU);
     if (!declareGuards(g, guards)) declareGuards(g, {});
-    // The defending CPU gets its clash reaction window (Quick Events /
-    // Ambush units) before damage — pause-capable, so the human can answer.
-    runCpuClashReactions('myAttack');
+    bump();
+    narrateBeats(buildGuardBeats(g, cpuLabel), () => {
+      // The defending CPU gets its clash reaction window (Quick Events /
+      // Ambush units) before damage — pause-capable, so the human can answer.
+      runCpuClashReactions('myAttack');
+    });
   };
 
   // The defending (non-active) player's vitality plate should flash when at
@@ -2058,6 +2142,13 @@ export function GameV4({
     }
   };
 
+  /** Keeps `narrating` and the timer chain's view of it in step — a running
+   * chain of setTimeout closures cannot read the state variable. */
+  const setNarratingBoth = (v: boolean) => {
+    narratingRef.current = v;
+    setNarrating(v);
+  };
+
   const tickCpuBeat = () => {
     cpuTimeoutRef.current = null;
     const beats = cpuBeatsRef.current;
@@ -2067,14 +2158,79 @@ export function GameV4({
       cpuDoneRef.current = null;
       setCpuBeat(null);
       setCpuFocus(null);
-      setNarrating(false);
+      setNarratingBoth(false);
       done?.();
       return;
     }
     cpuBeatIdxRef.current = i + 1;
     setCpuBeat({ text: beats[i].text, idx: i, total: beats.length });
     setCpuFocus(beats[i]);
+    // Paused: the beat stays on screen — with its rings and its spotlight —
+    // until the player steps forward or resumes. Nothing else drives the
+    // chain, so not scheduling the next timeout IS the pause.
+    if (cpuPausedRef.current) return;
     cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, beatMs(beats[i]));
+  };
+
+  /** Play an already-built beat list one beat at a time, then call `onDone`.
+   * Most beats come from the engine log (see `narrate`), but not every CPU
+   * decision writes a log line — `declareGuards` writes none at all — so this
+   * is also how a synthesized beat gets the same screen time, rings and SKIP
+   * handling as a logged one. */
+  const narrateBeats = (beats: CpuBeat[], onDone: () => void) => {
+    cpuBeatsRef.current = beats;
+    cpuBeatIdxRef.current = 0;
+    cpuDoneRef.current = onDone;
+    if (beats.length === 0) {
+      // Cleared as well as called: a `cpuDoneRef` left pointing at a spent
+      // continuation is what `toggleCpuPause` would otherwise read as "a
+      // narration is in flight".
+      cpuDoneRef.current = null;
+      setNarratingBoth(false);
+      onDone();
+      return;
+    }
+    setNarratingBoth(true);
+    tickCpuBeat();
+  };
+
+  /**
+   * Hold the narration on the beat currently on screen.
+   *
+   * SKIP was the only control over the opponent's turn, and it points one way:
+   * a player who wanted to LOOK at what just happened — read the card in the
+   * spotlight, follow the rings to the unit it hit — had no way to stop the
+   * beat leaving, only a speed dial that made the next one slower too. Pausing
+   * holds the current beat indefinitely; ▸ STEP then walks the turn one action
+   * at a time, which is the mode for actually understanding a swing.
+   *
+   * The choice persists across turns on purpose — someone who wants to step
+   * through this turn usually wants to step through the next one — and both
+   * controls stay on the divider the whole time so a paused board never reads
+   * as a stuck one.
+   */
+  const toggleCpuPause = () => {
+    const next = !cpuPausedRef.current;
+    cpuPausedRef.current = next;
+    setCpuPaused(next);
+    if (next) {
+      stopCpuTimer();
+      return;
+    }
+    // Resuming mid-run: the chain has no pending timeout (pausing cleared it,
+    // or the tick returned without scheduling), so restart it on the beat the
+    // player has been looking at.
+    if (narratingRef.current && cpuTimeoutRef.current === null) {
+      const shown = cpuBeatsRef.current[cpuBeatIdxRef.current - 1];
+      cpuTimeoutRef.current = window.setTimeout(tickCpuBeat, beatMs(shown));
+    }
+  };
+
+  /** Advance exactly one beat while paused. */
+  const stepCpuBeat = () => {
+    if (!cpuPausedRef.current) return;
+    stopCpuTimer();
+    tickCpuBeat();
   };
 
   /** Replay a CPU turn's log lines as staggered narration beats — each one
@@ -2085,20 +2241,14 @@ export function GameV4({
     events: CpuTurnEvent[],
     onDone: () => void,
   ) => {
-    cpuBeatsRef.current = buildCpuBeats(
-      lines.map((l) => humanize(l)),
-      logStart,
-      events,
+    narrateBeats(
+      buildCpuBeats(
+        lines.map((l) => humanize(l)),
+        logStart,
+        events,
+      ),
+      onDone,
     );
-    cpuBeatIdxRef.current = 0;
-    cpuDoneRef.current = onDone;
-    if (lines.length === 0) {
-      setNarrating(false);
-      onDone();
-      return;
-    }
-    setNarrating(true);
-    tickCpuBeat();
   };
 
   const skipCpuBeats = () => {
@@ -2121,7 +2271,7 @@ export function GameV4({
   const beginHumanTurn = () => {
     setCpuBeat(null);
     setCpuFocus(null);
-    setNarrating(false);
+    setNarratingBoth(false);
     respondResumeRef.current = null;
     cpuResumeCountRef.current = 0;
     bump();
@@ -2275,6 +2425,13 @@ export function GameV4({
   };
 
   const runCpuTurn = () => {
+    // Every handoff to the opponent funnels through here, so this is the one
+    // place the Battle Log divider needs stamping. Taken now rather than
+    // before the human's Dusk: their own shed and "At Dusk" lines belong to
+    // the turn they just finished, not to "since your last turn". The
+    // opponent's Dawn writes nothing to the log, so this index is exactly
+    // where its first visible action lands.
+    setHandoffAt(g.log.length);
     setStage('cpu');
     setCpuBeat(null);
     // Cleared too, or the previous turn's last beat keeps its actor/target
@@ -2549,7 +2706,10 @@ export function GameV4({
     // 'play' or 'cpuGuard' (the opponent's clash reactions), and telling the
     // player to press RESOLVE CLASH while the board is mid-replay — with the
     // button replaced by SKIP — is the opposite of what the bar is for.
-    if (narrating) return `${cpuLabel} is acting — watch the board, or SKIP ▸▸ to catch up.`;
+    if (narrating)
+      return cpuPaused
+        ? `Held on ${cpuLabel}'s move — ▸ STEP for the next one, ▶ RESUME to let it run.`
+        : `${cpuLabel} is acting — watch the board, ❚❚ HOLD to study a move, or SKIP ▸▸ to catch up.`;
     if (pending) {
       if (pending.kind === 'bond' || pending.kind === 'rebond')
         return 'Pick a highlighted friendly unit for the Item — a Charm can also take your own Vitality plate (✕ or Esc to cancel).';
@@ -2568,7 +2728,8 @@ export function GameV4({
         }`;
       return 'Reaction window — invoke Quick Events or Ambush units (essence auto-taps), then RESOLVE CLASH.';
     }
-    if (stage === 'cpu') return `${cpuLabel} is playing its turn — SKIP ▸▸ to fast-forward.`;
+    if (stage === 'cpu')
+      return `${cpuLabel} is playing its turn — ❚❚ HOLD to study a move, SKIP ▸▸ to fast-forward.`;
     if (stage === 'respond') {
       const top = g.stack[g.stack.length - 1];
       return top
@@ -2963,7 +3124,18 @@ export function GameV4({
       {/* ================= CLASH DIVIDER =================
           The one loud action on the whole board. Everything else stays
           ink-on-paper so whatever sits here always reads as the primary move. */}
-      <div className="relative shrink-0 flex items-center justify-center gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35">
+      {/* flex-wrap: the narration branch can carry four controls (speed, hold,
+          step, skip) and a 375px phone has no room for them on one line. The
+          extra right padding is scoped to that branch only — the LOG button is
+          absolutely positioned at the right edge, and reserving room for it
+          unconditionally would shift every other branch's centred primary
+          action (DECLARE ATTACK, RESOLVE CLASH) off centre. */}
+      <div
+        className={cn(
+          'relative shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35',
+          (stage === 'cpu' || narrating) && 'pr-14',
+        )}
+      >
         {/* Narration owns the divider whenever the opponent is acting — during
             its whole turn AND during the reaction beats that play out inside
             the human's own clash. Checked FIRST so those beats can't leave
@@ -2973,13 +3145,39 @@ export function GameV4({
             <button
               onClick={cycleCpuSpeed}
               title="Narration speed — click to cycle Slow / Normal / Fast"
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
             >
               ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
             </button>
             <button
+              onClick={toggleCpuPause}
+              title={
+                cpuPaused
+                  ? 'Resume the opponent’s turn'
+                  : 'Hold this beat on screen — then step through the turn one action at a time'
+              }
+              aria-pressed={cpuPaused}
+              className={cn(
+                'btn-pop heading-font text-[10px] px-2 py-2 ink-border-md tracking-wide',
+                cpuPaused
+                  ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                  : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
+              )}
+            >
+              {cpuPaused ? '▶ RESUME' : '❚❚ HOLD'}
+            </button>
+            {cpuPaused && (
+              <button
+                onClick={stepCpuBeat}
+                title="Advance one action"
+                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-2 ink-border-md tracking-wide"
+              >
+                ▸ STEP
+              </button>
+            )}
+            <button
               onClick={skipCpuBeats}
-              className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
+              className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-4 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
             >
               SKIP ▸▸
             </button>
@@ -3084,13 +3282,32 @@ export function GameV4({
       </div>
 
       {logExpanded && (
-        <div className="shrink-0 max-h-[132px] overflow-y-auto bg-[var(--c-ink)] border-b-2 border-[var(--c-yellow)]/30 px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight">
+        <div
+          ref={logScrollRef}
+          className="shrink-0 max-h-[132px] overflow-y-auto bg-[var(--c-ink)] border-b-2 border-[var(--c-yellow)]/30 px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight"
+        >
           <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
             Battle Log
           </div>
-          {g.log.slice(-160).map((l, i, arr) => (
-            <div key={g.log.length - arr.length + i}>· {renderKeywordText(humanize(l), true)}</div>
-          ))}
+          {g.log.slice(-160).map((l, i, arr) => {
+            const abs = g.log.length - arr.length + i;
+            return (
+              <React.Fragment key={abs}>
+                {/* Where the opponent's most recent turn starts. The log is
+                    the only place a player who skipped the narration can find
+                    out what happened, and an undivided wall of lines makes
+                    "what did it just do" a counting exercise. */}
+                {abs === handoffAt && (
+                  <div className="my-0.5 flex items-center gap-1 text-[7px] font-black text-[var(--c-yellow)] uppercase tracking-wide">
+                    <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
+                    since your last turn
+                    <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
+                  </div>
+                )}
+                <div>· {renderKeywordText(humanize(l), true)}</div>
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
 

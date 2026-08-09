@@ -125,19 +125,27 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v18.md` carry-forward. The v18 pass
-  actioned both v17 items: Sovereign of the Dying Star got its first dedicated
-  look and its invoke cost went 5 → 4 (arrival turn 8.3 → 6.7, +6 to +11
-  points, mid-field on all four cohorts, tops none — closed), and Sentinel's
-  scheduled Resolve 5 → 4 was spent, measured, **refuted** (−0.75 mean, ability
-  cadence unmoved: the kit spends below its ceiling, so the ceiling was never
-  the constraint) and reverted. Sentinel's next lever is the EFFECT, not the
-  price — bound the Ember minus to `enemyUnit`, dropping the face reach, on the
-  v7.5 Ethereal precedent — if it still tops 3+ cohorts on a fresh baseline.
-  Void Mother is now the bottom of the table on its own, with both of its
-  levers already spent and its invoke turn already the earliest in the pool.
-  Standing rules that should not be relearned: **four deck cohorts, not two**
-  (two cohorts cannot see a keyword with fewer than ~6 carriers), and **never
+  list is `docs/BALANCE_SIM_FINDINGS_v19.md` carry-forward. **v19 froze the
+  per-Leader levers**, and the reason is the most important thing on this
+  page: the v18 lever for Sentinel of the Nether Pit (bound the Ember minus to
+  `enemyUnit`) was spent on a baseline that met its condition in all four
+  cohorts, and measured **+0.9 mean, still first everywhere** — the third
+  consecutive lever on that Leader to measure nothing, after the v17 minus
+  reprice and the v18 Resolve trim. Differencing the sim's pinned suite against
+  its random-deck arm says why: Sentinel reads 62/61/58/62 pinned and
+  31/53/42/44 random — below the midpoint, and last in the pool in cohort A.
+  **Four passes of "Sentinel is first, nerf Sentinel" were reading its three
+  pinned decks, not its kit.** Void Mother is the same effect mirrored
+  (35/35/42/40 pinned, 54/43/50/62 random), so its scheduled dedicated look is
+  cancelled, not deferred.
+
+  **The next balance work is on the instrument: widen the pinned suite past
+  three decks per Leader, then re-baseline.** No further per-Leader lever
+  anywhere in the pool until a kit reading can be told apart from a deck
+  reading. `simulate-v5.ts` now prints the pinned-vs-random divergence on every
+  run, flagged at `|gap| >= 10`; treat a flagged row as unmeasured. Standing
+  rules that should not be relearned: **four deck cohorts, not two** (two
+  cohorts cannot see a keyword with fewer than ~6 carriers), and **never
   interleave content changes with balance trials in one pass**.
 
   **A lever that measures flat gets reverted, not shipped.** v18 is the
@@ -310,7 +318,7 @@ Ordered by how much they change what it feels like to own and play the game.
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v18.md` (v16's doc superseded and deleted).
+  `docs/BALANCE_SIM_FINDINGS_v19.md` (each pass's doc supersedes and deletes the last).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
   v7.8 (random table demoted to a deck-composition diagnostic) and finished in
   v16: the suite runs three pinned decks per Leader and reports the per-deck

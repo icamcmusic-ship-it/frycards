@@ -15,6 +15,19 @@
  *    offered — the interactive equivalent of an infinite loop
  *  - horizontal overflow at phone width (a control pushed off the screen)
  *  - a match that never reaches a winner inside the step budget
+ *  - a STALE-RING: a CPU actor/target highlight still pulsing on the board
+ *    when no narration is running (v19 — see below)
+ *  - a NARRATION stall: a beat counter that stops advancing, or a run that
+ *    never ends on its own (v19)
+ *
+ * v19 — the driver used to click `SKIP ▸▸` the instant it appeared, on every
+ * match. That is the one control that turns the CPU's whole turn OFF, so the
+ * entire narration path — the beat chain, the actor/target rings, the
+ * mid-board card spotlight, the attack lunge, everything the player watches to
+ * know what the opponent is doing — was never once exercised by the harness
+ * that exists to exercise the match UI. Half the matches now WATCH instead:
+ * they let the narration play to its own end and check that it advances, that
+ * it terminates, and that it takes its rings down with it when it does.
  *
  * Run against the Vite dev server, like the other audit scripts:
  *
@@ -24,6 +37,8 @@
  * Env: AUDIT_BASE (default http://localhost:3000), MATCHES (default 6),
  * WIDTH (default 1280; the phone sweep runs at 390 automatically for the
  * first two matches), STEPS (default 1200 per match), SEED0 (default 1),
+ * WATCH_EVERY (default 2 — every Nth match watches the narration instead of
+ * skipping it; 0 disables watching, 1 watches every match),
  * PLAYWRIGHT_CHROMIUM to point at a preinstalled browser binary.
  *
  * Exits non-zero on any finding, so it can gate a release.
@@ -36,12 +51,13 @@ const STEPS = Number(process.env.STEPS ?? 1200);
 const SEED0 = Number(process.env.SEED0 ?? 1);
 const WIDE = Number(process.env.WIDTH ?? 1280);
 const PHONE = 390;
+const WATCH_EVERY = Number(process.env.WATCH_EVERY ?? 2);
 
 interface Finding {
   match: number;
   seed: number;
   width: number;
-  kind: 'pageerror' | 'console' | 'hang' | 'overflow' | 'unfinished';
+  kind: 'pageerror' | 'console' | 'hang' | 'overflow' | 'unfinished' | 'stale-ring' | 'narration';
   detail: string;
 }
 
@@ -58,6 +74,12 @@ interface BoardRead {
   header: string;
   scrollWidth: number;
   innerWidth: number;
+  /** `"3/11"` while a CPU narration beat is on screen, `''` otherwise — the
+   * progress counter the bubble prints. Watch mode uses it as the liveness
+   * signal: a run whose counter stops moving has stalled. */
+  beat: string;
+  /** Elements currently carrying the pulsing CPU actor / target highlight. */
+  cpuRings: number;
 }
 
 /**
@@ -86,6 +108,12 @@ const READ_BOARD = `(() => {
       };
     });
   var turn = txt(document.querySelector('[aria-label="Concede match"]') ? document.querySelector('[aria-label="Concede match"]').nextElementSibling : null);
+  var body = String(document.body.innerText || '').replace(/\\s+/g, ' ').trim();
+  // Read off the rendered counter rather than a DOM hook: the narration bubble
+  // prints "4/11 · click ▸▸", which is the same string a player reads. Matched
+  // case-INSENSITIVELY: innerText reflects CSS text-transform, and the bubble
+  // is uppercased, so the literal on screen is "· CLICK ▸▸".
+  var m = /(\\d+\\/\\d+) · click/i.exec(body);
   return {
     buttons: buttons,
     rings: rings,
@@ -93,10 +121,12 @@ const READ_BOARD = `(() => {
     // innerText, not textContent: the match screen carries its keyframes in
     // an inline <style>, and textContent returns all of that CSS ahead of any
     // real board text — every substring probe below was reading stylesheet.
-    bodyText: String(document.body.innerText || '').replace(/\\s+/g, ' ').trim(),
+    bodyText: body,
     header: turn,
     scrollWidth: document.documentElement.scrollWidth,
     innerWidth: window.innerWidth,
+    beat: m ? m[1] : '',
+    cpuRings: document.querySelectorAll('.gv4-cpu-actor, .gv4-cpu-target').length,
   };
 })()`;
 
@@ -118,6 +148,8 @@ const EMPTY_BOARD: BoardRead = {
   header: '',
   scrollWidth: 0,
   innerWidth: 1,
+  beat: '',
+  cpuRings: 0,
 };
 
 async function readBoard(page: Page): Promise<BoardRead> {
@@ -229,6 +261,8 @@ async function driveMatch(
   match: number,
   seed: number,
   width: number,
+  /** Let the CPU's narration play out instead of clicking SKIP through it. */
+  watch: boolean,
 ) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
@@ -237,8 +271,9 @@ async function driveMatch(
     if (m.type() === 'error' && !NOISE.test(m.text())) errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  // FAST narration: the driver clicks SKIP anyway, but a stalled skip should
-  // not be papered over by a slow timer.
+  // FAST narration: a skipping driver clicks SKIP anyway, but a stalled skip
+  // should not be papered over by a slow timer — and a WATCHING one has to
+  // sit through every beat in real time, so it wants the short beat too.
   page.setDefaultTimeout(1000);
   await page.goto(`${BASE}?seed=${seed}&speed=2`, {
     waitUntil: 'domcontentloaded',
@@ -250,11 +285,33 @@ async function driveMatch(
   let stuckFor = 0;
   let finished = false;
   let overflowReported = false;
+  let staleRingReported = false;
+  let narrationReported = false;
+  /** Consecutive reads showing the same narration beat, in watch mode. */
+  let sameBeatFor = 0;
+  let lastBeat = '';
+  let beatsWatched = 0;
   let rng = seed >>> 0;
   const rand = () => (rng = (rng * 1664525 + 1013904223) >>> 0) / 0x100000000;
 
   for (let step = 0; step < STEPS && !finished; step++) {
     const b = await readBoard(page);
+    const narrating = b.beat !== '' || has(b.buttons, 'SKIP ▸▸');
+
+    // The CPU actor/target highlights are the "what is the opponent doing"
+    // signal. They belong to the beat on screen and nothing else, so one still
+    // pulsing with no narration running is a highlight the player will read as
+    // live while the board waits on THEM.
+    if (!staleRingReported && !narrating && b.cpuRings > 0) {
+      findings.push({
+        match,
+        seed,
+        width,
+        kind: 'stale-ring',
+        detail: `${b.cpuRings} CPU actor/target ring(s) still on the board with no narration running, at step ${step} (${b.header})`,
+      });
+      staleRingReported = true;
+    }
 
     if (!overflowReported && b.scrollWidth > b.innerWidth + 1) {
       findings.push({
@@ -267,7 +324,10 @@ async function driveMatch(
       overflowReported = true;
     }
 
-    const sig = `${b.header}|${b.handCards}|${b.buttons.length}|${b.bodyText.length}`;
+    // `beat` is part of the signature so a narration advancing normally can
+    // never read as a frozen board — its own text is inside bodyText, but two
+    // consecutive beats can happen to be the same length.
+    const sig = `${b.header}|${b.handCards}|${b.buttons.length}|${b.bodyText.length}|${b.beat}`;
     if (sig === lastSig) stuckFor++;
     else stuckFor = 0;
     lastSig = sig;
@@ -361,7 +421,34 @@ async function driveMatch(
       continue;
     }
     // 9. CPU narration.
-    if (has(B, 'SKIP ▸▸')) {
+    if (narrating) {
+      if (watch) {
+        // Sit through it, exactly as a player would. The only thing the driver
+        // does here is check that the run is alive: the counter advances, and
+        // eventually the whole thing takes itself down.
+        if (b.beat !== '' && b.beat === lastBeat) sameBeatFor++;
+        else {
+          if (b.beat !== '') beatsWatched++;
+          sameBeatFor = 0;
+        }
+        lastBeat = b.beat;
+        if (!narrationReported && sameBeatFor > 60) {
+          findings.push({
+            match,
+            seed,
+            width,
+            kind: 'narration',
+            detail: `narration stuck on beat ${b.beat || '(thinking)'} for 60 reads at step ${step} — it never advanced and never ended`,
+          });
+          narrationReported = true;
+          // Fall through to SKIP so the match can still finish and report
+          // whatever else is wrong with it.
+          await clickText(page, 'SKIP ▸▸');
+          continue;
+        }
+        await page.waitForTimeout(120);
+        continue;
+      }
       // Exercise the speed toggle too — it is a live control mid-narration.
       if (rand() < 0.1) await clickText(page, '⏱');
       await clickText(page, 'SKIP ▸▸');
@@ -430,8 +517,19 @@ async function driveMatch(
   // is how a run of suspiciously short matches gets diagnosed (a driver that
   // was resigning read exactly like a driver that was losing).
   const why = /(?:VICTORY|DEFEAT)\s+(.{0,160})/.exec(final.bodyText)?.[1] ?? '';
+  // A watch run that watched nothing is a broken harness, not a clean match —
+  // it means the narration was never detected and every beat got skipped.
+  if (watch && beatsWatched === 0) {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'narration',
+      detail: 'watch mode saw zero narration beats — the run never detected a CPU turn',
+    });
+  }
   console.log(
-    `match ${match} (seed ${seed}, ${width}px): ${outcome} · ${final.header} · ${errors.length} console error(s)${
+    `match ${match} (seed ${seed}, ${width}px, ${watch ? `watched ${beatsWatched} beats` : 'skipped'}): ${outcome} · ${final.header} · ${errors.length} console error(s)${
       why ? `\n    ↳ ${why}` : ''
     }`,
   );
@@ -446,7 +544,7 @@ for (let m = 0; m < MATCHES; m++) {
   // The first two matches run at phone width — that is where a control
   // pushed off the side actually costs the player the game.
   const width = m < 2 ? PHONE : WIDE;
-  await driveMatch(browser, m, SEED0 + m, width);
+  await driveMatch(browser, m, SEED0 + m, width, WATCH_EVERY > 0 && m % WATCH_EVERY === 0);
 }
 
 await browser.close();

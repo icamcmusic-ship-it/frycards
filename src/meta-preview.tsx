@@ -245,6 +245,24 @@ const shopItems: ShopItem[] = (['card_back', 'profile_banner', 'profile_avatar']
   }),
 );
 
+// v19: these three were all stubbed `[]`, and every panel gated on them was
+// therefore measured as an empty state and nothing else — the Store's
+// unopened-pack shelf (and its OPEN button, the entry point to PackOpening),
+// the equipped/owned cosmetic grids on Profile and Store, and the Collection's
+// numbered-print plates. The audit's whole job is measuring populated layouts
+// at phone width; three of them had no population to measure.
+const inventory = packTypes.map((p, i) => ({ pack_type_id: p.id, quantity: 1 + i * 2 }));
+const cosmetics = shopItems.map((s, i) => ({ shop_item_id: s.id, is_foil: i === 0 }));
+const serializedCards = POOL_V4.filter((c) => c.type !== 'Leader')
+  .slice(0, 4)
+  .map((c, i) => ({
+    card_id: c.id,
+    rarity: c.rarity ?? 'Mythic',
+    serial_number: i + 1,
+    cap: 25,
+    acquired_at: new Date(0).toISOString(),
+  }));
+
 const noop = async () => undefined;
 const meta: MetaState = {
   session: { user: { id: 'preview' } } as MetaState['session'],
@@ -257,10 +275,10 @@ const meta: MetaState = {
   shopItems,
   packTypes,
   collection,
-  cosmetics: [],
+  cosmetics,
   decks,
-  inventory: [],
-  serializedCards: [],
+  inventory,
+  serializedCards,
   setGuest: () => undefined,
   refreshProfile: noop,
   refreshCollection: noop,
