@@ -14,7 +14,7 @@
  *    comparison with the card's in-deck denominator restricted to games that
  *    ran long enough for it to appear. **Price off these, not the flat list,
  *    for anything gated on essence** — see `lengthMatchedBaseline` and
- *    the v7.7 findings pass (see `docs/BALANCE_SIM_FINDINGS_v18.md`, the
+ *    the v7.7 findings pass (see `docs/BALANCE_SIM_FINDINGS_v19.md`, the
  *    current doc), which adds a THIRD residual
  *    (`rampStateMatchedBaseline`) matching on ramp ACCESS rather than game
  *    length — the one to read for anything essence-gated.
@@ -1090,6 +1090,8 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     const preOppBigThreat = state.players[opponentOf(pid)].field.some(
       (u) => effMight(state, u) >= 6,
     );
+    /** Enemy bodies before the turn — see the v19 note on leaderShatterBlunder. */
+    const preOppFieldSize = state.players[opponentOf(pid)].field.length;
 
     const events = playTurn(state, pid);
     curveStats.totalTurns++;
@@ -1166,8 +1168,23 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       if (chosenGain === 0 && bestGain > 0) lapses.wellspringMisplay++;
     }
     // Leader shatter blunder: the CPU spent its Leader out of the game this
-    // turn with no Might-6+ threat on the board to justify it.
-    if (!preLeaderShattered && p.leader.shattered && !preOppBigThreat) {
+    // turn without buying a body for it.
+    //
+    // v19: this used to read `!preOppBigThreat` alone — the SAME predicate the
+    // ai.ts gate uses to decide the activation is justified. Sharing the
+    // predicate meant the counter could never catch the gate being wrong: every
+    // donation the gate let through was, by construction, one where a Might-6+
+    // threat existed, so the counter read 0 while Sentinel was shattering
+    // itself in 5% of its games and losing 3 of every 4 of them (v18 §3, at
+    // n=77 in cohort C). Now it also counts an outcome the gate cannot
+    // rationalise away: the Leader is gone and the enemy board is no smaller
+    // than it was, i.e. whatever it spent itself on did not remove anything.
+    const oppFieldAfter = state.players[opponentOf(pid)].field.length;
+    if (
+      !preLeaderShattered &&
+      p.leader.shattered &&
+      (!preOppBigThreat || oppFieldAfter >= preOppFieldSize)
+    ) {
       lapses.leaderShatterBlunder++;
     }
     // Item on a doomed unit: an Item invoked this turn that is bonded to
@@ -3180,6 +3197,53 @@ console.log(
   '\nRandom-deck Leader table — deck-composition DIAGNOSTIC, not a balance read (v7.8):',
   JSON.stringify(report.randomDeckLeaderDiagnostic, null, 2),
 );
+
+/**
+ * v19: the two tables above, differenced — the confound that three passes of
+ * levers were pointed straight through.
+ *
+ * The pinned suite gives each Leader THREE hand-built decks and is the balance
+ * read; the random table gives it a few hundred generated ones and is written
+ * off as deck-composition noise. Nobody had ever subtracted one from the
+ * other, and the subtraction is where the story is: on the v19 baseline
+ * Sentinel of the Nether Pit reads **+18.1** (62/61/58/62 pinned against
+ * 31/53/42/44 random — below the midpoint, and dead LAST in the pool in cohort
+ * A) and Void Mother reads **-14.1** (35/35/42/40 pinned against 54/43/50/62).
+ * They are the largest divergences in the pool, they point in opposite
+ * directions, and they are precisely the two Leaders the last three passes
+ * have been trying to move with kit levers — the one at the top of the pinned
+ * table and the one at the bottom.
+ *
+ * A three-deck sample cannot separate "strong kit" from "three strong decks",
+ * so a large gap means the headline row is substantially a statement about the
+ * pinned list. Printing it on every run makes that visible BEFORE the next
+ * lever is chosen rather than after it is spent. Read it as a caution flag on
+ * the pinned row, not as a balance number in its own right: the random arm has
+ * its own well-documented composition bias, which is why neither table alone
+ * settles anything.
+ */
+const pinnedByName = new Map(report.leaderPairSuiteSummary.map((l) => [String(l.name), l]));
+const divergence = Object.values(report.randomDeckLeaderDiagnostic)
+  .map((r) => {
+    const pinned = pinnedByName.get(String(r.name));
+    if (!pinned) return null;
+    return {
+      name: String(r.name),
+      pinnedPct: Number(pinned.winPct),
+      randomPct: Number(r.winPct),
+      randomGames: Number(r.games),
+      gap: Math.round((Number(pinned.winPct) - Number(r.winPct)) * 10) / 10,
+    };
+  })
+  .filter((x): x is NonNullable<typeof x> => x !== null)
+  .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+console.log(
+  '\nPinned-vs-random divergence (v19) — |gap| >= 10 means the pinned row is largely a statement\nabout that Leader’s three pinned decks, not its kit. Not a balance number; a caution flag:',
+);
+for (const d of divergence)
+  console.log(
+    `  ${d.name.padEnd(28)} pinned ${String(d.pinnedPct).padStart(5)}%   random ${String(d.randomPct).padStart(5)}% (n=${d.randomGames})   gap ${d.gap > 0 ? '+' : ''}${d.gap}${Math.abs(d.gap) >= 10 ? '   ⚑' : ''}`,
+  );
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
 console.log('\nCost bands:', JSON.stringify(report.costBands, null, 2));

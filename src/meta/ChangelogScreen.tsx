@@ -18,6 +18,18 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Watch-It-Happen Pass (v19)',
+    date: 'August 2026',
+    items: [
+      'THE OPPONENT’S BLOCKS NOW PLAY OUT INSTEAD OF JUST APPEARING. Declare an attack and its guard lines used to exist the very next instant, reported only as a count ("2 guard line(s)") that named neither the blocker nor what it stopped. Now each one is narrated: the blockers pulse yellow, the attacker they intercept pulses red, and a closing beat tells you exactly how much Might is still coming through — with the opponent’s own Vitality plate lit up, because that is what it is aimed at.',
+      'NEW: ❚❚ HOLD and ▸ STEP, next to ⏱ and SKIP ▸▸. Freeze the opponent’s move on screen for as long as you like, then walk its turn one action at a time. SKIP still fast-forwards the rest.',
+      'FIX: the Battle Log opened on its OLDEST line. It is five lines tall and holds the last 160, so opening it to see what just happened showed you ancient history. It now opens on the newest line — and marks where the opponent’s turn started with a "since your last turn" divider.',
+      'BALANCE: nothing on any card changed, and that is the finding. Sentinel of the Nether Pit’s scheduled nerf — the third in three passes — was measured and reverted like the last one, because the diagnostic finally showed why none of them worked: on randomly built decks Sentinel is a BELOW-average Leader, worst in the whole pool in one cohort. What has been finishing first for four passes was its three hand-built test decks, not the card. The planned Void Mother rework is cancelled on the same evidence. Full reasoning in docs/BALANCE_SIM_FINDINGS_v19.md.',
+      'FIX: the CPU would trade its entire Leader — aura, abilities and all — to finish off a big unit that was already one hit from dying. It no longer does that at all; measured across four deck cohorts, its rate of doing it went to zero with nothing else moving.',
+      'Under the hood: the screen audit only ever clicked one level deep, so nothing behind a click had ever been measured, and the match stress driver always pressed SKIP — meaning the narration everything above is built on was never once tested. Both now go where they were not looking, and three harness bugs that were hiding coverage are fixed.',
+    ],
+  },
+  {
     version: 'The Watch-the-CPU Pass (v18)',
     date: 'August 2026',
     items: [
@@ -25,20 +37,8 @@ export const ENTRIES: ChangelogEntry[] = [
       'GUARDS GOT EASIER: ✦ SUGGEST fills your guard lines with the same blocking heuristic the CPU uses, as a starting point you can edit. The attack button now reads how much Might you are sending ("⚔ DECLARE ATTACK — 3 · 11 MIGHT"), and ALL ×N sends everything that is ready.',
       'Narration speed (SLOW / NORMAL / FAST) is now in SETTINGS, not only on the bubble that appears mid-turn — so you can pick it before a match instead of during one.',
       'FIX: a response window could hang a match outright, with no button anywhere that resumed it. FIX: the battle log said "you casts Fry’s Charm on themselves". FIX: the previous turn’s highlight rings stayed pulsing into the next turn. FIX: a failed News Center post deletion reported nothing at all.',
-      'BALANCE: Sovereign of the Dying Star costs one less essence to invoke. It had finished last or next-to-last on every measured table and its kit was never the problem — it simply arrived on turn 8 and got too few turns to use it. It now lands on turn 7 and reads mid-field on all four cohorts without topping any. Sentinel of the Nether Pit’s scheduled follow-up nerf was measured and REVERTED: it changed nothing at all, and shipping a strictly worse card for no measured gain is not a balance change. Measured across 23,808 games per trial on four deck cohorts, zero rules violations; full numbers in docs/BALANCE_SIM_FINDINGS_v18.md.',
+      'BALANCE: Sovereign of the Dying Star costs one less essence to invoke. It had finished last or next-to-last on every measured table and its kit was never the problem — it simply arrived on turn 8 and got too few turns to use it. It now lands on turn 7 and reads mid-field on all four cohorts without topping any. Sentinel of the Nether Pit’s scheduled follow-up nerf was measured and REVERTED: it changed nothing at all, and shipping a strictly worse card for no measured gain is not a balance change. Measured across 23,808 games per trial on four deck cohorts, zero rules violations; full numbers now live in docs/BALANCE_SIM_FINDINGS_v19.md (which superseded this pass’s findings doc).',
       'Under the hood: a new stress harness plays whole matches through the real match UI in a browser, taking every action the board offers — ten matches at phone and desktop width, zero problems found.',
-    ],
-  },
-  {
-    version: 'The Interactive-Seam Pass (v17)',
-    date: 'August 2026',
-    items: [
-      'YOU CAN SEE WHAT THE CPU IS DOING: while the opponent plays, the card it is acting with pulses yellow and whatever it is acting on pulses red, beat by beat — including its Leader and your Vitality. The battle log finally records Leader ability uses, spell targets and every point of clash damage, in plain language ("You invoke…", the opponent by name). New speed control: SLOW / NORMAL / FAST, remembered between matches.',
-      'FIX: three rules windows the game owed you. Your card could freeze on the stack after you passed a response window; the opponent’s clash tricks resolved straight through your answer window when you attacked; and the attacking CPU never took its own reaction window when you defended. All three now play out exactly as the rulebook says.',
-      'FIX: a card drawn by an "At Dusk" effect was always the card auto-discarded to the hand limit, with no say. The shed choice now happens after Dusk draws, so you pick from your real final hand.',
-      'A Tool now lets you PICK the enemy unit it weakens, response windows you cannot act in pass themselves, the guard step shows exactly how much damage is coming through, and guest players can finally hit PLAY — the quick match the guest button always promised.',
-      'BALANCE: Sentinel of the Nether Pit’s reach ability now costs -3 Resolve (was -2) — it had finished first on every measured table two passes running. Avatar of the Abyss gets a point BACK (-4 → -3): three stacked nerfs from an older measuring stick had buried it at the bottom. Measured one at a time across 23,808 games each on four deck cohorts, zero rules violations; full numbers now live in docs/BALANCE_SIM_FINDINGS_v18.md (which superseded this pass’s findings doc).',
-      'Plus 17 fixed bugs across the menus, store, collection, marketplace, shops and submissions — from a double-paid match reward on a flaky connection to a progress meter that counted approved showcase cards twice.',
     ],
   },
 ];

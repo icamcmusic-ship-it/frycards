@@ -53,6 +53,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
       ['Dusk', '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.'],
+      [
+        'The opponent’s turn',
+        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. Its blocks are narrated the same way the moment you declare an attack. ⏱ sets the pace (SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest. Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
+      ],
     ],
   },
   {

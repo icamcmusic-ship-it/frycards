@@ -116,7 +116,9 @@ export function SettingsScreen({
             <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
               How long each line of the CPU's turn stays on screen while its cards and targets light
               up on the board. You can also change this mid-match from the ⏱ button on the narration
-              bubble — and SKIP ▸▸ always fast-forwards the rest of a turn.
+              bubble. Mid-turn there are two more controls next to it: ❚❚ HOLD freezes the move on
+              screen for as long as you like and ▸ STEP then walks the turn one action at a time,
+              while SKIP ▸▸ fast-forwards the rest of it.
             </p>
             <div className="flex flex-wrap gap-2">
               {CPU_SPEEDS.map((s, i) => (

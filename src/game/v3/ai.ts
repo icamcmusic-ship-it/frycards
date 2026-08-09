@@ -610,14 +610,25 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
     // big threat's remaining Grit (shatter/banish always answer; the
     // removalTargets list already excludes Warded and save-up Unbreakable
     // bodies).
+    // v19 (the v18 §3 / carry-forward #3 re-examination): the clause above is
+    // the whole gate, and for a DAMAGE ability it is self-defeating. A 2-point
+    // ping can only ever satisfy `value >= remainingGrit` against a Might-6+
+    // body that is ALREADY down to 2 Grit or less — a unit one clash from
+    // dying anyway. So the only damage abilities the gate ever let through
+    // were the ones buying the least: the whole Leader, aura and remaining
+    // tank included, traded for finishing off something that was already
+    // nearly dead. That is the shape behind Sentinel's cohort-C donations —
+    // `shatteredWinPct` 23.4% at n=77 against its 42.1% random-deck average,
+    // i.e. the games it shatters itself in are lost three times out of four.
+    //
+    // Unconditional removal (shatter / banish) keeps the discount: it answers
+    // a healthy threat, which is a trade worth making at zero Resolve. Damage
+    // does not, at any value the pool prints — so it no longer earns it.
     if (L.resolve + ab.resolveDelta <= 0) {
       const answersBigThreat =
         isRemoval(eff) &&
-        removalTargets.some(
-          (u) =>
-            effMight(state, u) >= 6 &&
-            (eff.action !== 'damage' || (eff.value ?? 0) >= remainingGrit(state, u)),
-        );
+        eff.action !== 'damage' &&
+        removalTargets.some((u) => effMight(state, u) >= 6);
       v -= answersBigThreat ? 6 : 20;
     }
     // Building Resolve is free value — but only while there is headroom to

@@ -9,13 +9,127 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v19.0 — The pass where the instrument was the bug: the CPU's blocks stopped being invisible, the Battle Log stopped opening on the wrong end, and four passes of nerfs turned out to be reading a deck list
+
+Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an
+interactive stress round, a match QoL round, a CPU-visibility/flow audit, and
+the v18 carry-forward balance items as sequential measured trials on the
+standing four 5,952-game cohorts. Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v19.md` (supersedes the v18 doc, deleted this pass).
+**0 invariant violations across 95,232 games**; 364 tests (5 new, in one new
+suite); 8 full matches driven end-to-end through the real match UI, half of
+them *watching* the CPU's narration rather than skipping it, with zero
+findings.
+
+**Match screen — the CPU's blocking decision is no longer invisible.** v18
+closed "the CPU's clash tricks played out in silence" for the reaction window.
+The step immediately before it was still silent, and more visibly so:
+
+- **The CPU's guards now narrate.** `declareGuards` writes nothing to the
+  engine log — it is pure state — so when you declared an attack, the guard
+  lines simply *existed* on the next frame. No beat, no ring, no animation, and
+  the entire report was a banner counting them ("Kuro assigns 2 guard line(s)")
+  that named neither a blocker nor the attacker it stopped. There is now one
+  beat per guard line, naming the attacker and every blocker on it, with the
+  blockers ringed yellow and the attacker they intercept ringed red — then a
+  closing beat for whatever is still coming through, ringing the CPU's own
+  Vitality plate and totalling the unguarded Might. Pinned by a new test suite.
+- **❚❚ HOLD and ▸ STEP.** SKIP was the only control over the opponent's turn
+  and it points one way: a player who wanted to *look* at what just happened —
+  read the card in the spotlight, follow the rings to what it hit — had no way
+  to stop the beat leaving, only a speed dial that made the next one slower
+  too. HOLD freezes the current beat indefinitely; STEP then walks the turn one
+  action at a time. Both sit on the clash divider next to ⏱ and SKIP ▸▸, and
+  the choice persists across turns.
+- **FIX: the Battle Log opened on its oldest line.** It renders oldest-first in
+  a ~5-line box holding the last 160 lines, and never scrolled — so opening it
+  to find out what the CPU just did showed you ancient history and left you to
+  scroll. It now pins to the newest line on open and on every line that arrives
+  while it is open.
+- **The Battle Log marks where the opponent's turn began** with a "SINCE YOUR
+  LAST TURN" divider, so the thing you skipped is one glance rather than a
+  counting exercise.
+- **HARDENING: the CPU's clash reactions now recover instead of white-screening.**
+  They run from the narration timer as of this pass (the guard beats call them
+  on the way out), so an engine exception escaping them would land outside
+  React entirely. They now recover to the player's turn the same way
+  `resolveCpuTurn` already did.
+- How to Play gained a "the opponent's turn" entry covering the whole
+  vocabulary (rings, spotlight, ⏱ / HOLD / STEP / SKIP, the log divider); the
+  in-match coach and Settings mention HOLD and STEP where they already
+  mentioned speed.
+
+**Harnesses — three of them were reporting clean by not looking.**
+
+- `audit:screens` was **depth ONE**: one click from a fresh load, then the
+  context was thrown away, so nothing that only exists *behind* a click had
+  ever been measured — no modal, no second-level panel. It now descends into
+  any first click that reveals controls, a fresh load per (parent, child) pair
+  so nothing compounds. That is 70 second-level clicks across six screens that
+  used to be invisible.
+- **FIX: its settle helper could stop the sweep after ten clicks on a
+  1,000-tile grid** and still print a clean pass — two consecutive samples
+  landing inside the same render chunk look exactly like a settled screen. It
+  now takes the largest count across the window (a control does not
+  un-render), and re-queries before believing a short read.
+- **FIX: a failed body read was reported as a white screen.** `.catch(() => '')`
+  made "the read failed" and "the render crashed" the same finding — a Vite HMR
+  reload landing between the click and the read reported two perfectly healthy
+  screens as blank. It re-reads before believing it, and says plainly when it
+  was the read that failed.
+- The offline preview stubbed **empty** inventory, cosmetics and serialized
+  prints, so every panel gated on them was measured as an empty state and
+  nothing else — the Store's unopened-pack shelf, the cosmetic grids, the
+  numbered-print plates. It owns some of each now.
+- `drive:match` **always clicked SKIP ▸▸**, on every match — the one control
+  that turns the CPU's whole turn off. The entire narration path the previous
+  two passes built was therefore never once exercised by the harness that
+  exists to exercise the match UI. Half the matches now watch it instead, and
+  check that it advances, that it terminates, and that it takes its rings down
+  with it (a new stale-ring invariant, plus a narration-stall finding).
+
+**Balance — one lever refuted, one blunder fixed, and the instrument corrected.**
+
+- **Sentinel of the Nether Pit: the third lever in three passes measured
+  nothing, and the diagnostic says why.** v18 named the trial and the baseline
+  met its condition (first in all *four* cohorts), so bounding its Ember minus
+  to `enemyUnit` was spent and measured: **+0.9 mean, still first everywhere.**
+  Reverted. Differencing the sim's two Leader tables — which nobody had done —
+  explains all three failures at once: on its own random-deck arm Sentinel
+  reads 30.8 / 53.0 / 42.1 / 43.8, a mean **below** the midpoint and *dead last
+  in the pool* in cohort A, against a pinned reading of 62/61/58/62. What has
+  been ranked first for four passes is substantially its three pinned decks.
+- **The sim now prints that difference on every run**, flagged at `|gap| >= 10`.
+  Five of nine Leaders agree between the two arms to within 4 points; the two
+  that do not are exactly the top and the bottom of the pinned table — Sentinel
+  at +18.1 and Void Mother at −14.1, consistent in sign across all four
+  cohorts. The dedicated Void Mother kit look v18 scheduled is **cancelled** on
+  that evidence rather than performed.
+- **FIX (shipped): the CPU traded its whole Leader to finish off an
+  almost-dead unit.** The v16 answer-gate let a self-shattering activation
+  through when it "answers a big threat", but for a *damage* ability that
+  condition can only be met against a Might-6+ body already down to 2 Grit —
+  one clash from dying anyway. Unconditional removal keeps the discount; a ping
+  no longer earns it. Sentinel's self-shatter rate goes **2.7 / 5.6 / 5.2 / 3.3
+  → 0.0 / 0.0 / 0.0 / 0.0** with the balance table flat (pinned moves ≤0.6, P1
+  and game length not at all).
+- **FIX: the lapse counter that was supposed to catch that used the gate's own
+  predicate**, so it read 0 through every pass in which it was happening. It
+  now also counts the outcome — Leader gone, enemy board no smaller. Validated
+  against the old gate, where it reads 5 in cohort A and the old counter read 0.
+
+**FIX (meta):** the deck editor's per-rarity copy-cap comment still named only
+Mythic in the 1-copy tier; v7.0 added Alt-Art, which both How to Play §11 and
+the rulebook print correctly.
+
 ### v18.0 — The watch-the-CPU pass: the opponent's clash tricks played out in silence, a stress driver that plays the real UI, and one scheduled lever that turned out to do nothing
 
 Five-part pass, in the order the brief asked for: a non-gameplay bug hunt, a
 gameplay stress test built as a new harness, a QoL round on the match screen, a
 CPU-visibility/flow audit, and the two v17 carry-forward balance items run as
 sequential measured trials on the standing four 5,952-game cohorts. Full
-balance numbers: `docs/BALANCE_SIM_FINDINGS_v18.md` (supersedes the v17 doc,
+balance numbers: `docs/BALANCE_SIM_FINDINGS_v19.md` (which superseded this
+pass’s own doc; supersedes the v17 doc,
 deleted this pass). **0 invariant violations across 95,232 games**; 359 tests
 (15 new, in two new suites); 10 full matches driven end-to-end through the real
 match UI by the new harness, at phone and desktop width, with zero findings.

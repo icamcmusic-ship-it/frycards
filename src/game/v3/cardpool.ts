@@ -1519,7 +1519,8 @@ const LEADER_RESOLVE_OVERRIDE: Record<string, number> = {
   // banks near the ceiling and lowering it from 5 to 4 changes nothing it
   // does. Reverted rather than printed: a price change that measurably moves
   // neither the win rate nor the ability cadence is a strictly worse card
-  // for no gain. See docs/BALANCE_SIM_FINDINGS_v18.md §1 for the next lever.
+  // for no gain. See docs/BALANCE_SIM_FINDINGS_v19.md §1 — which spent that
+  // "next lever" too, and refuted it.
 };
 
 /**
@@ -1758,6 +1759,30 @@ const LEADER_MINUS_ABILITY_OVERRIDE: Record<string, LeaderAbility> = {
     effect: { action: 'weaken', value: 1, target: 'allEnemyUnits' },
     text: '-3: All enemy units get -1/-1.',
   },
+  // v19, NOT SHIPPED — Sentinel of the Nether Pit, recorded here so the third
+  // lever on this kit is not spent a fourth time.
+  //
+  // The v18 carry-forward named it exactly: not the price, the EFFECT. Bound
+  // the Ember minus to `enemyUnit`, dropping the `any target` face reach, on
+  // the v7.5 Ethereal Sea Witch precedent. The baseline met the condition
+  // (Sentinel first in all FOUR cohorts: 61.9 / 60.7 / 58.0 / 61.6), so the
+  // lever was spent and measured alone:
+  //
+  //   61.3 / 63.4 / 59.5 / 61.6 — a mean of **+0.9 points**, still first in
+  //   all four, with cohort B up 2.7. Taking the finisher off the kit did not
+  //   move the kit.
+  //
+  // That is now THREE sequential levers on this Leader that measured nothing:
+  // the v17 minus reprice (-2 → -3), the v18 Resolve trim (5 → 4, mean -0.75,
+  // cadence unmoved), and this one. The v19 findings doc §1 explains why, and
+  // the explanation is not about the card: on the sim's own random-deck arm
+  // Sentinel reads 30.8 / 53.0 / 42.1 / 43.8 — a mean of 42.5%, BELOW the
+  // midpoint, and dead last in the pool in cohort A. Its pinned reading sits
+  // +18.1 points above its random-deck reading, the largest divergence in the
+  // pool. Three pinned decks are what finishes first; the kit does not.
+  //
+  // No further lever belongs on this card until the pinned suite can tell the
+  // two apart. See docs/BALANCE_SIM_FINDINGS_v19.md §1.
 };
 
 /** Does this ability actually reach across the table? */

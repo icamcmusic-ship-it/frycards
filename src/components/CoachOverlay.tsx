@@ -53,7 +53,7 @@ const SCRIPT: { stage: CoachStage; title: string; body: string }[] = [
   {
     stage: 'cpu',
     title: '4. OPPONENT’S TURN',
-    body: 'Watch the opponent play. If it attacks, YOU assign guards — pick an attacker line, click your units to block, then confirm. A reaction window follows where Quick Events and Ambush units can still be invoked before damage.',
+    body: 'Watch the opponent play — every move it makes is narrated, and the cards involved light up: yellow for what it is acting WITH, red for what it is aimed AT. ❚❚ HOLD freezes a move on screen and ▸ STEP walks the turn one action at a time; SKIP ▸▸ fast-forwards the rest. If it attacks, YOU assign guards — pick an attacker line, click your units to block, then confirm. A reaction window follows where Quick Events and Ambush units can still be invoked before damage.',
   },
   {
     stage: 'respond',
