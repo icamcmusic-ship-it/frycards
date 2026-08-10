@@ -202,7 +202,9 @@ for (const r of rows) {
   const expectKw = (c.keywords ?? []).join(', ') || null;
   if (norm(r.keywords) !== expectKw)
     problems.push(`${r.id}: cards.keywords="${r.keywords}" but the pool derives "${expectKw}"`);
-  if (JSON.stringify(canonical(r.essence_cost ?? null)) !== JSON.stringify(canonical(c.cost ?? null)))
+  if (
+    JSON.stringify(canonical(r.essence_cost ?? null)) !== JSON.stringify(canonical(c.cost ?? null))
+  )
     problems.push(
       `${r.id}: cards.essence_cost=${JSON.stringify(r.essence_cost)} but the pool derives ` +
         `${JSON.stringify(c.cost)}`,
