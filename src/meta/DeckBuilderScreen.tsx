@@ -526,12 +526,19 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   // An imported draft (a deck object with no id yet — see handleImport) is
   // always "dirty": it only exists in this editor, so backing out silently
   // would throw the whole import away without a word.
+  // Compared as a multiset, not by position: removing a card and re-adding it
+  // (or any other edit that nets out to the same card list in a different
+  // order) is not a change a save would actually write, and treating it as
+  // one nagged the player to discard "changes" that don't exist.
+  const sortedInitialCardIds = [...initialCardIds].sort();
+  const sameCards =
+    cardIds.length === initialCardIds.length &&
+    [...cardIds].sort().every((id, i) => id === sortedInitialCardIds[i]);
   const isDirty =
     (deck != null && deck.id == null) ||
     name !== initialName ||
     (deck?.leader_id ?? null) !== leaderId ||
-    cardIds.length !== initialCardIds.length ||
-    cardIds.some((id, i) => id !== initialCardIds[i]);
+    !sameCards;
   const handleBack = () => {
     if (isDirty && !window.confirm('Discard unsaved changes to this deck?')) return;
     onDone();

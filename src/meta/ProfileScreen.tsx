@@ -397,7 +397,7 @@ function CreatorTools() {
     }
   };
 
-  const run = async (fn: () => Promise<string | null>, success: string) => {
+  const run = async (fn: () => Promise<string | null>, success: string, onSuccess?: () => void) => {
     if (busy) return;
     setBusy(true);
     setError('');
@@ -410,6 +410,7 @@ function CreatorTools() {
         // Grants to yourself should show up immediately in the wallet/collection.
         refreshProfile();
         refreshCollection();
+        onSuccess?.();
       }
     } catch {
       setError('Something went wrong — check your connection and try again.');
@@ -486,7 +487,23 @@ function CreatorTools() {
                 TARGET: {target.username}
                 <RoleBadge role={target.role} />
               </span>
-              <PopButton color="steel" onClick={() => setTarget(null)}>
+              <PopButton
+                color="steel"
+                onClick={() => {
+                  setTarget(null);
+                  // The grant boxes don't belong to a player once the target
+                  // changes — left populated, a stale amount from the last
+                  // target could be granted to a new one with only a generic
+                  // confirm() dialog (which does name the right player) as
+                  // the only thing standing between an admin's misclick and
+                  // the wrong grant.
+                  setCredits(0);
+                  setVouchers(0);
+                  setCardId('');
+                  setCardQty(1);
+                  setCardFoil(false);
+                }}
+              >
                 CHANGE
               </PopButton>
             </div>
@@ -540,6 +557,10 @@ function CreatorTools() {
                   run(
                     () => adminGrantCurrency(target.id, credits, vouchers),
                     `Granted ${fmtCredits(credits)} / ${vouchers} vouchers to ${target.username}.`,
+                    () => {
+                      setCredits(0);
+                      setVouchers(0);
+                    },
                   );
                 }}
               >
@@ -598,6 +619,11 @@ function CreatorTools() {
                   run(
                     () => adminGrantCard(target.id, cardId.trim(), cardQty, cardFoil),
                     `Granted ${cardQty}× ${cardId}${cardFoil ? ' (foil)' : ''} to ${target.username}.`,
+                    () => {
+                      setCardId('');
+                      setCardQty(1);
+                      setCardFoil(false);
+                    },
                   );
                 }}
               >
@@ -627,7 +653,17 @@ function CreatorTools() {
                 disabled={busy}
                 onClick={() => {
                   if (!confirm(`Set ${target.username}'s role to "${role}"?`)) return;
-                  run(() => adminSetRole(target.id, role), `${target.username} is now a ${role}.`);
+                  // The TARGET banner's RoleBadge reads `target.role`, a
+                  // one-shot snapshot from when this player was selected —
+                  // refreshProfile()/refreshCollection() above only update
+                  // the calling creator's own data, so without this the
+                  // badge kept showing the pre-change role even though the
+                  // success notice confirmed the change went through.
+                  run(
+                    () => adminSetRole(target.id, role),
+                    `${target.username} is now a ${role}.`,
+                    () => setTarget((t) => (t ? { ...t, role } : t)),
+                  );
                 }}
               >
                 APPLY ROLE ▸

@@ -180,13 +180,31 @@ for (const id of bundled.keys()) {
  * applied, and this is the check that says so.
  */
 const norm = (s: string | null | undefined) => (s == null || s === '' ? null : s);
+// A plain `JSON.stringify` comparison is sensitive to key order, and jsonb's
+// canonical output order (shortest key first) never matches the field order
+// an object literal like `{ generic, pips }` produces — so it flagged every
+// single card's essence_cost as "drift" even when the values agreed, burying
+// the one real mismatch this check exists to catch in 296 false positives.
+// Sort keys recursively before comparing so only an actual value differs.
+const canonical = (v: unknown): unknown =>
+  v !== null && typeof v === 'object'
+    ? Array.isArray(v)
+      ? v.map(canonical)
+      : Object.fromEntries(
+          Object.entries(v as Record<string, unknown>)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, val]) => [k, canonical(val)]),
+        )
+    : v;
 for (const r of rows) {
   const c = POOL_BY_ID[r.id];
   if (!c) continue; // covered by the live-only check above
   const expectKw = (c.keywords ?? []).join(', ') || null;
   if (norm(r.keywords) !== expectKw)
     problems.push(`${r.id}: cards.keywords="${r.keywords}" but the pool derives "${expectKw}"`);
-  if (JSON.stringify(r.essence_cost ?? null) !== JSON.stringify(c.cost ?? null))
+  if (
+    JSON.stringify(canonical(r.essence_cost ?? null)) !== JSON.stringify(canonical(c.cost ?? null))
+  )
     problems.push(
       `${r.id}: cards.essence_cost=${JSON.stringify(r.essence_cost)} but the pool derives ` +
         `${JSON.stringify(c.cost)}`,

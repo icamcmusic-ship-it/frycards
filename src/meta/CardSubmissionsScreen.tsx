@@ -699,8 +699,12 @@ export function overridesFrom(
       problems.push('Bond Might/Grit must be whole numbers of 0 or more.');
     } else {
       const bond: NonNullable<CardDef['bond']> = {};
-      if (m) bond.might = m;
-      if (g) bond.grit = g;
+      // `m`/`g` are validated as "0 or more" just above, so an explicit 0 is a
+      // legal value the Creator typed on purpose — a truthy check here would
+      // silently drop it (and everything downstream would see `undefined`,
+      // not the 0 that was actually entered).
+      if (m != null) bond.might = m;
+      if (g != null) bond.grit = g;
       // `bond.grants` is the third thing living in this object — the keyword the
       // Item hands to the unit it bonds to, printed on 28 of the pool's 61
       // Items — and it has no box in this editor. Rebuilding `bond` from the two
