@@ -854,14 +854,24 @@ function SummaryStage({
     } finally {
       if (mountedRef.current) setSellBusy(false);
     }
+    // The sale itself already happened server-side by this point, whether or
+    // not this component is still mounted (the player can hit DONE, or press
+    // Escape, while the RPC loop above is mid-flight). refreshCollection and
+    // refreshProfile write into MetaContext — a component further up the
+    // tree that outlives this one — so, unlike the local setState calls
+    // above and below, they must run even after unmount or the player's
+    // displayed credits/collection go stale until something unrelated
+    // happens to refresh them.
+    if (totalCards > 0) {
+      refreshCollection();
+      refreshProfile();
+    }
     if (!mountedRef.current) return;
     if (newlySold.size > 0) setSold((s) => new Set([...s, ...newlySold]));
     if (totalCards > 0) {
       setSellNotice(
         `Quicksold ${totalCards} card${totalCards === 1 ? '' : 's'} for ${fmtCredits(totalCredits)}${shortfall ? ' (some copies were no longer available)' : ''}.`,
       );
-      refreshCollection();
-      refreshProfile();
     }
   };
 

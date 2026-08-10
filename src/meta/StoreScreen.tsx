@@ -1069,8 +1069,8 @@ function BountiesTab({
   setBusyId: (id: string | null) => void;
   setError: (s: string) => void;
   setNotice: (s: string) => void;
-  refreshProfile: () => void;
-  refreshCollection: () => void;
+  refreshProfile: () => Promise<void>;
+  refreshCollection: () => Promise<void>;
 }) {
   const [bounties, setBounties] = useState<BountyCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1155,9 +1155,10 @@ function BountiesTab({
         return;
       }
       setNotice(`Sold ${card.name} for ${data.sold_for} credits.`);
-      await load();
-      refreshProfile();
-      refreshCollection();
+      // Awaited — this tab has no overlay to cover a stale balance the way
+      // the pack-opening handlers do, so credits/collection must reflect the
+      // sale before busyId re-enables the row's buttons.
+      await Promise.all([load(), refreshProfile(), refreshCollection()]);
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {
@@ -1177,9 +1178,8 @@ function BountiesTab({
         return;
       }
       setNotice(`Bought ${card.name} for ${data.bought_for} credits.`);
-      await load();
-      refreshProfile();
-      refreshCollection();
+      // Awaited — same reasoning as handleSell above.
+      await Promise.all([load(), refreshProfile(), refreshCollection()]);
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {
