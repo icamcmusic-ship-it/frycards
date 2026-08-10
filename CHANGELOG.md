@@ -9,6 +9,124 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v20.0 — The pass where the fixed instrument turned the table over: the CPU's answers stopped being invisible, and the Leader nerfed three times turned out to be near the bottom
+
+Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an
+interactive stress round, a match QoL round, a CPU-visibility/flow audit, and
+the v19 carry-forward balance items. Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v20.md` (supersedes the v19 doc, deleted this pass).
+**0 invariant violations across five 5,952-game cohort runs**; 370 tests (6
+new, in one new suite); six matches driven end-to-end through the real match UI
+with a new mode that drives ❚❚ HOLD and ▸ STEP; 18 meta screens swept two clicks
+deep at two widths, six of them populated for the first time.
+
+**Match screen — the CPU's stack answers played out in silence.** v18 closed
+the clash reaction window and v19 closed the guard step. The priority window
+over the stack was the last one, and the most confusing:
+
+- **The CPU's responses now narrate.** Play a card and the CPU can counter it,
+  shatter the unit it was aimed at, or answer with a Quick Event of its own —
+  all of which arrived as a single banner over a board that had already
+  changed, with no beat, no ring, no card spotlight, and the stack display gone
+  by the time anyone looked. `respondToStack` has taken an observer since the
+  AI was written and the UI passed nothing; it now feeds the same beat chain as
+  every other CPU action, from both call sites (invoking into a window, and the
+  loop after the human passes).
+- **An attack beat now says what it is aimed at.** v19 rings the CPU's own
+  Vitality plate when it declines to guard, because that is what the unblocked
+  Might is pointed at. The mirror case — the CPU declaring an attack, the
+  louder half — rang the attackers and nothing else. It now rings the player's
+  plate too.
+- **The CPU's blocking decision gets a beat of its own** ("🤔 …is choosing its
+  guards…") before the guard lines land, so the answer reads as a reply to the
+  player's attack rather than as part of their own click.
+- **FIX: SKIP ▸▸ left ❚❚ HOLD switched on.** A CPU turn is narrated as several
+  runs back to back, and a run that starts while paused parks on its own first
+  beat — so holding once and then pressing SKIP fast-forwarded the current run
+  and froze on the next, once per remaining segment of the turn.
+- **FIX: invoking while a target pick was open silently discarded it.** Same
+  red bar, different rings, nothing said the first card had been put back. The
+  hand now refuses with "finish the current pick first (✕ or Esc to cancel it)"
+  — which is also what made the stress driver's hang unrecoverable (below).
+- **✕ CLEAR on both selections.** Escape has cleared an attack selection since
+  v17 and a guard assignment since v18; neither had a visible control, which
+  matters most immediately after ✦ SUGGEST fills every guard line at once.
+- **FIX: the hint bar was clipped to one line.** At 9px on a 375px phone that
+  is ~60 characters, and the guard hint puts the number it exists to deliver —
+  "Unguarded hits incoming: 12 Vitality (you have 9)" — at the end of ~150. Two
+  lines on a phone, one above `sm`.
+
+**Harnesses — six screens had been audited with nothing on them.**
+
+- `meta-preview` stubs the seven fields that live in `MetaState`; everything
+  else a screen shows it fetches for ITSELF on mount, and the harness is
+  offline. So Battle Pass (1 control), Marketplace (4), Friends (5), Missions
+  (4), News (3) and Player Shops (8) had been measured as empty states for
+  eight passes while the audit printed a clean pass — one of those "controls"
+  is the BACK button. A new `src/preview-fixtures.ts` answers PostgREST reads
+  offline; the same six screens now measure 28 / 51 / 11 / 7 / 2 / 13.
+- **That immediately found a crash.** The mystery-pack pool viewer
+  (VIEW FULL POOL) white-screened on `Cannot read properties of undefined` the
+  first time a test ever opened it — on three different storefronts. It was an
+  incomplete fixture rather than a product defect, and it is exactly what a
+  panel nothing had ever reached looks like from the outside.
+- `audit:screens` gained `ONLY=<screens>`. A full sweep is ~50 minutes, and
+  re-checking one fixed screen used to cost all of it — so in practice a
+  mid-pass fix was not re-measured.
+- `drive:match` gained a **study** mode. v19 replaced "always SKIP" with "half
+  the matches watch" on the reasoning that SKIP turns the CPU's turn off — and
+  then shipped ❚❚ HOLD and ▸ STEP onto the same divider, which the driver never
+  touched. Study mode drives them and checks what they promise: a held beat
+  must not move, and a step must advance by exactly one.
+- **FIX: the driver's own bond-pick branch had never fired.** It matched
+  `'BOND — pick'` case-sensitively against `innerText`, which the match screen
+  uppercases — the same defect v19 fixed for the beat counter and missed here.
+  With the branch dead, a bond pick left open was a state the driver could not
+  leave, and it hung a match outright once the driver started playing enough
+  cards to reach one.
+- **The driver only ever played the first third of a match.** Six of six runs
+  ended in DEFEAT between turn 6 and turn 8 against a headless average of 21,
+  because a miss on one randomly-chosen hand card ended the turn having
+  developed nothing. It now walks the hand instead of passing, attacks all-in
+  less often, blocks more, and stops throwing Locations away on unspent taps.
+- **FIX: `verify:pool` has not run since v17** — no egress to the Supabase host
+  — and v18/v19 both argued from the code path instead. It now takes a
+  `POOL_SNAPSHOT` JSON export and runs its identical checks offline.
+
+**Catalog — one real drift, two passes old.** Running those checks found
+`cards.essence_cost` for Sovereign of the Dying Star still at the pre-v18 price
+(generic 3, total 5) against the pool's derived total of 4 — v18's shipped
+reprice, never synced, in the column every server-side reader prices from. One
+row in 297; the template digest, rarity columns and every other derived column
+are in exact parity. The client derives its own mechanics and was never wrong,
+so no player's board was affected. **The live row was left for a human to
+apply** — the exact statement is in the findings doc.
+
+**Balance — the instrument was widened and the table turned over.**
+
+- **The pinned Leader suite was three decks on ONE recipe.** v16 added decks #1
+  and #2 and v19 concluded the pinned row was "substantially its three pinned
+  decks"; reading the two builders side by side shows it was narrower than
+  that. `randomArchetype` varies four things per deck — a 2–3 keyword subset, a
+  1–3 effect subset, 32–40 units, 4–6 sanctums — and the pinned builder varied
+  none of them. All three decks were the same archetype with different jitter.
+- **Nine decks on nine recipes**, sampling the same axes, still seeded on the
+  Leader id alone so the suite stays pinned across cohorts. Per Leader 432
+  games, up from 336, over three times as many distinct builds.
+- **Sentinel of the Nether Pit: 61.9 / 60.7 / 58.0 / 61.6 → 43.5 / 44.0 / 43.1
+  / 48.6.** First in all four cohorts for four passes, nerfed three times for
+  it, and it lands near the bottom. Its divergence gap collapses from a
+  one-signed +18.1 mean to +2.5. **Void Mother** comes off the floor
+  (35/35/42/40 → 47.5/43.8/42.4/43.8) and its cancelled rework stays cancelled.
+- **The new top is Mer-King**, first in all four cohorts at a 65.2% mean, and
+  the only Leader whose random-deck arm agrees on the finish. It is deliberately
+  **not** touched this pass: the suite it tops has one pass of history, and
+  spending a lever against a one-pass-old instrument is the mistake this project
+  just spent four passes making in the other direction.
+- P1 win rate and average game length reproduce v19's shipped table **to the
+  decimal** on all four cohorts, and cohort A was re-run after the UI round and
+  diffed byte-for-byte — the whole change is inside the suite.
+
 ### v19.0 — The pass where the instrument was the bug: the CPU's blocks stopped being invisible, the Battle Log stopped opening on the wrong end, and four passes of nerfs turned out to be reading a deck list
 
 Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an
