@@ -206,7 +206,7 @@ Everything here has a started implementation and a visible seam.
   Standing rules that should not be relearned: **four deck cohorts, not two**
   (two cohorts cannot see a keyword with fewer than ~6 carriers) — but **six
   when the question is about one specific Leader**, since v22's sign flip lived
-  in the fifth and sixth and the cohorts cost thirty seconds each; **never
+  in the sixth cohort alone and the cohorts cost thirty seconds each; **never
   interleave content changes with balance trials in one pass**; **do not spend a
   lever against a one-pass-old instrument** — that is the mistake the last four
   passes made in the other direction; and **a harness that cannot measure
