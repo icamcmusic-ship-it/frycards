@@ -2566,7 +2566,19 @@ export function GameV4({
     // table to FREEZE one of the player's units (Glaciate). A unit greying out
     // between the player's turn and the opponent's first move, with no line,
     // no ring and no beat, was the last thing the opponent did in silence.
-    const dawnLines = g.dawnLog;
+    //
+    // Only when they are still the TAIL of the log. The one path in where they
+    // are not is the opening turn: `createGame` runs the first player's Dawn
+    // and the mulligans are written after it, so on a CPU-first match
+    // `dawnLog` is real but stale by several lines. Narrating it there would
+    // replay a Dawn the player already sat through the mulligan screen for,
+    // and the divider would land inside the mulligan lines.
+    const tail = g.log.slice(g.log.length - g.dawnLog.length);
+    const dawnIsFresh =
+      g.dawnLog.length > 0 &&
+      tail.length === g.dawnLog.length &&
+      tail.every((l, i) => l === g.dawnLog[i]);
+    const dawnLines = dawnIsFresh ? g.dawnLog : [];
     // Every handoff to the opponent funnels through here, so this is the one
     // place the Battle Log divider needs stamping. Taken at the Dawn rather
     // than after it: those lines are the opponent's turn, not the tail of the

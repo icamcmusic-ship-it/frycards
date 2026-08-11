@@ -542,6 +542,12 @@ async function driveMatch(
       // reach. Alpha-striking is still worth exercising, just not as the
       // default line.
       if (rand() < 0.2 && (await clickText(page, 'ALL ×'))) continue;
+      // v22 — ✕ CLEAR, which v20 shipped onto this bar and nothing has pressed
+      // since. It empties the attacker selection, so the next loop rebuilds it:
+      // a control that failed to clear would read as an attack the player did
+      // not choose, and one that cleared too much (dropping the clash itself)
+      // would strand the turn. Occasionally, since it costs a step.
+      if (rand() < 0.12 && (await clickText(page, '✕ CLEAR'))) continue;
       await clickText(page, 'DECLARE ATTACK');
       continue;
     }
@@ -705,6 +711,16 @@ async function driveMatch(
     // uncastable card — see tryInvokeHand.
     if (b.handCards > 0 && (await tryInvokeHand(page, Math.floor(rand() * b.handCards), true)))
       continue;
+
+    // v22 — RE-BOND, the one board action the driver has never taken.
+    // A Weapon or Tool survives the unit it was bonded to and lands in the
+    // unbonded-Item row with its own button; re-bonding it opens a `pending`
+    // target pick, which is a state only this control can reach (every other
+    // route into `pending` comes from the hand). `rebonds` is 6,538 a run in
+    // the headless sim, so it is not a rare line — it was simply unreachable
+    // from here, and so was the whole "pick a target for something that is
+    // already on the board" seam.
+    if (rand() < 0.7 && (await clickText(page, 'RE-BOND'))) continue;
 
     const roll = rand();
     if (roll < 0.3 && (await clickSelector(page, '[role="button"][aria-disabled="false"]'))) {

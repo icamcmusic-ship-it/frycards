@@ -228,10 +228,29 @@ async function check(screen: string, width: number, path: number[] = []) {
   // by LABEL rather than index because a prelude has to survive the screen it
   // opens on gaining or losing a control; a wrong index would silently measure
   // some other state and still print a clean pass.
+  //
+  // Each step then waits for the control count to actually MOVE, rather than a
+  // flat sleep. `settledControlCount`'s two-equal-samples rule cannot cover an
+  // animation: the pack tear runs an 850ms timer before it swaps in the reveal,
+  // so a 450ms wait left the settle sampling `1, 1` — two equal reads, "settled"
+  // — and the entry measured the state it was supposed to be leaving while
+  // still printing a clean pass. Exactly the failure `settledControlCount`'s own
+  // header describes, arriving through a timer instead of a progressive render.
   for (const label of PRELUDE[screen] ?? []) {
+    const before = await page
+      .$$(CONTROLS)
+      .then((c) => c.length)
+      .catch(() => 0);
     const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
     await target.click({ timeout: 4000 }).catch(() => undefined);
-    await page.waitForTimeout(450);
+    for (let i = 0; i < 16; i++) {
+      await page.waitForTimeout(250);
+      const now = await page
+        .$$(CONTROLS)
+        .then((c) => c.length)
+        .catch(() => 0);
+      if (now !== before) break;
+    }
   }
   const settled = await settledControlCount(page);
 

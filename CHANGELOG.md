@@ -9,6 +9,148 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v22.0 — The pass where the opponent's Dawn and Dusk stopped happening in silence, and the caution flag four passes were read through got measured
+
+Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an
+interactive stress round, a match QoL round, a CPU-visibility/flow audit, and
+the v20 carry-forward balance items. Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v22.md` (supersedes the v20 doc). **0 invariant
+violations across six 5,952-game cohort runs** — the standing four plus two new
+ones; 379 tests (9 new, in one new suite); matches driven end-to-end through the
+real match UI; 20 meta screens swept two clicks deep at two widths, two of them
+reachable for the first time.
+
+**Match screen — the last silence was not a decision.** v18 closed the CPU's
+clash reaction window, v19 its guard step, v20 its priority window over the
+stack. Each found its target by asking which of the opponent's DECISIONS had no
+beat, and by v20 every decision had one. What was left is the two phases the
+RULES run on the opponent's behalf:
+
+- **The opponent's Dawn is now narrated, and Dawn is not a no-op.** It untaps,
+  heals (Sacred / Radiant / Regenerate), grows bodies (Thriving / Empowering),
+  draws (Archivist), rebuilds Leader Resolve (Resolute) — and reaches across the
+  table to FREEZE one of the player's units (Glaciate). None of it wrote a
+  single line to the engine log, so no narrator could have shown it:
+  `runCpuTurn`'s own comment asserted the opponent's Dawn "writes nothing to the
+  log", which was true and was the bug. A unit greying out between the player's
+  turn and the opponent's first move, with no line, no ring and no beat, was the
+  last thing the opponent did invisibly.
+- **Dusk too.** Entropic and Blighted erode cards off the player's deck — a real
+  clock on a real loss condition — and Scorched-Earth sweeps their whole board.
+  Units died at the opponent's Dusk with only the shatter lines to explain them,
+  and those name the unit, not the cause. Dusk runs inside `playTurn`, so these
+  lines needed only to exist to be narrated.
+- **`GameState.dawnLog`** carries the current Dawn's lines. Dawn runs inside the
+  `endPhase` that ends the PREVIOUS player's turn, so the match screen is
+  already past them by the time it takes its own `logStart` — and the opening
+  turn's Dawn runs inside `createGame`, before the mulligans, so "everything
+  from index N" is not the same set of lines. `runCpuTurn` narrates the slice
+  only when it is still the tail of the log, which is what keeps a CPU-first
+  match from replaying a Dawn the player already sat through the mulligan screen
+  for. The Battle Log's "since your last turn" divider moves back to cover it.
+- **Glaciate names the unit it froze**, rather than counting one. `applyEffect`
+  picks its own target through `autoTarget` and reports nothing, so the engine
+  diffs the enemy field around the call. Everything else aggregates per keyword,
+  so a six-unit Thriving board is one line, not six beats on the same fact.
+- **A line that names a card now rings that card even with no event behind it.**
+  The ring machinery is driven by the AI's structured event stream, which covers
+  what the AI DECIDES. It does not cover what the rules do — a shatter, a fizzle,
+  a Dawn freeze — and those were sentences with no ring. An event, when there is
+  one, still wins over the name scan.
+- **A beat aimed at something of the player's holds ~40% longer.** Most of an
+  opponent's turn is it improving its own board; the two or three beats where a
+  unit of theirs is frozen, weakened or hit are the ones they have to locate
+  before the ring leaves, and they were getting the same 1150ms as "Kuro plays a
+  Tide Wellspring".
+
+**Match QoL.**
+
+- **The Wellspring dots say which one to press.** Seven 16px circles whose only
+  distinguishing text was a `title` reading "Play a Void Wellspring (free)" —
+  identical for all seven, invisible on touch, and silent about the one fact
+  that decides which to press. Each now reports how many hand cards it would
+  UNLOCK. That is the measure the CPU's own `chooseWellspring` uses and it is
+  not "is short of this pip": a card short of two colours is unlocked by neither
+  alone, and counting it under both is how a recommendation names a dot that
+  changes nothing. Costs go through `canPayCost`, so the generic half counts too.
+  The best dot is ringed, the recommendation is spelled out in the hint bar
+  (where a phone can read it), and the dots get a 44px hit area.
+- **↻ REMATCH on the game-over screen.** BACK TO MENU was the only way off it, so
+  a second match meant menu → PLAY → re-pick the deck: three screens to repeat
+  what the player had just chosen. Disabled while the reward round-trip is in
+  flight, since remounting would unmount the state its retry loop writes into.
+- **How to Play** now documents what Dawn and Dusk actually do, and its
+  "opponent's turn" section covers all five moments it acts rather than three.
+
+**Non-gameplay bug hunt.**
+
+- **FIX: the XP readout could print a negative numerator** — `-2400/1200 XP TO
+  LEVEL 13`, next to a progress bar sitting correctly at zero. `ProgressBar` has
+  clamped a negative `value` since the pass that found the server's level/xp
+  pair can run ahead of this client-side mirror; the two TEXT labels beside
+  those bars never got the same treatment. Both now go through one
+  `levelProgress` helper, so the clamp cannot be applied to one and forgotten on
+  the other. Visible at all because the preview harness's stub profile was
+  itself 2,400 XP short of its own level — fixed, so the harness measures a
+  state a real account can be in.
+- 20 meta screens, two widths, every visible control clicked one at a time and
+  then every control those clicks reveal: **0 problems**.
+
+**Harness.**
+
+- **The match driver had been clicking the FIRST Wellspring dot every turn** —
+  the same colour for a whole match — since the harness was written.
+  Instrumenting one run found the human casting ONE card in nine turns behind an
+  all-Void hand while its board built Root, every other card reporting "Needs
+  Void essence your Locations can't produce yet". That is why every driven match
+  has ended between turn 6 and turn 10 against a headless average of 21, and why
+  v20's "the driver was passing its turns" fix did not move the number: the hand
+  was not the problem, the mana base was. It now reads the same unlock count a
+  player does, off the aria-label rather than a private hook.
+- **The driver re-bonds Items and presses ✕ CLEAR.** Re-bond is the only route
+  into a target pick that does not start from the hand, and it runs 6,538 times
+  a run in the headless sim; ✕ CLEAR shipped in v20 and nothing had pressed it
+  since.
+- **The screen audit measured pack opening at ONE control** — the tear button —
+  so the card-by-card reveal and the summary, the two screens a player sees after
+  every pack they open, had never been measured at any width. `PRELUDE` entries
+  drive a screen into a deeper state before the sweep begins; `pack@reveal` and
+  `pack@summary` are the first two.
+
+**Balance — no card changed, third pass running, and the diagnostic is the
+finding.** Full numbers in `docs/BALANCE_SIM_FINDINGS_v22.md`.
+
+- v20 left Mer-King named as the corrected instrument's answer and unspent
+  behind a pre-registered condition: first in 3+ cohorts AND a random-arm gap
+  under +10 in the cohorts that sample it. Six cohorts (the standing four plus
+  two new) put it **first in all six**, mean 65.6%, 8.4 points clear.
+- **The gate cannot be read as written, because the flag it is phrased in terms
+  of fires on a quarter of every reading in the table.** 51 gap observations:
+  median |gap| 5.0, max 18.6, `>= 10` on 12 of them, six of nine Leaders
+  tripping it at least once. It is at the ~76th percentile of its own
+  distribution and selects nothing. Retired as a gate.
+- The signature those diagnoses actually keyed on is a **one-signed** gap.
+  Mer-King is not one-signed (+3.5 / +11.2 / +12.0 / +9.5 / **−3.3**) and its
+  random arm reads above 50% in every cohort that samples it — the two arms
+  agree, which is the opposite of the Sentinel shape. **Exactly one Leader in
+  the pool is one-signed: Ruin-Walker Overseer** (−8.2 mean, negative in all
+  five sampling cohorts, last in the pinned table in five of six). That is the
+  Sentinel finding inverted — the suite appears to be UNDER-rating it — and per
+  the Sentinel lesson the first move is to understand the instrument, not to
+  move the card.
+- **v20 carry-forward #5 closed:** the divergence report printed no row at all
+  for a Leader the random arm never dealt, which reads as "no flag" rather than
+  "not measured" — and cohort D's missing row was Mer-King, the Leader the whole
+  table was pointing at. It now prints an explicit `UNSAMPLED` line by name.
+  Three of the six cohorts have one. Same failure shape as v14's "clicked 0
+  controls" and v20's six empty screens: silence that renders as a clean result.
+- The four standing cohorts reproduce v20 **to the decimal** (P1 44.7 / 46.5 /
+  46.3 / 44.7, avg turns 20.3 / 21.6 / 21.8 / 21.1, `invariantCount` 0), and
+  cohort A was diffed line-for-line against a pre-change baseline: byte-identical
+  apart from the timestamped report path. The engine's new log lines are visible
+  to the sim only through the one substring it greps for (`'sheds'`), which none
+  of them contain.
+
 ### v20.0 — The pass where the fixed instrument turned the table over: the CPU's answers stopped being invisible, and the Leader nerfed three times turned out to be near the bottom
 
 Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an

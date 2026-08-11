@@ -18,6 +18,20 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Dawn-and-Dusk Pass (v22)',
+    date: 'August 2026',
+    items: [
+      'THE OPPONENT’S DAWN AND DUSK NOW HAPPEN OUT LOUD. Four passes have each closed a place the opponent acted invisibly — its turn, its blocks, its answers on the stack — by asking which of its DECISIONS had no narration. Every decision had one. What was left is not a decision: it is the two phases the rules run for it. Between them they can FREEZE one of your units before it has played anything (Glaciate), erode your deck toward a deck-out loss (Entropic, Blighted), sweep your whole board (Scorched-Earth), heal it, grow its units and draw it cards. None of that wrote a single line anywhere. Its Dawn is now narrated on the board before its turn begins, the freeze names and rings the unit it took, and the Battle Log’s "since your last turn" divider has moved back to cover it.',
+      'A beat aimed at something of YOURS now holds ~40% longer on screen. Most of an opponent’s turn is it improving its own board; the two or three beats where a unit of yours is frozen, weakened or hit are the ones you actually have to find on the board, and they were getting the same second and a bit as "Kuro plays a Tide Wellspring".',
+      'Lines that name a card now light that card up even when no structured move sits behind them — "… was shattered", a Dawn freeze, a fizzle. Those were sentences with no ring.',
+      'NEW: the Wellspring dots tell you which one to press. Seven small coloured circles whose only distinguishing text was a tooltip reading "Play a Void Wellspring (free)" — identical for all seven and invisible on a phone. Each now reports how many cards in your hand it would UNLOCK (the same measure the CPU uses for its own), the best one is ringed, and the recommendation is spelled out in the hint bar. They also got a proper touch target.',
+      'NEW: ↻ REMATCH on the game-over screen. BACK TO MENU was the only way off it, so a second match meant three screens to re-pick what you had just chosen.',
+      'FIX: the XP readout could print a negative number ("-2400/1200 XP TO LEVEL 13"). The bar beside it has been clamped for several passes; the text never was.',
+      'BALANCE: no card changed, for the third pass running, and this time the diagnostic is the finding. Six deck cohorts (up from the standing four) put Mer-King first in ALL SIX and show its two measuring arms AGREEING for the first time — so it is not the measurement artefact Sentinel of the Nether Pit turned out to be. The caution flag those passes were read through fires on a quarter of all readings, which makes it no kind of filter; the one Leader that trips the signature it was actually built to detect is Ruin-Walker Overseer, which the test suite appears to be UNDER-rating. Full numbers in docs/BALANCE_SIM_FINDINGS_v22.md.',
+      'Under the hood: the match stress driver had been clicking the first Wellspring dot every turn for its whole existence — the same colour for a whole match — so it spent most games building the wrong essence in front of a hand it could not cast, and every driven match since the harness was written ended around turn 7 against a headless average of 21. It also now re-bonds Items and presses ✕ CLEAR, and the screen audit finally measures the pack-opening reveal and summary, which it had been reporting as "one control" (the tear button).',
+    ],
+  },
+  {
     version: 'The Nothing-Happens-In-Silence Pass (v20)',
     date: 'August 2026',
     items: [
@@ -29,18 +43,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'FIX: the hint bar was clipped to a single line, so on a phone the guard hint lost the one number it exists to deliver — how much Vitality is about to hit you. It now runs to two lines.',
       'BALANCE: no card changed, and for the second pass running that IS the finding. v19 discovered the Leader table had been ranking three hand-built decks instead of the cards; this pass widened it from 3 decks to 9 REAL ones and re-measured. Sentinel of the Nether Pit — first in all four cohorts for four passes, and nerfed three times for it — drops to 43.5% and lands near the BOTTOM. Void Mother, the one scheduled for a rework, comes off the floor. Full numbers in docs/BALANCE_SIM_FINDINGS_v20.md.',
       'Under the hood: six meta screens (Battle Pass, Marketplace, Player Shops, Friends, News, Missions) had been audited for eight passes with nothing on them — they fetch their own data and the audit runs offline, so it was measuring empty states and reporting a clean pass. They are populated now, which found a crash on the mystery-pack pool viewer the first time it was ever opened by a test.',
-    ],
-  },
-  {
-    version: 'The Watch-It-Happen Pass (v19)',
-    date: 'August 2026',
-    items: [
-      'THE OPPONENT’S BLOCKS NOW PLAY OUT INSTEAD OF JUST APPEARING. Declare an attack and its guard lines used to exist the very next instant, reported only as a count ("2 guard line(s)") that named neither the blocker nor what it stopped. Now each one is narrated: the blockers pulse yellow, the attacker they intercept pulses red, and a closing beat tells you exactly how much Might is still coming through — with the opponent’s own Vitality plate lit up, because that is what it is aimed at.',
-      'NEW: ❚❚ HOLD and ▸ STEP, next to ⏱ and SKIP ▸▸. Freeze the opponent’s move on screen for as long as you like, then walk its turn one action at a time. SKIP still fast-forwards the rest.',
-      'FIX: the Battle Log opened on its OLDEST line. It is five lines tall and holds the last 160, so opening it to see what just happened showed you ancient history. It now opens on the newest line — and marks where the opponent’s turn started with a "since your last turn" divider.',
-      'BALANCE: nothing on any card changed, and that is the finding. Sentinel of the Nether Pit’s scheduled nerf — the third in three passes — was measured and reverted like the last one, because the diagnostic finally showed why none of them worked: on randomly built decks Sentinel is a BELOW-average Leader, worst in the whole pool in one cohort. What has been finishing first for four passes was its three hand-built test decks, not the card. The planned Void Mother rework is cancelled on the same evidence. (v20 widened that diagnostic and confirmed it — see above.)',
-      'FIX: the CPU would trade its entire Leader — aura, abilities and all — to finish off a big unit that was already one hit from dying. It no longer does that at all; measured across four deck cohorts, its rate of doing it went to zero with nothing else moving.',
-      'Under the hood: the screen audit only ever clicked one level deep, so nothing behind a click had ever been measured, and the match stress driver always pressed SKIP — meaning the narration everything above is built on was never once tested. Both now go where they were not looking, and three harness bugs that were hiding coverage are fixed.',
     ],
   },
 ];
