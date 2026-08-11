@@ -16,7 +16,7 @@ interactive stress round, a match QoL round, a CPU-visibility/flow audit, and
 the v20 carry-forward balance items. Full numbers:
 `docs/BALANCE_SIM_FINDINGS_v22.md` (supersedes the v20 doc). **0 invariant
 violations across six 5,952-game cohort runs** — the standing four plus two new
-ones; 379 tests (9 new, in one new suite); matches driven end-to-end through the
+ones; 384 tests (14 new, in two new suites); matches driven end-to-end through the
 real match UI; 20 meta screens swept two clicks deep at two widths, two of them
 reachable for the first time.
 
@@ -96,7 +96,56 @@ RULES run on the opponent's behalf:
 - 20 meta screens, two widths, every visible control clicked one at a time and
   then every control those clicks reveal: **0 problems**.
 
+**Gameplay — two controls that were offered and then refused.** Both found by
+the stress driver, and both the same shape: a live, enabled control whose click
+produces a banner and no move. The driver reports that as a HANG because it is
+one — it presses, nothing changes, it presses again — and a player experiences it
+as a board that has stopped responding.
+
+- **A targeted Event with no legal target kept an enabled INVOKE.** `tryInvoke`
+  has always refused it ("no legal target for its effect — invoking now would
+  waste the card", which is the right call: the cost and the card would be spent
+  on an effect resolving into nothing), but `invokeWhy` — the function that
+  exists to answer "why can't this be invoked", and the one the button reads its
+  `disabled` from — never knew about the case. The preview kept quoting a cost
+  for a card that could not be played. Seed 312 spent an entire match pressing
+  it. Units and Items are deliberately still playable there: they keep their
+  body and bond value and only lose the rider.
+- **The Wellspring dots had no `why` gate at all.** They were the last control on
+  the board rendered on a bare "is it my main phase" check, and the engine's gate
+  is strictly narrower: `playWellspring` requires `inOwnMainClear`, which is
+  `inOwnMain` AND AN EMPTY STACK. So with anything waiting to resolve, seven
+  coloured dots stayed live and a click was answered with "One Wellspring per
+  turn, in your own main phase" — a sentence wrong about both halves of why it
+  failed. They now disable and name the real reason. `inMyMain` itself was
+  deliberately NOT changed to match: `invokeWhy` reads it and already handles a
+  non-empty stack with a better message of its own.
+
+Both gates are pinned by `interactive-v22.test.ts` against the engine predicate
+they have to mirror, so the two cannot drift apart again and be rediscovered by
+a hang.
+
+- **FIX: "You must Deal from an empty deck and loses."** — the defeat screen's
+  own sentence, and the only engine line with two verbs in one clause.
+  `humanizeLog`'s table rewrites the verb that follows the subject and nothing
+  after it, and the v18 suite that exists to catch exactly this listed the line
+  but only asserted the absence of `P1` and of a third-person FIRST verb, so it
+  passed straight through for four passes. Found by reading a driven match's
+  game-over line — which was only reachable at all because the same match
+  narrated the Blighted erode that caused the deck-out.
+
 **Harness.**
+
+- **A hang report now names the ladder branch the driver kept taking.** It used
+  to name the buttons on screen and nothing about what the driver was DOING with
+  them, which makes the commonest failure — a branch that fires, changes nothing
+  and restarts the ladder — invisible from the report. Diagnosing the first of
+  the two bugs above cost several full re-runs; the answer was one line of
+  state. Relatedly, the two driver actions that reported success on an element's
+  mere existence (play a Wellspring, press INVOKE) now confirm the board
+  answered — a card that left the hand, a Location that arrived, a target pick
+  that opened. **A driver may only report an action it can see the board
+  answer.**
 
 - **The match driver had been clicking the FIRST Wellspring dot every turn** —
   the same colour for a whole match — since the harness was written.
@@ -123,7 +172,7 @@ finding.** Full numbers in `docs/BALANCE_SIM_FINDINGS_v22.md`.
 - v20 left Mer-King named as the corrected instrument's answer and unspent
   behind a pre-registered condition: first in 3+ cohorts AND a random-arm gap
   under +10 in the cohorts that sample it. Six cohorts (the standing four plus
-  two new) put it **first in all six**, mean 65.6%, 8.4 points clear.
+  two new) put it **first in all six**, mean 65.6%, 9.8 points clear.
 - **The gate cannot be read as written, because the flag it is phrased in terms
   of fires on a quarter of every reading in the table.** 51 gap observations:
   median |gap| 5.0, max 18.6, `>= 10` on 12 of them, six of nine Leaders
@@ -142,7 +191,8 @@ finding.** Full numbers in `docs/BALANCE_SIM_FINDINGS_v22.md`.
   for a Leader the random arm never dealt, which reads as "no flag" rather than
   "not measured" — and cohort D's missing row was Mer-King, the Leader the whole
   table was pointing at. It now prints an explicit `UNSAMPLED` line by name.
-  Three of the six cohorts have one. Same failure shape as v14's "clicked 0
+  Two of the six cohorts have one (D omits Mer-King; F omits Sentinel and
+  Ruin-Walker Overseer). Same failure shape as v14's "clicked 0
   controls" and v20's six empty screens: silence that renders as a clean result.
 - The four standing cohorts reproduce v20 **to the decimal** (P1 44.7 / 46.5 /
   46.3 / 44.7, avg turns 20.3 / 21.6 / 21.8 / 21.1, `invariantCount` 0), and

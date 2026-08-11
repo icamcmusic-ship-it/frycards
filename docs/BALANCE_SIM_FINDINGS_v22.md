@@ -65,8 +65,9 @@ Pinned-suite win rate, one row per cohort (432 games per Leader per cohort,
 | Legendary Diver                | 47.9 | 41.9 | 47.0 | 45.1 | 44.4 | 40.3 | 44.4     |
 | Ruin-Walker Overseer           | 45.1 | 43.3 | 40.7 | 41.2 | 42.1 | 41.7 | 42.4     |
 
-**Mer-King is first in all six**, by 8.4 points on the mean and never by fewer
-than 6.7 in any single cohort. The two new cohorts do not soften it; F is its
+**Mer-King is first in all six**, by 9.8 points on the mean and never by fewer
+than 5.8 in any single cohort (10.6 / 9.1 / 5.8 / 10.0 / 9.5 / 12.0 over whoever
+places second in that cohort). The two new cohorts do not soften it; F is its
 second-best row.
 
 The first half of v20's condition is met, comfortably.
@@ -108,8 +109,11 @@ those two diagnoses were both right. Applying it to this table:
 - **Mer-King is not one-signed** (+3.5 / +11.2 / +12.0 / +9.5 / **−3.3**), and
   its random arm puts it **above 50% in every cohort that samples it** (64.3 /
   52.5 / 53.5 / 56.7 / 70.2, mean 59.4). Both arms say the same thing about it.
-  This is the opposite of the Sentinel shape, where a 60%+ pinned row sat on top
-  of a random arm reading 30.9 / 52.7 / 42.1 / 43.7.
+  This is the opposite of the Sentinel shape v19 flagged, where a 60%+ pinned
+  row sat on top of a random arm well below it in every cohort — Sentinel's
+  random arm still reads 30.9 / 52.7 / 42.1 / 43.7 / 37.2 today, which is what
+  makes its own +4.2 mean gap a fall in the PINNED row rather than a rise in
+  the random one.
 - **Sentinel is no longer one-signed either** (+12.6 / −8.7 / +1.0 / +4.9 /
   +11.2, mean +4.2), which is the v20 recipe fix reproducing on two fresh
   cohorts. Its pinned row also drifts up on the new cohorts (48.4, 50.2) —
@@ -136,7 +140,7 @@ suite that the random arm never dealt:
   Mer-King                     pinned  63.7%   random   —   (n=0)   (UNSAMPLED — this cohort's random decks never rolled this Leader; NOT a zero gap)
 ```
 
-Three of the six cohorts have at least one: **D** omits Mer-King, **F** omits
+Two of the six cohorts have at least one: **D** omits Mer-King, **F** omits
 both Sentinel of the Nether Pit and Ruin-Walker Overseer. Without this line, the
 Leader the whole v20 table was pointing the next lever at simply did not appear
 in cohort D's divergence report — and the Leader §2 now flags is one of the two
@@ -164,7 +168,7 @@ cohorts reproduce v20 to the decimal.
    a lever is not usable.** The condition v20 pre-registered is phrased in terms
    of a threshold that fires on 24% of all readings (§2), so it neither passes
    nor fails informatively. What the data DOES say: both arms agree, the gap is
-   not one-signed, and the pinned lead is 8.4 points on 2,592 games per Leader.
+   not one-signed, and the pinned lead is 9.8 points on 2,592 games per Leader.
    **Condition for next pass, restated in terms the data can answer:** if a
    seventh and eighth cohort keep Mer-King first and its random arm above 50% in
    every cohort that samples it, spend a single price or Resolve lever on its

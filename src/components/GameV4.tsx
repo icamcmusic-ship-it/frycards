@@ -57,6 +57,7 @@ import {
   essenceTotal,
   findUnit,
   hasInstantResponse,
+  STARTING_HAND,
 } from '../game/v3/engine';
 import {
   playTurn,
@@ -1234,7 +1235,15 @@ export function humanizeLog(s: string, cpuLabel: string): string {
     .replace(/\bP2\b/g, cpuLabel);
   // "You cast X on themselves" — the reflexive has to follow the subject.
   const fixed = out.startsWith('You cast ') ? out.replace(/\bthemselves\b/, 'yourself') : out;
-  return fixed.charAt(0).toUpperCase() + fixed.slice(1);
+  // v22 — a COORDINATED second verb in the same clause. The table above fixes
+  // the verb that follows the subject and nothing after it, and the engine has
+  // exactly one line with two: "P1 must Deal from an empty deck and loses",
+  // which came out as "You must Deal from an empty deck and loses". That is
+  // the last sentence a player reads when they deck out, printed on the defeat
+  // screen. The v18 suite listed the line but only asserted the absence of
+  // `P1` and of a third-person FIRST verb, so it passed it straight through.
+  const agreed = fixed.startsWith('You ') ? fixed.replace(/\band loses\b/, 'and lose') : fixed;
+  return agreed.charAt(0).toUpperCase() + agreed.slice(1);
 }
 
 /** A targeting/bonding choice in progress — resolved by clicking a
@@ -1358,6 +1367,24 @@ export function GameV4({
 
   const me = g.players[HUMAN];
   const foe = g.players[CPU];
+
+  /**
+   * The size the CPU mulliganed down to at setup, or null if it kept.
+   *
+   * Read once, from the state initializer's own log: `maybeMulliganPlayer` runs
+   * inside the `useState` above, so this value is fixed for the match and the
+   * hand it describes is long gone by the time anything else reads `foe.hand`.
+   * The line it comes from ("P2 mulligans to 6.") is written before the player
+   * can open the Battle Log and is buried by the first turn.
+   */
+  const [cpuMulliganTo] = useState<number | null>(() => {
+    let to: number | null = null;
+    for (const line of g.log) {
+      const m = /^P2 mulligans to (\d+)\.$/.exec(line);
+      if (m) to = Number(m[1]);
+    }
+    return to;
+  });
 
   const [, setVersion] = useState(0);
   const bump = () => {
@@ -1772,6 +1799,24 @@ export function GameV4({
     if (def.type === 'Item' && me.field.length === 0 && itemSurvives(def.subtype)) {
       return 'Needs a friendly unit to bond to';
     }
+    // v22 — the refusal `tryInvoke` was already making, moved to where the
+    // button reads its `disabled` from.
+    //
+    // A targeted Event with no legal target is not cast: `tryInvoke` says "no
+    // legal target for its effect — invoking now would waste the card" and
+    // returns, which is the right call (the cost and the card are spent for an
+    // effect that resolves into nothing). But `invokeWhy` never knew about it,
+    // so the INVOKE button stayed live, the preview kept quoting a cost, and
+    // clicking it produced a banner and no move. The match driver found it the
+    // way it finds every control that is offered and then refused: it pressed
+    // INVOKE, the board did not change, and it pressed it again for the rest of
+    // the match (seed 312). Units and Items are deliberately NOT covered —
+    // they keep their body and bond value and only lose the rider.
+    if (def.type === 'Event' && needsTarget(def.onInvoke)) {
+      if (targetsFor(g, HUMAN, def.onInvoke!).length === 0) {
+        return 'No legal target — invoking now would waste the card';
+      }
+    }
     return undefined;
   };
 
@@ -1897,7 +1942,43 @@ export function GameV4({
     doInvoke(cardIid, {});
   };
 
+  /** Wellsprings the player may still place this turn (2 on the opening turn
+   * when on the draw — see engine `wellspringAllowance`). */
+  const wellspringsLeft = Math.max(0, wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn);
+
+  /**
+   * Why can't a Wellspring be played right now? (undefined = it can)
+   *
+   * v22. This is the gate every other action on the board has had for passes —
+   * `invokeWhy`, `leaderInvokeWhy`, `abilityWhy` — and the Wellspring row was
+   * the one control still rendered on a bare `inMyMain`. The engine's
+   * `playWellspring` gates on `inOwnMainClear`, which is `inOwnMain` **AND an
+   * empty stack**, and the UI's `inMyMain` has no stack clause: with something
+   * waiting to resolve, the dots stayed live, coloured and clickable, and the
+   * click was answered with "One Wellspring per turn, in your own main phase"
+   * — a sentence that is wrong about both halves of why it failed. The match
+   * driver found it by pressing the dot forever.
+   *
+   * `inMyMain` itself is deliberately NOT changed to match: `invokeWhy` reads
+   * it and already handles a non-empty stack with a better message of its own
+   * ("only Quick Events / Ambush units"), which folding the clause in would
+   * replace with the much worse "invoke during your own main phases".
+   */
+  const wellspringWhy = ((): string | undefined => {
+    if (!inMyMain) return 'Play a Wellspring in your own main phase';
+    if (wellspringsLeft <= 0) return 'One Wellspring per turn';
+    if (g.stack.length > 0) {
+      const top = g.stack[g.stack.length - 1];
+      return `${top ? top.sourceName : 'Something'} is still on the stack — let it resolve first`;
+    }
+    return undefined;
+  })();
+
   const tryWellspring = (type: EssenceType) => {
+    if (wellspringWhy) {
+      say(wellspringWhy);
+      return;
+    }
     if (playWellspring(g, HUMAN, type)) {
       bump();
       say(`${type} Wellspring enters your Location row.`);
@@ -2870,10 +2951,6 @@ export function GameV4({
               : 'main1'
           : stage;
 
-  /** Wellsprings the player may still place this turn (2 on the opening turn
-   * when on the draw — see engine `wellspringAllowance`). */
-  const wellspringsLeft = Math.max(0, wellspringAllowance(g, HUMAN) - me.wellspringsPlayedThisTurn);
-
   /**
    * Per colour, how many cards in hand a Wellspring of that colour would
    * UNLOCK — cards this Location row cannot pay for today and could after.
@@ -2975,18 +3052,24 @@ export function GameV4({
               : ''
           }Play a Wellspring (once per turn), tap Locations for essence — or just INVOKE: the cost auto-taps. ${
             g.phase === 'Main1'
-              ? 'NEXT moves to the Clash.'
+              ? // Named as the button is LABELLED (v22). The hint bar said
+                // "NEXT" in three places and the phase button never reads NEXT
+                // in any state a player can see it — `phaseButtonLabel` only
+                // returns 'NEXT ▸' for Dawn and Dusk, and `showPhaseButton`
+                // hides it in both. The one string the help text repeated was
+                // the one string not on the board.
+                'TO CLASH ▸ moves to the Clash.'
               : me.hand.length > MAX_HAND
                 ? // The button already reads END TURN (shed N) — the hint used
                   // to promise a plain "NEXT ends your turn" and then open a
                   // full-screen picker instead.
                   `END TURN asks you to shed ${me.hand.length - MAX_HAND} down to the ${MAX_HAND}-card limit first.`
-                : 'END TURN ends your turn.'
+                : 'END TURN ▸ ends your turn.'
           }`;
         case 'Clash':
           return myAttackers.length === 0
-            ? 'No ready attackers — NEXT to skip to Main II.'
-            : 'Click your ready units to add them to the attack, then DECLARE ATTACK (or NEXT to skip).';
+            ? 'No ready attackers — SKIP TO MAIN II ▸.'
+            : 'Click your ready units to add them to the attack, then DECLARE ATTACK (or SKIP TO MAIN II ▸).';
         default:
           return null;
       }
@@ -3633,25 +3716,32 @@ export function GameV4({
                 <button
                   key={t}
                   onClick={() => tryWellspring(t)}
+                  // Disabled rather than live-and-refusing: see `wellspringWhy`.
+                  disabled={!!wellspringWhy}
                   title={
+                    wellspringWhy ??
                     (need > 0
                       ? `Unlocks ${need} card${need === 1 ? '' : 's'} in your hand. `
                       : `Unlocks nothing in hand right now. `) +
-                    (wellspringsLeft > 1
-                      ? `${wellspringsLeft} Wellsprings left this turn (you are on the draw; the second arrives exhausted).`
-                      : `Play a ${t} Wellspring (free).`)
+                      (wellspringsLeft > 1
+                        ? `${wellspringsLeft} Wellsprings left this turn (you are on the draw; the second arrives exhausted).`
+                        : `Play a ${t} Wellspring (free).`)
                   }
                   aria-label={
-                    need > 0
-                      ? `Play a ${t} Wellspring — unlocks ${need} card${need === 1 ? '' : 's'} in hand`
-                      : `Play a ${t} Wellspring`
+                    wellspringWhy
+                      ? `Play a ${t} Wellspring — unavailable: ${wellspringWhy}`
+                      : need > 0
+                        ? `Play a ${t} Wellspring — unlocks ${need} card${need === 1 ? '' : 's'} in hand`
+                        : `Play a ${t} Wellspring`
                   }
                   // tap-44: these are 16px dots in a dense lane, which is under
                   // any usable touch target. The class widens the HIT area with
                   // a pseudo-element and leaves the layout alone.
                   className={cn(
-                    'tap-44 btn-pop flex items-center justify-center rounded-full font-mono font-black border border-white/70',
-                    need > 0 &&
+                    'tap-44 flex items-center justify-center rounded-full font-mono font-black border border-white/70',
+                    wellspringWhy ? 'opacity-40 cursor-not-allowed' : 'btn-pop',
+                    !wellspringWhy &&
+                      need > 0 &&
                       'ring-2 ring-[var(--c-yellow)] ring-offset-1 ring-offset-[var(--c-ink)]',
                   )}
                   style={{
@@ -4156,6 +4246,19 @@ export function GameV4({
               Opening hand — {playerName}
               {mulliganCount > 0 ? ` · mulligan ×${mulliganCount}` : ''}
             </div>
+            {/* v22 — the opponent's mulligan. It runs inside the setup that
+                builds this screen (`maybeMulliganPlayer` at createGame), writes
+                its line to a Battle Log the player cannot open yet, and is then
+                buried by everything the first turn writes. It is also real
+                information: a Leader that shipped its hand back is down a card
+                before either player has moved, which is the first thing a
+                human opponent would have told you. */}
+            {cpuMulliganTo !== null && (
+              <div className="text-[11px] font-bold text-[var(--c-red)] mb-1">
+                ↻ {cpuLabel} mulliganed — it opens on {cpuMulliganTo} card
+                {cpuMulliganTo === 1 ? '' : 's'}, not {STARTING_HAND}.
+              </div>
+            )}
             <div className="text-[11px] font-bold text-[var(--c-steel)] max-w-xl mx-auto mb-3 sm:mb-4 leading-snug">
               {`A mulligan shuffles these ${me.hand.length} cards back into your deck and draws ${Math.max(0, me.hand.length - 1)} fresh ones — one FEWER each time (rulebook §3). ${isNarrow ? 'Tap' : 'Click'} any card to zoom in.`}
             </div>

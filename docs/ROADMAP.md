@@ -187,7 +187,7 @@ Everything here has a started implementation and a visible seam.
 
   v20's gate was "first in 3+ cohorts AND a random-arm gap under +10 in the
   cohorts that sample it". Mer-King is now first in **six of six** (mean 65.6%,
-  8.4 clear) — but the `|gap| >= 10` half cannot decide anything, because
+  9.8 clear) — but the `|gap| >= 10` half cannot decide anything, because
   across 51 gap observations that flag **fires on 24% of them**: median |gap|
   5.0, max 18.6, six of nine Leaders tripping it at least once. It sits at the
   ~76th percentile of its own distribution. **Retired as a gate; it stays in the
