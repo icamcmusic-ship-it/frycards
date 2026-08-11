@@ -75,7 +75,11 @@ const profile: Profile = {
   role: 'player',
   credits: 12_500,
   vouchers: 6,
-  xp: 4200,
+  // xp must sit INSIDE level 12's band (xpForLevel(12)=6600 … xpForLevel(13)=7800)
+  // or every level readout in the harness measures an impossible state. The
+  // old pair (4200 at level 12) was 2,400 XP short of its own level and printed
+  // `-2400/1200 XP TO LEVEL 13` on Profile and the Main Menu.
+  xp: 7000,
   level: 12,
   wins: 31,
   losses: 19,

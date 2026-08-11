@@ -289,6 +289,50 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
 }
 
 /**
+ * Play the Wellspring the HAND is asking for, falling back to any of them.
+ *
+ * v22 — the driver used to click `button[aria-label^="Play a "]`, which is the
+ * FIRST dot in the row, which is the same colour every turn for a whole match.
+ * A random deck is two or three colours, so roughly every other match the
+ * driver spent nine turns building a mono-colour board in front of a hand it
+ * could not cast: instrumenting one run showed the human invoking ONE card
+ * across the whole game, every other hand card reporting "Needs Void essence
+ * your Locations can't produce yet", and the match ending in a turn-7 defeat.
+ *
+ * That is why every driven match since the harness was written has ended
+ * between turn 6 and turn 10 against a headless average of 21, and it is why
+ * v20's "the driver was passing its turns" fix (scan the hand instead of
+ * trying one card) did not move the number: the hand was not the problem, the
+ * mana base was. Everything a real match reaches after turn 10 — a board wide
+ * enough to need multi-guard lines, a hand over the shed limit, the long
+ * response chains — has therefore never been driven.
+ *
+ * The match UI now rings the needed dot and names the colour in its aria-label
+ * (same pass), so the driver reads the same signal a player does rather than a
+ * private hook.
+ */
+async function playWellspring(page: Page): Promise<boolean> {
+  return evalSafe(
+    page,
+    `(() => {
+      var els = Array.prototype.slice.call(document.querySelectorAll('button[aria-label^="Play a "]'));
+      if (els.length === 0) return false;
+      // "Play a Void Wellspring — unlocks 3 cards in hand" — the count is the
+      // number of hand cards that colour would turn on.
+      var best = null, bestN = -1;
+      for (var i = 0; i < els.length; i++) {
+        var m = /unlocks (\\d+) card/.exec(els[i].getAttribute('aria-label') || '');
+        var n = m ? Number(m[1]) : 0;
+        if (n > bestN) { bestN = n; best = els[i]; }
+      }
+      (best || els[0]).click();
+      return true;
+    })()`,
+    false,
+  );
+}
+
+/**
  * v20 — what the driver does with the opponent's turn.
  *
  * v19 replaced "always SKIP" with "half the matches watch", on the reasoning
@@ -656,7 +700,7 @@ async function driveMatch(
     // purely random driver skipped all three often enough to lose every match
     // by turn 6 without ever reaching a big board.
     if (await clickText(page, 'INVOKE LEADER')) continue;
-    if (await clickSelector(page, 'button[aria-label^="Play a "]')) continue;
+    if (await playWellspring(page)) continue;
     // `scan`: keep going through the hand rather than passing the turn on one
     // uncastable card — see tryInvokeHand.
     if (b.handCards > 0 && (await tryInvokeHand(page, Math.floor(rand() * b.handCards), true)))
