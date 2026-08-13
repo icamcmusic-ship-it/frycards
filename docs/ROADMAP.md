@@ -61,9 +61,9 @@ Everything here has a started implementation and a visible seam.
     the reprice shipped, while v18 and v19 both carried "no shipped change
     touches a `cards` column" as the reason not to worry. One drift in 297
     cards, invisible in the game and wrong in every server-side price.
-    **The write is still outstanding two passes later** — see
-    `docs/BALANCE_SIM_FINDINGS_v22.md` carry-forward #4 for the one-line
-    statement.
+    **Closed in v23**: the live row is corrected and `verify:pool` passes with
+    full parity against a fresh 297-row snapshot — see
+    `docs/BALANCE_SIM_FINDINGS_v23.md` "Closed this pass".
 
 - **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
@@ -159,10 +159,13 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v22.md` carry-forward. **v19 froze the
+  list is `docs/BALANCE_SIM_FINDINGS_v23.md` carry-forward. **v19 froze the
   per-Leader levers pending a widened instrument; v20 widened it; v22 measured
   the caution flag those readings were being filtered through and retired it as
-  a gate. Both results are the most important thing on this page.**
+  a gate; v23 met Mer-King's restated condition on eight cohorts (the lever is
+  authorized for the next no-content pass, and ONLY there) and closed the
+  Ruin-Walker divergence as a persistent lemon deck in the instrument, not a
+  weak kit. Those results are the most important thing on this page.**
 
   The pinned Leader suite gave each Leader three decks — and all three were the
   SAME RECIPE with different jitter seeds. `randomArchetype` varies four things
@@ -383,19 +386,26 @@ Ordered by how much they change what it feels like to own and play the game.
   is in `docs/PVP_DESIGN.md`. Real blocker is that `engine.ts` is a
   client-side pure reducer with no notion of hidden information across a wire.
   Match history and replays are the honest first step toward it.
-- **Leader keywords.** Leaders have three (Commander, Resolute, Warlord) where
-  every other type now has six or seven. `roll(seed, 'ldr-kw6', 6)` has no free
-  band, so any addition re-rolls all nine existing Leaders and invalidates every
-  per-Leader adjustment in `cardpool.ts` at a stroke — the same trap the v7.3
-  colour-pair note and the v7.5 `V75_KEYWORDS` split both record. Needs the roll
-  restructured onto its own band first, then a balance pass.
+- **Leader keywords.** Leaders have three printed keywords (Commander,
+  Resolute, Warlord) where every other type now has six or seven. The v7.8
+  restructure froze the 'ldr-kw6' path and gave future generations their own
+  band (`LEADER_NEXT_KEYWORDS` / 'ldr-kw-next'), and **v23 implemented the
+  generation**: Onslaught (Ember), Beacon (Light), Dread (Void), engine-tested
+  (`keywords-v23-leaders.test.ts`) and listed in `UNPRINTED_KEYWORDS` — in the
+  registry, absent from the pool and the player-facing glossary. What remains
+  is the PRINT, and it is a content decision with a known shape: the
+  'ldr-kw-next' band only reaches keyword-less Leaders, which today is exactly
+  Sentinel of the Nether Pit (→ Onslaught, on-colour); Beacon/Dread need a
+  per-Leader grant. A measured two-cohort preview of that print — all three
+  playable, none degenerate — is in `docs/BALANCE_SIM_FINDINGS_v23.md` §5.
+  Do not interleave the print with a balance lever.
 - ~~Raise the Unit cost ceiling for keyword surcharges~~ — **shipped in v16**
   (surcharge charges in full above the base cap, ceiling 9), together with the
   v9 "Unbreakable's save heals marked damage" item: the save now leaves the
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v22.md` (each pass's doc supersedes and deletes the last).
+  `docs/BALANCE_SIM_FINDINGS_v23.md` (each pass's doc supersedes and deletes the last).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
   v7.8 (random table demoted to a deck-composition diagnostic), extended in
   v16 and finally made honest in **v20**, where the three "pinned decks" turned

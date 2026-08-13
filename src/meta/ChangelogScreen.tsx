@@ -18,6 +18,21 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Every-Button-Tells-The-Truth Pass (v23)',
+    date: 'August 2026',
+    items: [
+      'EVERY CONTROL ON THE BOARD NOW TELLS THE TRUTH. Three controls could still offer a move the rules were going to refuse: ⚜ INVOKE LEADER stayed lit with a card waiting to resolve — and clicking it exhausted your Locations for a cost that was never going to be paid; a Leader ability could walk you through a whole target pick before bouncing with "Illegal target"; and 💠 RE-BOND had no disabled state at all. All three now grey out and name the actual reason, the same treatment every other control got over the last two passes. Four controls could also still be pressed into the MIDDLE of the opponent’s narrated turn; they wait now.',
+      'THE CARD YOU ARE ASKED TO ANSWER IS NOW SHOWN TO YOU. When the opponent’s play opened your response window — the one moment the game stops and waits for you — that exact play was the one with no card spotlight and no rings, just a log line and a PASS button. It gets the full treatment now.',
+      'NOTHING CHANGES THE BOARD IN SILENCE ANY MORE. A Sanctum’s "At Dusk" trigger could damage your unit or eat your deck with no line anywhere; Wildfire took 2 Vitality with only "…was shattered." to explain it; Siphon raised the opponent’s life "from nowhere" mid-clash. All three now write a line — which means they get narrated, ringed and floated like everything else.',
+      'YOUR OWN DAWN IS YOURS AGAIN. It resolves at the tail of the opponent’s turn, so "You draw a card at Dawn" was playing in the red "opponent is acting" bubble. Those beats now show in your yellow, labelled ☀ YOUR DAWN.',
+      'FIX: messages stopped covering each other. "Bond set — now pick a target for its effect." was painted UNDERNEATH the red targeting bar it explains; on a phone that bar could also push its own ✕ cancel off the screen edge. The narration bubble, targeting bar and message banner now stack in one column that fits the screen.',
+      'FIX: five shop/collection bugs — the Bounties SELL button could offer a sale the server would refuse when your last spare copy was deck-locked AND Serialized; the Marketplace bid dialog kept quoting a stale price after a rival bid (and stayed pressable after a buyout); ✦ VIEW FOIL flipped the card but not the market value beside it; the pack summary’s HAUL VALUE ignored the cards you just quicksold from that very screen; and a pack priced at 0 vouchers would have rendered a free buy button.',
+      'QOL: the ash-pile opens as a bottom sheet on phones instead of covering the whole board; a held narration says ❚❚ HELD on the bubble itself; the CPU crashing mid-turn now hands you a real turn instead of a board where only one button works.',
+      'NEW (under the hood): three LEADER keywords exist in the engine — Onslaught (Ember: your attackers hit +1 harder), Beacon (Light: your Leader restores 1 Vitality at Dawn), Dread (Void: enemy units get −1 Might). NO card carries them yet: they are implemented, tested and priced so a future set can print them deliberately instead of ad hoc. A measured preview of that print is in the findings doc.',
+      'BALANCE: no card changed, fourth pass running, and both open Leader questions are ANSWERED. Mer-King: first in all EIGHT cohorts with both measuring arms agreeing — the adjustment is now formally authorized for a dedicated balance pass. Ruin-Walker Overseer: NOT weak after all — one of its nine fixed test decks turns out to be a permanent dud (15.6% across every cohort) dragging its average; without it the kit is mid-field. Six of nine Leaders carry at least one such dud deck, and the test harness now flags them automatically. Full numbers in docs/BALANCE_SIM_FINDINGS_v23.md.',
+    ],
+  },
+  {
     version: 'The Dawn-and-Dusk Pass (v22)',
     date: 'August 2026',
     items: [
@@ -32,20 +47,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'FIX: the XP readout could print a negative number ("-2400/1200 XP TO LEVEL 13"). The bar beside it has been clamped for several passes; the text never was.',
       'BALANCE: no card changed, for the third pass running, and this time the diagnostic is the finding. Six deck cohorts (up from the standing four) put Mer-King first in ALL SIX and show its two measuring arms AGREEING for the first time — so it is not the measurement artefact Sentinel of the Nether Pit turned out to be. The caution flag those passes were read through fires on a quarter of all readings, which makes it no kind of filter; the one Leader that trips the signature it was actually built to detect is Ruin-Walker Overseer, which the test suite appears to be UNDER-rating. Full numbers in docs/BALANCE_SIM_FINDINGS_v22.md.',
       'Under the hood: the match stress driver had been clicking the first Wellspring dot every turn for its whole existence — the same colour for a whole match — so it spent most games building the wrong essence in front of a hand it could not cast, and every driven match since the harness was written ended around turn 7 against a headless average of 21. It also now re-bonds Items and presses ✕ CLEAR, and the screen audit finally measures the pack-opening reveal and summary, which it had been reporting as "one control" (the tear button).',
-    ],
-  },
-  {
-    version: 'The Nothing-Happens-In-Silence Pass (v20)',
-    date: 'August 2026',
-    items: [
-      'THE OPPONENT’S ANSWERS NOW PLAY OUT TOO. Play a card and the CPU could counter it, shatter the unit you aimed at, or answer with a Quick Event of its own — and all of that arrived as one banner over a board that had already changed. Its response window is now narrated beat by beat like everything else it does: the card it played is held up in the middle of the board, and the unit it is aimed at pulses red. That was the last place the opponent still acted invisibly.',
-      'When the opponent declares an attack, YOUR Vitality plate now lights up with it — the attackers already leaned across the line, but nothing said where they were pointed. Its blocking decision also gets a beat of its own ("choosing its guards…") before the guard lines land, so the answer reads as a reply to your attack rather than part of your own click.',
-      'FIX: SKIP ▸▸ no longer leaves ❚❚ HOLD switched on. A turn is narrated as several runs back to back, so holding once and then pressing SKIP fast-forwarded the current run and froze on the next one — you had to press SKIP again for every remaining piece of the turn.',
-      'FIX: starting a new card while you were already picking a target silently threw the first pick away — same red bar, different rings, no word about it. The hand now says "finish the current pick first (✕ or Esc to cancel it)".',
-      'NEW: ✕ CLEAR next to DECLARE ATTACK and CONFIRM GUARDS. Escape has always cleared a selection; there was no visible way to do it, which matters most right after ✦ SUGGEST fills every guard line at once.',
-      'FIX: the hint bar was clipped to a single line, so on a phone the guard hint lost the one number it exists to deliver — how much Vitality is about to hit you. It now runs to two lines.',
-      'BALANCE: no card changed, and for the second pass running that IS the finding. v19 discovered the Leader table had been ranking three hand-built decks instead of the cards; this pass widened it from 3 decks to 9 REAL ones and re-measured. Sentinel of the Nether Pit — first in all four cohorts for four passes, and nerfed three times for it — drops to 43.5% and lands near the BOTTOM. Void Mother, the one scheduled for a rework, comes off the floor. Full numbers in docs/BALANCE_SIM_FINDINGS_v20.md.',
-      'Under the hood: six meta screens (Battle Pass, Marketplace, Player Shops, Friends, News, Missions) had been audited for eight passes with nothing on them — they fetch their own data and the audit runs offline, so it was measuring empty states and reporting a clean pass. They are populated now, which found a crash on the mystery-pack pool viewer the first time it was ever opened by a test.',
     ],
   },
 ];

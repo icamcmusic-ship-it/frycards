@@ -163,7 +163,32 @@ measured, and reverted; nothing of it ships.
 
 ## 5. The print experiment (reverted — recorded for the next content pass)
 
-_Filled in at the end of the pass — see CHANGELOG v23 for the shipped list._
+Cohorts A and B were re-run once with the print switched on temporarily:
+`LEADER_NEXT_KEYWORDS` filled (which gave Sentinel of the Nether Pit
+**Onslaught**, on-colour, +1 invoke cost via the surcharge), plus scratch
+grants of **Beacon** to Ethereal Sea Witch (cost unchanged — the +1 weight
+rounds away next to Resolute's) and **Dread** to Void Mother (+2 cost).
+Both runs: 0 invariants, headline outcomes inside the standing spread
+(P1 45.2 / 46.7, turns 20.5 / 21.8). Pinned rows, baseline → experiment:
+
+| Leader (keyword gained)        | A base → exp | B base → exp |
+| ------------------------------ | ------------ | ------------ |
+| Sentinel + Onslaught (+1 cost) | 43.5 → 45.4  | 44.0 → 49.1  |
+| Ethereal + Beacon (±0 cost)    | 53.7 → 58.3  | 54.6 → 56.5  |
+| Void Mother + Dread (+2 cost)  | 47.5 → 48.8  | 43.8 → 43.5  |
+| Mer-King (control, unchanged)  | 67.8 → 65.7  | 63.7 → 64.4  |
+
+Reading, with the usual single-carrier caveat (a Leader-carried keyword's
+number is confounded with its Leader's whole cohort, and two cohorts is a
+direction, not a measurement): **all three keywords are playable and none is
+degenerate.** Onslaught lifts Sentinel in both cohorts even after paying a
+point of cost; Beacon reads +2 to +5 on Ethereal at no cost, which makes its
+weight-1 (rounds-to-nothing beside Resolute) the number to watch if it ever
+prints on a Resolute Leader; Dread is roughly cost-neutral at +2 — the aura
+pays its own surcharge and no more. Mer-King stays first in both runs, so no
+print here rescues or worsens the §1 story. **Everything in this section was
+then reverted**; the shipped pool is byte-identical (header). The next
+content pass can start from these numbers instead of from zero.
 
 ## Carry-forward items
 

@@ -3349,6 +3349,14 @@ export function GameV4({
         >
           {cpuBeat ? (
             <>
+              {/* The bubble itself says HELD: the RESUME/STEP buttons live on
+                  the divider, and a fresh segment parking on its beat 0 under
+                  a hold read as a stuck board to anyone not looking there. */}
+              {cpuPaused && (
+                <span className="mr-1 text-[8px] font-black bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm">
+                  ❚❚ HELD
+                </span>
+              )}
               {cpuFocus?.mine && <span className="mr-1 text-[8px] font-black">☀ YOUR DAWN —</span>}
               {renderKeywordText(cpuBeat.text)}
               <span className="ml-2 text-[8px] font-mono opacity-80">
@@ -4250,7 +4258,11 @@ export function GameV4({
 
       {/* Ash-pile drawer */}
       {showAsh && (
-        <div className="absolute right-2 left-2 sm:left-auto top-16 bottom-24 w-auto sm:w-[260px] max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
+        // Phone: a bottom SHEET (top-auto + max-h) that leaves the upper
+        // board readable, instead of the old top-16/bottom-24 overlay that
+        // covered everything including the hand dock. Desktop keeps the
+        // fixed right-hand column.
+        <div className="absolute right-2 left-2 sm:left-auto top-auto sm:top-16 bottom-24 max-h-[52vh] sm:max-h-none w-auto sm:w-[260px] max-w-none sm:max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
           {(() => {
             const owner = showAsh === 'foe' ? foe : me;
             const label = showAsh === 'foe' ? `${cpuLabel.toUpperCase()} ASH-PILE` : 'ASH-PILE';

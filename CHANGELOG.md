@@ -9,6 +9,137 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v23.0 — The pass where the one-signed Leader turned out to be one deck, the gates finally all told the truth, and the Leader keyword generation arrived unprinted
+
+Six-part pass in the order the brief asked for: a non-gameplay bug hunt, an
+interactive stress round, a match QoL round, a CPU-visibility audit, the v22
+carry-forward balance items on eight cohorts, and a new-keyword round. Full
+numbers: `docs/BALANCE_SIM_FINDINGS_v23.md` (supersedes the v22 doc). **0
+invariant violations across ten 5,952-game cohort runs** (the standing six +
+two fresh + two experimental); 394 tests (9 new — the Leader-keyword suite
+and a two-way dead-text guard); the meta-screen sweep clean at both widths
+and the match driver clean over six full matches on the fixed build.
+
+**Gameplay — the last three controls whose click the engine would refuse.**
+v22 closed this seam for the Wellspring dots and INVOKE on targeted Events;
+this pass audited every remaining control against the engine function it
+fronts and found three more, all the same shape — a UI gate reading
+`inMyMain` where the engine reads `inOwnMainClear` (main phase AND an empty
+stack):
+
+- **⚜ INVOKE LEADER** stayed enabled with something on the stack — and its
+  click auto-tapped Locations for a cost `canInvokeLeader` was always going
+  to refuse, leaving them exhausted for nothing. The gate now names the
+  stack item; the refusal path re-renders so a tapped board never lingers.
+- **Leader ability pills** walked the player through a whole target pick
+  before the engine's `inOwnMainClear` check bounced it as "Illegal target."
+  `leaderAbilityWhy` gained the stack clause.
+- **💠 RE-BOND had no gate at all** — a bare `inMyMain` check inside the
+  click handler and no `disabled` on the button. It now has a `rebondWhy`
+  like every other control, with the reason on the button.
+- The same audit found four controls that ignored `narrating` and could act
+  into the middle of the opponent's replay (Wellspring dots, INVOKE LEADER,
+  ability pills, RE-BOND). All four now disable with "SKIP ▸▸ to catch up".
+
+**CPU visibility — the two remaining silences.**
+
+- **The play that pauses the game for your response was the one play with no
+  spotlight.** The AI emits an `invoke` event for every card it plays — but
+  it emitted it AFTER `settleAfterPlay`, which exits by THROWING when the
+  play leaves the human holding priority. So exactly the plays the player is
+  asked to answer arrived as a bare log line with no card face and no rings,
+  followed by a PASS window over a card they were never shown. The event now
+  fires before the throw.
+- **Triggers, Wildfire and Siphon wrote nothing to the log.** A resolving
+  trigger's SUCCESS path had no line (only its fizzle did), so an "At Dusk"
+  Sanctum could damage a unit or erode the deck and the board simply changed
+  between beats. Wildfire's parting shot took 2 Vitality with only "X was
+  shattered." on the record; Siphon raised the opponent's Vitality
+  "from nowhere" mid-clash. All three now log — and therefore narrate, ring
+  and float like every other CPU action. Verified sim-neutral: cohort A
+  re-run is byte-identical.
+- **Your own Dawn no longer narrates as the opponent's.** It runs inside the
+  endPhase that ends the CPU's turn, so its lines ride the CPU's narrated
+  slice — and played in the red "opponent is acting" bubble. Those beats are
+  now tagged and render in the player's yellow under a **☀ YOUR DAWN** label.
+- **A CPU crash mid-turn no longer strands the board.** The recovery paths
+  parked the UI in the player's stage while `g.active` was still CPU — every
+  control dead except the phase button, which then drove the OPPONENT's
+  phases. Recovery now cranks the engine forward to the player's own turn.
+
+**Match QoL.**
+
+- **The three top-of-board messages stopped fighting.** The narration
+  bubble, the PICK A TARGET bar and the yellow `say()` banner all lived at
+  the same spot with the same z-index, so DOM order decided which painted —
+  "Bond set — now pick a target for its effect." rendered UNDERNEATH the
+  very bar it explains. They now stack in one column, which also caps the
+  target bar's width on a phone (its ✕ cancel could previously be pushed
+  off the right edge of a 390px screen, with no Escape on touch).
+- **❚❚ HELD shows on the bubble itself** — a held narration parking on a new
+  segment's first beat read as a stuck board unless you were looking at the
+  divider buttons.
+- **The ash-pile is a bottom sheet on phones** instead of an overlay that
+  covered the whole board including the hand dock.
+- The Wellspring "already played" message knows about the two-Wellspring
+  opening-turn allowance instead of always saying "One Wellspring per turn."
+
+**Non-gameplay bug hunt.** The depth-two screen sweep (both widths, ~250
+control clicks): **0 problems**. Code review found five real ones, all fixed:
+
+- **FIX: the Bounties SELL gate checked deck locks and Serialized reserves
+  against the same copies** — own 2 copies of a bountied card with one in a
+  deck and one Serialized and SELL rendered enabled, then bounced off the
+  server. The two reservations now ADD, as every other sell surface counts
+  them.
+- **FIX: the Marketplace bid modal froze its listing at open.** The realtime
+  reload refreshed the rows behind it, but the modal kept quoting the old
+  current bid — a rival bid left PLACE BID enabled against a number
+  `place_bid` was always going to refuse, and a buyout/expiry left it live
+  against a dead listing. The modal now re-derives the live row every
+  render, raises the pre-filled amount with a rival bid, and says plainly
+  when the listing has ended.
+- **FIX: ✦ VIEW FOIL changed the picture and nothing else** — the Collection
+  inspector's market-value panel kept describing the variant you clicked,
+  not the one on screen. The toggle now reports back.
+- **FIX: HAUL VALUE ignored QUICKSELL** — the pack summary's "what you kept"
+  tile kept quoting the pre-sale number after the same screen stamped 30
+  cards SOLD. It now excludes them.
+- **FIX: a `pack_types` row with `price_vouchers = 0` rendered a free
+  "0 VOUCHERS" buy button** — the cosmetics grid and ProfileScreen document
+  0 as "not voucher-purchasable"; the two pack paths now agree. (Latent — no
+  live row carries 0 today.)
+- One suspected bug was disproven against the live server: Player Shops'
+  `top_rarity_tier` badge is correct — the server's `rarity_tier()` is
+  1-indexed and the client's `- 1` is the right conversion.
+
+**Keywords — the Leader generation, implemented and deliberately unprinted.**
+Leaders carry three keywords where every other type has six or seven (the
+standing roadmap item). This pass ships the engine half: **Onslaught**
+(Ember — your units get +1 Might while attacking), **Beacon** (Light — your
+invoked Leader restores 1 Vitality at Dawn), **Dread** (Void — enemy units
+get −1 Might while your Leader is fielded), with eight pinned tests, registry
+entries and by-analogy weights. **No card prints them**: `UNPRINTED_KEYWORDS`
+names the three, the catalog's dead-text guard exempts exactly that list (and
+fails the moment one prints while still listed), How to Play skips them, and
+`verify:pool` confirms the pool byte-identical. A measured two-cohort preview
+of the print — all three playable, none degenerate — is recorded in the
+findings doc §5 and was reverted.
+
+**Balance (nothing shipped — deliberate, fourth pass running).** Eight
+cohorts, all standing six byte-identical to v22. **Mer-King's restated
+condition is MET** — first in all eight, random arm above 50% everywhere it
+is sampled — and the lever is authorized for the next pass that contains
+nothing else, per the condition's own wording. **Ruin-Walker Overseer is
+closed as instrument, not card**: its one-signed divergence traces to pinned
+deck #1, a persistent 15.6% lemon (12.5–18.8 across all eight cohorts) whose
+recipe drafts the Root/Void pool's understatted keyword carriers; without it
+the kit reads 46.0%, mid-field. Six of nine Leaders carry at least one such
+lemon deck — `scripts/aggregate-cohorts.ts` now computes the cross-run sign
+table and flags them, closing the "assembled by hand" item. The two-pass-old
+Sovereign of the Dying Star `cards` row is verified synced, with full
+pool parity against a fresh snapshot.
+
 ### v22.0 — The pass where the opponent's Dawn and Dusk stopped happening in silence, and the caution flag four passes were read through got measured
 
 Five-part pass in the order the brief asked for: a non-gameplay bug hunt, an
