@@ -3343,6 +3343,25 @@ const divergence = Object.values(report.randomDeckLeaderDiagnostic)
   })
   .filter((x): x is NonNullable<typeof x> => x !== null)
   .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+/**
+ * Leaders the random arm never dealt into this cohort at all (v22 — v20
+ * carry-forward #5).
+ *
+ * `randomArchetype` picks a Leader per deck from `DECK_SEED`'s stream, so a
+ * 32-deck cohort can simply miss one; cohort D missed Mer-King, which is the
+ * Leader the whole v20 table was pointing the next lever at. The report is
+ * keyed on the random arm, so a missing Leader produced no row — and a Leader
+ * with no row reads exactly like a Leader with no flag. That is the failure
+ * mode this harness has hit twice now in other guises (v14's "clicked 0
+ * controls", v20's six empty screens): silence that looks like a clean result.
+ *
+ * Printed by name and not merely counted: the next pass's decision rule is
+ * per-Leader ("gap under +10 in the cohorts that sample it"), so which ones
+ * were unsampled is the whole content of the caveat.
+ */
+const unsampledLeaders = report.leaderPairSuiteSummary
+  .map((l) => String(l.name))
+  .filter((name) => !divergence.some((d) => d.name === name));
 console.log(
   `\nPinned-vs-random divergence (v19) — |gap| >= 10 means the pinned row is largely a statement\nabout that Leader’s ${LEADER_PAIR_DECKS} pinned decks, not its kit. Not a balance number; a caution flag.\nv20 widened the suite to ${LEADER_PAIR_DECKS} recipes; a gap that SHRANK against the v19 table was a\nrecipe artefact, and one that held is a genuine disagreement between the arms:`,
 );
@@ -3350,6 +3369,12 @@ for (const d of divergence)
   console.log(
     `  ${d.name.padEnd(28)} pinned ${String(d.pinnedPct).padStart(5)}%   random ${String(d.randomPct).padStart(5)}% (n=${d.randomGames})   gap ${d.gap > 0 ? '+' : ''}${d.gap}${Math.abs(d.gap) >= 10 ? '   ⚑' : ''}`,
   );
+for (const name of unsampledLeaders) {
+  const pinned = pinnedByName.get(name);
+  console.log(
+    `  ${name.padEnd(28)} pinned ${String(pinned ? pinned.winPct : '?').padStart(5)}%   random   —   (n=0)   (UNSAMPLED — this cohort's random decks never rolled this Leader; NOT a zero gap)`,
+  );
+}
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
 console.log('\nCost bands:', JSON.stringify(report.costBands, null, 2));

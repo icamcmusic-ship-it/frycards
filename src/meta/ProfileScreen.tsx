@@ -12,7 +12,7 @@ import {
   PlayerRole,
   ShopItem,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, ProgressBar, xpForLevel } from './ui';
+import { MetaHeader, PopButton, Notice, ProgressBar, levelProgress } from './ui';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
 import { POOL_V4 } from '../game/v3/cardpool';
@@ -112,6 +112,9 @@ export function ProfileScreen({
   const avatar = shopItems.find((s) => s.id === profile.equipped_avatar);
   const winRate =
     profile.games_played > 0 ? Math.round((profile.wins / profile.games_played) * 100) : 0;
+  // Clamped: see `levelProgress`. The raw subtraction printed a negative
+  // numerator whenever the server's level/xp pair ran ahead of this mirror.
+  const levelXp = levelProgress(profile.level, profile.xp);
 
   const sections: { type: ShopItem['item_type']; label: string; equipped: string | null }[] = [
     { type: 'card_back', label: 'CARD BACKS', equipped: profile.equipped_card_back },
@@ -215,14 +218,13 @@ export function ProfileScreen({
           <div className="flex justify-between text-[10px] font-black mb-1">
             <span>LEVEL {profile.level}</span>
             <span className="font-mono">
-              {profile.xp - xpForLevel(profile.level)}/
-              {xpForLevel(profile.level + 1) - xpForLevel(profile.level)} XP TO LEVEL{' '}
-              {profile.level + 1}
+              {levelXp.into}/{levelXp.band} XP TO LEVEL {profile.level + 1}
             </span>
           </div>
           <ProgressBar
-            value={profile.xp - xpForLevel(profile.level)}
-            max={xpForLevel(profile.level + 1) - xpForLevel(profile.level)}
+            value={levelXp.into}
+            max={levelXp.band}
+            ariaLabel={`XP toward level ${profile.level + 1}`}
           />
           <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
             Earn XP from every match (+60 win / +25 loss). Each level pays a credits bonus; every

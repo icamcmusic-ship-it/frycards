@@ -282,10 +282,87 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
       })()`,
       false,
     );
-    if (invoked) return true;
+    // v22 — pressing an enabled INVOKE is not the same as invoking. A refusal
+    // that only prints a banner leaves the hand exactly as it was, and the
+    // caller treats `true` as "progress was made, restart the ladder": that is
+    // an infinite loop, and it is what seed 312 spent a whole match doing
+    // against a targeted Event with no legal target. The UI now disables that
+    // button, so this is the belt to that braces — the rule being that a driver
+    // may only report an action it can SEE the board answer.
+    if (invoked) {
+      await page.waitForTimeout(120);
+      const after = await evalSafe<number>(
+        page,
+        `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+        count,
+      );
+      // Either the card left the hand, or a target pick is open on top of it.
+      const picking = await evalSafe(
+        page,
+        `/PICK A TARGET|BOND — pick/i.test(String(document.body.innerText || ''))`,
+        false,
+      );
+      if (after !== count || picking) return true;
+      await clickText(page, '✕ CLOSE');
+      continue;
+    }
     await clickText(page, '✕ CLOSE');
   }
   return false;
+}
+
+/**
+ * Play the Wellspring the HAND is asking for, falling back to any of them.
+ *
+ * v22 — the driver used to click `button[aria-label^="Play a "]`, which is the
+ * FIRST dot in the row, which is the same colour every turn for a whole match.
+ * A random deck is two or three colours, so roughly every other match the
+ * driver spent nine turns building a mono-colour board in front of a hand it
+ * could not cast: instrumenting one run showed the human invoking ONE card
+ * across the whole game, every other hand card reporting "Needs Void essence
+ * your Locations can't produce yet", and the match ending in a turn-7 defeat.
+ *
+ * That is why every driven match since the harness was written has ended
+ * between turn 6 and turn 10 against a headless average of 21, and it is why
+ * v20's "the driver was passing its turns" fix (scan the hand instead of
+ * trying one card) did not move the number: the hand was not the problem, the
+ * mana base was. Everything a real match reaches after turn 10 — a board wide
+ * enough to need multi-guard lines, a hand over the shed limit, the long
+ * response chains — has therefore never been driven.
+ *
+ * The match UI now rings the needed dot and names the colour in its aria-label
+ * (same pass), so the driver reads the same signal a player does rather than a
+ * private hook.
+ */
+async function playWellspring(page: Page): Promise<boolean> {
+  return evalSafe(
+    page,
+    `(() => {
+      var els = Array.prototype.slice.call(document.querySelectorAll('button[aria-label^="Play a "]'))
+        .filter(function (el) { return el.disabled !== true; });
+      if (els.length === 0) return false;
+      // "Play a Void Wellspring — unlocks 3 cards in hand" — the count is the
+      // number of hand cards that colour would turn on.
+      var best = null, bestN = -1;
+      for (var i = 0; i < els.length; i++) {
+        var m = /unlocks (\\d+) card/.exec(els[i].getAttribute('aria-label') || '');
+        var n = m ? Number(m[1]) : 0;
+        if (n > bestN) { bestN = n; best = els[i]; }
+      }
+      var before = document.querySelectorAll('[aria-label$="Wellspring"], [aria-label$="Wellspring, exhausted"]').length;
+      (best || els[0]).click();
+      // v22 — report whether a Location actually ARRIVED, not merely that a dot
+      // was there to press. The old form returned true on the element's mere
+      // existence, and the ladder treats true as "progress was made, restart
+      // the ladder": a dot that renders but is refused is then an infinite
+      // loop, which is exactly the hang seed 312 produced (the engine gates
+      // Wellsprings on an empty stack and the row did not). The UI now disables
+      // the dot in that state, so this is the belt to that braces — an action
+      // that changes nothing must never count as a step.
+      return document.querySelectorAll('[aria-label$="Wellspring"], [aria-label$="Wellspring, exhausted"]').length > before;
+    })()`,
+    false,
+  );
 }
 
 /**
@@ -335,6 +412,23 @@ async function driveMatch(
 
   let lastSig = '';
   let stuckFor = 0;
+  /**
+   * The ladder branch each of the last few iterations took (v22).
+   *
+   * A hang report used to name the buttons on screen and nothing about what
+   * the driver was DOING with them, which makes the single most common
+   * failure — a branch that fires, changes nothing, and `continue`s — invisible
+   * from the report. Diagnosing one cost several full re-runs; the answer is
+   * one line of state.
+   */
+  const recentActions: string[] = [];
+  const act = <T>(name: string, result: T): T => {
+    if (result) {
+      recentActions.push(name);
+      if (recentActions.length > 12) recentActions.shift();
+    }
+    return result;
+  };
   let finished = false;
   let overflowReported = false;
   let staleRingReported = false;
@@ -403,11 +497,14 @@ async function driveMatch(
         seed,
         width,
         kind: 'hang',
-        detail: `board stopped moving for 90 steps at step ${step}. Buttons: ${b.buttons
-          .filter((x) => !x.disabled)
-          .map((x) => x.text)
-          .join(' | ')
-          .slice(0, 300)}`,
+        detail:
+          `board stopped moving for 90 steps at step ${step}. ` +
+          `Last actions: ${recentActions.join(' → ') || '(none — the ladder fell through every branch)'}. ` +
+          `Buttons: ${b.buttons
+            .filter((x) => !x.disabled)
+            .map((x) => x.text)
+            .join(' | ')
+            .slice(0, 300)}`,
       });
       break;
     }
@@ -498,6 +595,12 @@ async function driveMatch(
       // reach. Alpha-striking is still worth exercising, just not as the
       // default line.
       if (rand() < 0.2 && (await clickText(page, 'ALL ×'))) continue;
+      // v22 — ✕ CLEAR, which v20 shipped onto this bar and nothing has pressed
+      // since. It empties the attacker selection, so the next loop rebuilds it:
+      // a control that failed to clear would read as an attack the player did
+      // not choose, and one that cleared too much (dropping the clash itself)
+      // would strand the turn. Occasionally, since it costs a step.
+      if (rand() < 0.12 && (await clickText(page, '✕ CLEAR'))) continue;
       await clickText(page, 'DECLARE ATTACK');
       continue;
     }
@@ -655,15 +758,31 @@ async function driveMatch(
     // Develop first, always: Leader down, Wellspring played, then cards. A
     // purely random driver skipped all three often enough to lose every match
     // by turn 6 without ever reaching a big board.
-    if (await clickText(page, 'INVOKE LEADER')) continue;
-    if (await clickSelector(page, 'button[aria-label^="Play a "]')) continue;
+    if (act('INVOKE LEADER', await clickText(page, 'INVOKE LEADER'))) continue;
+    if (act('wellspring', await playWellspring(page))) continue;
     // `scan`: keep going through the hand rather than passing the turn on one
     // uncastable card — see tryInvokeHand.
-    if (b.handCards > 0 && (await tryInvokeHand(page, Math.floor(rand() * b.handCards), true)))
+    if (
+      b.handCards > 0 &&
+      act('invoke-hand', await tryInvokeHand(page, Math.floor(rand() * b.handCards), true))
+    )
       continue;
 
+    // v22 — RE-BOND, the one board action the driver has never taken.
+    // A Weapon or Tool survives the unit it was bonded to and lands in the
+    // unbonded-Item row with its own button; re-bonding it opens a `pending`
+    // target pick, which is a state only this control can reach (every other
+    // route into `pending` comes from the hand). `rebonds` is 6,538 a run in
+    // the headless sim, so it is not a rare line — it was simply unreachable
+    // from here, and so was the whole "pick a target for something that is
+    // already on the board" seam.
+    if (rand() < 0.7 && act('re-bond', await clickText(page, 'RE-BOND'))) continue;
+
     const roll = rand();
-    if (roll < 0.3 && (await clickSelector(page, '[role="button"][aria-disabled="false"]'))) {
+    if (
+      roll < 0.3 &&
+      act('leader-ability', await clickSelector(page, '[role="button"][aria-disabled="false"]'))
+    ) {
       // Leader ability pills are the only aria-disabled="false" role=button
       // on the board; a usable one resolves, an unusable one just says why.
       continue;
@@ -674,16 +793,20 @@ async function driveMatch(
     // tapped in Main I and not spent is a Location the driver has thrown away
     // for Main II. At eight percent of a long turn it was doing that several
     // times a turn, every turn.
-    if (roll < 0.32 && (await clickSelector(page, 'button[aria-label$="Wellspring"]'))) continue;
+    if (
+      roll < 0.32 &&
+      act('tap-location', await clickSelector(page, 'button[aria-label$="Wellspring"]'))
+    )
+      continue;
     if (roll < 0.62) {
       // Ash-pile drawer, battle log, inspector — read-only chrome that still
       // has to survive being opened mid-turn.
       const chrome = ['ASH-PILE', '▴ LOG', '▾ LOG'][Math.floor(rand() * 3)];
-      if (await clickText(page, chrome)) continue;
+      if (act(`chrome:${chrome}`, await clickText(page, chrome))) continue;
     }
     for (const label of ['TO CLASH', 'SKIP TO MAIN II', 'END TURN', 'NEXT ▸']) {
       if (B.some((x) => !x.disabled && x.text.includes(label))) {
-        if (await clickText(page, label)) break;
+        if (act(`phase:${label}`, await clickText(page, label))) break;
       }
     }
   }

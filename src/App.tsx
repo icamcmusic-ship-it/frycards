@@ -186,7 +186,15 @@ function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
 // ---------------------------------------------------------------------------
-function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
+function Game({
+  setup,
+  onExit,
+  onRematch,
+}: {
+  setup: MatchSetup;
+  onExit: () => void;
+  onRematch: () => void;
+}) {
   const { session, profile, refreshProfile } = useMeta();
   // useState initializer, not a plain call: for a random setup, calling
   // setupToDeck on every render would silently re-roll the human's deck
@@ -264,6 +272,7 @@ function Game({ setup, onExit }: { setup: MatchSetup; onExit: () => void }) {
         cpuLabel={cpuArch.label}
         playerName={profile?.username || 'Player 1'}
         onExit={onExit}
+        onRematch={onRematch}
         onResult={onResult}
         reward={reward}
         rewardError={rewardError}
@@ -387,6 +396,12 @@ function AppInner() {
             setScreen('menu');
             setGameKey((k) => k + 1);
           }}
+          // Bumping the key remounts <Game>, which re-runs both deck
+          // initializers: the same SETUP, a fresh roll. That is what a rematch
+          // means for a random-deck quick match, and for a saved deck it is
+          // the same list against a newly rolled CPU — the CPU already rerolls
+          // every match, so this keeps the two consistent.
+          onRematch={() => setGameKey((k) => k + 1)}
         />
       </div>
     );

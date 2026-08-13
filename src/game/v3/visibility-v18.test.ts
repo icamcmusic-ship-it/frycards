@@ -46,7 +46,23 @@ describe('humanizeLog', () => {
       expect(out, `${l} -> ${out}`).not.toMatch(
         /\byou (invokes|plays|attacks|sheds|mulligans|casts)\b/i,
       );
+      // v22 — and the same defect on a COORDINATED second verb. The rule above
+      // only ever looked at the verb directly after the subject, so
+      // "You must Deal from an empty deck and loses" passed it for four
+      // passes — on the defeat screen, which is the one place that line is
+      // ever read.
+      expect(out, `${l} -> ${out}`).not.toMatch(/\band (loses|wins|draws)\b/i);
     }
+  });
+
+  test('the deck-out line agrees with its second-person subject', () => {
+    expect(humanizeLog('P1 must Deal from an empty deck and loses.', CPU)).toBe(
+      'You must Deal from an empty deck and lose.',
+    );
+    // The opponent's version is third person and must NOT be touched.
+    expect(humanizeLog('P2 must Deal from an empty deck and loses.', CPU)).toBe(
+      `${CPU} must Deal from an empty deck and loses.`,
+    );
   });
 
   test('the self-cast Charm line reads "You cast … on yourself"', () => {

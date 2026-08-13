@@ -203,6 +203,19 @@ export interface GameState {
   /** Whose window it is to respond, or null when no window is open. */
   priority: PriorityState | null;
   log: string[];
+  /**
+   * The lines the CURRENT turn's Dawn wrote (v22).
+   *
+   * Dawn runs inside the `endPhase` that ends the PREVIOUS player's turn, so
+   * an interactive UI that takes its own `logStart` when it hands the turn
+   * over is already past them: the opponent's Glaciate freeze, Archivist draw
+   * and Sacred heal all landed behind the narrator. Handing back the slice
+   * rather than an index keeps the UI out of log arithmetic — the opening turn
+   * runs its Dawn inside `createGame`, before the mulligans, so "everything
+   * from index N" is not the same set of lines. Purely a read-only report;
+   * nothing in the engine branches on it.
+   */
+  dawnLog: string[];
   rng: Rng;
   /**
    * Optional Dusk shed chooser, installed by an interactive UI. Called during
@@ -460,6 +473,7 @@ export function createGame(
     stack: [],
     priority: null,
     log: [],
+    dawnLog: [],
     rng,
   };
   const handSize = opts.handSize ?? STARTING_HAND;
@@ -1154,6 +1168,16 @@ export function stateBasedChecks(state: GameState): void {
 function runDawn(state: GameState): void {
   const p = state.players[state.active];
   state.phase = 'Dawn';
+  // v22 — where this Dawn begins in the log, so the match UI can narrate it
+  // (see `GameState.dawnLog`, filled in at the bottom of this function).
+  const dawnLogStart = state.log.length;
+  // Aggregated so a wide board is one line per KEYWORD rather than one per
+  // unit — a six-unit Thriving board narrated unit-by-unit is six beats of the
+  // opponent's turn spent on the same fact.
+  let regenerated = 0;
+  let thriving = 0;
+  let vitalityGained = 0;
+  let empowered = 0;
   // v16: Unbreakable is ONCE PER GAME — the spent save never recharges. The
   // v7.5 every-Dawn reset (one save per turn of the game) survived the whole
   // lever ladder: cost, keyword bound, printed-effect and stat trims on its
@@ -1171,25 +1195,32 @@ function runDawn(state: GameState): void {
     if (u.damage > 0 && unitHasKw(u, 'Regenerate')) {
       telemetry.onKeywordProc?.('Regenerate', u.damage);
       u.damage = 0;
+      regenerated++;
     }
     // v6.9 Thriving: compounding growth, one point of each per Dawn.
     if (unitHasKw(u, 'Thriving')) {
       u.permMight += 1;
       u.permGrit += 1;
       telemetry.onKeywordProc?.('Thriving', 1);
+      thriving++;
     }
     // v6.9 Radiant: a slow drip of Vitality while it holds the field.
     if (unitHasKw(u, 'Radiant') && p.vitality < LEADER_HP) {
       p.vitality += 1;
       telemetry.onKeywordProc?.('Radiant', 1);
+      vitalityGained++;
     }
     // v7.3 Empowering: each Empowering Item grows the unit it is bonded to.
     const empowering = u.items.filter((c) => hasKw(c.def, 'Empowering')).length;
     if (empowering > 0) {
       u.permMight += empowering;
       telemetry.onKeywordProc?.('Empowering', empowering);
+      empowered++;
     }
   }
+  if (regenerated > 0) state.log.push(`${p.id}'s Regenerate heals ${regenerated} unit(s).`);
+  if (thriving > 0) state.log.push(`${p.id}'s Thriving unit(s) grow +1/+1 (${thriving}).`);
+  if (empowered > 0) state.log.push(`${p.id}'s Empowering Item(s) grow ${empowered} unit(s).`);
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
   p.wellspringPlayedThisTurn = false;
@@ -1232,7 +1263,11 @@ function runDawn(state: GameState): void {
     if (l.def && hasKw(l.def, 'Sacred') && p.vitality < LEADER_HP) {
       p.vitality += 1;
       telemetry.onKeywordProc?.('Sacred', 1);
+      vitalityGained++;
     }
+  }
+  if (vitalityGained > 0) {
+    state.log.push(`${p.id} recovers ${vitalityGained} Vitality at Dawn.`);
   }
   // v7.3 Archivist: card advantage that only switches on once the Sanctum
   // board is actually built out — the payoff half of a ramp deck, where
@@ -1241,6 +1276,7 @@ function runDawn(state: GameState): void {
     const archivists = p.locations.filter((l) => l.def && hasKw(l.def, 'Archivist')).length;
     if (archivists > 0) {
       telemetry.onKeywordProc?.('Archivist', archivists);
+      state.log.push(`${p.id}'s Archivist deals ${archivists} extra card(s).`);
       dealCards(state, state.active, archivists);
     }
   }
@@ -1269,18 +1305,33 @@ function runDawn(state: GameState): void {
     }
     l.glaciateAsleep = true;
     telemetry.onKeywordProc?.('Glaciate', 1);
+    // Named, not counted. This is the one Dawn keyword that reaches across the
+    // table — a unit the OPPONENT owns stops being able to attack or guard —
+    // and until v22 it did that with no log line and no beat: the player found
+    // out by noticing a greyed-out card. `applyEffect` picks the target itself
+    // through `autoTarget` and reports nothing, so diff the enemy field around
+    // the call to learn which one it took.
+    const frozenBefore = new Set(
+      state.players[opponentOf(state.active)].field.filter((u) => u.exhausted).map((u) => u.iid),
+    );
     applyEffect(state, state.active, { action: 'exhaust', target: 'enemyUnit' });
+    const frozen = state.players[opponentOf(state.active)].field.find(
+      (u) => u.exhausted && !frozenBefore.has(u.iid),
+    );
+    if (frozen) state.log.push(`${p.id}'s Glaciate freezes ${frozen.def.name}.`);
   }
   // v6.0 Resolute: an invoked Leader recovers 1 Resolve, up to its printed value.
   const L = p.leader;
   if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
     L.resolve += 1;
     telemetry.onKeywordProc?.('Resolute', 1);
+    state.log.push(`${p.id}'s Leader recovers 1 Resolve (Resolute).`);
   }
   runTriggers(state, state.active, 'atDawn');
   drainStack(state); // Dawn is not a response window — resolve before the Deal.
   // Deal 1 (first player skips on turn 1).
   if (!(state.turn === 1 && state.active === state.firstPlayer)) dealCards(state, state.active, 1);
+  state.dawnLog = state.log.slice(dawnLogStart);
   if (!state.winner) state.phase = 'Main1';
 }
 
@@ -1293,12 +1344,22 @@ function runDusk(state: GameState): void {
   const entropic = p.field.filter((u) => unitHasKw(u, 'Entropic')).length;
   if (entropic > 0) {
     telemetry.onKeywordProc?.('Entropic', entropic);
+    // Logged (v22): eroding the opponent's deck is a real clock on a real win
+    // condition — deck-out ends the game — and it happened silently. The Ash
+    // pile grew, the deck counter ticked down, and no line anywhere connected
+    // the two.
+    state.log.push(
+      `${p.id}'s Entropic erodes ${entropic} card(s) from ${opponentOf(state.active)}'s deck.`,
+    );
     applyEffect(state, state.active, { action: 'erode', value: entropic, target: 'enemyPlayer' });
   }
   // v7.3 Blighted: Entropic's Location-side counterpart.
   const blighted = p.locations.filter((l) => l.def && hasKw(l.def, 'Blighted')).length;
   if (blighted > 0) {
     telemetry.onKeywordProc?.('Blighted', blighted);
+    state.log.push(
+      `${p.id}'s Blighted erodes ${blighted} card(s) from ${opponentOf(state.active)}'s deck.`,
+    );
     applyEffect(state, state.active, { action: 'erode', value: blighted, target: 'enemyPlayer' });
   }
   // v7.5 Scorched-Earth: Ember's Location text — a recurring board sweep,
@@ -1315,6 +1376,12 @@ function runDusk(state: GameState): void {
   const scorched = p.locations.filter((l) => l.def && hasKw(l.def, 'Scorched-Earth')).length;
   if (scorched > 0 && sanctumCount(p) >= 3) {
     telemetry.onKeywordProc?.('Scorched-Earth', scorched);
+    // A repeating board sweep is the loudest thing either player can do and it
+    // was the quietest: units died at the opponent's Dusk with only the
+    // shatter lines to explain them, and those name the unit, not the cause.
+    state.log.push(
+      `${p.id}'s Scorched-Earth sweeps ${opponentOf(state.active)}'s units for ${scorched}.`,
+    );
     applyEffect(state, state.active, {
       action: 'damage',
       value: scorched,

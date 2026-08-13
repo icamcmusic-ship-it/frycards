@@ -41,7 +41,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
     body: [
       [
         'Dawn',
-        'Recover (untap) all your exhausted permanents, "At Dawn" triggers fire, then Deal one card. Fully automatic in this client.',
+        'Recover (untap) all your exhausted permanents, "At Dawn" keywords and triggers fire, then Deal one card. Fully automatic in this client — but not empty: Regenerate heals, Thriving and Empowering grow bodies, Sacred and Radiant restore Vitality, Archivist draws, Resolute rebuilds Leader Resolve, and Glaciate reaches across the table to freeze one of the OPPONENT\'s units. Every one of those is now a line in the Battle Log, and the opponent\'s Dawn is narrated on the board before its turn begins.',
       ],
       [
         'Main Phase I',
@@ -52,10 +52,13 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
       ],
       ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
-      ['Dusk', '"At Dusk" triggers fire, you Shed (discard) down to 7 cards, and the turn passes.'],
+      [
+        'Dusk',
+        '"At Dusk" keywords and triggers fire — Entropic and Blighted erode cards off the opponent\'s deck, Scorched-Earth sweeps their whole board — then you Shed (discard) down to 7 cards and the turn passes.',
+      ],
       [
         'The opponent’s turn',
-        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. That covers all three of the moments it acts: its own turn, its blocks the instant you declare an attack, and its ANSWERS to a card you just played (it can counter you, or kill the unit you were aiming at, before your card resolves). When it declares an attack, your own Vitality plate lights up too — that is what the attackers are pointed at until you guard them. ⏱ sets the pace (SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest (and releases the hold). Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
+        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. That covers every moment it acts: its Dawn (where a Glaciate can freeze one of your units before it has played anything), its own turn, its blocks the instant you declare an attack, its Dusk sweeps, and its ANSWERS to a card you just played (it can counter you, or kill the unit you were aiming at, before your card resolves). When it declares an attack, your own Vitality plate lights up too — that is what the attackers are pointed at until you guard them. ⏱ sets the pace (SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest (and releases the hold). Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
       ],
     ],
   },

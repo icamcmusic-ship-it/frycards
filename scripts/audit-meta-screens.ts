@@ -82,7 +82,37 @@ const ALL_SCREENS = [
   // v13: the review queue's mechanics-override editor and the BULK ADD
   // importer only exist for the Creator.
   'submissions&role=creator',
+  // v22 — see PRELUDE. `pack` mounts on its unopened wrapper, whose only
+  // control is the tear button, so the sweep measured one control and stopped:
+  // the card-by-card reveal and the summary — the two screens a player sees
+  // after EVERY pack they open, and where the foil treatments, the rarity
+  // plates and the sell-value maths live — had never been measured at all.
+  'pack@reveal',
+  'pack@summary',
 ];
+
+/**
+ * States that only exist behind a fixed opening sequence, as button labels to
+ * click after load and before the sweep begins.
+ *
+ * This is not the same tool as the depth-two sweep. That one clicks ONE control
+ * and measures what it opened, which is right for a modal hanging off a screen
+ * — but a flow whose second state is three clicks deep is invisible to it, and
+ * a flow whose first control ADVANCES rather than opens (a pack tear, a reveal)
+ * gets measured on the state the player passes through in half a second rather
+ * than the one they stop on.
+ *
+ * The prelude runs before the control count is settled, so the sweep that
+ * follows treats the post-prelude state as the screen: every control on it is
+ * clicked one at a time, on a fresh load that replays the prelude first.
+ */
+const PRELUDE: Record<string, string[]> = {
+  'pack@reveal': ['JUST TEAR IT OPEN FOR ME'],
+  'pack@summary': ['JUST TEAR IT OPEN FOR ME', 'REVEAL ALL'],
+};
+
+/** The `?screen=` value for an entry — `pack@reveal` mounts plain `pack`. */
+const screenQuery = (entry: string) => entry.split('@')[0];
 
 /**
  * v20: a full sweep is ~50 minutes, and confirming ONE fix on ONE screen used
@@ -189,8 +219,39 @@ async function check(screen: string, width: number, path: number[] = []) {
     if (m.type() === 'error') errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  await page.goto(`${BASE}?screen=${screen}`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  await page.goto(`${BASE}?screen=${screenQuery(screen)}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20_000,
+  });
   await page.waitForTimeout(700);
+  // Walk this entry's prelude (if any) into the state being measured. Clicked
+  // by LABEL rather than index because a prelude has to survive the screen it
+  // opens on gaining or losing a control; a wrong index would silently measure
+  // some other state and still print a clean pass.
+  //
+  // Each step then waits for the control count to actually MOVE, rather than a
+  // flat sleep. `settledControlCount`'s two-equal-samples rule cannot cover an
+  // animation: the pack tear runs an 850ms timer before it swaps in the reveal,
+  // so a 450ms wait left the settle sampling `1, 1` — two equal reads, "settled"
+  // — and the entry measured the state it was supposed to be leaving while
+  // still printing a clean pass. Exactly the failure `settledControlCount`'s own
+  // header describes, arriving through a timer instead of a progressive render.
+  for (const label of PRELUDE[screen] ?? []) {
+    const before = await page
+      .$$(CONTROLS)
+      .then((c) => c.length)
+      .catch(() => 0);
+    const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
+    await target.click({ timeout: 4000 }).catch(() => undefined);
+    for (let i = 0; i < 16; i++) {
+      await page.waitForTimeout(250);
+      const now = await page
+        .$$(CONTROLS)
+        .then((c) => c.length)
+        .catch(() => 0);
+      if (now !== before) break;
+    }
+  }
   const settled = await settledControlCount(page);
 
   const labels: string[] = [];

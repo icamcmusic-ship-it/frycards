@@ -206,6 +206,25 @@ export function xpForLevel(level: number): number {
   return 50 * (level - 1) * level;
 }
 
+/**
+ * XP earned INTO the current level, and the size of that level's band.
+ *
+ * `ProgressBar` has clamped a negative `value` since the pass that noticed the
+ * server's level/xp pair can run ahead of this client-side mirror (a level-up
+ * lands in `profiles` before the xp write this session sees, and the two are
+ * read independently). The two TEXT labels beside those bars were never given
+ * the same treatment, so the exact state the bar was hardened against printed
+ * as `-2400/1200 XP TO LEVEL 13` — a negative numerator next to a bar sitting
+ * correctly at zero. Both readouts go through here now, so the clamp cannot be
+ * applied to one and forgotten on the other.
+ */
+export function levelProgress(level: number, xp: number): { into: number; band: number } {
+  const cur = xpForLevel(level);
+  const next = xpForLevel(level + 1);
+  const band = Math.max(1, next - cur);
+  return { into: Math.min(band, Math.max(0, xp - cur)), band };
+}
+
 /** Level badge + XP-to-next-level bar, driven by the profile row. */
 export function LevelBadge({
   level,
@@ -216,8 +235,7 @@ export function LevelBadge({
   xp: number;
   compact?: boolean;
 }) {
-  const cur = xpForLevel(level);
-  const next = xpForLevel(level + 1);
+  const { into, band } = levelProgress(level, xp);
   return (
     <div className="flex items-center gap-2">
       <span className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-xs px-2 py-0.5 ink-border-sm">
@@ -226,13 +244,13 @@ export function LevelBadge({
       {!compact && (
         <div className="flex flex-col gap-0.5 w-28">
           <ProgressBar
-            value={xp - cur}
-            max={next - cur}
+            value={into}
+            max={band}
             className="h-1.5"
             ariaLabel={`XP toward level ${level + 1}`}
           />
           <span className="text-[8px] font-bold text-[var(--c-steel)] leading-none">
-            {xp - cur}/{next - cur} XP TO LV {level + 1}
+            {into}/{band} XP TO LV {level + 1}
           </span>
         </div>
       )}

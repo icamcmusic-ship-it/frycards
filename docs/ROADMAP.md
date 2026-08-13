@@ -61,8 +61,9 @@ Everything here has a started implementation and a visible seam.
     the reprice shipped, while v18 and v19 both carried "no shipped change
     touches a `cards` column" as the reason not to worry. One drift in 297
     cards, invisible in the game and wrong in every server-side price.
-    **The write is still outstanding** — see `docs/BALANCE_SIM_FINDINGS_v20.md`
-    carry-forward #4 for the one-line statement.
+    **The write is still outstanding two passes later** — see
+    `docs/BALANCE_SIM_FINDINGS_v22.md` carry-forward #4 for the one-line
+    statement.
 
 - **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
@@ -99,6 +100,19 @@ Everything here has a started implementation and a visible seam.
   must carry the FULL row shape — the first run crashed the mystery-pool viewer
   on `pool.rarities` being undefined, which is a fixture defect that looks
   exactly like a product one.
+
+  **v22 found the same hole one flow deeper.** The sweep measures a screen's
+  visible controls, and `pack` has exactly one before the pack is torn — so the
+  card-by-card reveal and the summary, the two screens a player sees after
+  EVERY pack they open (where the foil treatments, the rarity plates and the
+  sell-value maths all live), had never been measured at any width. The
+  depth-two sweep cannot reach them either: it clicks one control and measures
+  what OPENED, and a tear button advances rather than opens. `PRELUDE` entries
+  in `audit-meta-screens.ts` drive a screen into a deeper state by button LABEL
+  before the sweep begins; `pack@reveal` and `pack@summary` are the first two,
+  and both measure clean at 375 and 1280. The general rule that falls out:
+  **a screen the player passes THROUGH is not the screen they stop on**, and
+  the control count only ever describes the former.
 
   What that measurement found: **nothing**. All sixteen screens render at 375px
   with `documentElement.scrollWidth === innerWidth` and zero interactive
@@ -145,9 +159,10 @@ Everything here has a started implementation and a visible seam.
   `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
   been walked.
 - **One balance pass per release, against the findings doc.** The whole live
-  list is `docs/BALANCE_SIM_FINDINGS_v20.md` carry-forward. **v19 froze the
-  per-Leader levers pending a widened instrument; v20 widened it, and the
-  result is the most important thing on this page.**
+  list is `docs/BALANCE_SIM_FINDINGS_v22.md` carry-forward. **v19 froze the
+  per-Leader levers pending a widened instrument; v20 widened it; v22 measured
+  the caution flag those readings were being filtered through and retired it as
+  a gate. Both results are the most important thing on this page.**
 
   The pinned Leader suite gave each Leader three decks — and all three were the
   SAME RECIPE with different jitter seeds. `randomArchetype` varies four things
@@ -167,12 +182,39 @@ Everything here has a started implementation and a visible seam.
 
   The corrected instrument's own answer is **Mer-King** — first in all four
   cohorts at a 65.2% mean, nine clear of second, and the only Leader whose
-  random arm agrees on the finish. It is deliberately unspent: the suite it
-  tops has one pass of history. Standing rules that should not be relearned:
-  **four deck cohorts, not two** (two cohorts cannot see a keyword with fewer
-  than ~6 carriers), **never interleave content changes with balance trials in
-  one pass**, and **do not spend a lever against a one-pass-old instrument** —
-  that is the mistake the last four passes made in the other direction.
+  random arm agrees on the finish. v20 left it unspent behind a pre-registered
+  condition, and **v22 ran that condition and found it unreadable.**
+
+  v20's gate was "first in 3+ cohorts AND a random-arm gap under +10 in the
+  cohorts that sample it". Mer-King is now first in **six of six** (mean 65.6%,
+  9.8 clear) — but the `|gap| >= 10` half cannot decide anything, because
+  across 51 gap observations that flag **fires on 24% of them**: median |gap|
+  5.0, max 18.6, six of nine Leaders tripping it at least once. It sits at the
+  ~76th percentile of its own distribution. **Retired as a gate; it stays in the
+  report as a per-cohort eyebrow-raise and no decision rule should be phrased in
+  terms of it again.**
+
+  What the v19/v20 diagnoses actually keyed on is a **one-signed** gap across
+  cohorts, and on that test Mer-King is clean (+3.5 / +11.2 / +12.0 / +9.5 /
+  −3.3, and its random arm reads above 50% in every cohort that samples it — the
+  two arms agree). **Exactly one Leader in the pool is one-signed: Ruin-Walker
+  Overseer** (−8.2 mean, negative in all five sampling cohorts, last in the
+  pinned table in five of six). That is the Sentinel finding inverted — the
+  suite appears to be UNDER-rating it — and per the Sentinel lesson the next
+  move is to understand the instrument, **not to buff the card.**
+
+  Standing rules that should not be relearned: **four deck cohorts, not two**
+  (two cohorts cannot see a keyword with fewer than ~6 carriers) — but **six
+  when the question is about one specific Leader**, since v22's sign flip lived
+  in the sixth cohort alone and the cohorts cost thirty seconds each; **never
+  interleave content changes with balance trials in one pass**; **do not spend a
+  lever against a one-pass-old instrument** — that is the mistake the last four
+  passes made in the other direction; and **a harness that cannot measure
+  something must say so where it would have printed the measurement**. That last
+  one is now a three-time finding, not a coincidence: v14's "clicked 0 controls",
+  v20's six meta screens audited empty, and v22's divergence report printing no
+  row at all for a Leader the random arm never dealt — which in cohort D was
+  Mer-King, the Leader the whole table was pointing at.
 
   **A lever that measures flat gets reverted, not shipped.** v18 is the
   precedent: the named next lever was spent because the doc said to, produced
@@ -353,7 +395,7 @@ Ordered by how much they change what it feels like to own and play the game.
   unit at the brink (Grit − 1) instead of fully healed, which honoured the
   rulebook without the packet-level combat refactor this file predicted. The
   keyword itself is once per game and, for the first time, reads in band. See
-  `docs/BALANCE_SIM_FINDINGS_v20.md` (each pass's doc supersedes and deletes the last).
+  `docs/BALANCE_SIM_FINDINGS_v22.md` (each pass's doc supersedes and deletes the last).
 - ~~Make the pinned Leader suite the primary Leader instrument~~ — done in
   v7.8 (random table demoted to a deck-composition diagnostic), extended in
   v16 and finally made honest in **v20**, where the three "pinned decks" turned
