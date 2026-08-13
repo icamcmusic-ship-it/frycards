@@ -726,12 +726,6 @@ function SummaryStage({
   );
   const convertedCount = pulls.filter((p) => p.converted_to_credits).length;
   const foilCount = pulls.filter((p) => p.foil).length;
-  // Quicksell value of everything the player actually KEPT. Over-cap pulls are
-  // excluded because they were already paid out as credits above.
-  const haulValue = pulls.reduce(
-    (s, p) => s + (p.converted_to_credits ? 0 : quicksellPrice(p.rarity, p.foil)),
-    0,
-  );
 
   // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
   const bestIndex = useMemo(() => {
@@ -800,6 +794,15 @@ function SummaryStage({
     );
   const clutterValue = clutterIndices.reduce(
     (s, i) => s + quicksellPrice(pulls[i].rarity, pulls[i].foil),
+    0,
+  );
+  // Quicksell value of everything the player actually KEPT. Over-cap pulls
+  // are excluded because they were already paid out as credits, and pulls
+  // QUICKSOLD from this very screen are excluded for the same reason — the
+  // tile's own contract is "what you still own", and it used to keep quoting
+  // the pre-sale number after the cards beside it were stamped SOLD (v23).
+  const haulValue = pulls.reduce(
+    (s, p, i) => s + (p.converted_to_credits || sold.has(i) ? 0 : quicksellPrice(p.rarity, p.foil)),
     0,
   );
 

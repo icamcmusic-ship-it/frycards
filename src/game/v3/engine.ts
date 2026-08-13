@@ -307,6 +307,23 @@ function warlordBonus(p: PlayerState): number {
   return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Warlord') ? 1 : 0;
 }
 
+/** v23 Dread: −1 Might to all ENEMY units while this Leader is fielded — the
+ * Void mirror of Commander, and the first Leader keyword that reaches across
+ * the table. Applied inside effMight (which floors at 0), so the AI's every
+ * Might read prices it automatically. Not yet printed on any Leader — see
+ * LEADER_NEXT_KEYWORDS in cardpool.ts. */
+function dreadPenalty(opp: PlayerState): number {
+  return opp.leader.invoked && !opp.leader.shattered && hasKw(opp.leader.def, 'Dread') ? 1 : 0;
+}
+
+/** v23 Onslaught: +1 Might on your units while ATTACKING (only), while your
+ * Leader is fielded — Commander's aggressive half at a cheaper weight.
+ * Applied in the clash packet builder rather than effMight, so it never
+ * inflates a guard's counter-damage. Not yet printed — see above. */
+function onslaughtBonus(p: PlayerState): number {
+  return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Onslaught') ? 1 : 0;
+}
+
 /** v7.3: how many real Sanctums (Location CARDS) a player controls. Basic
  * Wellsprings sit in the same `locations` array with no `def`, so a plain
  * `locations.length` counts them too — which would leave Ritual and Archivist
@@ -332,7 +349,12 @@ export function effMight(state: GameState, u: UnitInst): number {
   const item = u.items.reduce((s, c) => s + (c.def.bond?.might ?? 0), 0);
   return Math.max(
     0,
-    (u.def.might ?? 0) + u.permMight + item + sanctumBonus(p, 'MIGHT_ALL') + commanderBonus(p),
+    (u.def.might ?? 0) +
+      u.permMight +
+      item +
+      sanctumBonus(p, 'MIGHT_ALL') +
+      commanderBonus(p) -
+      dreadPenalty(state.players[opponentOf(u.owner)]),
   );
 }
 
@@ -674,6 +696,43 @@ export function passPriority(state: GameState, pid: PlayerId): boolean {
   return true;
 }
 
+/** One-line account of what a resolving trigger is about to do. Triggers were
+ * the last class of board change with no log line at all on the SUCCESS path
+ * (only their fizzles were logged) — an "At Dusk" Sanctum could damage a unit,
+ * erode the deck or exhaust something and the narrator had no sentence for it,
+ * so the board simply changed between beats (v23; same shape as the v22
+ * Dawn/Dusk keyword lines). */
+function triggerNote(state: GameState, item: StackItem): string {
+  const eff = item.effect!;
+  const v = eff.value ?? 0;
+  const t = item.targetIid;
+  const target = t === 'P1' || t === 'P2' ? t : t ? findUnit(state, t)?.def.name : undefined;
+  switch (eff.action) {
+    case 'damage':
+      return `deals ${v} damage${target ? ` to ${target}` : ''}`;
+    case 'heal':
+      return target ? `restores ${v} to ${target}` : `restores ${v}`;
+    case 'draw':
+      return `deals ${v} card${v === 1 ? '' : 's'} to ${item.controller}`;
+    case 'buff':
+      return target ? `gives ${target} +${v}/+${v}` : `gives its side +${v}/+${v}`;
+    case 'shatter':
+      return target ? `shatters ${target}` : 'shatters';
+    case 'banish':
+      return target ? `banishes ${target}` : 'banishes';
+    case 'erode':
+      return `erodes ${v} card${v === 1 ? '' : 's'} from ${opponentOf(item.controller)}'s deck`;
+    case 'recover':
+      return target ? `recovers ${target}` : 'recovers';
+    case 'exhaust':
+      return target ? `exhausts ${target}` : 'exhausts';
+    case 'weaken':
+      return target ? `gives ${target} -${v}/-${v}` : 'weakens';
+    default:
+      return 'resolves';
+  }
+}
+
 /** Resolve the top item of the stack. */
 function resolveTop(state: GameState): void {
   const item = state.stack.pop();
@@ -683,6 +742,7 @@ function resolveTop(state: GameState): void {
       state.log.push(`${item.sourceName}'s trigger fizzles — no legal target.`);
       return;
     }
+    state.log.push(`${item.sourceName}'s trigger ${triggerNote(state, item)}.`);
     applyEffect(state, item.controller, item.effect!, item.targetIid);
   } else {
     resolveInvokedCard(state, item);
@@ -855,7 +915,12 @@ function siphonGain(state: GameState, source: UnitInst, amount: number): void {
   const p = state.players[source.owner];
   const gained = Math.min(LEADER_HP, p.vitality + amount) - p.vitality;
   p.vitality += gained;
-  if (gained > 0) telemetry.onKeywordProc?.('Siphon', gained);
+  if (gained > 0) {
+    telemetry.onKeywordProc?.('Siphon', gained);
+    // Logged (v23): the one keyword that moves a VITALITY total upward had no
+    // line — the opponent's life went up "from nowhere" mid-clash.
+    state.log.push(`${source.def.name}'s Siphon restores ${gained} Vitality to ${source.owner}.`);
+  }
 }
 
 // Returns the net damage that actually landed after mitigation — callers use
@@ -1063,7 +1128,11 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   // for the same reason 'dies' triggers do (see below).
   if (wildfire) {
     telemetry.onKeywordProc?.('Wildfire', 2);
-    damagePlayer(state, opponentOf(u.owner), 2);
+    const landed = damagePlayer(state, opponentOf(u.owner), 2);
+    // Logged (v23): the player lost Vitality with only "X was shattered." on
+    // the record to explain it — the parting shot itself had no line.
+    if (landed > 0)
+      state.log.push(`${u.def.name}'s Wildfire deals ${landed} damage to ${opponentOf(u.owner)}.`);
   }
   // Rulebook "when ... leaves the field" has no ash/void distinction: 'dies'
   // triggers fire on banish too.
@@ -1326,6 +1395,14 @@ function runDawn(state: GameState): void {
     L.resolve += 1;
     telemetry.onKeywordProc?.('Resolute', 1);
     state.log.push(`${p.id}'s Leader recovers 1 Resolve (Resolute).`);
+  }
+  // v23 Beacon: an invoked Leader restores 1 Vitality at its Dawn — Radiant's
+  // shape moved onto the Leader zone. Logged like every other Dawn proc, so
+  // the match narrator has a line for it. Not yet printed on any Leader.
+  if (L.invoked && !L.shattered && hasKw(L.def, 'Beacon') && p.vitality < LEADER_HP) {
+    p.vitality += 1;
+    telemetry.onKeywordProc?.('Beacon', 1);
+    state.log.push(`${p.id}'s Leader restores 1 Vitality (Beacon).`);
   }
   runTriggers(state, state.active, 'atDawn');
   drainStack(state); // Dawn is not a response window — resolve before the Deal.
@@ -2207,7 +2284,12 @@ function collectStepWithHistory(
       }
     }
     if (!participates(attacker, step)) continue;
-    let might = effMight(state, attacker);
+    // v23 Onslaught: attack-only Might, added here (not in effMight) so a
+    // guard's counter-packet above never carries it. The CPU's attack
+    // valuation reads effMight and therefore prices this keyword slightly
+    // conservatively — fine for an unprinted keyword; revisit if it prints.
+    let might = effMight(state, attacker) + onslaughtBonus(state.players[attacker.owner]);
+    if (might > effMight(state, attacker)) telemetry.onKeywordProc?.('Onslaught', 1);
     if (guards.length === 0) {
       if (!everGuarded.has(attackerIid)) {
         // Never guarded: hits the defender for full Might.

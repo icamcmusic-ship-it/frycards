@@ -642,6 +642,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
           def={inspect.def}
           foil={inspect.foil}
           canToggleFoil={!inspect.serial && (inspectOwned?.f || 0) > 0}
+          // ✦ VIEW FOIL swaps the card on display — swap `inspect.foil` with
+          // it so the market-value panel below describes the variant actually
+          // on screen, not the tile that was clicked.
+          onFoilToggle={(showFoil) => setInspect((i) => (i ? { ...i, foil: showFoil } : i))}
           serial={inspect.serial}
           meta={[
             { label: 'Rarity', value: inspect.def.rarity || 'Common' },

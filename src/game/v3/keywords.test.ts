@@ -70,10 +70,15 @@ const EXPECTED = [
   'Blessed', // Item — Tide, Light
   'Scorched-Earth',
   'Glaciate', // Location — Ember, Gale
+  // v23: the Leader generation — implemented and engine-tested, NOT yet
+  // printed (see UNPRINTED_KEYWORDS and keywords-v23-leaders.test.ts).
+  'Onslaught',
+  'Beacon',
+  'Dread', // Leader — Ember, Light, Void
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 + 6 v7.5 keywords, unique', () => {
+  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 + 6 v7.5 + 3 v23 Leader keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
@@ -89,11 +94,15 @@ describe('keyword set', () => {
     // type it deliberately skipped: its keyword roll (`roll(seed,'ldr-kw6',6)`)
     // has no free band, so any addition re-rolls existing Leaders — a balance
     // change disguised as a content one, over a 9-card type.
+    // v23 finally grows the Leader vocabulary 3 -> 6 (Onslaught/Beacon/Dread),
+    // safely: the v7.8 restructure froze the 'ldr-kw6' path onto its own
+    // fixed list, so these can exist in the registry without re-rolling any
+    // Leader — and none is printed yet (UNPRINTED_KEYWORDS).
     const counts: Record<string, number> = {
       Event: 6,
       Item: 6,
       Location: 7,
-      Leader: 3,
+      Leader: 6,
     };
     for (const [t, n] of Object.entries(counts)) {
       expect(keywordsForType(t as 'Event').length, `${t} keywords`).toBe(n);
