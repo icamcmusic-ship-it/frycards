@@ -1091,6 +1091,11 @@ function mapEvent(c: CardTemplate): CardDef {
   // existing carriers changed keyword and 14 cards that had rolled NOTHING
   // picked one up. It is still a content change and it moved the meta — see
   // the Glaciate note in keywords.ts.
+  // v24: the 76-100 remainder of this roll prints nothing TODAY — the v24
+  // Event generation (Kindle/Tailwind/Luminous, see UNPRINTED_KEYWORDS) was
+  // trialled on a temporary 76-92 band (upward-only, zero re-rolls, measured
+  // in docs/BALANCE_SIM_FINDINGS_v24.md §2) and reverted. A future print
+  // rebuilds that band rather than touching the two live ones below.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
     kwRoll >= 26 && kwRoll < 42

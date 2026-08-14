@@ -114,10 +114,33 @@ describe('v24 Event keyword — Tailwind', () => {
     expect(s.log.some((l) => l.includes('Tailwind'))).toBe(true);
   });
 
-  test('no exhausted unit is a quiet no-op, not a crash', () => {
+  test('with no tired unit it recovers an exhausted Location instead', () => {
+    const s = game();
+    summonUnit(s, 'P1', VANILLA); // ready — must not be touched
+    s.players.P1.locations.push({ iid: 'ws#1', produces: 'Gale', exhausted: true });
+    s.players.P2.locations.push({ iid: 'ws#2', produces: 'Gale', exhausted: true });
+
+    expect(cast(s, ev('tail_ev2', ['Tailwind']), 't#2')).toBe(true);
+    expect(s.players.P1.locations[0].exhausted).toBe(false);
+    expect(s.players.P2.locations[0].exhausted).toBe(true); // never crosses
+    expect(s.log.some((l) => l.includes('Tailwind'))).toBe(true);
+  });
+
+  test('a tired unit takes priority over a spent Location', () => {
+    const s = game();
+    const mine = summonUnit(s, 'P1', VANILLA);
+    mine.exhausted = true;
+    s.players.P1.locations.push({ iid: 'ws#3', produces: 'Gale', exhausted: true });
+
+    expect(cast(s, ev('tail_ev3', ['Tailwind']), 't#3')).toBe(true);
+    expect(mine.exhausted).toBe(false);
+    expect(s.players.P1.locations[0].exhausted).toBe(true);
+  });
+
+  test('nothing exhausted at all is a quiet no-op, not a crash', () => {
     const s = game();
     summonUnit(s, 'P1', VANILLA);
-    expect(cast(s, ev('tail_ev2', ['Tailwind']), 't#2')).toBe(true);
+    expect(cast(s, ev('tail_ev4', ['Tailwind']), 't#4')).toBe(true);
     expect(s.log.some((l) => l.includes('Tailwind'))).toBe(false);
   });
 });

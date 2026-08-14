@@ -299,7 +299,8 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Beacon: 'At your Dawn, your invoked Leader restores 1 Vitality.',
   Dread: 'While your Leader is on the field, enemy units get -1 Might.',
   Kindle: 'When this Event resolves, deal 1 damage to the enemy player.',
-  Tailwind: 'When this Event resolves, recover a random exhausted friendly unit.',
+  Tailwind:
+    'When this Event resolves, recover a random exhausted friendly unit — or an exhausted Location if no unit is tired.',
   Luminous: 'When this Event resolves, restore 1 Vitality.',
 };
 

@@ -1887,8 +1887,14 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         }
       }
       // v24 Tailwind: Gale's tempo rider — recovers one exhausted friendly
-      // unit. Random over the candidates (seeded rng, the Exhume precedent)
-      // so replays stay deterministic.
+      // unit, falling back to an exhausted Location when no unit is tired.
+      // The fallback IS the keyword in practice: the v24 print experiment
+      // measured the unit-only version at ZERO activations over two cohorts
+      // (~780 carrier games) — Events overwhelmingly resolve in Main I,
+      // right after Dawn recovered every unit, so the text was dead. Paying
+      // the Event's own cost exhausts Locations, so the Location arm is
+      // nearly always live and reads as a 1-essence rebate. Random over the
+      // candidates (seeded rng, the Exhume precedent) for determinism.
       if (!fizzled && hasKw(def, 'Tailwind')) {
         const tired = p.field.filter((u) => u.exhausted);
         if (tired.length > 0) {
@@ -1896,6 +1902,16 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
           u.exhausted = false;
           telemetry.onKeywordProc?.('Tailwind', 1);
           state.log.push(`${def.name}'s Tailwind recovers ${u.def.name}.`);
+        } else {
+          const spent = p.locations.filter((l) => l.exhausted);
+          if (spent.length > 0) {
+            const l = spent[Math.floor(state.rng() * spent.length)];
+            l.exhausted = false;
+            telemetry.onKeywordProc?.('Tailwind', 1);
+            state.log.push(
+              `${def.name}'s Tailwind recovers ${l.def ? l.def.name : `a ${l.produces} Wellspring`}.`,
+            );
+          }
         }
       }
       // v24 Luminous: Light's on-resolve rider, a single Vitality point

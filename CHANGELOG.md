@@ -9,6 +9,88 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v24.0 — The pass where a softlock died, the damage numbers found their beats, and a keyword died in the lab instead of in the pool
+
+Six-part pass in the brief's order: a meta-screen bug hunt, an engine stress
+round, a match QoL round, a CPU-visibility audit, the v23 carry-forwards, and
+a new-keyword round. Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md`
+(supersedes the v23 doc). **0 invariant violations across nine 5,952-game
+cohort runs** (three standing + one fresh-seed stress cohort + four
+experimental + the final neutrality re-run); 402 tests (8 new — the v24
+Event keyword suite); the shipped pool byte-identical, verified twice.
+
+**Match UI — a hard softlock and two dead-end recoveries.** The full-file
+audit found the worst bug of the pass: a response window re-entered after the
+CPU answered an auto-passed window never raised the respond stage — priority
+was the player's, with no PASS button, no castable card, no tappable
+Location, and only CONCEDE alive. (Repro: the CPU's stack answer kills a
+unit whose dies-trigger draws the player a castable Quick Event.) Fixed at
+the one place every re-entry passes through. The two crash-recovery paths
+had a matching hole: recovering from a live CPU clash either called
+`beginHumanTurn` with the CPU still active (every control dead) or cranked
+`endPhase` against the engine's mid-clash refusal (twelve no-ops, then the
+same dead board). Recovery now drops the live clash first. And PASS now
+clears a half-built target pick — the stale red PICK A TARGET bar could
+otherwise spend the card later on a click that was never meant to cast it.
+
+**CPU visibility — the damage numbers found their beats.** The CPU's whole
+turn is computed first and narrated after, so every −N/+N float (both
+Vitality plates included) fired during the "🤔 thinking…" bubble and was
+gone seconds before the beat describing the hit. Floats from CPU actions now
+queue and release on the narration beat that involves their unit or player,
+with leftovers flushed at the end of the run. Beats aimed at a unit of the
+player's that DIED mid-turn now get the long "aimed at me" dwell time too —
+previously exactly those beats ran short, because the dead unit was no
+longer on the field to match. SKIP pressed during the thinking delay now
+skips the narration it fast-forwards into, instead of double-charging the
+button.
+
+**Match QoL.** CONCEDE is reachable from the mulligan overlay (it covered
+the top bar, so a mis-queued match had to be played); the clash guard lines
+stay visible inside a mid-clash response window (they vanished exactly while
+the player was deciding whether to counter); the guard-step gating text
+stopped claiming "invoke during your own main phases" mid-clash; the ON THE
+PLAY / ON THE DRAW badge shows (and is tappable) on phones; badge tooltips
+portal out of the scrolling lanes instead of clipping at the lane edge;
+Shift+Enter reads a tappable Sanctum without spending its tap; the
+guard-step divider reserves room for the LOG button so it can't eat CONFIRM
+GUARDS taps.
+
+**Meta screens — eleven fixes from the screen-by-screen audit.** The two
+worst: an auction you bid on VANISHED from MY LISTINGS & BIDS the moment a
+rival outbid you (the schema stores only the current bidder — the client now
+remembers your bids, keeps the row, and tags it OUTBID), and a pending trade
+older than the newest 50 trades fell out of the fetch window entirely —
+unacceptable and uncancellable, for both parties, with no UI path back.
+Also: the close-shop refund notice rendered into a branch that never showed
+it; a busy shop owner's own sales could push MY PURCHASES (and the 3-day
+rating window) out of the query limit; the shops card picker dead-ended on
+"of 0 spare" when only foils were spare (Marketplace's picker had this fix;
+shops' never got it); one network blip pinned a permanent "couldn't load"
+banner over live data in Marketplace and Social; Collection sell buttons
+re-enabled against stale counts (a fast double-click sold ghost copies);
+pack HAUL VALUE counted serialized pulls it can never quicksell; the
+settings toggle swallowed a fast undo; creator search with a target selected
+fetched results and rendered nothing.
+
+**NEW (under the hood): the v24 Event keyword generation, unprinted.**
+Kindle (Ember: 1 damage to the enemy player on resolve), Tailwind (Gale:
+recover a tired unit, else a spent Location), Luminous (Light: restore 1
+Vitality on resolve) — implemented, tested, priced, in `UNPRINTED_KEYWORDS`,
+on no card. The print experiment earned its keep twice: it caught that
+merely REGISTERING a colour-mapped Event keyword re-rolled three live Events
+(`freshKeywordFor` now excludes unprinted keywords, and the catalog guard
+that caught it stays), and it caught **Tailwind's first design at ZERO
+activations across ~780 carrier games** — correct code, dead text: Events
+resolve right after Dawn recovered everything. The redesigned fallback
+activates ~1.4×/carrier-game. Both experimental prints reverted; the pool
+ships byte-identical.
+
+**Balance: no card changed, fifth pass running.** The Mer-King lever stays
+authorized and unspent (this pass carries engine/UI/content work, which its
+condition forbids); Unbreakable checked and in band (+56.9% carriers, not
+negative); Sacred carried. Control cohorts identical to v23 to the decimal.
+
 ### v23.0 — The pass where the one-signed Leader turned out to be one deck, the gates finally all told the truth, and the Leader keyword generation arrived unprinted
 
 Six-part pass in the order the brief asked for: a non-gameplay bug hunt, an
@@ -216,7 +298,7 @@ RULES run on the opponent's behalf:
 **Non-gameplay bug hunt.**
 
 - **FIX: the XP readout could print a negative numerator** — `-2400/1200 XP TO
-  LEVEL 13`, next to a progress bar sitting correctly at zero. `ProgressBar` has
+LEVEL 13`, next to a progress bar sitting correctly at zero. `ProgressBar` has
   clamped a negative `value` since the pass that found the server's level/xp
   pair can run ahead of this client-side mirror; the two TEXT labels beside
   those bars never got the same treatment. Both now go through one
@@ -459,7 +541,7 @@ standing four 5,952-game cohorts. Full numbers:
 `docs/BALANCE_SIM_FINDINGS_v19.md` (supersedes the v18 doc, deleted this pass).
 **0 invariant violations across 95,232 games**; 364 tests (5 new, in one new
 suite); 8 full matches driven end-to-end through the real match UI, half of
-them *watching* the CPU's narration rather than skipping it, with zero
+them _watching_ the CPU's narration rather than skipping it, with zero
 findings.
 
 **Match screen — the CPU's blocking decision is no longer invisible.** v18
@@ -468,7 +550,7 @@ The step immediately before it was still silent, and more visibly so:
 
 - **The CPU's guards now narrate.** `declareGuards` writes nothing to the
   engine log — it is pure state — so when you declared an attack, the guard
-  lines simply *existed* on the next frame. No beat, no ring, no animation, and
+  lines simply _existed_ on the next frame. No beat, no ring, no animation, and
   the entire report was a banner counting them ("Kuro assigns 2 guard line(s)")
   that named neither a blocker nor the attacker it stopped. There is now one
   beat per guard line, naming the attacker and every blocker on it, with the
@@ -476,7 +558,7 @@ The step immediately before it was still silent, and more visibly so:
   closing beat for whatever is still coming through, ringing the CPU's own
   Vitality plate and totalling the unguarded Might. Pinned by a new test suite.
 - **❚❚ HOLD and ▸ STEP.** SKIP was the only control over the opponent's turn
-  and it points one way: a player who wanted to *look* at what just happened —
+  and it points one way: a player who wanted to _look_ at what just happened —
   read the card in the spotlight, follow the rings to what it hit — had no way
   to stop the beat leaving, only a speed dial that made the next one slower
   too. HOLD freezes the current beat indefinitely; STEP then walks the turn one
@@ -503,7 +585,7 @@ The step immediately before it was still silent, and more visibly so:
 **Harnesses — three of them were reporting clean by not looking.**
 
 - `audit:screens` was **depth ONE**: one click from a fresh load, then the
-  context was thrown away, so nothing that only exists *behind* a click had
+  context was thrown away, so nothing that only exists _behind_ a click had
   ever been measured — no modal, no second-level panel. It now descends into
   any first click that reveals controls, a fresh load per (parent, child) pair
   so nothing compounds. That is 70 second-level clicks across six screens that
@@ -533,12 +615,12 @@ The step immediately before it was still silent, and more visibly so:
 
 - **Sentinel of the Nether Pit: the third lever in three passes measured
   nothing, and the diagnostic says why.** v18 named the trial and the baseline
-  met its condition (first in all *four* cohorts), so bounding its Ember minus
+  met its condition (first in all _four_ cohorts), so bounding its Ember minus
   to `enemyUnit` was spent and measured: **+0.9 mean, still first everywhere.**
   Reverted. Differencing the sim's two Leader tables — which nobody had done —
   explains all three failures at once: on its own random-deck arm Sentinel
-  reads 30.8 / 53.0 / 42.1 / 43.8, a mean **below** the midpoint and *dead last
-  in the pool* in cohort A, against a pinned reading of 62/61/58/62. What has
+  reads 30.8 / 53.0 / 42.1 / 43.8, a mean **below** the midpoint and _dead last
+  in the pool_ in cohort A, against a pinned reading of 62/61/58/62. What has
   been ranked first for four passes is substantially its three pinned decks.
 - **The sim now prints that difference on every run**, flagged at `|gap| >= 10`.
   Five of nine Leaders agree between the two arms to within 4 points; the two
@@ -548,7 +630,7 @@ The step immediately before it was still silent, and more visibly so:
   that evidence rather than performed.
 - **FIX (shipped): the CPU traded its whole Leader to finish off an
   almost-dead unit.** The v16 answer-gate let a self-shattering activation
-  through when it "answers a big threat", but for a *damage* ability that
+  through when it "answers a big threat", but for a _damage_ ability that
   condition can only be met against a Might-6+ body already down to 2 Grit —
   one clash from dying anyway. Unconditional removal keeps the discount; a ping
   no longer earns it. Sentinel's self-shatter rate goes **2.7 / 5.6 / 5.2 / 3.3
@@ -1040,8 +1122,8 @@ sweep, whose headline finding was in the live database rather than in the code.
     the v13 entry first said 15, corrected in v14 against both the pool and
     the live `cards` table).
   - The three-way subtype roll reuses the old two-way roll's salt and its 60/40
-    cut point, so a Charm is *exactly* the old Bound band and Weapon+Tool are
-    *exactly* the old Worn band. Only the 78..100 slice of the old Worn band is
+    cut point, so a Charm is _exactly_ the old Bound band and Weapon+Tool are
+    _exactly_ the old Worn band. Only the 78..100 slice of the old Worn band is
     new behaviour.
 - **The CPU plays both new lines.** It prices a self-cast Charm as the heal it
   is (worth it when the Vitality is actually missing, worth nothing when it is
@@ -1071,7 +1153,7 @@ sweep, whose headline finding was in the live database rather than in the code.
   - Overrides live on the **template** because the template is the only thing
     the game client loads — writing them to the `cards` mechanics columns would
     have produced a card the server priced one way and the game printed another.
-    The derived columns are written from the *overridden* card for the same
+    The derived columns are written from the _overridden_ card for the same
     reason.
   - A keyword the engine does not implement is **rejected**, not printed: an
     invented keyword renders a chip with no rules text and does nothing at all
@@ -1080,7 +1162,7 @@ sweep, whose headline finding was in the live database rather than in the code.
   - `creator_bulk_add_cards` gets this for free: it hands each row straight to
     `apply_card_upsert`, which now reads `overrides`.
 - **The bar for the set is 100 cards, not 10 submitters.** The old copy quoted
-  `POLL_THRESHOLD = 10` *submitters*, which measures interest rather than
+  `POLL_THRESHOLD = 10` _submitters_, which measures interest rather than
   content — ten players submitting one card each is a shelf, not a set. The
   screen now shows a progress meter against `SHOWCASE_MIN_CARDS = 100`
   (pending + approved + printed), and `get_showcase_stats` returns `submitted`
@@ -1111,7 +1193,7 @@ sweep, whose headline finding was in the live database rather than in the code.
   each stored one generic essence more expensive than `cardpool.ts` derives —
   a `COST_ADJUST` balance pass that shipped in code and never ran `db:sync`.
   Every other mechanics field on every one of the 297 cards matched exactly,
-  which is what made it invisible: the *game* was right, and only the server's
+  which is what made it invisible: the _game_ was right, and only the server's
   own reads (`pick_deck_bucket`'s cheap-first ordering for Deck Box builds, and
   anything pricing off `essence_cost`) were wrong. Corrected in place, and the
   whole-pool hash now matches the bundle field for field.
@@ -1156,7 +1238,7 @@ Reachable from the main menu (`CARD SUBMISSIONS`).
   Charm, Event or Location — and flavor text. No rules text: mechanics are
   assigned by the game, not written by hand, so there is nothing to write.
 - **One full art per account, per set. One video Mythic per account, per set.**
-  Enforced twice, on purpose. `submit_card` counts a pending *or* approved
+  Enforced twice, on purpose. `submit_card` counts a pending _or_ approved
   request as holding the slot, so the form can grey the option out before the
   player fills it in; and `creator_review_submission` re-checks it against what
   actually got **printed**, which is the check that matters — the Creator picks
@@ -1246,7 +1328,7 @@ Three more, found while writing the feature rather than by reading:
   convert-to-credits path and `PackOpening.tsx` branches on it in fifteen
   places. `grant_pack_contents` always grants the card and hard-wires
   `credits_gained` to 0, so all of that UI is unreachable and a player can hold
-  five copies of a Mythic they may only ever play one of. **Not patched**: 
+  five copies of a Mythic they may only ever play one of. **Not patched**:
   wiring it up changes what packs pay out, so it is filed with the other open
   economy calls in `docs/ROADMAP.md` rather than decided here.
 
@@ -1340,8 +1422,7 @@ both and compare them, which is what `bughunt-v11.test.ts` now does.
   lethal. Two live carriers in the pool (`familiar_in_the_dark`,
   `phosphor_lich`).
 - **Neither CPU model subtracted the defender's Bulwark Sanctums.**
-  `damagePlayer` shaves 1 per Bulwark Sanctum off every face packet, floored at
-  0. Attacking, that made an "exactly lethal" all-in read as won when it was
+  `damagePlayer` shaves 1 per Bulwark Sanctum off every face packet, floored at 0. Attacking, that made an "exactly lethal" all-in read as won when it was
   not, and dragged the rest of the board into a losing attack behind it.
   Defending, it made a survivable attack read as lethal and forced a chump block
   to prevent damage the Sanctum was already preventing. Three carriers in the
