@@ -156,9 +156,9 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       // UNPRINTED_KEYWORDS: engine-ready but on no card yet — a glossary
       // entry the player can never meet is dead text (catalog.test.ts owns
       // the same rule for the pool).
-      ...KEYWORDS.filter((kw) => KEYWORD_TYPES[kw] === type && !UNPRINTED_KEYWORDS.includes(kw)).map(
-        (kw) => [kw, KEYWORD_TEXT[kw]] as [string, string],
-      ),
+      ...KEYWORDS.filter(
+        (kw) => KEYWORD_TYPES[kw] === type && !UNPRINTED_KEYWORDS.includes(kw),
+      ).map((kw) => [kw, KEYWORD_TEXT[kw]] as [string, string]),
     ]),
   },
   {

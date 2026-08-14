@@ -60,12 +60,12 @@ const fmt = (v: number | null, w = 6) =>
 console.log(`Cohorts: ${labels.join(' ')} (${paths.length} reports)\n`);
 
 // ---- pinned means and medians ------------------------------------------
-console.log('PINNED suite across cohorts (winPct per cohort | cross-cohort mean | median-of-deck-medians):');
+console.log(
+  'PINNED suite across cohorts (winPct per cohort | cross-cohort mean | median-of-deck-medians):',
+);
 const pinnedMean: Record<string, number> = {};
 for (const lid of leaderIds) {
-  const wps = cohorts.map(
-    (c) => c.leaderPairSuiteSummary.find((r) => r.id === lid)?.winPct ?? NaN,
-  );
+  const wps = cohorts.map((c) => c.leaderPairSuiteSummary.find((r) => r.id === lid)?.winPct ?? NaN);
   const meds = cohorts.map(
     (c) => c.leaderPairSuiteSummary.find((r) => r.id === lid)?.deckMedian ?? NaN,
   );
@@ -77,7 +77,9 @@ for (const lid of leaderIds) {
 }
 
 // ---- the sign table -----------------------------------------------------
-console.log('\nPinned-minus-random GAP per cohort (— = that cohort\'s random arm never rolled the Leader):');
+console.log(
+  "\nPinned-minus-random GAP per cohort (— = that cohort's random arm never rolled the Leader):",
+);
 for (const lid of leaderIds) {
   const gaps: (number | null)[] = cohorts.map((c) => {
     const p = c.leaderPairSuiteSummary.find((r) => r.id === lid);
@@ -87,8 +89,7 @@ for (const lid of leaderIds) {
   });
   const vals = gaps.filter((g): g is number => g !== null);
   const mean = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
-  const oneSigned =
-    vals.length >= 2 && (vals.every((g) => g > 0) || vals.every((g) => g < 0));
+  const oneSigned = vals.length >= 2 && (vals.every((g) => g > 0) || vals.every((g) => g < 0));
   console.log(
     `  ${nameOf[lid].padEnd(28)} ${gaps.map((g) => fmt(g)).join(' ')}  mean ${fmt(mean)}` +
       (oneSigned ? '   << ONE-SIGNED across every sampling cohort' : ''),
@@ -96,7 +97,9 @@ for (const lid of leaderIds) {
 }
 
 // ---- persistent-lemon decks --------------------------------------------
-console.log('\nPer-deck cross-cohort means (a deck 15+ points under its Leader\'s deck median is flagged):');
+console.log(
+  "\nPer-deck cross-cohort means (a deck 15+ points under its Leader's deck median is flagged):",
+);
 for (const lid of leaderIds) {
   const rows = cohorts.map((c) => c.leaderPairSuiteSummary.find((r) => r.id === lid));
   const deckCount = rows[0]?.byDeck.length ?? 0;
@@ -109,9 +112,7 @@ for (const lid of leaderIds) {
     sorted.length % 2 === 1
       ? sorted[(sorted.length - 1) / 2]
       : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
-  const flagged = deckMeans
-    .map((m, k) => ({ m, k }))
-    .filter(({ m }) => median - m >= 15);
+  const flagged = deckMeans.map((m, k) => ({ m, k })).filter(({ m }) => median - m >= 15);
   console.log(
     `  ${nameOf[lid].padEnd(28)} [${deckMeans.map((m) => m.toFixed(1)).join(' / ')}]  median ${median.toFixed(1)}` +
       (flagged.length
