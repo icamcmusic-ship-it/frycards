@@ -86,6 +86,16 @@ export const KEYWORDS = [
   'Onslaught', // Leader — Ember
   'Beacon', // Leader — Light
   'Dread', // Leader — Void
+  // -- v24: the Event generation on the same pattern. Events had printable
+  // colour text in Tide (Echoing), Root (Ritual), Void (Fate) and Shadow
+  // (Exhume) but nothing at all in Ember, Gale or Light — the last type with
+  // colour holes that wide. Implemented and tested engine-side
+  // (keywords-v24-events.test.ts); NOT printed on any card: no roll band
+  // includes them, so the pool stays byte-identical and printing them is a
+  // future content pass's own decision (the v7.5/v23 sequencing lesson). --
+  'Kindle', // Event — Ember
+  'Tailwind', // Event — Gale
+  'Luminous', // Event — Light
 ] as const;
 
 /**
@@ -118,7 +128,15 @@ export const V75_KEYWORDS: readonly string[] = [
  * still listed here — so the exemption cannot outlive its reason. Keep player-
  * facing keyword glossaries from listing these until they print.
  */
-export const UNPRINTED_KEYWORDS: readonly string[] = ['Onslaught', 'Beacon', 'Dread'];
+export const UNPRINTED_KEYWORDS: readonly string[] = [
+  'Onslaught',
+  'Beacon',
+  'Dread',
+  // v24 Event generation — same standing as the Leader three above.
+  'Kindle',
+  'Tailwind',
+  'Luminous',
+];
 
 export type Keyword = (typeof KEYWORDS)[number];
 
@@ -176,6 +194,9 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Onslaught: 'Leader',
   Beacon: 'Leader',
   Dread: 'Leader',
+  Kindle: 'Event',
+  Tailwind: 'Event',
+  Luminous: 'Event',
 };
 
 /**
@@ -213,6 +234,11 @@ export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
   Onslaught: 'Ember',
   Beacon: 'Light',
   Dread: 'Void',
+  // v24 Event generation — fills the last three colour holes any type had:
+  // Events had no printable text in Ember, Gale or Light.
+  Kindle: 'Ember',
+  Tailwind: 'Gale',
+  Luminous: 'Light',
 };
 
 /** Keywords legal on a given card type. */
@@ -272,6 +298,9 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Onslaught: 'While your Leader is on the field, your attacking units get +1 Might.',
   Beacon: 'At your Dawn, your invoked Leader restores 1 Vitality.',
   Dread: 'While your Leader is on the field, enemy units get -1 Might.',
+  Kindle: 'When this Event resolves, deal 1 damage to the enemy player.',
+  Tailwind: 'When this Event resolves, recover a random exhausted friendly unit.',
+  Luminous: 'When this Event resolves, restore 1 Vitality.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -487,6 +516,14 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   Onslaught: 1, // Commander's attack-only half — cheaper than the full aura
   Beacon: 1, // 1 Vitality a turn, priced with Radiant/Sacred
   Dread: 3, // a board-wide enemy debuff: stronger than Commander's own-side aura
+  // v24 Event generation — by-analogy weights, never through a sim pass (they
+  // price nothing until a card prints them). All three are one-shot riders on
+  // a card that resolves once, a strictly weaker shape than the repeating
+  // effects their analogues sit on. Resolution note applies: keywordCostAdj is
+  // Math.round(w / 2), so 1 still rounds up to a full point on a print.
+  Kindle: 1, // half a Wildfire (1 face damage, on resolve instead of on death)
+  Tailwind: 1, // one-shot tempo on your own board, priced with Tethered
+  Luminous: 1, // one-shot Vitality point, priced with Blessed's tier
 };
 
 /** Short label for card-face chips. */

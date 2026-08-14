@@ -75,10 +75,15 @@ const EXPECTED = [
   'Onslaught',
   'Beacon',
   'Dread', // Leader — Ember, Light, Void
+  // v24: the Event generation — implemented and engine-tested, NOT yet
+  // printed (see UNPRINTED_KEYWORDS and keywords-v24-events.test.ts).
+  'Kindle',
+  'Tailwind',
+  'Luminous', // Event — Ember, Gale, Light
 ];
 
 describe('keyword set', () => {
-  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 + 6 v7.5 + 3 v23 Leader keywords, unique', () => {
+  test('the 14 rulebook + 10 v6.0 type + 7 v6.9 colour + 8 v7.3 + 6 v7.5 + 3 v23 Leader + 3 v24 Event keywords, unique', () => {
     expect([...KEYWORDS].sort()).toEqual([...EXPECTED].sort());
     expect(new Set(KEYWORDS).size).toBe(KEYWORDS.length);
   });
@@ -98,8 +103,10 @@ describe('keyword set', () => {
     // safely: the v7.8 restructure froze the 'ldr-kw6' path onto its own
     // fixed list, so these can exist in the registry without re-rolling any
     // Leader — and none is printed yet (UNPRINTED_KEYWORDS).
+    // v24 grows Event 6 -> 9 (Kindle/Tailwind/Luminous) the same way: in the
+    // registry, in no roll band, printed on nothing yet.
     const counts: Record<string, number> = {
-      Event: 6,
+      Event: 9,
       Item: 6,
       Location: 7,
       Leader: 6,

@@ -32,6 +32,7 @@ import {
   isKeyword,
   keywordsForType,
   V75_KEYWORDS,
+  UNPRINTED_KEYWORDS,
 } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -846,8 +847,16 @@ function freshKeywordFor(
   // list's length, so letting these into this list would re-roll the keyword
   // of every card of the type whose own colour has no match and falls back to
   // `all` — see V75_KEYWORDS. They get their own band and their own list.
+  // v24: UNPRINTED_KEYWORDS are excluded for the same reason — registering a
+  // keyword (Kindle/Tailwind/Luminous, Event-typed and colour-mapped) must
+  // not silently reprint the pool. Printing them later means building them a
+  // band of their own, the way v7.5 did; deleting them from
+  // UNPRINTED_KEYWORDS without one re-rolls every colour-fallback Event.
   const all = keywordsForType(type).filter(
-    (kw) => KEYWORD_COLOR[kw] !== undefined && !V75_KEYWORDS.includes(kw),
+    (kw) =>
+      KEYWORD_COLOR[kw] !== undefined &&
+      !V75_KEYWORDS.includes(kw) &&
+      !UNPRINTED_KEYWORDS.includes(kw),
   );
   if (!all.length) return undefined;
   const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];

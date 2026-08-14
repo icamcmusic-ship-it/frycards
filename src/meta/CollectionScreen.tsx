@@ -259,10 +259,17 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
     } catch {
       setBulkError('Something went wrong — check your connection and try again.');
     } finally {
+      // Refresh BEFORE releasing the bulk-busy flag — re-enabling the bulk
+      // buttons against stale spare counts let an immediate re-click run the
+      // whole sell loop into a mid-loop server error.
+      try {
+        await Promise.all([refreshCollection(), refreshProfile()]);
+      } catch {
+        // The sale itself already succeeded/reported; a failed refresh just
+        // means the realtime subscription will catch the counts up.
+      }
       setBulkBusy(null);
       setBulkProgress(null);
-      refreshCollection();
-      refreshProfile();
     }
   };
 
@@ -387,8 +394,10 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
         setSellError(error);
         return;
       }
-      refreshCollection();
-      refreshProfile();
+      // Awaited before `finally` releases `selling` — re-enabling the sell
+      // buttons against the stale counts let a fast second click sell copies
+      // that no longer exist (server rejects it, but with a scary error).
+      await Promise.all([refreshCollection(), refreshProfile()]);
     } catch {
       // quicksellCards rejecting outright (network error) instead of
       // returning {error} previously left the button silently stop

@@ -1876,6 +1876,35 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
           state.log.push(`${def.name} exhumes ${unit.def.name}.`);
         }
       }
+      // v24 Kindle: Ember's on-resolve rider — a guaranteed point at the
+      // face. Routed through damagePlayer so Bulwark reads it like any other
+      // damage, and suppressed on fizzle like the riders above.
+      if (!fizzled && hasKw(def, 'Kindle')) {
+        telemetry.onKeywordProc?.('Kindle', 1);
+        const landed = damagePlayer(state, opponentOf(pid), 1);
+        if (landed > 0) {
+          state.log.push(`${def.name}'s Kindle deals ${landed} damage to ${opponentOf(pid)}.`);
+        }
+      }
+      // v24 Tailwind: Gale's tempo rider — recovers one exhausted friendly
+      // unit. Random over the candidates (seeded rng, the Exhume precedent)
+      // so replays stay deterministic.
+      if (!fizzled && hasKw(def, 'Tailwind')) {
+        const tired = p.field.filter((u) => u.exhausted);
+        if (tired.length > 0) {
+          const u = tired[Math.floor(state.rng() * tired.length)];
+          u.exhausted = false;
+          telemetry.onKeywordProc?.('Tailwind', 1);
+          state.log.push(`${def.name}'s Tailwind recovers ${u.def.name}.`);
+        }
+      }
+      // v24 Luminous: Light's on-resolve rider, a single Vitality point
+      // capped at the start value like every other restore.
+      if (!fizzled && hasKw(def, 'Luminous') && p.vitality < LEADER_HP) {
+        p.vitality += 1;
+        telemetry.onKeywordProc?.('Luminous', 1);
+        state.log.push(`${def.name}'s Luminous restores 1 Vitality to ${pid}.`);
+      }
       p.ashPile.push(card);
       break;
     }

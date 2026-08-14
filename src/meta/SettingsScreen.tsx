@@ -36,8 +36,11 @@ export function SettingsScreen({
     setError('');
     try {
       const err = await setHideSerializedAnnouncements(!profile.hide_serialized_announcements);
+      // Await the refresh before releasing `busy` — the button computes the
+      // next value from `profile`, so re-enabling against the stale profile
+      // made a quick second click re-send the SAME value instead of undoing.
       if (err) setError(err);
-      else refreshProfile();
+      else await refreshProfile();
     } catch {
       setError('Something went wrong — check your connection and try again.');
     } finally {

@@ -801,8 +801,16 @@ function SummaryStage({
   // QUICKSOLD from this very screen are excluded for the same reason — the
   // tile's own contract is "what you still own", and it used to keep quoting
   // the pre-sale number after the cards beside it were stamped SOLD (v23).
+  // Serialized pulls count zero: they can never be quicksold (this screen's
+  // own clutter-sell and CollectionScreen both treat them as permanently
+  // reserved), so quoting their quicksell price advertised value the player
+  // cannot realize.
   const haulValue = pulls.reduce(
-    (s, p, i) => s + (p.converted_to_credits || sold.has(i) ? 0 : quicksellPrice(p.rarity, p.foil)),
+    (s, p, i) =>
+      s +
+      (p.converted_to_credits || sold.has(i) || p.serialized
+        ? 0
+        : quicksellPrice(p.rarity, p.foil)),
     0,
   );
 
