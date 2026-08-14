@@ -261,6 +261,14 @@ export function leaderAbilityWhy(
   const L = g.players[pid].leader;
   if (!L.invoked || L.shattered) return 'Leader not on the field';
   if (!inOwnMain) return 'Leader abilities resolve during your main phases';
+  // `activateLeaderAbility` gates on `inOwnMainClear` — main phase AND an
+  // empty stack. Without this clause the pill stayed live with something
+  // waiting to resolve, and a *targeted* ability walked the player through a
+  // whole target pick before the engine refused it as "Illegal target".
+  if (g.stack.length > 0) {
+    const top = g.stack[g.stack.length - 1];
+    return `${top ? top.sourceName : 'Something'} is still on the stack — let it resolve first`;
+  }
   if (L.abilityUsedThisTurn) return 'One Leader ability per turn — already used';
   const ab = L.def.leaderAbilities?.[idx];
   if (!ab) return 'No such ability';
@@ -1075,6 +1083,11 @@ export interface CpuBeat {
   cardId?: string;
   /** This beat is a declared attack: the attackers lunge across the line. */
   attacking?: boolean;
+  /** This beat is the PLAYER's own Dawn (it runs inside the endPhase that
+   * ends the opponent's turn, so its lines land in the opponent's narrated
+   * slice) — the bubble renders it in the player's colours under a YOUR DAWN
+   * label instead of presenting it as something the opponent did. */
+  mine?: boolean;
 }
 
 /**
@@ -1965,8 +1978,16 @@ export function GameV4({
    * replace with the much worse "invoke during your own main phases".
    */
   const wellspringWhy = ((): string | undefined => {
+    // Narration leaves `inMyMain` true underneath it (the CPU's stack answer
+    // plays out while stage is still 'play'), so without this clause the dots
+    // were live in the middle of the opponent's replay — the same hole
+    // `canTapNow` closed for Locations.
+    if (narrating) return `${cpuLabel} is acting — SKIP ▸▸ to catch up`;
     if (!inMyMain) return 'Play a Wellspring in your own main phase';
-    if (wellspringsLeft <= 0) return 'One Wellspring per turn';
+    if (wellspringsLeft <= 0)
+      return wellspringAllowance(g, HUMAN) > 1
+        ? "Both of this turn's Wellsprings are already down"
+        : 'One Wellspring per turn';
     if (g.stack.length > 0) {
       const top = g.stack[g.stack.length - 1];
       return `${top ? top.sourceName : 'Something'} is still on the stack — let it resolve first`;
@@ -1994,7 +2015,16 @@ export function GameV4({
     const L = me.leader;
     if (L.invoked) return 'Your Leader is already on the field';
     if (L.shattered) return 'Your Leader is shattered';
+    if (narrating) return `${cpuLabel} is acting — SKIP ▸▸ to catch up`;
     if (!inMyMain) return 'Invoke your Leader during your own main phases';
+    // The engine's gate is `inOwnMainClear` — main phase AND an empty stack
+    // (v22 closed exactly this seam for the Wellspring dots). Without the
+    // clause the button stayed enabled, and the click auto-tapped Locations
+    // for a cost the engine was always going to refuse.
+    if (g.stack.length > 0) {
+      const top = g.stack[g.stack.length - 1];
+      return `${top ? top.sourceName : 'Something'} is still on the stack — let it resolve first`;
+    }
     if (!canAfford(me, L.def.cost)) return 'Not enough essence (even tapping every Location)';
     return undefined;
   })();
@@ -2008,10 +2038,19 @@ export function GameV4({
     if (canInvokeLeader(g, HUMAN) && invokeLeader(g, HUMAN)) {
       bump();
       say(`${me.leader.def.name} takes the field.`);
-    } else say("Can't invoke your Leader right now.");
+    } else {
+      // Unreachable now that `leaderInvokeWhy` mirrors the engine gate, but if
+      // it ever fires the auto-tap above exhausted Locations — re-render so
+      // the board doesn't show them untapped.
+      bump();
+      say("Can't invoke your Leader right now.");
+    }
   };
 
-  const abilityWhy = (idx: number): string | undefined => leaderAbilityWhy(g, HUMAN, idx, inMyMain);
+  const abilityWhy = (idx: number): string | undefined =>
+    narrating
+      ? `${cpuLabel} is acting — SKIP ▸▸ to catch up`
+      : leaderAbilityWhy(g, HUMAN, idx, inMyMain);
 
   const tryLeaderAbility = (idx: number) => {
     const why = abilityWhy(idx);
@@ -2032,20 +2071,29 @@ export function GameV4({
     checkWinner();
   };
 
-  const tryRebond = (itemIid: string) => {
-    if (!inMyMain) {
-      say('Re-bond during your own main phases.');
-      return;
+  /** Why can't this loose Item be re-bonded right now? (undefined = it can.)
+   * Mirrors `rebondItem`'s own gate (`inOwnMainClear` — main phase AND empty
+   * stack); the 💠 button reads its `disabled` from this, so it can't offer a
+   * pick the engine will refuse at the end of it. */
+  const rebondWhy = (itemIid: string): string | undefined => {
+    if (narrating) return `${cpuLabel} is acting — SKIP ▸▸ to catch up`;
+    if (!inMyMain) return 'Re-bond during your own main phases';
+    if (g.stack.length > 0) {
+      const top = g.stack[g.stack.length - 1];
+      return `${top ? top.sourceName : 'Something'} is still on the stack — let it resolve first`;
     }
     const item = me.unbondedItems.find((c) => c.iid === itemIid);
-    if (!item) return;
-    if (me.field.length === 0) {
-      say('No friendly unit to re-bond to.');
-      return;
-    }
+    if (!item) return 'That Item is no longer loose';
+    if (me.field.length === 0) return 'No friendly unit to re-bond to';
     const cost: EssenceCost = { generic: item.def.rebondCost ?? 0, pips: {} };
-    if (!canAfford(me, cost)) {
-      say(`Re-bond costs ${cost.generic} essence.`);
+    if (!canAfford(me, cost)) return `Re-bond costs ${cost.generic} essence`;
+    return undefined;
+  };
+
+  const tryRebond = (itemIid: string) => {
+    const why = rebondWhy(itemIid);
+    if (why) {
+      say(why);
       return;
     }
     setPending({ kind: 'rebond', itemIid });
@@ -2129,7 +2177,12 @@ export function GameV4({
         if (rebondItem(g, HUMAN, p.itemIid, targetIid)) {
           bump();
           say('Item re-bonded.');
-        } else say('Illegal re-bond.');
+        } else {
+          // The auto-tap above exhausted Locations — re-render them even on
+          // the refusal path.
+          bump();
+          say('Illegal re-bond.');
+        }
         return;
       }
     }
@@ -2440,16 +2493,30 @@ export function GameV4({
     logStart: number,
     events: CpuTurnEvent[],
     onDone: () => void,
+    /** Trailing count of `lines` that are the PLAYER's own Dawn — see
+     * `CpuBeat.mine`. The callers that narrate a completed CPU turn compute
+     * it from `g.dawnLog`; mid-turn narrations pass nothing. */
+    mineTail = 0,
   ) => {
-    narrateBeats(
-      buildCpuBeats(
-        lines.map((l) => humanize(l)),
-        logStart,
-        events,
-        g,
-      ),
-      onDone,
+    const beats = buildCpuBeats(
+      lines.map((l) => humanize(l)),
+      logStart,
+      events,
+      g,
     );
+    for (let i = Math.max(0, beats.length - mineTail); i < beats.length; i++) beats[i].mine = true;
+    narrateBeats(beats, onDone);
+  };
+
+  /** How many trailing log lines are the human's own Dawn (the one that runs
+   * inside the endPhase ending the CPU's turn). Only meaningful right after a
+   * CPU turn RAN TO COMPLETION — callers gate on that themselves. */
+  const humanDawnTailLen = (): number => {
+    if (g.dawnLog.length === 0 || g.active !== HUMAN) return 0;
+    const tail = g.log.slice(g.log.length - g.dawnLog.length);
+    return tail.length === g.dawnLog.length && tail.every((l, i) => l === g.dawnLog[i])
+      ? g.dawnLog.length
+      : 0;
   };
 
   const skipCpuBeats = () => {
@@ -2496,6 +2563,27 @@ export function GameV4({
     closePreview();
     setStage('play');
     flashPhase('YOUR TURN');
+  };
+
+  /**
+   * Recovery landing for a CPU turn that crashed or hit the resume backstop.
+   *
+   * Those paths used to call `beginHumanTurn()` directly, which set stage
+   * 'play' while `g.active` was still CPU — every control gated on `inMyMain`
+   * was dead, and the one that wasn't (the phase button reads only the stage)
+   * quietly drove the OPPONENT's phases when pressed. Crank the engine forward
+   * to the human's own turn first, best-effort: the engine is already in a
+   * state one call out of couldn't handle, so a second failure just stops the
+   * cranking and leaves the phase button as the escape hatch it always was.
+   */
+  const recoverToHumanTurn = () => {
+    try {
+      let safety = 12;
+      while (!g.winner && g.active === CPU && safety-- > 0) endPhase(g);
+    } catch {
+      /* already recovering from a crash — stop cranking, keep what we have */
+    }
+    beginHumanTurn();
   };
 
   /**
@@ -2593,35 +2681,44 @@ export function GameV4({
         // human's turn instead and leave the details in the console.
         console.error('CPU turn crashed:', e);
         say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
-        beginHumanTurn();
+        recoverToHumanTurn();
         return;
       }
       pause = e as object;
     }
     bump();
-    narrate(g.log.slice(logStart), logStart, events, () => {
-      if (checkWinner()) return;
-      if (pause === CLASH_PAUSE && g.clash && g.clash.step === 'guards') {
-        setGuardSel({});
-        setGuardFocus(g.clash.attackers[0] ?? null);
-        setStage('cpuGuard');
-        say(`${cpuLabel} attacks — assign your guards!`);
-      } else if (pause === PRIORITY_PAUSE) {
-        // Bounded: a resume that somehow makes no progress must not spin the
-        // turn forever through the narration timer.
-        if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
-          settleStack(g, { interactive: false });
-          bump();
-          beginHumanTurn();
-        } else if (hasPriority(g, HUMAN)) {
-          openResponseWindow(resumeCpuTurn);
+    // A completed turn's slice ends with the HUMAN's Dawn (it runs inside the
+    // endPhase that ends the CPU's turn) — mark those beats as the player's
+    // own so they don't narrate as opponent actions.
+    narrate(
+      g.log.slice(logStart),
+      logStart,
+      events,
+      () => {
+        if (checkWinner()) return;
+        if (pause === CLASH_PAUSE && g.clash && g.clash.step === 'guards') {
+          setGuardSel({});
+          setGuardFocus(g.clash.attackers[0] ?? null);
+          setStage('cpuGuard');
+          say(`${cpuLabel} attacks — assign your guards!`);
+        } else if (pause === PRIORITY_PAUSE) {
+          // Bounded: a resume that somehow makes no progress must not spin the
+          // turn forever through the narration timer.
+          if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+            settleStack(g, { interactive: false });
+            bump();
+            recoverToHumanTurn();
+          } else if (hasPriority(g, HUMAN)) {
+            openResponseWindow(resumeCpuTurn);
+          } else {
+            resumeCpuTurn();
+          }
         } else {
-          resumeCpuTurn();
+          beginHumanTurn();
         }
-      } else {
-        beginHumanTurn();
-      }
-    });
+      },
+      pause ? 0 : humanDawnTailLen(),
+    );
   };
 
   /** Pick the CPU's turn back up where a response window paused it. */
@@ -2703,7 +2800,7 @@ export function GameV4({
     } catch (e) {
       console.error('CPU post-clash crashed:', e);
       say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
-      beginHumanTurn();
+      recoverToHumanTurn();
       return;
     }
     playCpuRemainder();
@@ -2727,27 +2824,33 @@ export function GameV4({
       if (e !== PRIORITY_PAUSE) {
         console.error('CPU post-clash crashed:', e);
         say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
-        beginHumanTurn();
+        recoverToHumanTurn();
         return;
       }
       paused = true;
     }
     bump();
     setStage('cpu');
-    narrate(g.log.slice(logStart), logStart, events, () => {
-      if (checkWinner()) return;
-      if (!paused) {
-        beginHumanTurn();
-      } else if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
-        settleStack(g, { interactive: false });
-        bump();
-        beginHumanTurn();
-      } else if (hasPriority(g, HUMAN)) {
-        openResponseWindow(playCpuRemainder);
-      } else {
-        playCpuRemainder();
-      }
-    });
+    narrate(
+      g.log.slice(logStart),
+      logStart,
+      events,
+      () => {
+        if (checkWinner()) return;
+        if (!paused) {
+          beginHumanTurn();
+        } else if (cpuResumeCountRef.current++ > MAX_CPU_RESUMES) {
+          settleStack(g, { interactive: false });
+          bump();
+          recoverToHumanTurn();
+        } else if (hasPriority(g, HUMAN)) {
+          openResponseWindow(playCpuRemainder);
+        } else {
+          playCpuRemainder();
+        }
+      },
+      paused ? 0 : humanDawnTailLen(),
+    );
   };
 
   // ---- clash: human defending (stage 'cpuGuard') --------------------------
@@ -3204,12 +3307,6 @@ export function GameV4({
         </div>
       )}
 
-      {banner && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">
-          {banner}
-        </div>
-      )}
-
       {/* The card the opponent is playing right now, held mid-board for the
           length of its beat. A name in a log line is easy to miss; the face
           is not — this is the difference between "something happened" and
@@ -3227,67 +3324,101 @@ export function GameV4({
         </div>
       )}
 
-      {/* CPU turn narration */}
-      {(stage === 'cpu' || narrating) && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={skipCpuBeats}
-          onKeyDown={(e) => {
-            // The narration renders nested keyword-link buttons; let their own
-            // Enter/Space open the glossary instead of skipping the CPU beats.
-            if (e.target !== e.currentTarget) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              skipCpuBeats();
-            }
-          }}
-          title="Click to fast-forward the opponent's turn"
-          className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none"
-        >
-          {cpuBeat ? (
-            <>
-              {renderKeywordText(cpuBeat.text)}
-              <span className="ml-2 text-[8px] font-mono opacity-80">
-                {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
-              </span>
-            </>
-          ) : (
-            <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              cycleCpuSpeed();
+      {/* Top-of-board message column. The CPU narration bubble, the pending
+          target bar and the `say()` banner all used to live at the same
+          `top-10 z-50` spot as three absolute siblings, so DOM order decided
+          which one painted: every `say()` fired while a narration or a target
+          pick was up — "Bond set — now pick a target for its effect." above
+          all — rendered UNDERNEATH the very bar it was explaining. One
+          column, stacked, so they are all visible at once, and the column
+          (not each bar) carries the phone-width cap. */}
+      <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 flex flex-col items-center gap-1 max-w-[92vw] pointer-events-none">
+        {(stage === 'cpu' || narrating) && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={skipCpuBeats}
+            onKeyDown={(e) => {
+              // The narration renders nested keyword-link buttons; let their own
+              // Enter/Space open the glossary instead of skipping the CPU beats.
+              if (e.target !== e.currentTarget) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                skipCpuBeats();
+              }
             }}
-            title="Narration speed — click to cycle Slow / Normal / Fast"
-            aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
-            className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
+            title="Click to fast-forward the opponent's turn"
+            className={cn(
+              'pointer-events-auto heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none',
+              // The player's own Dawn runs inside the endPhase that ends the
+              // opponent's turn, so its beats ride the same narration — but
+              // they are the PLAYER's, and presenting "You draw a card at
+              // Dawn." in the opponent's red was a mislabel.
+              cpuFocus?.mine
+                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                : 'bg-[var(--c-red)] text-white',
+            )}
           >
-            ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-          </button>
-        </div>
-      )}
+            {cpuBeat ? (
+              <>
+                {/* The bubble itself says HELD: the RESUME/STEP buttons live on
+                  the divider, and a fresh segment parking on its beat 0 under
+                  a hold read as a stuck board to anyone not looking there. */}
+                {cpuPaused && (
+                  <span className="mr-1 text-[8px] font-black bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm">
+                    ❚❚ HELD
+                  </span>
+                )}
+                {cpuFocus?.mine && (
+                  <span className="mr-1 text-[8px] font-black">☀ YOUR DAWN —</span>
+                )}
+                {renderKeywordText(cpuBeat.text)}
+                <span className="ml-2 text-[8px] font-mono opacity-80">
+                  {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
+                </span>
+              </>
+            ) : (
+              <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                cycleCpuSpeed();
+              }}
+              title="Narration speed — click to cycle Slow / Normal / Fast"
+              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
+              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
+            >
+              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
+            </button>
+          </div>
+        )}
 
-      {/* Pending target bar */}
-      {pending && (
-        <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex gap-2 items-center">
-          {pending.kind === 'bond'
-            ? isPendingTarget(HUMAN)
-              ? 'BOND — pick a friendly unit, or your Vitality'
-              : 'BOND — pick a friendly unit'
-            : pending.kind === 'rebond'
-              ? 'RE-BOND — pick a friendly unit'
-              : `PICK A TARGET — ${describeEffect(pending.effect)}`}
-          <button
-            onClick={() => setPending(null)}
-            aria-label="Cancel targeting"
-            className="bg-[var(--c-ink)] px-1"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+        {/* Pending target bar */}
+        {pending && (
+          <div className="pointer-events-auto bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex flex-wrap justify-center gap-2 items-center max-w-[92vw]">
+            {pending.kind === 'bond'
+              ? isPendingTarget(HUMAN)
+                ? 'BOND — pick a friendly unit, or your Vitality'
+                : 'BOND — pick a friendly unit'
+              : pending.kind === 'rebond'
+                ? 'RE-BOND — pick a friendly unit'
+                : `PICK A TARGET — ${describeEffect(pending.effect)}`}
+            <button
+              onClick={() => setPending(null)}
+              aria-label="Cancel targeting"
+              className="bg-[var(--c-ink)] px-1"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        {banner && (
+          <div className="pointer-events-auto bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs text-center">
+            {banner}
+          </div>
+        )}
+      </div>
 
       {/* Clash bar — attacker → guard lines (both directions). Drops at step
           'done': the clash has resolved and only lingers until endPhase. */}
@@ -3758,16 +3889,31 @@ export function GameV4({
             })}
           </span>
         )}
-        {me.unbondedItems.map((c) => (
-          <button
-            key={c.iid}
-            onClick={() => tryRebond(c.iid)}
-            title={`Re-bond ${c.def.name} to a friendly unit for ${c.def.rebondCost ?? 0} essence`}
-            className="btn-pop text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm shrink-0"
-          >
-            💠 {c.def.name} · RE-BOND {c.def.rebondCost ?? 0}
-          </button>
-        ))}
+        {me.unbondedItems.map((c) => {
+          const why = rebondWhy(c.iid);
+          return (
+            <button
+              key={c.iid}
+              onClick={() => tryRebond(c.iid)}
+              disabled={!!why}
+              title={
+                why ??
+                `Re-bond ${c.def.name} to a friendly unit for ${c.def.rebondCost ?? 0} essence`
+              }
+              aria-label={
+                why
+                  ? `Re-bond ${c.def.name} — unavailable: ${why}`
+                  : `Re-bond ${c.def.name} for ${c.def.rebondCost ?? 0} essence`
+              }
+              className={cn(
+                'text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm shrink-0',
+                why ? 'opacity-40 cursor-not-allowed' : 'btn-pop',
+              )}
+            >
+              💠 {c.def.name} · RE-BOND {c.def.rebondCost ?? 0}
+            </button>
+          );
+        })}
         <Tip
           text="Locations produce your Essence — exhaust one to add a pip. Invoking auto-taps whatever the cost needs. The pool empties at the end of every phase."
           className="tap-44 text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
@@ -4127,7 +4273,11 @@ export function GameV4({
 
       {/* Ash-pile drawer */}
       {showAsh && (
-        <div className="absolute right-2 left-2 sm:left-auto top-16 bottom-24 w-auto sm:w-[260px] max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
+        // Phone: a bottom SHEET (top-auto + max-h) that leaves the upper
+        // board readable, instead of the old top-16/bottom-24 overlay that
+        // covered everything including the hand dock. Desktop keeps the
+        // fixed right-hand column.
+        <div className="absolute right-2 left-2 sm:left-auto top-auto sm:top-16 bottom-24 max-h-[52vh] sm:max-h-none w-auto sm:w-[260px] max-w-none sm:max-w-[260px] bg-[var(--c-ink)] ink-border-md z-40 p-2 overflow-y-auto">
           {(() => {
             const owner = showAsh === 'foe' ? foe : me;
             const label = showAsh === 'foe' ? `${cpuLabel.toUpperCase()} ASH-PILE` : 'ASH-PILE';

@@ -76,6 +76,16 @@ export const KEYWORDS = [
   'Blessed', // Item — Light
   'Scorched-Earth', // Location — Ember
   'Glaciate', // Location — Gale
+  // -- v23: the first LEADER keyword generation on v7.8's 'ldr-kw-next'
+  // plumbing (Leaders had three keywords where every other type has six or
+  // seven — the roadmap item). Implemented and tested engine-side; NOT yet
+  // printed on any Leader: cardpool's LEADER_NEXT_KEYWORDS stays empty, so
+  // the pool is byte-identical and printing them is a future content pass's
+  // own decision — the sequencing lesson v7.5 recorded after interleaving a
+  // roll-band widening with balance trials. --
+  'Onslaught', // Leader — Ember
+  'Beacon', // Leader — Light
+  'Dread', // Leader — Void
 ] as const;
 
 /**
@@ -99,6 +109,16 @@ export const V75_KEYWORDS: readonly string[] = [
   'Scorched-Earth',
   'Glaciate',
 ];
+
+/**
+ * v23: keywords the engine implements and tests but that NO pool card prints
+ * yet — the Leader generation above, awaiting a 'ldr-kw-next' content pass.
+ * The catalog's dead-text guard (catalog.test.ts) exempts exactly this list
+ * and, in the other direction, fails the moment one of these DOES print while
+ * still listed here — so the exemption cannot outlive its reason. Keep player-
+ * facing keyword glossaries from listing these until they print.
+ */
+export const UNPRINTED_KEYWORDS: readonly string[] = ['Onslaught', 'Beacon', 'Dread'];
 
 export type Keyword = (typeof KEYWORDS)[number];
 
@@ -153,6 +173,9 @@ export const KEYWORD_TYPES: Record<Keyword, CardType> = {
   Blessed: 'Item',
   'Scorched-Earth': 'Location',
   Glaciate: 'Location',
+  Onslaught: 'Leader',
+  Beacon: 'Leader',
+  Dread: 'Leader',
 };
 
 /**
@@ -184,6 +207,12 @@ export const KEYWORD_COLOR: Partial<Record<Keyword, string>> = {
   Blessed: 'Light',
   'Scorched-Earth': 'Ember',
   Glaciate: 'Gale',
+  // v23 Leader generation. Leaders had keywords in Shadow only (Warlord);
+  // these fill Ember, Light and Void so a future 'ldr-kw-next' print has an
+  // on-colour option for six of the nine pool Leaders.
+  Onslaught: 'Ember',
+  Beacon: 'Light',
+  Dread: 'Void',
 };
 
 /** Keywords legal on a given card type. */
@@ -240,6 +269,9 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   'Scorched-Earth':
     'At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit.',
   Glaciate: 'At every other Dawn, exhaust a target enemy unit.',
+  Onslaught: 'While your Leader is on the field, your attacking units get +1 Might.',
+  Beacon: 'At your Dawn, your invoked Leader restores 1 Vitality.',
+  Dread: 'While your Leader is on the field, enemy units get -1 Might.',
 };
 
 /** Cost weight each keyword contributes to a card's essence cost in the
@@ -448,6 +480,13 @@ export const KEYWORD_COST: Record<Keyword, number> = {
   // forward on that basis.
   'Scorched-Earth': 3, // a repeating board sweep, gated on 3+ Sanctums
   Glaciate: 3, // tempo denial every other Dawn, priced with Scorched-Earth
+  // v23 Leader generation — by-analogy weights, never through a sim pass
+  // (they price nothing until a card prints them; recorded now so the first
+  // print doesn't invent them ad hoc). Resolution note applies: keywordCostAdj
+  // is Math.round(w / 2), so 1 rounds up to a full point.
+  Onslaught: 1, // Commander's attack-only half — cheaper than the full aura
+  Beacon: 1, // 1 Vitality a turn, priced with Radiant/Sacred
+  Dread: 3, // a board-wide enemy debuff: stronger than Commander's own-side aura
 };
 
 /** Short label for card-face chips. */

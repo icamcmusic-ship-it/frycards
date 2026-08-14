@@ -17,7 +17,7 @@ import {
 } from './cardpool';
 import { itemSurvives, totalCost } from './cards';
 import { GENERATED_CARDS } from '../generated-cards';
-import { KEYWORDS } from './keywords';
+import { KEYWORDS, UNPRINTED_KEYWORDS } from './keywords';
 import { LEADER_COLORS, cardColors, isColorLegal } from './colors';
 
 test('catalog sanity: pool is non-empty and has Leaders', () => {
@@ -71,8 +71,21 @@ test('every keyword the rulebook prints reaches at least one card', () => {
   for (const c of POOL_V4) {
     for (const kw of c.keywords ?? []) carriers.set(kw, (carriers.get(kw) ?? 0) + 1);
   }
-  const dead = [...carriers].filter(([, n]) => n === 0).map(([kw]) => kw);
+  // v23: UNPRINTED_KEYWORDS is the one sanctioned exception — engine-ready
+  // Leader keywords whose print is deferred to a content pass. The guard
+  // still owns them in the other direction below.
+  const dead = [...carriers]
+    .filter(([kw, n]) => n === 0 && !UNPRINTED_KEYWORDS.includes(kw))
+    .map(([kw]) => kw);
   expect(dead, `keywords with no carrier in the pool: ${dead.join(', ')}`).toEqual([]);
+});
+
+test('UNPRINTED_KEYWORDS lists only keywords that genuinely have no carrier', () => {
+  // The exemption above must not outlive its reason: the moment a listed
+  // keyword prints on a pool card, this fails and the entry comes out.
+  const printed = new Set(POOL_V4.flatMap((c) => c.keywords ?? []));
+  const stale = UNPRINTED_KEYWORDS.filter((kw) => printed.has(kw));
+  expect(stale, `now printed — remove from UNPRINTED_KEYWORDS: ${stale.join(', ')}`).toEqual([]);
 });
 
 test('units have sane stats and only real keywords', () => {

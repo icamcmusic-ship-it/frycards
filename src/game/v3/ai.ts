@@ -513,7 +513,14 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         c.def.type === 'Item' ? (bestBondTarget(state, pid)?.iid ?? BOND_TARGET_SELF) : undefined;
       const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
       if (invokeCard(state, pid, c.iid, { targetIid, bondTargetIid })) {
-        settleAfterPlay(state, pid);
+        // Emitted BEFORE settleAfterPlay: that call exits by THROWING when the
+        // play leaves the opponent holding priority (the UI's response
+        // window), so an observe placed after it never fires for exactly the
+        // plays the player is asked to answer — the narration got a bare log
+        // line with no card spotlight and no rings, followed by a PASS/respond
+        // window over a card it never showed. The stamped `logAt` now precedes
+        // the resolution lines, which fall to the name-scan fallback instead
+        // of inheriting this event's rings — the more precise attribution.
         observe?.({
           kind: 'invoke',
           name: c.def.name,
@@ -522,6 +529,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
           targetIid,
           targetName,
         });
+        settleAfterPlay(state, pid);
         progress = true;
         break;
       }
@@ -540,7 +548,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
         const targetIid = chooseTarget(state, pid, reserved.def);
         const targetName = targetIid ? findUnit(state, targetIid)?.def.name : undefined;
         if (invokeCard(state, pid, reserved.iid, { targetIid })) {
-          settleAfterPlay(state, pid);
+          // Before settleAfterPlay — see the note at the main invoke loop.
           observe?.({
             kind: 'invoke',
             name: reserved.def.name,
@@ -549,6 +557,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
             targetIid,
             targetName,
           });
+          settleAfterPlay(state, pid);
         }
       }
     }
@@ -1120,7 +1129,7 @@ function reactionPlaysBody(
       }
       targetIid ??= c.def.onInvoke ? autoTarget(state, defender, c.def.onInvoke) : undefined;
       if (invokeCard(state, defender, c.iid, { targetIid })) {
-        settleAfterPlay(state, defender);
+        // Before settleAfterPlay — see the note at the main invoke loop.
         observe?.({
           kind: 'invoke',
           name: c.def.name,
@@ -1130,6 +1139,7 @@ function reactionPlaysBody(
           targetName: targetIid ? findUnit(state, targetIid)?.def.name : undefined,
           by: defender,
         });
+        settleAfterPlay(state, defender);
         plays++;
         progress = true;
         break;

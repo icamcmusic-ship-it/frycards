@@ -970,7 +970,10 @@ function PackTile({
             )}
           </div>
         )}
-        {pack.price_vouchers != null && (
+        {/* `price_vouchers` 0 means "not voucher-purchasable", same as the
+            cosmetics grid below and ProfileScreen document — a bare `!= null`
+            rendered a free 0 VOUCHERS buy button on such a row (v23). */}
+        {pack.price_vouchers != null && pack.price_vouchers > 0 && (
           <div className="flex-1 min-w-0">
             <PopButton
               color="steel"
@@ -1037,7 +1040,7 @@ function PackTile({
             )}
           </button>
         )}
-        {pack.price_vouchers != null && (
+        {pack.price_vouchers != null && pack.price_vouchers > 0 && (
           <button
             disabled={!profile || !!busyId || profile.vouchers < pack.price_vouchers}
             onClick={() => onSaveForLater(pack, 'vouchers')}
@@ -1103,11 +1106,17 @@ function BountiesTab({
   /** Why this bounty card can't be sold, or null when it can. */
   const sellBlockedWhy = (card: BountyCard): string | null => {
     const locked = lockedByDecks.get(card.card_id) || 0;
-    if (card.owned - 1 < locked) return 'In use by one of your decks — remove it first';
     const reserved = serializedReserved.get(card.card_id) || 0;
+    // A deck lock and a Serialized print reserve DIFFERENT physical copies,
+    // so they ADD — checking each against the same `owned - 1` let a card
+    // that was both deck-locked and Serialized pass both gates and reach the
+    // server's refusal (v23). Every other sell surface sums them
+    // (Collection, Marketplace, Player Shops).
+    if (card.owned - 1 >= locked + reserved) return null;
+    if (card.owned - 1 < locked) return 'In use by one of your decks — remove it first';
     if (reserved > 0 && card.owned - 1 < reserved)
       return "You own a Serialized copy — it can't be sold";
-    return null;
+    return 'Your spare copies are deck-locked or Serialized — none can be sold';
   };
 
   const load = async () => {

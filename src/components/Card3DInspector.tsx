@@ -43,6 +43,7 @@ export function Card3DInspector({
   def,
   foil,
   canToggleFoil,
+  onFoilToggle,
   serial,
   meta,
   actions,
@@ -53,6 +54,11 @@ export function Card3DInspector({
   foil?: boolean;
   /** When the player owns both normal and foil copies, show a variant toggle. */
   canToggleFoil?: boolean;
+  /** Fired when ✦ VIEW FOIL / VIEW NORMAL flips the variant on display, so a
+   * caller whose side panels describe the variant (Collection's market value)
+   * can follow — without this the toggle changed only the picture while the
+   * numbers beside it kept describing the tile that was clicked. */
+  onFoilToggle?: (showFoil: boolean) => void;
   /** This exact numbered print — mutually exclusive with foil (serialized
    * copies are never foil, see quicksell_cards' serialized-reserved check),
    * so passing this suppresses the foil toggle entirely. */
@@ -343,7 +349,11 @@ export function Card3DInspector({
             )}
             {canToggleFoil && !serial && (
               <button
-                onClick={() => setShowFoil((f) => !f)}
+                onClick={() => {
+                  const next = !showFoil;
+                  setShowFoil(next);
+                  onFoilToggle?.(next);
+                }}
                 className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
               >
                 {showFoil ? 'VIEW NORMAL' : '✦ VIEW FOIL'}
