@@ -45,6 +45,18 @@ import { COLORS } from './colors';
 
 const SEATS: PlayerId[] = ['P1', 'P2'];
 
+/**
+ * Soak volume. Every stress pass since v22 has raised this by hand, run it,
+ * and reverted the edit before committing so CI stays quick — which means the
+ * raised number lives only in a changelog sentence and nobody can re-run last
+ * pass's volume without re-deriving it. It is an env var now:
+ *
+ *   FUZZ_SEEDS=1000 npx vitest run src/game/v3/fuzz.test.ts
+ *
+ * The default is the CI number and is what an unset environment gets.
+ */
+const SOAK_SEEDS = Math.max(1, Number(process.env.FUZZ_SEEDS) || 200);
+
 /** Everything that must hold at every observable point of every game. */
 function checkInvariants(g: GameState, where: string): void {
   const seen = new Map<string, string>();
@@ -146,38 +158,44 @@ function checkInvariants(g: GameState, where: string): void {
 }
 
 describe('soak — full AI matches over randomized real-catalog decks', () => {
-  test('200 seeded matches finish cleanly with every invariant intact', () => {
-    const TURN_CAP = 400;
-    let decided = 0;
+  test(
+    `${SOAK_SEEDS} seeded matches finish cleanly with every invariant intact`,
+    () => {
+      const TURN_CAP = 400;
+      let decided = 0;
 
-    for (let seed = 1; seed <= 200; seed += 1) {
-      const rng = mulberry32(seed * 7919);
-      const a: DeckDef = buildDeck(randomArchetype(rng));
-      const b: DeckDef = buildDeck(randomArchetype(rng));
-      const g = createGame(a, b, POOL_BY_ID, {
-        rng: mulberry32(seed * 104729),
-        firstPlayer: seed % 2 === 0 ? 'P1' : 'P2',
-      });
+      for (let seed = 1; seed <= SOAK_SEEDS; seed += 1) {
+        const rng = mulberry32(seed * 7919);
+        const a: DeckDef = buildDeck(randomArchetype(rng));
+        const b: DeckDef = buildDeck(randomArchetype(rng));
+        const g = createGame(a, b, POOL_BY_ID, {
+          rng: mulberry32(seed * 104729),
+          firstPlayer: seed % 2 === 0 ? 'P1' : 'P2',
+        });
 
-      for (const pid of SEATS) maybeMulliganPlayer(g, pid, rng);
-      checkInvariants(g, `seed ${seed} setup`);
+        for (const pid of SEATS) maybeMulliganPlayer(g, pid, rng);
+        checkInvariants(g, `seed ${seed} setup`);
 
-      let turns = 0;
-      while (!g.winner && turns < TURN_CAP) {
-        playTurn(g, g.active);
-        turns += 1;
-        checkInvariants(g, `seed ${seed} turn ${turns}`);
+        let turns = 0;
+        while (!g.winner && turns < TURN_CAP) {
+          playTurn(g, g.active);
+          turns += 1;
+          checkInvariants(g, `seed ${seed} turn ${turns}`);
+        }
+
+        // A match that never resolves is itself the bug — the CPU is capable of
+        // passing every phase, so an unbounded game means a stuck phase machine.
+        expect(turns, `seed ${seed} never terminated`).toBeLessThan(TURN_CAP);
+        expect(g.winner, `seed ${seed} ended with no winner`).not.toBeNull();
+        decided += 1;
       }
 
-      // A match that never resolves is itself the bug — the CPU is capable of
-      // passing every phase, so an unbounded game means a stuck phase machine.
-      expect(turns, `seed ${seed} never terminated`).toBeLessThan(TURN_CAP);
-      expect(g.winner, `seed ${seed} ended with no winner`).not.toBeNull();
-      decided += 1;
-    }
-
-    expect(decided).toBe(200);
-  }, 120_000);
+      expect(decided).toBe(SOAK_SEEDS);
+      // Scales with the volume: the default 200 finishes well inside 120s, and a
+      // 1,000-seed stress run must not fail on the clock instead of on a bug.
+    },
+    120_000 + SOAK_SEEDS * 600,
+  );
 
   test('hands never exceed the cap once a turn has been completed', () => {
     for (let seed = 1; seed <= 40; seed += 1) {

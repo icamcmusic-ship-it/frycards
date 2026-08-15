@@ -46,8 +46,11 @@ import { COLORS } from './colors';
 
 const SEATS: PlayerId[] = ['P1', 'P2'];
 // Each seed is a full random-action match with a per-action invariant sweep;
-// 60 keeps the suite quick while still covering thousands of turns.
-const SEEDS = 60;
+// 60 keeps the suite quick while still covering thousands of turns. A stress
+// pass raises it without editing this file:
+//
+//   CHAOS_SEEDS=500 npx vitest run src/game/v3/chaos.test.ts
+const SEEDS = Math.max(1, Number(process.env.CHAOS_SEEDS) || 60);
 
 function check(g: GameState, where: string) {
   const seen = new Set<string>();

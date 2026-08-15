@@ -72,6 +72,7 @@ import {
   CardDef,
   Effect,
   EssenceCost,
+  LEADER_HP,
   MAX_HAND,
   totalCost,
   hasKw,
@@ -1374,6 +1375,7 @@ export function GameV4({
   cpuLabel,
   playerName,
   seed,
+  startVitality,
   onExit,
   onRematch,
   onResult,
@@ -1391,6 +1393,18 @@ export function GameV4({
    * match driver) pass one so a run is reproducible. Real matches omit it and
    * get a clock-derived seed. */
   seed?: number;
+  /**
+   * Opening Vitality override, for the offline harnesses only — real matches
+   * never pass it.
+   *
+   * v26: the Playwright match driver clicks legal-but-random actions against a
+   * CPU that plays properly, so across every match it has ever driven it has
+   * lost every single one. The victory screen — its rewards block, its rematch
+   * control, its result callback — had therefore never been rendered by the
+   * harness whose job is to render every state of the match UI. Dropping the
+   * CPU's opening Vitality lets a random clicker actually close a game out.
+   */
+  startVitality?: { human?: number; cpu?: number };
   onExit: () => void;
   /**
    * Start another match with the same setup, without going back out to the
@@ -1431,6 +1445,13 @@ export function GameV4({
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
     maybeMulliganPlayer(game, CPU, game.rng);
+    // Harness-only opening Vitality override — see the `startVitality` prop.
+    if (startVitality) {
+      if (startVitality.human !== undefined)
+        game.players[HUMAN].vitality = Math.max(1, Math.min(LEADER_HP, startVitality.human));
+      if (startVitality.cpu !== undefined)
+        game.players[CPU].vitality = Math.max(1, Math.min(LEADER_HP, startVitality.cpu));
+    }
     // The human's Dusk shed choice must happen AFTER "At Dusk" triggers
     // resolve (they can draw), so the engine calls back here mid-Dusk. A
     // pre-pick made before ending the turn is honored when it still fits;

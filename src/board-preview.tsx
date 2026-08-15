@@ -5,6 +5,9 @@
 // Query string (used by `scripts/drive-match.ts`, the Playwright match driver):
 //   ?seed=N    deck roll AND the match RNG, so a run reproduces exactly
 //   ?speed=0|1|2  narration speed (SLOW / NORMAL / FAST) for this page only
+//   ?cpuvit=N  / ?myvit=N   opening Vitality override (harness only) — the
+//     driver clicks random legal actions, so without a handicap it loses every
+//     match and the VICTORY screen never renders. See GameV4's startVitality.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
@@ -24,6 +27,12 @@ if (speedParam !== null) {
   }
 }
 
+const vitParam = (key: string): number | undefined => {
+  const n = Number(params.get(key));
+  return params.get(key) !== null && Number.isFinite(n) && n > 0 ? n : undefined;
+};
+const startVitality = { human: vitParam('myvit'), cpu: vitParam('cpuvit') };
+
 const a = randomArchetype(mulberry32(seed || 7));
 const b = randomArchetype(mulberry32(seed ? seed * 7919 + 1 : 99));
 
@@ -35,6 +44,11 @@ createRoot(document.getElementById('root')!).render(
     cpuLabel={b.label}
     playerName="Preview"
     seed={seed || undefined}
+    startVitality={
+      startVitality.human !== undefined || startVitality.cpu !== undefined
+        ? startVitality
+        : undefined
+    }
     onExit={() => undefined}
   />,
 );
