@@ -35,6 +35,7 @@ import {
   BOND_TARGET_SELF,
   declareAttackers,
   declareGuards,
+  discardLiveClash,
   resolveClash,
   canInvokeLeader,
   canPayCost,
@@ -417,7 +418,27 @@ function Tip({
   className?: string;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  // Portaled at a viewport-fixed position (same reason as HoverPreview): the
+  // badges wearing these sit inside overflow-scrolling field lanes, where an
+  // absolute popover was clipped by the lane edge — and pushed fully
+  // off-screen for the leftmost unit on a phone.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const open = pos !== null;
+  const setOpen = (v: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(open) : v;
+    if (!next) {
+      setPos(null);
+      return;
+    }
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const vw = window.visualViewport?.width ?? window.innerWidth;
+    const width = 160; // matches the popover's w-40
+    setPos({
+      top: rect.bottom + 4,
+      left: Math.min(Math.max(8, rect.right - width), vw - width - 8),
+    });
+  };
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -456,11 +477,16 @@ function Tip({
       }}
     >
       {children}
-      {open && (
-        <span className="absolute z-[9995] top-full right-0 mt-1 w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none">
-          {text}
-        </span>
-      )}
+      {open &&
+        createPortal(
+          <span
+            className="fixed z-[9995] w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
+            style={{ top: pos!.top, left: pos!.left }}
+          >
+            {text}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -572,12 +598,26 @@ function LocationTile({
             }
           : undefined
       }
+      onKeyDown={
+        sanctum && onInspect
+          ? (e) => {
+              // Keyboard path to READ a tappable Sanctum without spending its
+              // tap (Enter/Space alone are the click = tap-for-essence).
+              if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault();
+                onInspect();
+              }
+            }
+          : undefined
+      }
       disabled={!action}
       title={
         loc.exhausted
           ? `${label} — exhausted (recovers at Dawn)`
           : tappable
-            ? `${label} — exhaust: add one ${loc.produces} essence`
+            ? `${label} — exhaust: add one ${loc.produces} essence${
+                sanctum ? ' (right-click / long-press / Shift+Enter to read it)' : ''
+              }`
             : label
       }
       aria-label={`${label}${loc.exhausted ? ', exhausted' : ''}`}
@@ -1404,6 +1444,12 @@ export function GameV4({
     recordDamageFloats();
     setVersion((v) => v + 1);
   };
+  /** bump() for the compute-then-narrate CPU paths: damage/heal floats queue
+   * for the narration ticker instead of firing on the final board render. */
+  const bumpDeferringFloats = () => {
+    recordDamageFloats(true);
+    setVersion((v) => v + 1);
+  };
 
   const [stage, setStage] = useState<Stage>('mulligan');
   const [mulliganCount, setMulliganCount] = useState(0);
@@ -1452,7 +1498,13 @@ export function GameV4({
    * getting exactly the same 1150ms as "Kuro plays a Tide Wellspring". */
   const beatMs = (beat?: CpuBeat) => {
     const spotlit = beat?.cardId || beat?.attacking ? 1.45 : 1;
-    const aimedAtMe = beat?.targets.some((t) => t === HUMAN || me.field.some((u) => u.iid === t))
+    // iidOwnerRef, not just me.field: a unit of mine that DIED during the
+    // turn is gone from the field by narration time — and its beat is exactly
+    // the one that most needs the longer dwell.
+    const aimedAtMe = beat?.targets.some(
+      (t) =>
+        t === HUMAN || me.field.some((u) => u.iid === t) || iidOwnerRef.current.get(t) === HUMAN,
+    )
       ? 1.4
       : 1;
     return CPU_PACE.BEAT_MS * CPU_SPEEDS[cpuSpeedRef.current].mult * Math.max(spotlit, aimedAtMe);
@@ -1493,6 +1545,10 @@ export function GameV4({
   const [flashIids, setFlashIids] = useState<Set<string>>(new Set());
   const damageMemoRef = useRef<Map<string, number>>(new Map());
   const floatIdRef = useRef(0);
+  /** Floats queued by bumpDeferringFloats, waiting for their narration beat. */
+  const pendingFloatsRef = useRef<DmgFloat[]>([]);
+  /** Owner of every unit iid ever fielded — survives the unit's death. */
+  const iidOwnerRef = useRef<Map<string, PlayerId>>(new Map());
   const resultSent = useRef(false);
   const cpuTimeoutRef = useRef<number | null>(null);
   // Separate from cpuTimeoutRef (which paces the beat-by-beat narration):
@@ -1500,6 +1556,9 @@ export function GameV4({
   // computed. Kept distinct so SKIP during that delay can fast-forward into
   // resolveCpuTurn instead of just cancelling it outright (see skipCpuBeats).
   const cpuThinkTimeoutRef = useRef<number | null>(null);
+  /** One-shot: SKIP was pressed during the "thinking" delay, so the next
+   * narration run starts already fast-forwarded (see skipCpuBeats). */
+  const skipNextNarrationRef = useRef(false);
   const bannerTimeoutRef = useRef<number | null>(null);
   const phaseTimeoutRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<number | null>(null);
@@ -1558,13 +1617,24 @@ export function GameV4({
   }
 
   /** Diff every unit's marked damage and both players' Vitality against the
-   * last bump, floating "-N"/"+N" over whatever changed. */
-  function recordDamageFloats() {
+   * last bump, floating "-N"/"+N" over whatever changed.
+   *
+   * `defer` (v24): the compute-then-narrate CPU paths render the FINAL board
+   * first and replay the beats after — so every float used to fire during the
+   * "thinking" bubble and was gone seconds before the beat describing the hit
+   * arrived. Deferred floats queue instead, and the narration ticker releases
+   * each one when a beat involving its unit/player is on screen (leftovers
+   * flush when the run ends). */
+  function recordDamageFloats(defer = false) {
     const seen = new Map<string, number>();
     const fresh: DmgFloat[] = [];
     for (const pid of ['P1', 'P2'] as PlayerId[]) {
       const p = g.players[pid];
       for (const u of p.field) {
+        // Every iid ever seen on a field, by owner — beatMs uses it to give
+        // "aimed at me" dwell time to beats about units that DIED this turn
+        // (they're no longer in me.field by narration time).
+        iidOwnerRef.current.set(u.iid, pid);
         seen.set(u.iid, u.damage);
         const prev = damageMemoRef.current.get(u.iid);
         if (prev !== undefined && u.damage > prev) {
@@ -1603,9 +1673,31 @@ export function GameV4({
       }
     }
     damageMemoRef.current = seen;
-    spawnFloats(fresh);
+    if (defer) pendingFloatsRef.current.push(...fresh);
+    else spawnFloats(fresh);
   }
   const floatsFor = (iid: string) => floats.filter((f) => f.iid === iid);
+
+  /** Release queued floats whose unit/player a narration beat is pointing at
+   * (beat targets use unit iids and player ids; vitality floats key
+   * 'vit:P1'/'vit:P2'). Pass no beat to flush everything. */
+  const releaseFloatsFor = (beat?: CpuBeat) => {
+    if (pendingFloatsRef.current.length === 0) return;
+    let release: DmgFloat[];
+    if (!beat) {
+      release = pendingFloatsRef.current;
+      pendingFloatsRef.current = [];
+    } else {
+      const ids = new Set([...beat.targets, ...beat.actors]);
+      release = pendingFloatsRef.current.filter(
+        (f) => ids.has(f.iid) || (f.iid.startsWith('vit:') && ids.has(f.iid.slice(4))),
+      );
+      if (release.length === 0) return;
+      const gone = new Set(release.map((f) => f.id));
+      pendingFloatsRef.current = pendingFloatsRef.current.filter((f) => !gone.has(f.id));
+    }
+    spawnFloats(release);
+  };
 
   /** Big center-screen phase banner (MAIN I / CLASH / …). */
   const flashPhase = (label: string) => {
@@ -1793,6 +1885,11 @@ export function GameV4({
     if (!inMyMain) {
       if (inMyReaction || inMyResponse) {
         if (!quick && !ambush) return 'Only Quick Events / Ambush units can respond';
+      } else if (stage === 'cpuGuard' && g.clash && g.clash.step === 'guards') {
+        // The old fall-through said "invoke during your own main phases" —
+        // wrong on both halves here: it's the player's own clash, and a
+        // reaction window is one confirm away.
+        return 'Assign guards first — the reaction window opens after you confirm';
       } else {
         return 'Invoke during your own main phases';
       }
@@ -1863,7 +1960,11 @@ export function GameV4({
         events.push(ev);
       });
     }
-    bump();
+    // Deferred like the other compute-then-narrate paths — floats land on
+    // their beats; with nothing narrated (plays 0) nothing was deferred worth
+    // holding and the next ticker/turn boundary flushes leftovers anyway.
+    if (plays > 0) bumpDeferringFloats();
+    else bump();
     if (checkWinner()) return;
     // `plays` is handed to the continuation rather than returned: with nothing
     // to narrate the continuation runs SYNCHRONOUSLY, so a caller closing over
@@ -2300,12 +2401,17 @@ export function GameV4({
         // resolveCpuTurn already does, and leave the details in the console.
         console.error('CPU clash reactions crashed:', e);
         say(`${cpuLabel} hit an unexpected snag — play passes to you.`);
-        beginHumanTurn();
+        // recoverToHumanTurn, NOT beginHumanTurn: on a 'cpuClash' crash the
+        // CPU is still the active player with a live clash — beginHumanTurn
+        // alone left stage 'play' with every inMyMain control dead and the
+        // phase button hidden behind the unresolved clash. Zero enabled
+        // actions; only CONCEDE escaped.
+        recoverToHumanTurn();
         return;
       }
       paused = true;
     }
-    bump();
+    bumpDeferringFloats();
     if (checkWinner()) return;
     narrate(g.log.slice(logStart), logStart, events, () => {
       if (checkWinner()) return;
@@ -2320,6 +2426,10 @@ export function GameV4({
 
   /** After the CPU's guards + reactions are in: back to the human's clash. */
   const finishMyAttackDeclaration = () => {
+    // Same stale-pick clear as finishCpuClashResolve/resumeCpuTurn: a target
+    // pick abandoned inside a mid-clash response window must not survive
+    // into the resumed clash.
+    setPending(null);
     setStage('play');
     // Both halves of the CPU's answer are narrated beat-by-beat now — the
     // guard lines by `guardBeats` and the reaction plays by
@@ -2407,6 +2517,9 @@ export function GameV4({
     const beats = cpuBeatsRef.current;
     const i = cpuBeatIdxRef.current;
     if (i >= beats.length) {
+      // Whatever queued floats no beat claimed (e.g. a unit that died before
+      // its line, or a skipped run) still fire — late beats one, lost none.
+      releaseFloatsFor();
       const done = cpuDoneRef.current;
       cpuDoneRef.current = null;
       setCpuBeat(null);
@@ -2418,6 +2531,10 @@ export function GameV4({
     cpuBeatIdxRef.current = i + 1;
     setCpuBeat({ text: beats[i].text, idx: i, total: beats.length });
     setCpuFocus(beats[i]);
+    // The damage/heal floats belonging to this beat's units fire NOW, beside
+    // the line describing them, not seconds earlier on the pre-narration
+    // render (see bumpDeferringFloats).
+    releaseFloatsFor(beats[i]);
     // Paused: the beat stays on screen — with its rings and its spotlight —
     // until the player steps forward or resumes. Nothing else drives the
     // chain, so not scheduling the next timeout IS the pause.
@@ -2434,6 +2551,15 @@ export function GameV4({
     cpuBeatsRef.current = beats;
     cpuBeatIdxRef.current = 0;
     cpuDoneRef.current = onDone;
+    // SKIP pressed during the pre-compute "thinking" delay: the player asked
+    // to fast-forward the turn before its beats existed. Honor it now — the
+    // old behavior narrated normally and made them press SKIP a second time.
+    if (skipNextNarrationRef.current) {
+      skipNextNarrationRef.current = false;
+      cpuBeatIdxRef.current = beats.length;
+      tickCpuBeat();
+      return;
+    }
     if (beats.length === 0) {
       // Cleared as well as called: a `cpuDoneRef` left pointing at a spent
       // continuation is what `toggleCpuPause` would otherwise read as "a
@@ -2540,6 +2666,8 @@ export function GameV4({
     if (cpuThinkTimeoutRef.current !== null) {
       window.clearTimeout(cpuThinkTimeoutRef.current);
       cpuThinkTimeoutRef.current = null;
+      // One-shot: the narration this resolveCpuTurn builds starts skipped.
+      skipNextNarrationRef.current = true;
       resolveCpuTurn();
       return;
     }
@@ -2549,6 +2677,9 @@ export function GameV4({
   };
 
   const beginHumanTurn = () => {
+    // Safety flush: a recovery path can land here without the narration
+    // ticker's own end-of-run flush having fired.
+    releaseFloatsFor();
     setCpuBeat(null);
     setCpuFocus(null);
     setNarratingBoth(false);
@@ -2578,6 +2709,13 @@ export function GameV4({
    */
   const recoverToHumanTurn = () => {
     try {
+      // A live clash blocks endPhase outright (the engine refuses to end a
+      // phase mid-clash), so cranking below would spin its 12 iterations
+      // doing nothing and land in a stage with zero enabled actions. Drop
+      // the clash first — the same defensive discard finishDuskShed does,
+      // routed through the engine (not a direct `g.clash =` here) since `g`
+      // is a useState value this component must not mutate inline.
+      if (g.clash && g.clash.step !== 'done') discardLiveClash(g);
       let safety = 12;
       while (!g.winner && g.active === CPU && safety-- > 0) endPhase(g);
     } catch {
@@ -2638,6 +2776,13 @@ export function GameV4({
       if (checkWinner()) return;
       if (hasPriority(g, HUMAN)) {
         if (cpuPlays > 0) say(`${cpuLabel} responded — answer it or pass.`);
+        // The window can be re-entered from a path that never set the stage:
+        // the auto-pass in openResponseWindow skips `setStage('respond')`,
+        // and the CPU's answer can put a castable instant INTO our hand
+        // (e.g. a dies-trigger draw), making settleStack halt on us again.
+        // Without this the PASS button never rendered — a hard softlock with
+        // priority ours and no control that could exercise it.
+        setStage('respond');
         return; // still their window
       }
       const resume = respondResumeRef.current;
@@ -2649,6 +2794,11 @@ export function GameV4({
   /** PASS button in a response window. */
   const passMyPriority = () => {
     if (!hasPriority(g, HUMAN)) return;
+    // PASS abandons any half-built target pick — leaving `pending` alive let
+    // the red PICK A TARGET bar (and live target rings) survive into whatever
+    // stage play resumed to, where a click on a still-ringed card would spend
+    // the card the player had decided NOT to cast.
+    setPending(null);
     passPriority(g, HUMAN);
     afterResponseAction();
   };
@@ -2686,7 +2836,7 @@ export function GameV4({
       }
       pause = e as object;
     }
-    bump();
+    bumpDeferringFloats();
     // A completed turn's slice ends with the HUMAN's Dawn (it runs inside the
     // endPhase that ends the CPU's turn) — mark those beats as the player's
     // own so they don't narrate as opponent actions.
@@ -3260,16 +3410,19 @@ export function GameV4({
         {/* Who won the opening coin-flip. It is randomised per match now, and
             it changes real things (the turn-1 Deal skip, the second player's
             bonus Wellspring), so it can't be left implicit. */}
-        <span
-          className="heading-font text-[8px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-steel)]/60 text-[var(--c-paper)] shrink-0 hidden sm:inline"
-          title={
+        {/* Shown on phones too (it's tiny): on a small screen the only other
+            evidence of going second was the extra Wellspring itself. Tip
+            makes the explanation tappable where `title` never shows. */}
+        <Tip
+          text={
             g.firstPlayer === HUMAN
               ? 'You went first — you skipped the Deal on turn 1.'
               : 'You went second — you got a second (exhausted) Wellspring on your opening turn.'
           }
+          className="heading-font text-[8px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-steel)]/60 text-[var(--c-paper)] shrink-0"
         >
           {g.firstPlayer === HUMAN ? 'ON THE PLAY' : 'ON THE DRAW'}
-        </span>
+        </Tip>
         {/* The phase tracker moved out of this bar into its own full-width
             stepper below — see PhaseStepper. */}
         <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate hidden sm:inline">
@@ -3422,35 +3575,40 @@ export function GameV4({
 
       {/* Clash bar — attacker → guard lines (both directions). Drops at step
           'done': the clash has resolved and only lingers until endPhase. */}
-      {g.clash && g.clash.step !== 'done' && (stage === 'play' || stage === 'cpuGuard') && (
-        <div className="absolute left-1/2 top-[4.6rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
-          <span className="heading-font text-[9px] text-[var(--c-red)]">
-            {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
-          </span>
-          {clashLines.map((line) => (
-            <button
-              key={line.iid}
-              onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
-              className={cn(
-                'text-[8.5px] font-bold px-1 py-0.5 leading-tight text-left',
-                guardStep
-                  ? guardFocus === line.iid
-                    ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm'
-                    : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)] ink-border-sm btn-pop'
-                  : 'text-[var(--c-paper)]/85',
-              )}
-            >
-              #{line.n} {line.name} →{' '}
-              {line.guards.length > 0 ? line.guards.join(' + ') : guardStep ? 'unguarded' : 'YOU'}
-            </button>
-          ))}
-          {reactionStep && (
-            <span className="text-[8px] font-bold text-[#29B6F6]">
-              REACTION WINDOW — Quick / Ambush cards playable
+      {/* 'respond' kept in: a reaction-window invoke opens a response window
+          mid-clash, and hiding the guard lines exactly while the player is
+          deciding whether to counter made the decision blind. */}
+      {g.clash &&
+        g.clash.step !== 'done' &&
+        (stage === 'play' || stage === 'cpuGuard' || stage === 'respond') && (
+          <div className="absolute left-1/2 top-[4.6rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
+            <span className="heading-font text-[9px] text-[var(--c-red)]">
+              {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
             </span>
-          )}
-        </div>
-      )}
+            {clashLines.map((line) => (
+              <button
+                key={line.iid}
+                onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
+                className={cn(
+                  'text-[8.5px] font-bold px-1 py-0.5 leading-tight text-left',
+                  guardStep
+                    ? guardFocus === line.iid
+                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm'
+                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)] ink-border-sm btn-pop'
+                    : 'text-[var(--c-paper)]/85',
+                )}
+              >
+                #{line.n} {line.name} →{' '}
+                {line.guards.length > 0 ? line.guards.join(' + ') : guardStep ? 'unguarded' : 'YOU'}
+              </button>
+            ))}
+            {reactionStep && (
+              <span className="text-[8px] font-bold text-[#29B6F6]">
+                REACTION WINDOW — Quick / Ambush cards playable
+              </span>
+            )}
+          </div>
+        )}
 
       {/* The stack — top of the list resolves first. Only worth showing while
           something is actually waiting on it, which outside a response window
@@ -3569,7 +3727,10 @@ export function GameV4({
       <div
         className={cn(
           'relative shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35',
-          (stage === 'cpu' || narrating) && 'pr-14',
+          // guardStep too: SUGGEST + CLEAR + CONFIRM GUARDS wrap on a phone,
+          // and without the reserved padding the absolutely-positioned LOG
+          // button painted over CONFIRM's right edge and ate its taps.
+          (stage === 'cpu' || narrating || guardStep) && 'pr-14',
         )}
       >
         {/* Narration owns the divider whenever the opponent is acting — during
@@ -4389,6 +4550,22 @@ export function GameV4({
             aria-label="Mulligan"
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-3 sm:p-5 text-center max-w-5xl w-full my-auto outline-none"
           >
+            {/* This overlay covers the top bar (and its CONCEDE) — without an
+                exit here a mis-queued match had to be kept and played out. */}
+            <div className="flex justify-end -mb-6 sm:-mb-8">
+              <button
+                onClick={() =>
+                  setConfirmDialog({
+                    text: 'Concede this match? This will count as a loss.',
+                    onConfirm: concede,
+                  })
+                }
+                className="tap-44 btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-1 ink-border-sm"
+                aria-label="Concede match"
+              >
+                ✕ CONCEDE
+              </button>
+            </div>
             <div className="heading-font text-xl sm:text-3xl mb-1">
               {mulliganCount > 0 ? 'YOUR NEW HAND' : 'KEEP or MULLIGAN?'}
             </div>

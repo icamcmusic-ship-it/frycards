@@ -32,6 +32,7 @@ import {
   isKeyword,
   keywordsForType,
   V75_KEYWORDS,
+  UNPRINTED_KEYWORDS,
 } from './keywords';
 
 // ---------------------------------------------------------------------------
@@ -846,8 +847,16 @@ function freshKeywordFor(
   // list's length, so letting these into this list would re-roll the keyword
   // of every card of the type whose own colour has no match and falls back to
   // `all` — see V75_KEYWORDS. They get their own band and their own list.
+  // v24: UNPRINTED_KEYWORDS are excluded for the same reason — registering a
+  // keyword (Kindle/Tailwind/Luminous, Event-typed and colour-mapped) must
+  // not silently reprint the pool. Printing them later means building them a
+  // band of their own, the way v7.5 did; deleting them from
+  // UNPRINTED_KEYWORDS without one re-rolls every colour-fallback Event.
   const all = keywordsForType(type).filter(
-    (kw) => KEYWORD_COLOR[kw] !== undefined && !V75_KEYWORDS.includes(kw),
+    (kw) =>
+      KEYWORD_COLOR[kw] !== undefined &&
+      !V75_KEYWORDS.includes(kw) &&
+      !UNPRINTED_KEYWORDS.includes(kw),
   );
   if (!all.length) return undefined;
   const onColor = color ? all.filter((kw) => KEYWORD_COLOR[kw] === color) : [];
@@ -1082,6 +1091,11 @@ function mapEvent(c: CardTemplate): CardDef {
   // existing carriers changed keyword and 14 cards that had rolled NOTHING
   // picked one up. It is still a content change and it moved the meta — see
   // the Glaciate note in keywords.ts.
+  // v24: the 76-100 remainder of this roll prints nothing TODAY — the v24
+  // Event generation (Kindle/Tailwind/Luminous, see UNPRINTED_KEYWORDS) was
+  // trialled on a temporary 76-92 band (upward-only, zero re-rolls, measured
+  // in docs/BALANCE_SIM_FINDINGS_v24.md §2) and reverted. A future print
+  // rebuilds that band rather than touching the two live ones below.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
     kwRoll >= 26 && kwRoll < 42

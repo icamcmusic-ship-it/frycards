@@ -390,6 +390,16 @@ function CreatorTools() {
     if (!query.trim() || searching) return;
     setSearching(true);
     setError('');
+    // Searching while a target is selected means "switch players" — but the
+    // results list only renders with no target, so without this the search
+    // ran, showed its spinner, and then displayed nothing. Clearing the
+    // target (and the grant boxes, same as CHANGE) lets the results appear.
+    setTarget(null);
+    setCredits(0);
+    setVouchers(0);
+    setCardId('');
+    setCardQty(1);
+    setCardFoil(false);
     try {
       setResults(await searchPlayers(query));
     } catch {

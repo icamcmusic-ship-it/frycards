@@ -9,6 +9,7 @@ import {
   cancelListing,
   buyListing,
   placeBid,
+  rememberBidListing,
   MarketListing,
   PublicProfile,
   MARKET_FEE,
@@ -59,6 +60,8 @@ function defFor(cardId: string): CardDef {
   );
 }
 
+const LOAD_ERROR = 'Could not load the marketplace. Check your connection and try again.';
+
 export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   const {
     session,
@@ -97,13 +100,16 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       if (gen !== reloadGen.current) return;
       setListings(ls);
       setMyActivity(mine);
+      // A successful (often background/realtime) reload clears a previous
+      // LOAD failure — one network blip used to pin the banner over fully
+      // live data until a manual action. Action errors are left alone.
+      setError((e) => (e === LOAD_ERROR ? '' : e));
       const ids = [...new Set([...ls, ...mine].map((l) => l.seller))];
       const profiles = await fetchPublicProfiles(ids);
       if (gen !== reloadGen.current) return;
       setSellers(new Map(profiles.map((p) => [p.id, p])));
     } catch {
-      if (gen === reloadGen.current)
-        setError('Could not load the marketplace. Check your connection and try again.');
+      if (gen === reloadGen.current) setError(LOAD_ERROR);
     } finally {
       if (gen === reloadGen.current) setLoading(false);
     }
@@ -199,6 +205,18 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     // listing whose countdown has already ticked to "ended" would otherwise
     // still show live, clickable BID/BUY buttons until the next reload.
     const timedOut = timeLeft(l.ends_at) === 'ended';
+    // In the activity fetch, not the seller, not leading, and somebody holds
+    // the high bid: this is a remembered auction the player has been outbid
+    // on (see rememberBidListing) — tag it so the moment is visible instead
+    // of the row silently vanishing.
+    const outbid =
+      isAuction &&
+      !highBidder &&
+      l.current_bidder != null &&
+      l.seller !== userId &&
+      l.status === 'active' &&
+      !timedOut &&
+      myActivity.some((a) => a.id === l.id);
     return (
       <div
         key={l.id}
@@ -254,6 +272,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                   {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                   {highBidder ? ' · YOU LEAD' : ''}
                 </span>
+                {outbid && (
+                  <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-white">
+                    OUTBID
+                  </span>
+                )}
               </>
             ) : (
               <span className="flex items-center gap-1 heading-font text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm">
@@ -549,7 +572,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 onClick={() => {
                   const l = bidForLive;
                   setBidFor(null);
-                  run(() => placeBid(l.id, bidAmount), 'Bid placed!');
+                  void run(() => placeBid(l.id, bidAmount), 'Bid placed!').then((ok) => {
+                    // Remembered so the auction stays in MY LISTINGS & BIDS
+                    // (with an OUTBID tag) after a rival takes the high bid —
+                    // the schema only stores the CURRENT bidder.
+                    if (ok && userId) rememberBidListing(userId, l.id);
+                  });
                 }}
               >
                 PLACE BID ▸

@@ -885,16 +885,35 @@ export interface Trade {
 }
 
 export async function fetchTrades(): Promise<Trade[]> {
-  const { data, error } = await supabase
-    .from('trades')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(50);
+  // Two queries on purpose: a single newest-50 window let a PENDING trade
+  // older than 50 rows of history vanish from both parties' OPEN TRADES —
+  // unacceptable/uncancellable with no UI path left to resolve it. Pending
+  // trades are fetched without the history cap (RLS already scopes rows to
+  // the caller's own trades, and a player can't accumulate unbounded pending
+  // offers), then merged with the recent history window.
+  const [pending, recent] = await Promise.all([
+    supabase
+      .from('trades')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false }),
+    supabase.from('trades').select('*').order('created_at', { ascending: false }).limit(50),
+  ]);
+  const error = pending.error ?? recent.error;
   if (error) {
     console.error('fetchTrades failed:', error.message);
     throw error;
   }
-  return (data as Trade[]) || [];
+  const seen = new Set<string>();
+  const merged: Trade[] = [];
+  for (const t of [...((pending.data as Trade[]) || []), ...((recent.data as Trade[]) || [])]) {
+    if (!seen.has(t.id)) {
+      seen.add(t.id);
+      merged.push(t);
+    }
+  }
+  merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  return merged;
 }
 
 export async function fetchFriendCollection(friendId: string): Promise<PlayerCard[]> {
@@ -988,18 +1007,78 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
   return (data as MarketListing[]) || [];
 }
 
+// ---------------------------------------------------------------------------
+// Bid memory. The schema records only the CURRENT high bidder on a listing,
+// so the moment a rival outbids you the `current_bidder.eq.you` arm below
+// stops matching and the auction silently vanished from MY LISTINGS & BIDS —
+// at exactly the moment you'd want to rebid. There is no bids table to query,
+// so the client remembers which listings this player has bid on (bounded,
+// per-user, localStorage so it survives a reload) and merges them back into
+// the activity fetch. Best-effort: another device won't share the memory.
+// ---------------------------------------------------------------------------
+const BID_MEMORY_KEY = 'frycards_market_bids_v1';
+const BID_MEMORY_MAX = 50;
+
+function loadBidMemory(userId: string): string[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(BID_MEMORY_KEY) ?? '{}') as Record<
+      string,
+      string[]
+    >;
+    const ids = all[userId];
+    return Array.isArray(ids) ? ids.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Record that `userId` placed a bid on `listingId` — call on bid success. */
+export function rememberBidListing(userId: string, listingId: string): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(BID_MEMORY_KEY) ?? '{}') as Record<
+      string,
+      string[]
+    >;
+    const ids = loadBidMemory(userId).filter((id) => id !== listingId);
+    ids.unshift(listingId);
+    all[userId] = ids.slice(0, BID_MEMORY_MAX);
+    localStorage.setItem(BID_MEMORY_KEY, JSON.stringify(all));
+  } catch {
+    // Blocked storage just loses the nicety, never the bid itself.
+  }
+}
+
 export async function fetchMyMarketActivity(userId: string): Promise<MarketListing[]> {
-  const { data, error } = await supabase
-    .from('market_listings')
-    .select('*')
-    .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const remembered = loadBidMemory(userId);
+  const [mine, bidOn] = await Promise.all([
+    supabase
+      .from('market_listings')
+      .select('*')
+      .or(`seller.eq.${userId},current_bidder.eq.${userId}`)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    remembered.length
+      ? supabase.from('market_listings').select('*').in('id', remembered).eq('status', 'active')
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const error = mine.error ?? bidOn.error;
   if (error) {
     console.error('fetchMyMarketActivity failed:', error.message);
     throw error;
   }
-  return (data as MarketListing[]) || [];
+  const seen = new Set<string>();
+  const merged: MarketListing[] = [];
+  for (const l of [
+    ...((mine.data as MarketListing[]) || []),
+    ...((bidOn.data as MarketListing[]) || []),
+  ]) {
+    if (!seen.has(l.id)) {
+      seen.add(l.id);
+      merged.push(l);
+    }
+  }
+  merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  return merged;
 }
 
 export async function createListing(opts: {
@@ -1524,12 +1603,15 @@ export async function fetchMysteryLiveStats(listingId: string): Promise<MysteryL
   return data as MysteryLiveStats;
 }
 
-/** Purchases where the caller is either the buyer or the selling shop's owner. */
+/** Purchases where the caller is the buyer. Buyer-only on purpose: the one
+ * consumer (MY PURCHASES + the rating window) discards owner-side rows, and
+ * fetching both sides under one `limit` let a busy owner's own SALES push
+ * every purchase out of the window — an empty list and no way to rate. */
 export async function fetchMyShopPurchases(userId: string): Promise<ShopPurchase[]> {
   const { data, error } = await supabase
     .from('shop_purchases')
     .select('*')
-    .or(`buyer.eq.${userId},owner.eq.${userId}`)
+    .eq('buyer', userId)
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) {

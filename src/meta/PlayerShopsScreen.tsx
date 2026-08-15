@@ -164,7 +164,11 @@ function RarityPill({
       className="text-[9px] font-black px-1.5 py-0.5 ink-border-sm whitespace-nowrap"
       style={{
         backgroundColor: RARITY_HEX[rarity] || RARITY_HEX.Common,
-        color: rarityTier(rarity) === 0 || rarity === 'Ultra-Rare' ? '#1A1A1A' : '#fff',
+        // Match RARITY_CHIP's contrast choices: light backgrounds (Common,
+        // Uncommon green, Full-Art teal, Ultra-Rare gold) take dark text.
+        color: ['Common', 'Uncommon', 'Full-Art', 'Ultra-Rare'].includes(rarity)
+          ? '#1A1A1A'
+          : '#fff',
       }}
     >
       {children}
@@ -554,7 +558,10 @@ function QuickAddBar({
             className="text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm btn-pop"
             style={{
               backgroundColor: RARITY_HEX[r],
-              color: rarityTier(r) === 0 || r === 'Ultra-Rare' ? '#1A1A1A' : '#fff',
+              // Same contrast choices as RARITY_CHIP (see RarityPill).
+              color: ['Common', 'Uncommon', 'Full-Art', 'Ultra-Rare'].includes(r)
+                ? '#1A1A1A'
+                : '#fff',
             }}
           >
             + ALL {r.toUpperCase()} ({byRarity.get(r)})
@@ -744,7 +751,17 @@ function CardStackPicker({
             key={c.card_id}
             onClick={() => {
               setCardId(c.card_id);
-              setFoil(false);
+              // Same fix as Marketplace's SellForm: a card whose normal
+              // copies are all locked/serialized but which has spare foils
+              // passed the sellable filter, then dead-ended on "of 0 spare"
+              // with a disabled + ADD unless the player found the Foil box.
+              // Default the variant to the one that's actually sellable.
+              const sp = spareSplit(
+                { q: c.quantity, f: c.foil_quantity },
+                locked.get(c.card_id) || 0,
+              );
+              const spareNormal = Math.max(0, sp.normal - (serializedReserved.get(c.card_id) || 0));
+              setFoil(spareNormal <= 0 && sp.foil > 0);
               setQty(1);
             }}
             className={cn(
@@ -1734,6 +1751,15 @@ function MyShopTab() {
       const gen = ++reloadGen.current;
       const stale = () => isCancelled?.() || gen !== reloadGen.current;
       setLoadError('');
+      // Guests never reach this tab today (MainMenu gates it), but the old
+      // comment's claim that an empty id "just returns empty results" was
+      // wrong — `.eq('owner', '')` on a uuid column is a PostgREST type
+      // error, which would land in the catch below as a misleading
+      // "couldn't load" + RETRY loop. Skip the fetches outright instead.
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
       try {
         const s = await fetchMyShop(userId);
         if (stale()) return;
@@ -1878,6 +1904,14 @@ function MyShopTab() {
         {error && (
           <div className="mb-3">
             <Notice text={error} />
+          </div>
+        )}
+        {/* The close-shop refund message lands HERE — closing flips the shop
+         * to dormant before the notice renders, so without this block the
+         * "N credits refunded" the player was promised never appeared. */}
+        {notice && (
+          <div className="mb-3">
+            <Notice text={notice} kind="success" />
           </div>
         )}
         <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4">

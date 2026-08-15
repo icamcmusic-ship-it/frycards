@@ -1497,6 +1497,19 @@ function applyShedOrder(state: GameState, picked: string[]): void {
 }
 
 /**
+ * Defensive discard of a live clash — the same clause `finishDuskShed` uses
+ * below. Exported for UI-side crash/backstop recovery: a caller needs to
+ * drop a stuck clash before it can crank `endPhase` forward (which refuses
+ * outright while `state.clash` is set), and a UI component holding `state`
+ * from `useState` must not mutate its fields directly (react-hooks/immutability) —
+ * routing the assignment through an engine function is the fix, not a lint
+ * suppression.
+ */
+export function discardLiveClash(state: GameState): void {
+  state.clash = null;
+}
+
+/**
  * Complete Dusk from the shed step on: shed to MAX_HAND (the `picked` cards
  * first, then from the end), clear the clash, pass the turn and run the next
  * player's Dawn. Exported so a UI whose `chooseShed` hook paused the turn
@@ -1875,6 +1888,51 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
           telemetry.onKeywordProc?.('Exhume', 1);
           state.log.push(`${def.name} exhumes ${unit.def.name}.`);
         }
+      }
+      // v24 Kindle: Ember's on-resolve rider — a guaranteed point at the
+      // face. Routed through damagePlayer so Bulwark reads it like any other
+      // damage, and suppressed on fizzle like the riders above.
+      if (!fizzled && hasKw(def, 'Kindle')) {
+        telemetry.onKeywordProc?.('Kindle', 1);
+        const landed = damagePlayer(state, opponentOf(pid), 1);
+        if (landed > 0) {
+          state.log.push(`${def.name}'s Kindle deals ${landed} damage to ${opponentOf(pid)}.`);
+        }
+      }
+      // v24 Tailwind: Gale's tempo rider — recovers one exhausted friendly
+      // unit, falling back to an exhausted Location when no unit is tired.
+      // The fallback IS the keyword in practice: the v24 print experiment
+      // measured the unit-only version at ZERO activations over two cohorts
+      // (~780 carrier games) — Events overwhelmingly resolve in Main I,
+      // right after Dawn recovered every unit, so the text was dead. Paying
+      // the Event's own cost exhausts Locations, so the Location arm is
+      // nearly always live and reads as a 1-essence rebate. Random over the
+      // candidates (seeded rng, the Exhume precedent) for determinism.
+      if (!fizzled && hasKw(def, 'Tailwind')) {
+        const tired = p.field.filter((u) => u.exhausted);
+        if (tired.length > 0) {
+          const u = tired[Math.floor(state.rng() * tired.length)];
+          u.exhausted = false;
+          telemetry.onKeywordProc?.('Tailwind', 1);
+          state.log.push(`${def.name}'s Tailwind recovers ${u.def.name}.`);
+        } else {
+          const spent = p.locations.filter((l) => l.exhausted);
+          if (spent.length > 0) {
+            const l = spent[Math.floor(state.rng() * spent.length)];
+            l.exhausted = false;
+            telemetry.onKeywordProc?.('Tailwind', 1);
+            state.log.push(
+              `${def.name}'s Tailwind recovers ${l.def ? l.def.name : `a ${l.produces} Wellspring`}.`,
+            );
+          }
+        }
+      }
+      // v24 Luminous: Light's on-resolve rider, a single Vitality point
+      // capped at the start value like every other restore.
+      if (!fizzled && hasKw(def, 'Luminous') && p.vitality < LEADER_HP) {
+        p.vitality += 1;
+        telemetry.onKeywordProc?.('Luminous', 1);
+        state.log.push(`${def.name}'s Luminous restores 1 Vitality to ${pid}.`);
       }
       p.ashPile.push(card);
       break;

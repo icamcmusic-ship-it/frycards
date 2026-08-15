@@ -142,6 +142,10 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
       if (stale()) return;
       setFriendships(fs);
       setTrades(ts);
+      // A successful reload (this includes background realtime refreshes)
+      // clears a previous load failure — one blip used to pin the "couldn't
+      // load" banner over live, updating data until a manual RETRY.
+      setLoadError(false);
       const ids = new Set<string>();
       for (const f of fs) {
         ids.add(f.requester);

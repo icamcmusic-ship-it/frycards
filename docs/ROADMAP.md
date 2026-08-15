@@ -26,7 +26,7 @@ Everything here has a started implementation and a visible seam.
   not the verdict), renamed the set, put the **100-card viability bar** in front
   of the copy, made every card preview full size and 3D-inspectable, and printed
   the **art aspect ratios** submitters were previously left to guess. What is
-  still deliberately *not* done is a decision each, not a defect:
+  still deliberately _not_ done is a decision each, not a defect:
 
   - **The `Players Showcase 2026 Booster` pack row exists but is
     `is_active = false`.** It is set-restricted, and `random_card_of_rarity`'s
@@ -67,7 +67,7 @@ Everything here has a started implementation and a visible seam.
 
 - **The Item subtype split owes a balance pass** (new in v13). Renaming `Charm`
   to `Item` was seed-stable — `SEED_TYPE` keeps hashing Items as `Charm`, so
-  cost, colour and keywords are byte-identical — but the *subtypes* are not a
+  cost, colour and keywords are byte-identical — but the _subtypes_ are not a
   rename: the old Bound/Worn pair became Charm/Weapon/Tool, 11 of the 61 Items
   became Tools, and a Tool trades one point of bond for a permanent -1/-1 (-2/-2
   at Full-Art and up) on a target enemy unit as it lands. Charms also gained a
@@ -141,7 +141,7 @@ Everything here has a started implementation and a visible seam.
   **v14 found that the entry above was measuring less than it claimed.** The
   click sweep sampled the control count at a fixed 700ms and used it as its
   stop condition, so a screen that mounts its panels after a fetch settles was
-  read as having *no* controls and skipped at index 0 — which prints as
+  read as having _no_ controls and skipped at index 0 — which prints as
   `clicked 0 control(s)` and reads like "checked, nothing to click". Four
   screens were never clicked at all, `submissions&role=creator` — the very one
   v13 added — among them, while the run still exited 0. Both passes now share a
@@ -153,6 +153,7 @@ Everything here has a started implementation and a visible seam.
   clamps its card scale to the viewport and stacks the control column below the
   card under 520px, the way `Card3DInspector` clamps — so `✕ CLOSE` and INVOKE
   stay on-screen on a phone.
+
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
@@ -278,6 +279,7 @@ Ordered by how much they change what it feels like to own and play the game.
   already shipped. Before v12 every pack row had `allowed_sets = null`, which
   `grant_pack_contents` reads as "draw from the entire table" — Volume #2 would
   have appeared inside Volume #1 boosters on the day its first card landed.
+
 - **Custom fonts as first-class assets.** Currently two Google Fonts pulled at
   runtime by an `@import` at the top of `src/index.css` — a third-party
   request on first paint and a hard dependency on a CDN. Two things worth
@@ -399,6 +401,15 @@ Ordered by how much they change what it feels like to own and play the game.
   per-Leader grant. A measured two-cohort preview of that print — all three
   playable, none degenerate — is in `docs/BALANCE_SIM_FINDINGS_v23.md` §5.
   Do not interleave the print with a balance lever.
+- **v24 Event keywords.** The same pattern one type over: v24 implemented
+  Kindle (Ember), Tailwind (Gale), Luminous (Light) — the last colour holes
+  any type carried — engine-tested (`keywords-v24-events.test.ts`) and listed
+  in `UNPRINTED_KEYWORDS`. Printing them has a known shape too: the Event
+  keyword roll's 76-100 band currently prints nothing, so a 76-92 band (used
+  by the reverted v24 experiment, see `docs/BALANCE_SIM_FINDINGS_v24.md`)
+  prints them upward-only without re-rolling any carrier. `freshKeywordFor`
+  excludes `UNPRINTED_KEYWORDS` — deleting a keyword from that list without
+  giving it its own band re-rolls every colour-fallback Event.
 - ~~Raise the Unit cost ceiling for keyword surcharges~~ — **shipped in v16**
   (surcharge charges in full above the base cap, ceiling 9), together with the
   v9 "Unbreakable's save heals marked damage" item: the save now leaves the
