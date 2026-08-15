@@ -9,6 +9,56 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v25.0 — The pass where the cards got their slabs and the opponent learned to think out loud everywhere
+
+Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay
+stress round, a match QoL round, a CPU-visibility audit, the v24
+carry-forwards, and one new feature — the Grading Lab. **0 invariant
+violations across 23,808 AI games** (three standing cohorts + a fresh-seed
+stress cohort) plus raised-volume fuzz (1,000 seeded matches) and chaos
+(500 random-legal-action matches) suites; every cohort's win rate and turn
+count identical to v24's to the decimal, so the engine ships behaviourally
+unchanged. 410 tests (8 new — the grading economy suite).
+
+**NEW — the Grading Lab (card grading mini-game).** Players spend credits
+to submit spare cards for professional grading. Three services, each with
+its own fee, resale premium and slab case style: Timeless Card Authority
+(400cr base, ×1.6 resale premium, black-and-gold case), Alpha Mint Grading
+(180cr, ×1.25, silver-and-blue; 20%/35% bulk discounts at 5+/10+ cards per
+submission), Keeper Standard (70cr, ×1.0, green; cheapest rush pricing and
+a 55% chance to bump the roll a half-point — "grades a little higher").
+Turnarounds: 16h standard / 8h rush (×1.75, Keeper ×1.4) / instant (×6,
+Keeper ×5). Grades run the standard 5–10 scale with half-points 5.5–9.5;
+the roll is weighted toward 8–9 with 10s rare, and is rolled **server-side
+at reveal time** (never stored earlier, so RLS can expose the row without
+spoilers). A slab quicksells at raw price × grade multiplier (1.1 at a 5
+up to ×12 at a 10) × service premium; CRACK SLAB returns the raw copy.
+Submissions respect the exact deck-lock and Serialized-reserve rules
+quicksell uses. Server side is the `card_grading_v25` migration
+(`graded_cards` + four SECURITY DEFINER RPCs); client mirrors live in
+`src/meta/grading.ts` with a dedicated test suite. Slabs render on a
+GRADED CARDS shelf in the Collection, encased in their service's style.
+
+**Match QoL + CPU visibility (5 gaps left after three prior passes).**
+Refusals now render as a red shaking `role="alert"` banner distinct from
+confirmations (~15 sites); banner hold time scales with message length;
+the clash bar prints each attacker's ⚔ Might on its guard line; the CPU
+opens a visible 🤔 think-beat before clash reactions and stack answers
+(both previously fired inside the player's own click); the match screen's
+keyframes honor `prefers-reduced-motion`.
+
+**Meta-screen audit (1 fix).** The full screen-by-screen pass found one
+player-visible bug: `sold_out` rendered raw as "SOLD_OUT" in three Player
+Shops badges. Everything else checked — double-spend guards, unmount
+races, modal escapes, empty-vs-error states — was already defended by the
+v22–v24 fixes, each verified rather than assumed.
+
+**Balance: no card changed, sixth pass running.** The Mer-King lever stays
+unspent per its own condition (this pass carries content and engine work).
+Unbreakable's trigger not met (carriers 56.9–61.1% across four cohorts);
+Sacred's cohort dependence re-confirmed (47.0–62.2% spread). Full numbers
+appended to `docs/BALANCE_SIM_FINDINGS_v24.md` (§ v25 re-measurement).
+
 ### v24.0 — The pass where a softlock died, the damage numbers found their beats, and a keyword died in the lab instead of in the pool
 
 Six-part pass in the brief's order: a meta-screen bug hunt, an engine stress

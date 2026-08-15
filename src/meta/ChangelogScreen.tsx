@@ -18,6 +18,19 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Slabs-And-Half-Points Pass (v25)',
+    date: 'August 2026',
+    items: [
+      'NEW — THE GRADING LAB. Send spare cards off to be professionally graded and get them back sealed in a display slab. Three services with their own case styles and reputations: TIMELESS CARD AUTHORITY (the premier house — priciest fees, and its slabs command the highest resale premium), ALPHA MINT GRADING (serious grading at volume — 5+ cards in one submission get 20% off, 10+ get 35% off), and KEEPER STANDARD (cheapest and fastest — and known to grade a touch generously, which the resale market prices in). Pick your turnaround: 16-hour standard, 8-hour rush, or INSTANT for a serious premium.',
+      'Grades run the standard 5\u201310 scale with half-points (a 9.5 exists; a straight 10 is the rare gem). A strong grade multiplies the card\u2019s quicksell price MANY times over \u2014 a gem-mint 10 in a TCA case sells for a small fortune \u2014 while a 5 barely covers the fee. That\u2019s the gamble. Graded slabs appear on their own GRADED CARDS shelf in your Collection, each in its service\u2019s case with the grade stamped on. Not feeling the case any more? CRACK THE SLAB and the raw card returns to your collection.',
+      'Deck-locked and Serialized copies can\u2019t be sent for grading \u2014 same protections as quicksell \u2014 and grades are rolled at reveal time on the server, so there is no peeking.',
+      'THE OPPONENT THINKS OUT LOUD EVERYWHERE NOW. Two spots still had the CPU acting instantly inside your own click \u2014 its reaction plays before clash damage and its answer to a card you just cast. Both now open with a visible \ud83e\udd14 thinking beat at your narration speed, honored by HOLD/STEP/SKIP like everything else.',
+      'WHEN THE GAME SAYS NO, IT LOOKS LIKE A NO. Refused actions (illegal targets, unpayable costs, guard-rule violations\u2026) now flash a red shaking banner instead of the same yellow strip a success uses \u2014 and long explanations stay on screen long enough to actually read. The clash bar also shows each attacker\u2019s \u2694 Might right on the guard line, so the numbers you guard around are where the decision happens. The match screen also fully honors your device\u2019s reduced-motion setting now.',
+      'FIX: a sold-out listing in Player Shops proudly announced itself as \u201cSOLD_OUT\u201d in three places. It reads SOLD OUT now. (The full screen-by-screen audit found the rest of the meta screens clean \u2014 the last three passes\u2019 fixes are holding.)',
+      'BALANCE: no card changed, sixth pass running. 23,808 fresh AI games plus raised-volume chaos/fuzz suites: ZERO rule violations, every cohort identical to v24\u2019s numbers to the decimal. The authorized Mer-King adjustment stays reserved for a dedicated balance pass, per its own protocol. Full numbers appended to docs/BALANCE_SIM_FINDINGS_v24.md.',
+    ],
+  },
+  {
     version: 'The Numbers-Find-Their-Beats Pass (v24)',
     date: 'August 2026',
     items: [
@@ -29,21 +42,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'QOL: you can CONCEDE from the opening-hand screen (it used to cover the only exit); the clash guard lines stay on screen while you decide whether to counter mid-clash; the guard-step message tells the truth ("assign guards first — the reaction window opens after you confirm"); the ON THE PLAY / ON THE DRAW badge now shows on phones and taps to explain itself; small badge tooltips stop being cut off by the board edge; Shift+Enter reads your own Sanctum without spending its tap.',
       'NEW (under the hood): three EVENT keywords exist in the engine — Kindle (Ember: 1 damage to the enemy player as the Event resolves), Tailwind (Gale: recover a tired unit, or a spent Location), Luminous (Light: restore 1 Vitality). NO card carries them yet. The lab run that previewed printing them caught Tailwind’s first design activating ZERO times across two full cohorts — correct code, dead text — so it was redesigned before ever reaching a card. Full numbers in docs/BALANCE_SIM_FINDINGS_v24.md.',
       'BALANCE: no card changed, fifth pass running. The authorized Mer-King adjustment stays reserved for a dedicated balance pass (this one carries engine and UI work, which its measurement protocol forbids). All control cohorts identical to v23 to the decimal; 0 rule violations across nine ~6,000-game runs.',
-    ],
-  },
-  {
-    version: 'The Every-Button-Tells-The-Truth Pass (v23)',
-    date: 'August 2026',
-    items: [
-      'EVERY CONTROL ON THE BOARD NOW TELLS THE TRUTH. Three controls could still offer a move the rules were going to refuse: ⚜ INVOKE LEADER stayed lit with a card waiting to resolve — and clicking it exhausted your Locations for a cost that was never going to be paid; a Leader ability could walk you through a whole target pick before bouncing with "Illegal target"; and 💠 RE-BOND had no disabled state at all. All three now grey out and name the actual reason, the same treatment every other control got over the last two passes. Four controls could also still be pressed into the MIDDLE of the opponent’s narrated turn; they wait now.',
-      'THE CARD YOU ARE ASKED TO ANSWER IS NOW SHOWN TO YOU. When the opponent’s play opened your response window — the one moment the game stops and waits for you — that exact play was the one with no card spotlight and no rings, just a log line and a PASS button. It gets the full treatment now.',
-      'NOTHING CHANGES THE BOARD IN SILENCE ANY MORE. A Sanctum’s "At Dusk" trigger could damage your unit or eat your deck with no line anywhere; Wildfire took 2 Vitality with only "…was shattered." to explain it; Siphon raised the opponent’s life "from nowhere" mid-clash. All three now write a line — which means they get narrated, ringed and floated like everything else.',
-      'YOUR OWN DAWN IS YOURS AGAIN. It resolves at the tail of the opponent’s turn, so "You draw a card at Dawn" was playing in the red "opponent is acting" bubble. Those beats now show in your yellow, labelled ☀ YOUR DAWN.',
-      'FIX: messages stopped covering each other. "Bond set — now pick a target for its effect." was painted UNDERNEATH the red targeting bar it explains; on a phone that bar could also push its own ✕ cancel off the screen edge. The narration bubble, targeting bar and message banner now stack in one column that fits the screen.',
-      'FIX: five shop/collection bugs — the Bounties SELL button could offer a sale the server would refuse when your last spare copy was deck-locked AND Serialized; the Marketplace bid dialog kept quoting a stale price after a rival bid (and stayed pressable after a buyout); ✦ VIEW FOIL flipped the card but not the market value beside it; the pack summary’s HAUL VALUE ignored the cards you just quicksold from that very screen; and a pack priced at 0 vouchers would have rendered a free buy button.',
-      'QOL: the ash-pile opens as a bottom sheet on phones instead of covering the whole board; a held narration says ❚❚ HELD on the bubble itself; the CPU crashing mid-turn now hands you a real turn instead of a board where only one button works.',
-      'NEW (under the hood): three LEADER keywords exist in the engine — Onslaught (Ember: your attackers hit +1 harder), Beacon (Light: your Leader restores 1 Vitality at Dawn), Dread (Void: enemy units get −1 Might). NO card carries them yet: they are implemented, tested and priced so a future set can print them deliberately instead of ad hoc. A measured preview of that print is in the findings doc.',
-      'BALANCE: no card changed, fourth pass running, and both open Leader questions are ANSWERED. Mer-King: first in all EIGHT cohorts with both measuring arms agreeing — the adjustment is now formally authorized for a dedicated balance pass. Ruin-Walker Overseer: NOT weak after all — one of its nine fixed test decks turns out to be a permanent dud (15.6% across every cohort) dragging its average; without it the kit is mid-field. Six of nine Leaders carry at least one such dud deck, and the test harness now flags them automatically. Full numbers in docs/BALANCE_SIM_FINDINGS_v23.md.',
     ],
   },
 ];
