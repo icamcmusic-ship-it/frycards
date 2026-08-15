@@ -194,6 +194,38 @@ const GAME_CSS = `
   50% { transform: translateY(12px); }
 }
 .gv4-lunge-down { animation: gv4-lunge-down 0.9s ease-in-out infinite; }
+/* A refused action's banner gives a short sideways shake so "that was a no"
+ * registers even before the sentence is read. */
+@keyframes gv4-banner-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+.gv4-banner-shake { animation: gv4-banner-shake 0.32s ease-in-out; }
+/* Honor the OS-level "reduce motion" preference, like the rest of the app
+ * (index.css, CardFaceV4, Card3DInspector) already does. Information-carrying
+ * feedback stays — rings render as static outlines, floats and the phase
+ * banner become plain fades — only the movement goes. */
+@keyframes gv4-fade {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes gv4-fade-float {
+  0% { opacity: 0; transform: translate(-50%, 0); }
+  12% { opacity: 1; transform: translate(-50%, 0); }
+  80% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
+  .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
+  .gv4-phase-banner { animation: gv4-fade 1.15s ease-out forwards; }
+  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float 1.15s ease-out forwards; }
+}
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
@@ -1521,7 +1553,10 @@ export function GameV4({
     onConfirm: () => void;
   } | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
-  const [banner, setBanner] = useState<string | null>(null);
+  /** The transient `say()` banner. `tone` separates a status line ("Guards
+   * set…", yellow) from a refusal ("Not enough essence…", red + shake) so an
+   * invalid action is legible as one at a glance, not only after reading. */
+  const [banner, setBanner] = useState<{ text: string; tone: 'info' | 'warn' } | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const logScrollRef = useRef<HTMLDivElement>(null);
   /**
@@ -1582,14 +1617,19 @@ export function GameV4({
 
   const humanize = (s: string) => humanizeLog(s, cpuLabel);
 
-  const say = (msg: string) => {
-    setBanner(msg);
+  const say = (msg: string, tone: 'info' | 'warn' = 'info') => {
+    setBanner({ text: msg, tone });
     if (bannerTimeoutRef.current !== null) window.clearTimeout(bannerTimeoutRef.current);
+    // Longer sentences hold longer: the fixed 2200ms was tuned for "Clash
+    // resolves!" and clipped the ~120-character refusal explanations mid-read.
+    const holdMs = Math.min(5200, 2200 + Math.max(0, msg.length - 40) * 30);
     bannerTimeoutRef.current = window.setTimeout(() => {
-      setBanner((b) => (b === msg ? null : b));
+      setBanner((b) => (b?.text === msg ? null : b));
       bannerTimeoutRef.current = null;
-    }, 2200);
+    }, holdMs);
   };
+  /** `say()` for refusals — red banner with a shake instead of status yellow. */
+  const refuse = (msg: string) => say(msg, 'warn');
 
   useEffect(
     () => () => {
@@ -1969,8 +2009,20 @@ export function GameV4({
     // `plays` is handed to the continuation rather than returned: with nothing
     // to narrate the continuation runs SYNCHRONOUSLY, so a caller closing over
     // this function's own return value would read it before it exists.
-    if (plays > 0) narrate(g.log.slice(logStart), logStart, events, () => onDone(plays));
-    else onDone(plays);
+    if (plays > 0) {
+      const beats = buildCpuBeats(
+        g.log.slice(logStart).map((l) => humanize(l)),
+        logStart,
+        events,
+        g,
+      );
+      // The same "thinking" opener every other CPU segment gets (v20 gave it
+      // to the guard step): without it the CPU's answer to the player's card
+      // arrived on the very next frame after their own click, reading as part
+      // of the click rather than as the opponent's reply to it.
+      beats.unshift({ text: `🤔 ${cpuLabel} considers a response…`, actors: [], targets: [] });
+      narrateBeats(beats, () => onDone(plays));
+    } else onDone(plays);
   };
 
   /** Actually invoke a hand card (auto-taps Locations for its cost). */
@@ -2005,7 +2057,7 @@ export function GameV4({
       });
     } else {
       bump(); // taps may have happened
-      say("Can't invoke that right now.");
+      refuse("Can't invoke that right now.");
       checkWinner();
     }
   };
@@ -2016,7 +2068,7 @@ export function GameV4({
     if (!card) return;
     const why = invokeWhy(card);
     if (why) {
-      say(why);
+      refuse(why);
       return;
     }
     closePreview();
@@ -2049,7 +2101,7 @@ export function GameV4({
       // cost and card are still spent). Units/Items keep their body/bond
       // value, so they stay playable and just lose the rider.
       if (card.def.type === 'Event') {
-        say('No legal target for its effect — invoking now would waste the card.');
+        refuse('No legal target for its effect — invoking now would waste the card.');
         return;
       }
     }
@@ -2098,18 +2150,18 @@ export function GameV4({
 
   const tryWellspring = (type: EssenceType) => {
     if (wellspringWhy) {
-      say(wellspringWhy);
+      refuse(wellspringWhy);
       return;
     }
     if (playWellspring(g, HUMAN, type)) {
       bump();
       say(`${type} Wellspring enters your Location row.`);
-    } else say('One Wellspring per turn, in your own main phase.');
+    } else refuse('One Wellspring per turn, in your own main phase.');
   };
 
   const tryTapLocation = (loc: LocationInst) => {
     if (tapLocationForEssence(g, HUMAN, loc.iid)) bump();
-    else say('Essence comes in your main phases (or your reaction window).');
+    else refuse('Essence comes in your main phases (or your reaction window).');
   };
 
   const leaderInvokeWhy = ((): string | undefined => {
@@ -2132,7 +2184,7 @@ export function GameV4({
 
   const tryInvokeLeader = () => {
     if (leaderInvokeWhy) {
-      say(leaderInvokeWhy);
+      refuse(leaderInvokeWhy);
       return;
     }
     autoTapFor(g, HUMAN, me.leader.def.cost);
@@ -2144,7 +2196,7 @@ export function GameV4({
       // it ever fires the auto-tap above exhausted Locations — re-render so
       // the board doesn't show them untapped.
       bump();
-      say("Can't invoke your Leader right now.");
+      refuse("Can't invoke your Leader right now.");
     }
   };
 
@@ -2156,7 +2208,7 @@ export function GameV4({
   const tryLeaderAbility = (idx: number) => {
     const why = abilityWhy(idx);
     if (why) {
-      say(why);
+      refuse(why);
       return;
     }
     const ab = me.leader.def.leaderAbilities![idx];
@@ -2168,7 +2220,7 @@ export function GameV4({
     if (activateLeaderAbility(g, HUMAN, idx)) {
       bump();
       say('Leader ability resolves.');
-    } else say('Illegal.');
+    } else refuse('Illegal.');
     checkWinner();
   };
 
@@ -2194,7 +2246,7 @@ export function GameV4({
   const tryRebond = (itemIid: string) => {
     const why = rebondWhy(itemIid);
     if (why) {
-      say(why);
+      refuse(why);
       return;
     }
     setPending({ kind: 'rebond', itemIid });
@@ -2269,7 +2321,7 @@ export function GameV4({
         if (activateLeaderAbility(g, HUMAN, p.idx, targetIid)) {
           bump();
           say('Leader ability resolves.');
-        } else say('Illegal target.');
+        } else refuse('Illegal target.');
         checkWinner();
         return;
       case 'rebond': {
@@ -2282,7 +2334,7 @@ export function GameV4({
           // The auto-tap above exhausted Locations — re-render them even on
           // the refusal path.
           bump();
-          say('Illegal re-bond.');
+          refuse('Illegal re-bond.');
         }
         return;
       }
@@ -2413,7 +2465,18 @@ export function GameV4({
     }
     bumpDeferringFloats();
     if (checkWinner()) return;
-    narrate(g.log.slice(logStart), logStart, events, () => {
+    const beats = buildCpuBeats(
+      g.log.slice(logStart).map((l) => humanize(l)),
+      logStart,
+      events,
+      g,
+    );
+    // Same discrete-step opener the guard beats get: a reaction play starting
+    // on the frame after the player's own click read as part of that click.
+    if (beats.length > 0) {
+      beats.unshift({ text: `🤔 ${cpuLabel} reacts to the clash…`, actors: [], targets: [] });
+    }
+    narrateBeats(beats, () => {
       if (checkWinner()) return;
       if (paused) {
         openResponseWindow(() => runCpuClashReactions(which));
@@ -2440,7 +2503,7 @@ export function GameV4({
   const declareMyAttack = () => {
     if (atkSel.size === 0) return;
     if (!declareAttackers(g, [...atkSel])) {
-      say('Illegal attack selection.');
+      refuse('Illegal attack selection.');
       return;
     }
     setAtkSel(new Set());
@@ -3037,7 +3100,7 @@ export function GameV4({
             why = `${attacker.def.name} is Aerial — only Aerial or Skywatch units can guard it.`;
           else if (attacker && unit && unitHasKw(attacker, 'Nimble'))
             why = `${attacker.def.name} is Nimble — only a unit with LESS Might can guard it.`;
-          say(why);
+          refuse(why);
           return sel;
         }
         next[guardFocus] = [...(next[guardFocus] ?? []), unitIid];
@@ -3091,14 +3154,14 @@ export function GameV4({
 
   const confirmGuards = () => {
     if (guardProblem) {
-      say(guardProblem);
+      refuse(guardProblem);
       return;
     }
     if (declareGuards(g, guardSel)) {
       bump();
       say('Guards set — reaction window: Quick Events & Ambush units are live.');
     } else {
-      say('Illegal guard assignment.');
+      refuse('Illegal guard assignment.');
     }
   };
 
@@ -3145,6 +3208,10 @@ export function GameV4({
       iid: aIid,
       n: i + 1,
       name: a?.def.name ?? '(gone)',
+      // The attacker's effective Might, printed on its clash-bar line: "which
+      // one do I guard first?" is a Might comparison, and the numbers lived
+      // only on the card faces below the bar making the decision about them.
+      might: a ? effMight(g, a) : 0,
       guards: gs as string[],
     };
   });
@@ -3567,8 +3634,19 @@ export function GameV4({
           </div>
         )}
         {banner && (
-          <div className="pointer-events-auto bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs text-center">
-            {banner}
+          <div
+            // Keyed so a second refusal in a row re-runs the shake — the same
+            // message repeated with no motion read as "nothing happened".
+            key={`${banner.tone}:${banner.text}`}
+            role={banner.tone === 'warn' ? 'alert' : 'status'}
+            className={cn(
+              'pointer-events-auto heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs text-center',
+              banner.tone === 'warn'
+                ? 'gv4-banner-shake bg-[var(--c-red)] text-white'
+                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+            )}
+          >
+            {banner.text}
           </div>
         )}
       </div>
@@ -3598,7 +3676,7 @@ export function GameV4({
                     : 'text-[var(--c-paper)]/85',
                 )}
               >
-                #{line.n} {line.name} →{' '}
+                #{line.n} {line.name} ⚔{line.might} →{' '}
                 {line.guards.length > 0 ? line.guards.join(' + ') : guardStep ? 'unguarded' : 'YOU'}
               </button>
             ))}
