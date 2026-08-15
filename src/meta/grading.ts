@@ -93,11 +93,9 @@ export const GRADING_SERVICES: GradingServiceInfo[] = [
   },
 ];
 
-export const GRADING_SERVICE_BY_ID: Record<GradingService, GradingServiceInfo> =
-  Object.fromEntries(GRADING_SERVICES.map((s) => [s.id, s])) as Record<
-    GradingService,
-    GradingServiceInfo
-  >;
+export const GRADING_SERVICE_BY_ID: Record<GradingService, GradingServiceInfo> = Object.fromEntries(
+  GRADING_SERVICES.map((s) => [s.id, s]),
+) as Record<GradingService, GradingServiceInfo>;
 
 export const GRADING_SPEEDS: {
   id: GradingSpeed;
@@ -208,7 +206,10 @@ export async function submitGrading(
   items: { card_id: string; qty: number; foil: boolean }[],
   service: GradingService,
   speed: GradingSpeed,
-): Promise<{ data: { credits: number; total_fee: number; ready_at: string } | null; error: string | null }> {
+): Promise<{
+  data: { credits: number; total_fee: number; ready_at: string } | null;
+  error: string | null;
+}> {
   const { data, error } = await supabase.rpc('submit_grading', {
     p_items: items,
     p_service: service,
@@ -219,7 +220,13 @@ export async function submitGrading(
 }
 
 export async function revealGradedCards(): Promise<{
-  revealed: { id: string; card_id: string; foil: boolean; service: GradingService; grade: number }[];
+  revealed: {
+    id: string;
+    card_id: string;
+    foil: boolean;
+    service: GradingService;
+    grade: number;
+  }[];
   error: string | null;
 }> {
   const { data, error } = await supabase.rpc('reveal_graded_cards');

@@ -38,6 +38,7 @@ export function GradedSlab({
   onClick,
   selected,
 }: {
+  key?: React.Key;
   g: GradedCard;
   size?: 'compact' | 'full';
   onClick?: () => void;
@@ -167,7 +168,8 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
       locked.set(d.leader_id, (locked.get(d.leader_id) || 0) + 1);
     }
     const serialized = new Map<string, number>();
-    for (const s of serializedCards) serialized.set(s.card_id, (serialized.get(s.card_id) || 0) + 1);
+    for (const s of serializedCards)
+      serialized.set(s.card_id, (serialized.get(s.card_id) || 0) + 1);
     const out: { cardId: string; foil: boolean; spare: number }[] = [];
     for (const [cardId, o] of owned) {
       if (!POOL_BY_ID[cardId]) continue;
@@ -297,7 +299,11 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
   }
 
   const tabBtn = (t: Tab, label: React.ReactNode) => (
-    <PopButton color={tab === t ? 'black' : 'yellow'} onClick={() => setTab(t)} ariaPressed={tab === t}>
+    <PopButton
+      color={tab === t ? 'black' : 'yellow'}
+      onClick={() => setTab(t)}
+      ariaPressed={tab === t}
+    >
       {label}
     </PopButton>
   );
@@ -366,8 +372,8 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
                   )}
                   title={sp.blurb}
                 >
-                  {sp.name} ·{' '}
-                  {fmtCredits(gradingUnitFee(service, sp.id, Math.max(1, basketCount)))}/card
+                  {sp.name} · {fmtCredits(gradingUnitFee(service, sp.id, Math.max(1, basketCount)))}
+                  /card
                 </button>
               ))}
             </div>
@@ -384,19 +390,34 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
                     const [cardId, foilStr] = key.split('|');
                     const foil = foilStr === 'true';
                     const def = POOL_BY_ID[cardId];
-                    const max = spares.find((s) => s.cardId === cardId && s.foil === foil)?.spare ?? qty;
+                    const max =
+                      spares.find((s) => s.cardId === cardId && s.foil === foil)?.spare ?? qty;
                     if (!def) return null;
                     return (
-                      <div key={key} className="flex items-center gap-1.5 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm px-2 py-1">
+                      <div
+                        key={key}
+                        className="flex items-center gap-1.5 bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm px-2 py-1"
+                      >
                         <span className="text-[11px] font-bold truncate max-w-36">
                           {def.name}
                           {foil ? ' (FOIL)' : ''}
                         </span>
-                        <PopButton color="steel" className="!px-1.5 !py-0.5 !text-[10px]" onClick={() => bump(cardId, foil, -1, max)} ariaLabel={`Remove one ${def.name}`}>
+                        <PopButton
+                          color="steel"
+                          className="!px-1.5 !py-0.5 !text-[10px]"
+                          onClick={() => bump(cardId, foil, -1, max)}
+                          ariaLabel={`Remove one ${def.name}`}
+                        >
                           −
                         </PopButton>
                         <span className="heading-font text-xs w-4 text-center">{qty}</span>
-                        <PopButton color="steel" className="!px-1.5 !py-0.5 !text-[10px]" onClick={() => bump(cardId, foil, +1, max)} disabled={qty >= max} ariaLabel={`Add one ${def.name}`}>
+                        <PopButton
+                          color="steel"
+                          className="!px-1.5 !py-0.5 !text-[10px]"
+                          onClick={() => bump(cardId, foil, +1, max)}
+                          disabled={qty >= max}
+                          ariaLabel={`Add one ${def.name}`}
+                        >
                           +
                         </PopButton>
                       </div>
@@ -407,7 +428,8 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
                   <span className="text-xs font-bold flex items-center gap-1">
                     FEE: <Credits amount={totalFee} />
                     <span className="text-[var(--c-steel)]">
-                      ({fmtCredits(unitFee)}/card{bulkOff > 0 ? ` · ${bulkOff}% bulk discount` : ''})
+                      ({fmtCredits(unitFee)}/card{bulkOff > 0 ? ` · ${bulkOff}% bulk discount` : ''}
+                      )
                     </span>
                   </span>
                   {service === 'amg' && basketCount < 10 && (
@@ -555,10 +577,19 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
                       </PopButton>
                       {crackConfirm === g.id ? (
                         <div className="flex gap-1">
-                          <PopButton color="red" className="!px-2 !py-1 !text-[10px]" onClick={() => void crackSlab(g)} disabled={slabBusy === g.id}>
+                          <PopButton
+                            color="red"
+                            className="!px-2 !py-1 !text-[10px]"
+                            onClick={() => void crackSlab(g)}
+                            disabled={slabBusy === g.id}
+                          >
                             CRACK IT
                           </PopButton>
-                          <PopButton color="steel" className="!px-2 !py-1 !text-[10px]" onClick={() => setCrackConfirm(null)}>
+                          <PopButton
+                            color="steel"
+                            className="!px-2 !py-1 !text-[10px]"
+                            onClick={() => setCrackConfirm(null)}
+                          >
                             KEEP
                           </PopButton>
                         </div>
