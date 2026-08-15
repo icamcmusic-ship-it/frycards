@@ -1274,7 +1274,9 @@ function MysteryListingCard({
                     reloaded", never a live listing. Only a genuinely terminal
                     status (closed/cancelled) overrides the SOLD OUT label. */}
                 {listing.status && listing.status !== 'active'
-                  ? listing.status.toUpperCase()
+                  ? // 'sold_out' is a raw status value — print it as words,
+                    // same treatment StoreScreen gives pack_tier.
+                    listing.status.replace(/_/g, ' ').toUpperCase()
                   : 'SOLD OUT'}
               </span>
             )}
@@ -1538,7 +1540,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
             )}
             {l.status !== 'active' && (
               <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
-                {(l.status || 'UNAVAILABLE').toUpperCase()}
+                {(l.status || 'UNAVAILABLE').replace(/_/g, ' ').toUpperCase()}
               </span>
             )}
           </div>
@@ -2143,7 +2145,8 @@ function MyShopTab() {
                     )
                     .join(', ')}
               {' · '}
-              <Credits amount={l.price} /> · {(l.status || 'UNKNOWN').toUpperCase()}
+              <Credits amount={l.price} /> ·{' '}
+              {(l.status || 'UNKNOWN').replace(/_/g, ' ').toUpperCase()}
             </div>
             {l.status === 'active' &&
               (l.listing_type === 'individual' || l.listing_type === 'bundle') && (

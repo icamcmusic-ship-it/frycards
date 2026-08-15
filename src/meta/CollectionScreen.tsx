@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, ProgressBar, CardMarketValuePanel, Credits } from './ui';
 import { cn } from '../lib/utils';
@@ -9,6 +9,8 @@ import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
+import { GradedCard, fetchGradedCards } from './grading';
+import { GradedSlab } from './GradingScreen';
 import { fmtCredits, quicksellPrice } from './economy';
 import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
 
@@ -73,7 +75,14 @@ async function runBulkQuicksell(
   return { credits: totalCredits, cards: totalCards, error: null };
 }
 
-export function CollectionScreen({ onBack }: { onBack: () => void }) {
+export function CollectionScreen({
+  onBack,
+  onGrading,
+}: {
+  onBack: () => void;
+  /** Navigate to the Grading Lab — the graded shelf's slabs deep-link there. */
+  onGrading?: () => void;
+}) {
   // v7.5: the browse grid printed `full` (240x336) cards. On a 375px phone
   // that is ONE card per row and, at 297 cards plus foil/serialized entries,
   // a 119,000px-tall page — the collection was effectively unbrowsable on a
@@ -98,6 +107,19 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
   const [setName, setSetName] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
   const [search, setSearch] = useState('');
+  // Graded slabs live in their own table (graded_cards) — encased copies are
+  // out of player_cards entirely, so the shelf fetches them directly.
+  const [gradedCards, setGradedCards] = useState<GradedCard[]>([]);
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    fetchGradedCards(profile.id).then((rows) => {
+      if (!cancelled) setGradedCards(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sort, setSort] = useState<SortKey>('Name');
   // Which standalone tile in the grid is open in the inspector — normal,
   // foil, and each serialized print are now separate tiles (see `entries`
@@ -491,6 +513,25 @@ export function CollectionScreen({ onBack }: { onBack: () => void }) {
             </div>
           )}
         </div>
+
+        {/* Graded shelf — encased slabs, each in its service's case style.
+            Slabs are display/sale pieces (not deck-legal); selling and
+            case-cracking live in the Grading Lab, so the shelf deep-links. */}
+        {gradedCards.length > 0 && (
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
+              <span className="text-[9px] font-bold text-[var(--c-steel)]">
+                Sell or crack slabs in the Grading Lab
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {gradedCards.map((g) => (
+                <GradedSlab key={g.id} g={g} onClick={onGrading} />
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <input

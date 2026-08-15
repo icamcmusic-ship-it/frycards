@@ -18,6 +18,7 @@ import {
   CalendarCheck,
   Flame,
   Palette,
+  Award,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
@@ -37,6 +38,7 @@ export type MetaScreen =
   | 'social'
   | 'market'
   | 'shops'
+  | 'grading'
   | 'profile'
   | 'settings'
   | 'changelog'
@@ -277,6 +279,14 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       desc: guest ? 'Requires an account' : 'Player-run storefronts',
       icon: <Building2 className="w-8 h-8" />,
       color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
+      disabled: guest,
+    },
+    {
+      key: 'grading',
+      label: 'GRADING LAB',
+      desc: guest ? 'Requires an account' : 'Get your cards graded & slabbed',
+      icon: <Award className="w-8 h-8" />,
+      color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
       disabled: guest,
     },
     {
