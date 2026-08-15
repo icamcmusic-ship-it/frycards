@@ -1890,6 +1890,55 @@ export function GameV4({
     guardSel,
   ]);
 
+  /**
+   * Space (or Enter) presses whatever the clash divider is currently offering.
+   *
+   * The divider renders exactly ONE primary action at a time by construction —
+   * DECLARE ATTACK, RESOLVE CLASH, CONFIRM GUARDS, PASS, the phase button,
+   * SKIP — which is the whole reason it exists. On a desktop that still meant
+   * moving the pointer to the middle of the board and back for every single
+   * phase of every single turn: a 20-turn match is ~80 round trips to the same
+   * spot. Escape has cancelled things since v17; nothing ever CONFIRMED.
+   *
+   * Dispatched as a real click on the rendered button rather than by calling
+   * the handler, so a disabled primary (CONFIRM GUARDS with an illegal
+   * assignment) refuses the key exactly as it refuses the pointer, and there is
+   * no second copy of the branch logic to drift out of step with the render.
+   *
+   * Deliberately inert while a modal owns the screen (mulligan, shed picker,
+   * confirm dialog, inspector, game over) and while a target pick is open —
+   * Space there means "the thing in front of me", and the thing in front of
+   * them is not the divider. Also inert when the key would double-fire a
+   * focused control: a keyboard user who has tabbed to a button already gets
+   * Space from the browser.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (stage === 'over' || stage === 'mulligan') return;
+      if (confirmDialog || inspect || pending || showAsh || shedPick !== null) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (
+        tag === 'BUTTON' ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        el?.isContentEditable ||
+        el?.getAttribute('role') === 'button'
+      ) {
+        return;
+      }
+      const primary = document.querySelector<HTMLButtonElement>('button[data-primary="1"]');
+      if (!primary || primary.disabled) return;
+      e.preventDefault();
+      primary.click();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [stage, confirmDialog, inspect, pending, showAsh, shedPick]);
+
   // The Battle Log renders oldest-first and is only ~5 lines tall, so it used
   // to open scrolled to the TOP of the last 160 lines — i.e. on the oldest
   // history it holds. Every player opening it wants the newest line, which is
@@ -3441,15 +3490,32 @@ export function GameV4({
   const previewMaxCardW = Math.max(120, viewportW - 16 - previewChrome - previewColW);
   const previewScale = Math.min(HOVER_PREVIEW_SCALE, previewMaxCardW / CARD_SIZES.full.w);
 
+  /**
+   * Hand cards that could still be invoked right now (v26).
+   *
+   * The sim has counted this lapse for the CPU since v5.3
+   * (`wastedEssenceWithPlay`) and the board never once mentioned it to the
+   * human, who makes it far more often: essence does not carry over, so a turn
+   * ended with an affordable, castable card in hand is a card's worth of tempo
+   * thrown away, and the only way to notice was to re-read seven card costs
+   * against the essence row before every END TURN. Counted off `invokeWhy`, the
+   * same predicate the INVOKE button reads, so the number can never disagree
+   * with what the hand will actually let you do.
+   */
+  const playableInHand =
+    stage === 'play' && g.active === HUMAN && (g.phase === 'Main1' || g.phase === 'Main2')
+      ? me.hand.filter((c) => !invokeWhy(c)).length
+      : 0;
+
   const phaseButtonLabel =
     g.phase === 'Main1'
-      ? 'TO CLASH ▸'
+      ? `TO CLASH ▸${playableInHand > 0 ? ` · ${playableInHand} PLAYABLE` : ''}`
       : g.phase === 'Clash'
         ? 'SKIP TO MAIN II ▸'
         : g.phase === 'Main2'
           ? me.hand.length > MAX_HAND
             ? `END TURN (shed ${me.hand.length - MAX_HAND}) ▸`
-            : 'END TURN ▸'
+            : `END TURN ▸${playableInHand > 0 ? ` · ${playableInHand} PLAYABLE` : ''}`
           : 'NEXT ▸';
 
   const showPhaseButton =
@@ -3873,6 +3939,7 @@ export function GameV4({
             )}
             <button
               onClick={skipCpuBeats}
+              data-primary="1"
               className="btn-pop heading-font text-sm bg-[var(--c-steel)] text-[var(--c-paper)] px-4 py-2 ink-border-md shadow-hard-black-xs tracking-wide"
             >
               SKIP ▸▸
@@ -3902,17 +3969,25 @@ export function GameV4({
             </button>
             <button
               onClick={declareMyAttack}
+              data-primary="1"
               className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
             >
               {/* The Might going in, not just the head count: "3 units" says
                   nothing about whether this is lethal, and the player was
-                  adding it up off the cards by hand. */}
+                  adding it up off the cards by hand.
+                  v26 finishes that sentence. The button printed the Might and
+                  left the comparison — against a Vitality plate at the far end
+                  of the board — to the player, which is exactly the arithmetic
+                  it exists to do. "IF UNGUARDED" because the opponent still
+                  gets its guard step; this is the ceiling, not a promise. */}
               ⚔ DECLARE ATTACK — {atkSel.size} · {selectedMight} MIGHT
+              {selectedMight >= foe.vitality && foe.vitality > 0 ? ' · LETHAL IF UNGUARDED' : ''}
             </button>
           </>
         ) : stage === 'play' && g.clash && g.clash.step !== 'done' ? (
           <button
             onClick={resolveMyClash}
+            data-primary="1"
             className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
             💥 RESOLVE CLASH
@@ -3942,6 +4017,7 @@ export function GameV4({
             )}
             <button
               onClick={confirmGuards}
+              data-primary="1"
               disabled={!!guardProblem}
               title={guardProblem ?? undefined}
               className={cn(
@@ -3961,6 +4037,7 @@ export function GameV4({
         ) : reactionStep ? (
           <button
             onClick={resolveCpuClash}
+            data-primary="1"
             className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
             💥 RESOLVE CLASH
@@ -3968,6 +4045,7 @@ export function GameV4({
         ) : inMyResponse ? (
           <button
             onClick={passMyPriority}
+            data-primary="1"
             className="btn-pop heading-font text-sm bg-[#29B6F6] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
             ⏭ PASS — LET IT RESOLVE
@@ -3975,6 +4053,7 @@ export function GameV4({
         ) : showPhaseButton ? (
           <button
             onClick={advanceMyPhase}
+            data-primary="1"
             className={cn(
               'btn-pop heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
               g.phase === 'Main2'
@@ -3987,6 +4066,17 @@ export function GameV4({
         ) : (
           <span className="heading-font text-[9px] text-[var(--c-paper)]/35 tracking-[2px] py-2">
             — CLASH LINE —
+          </span>
+        )}
+        {/* The Space shortcut, where the thing it presses is. A shortcut
+            nobody is told about is a shortcut nobody uses; pointer-only
+            screens (phones) don't have the key, so they don't get the chip. */}
+        {viewportW >= 640 && stage !== 'over' && stage !== 'mulligan' && (
+          <span
+            className="absolute left-2 heading-font text-[8px] text-[var(--c-paper)]/40 tracking-[1px] hidden sm:inline"
+            aria-hidden
+          >
+            ␣ SPACE
           </span>
         )}
         {/* Battle log lives on the divider so it never competes with either
@@ -4285,7 +4375,7 @@ export function GameV4({
         )}
         <div className="flex items-center gap-2 px-2 pt-1">
           <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
-            HAND {me.hand.length}/{MAX_HAND} · tap or hover a card to preview
+            HAND {me.hand.length}/{MAX_HAND} · tap or hover to preview · double-click to play
             {inMyReaction || reactionStep
               ? ' · REACTION: Quick & Ambush only'
               : inMyResponse
@@ -4356,6 +4446,20 @@ export function GameV4({
                     setPreview(c.iid);
                   }}
                   onClick={activate}
+                  // v26 — double-click plays it. Every card in the game costs
+                  // three interactions to cast on a desktop (click the card,
+                  // read the preview, click INVOKE), and the preview is a
+                  // reference the player rarely needs for the fifth copy of a
+                  // Wellspring or a card they picked out of their own deck.
+                  // Refusals still go through `tryInvoke`, so a double-click on
+                  // an unaffordable card explains itself in the banner exactly
+                  // as the button does rather than doing nothing.
+                  onDoubleClick={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    e.preventDefault();
+                    closePreview();
+                    tryInvoke(c.iid);
+                  }}
                   onKeyDown={(e) => {
                     // Nested cost/keyword chips inside the card handle their
                     // own Enter/Space — don't pin the preview on their behalf.
