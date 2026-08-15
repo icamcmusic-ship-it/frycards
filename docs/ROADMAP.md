@@ -168,6 +168,21 @@ Everything here has a started implementation and a visible seam.
   Ruin-Walker divergence as a persistent lemon deck in the instrument, not a
   weak kit. Those results are the most important thing on this page.**
 
+  **v26 re-opened the Ruin-Walker item, on eight cohorts.** Its
+  pinned-minus-random gap is negative in EVERY cohort that samples it (−17.9 /
+  −15.8 / −8.0 / −3.5 / −0.5 / −8.2 / −5.4 / −14.7, mean −9.3), including
+  three on a game seed never used before — and one-signedness across every
+  sampling cohort is the exact statistic v22 named as discriminating. The
+  lemon recipe is still real (deck #1, 17.2% cross-cohort mean), but a lemon
+  in one of nine recipes does not make a gap one-signed in eight of eight.
+  This is a DECK-RECIPE question before it is a card question: re-roll
+  Ruin-Walker's deck #1 recipe and re-measure before anyone touches a card.
+  Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v26 re-measurement.
+  v26 also narrowed the `Sacred` item — one-signed positive across all eight
+  cohorts, so the SIGN is stable and only the magnitude (+0.1 … +10.3) is
+  cohort composition; a pass quoting a double-digit Sacred delta off a single
+  cohort is quoting its deck roll.
+
   The pinned Leader suite gave each Leader three decks — and all three were the
   SAME RECIPE with different jitter seeds. `randomArchetype` varies four things
   per deck (a 2–3 keyword subset, a 1–3 effect subset, 32–40 units, 4–6

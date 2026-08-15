@@ -205,3 +205,78 @@ Closed this pass: nothing — this was a stress/verification pass; every
 carry-forward item survives unchanged, which is itself the finding: four
 cohorts, 23,808 games, ~1,500 extra fuzz/chaos matches, and the engine did
 not blink.
+
+## v26 re-measurement (2026-08-15)
+
+Bug/QoL pass. **Runs:** eight cohorts, 5,952 games each — **47,616 games** —
+`npx tsx scripts/simulate-v5.ts 6 32 <gameSeed> <deckSeed>`:
+
+| Cohort | gameSeed | deckSeed | Why                              |
+| ------ | -------- | -------- | -------------------------------- |
+| A      | 1337     | 1337     | standing                         |
+| B      | 1337     | 42       | standing                         |
+| C      | 1337     | 7        | standing                         |
+| D      | 1337     | 4242     | new deck roll, standing game seed |
+| E      | 1337     | 9001     | new deck roll, standing game seed |
+| F      | 20260815 | 20260815 | fresh game seed                  |
+| G      | 20260815 | 777      | fresh game seed                  |
+| H      | 20260815 | 31415    | fresh game seed                  |
+
+Plus the fuzz soak at **1,200 seeds** (6x the CI default) and the chaos monkey
+at **600** (10x), both through the new `FUZZ_SEEDS` / `CHAOS_SEEDS` env knobs
+rather than a hand edit reverted before the commit — so this volume is
+re-runnable by anyone, which the last four passes' volumes are not.
+
+**Neutrality control.** A, B and C reproduce v25 to the decimal — P1 44.7 /
+46.5 / 46.3, avg turns 20.3 / 21.6 / 21.8, and every keyword row identical
+(Sacred 51.9 n=634, 59.4 n=1398, 62.2 n=995; Unbreakable 56.9 n=1210, 57.4
+n=1619, 58.1 n=2313). The pass's changes are UI-only and the numbers say so.
+`invariantCount` 0 in all eight; 0 failures across 1,800 fuzz/chaos matches.
+
+### Carry-forward status
+
+1. **Mer-King lever — STILL UNSPENT, carried.** This pass ships content (the
+   Grading Lab overhaul) and UI work, so the condition's final clause — spent
+   only in a pass containing nothing but the lever — holds again. Its
+   cross-cohort pinned-minus-random gap is **not** one-signed (+3.8 / +7.7 /
+   — / +3.5 / +5.0 / **−8.9** / +11.2 / +12.0, mean +4.9), which is the
+   discriminating statistic v22 named; the lever stays authorized, unspent,
+   and unjustified by this evidence alone.
+2. **v23 Leader keyword print** — carried, untouched.
+3. **v24 Event keyword print** — carried, untouched; `UNPRINTED_KEYWORDS`
+   unmodified, no band built.
+4. **`Unbreakable` weight 7 — carried, trigger still not met, now on eight
+   cohorts.** Carrier win 56.9 / 57.4 / 58.1 / 66.0 / 61.8 / 61.2 / 60.3 /
+   62.3 (normΔ +9.4 / +7.4 / +8.0 / +15.0 / +9.6 / +8.9 / +5.8 / +9.6).
+   Positive everywhere; the re-check fires on a NEGATIVE carrier delta and
+   has now failed to fire across eight independent deck rolls.
+5. **`Sacred` cohort dependence — NARROWED, and this is the pass's balance
+   finding.** v25 left it as "the sign flips in the stress cohort, so the
+   number is a statement about cohorts". Eight cohorts say something sharper:
+   normΔ +1.9 / +10.0 / +10.3 / +8.7 / +0.1 / +5.3 / +2.8 / +5.6 — **one-signed
+   positive in all eight** (and v25's stress reading, +0.2, is the same sign).
+   The SIGN is stable; only the MAGNITUDE is cohort-dependent, and it ranges
+   from "indistinguishable from zero" (+0.1, +1.9) to "large" (+10.3). So the
+   honest restatement is: Sacred is mildly positive, and any pass reading a
+   double-digit delta off one cohort is reading its deck roll, not the
+   keyword. Still no action — a keyword whose worst reading is +0.1 is not a
+   balance problem, and rule #6 forbids spending a lever in this pass anyway.
+6. **Content/balance interleaving** — carried and honoured: no card price,
+   stat, weight or keyword band changed.
+
+### New this pass
+
+- **Ruin-Walker Overseer's pinned kit is one-signed negative across every
+  cohort that samples it** (−17.9 / −15.8 / −8.0 / −3.5 / −0.5 / −8.2 / −5.4
+  / −14.7, mean **−9.3**) — the only Leader in the table that is. v22 opened
+  this and closed it as a deck-luck artefact of one lemon recipe; the lemon is
+  real (deck #1, 17.2% cross-cohort mean, flagged by the aggregator) but it
+  does not explain a gap that is negative in all eight cohorts including the
+  three on a fresh game seed. This is now the strongest single balance signal
+  in the report, and it is a **deck-recipe** question before it is a card
+  question: the next balance pass should re-roll Ruin-Walker's deck #1 recipe
+  and re-measure before touching a single card. Recorded, not acted on —
+  same rule #6.
+- The aggregator (`scripts/aggregate-cohorts.ts`) was run over all eight
+  reports at once, which is what makes the two one-signed claims above
+  statements rather than impressions.
