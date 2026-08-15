@@ -1497,6 +1497,19 @@ function applyShedOrder(state: GameState, picked: string[]): void {
 }
 
 /**
+ * Defensive discard of a live clash — the same clause `finishDuskShed` uses
+ * below. Exported for UI-side crash/backstop recovery: a caller needs to
+ * drop a stuck clash before it can crank `endPhase` forward (which refuses
+ * outright while `state.clash` is set), and a UI component holding `state`
+ * from `useState` must not mutate its fields directly (react-hooks/immutability) —
+ * routing the assignment through an engine function is the fix, not a lint
+ * suppression.
+ */
+export function discardLiveClash(state: GameState): void {
+  state.clash = null;
+}
+
+/**
  * Complete Dusk from the shed step on: shed to MAX_HAND (the `picked` cards
  * first, then from the end), clear the clash, pass the turn and run the next
  * player's Dawn. Exported so a UI whose `chooseShed` hook paused the turn

@@ -35,6 +35,7 @@ import {
   BOND_TARGET_SELF,
   declareAttackers,
   declareGuards,
+  discardLiveClash,
   resolveClash,
   canInvokeLeader,
   canPayCost,
@@ -2711,8 +2712,10 @@ export function GameV4({
       // A live clash blocks endPhase outright (the engine refuses to end a
       // phase mid-clash), so cranking below would spin its 12 iterations
       // doing nothing and land in a stage with zero enabled actions. Drop
-      // the clash first — the same defensive discard finishDuskShed does.
-      if (g.clash && g.clash.step !== 'done') g.clash = null;
+      // the clash first — the same defensive discard finishDuskShed does,
+      // routed through the engine (not a direct `g.clash =` here) since `g`
+      // is a useState value this component must not mutate inline.
+      if (g.clash && g.clash.step !== 'done') discardLiveClash(g);
       let safety = 12;
       while (!g.winner && g.active === CPU && safety-- > 0) endPhase(g);
     } catch {
