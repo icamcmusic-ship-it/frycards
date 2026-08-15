@@ -34,16 +34,30 @@ describe('loadCpuSpeed', () => {
     expect(CPU_SPEEDS[loadCpuSpeed()].label).toBe('NORMAL');
   });
 
-  test('a stored index round-trips', () => {
+  test('a stored choice round-trips, by label', () => {
     for (let i = 0; i < CPU_SPEEDS.length; i++) {
       saveCpuSpeed(i);
-      expect(store.get(CPU_SPEED_KEY)).toBe(String(i));
+      expect(store.get(CPU_SPEED_KEY)).toBe(CPU_SPEEDS[i].label);
       expect(loadCpuSpeed()).toBe(i);
     }
   });
 
+  // v26 inserted CINEMATIC at the slow end of the ladder, so every index a
+  // player had stored before it now names a different speed. A migration that
+  // is wrong here is invisible: the match simply plays at a pace nobody chose.
+  test('a legacy v17-v25 index migrates to the speed it used to mean', () => {
+    for (const [stored, label] of [
+      ['0', 'SLOW'],
+      ['1', 'NORMAL'],
+      ['2', 'FAST'],
+    ] as const) {
+      store.set(CPU_SPEED_KEY, stored);
+      expect(CPU_SPEEDS[loadCpuSpeed()].label, `legacy ${stored}`).toBe(label);
+    }
+  });
+
   test('junk, out-of-range and fractional values fall back to NORMAL', () => {
-    for (const bad of ['', 'fast', '-1', '3', '99', '1.5', 'NaN']) {
+    for (const bad of ['', 'brisk', '-1', '3', '99', '1.5', 'NaN']) {
       store.set(CPU_SPEED_KEY, bad);
       expect(loadCpuSpeed(), `stored ${JSON.stringify(bad)}`).toBe(DEFAULT_CPU_SPEED);
     }

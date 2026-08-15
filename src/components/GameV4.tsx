@@ -98,7 +98,17 @@ const CPU: PlayerId = 'P2';
 
 /** Component-scoped keyframes for the match-only combat feedback (damage
  * floats, phase banners, attack flashes) — an inline <style> block rather
- * than src/index.css, which another surface owns. */
+ * than src/index.css, which another surface owns.
+ *
+ * v26: every duration below is scaled by `--gv4-pace`, the narration speed's
+ * own multiplier, set on the match root. Before this the speed dial moved only
+ * the DWELL between beats: on SLOW a beat sat on screen for two seconds, but
+ * the card still snapped into the middle of the board in 0.5s and the damage
+ * number still flew off in 1.15s, so the parts a player is actually trying to
+ * watch went past at exactly the speed they had just said was too fast. The
+ * ring pulse and the attack lunge are deliberately NOT scaled — they loop for
+ * the whole beat, and a slower loop reads as a stall rather than as motion.
+ */
 const GAME_CSS = `
 @keyframes gv4-dmg-float {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
@@ -112,7 +122,7 @@ const GAME_CSS = `
   left: 50%;
   z-index: 45;
   pointer-events: none;
-  animation: gv4-dmg-float 1.15s ease-out forwards;
+  animation: gv4-dmg-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards;
   font-weight: 900;
   font-size: 15px;
   color: #fff;
@@ -128,7 +138,7 @@ const GAME_CSS = `
   left: 50%;
   z-index: 45;
   pointer-events: none;
-  animation: gv4-dmg-float 1.15s ease-out forwards;
+  animation: gv4-dmg-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards;
   font-weight: 900;
   font-size: 15px;
   color: #fff;
@@ -145,13 +155,13 @@ const GAME_CSS = `
   78% { opacity: 1; }
   100% { opacity: 0; transform: scale(1.02); }
 }
-.gv4-phase-banner { animation: gv4-phase-pop 1.15s ease-out forwards; }
+.gv4-phase-banner { animation: gv4-phase-pop calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
 @keyframes gv4-attack-flash {
   0%, 100% { filter: none; }
   30% { filter: brightness(1.7) saturate(1.5); }
   60% { filter: brightness(0.75); }
 }
-.gv4-attack-flash { animation: gv4-attack-flash 0.65s ease-in-out; }
+.gv4-attack-flash { animation: gv4-attack-flash calc(0.65s * var(--gv4-pace, 1)) ease-in-out; }
 /* Pulsing outlines on the card the opponent is acting with (yellow) and
  * whatever it's acting on (red) — the same color grammar as the human's own
  * attacker/target rings, just animated since the player isn't driving. */
@@ -178,7 +188,7 @@ const GAME_CSS = `
   60% { opacity: 1; transform: translateY(-2px) scale(1.05); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-.gv4-unit-enter { animation: gv4-unit-enter 0.35s ease-out; }
+.gv4-unit-enter { animation: gv4-unit-enter calc(0.35s * var(--gv4-pace, 1)) ease-out; }
 /* The card the opponent is playing, held in the middle of the board while its
  * narration beat is on screen. Named cards in a log line are easy to skim
  * past; the face itself is not. */
@@ -187,7 +197,7 @@ const GAME_CSS = `
   55% { opacity: 1; transform: translateY(4px) scale(1.04) rotate(1deg); }
   100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
 }
-.gv4-cpu-play { animation: gv4-cpu-play 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.gv4-cpu-play { animation: gv4-cpu-play calc(0.5s * var(--gv4-pace, 1)) cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 /* An attacking body leans across the clash line for the duration of the
  * attack beat, so a declared attack reads as movement and not as a ring. */
 @keyframes gv4-lunge-down {
@@ -224,8 +234,8 @@ const GAME_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
   .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
-  .gv4-phase-banner { animation: gv4-fade 1.15s ease-out forwards; }
-  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float 1.15s ease-out forwards; }
+  .gv4-phase-banner { animation: gv4-fade calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
+  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
 }
 `;
 
@@ -1332,6 +1342,17 @@ export function humanizeLog(s: string, cpuLabel: string): string {
   return agreed.charAt(0).toUpperCase() + agreed.slice(1);
 }
 
+/** The opponent's last turn in numbers — see `turnRecap`. */
+interface TurnRecap {
+  vitalityLost: number;
+  unitsLost: number;
+  cardsPlayed: number;
+  attacked: boolean;
+  cardsDrawnByMe: number;
+  /** Log lines the turn produced — the "read the whole thing" affordance. */
+  lines: number;
+}
+
 /** A targeting/bonding choice in progress — resolved by clicking a
  * highlighted card (or Vitality plate). */
 type Pending =
@@ -1587,6 +1608,25 @@ export function GameV4({
    * a hunt through undifferentiated lines. `-1` until the first handoff.
    */
   const [handoffAt, setHandoffAt] = useState(-1);
+  /**
+   * What the opponent did last turn, in numbers, shown until the player
+   * dismisses it (v26).
+   *
+   * The narration answers "what is the opponent doing" beautifully while it is
+   * running and then takes the whole answer off the screen with it. Two very
+   * ordinary things leave a player with no answer at all: pressing SKIP ▸▸ —
+   * which is a button the board offers, on every turn — and looking away.
+   * After either one the board has simply changed, and the only record is 160
+   * lines of Battle Log behind a toggle. This is the receipt.
+   */
+  const [turnRecap, setTurnRecap] = useState<TurnRecap | null>(null);
+  /** Board state as the opponent's turn began — the other half of the recap. */
+  const cpuTurnSnapshotRef = useRef<{
+    vitality: number;
+    fieldIids: string[];
+    hand: number;
+    logAt: number;
+  } | null>(null);
   // Hand preview: the hand card currently enlarged above the bottom dock.
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
@@ -2809,10 +2849,47 @@ export function GameV4({
     tickCpuBeat();
   };
 
+  /**
+   * Digest the opponent's whole turn into a few numbers, for the strip that
+   * greets the player when control comes back (see `turnRecap`).
+   *
+   * Read off the engine log slice since the handoff plus the snapshot taken
+   * when the turn started, NOT off the narration beats: a skipped turn has no
+   * beats the player ever saw, and the skipped turn is precisely the one this
+   * exists for.
+   */
+  const buildTurnRecap = (): TurnRecap | null => {
+    const snap = cpuTurnSnapshotRef.current;
+    cpuTurnSnapshotRef.current = null;
+    if (!snap) return null;
+    const lines = g.log.slice(snap.logAt);
+    if (lines.length === 0) return null;
+    const theirs = lines.filter((l) => l.startsWith('P2 '));
+    const recap: TurnRecap = {
+      vitalityLost: Math.max(0, snap.vitality - me.vitality),
+      unitsLost: snap.fieldIids.filter((iid) => !me.field.some((u) => u.iid === iid)).length,
+      cardsPlayed: theirs.filter((l) => /\b(invokes|casts|plays)\b/.test(l)).length,
+      attacked: theirs.some((l) => /\battacks\b/.test(l)),
+      cardsDrawnByMe: Math.max(0, me.hand.length - snap.hand),
+      lines: lines.length,
+    };
+    // Nothing worth a strip: no damage, no losses, no plays, no attack.
+    if (
+      recap.vitalityLost === 0 &&
+      recap.unitsLost === 0 &&
+      recap.cardsPlayed === 0 &&
+      !recap.attacked
+    ) {
+      return null;
+    }
+    return recap;
+  };
+
   const beginHumanTurn = () => {
     // Safety flush: a recovery path can land here without the narration
     // ticker's own end-of-run flush having fired.
     releaseFloatsFor();
+    setTurnRecap(buildTurnRecap());
     setCpuBeat(null);
     setCpuFocus(null);
     setNarratingBoth(false);
@@ -3044,7 +3121,17 @@ export function GameV4({
     // place the Battle Log divider needs stamping. Taken at the Dawn rather
     // than after it: those lines are the opponent's turn, not the tail of the
     // human's. Their own shed and "At Dusk" lines stay on their side.
-    setHandoffAt(Math.max(0, g.log.length - dawnLines.length));
+    const handoff = Math.max(0, g.log.length - dawnLines.length);
+    setHandoffAt(handoff);
+    // The other end of the turn recap. Taken from the same line as the handoff
+    // divider, so the digest covers exactly the slice the Battle Log marks off.
+    cpuTurnSnapshotRef.current = {
+      vitality: me.vitality,
+      fieldIids: me.field.map((u) => u.iid),
+      hand: me.hand.length,
+      logAt: handoff,
+    };
+    setTurnRecap(null);
     setStage('cpu');
     setCpuBeat(null);
     // Cleared too, or the previous turn's last beat keeps its actor/target
@@ -3536,9 +3623,16 @@ export function GameV4({
   return (
     <div
       className="w-full h-screen flex flex-col overflow-hidden select-none"
-      style={{
-        background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
-      }}
+      style={
+        {
+          background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
+          // Every combat animation's duration is a multiple of this — see
+          // GAME_CSS. Clamped at 1 so FAST doesn't make the feedback
+          // subliminal: a player who wants to skim the opponent's turn wants
+          // shorter WAITS, not a damage number they can't read.
+          '--gv4-pace': Math.max(1, CPU_SPEEDS[cpuSpeedIdx].mult),
+        } as React.CSSProperties
+      }
     >
       <style>{GAME_CSS}</style>
 
@@ -3697,6 +3791,57 @@ export function GameV4({
               className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
             >
               ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
+            </button>
+          </div>
+        )}
+
+        {/* What the opponent just did, kept on screen after the narration —
+            or after a SKIP — has taken itself away. */}
+        {turnRecap && stage === 'play' && !narrating && (
+          <div
+            className="pointer-events-auto bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 max-w-[92vw]"
+            role="status"
+          >
+            <span className="heading-font text-[10px] text-[var(--c-red)]">
+              ⟲ {cpuLabel.toUpperCase()}&apos;S TURN
+            </span>
+            {turnRecap.cardsPlayed > 0 && (
+              <span className="text-[10px] font-bold">
+                {turnRecap.cardsPlayed} card{turnRecap.cardsPlayed === 1 ? '' : 's'} played
+              </span>
+            )}
+            {turnRecap.attacked && <span className="text-[10px] font-bold">attacked</span>}
+            {turnRecap.vitalityLost > 0 && (
+              <span className="text-[10px] font-black text-[var(--c-red)]">
+                −{turnRecap.vitalityLost} Vitality (you: {me.vitality})
+              </span>
+            )}
+            {turnRecap.unitsLost > 0 && (
+              <span className="text-[10px] font-black text-[var(--c-red)]">
+                {turnRecap.unitsLost} of your units lost
+              </span>
+            )}
+            {turnRecap.cardsDrawnByMe > 0 && (
+              <span className="text-[10px] font-bold text-[var(--c-yellow)]">
+                +{turnRecap.cardsDrawnByMe} card{turnRecap.cardsDrawnByMe === 1 ? '' : 's'} to you
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setLogExpanded(true);
+                setTurnRecap(null);
+              }}
+              className="heading-font text-[8px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              title={`Open the Battle Log on ${cpuLabel}'s ${turnRecap.lines} line(s)`}
+            >
+              ▴ FULL LOG
+            </button>
+            <button
+              onClick={() => setTurnRecap(null)}
+              aria-label="Dismiss the turn recap"
+              className="heading-font text-[8px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+            >
+              ✕
             </button>
           </div>
         )}
