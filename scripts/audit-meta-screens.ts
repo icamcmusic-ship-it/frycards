@@ -89,6 +89,13 @@ const ALL_SCREENS = [
   // plates and the sell-value maths live — had never been measured at all.
   'pack@reveal',
   'pack@summary',
+  // v26 — the Grading Lab shipped in v25 with no harness entry at all, so the
+  // newest layout in the game was the only one never measured. Its two other
+  // tabs are behind a tab click, which is a PRELUDE hop, not a depth-two one:
+  // the sweep would measure the submit form again under a different name.
+  'grading',
+  'grading@limbo',
+  'grading@vault',
 ];
 
 /**
@@ -109,6 +116,8 @@ const ALL_SCREENS = [
 const PRELUDE: Record<string, string[]> = {
   'pack@reveal': ['JUST TEAR IT OPEN FOR ME'],
   'pack@summary': ['JUST TEAR IT OPEN FOR ME', 'REVEAL ALL'],
+  'grading@limbo': ['AT THE GRADERS'],
+  'grading@vault': ['MY SLABS'],
 };
 
 /** The `?screen=` value for an entry — `pack@reveal` mounts plain `pack`. */

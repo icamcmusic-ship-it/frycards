@@ -49,12 +49,26 @@ export function GradedSlab({
   if (!def) return null;
   const graded = g.grade != null;
   return (
-    <button
-      type="button"
+    // A <div role="button">, not a <button>: CardFace prints its own keyword
+    // and cost chips as real <button> elements, and a button inside a button
+    // is invalid HTML that breaks keyboard and screen-reader navigation. This
+    // is the same call CardFace itself makes for the same reason — the v26
+    // harness pass caught it the first time the Grading Lab was measured.
+    <div
+      role="button"
+      tabIndex={onClick ? 0 : -1}
+      aria-disabled={!onClick}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (!onClick || e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       aria-label={`${def.name}${graded ? `, graded ${fmtGrade(g.grade!)} by ${svc.name}` : ', grading in progress'}`}
       className={cn(
-        'relative p-2 pb-1 ink-border-md shadow-hard-black-sm text-left transition-transform',
+        'relative p-2 pb-1 ink-border-md shadow-hard-black-sm text-left transition-transform w-fit',
         onClick && 'btn-pop cursor-pointer',
         selected && 'ring-4 ring-[var(--c-yellow)]',
       )}
@@ -81,7 +95,7 @@ export function GradedSlab({
         {graded ? (GRADE_WORDS[String(g.grade)] ?? 'GRADED') : 'IN GRADING'}
         {g.foil ? ' · FOIL' : ''}
       </div>
-    </button>
+    </div>
   );
 }
 

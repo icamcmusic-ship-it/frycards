@@ -199,7 +199,15 @@ export async function fetchGradedCards(userId: string): Promise<GradedCard[]> {
     .eq('user_id', userId)
     .order('submitted_at', { ascending: false });
   if (error) return [];
-  return (data as GradedCard[]) || [];
+  // `grade` is a SQL numeric. PostgREST renders those unquoted today, but a
+  // driver or gateway that hands them back as strings ("8.0") would put a
+  // string through `fmtGrade`, whose `toFixed` then throws and takes the whole
+  // Collection screen down with it. Normalize once, here, where the row enters
+  // the client — the reveal path has always done this.
+  return ((data as GradedCard[]) || []).map((g) => ({
+    ...g,
+    grade: g.grade == null ? null : Number(g.grade),
+  }));
 }
 
 export async function submitGrading(

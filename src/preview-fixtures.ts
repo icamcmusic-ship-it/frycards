@@ -367,6 +367,52 @@ const SUBMISSIONS = Array.from({ length: 6 }, (_, i) => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Grading Lab
+//
+// v25 shipped the Grading Lab without a harness entry, so the one screen with
+// a brand-new layout was the only one never measured. Three of these are still
+// at the graders (one already due, so the REVEAL control renders) and four are
+// revealed slabs across all three services, which is what the vault shelf and
+// its SELL / CRACK controls need in order to exist at all.
+// ---------------------------------------------------------------------------
+const GRADED_CARDS = [
+  ...(['tca', 'amg', 'keeper'] as const).map((service, i) => ({
+    id: `preview-graded-pending-${i}`,
+    user_id: PREVIEW_USER,
+    card_id: cardAt(i * 23).id,
+    foil: i === 1,
+    service,
+    speed: (['standard', 'rush', 'instant'] as const)[i],
+    fee_paid: 180 + i * 90,
+    submitted_at: T0,
+    // The first one is due (READY / REVEAL), the others still counting down.
+    ready_at: i === 0 ? T0 : T_FUTURE,
+    grade: null,
+    revealed_at: null,
+  })),
+  ...(
+    [
+      ['tca', 10],
+      ['amg', 8.5],
+      ['keeper', 7],
+      ['tca', 5.5],
+    ] as const
+  ).map(([service, grade], i) => ({
+    id: `preview-graded-vault-${i}`,
+    user_id: PREVIEW_USER,
+    card_id: cardAt(i * 29 + 3).id,
+    foil: i === 2,
+    service,
+    speed: 'standard' as const,
+    fee_paid: 400,
+    submitted_at: T0,
+    ready_at: T0,
+    grade,
+    revealed_at: T0,
+  })),
+];
+
+// ---------------------------------------------------------------------------
 // The fixture tables
 // ---------------------------------------------------------------------------
 const TABLES: Record<string, unknown[]> = {
@@ -446,6 +492,7 @@ const TABLES: Record<string, unknown[]> = {
     },
   ],
   card_submissions: SUBMISSIONS,
+  graded_cards: GRADED_CARDS,
   player_serialized_cards: SERIALIZED_FEED.slice(0, 4).map((s) => ({
     card_id: s.card_id,
     rarity: s.rarity,
@@ -579,7 +626,7 @@ const RPCS: Record<string, unknown> = {
  * these answer with a PostgREST-shaped error so the screen shows its own error
  * state rather than a success it never had. */
 const WRITE_RPC =
-  /^(buy_|sell_|claim_|create_|cancel_|open_|place_|equip_|set_|send_|respond_|remove_|save_|submit_|report_|rate_|update_|close_|reopen_|withdraw_|admin_|creator_|settle_|quicksell_|preview_mystery_pool|record_match_result)/;
+  /^(buy_|sell_|claim_|create_|cancel_|open_|place_|equip_|set_|send_|respond_|remove_|save_|submit_|report_|rate_|update_|close_|reopen_|withdraw_|admin_|creator_|settle_|quicksell_|reveal_|crack_|preview_mystery_pool|record_match_result)/;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
