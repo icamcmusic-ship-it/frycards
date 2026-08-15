@@ -327,6 +327,23 @@ Ordered by how much they change what it feels like to own and play the game.
     Wiring it up is a real payout change (duplicates above the cap stop being
     cards and start being credits), which is why it is a call and not a patch.
     The cheap alternative is to delete the plumbing and the type fields.
+  - **Grading is a flat fee on a proportional payout, so it prints credits at
+    the top of the rarity ladder** (found v26, by building the screen that
+    shows the number). A slab quicksells at raw price × grade multiplier ×
+    service premium, and the average grade multiplier is ×3.83 — so a TCA slab
+    averages **×6.14 the raw card** for a flat 400-credit fee. On a Common
+    (raw 10) that is a 339-credit loss and the mini-game is a hobby; on a
+    Mythic (raw 3,000) it is an average +18,000 against the same 400, and
+    quicksell is strictly dominated for every spare Mythic a player will ever
+    own. Nothing is broken — this is exactly what v25 priced — but the v26 Lab
+    now prints "EXPECTED BACK … (+17,000 vs fee)" on the pay bar, so the
+    arbitrage stops being something a player has to work out and starts being
+    something the screen recommends. The shape of the fix is the one real
+    grading houses use: **a declared-value fee** (base + a percentage of the
+    card's raw quicksell price), which leaves Commons cheap, makes Mythics
+    expensive, and keeps the gamble intact at every tier. That is a payout
+    change to a shipped economy, so it is a call and not a patch — recorded
+    here rather than made quietly in a UI pass.
   - **The bounty shop's round trip is a guaranteed profit.** `buy_bounty_card`
     charges 3x a card's base sell price and `sell_bounty_card` pays 5x, and the
     buy/sell block is _same-day only_ (`player_bounty_activity` is keyed on

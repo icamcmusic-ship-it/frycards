@@ -9,6 +9,75 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v26.0 — The pass where the opponent's turn got a receipt and the slab became an object
+
+Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
+round, a match QoL round, a flow/CPU-visibility audit, the carry-forward
+re-measurement, and the Grading Lab overhaul. **0 invariant violations across
+47,616 AI games** (eight cohorts, three of them on a game seed never used
+before) plus a 1,200-match fuzz soak and a 600-match chaos run; 415 tests
+(5 new). The engine ships behaviourally unchanged — cohorts A/B/C reproduce
+v25 to the decimal, keyword rows included.
+
+**The Grading Lab, rebuilt.** The slab was a coloured rectangle; it is a
+moulded acrylic case now, with a bevelled shell, a three-zone label (service
+wordmark, card name and rarity line, grade numeral and word), glass glare, a
+cert number and barcode derived from the row, and a case treatment per grade
+tier — gold at 10, silver at 9.5, flat grey at 6 and below, with a slow shine
+on the top two grades that honours reduced-motion. Pending slabs frost their
+window and read SEALED. The screen around it stopped hiding its own numbers:
+a published odds table per service (all three roll the same table — TCA
+resells higher, Keeper bumps 55% of rolls a half point), an average-return and
+chance-of-9+ line on every service, the expected slab value on every card in
+the picker, and expected-return-against-fee on the pay bar. Four numbered
+steps, a picker that scrolls in its own bounds, a sticky pay bar, ADD ALL per
+card, a portfolio total and three sort orders in the vault, progress bars in
+limbo, and a CHECK FOR RESULTS button for a client clock that disagrees with
+the server's. **Vouchers now pay grading fees** at 100 credits to the voucher —
+the rate the pack shelf already uses.
+
+**Match QoL — four things the board was making the player do by hand.** SPACE
+(or Enter) presses whatever the clash divider is offering — DECLARE ATTACK,
+RESOLVE CLASH, CONFIRM GUARDS, PASS, the phase button, SKIP — dispatched as a
+real click, so a disabled primary refuses the key exactly as it refuses the
+pointer, and inert under every modal. Double-clicking a hand card plays it.
+DECLARE ATTACK says LETHAL IF UNGUARDED when the selection is at or over the
+opponent's Vitality. The phase button counts the affordable, castable cards a
+turn is about to throw away (`· N PLAYABLE`).
+
+**CPU visibility — the turn recap, and animations that actually slow down.**
+The speed dial used to move only the WAIT between beats: every animation kept
+its literal duration, so the parts a player is trying to watch went past at
+the speed they had just said was too fast. Every combat animation now scales
+with the narration pace, and a new slowest rung — **CINEMATIC** — joins the
+ladder (the preference is stored by name now, with old numeric values
+migrated, so nobody's saved choice becomes a speed they didn't pick). And
+because the narration takes its whole answer off screen when it ends — after a
+SKIP there was never an answer at all — a dismissible **turn recap** now
+greets the returning player: cards played, whether it attacked, Vitality lost
+and where that leaves them, units lost, cards drawn, and ▴ FULL LOG.
+
+**Bug hunt: the newest screen was the only one never measured.** The Grading
+Lab shipped in v25 without a harness entry, so the newest layout in the game
+had never been loaded at phone width. Adding it (with fixtures) found a real
+bug on the first run: the slab was a `<button>` wrapping a CardFace, whose
+keyword and cost chips are real buttons — invalid HTML that breaks keyboard
+and screen-reader navigation. Also fixed: `fetchGradedCards` passed a numeric
+`grade` through raw where the reveal path normalised it, one driver quirk away
+from taking the Collection down.
+
+**Instruments.** The fuzz and chaos volumes are env knobs (`FUZZ_SEEDS`,
+`CHAOS_SEEDS`) instead of constants each stress pass edits and reverts; the
+match driver can now hand itself a winnable board (`WIN_EVERY`), because
+across every run it had ever done it had lost every match — the VICTORY screen
+was the one match state the match-state harness had never rendered.
+
+**Balance: no card changed, seventh pass running.** The Mer-King lever stays
+unspent per its own condition. `Sacred` narrows from "the sign flips" to
+"one-signed positive across eight cohorts, magnitude is deck roll"; the
+Ruin-Walker pinned-kit gap re-opens as one-signed negative in all eight. Full
+numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v26 re-measurement.
+
 ### v25.0 — The pass where the cards got their slabs and the opponent learned to think out loud everywhere
 
 Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay
