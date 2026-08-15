@@ -10,7 +10,7 @@ import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { GradedCard, fetchGradedCards } from './grading';
-import { GradedSlab } from './GradingScreen';
+import { GradedSlab, SLAB_CSS } from './GradedSlab';
 import { fmtCredits, quicksellPrice } from './economy';
 import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
 
@@ -525,6 +525,9 @@ export function CollectionScreen({
                 Sell or crack slabs in the Grading Lab
               </span>
             </div>
+            {/* The slab's own keyframes travel with it — a top-grade case
+                shines on this shelf as well as in the Lab. */}
+            <style>{SLAB_CSS}</style>
             <div className="flex flex-wrap gap-2">
               {gradedCards.map((g) => (
                 <GradedSlab key={g.id} g={g} onClick={onGrading} />

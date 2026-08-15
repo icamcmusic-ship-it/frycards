@@ -89,6 +89,23 @@ export function Credits({
   );
 }
 
+/** Inline "ticket glyph + amount" — the voucher counterpart of `Credits`, for
+ * running text and buttons that quote a voucher price. */
+export function Vouchers({
+  amount,
+  className,
+}: {
+  amount: number | null | undefined;
+  className?: string;
+}) {
+  return (
+    <span className={cn('inline-flex items-center gap-0.5', className)}>
+      <Ticket className="w-3 h-3 shrink-0" aria-hidden /> {fmtVouchers(amount)}
+      <span className="sr-only">vouchers</span>
+    </span>
+  );
+}
+
 /** Vouchers — the premium currency (plain integer). */
 export function VoucherChip({ amount }: { amount: number }) {
   return (

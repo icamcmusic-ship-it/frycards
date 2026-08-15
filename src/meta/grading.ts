@@ -10,6 +10,24 @@ import { quicksellPrice } from './economy';
 
 export type GradingService = 'tca' | 'amg' | 'keeper';
 export type GradingSpeed = 'standard' | 'rush' | 'instant';
+/** What the fee is paid in (v26). */
+export type GradingCurrency = 'credits' | 'vouchers';
+
+/**
+ * Credits to the voucher.
+ *
+ * Not invented here: every pack row that carries both prices is priced at this
+ * rate (599cr/6v, 699cr/7v, 1199cr/12v, 3799cr/38v), so a grading fee quoted
+ * in vouchers has to use the same one or the Lab becomes the cheapest — or the
+ * most expensive — voucher sink in the game by accident. Mirror of
+ * `grading_voucher_fee`.
+ */
+export const VOUCHER_RATE = 100;
+
+/** Mirror of grading_voucher_fee — a fee is never free, so it floors at 1. */
+export function gradingVoucherFee(credits: number): number {
+  return Math.max(1, Math.ceil(credits / VOUCHER_RATE));
+}
 
 export interface GradedCard {
   id: string;
@@ -157,6 +175,69 @@ export function gradeMultiplier(grade: number): number {
   return hit ? hit[1] : 1;
 }
 
+/**
+ * The grade roll's own odds — mirror of `grading_roll`'s band widths over 94.
+ *
+ * v25 shipped the roll server-side and told the player nothing about it: three
+ * services with different fees and premiums, and no way to know whether the
+ * expensive one graded HIGHER (it does not — every service rolls the same
+ * table; TCA sells for more, Keeper nudges the roll). A grading screen that
+ * hides its own odds is asking the player to gamble blind, and the pack odds
+ * modal has set the opposite precedent in this game since v6.
+ */
+export const GRADE_ODDS: [number, number][] = [
+  [5, 2 / 94],
+  [5.5, 3 / 94],
+  [6, 4 / 94],
+  [6.5, 5 / 94],
+  [7, 8 / 94],
+  [7.5, 10 / 94],
+  [8, 14 / 94],
+  [8.5, 16 / 94],
+  [9, 16 / 94],
+  [9.5, 12 / 94],
+  [10, 4 / 94],
+];
+
+/** Keeper's "grades a little higher": 55% of rolls bump a half point. */
+export const KEEPER_BUMP_CHANCE = 0.55;
+
+/** The odds a given service actually delivers, Keeper's bump included. */
+export function gradeOddsFor(service: GradingService): [number, number][] {
+  if (service !== 'keeper') return GRADE_ODDS;
+  const out = new Map<number, number>(GRADE_ODDS.map(([g]) => [g, 0]));
+  for (const [g, p] of GRADE_ODDS) {
+    const bumped = Math.min(10, g + 0.5);
+    out.set(g, (out.get(g) ?? 0) + p * (1 - KEEPER_BUMP_CHANCE));
+    out.set(bumped, (out.get(bumped) ?? 0) + p * KEEPER_BUMP_CHANCE);
+  }
+  return [...out.entries()].sort((a, b) => a[0] - b[0]);
+}
+
+/** Average grade multiplier a service returns — the honest way to compare
+ * three fee structures that all roll the same table. */
+export function expectedGradeMultiplier(service: GradingService): number {
+  return gradeOddsFor(service).reduce((sum, [g, p]) => sum + gradeMultiplier(g) * p, 0);
+}
+
+/** Average quicksell value of a slab from `service`, before its fee. */
+export function expectedSlabValue(
+  rarity: string | undefined,
+  foil: boolean,
+  service: GradingService,
+): number {
+  return Math.round(
+    quicksellPrice(rarity, foil) *
+      expectedGradeMultiplier(service) *
+      GRADING_SERVICE_BY_ID[service].premium,
+  );
+}
+
+/** Chance a service's roll lands at `grade` or better. */
+export function chanceOfAtLeast(service: GradingService, grade: number): number {
+  return gradeOddsFor(service).reduce((sum, [g, p]) => (g >= grade ? sum + p : sum), 0);
+}
+
 /** Quicksell price of a revealed slab (mirror of quicksell_graded_card). */
 export function gradedQuicksellPrice(
   rarity: string | undefined,
@@ -214,14 +295,24 @@ export async function submitGrading(
   items: { card_id: string; qty: number; foil: boolean }[],
   service: GradingService,
   speed: GradingSpeed,
+  currency: GradingCurrency = 'credits',
 ): Promise<{
-  data: { credits: number; total_fee: number; ready_at: string } | null;
+  data: {
+    credits: number;
+    vouchers: number;
+    currency: GradingCurrency;
+    total_fee: number;
+    /** What was actually taken, in `currency` units. */
+    charged: number;
+    ready_at: string;
+  } | null;
   error: string | null;
 }> {
   const { data, error } = await supabase.rpc('submit_grading', {
     p_items: items,
     p_service: service,
     p_speed: speed,
+    p_currency: currency,
   });
   if (error) return { data: null, error: error.message };
   return { data, error: null };
