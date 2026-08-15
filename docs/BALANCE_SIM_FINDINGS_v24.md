@@ -151,3 +151,57 @@ are in CHANGELOG v24. None touches a card, a weight, or a roll.
 - **Tailwind v1** — closed as a design, before ever printing: the lab run
   measured it at zero activations and the redesign shipped in its place.
   This is the cheapest a dead keyword has ever been caught in this project.
+
+## v25 re-measurement (2026-08-15)
+
+Engine/bug stress pass. **Runs:** the standing measurement,
+`npx tsx scripts/simulate-v5.ts 6 32 1337 <deckSeed>` for deckSeeds 1337 (A),
+42 (B), 7 (C), plus the v24 stress cohort re-run (`31415 31415`) — 5,952
+games each, 23,808 total. On top of that, the fuzz soak was run at 1,000
+seeds (5× normal) and the chaos-monkey suite at 500 seeds (~8× normal), both
+temporarily raised and reverted after the run.
+
+| Metric (A/B/C/stress)   | v24                       | v25                       |
+| ----------------------- | ------------------------- | ------------------------- |
+| P1 win rate             | 44.7 / 46.5 / 46.3 / 46.6 | 44.7 / 46.5 / 46.3 / 46.6 |
+| Avg game length (turns) | 20.3 / 21.6 / 21.8 / 23.2 | 20.3 / 21.6 / 21.8 / 23.2 |
+| `invariantCount`        | 0                         | 0                         |
+
+Identical to the decimal on every cohort — the engine is unchanged in
+behaviour and the control holds. The raised-iteration fuzz (1,000 full
+AI-vs-AI matches, per-turn invariant sweep, hard termination requirement) and
+chaos runs (500 random-legal-action matches, per-action sweep) found **zero
+failures**: no crashes, no invariant violations, no stalled games, no
+illegal action accepted, no wrong win detection. **No engine bug was found
+this pass, so no fix and no new regression test ships** — the existing
+suites (402 tests) pass unmodified.
+
+Carry-forward status:
+
+1. **Mer-King lever — STILL UNSPENT, carried.** This pass contains engine/bug
+   stress work (the raised-iteration soak runs and this re-measurement), so
+   per the condition's final clause — the lever is spent only in a pass
+   containing nothing but the lever — it cannot be spent here. No card
+   price/stat/weight was touched, no unprinted keyword was printed, and #6
+   (never interleave content and balance) is honoured.
+2. **v23 Leader keyword print** — carried, untouched (content work; out of
+   scope for a bug pass).
+3. **v24 Event keyword print** — carried, untouched (same reason;
+   `UNPRINTED_KEYWORDS` unmodified, no band built).
+4. **`Unbreakable` weight 7** — **carried, trigger not met.** Cohort A:
+   carriers 56.9% at n=1210 (identical to v24); B 57.4% (n=1619), C 58.1%
+   (n=2313), stress 61.1% (n=745). Not negative anywhere — the weight-7
+   re-check condition remains untripped.
+5. **`Sacred` cohort dependence** — **carried, dependence re-confirmed.**
+   A 51.9% (n=634, normΔ +1.9), B 59.4% (n=1398, normΔ +10.0), C 62.2%
+   (n=995, normΔ +10.3), stress 47.0% (n=1707, normΔ +0.2). A ~15-point
+   spread across cohorts with the sign flipping in the stress cohort — the
+   number is still a statement about cohorts, not the keyword. No action
+   until a pass isolates it.
+6. **Content/balance interleaving** — carried and honoured: nothing shipped
+   this pass but verification.
+
+Closed this pass: nothing — this was a stress/verification pass; every
+carry-forward item survives unchanged, which is itself the finding: four
+cohorts, 23,808 games, ~1,500 extra fuzz/chaos matches, and the engine did
+not blink.
