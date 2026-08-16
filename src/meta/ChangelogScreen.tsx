@@ -18,6 +18,20 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Turn-Gets-A-Receipt Pass (v26)',
+    date: 'August 2026',
+    items: [
+      'THE GRADING LAB, REBUILT. Slabs are real cases now — a moulded acrylic shell with a proper grading label (service, card name, rarity line, and the grade stamped big beside its word), glass glare across the window, and a certificate number and barcode unique to that slab. The case changes with the grade: gold at a 10, silver at 9.5, plain grey at the bottom of the scale, with a slow shine on the top two grades. Cards still at the graders sit behind frosted glass marked SEALED — no peeking.',
+      'THE LAB NOW SHOWS ITS ODDS. Every grade and its exact chance, per service, in one table — and the thing it reveals is worth knowing: all three services roll the SAME grades. TCA does not grade higher, it RESELLS higher; Keeper alone nudges 55% of rolls up a half point, which is why its slabs carry no premium. Every service also prints its average return and its chance of a 9+, every spare card shows what its slab would be worth, and the pay bar shows expected return against the fee before you commit.',
+      'PAY FOR GRADING WITH VOUCHERS. Fees can now be paid in vouchers at the same 100-credits-to-1 rate the pack shelf uses. The submit flow is four clear steps with a sticky pay bar, ADD ALL for every spare of a card, a portfolio total and sort orders for your vault, and progress bars while your cards are out.',
+      'SPACE PRESSES THE BUTTON. The middle of the board always offers exactly one main action — DECLARE ATTACK, RESOLVE CLASH, CONFIRM GUARDS, PASS, next phase, SKIP — and the spacebar (or Enter) now presses it. Double-click a card in hand to play it without opening the preview first. DECLARE ATTACK tells you when your swing is LETHAL IF UNGUARDED, and the phase button counts the cards you can still afford to play before you end the turn.',
+      'YOU CAN SEE WHAT THE OPPONENT DID — EVEN IF YOU SKIPPED IT. When the opponent’s turn ends, a recap strip now says what happened: cards played, whether it attacked, the Vitality you lost and what you are on, units you lost, cards you drew — with a jump into the full log. Previously, pressing SKIP meant the board simply changed.',
+      'SLOWER, ON PURPOSE. The narration speed dial used to change only the pause between lines while the animations themselves ran at full speed. Now the whole show slows down together — and there is a new slowest setting, CINEMATIC, for watching every move land. Your existing choice is preserved.',
+      'FIX: the Grading Lab shipped last patch without ever being run through the layout harness. Adding it caught a real bug immediately — slabs were built out of nested buttons, which breaks keyboard and screen-reader navigation — plus one crash waiting to happen in the Collection. Both fixed, and the Lab is in the harness for good now.',
+      'BALANCE: no card changed, seventh pass running. 47,616 fresh AI games across eight deck cohorts plus raised fuzz and chaos runs: ZERO rule violations, and every control cohort identical to v25 to the decimal. Two long-standing measurement questions moved: Sacred’s advantage is real but small (the big readings were deck luck), and Ruin-Walker Overseer’s pinned decks underperform in every cohort — flagged for the next balance pass.',
+    ],
+  },
+  {
     version: 'The Slabs-And-Half-Points Pass (v25)',
     date: 'August 2026',
     items: [
@@ -28,20 +42,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'WHEN THE GAME SAYS NO, IT LOOKS LIKE A NO. Refused actions (illegal targets, unpayable costs, guard-rule violations\u2026) now flash a red shaking banner instead of the same yellow strip a success uses \u2014 and long explanations stay on screen long enough to actually read. The clash bar also shows each attacker\u2019s \u2694 Might right on the guard line, so the numbers you guard around are where the decision happens. The match screen also fully honors your device\u2019s reduced-motion setting now.',
       'FIX: a sold-out listing in Player Shops proudly announced itself as \u201cSOLD_OUT\u201d in three places. It reads SOLD OUT now. (The full screen-by-screen audit found the rest of the meta screens clean \u2014 the last three passes\u2019 fixes are holding.)',
       'BALANCE: no card changed, sixth pass running. 23,808 fresh AI games plus raised-volume chaos/fuzz suites: ZERO rule violations, every cohort identical to v24\u2019s numbers to the decimal. The authorized Mer-King adjustment stays reserved for a dedicated balance pass, per its own protocol. Full numbers appended to docs/BALANCE_SIM_FINDINGS_v24.md.',
-    ],
-  },
-  {
-    version: 'The Numbers-Find-Their-Beats Pass (v24)',
-    date: 'August 2026',
-    items: [
-      'FIX (the big one): a rare response-window sequence could FREEZE the match — priority was yours, but no PASS button, no castable card, no tappable Location, only CONCEDE. It happened when the opponent’s answer to your play put a playable Quick Event into your own hand (say, a dies-trigger drew you one) after the game had already passed for you once. Every way back into that window now brings the PASS button with it. Two related crash-recovery paths that could land you on a board where nothing was pressable were fixed the same day.',
-      'THE DAMAGE NUMBERS NOW LAND ON THEIR MOMENTS. Every −N/+N from the opponent’s turn used to fire during the "🤔 thinking…" bubble — all at once, on the final board, gone seconds before the narration described the hits. Each float now waits and pops exactly when its beat is on screen. Beats about a unit of yours that DIED during the turn also finally get the long dwell time — they were the one kind of beat running short.',
-      'FIX: pressing PASS after starting a target pick left the red PICK A TARGET bar alive — and a later click on a still-ringed card would cast the very card you had decided to hold. PASS now abandons the pick. SKIP during the opponent’s thinking pause also actually skips now, instead of needing a second press.',
-      'MARKETPLACE: being outbid no longer makes the auction VANISH from MY LISTINGS & BIDS at exactly the moment you would rebid — the row stays, tagged OUTBID. A pending trade can no longer age out of the fetch window into a limbo neither party could accept, decline or cancel. One network blip no longer pins a permanent "couldn’t load" banner over live data.',
-      'SHOPS & COLLECTION: the close-shop refund message actually appears now; a busy shop owner’s own sales no longer push MY PURCHASES (and the rating window) out of view; the shop card picker defaults to Foil when your foils are the only spares instead of dead-ending on "of 0 spare"; sell buttons wait for the refreshed counts so a fast double-click can’t sell copies you no longer have; pack HAUL VALUE stops counting serialized pulls it can never quicksell.',
-      'QOL: you can CONCEDE from the opening-hand screen (it used to cover the only exit); the clash guard lines stay on screen while you decide whether to counter mid-clash; the guard-step message tells the truth ("assign guards first — the reaction window opens after you confirm"); the ON THE PLAY / ON THE DRAW badge now shows on phones and taps to explain itself; small badge tooltips stop being cut off by the board edge; Shift+Enter reads your own Sanctum without spending its tap.',
-      'NEW (under the hood): three EVENT keywords exist in the engine — Kindle (Ember: 1 damage to the enemy player as the Event resolves), Tailwind (Gale: recover a tired unit, or a spent Location), Luminous (Light: restore 1 Vitality). NO card carries them yet. The lab run that previewed printing them caught Tailwind’s first design activating ZERO times across two full cohorts — correct code, dead text — so it was redesigned before ever reaching a card. Full numbers in docs/BALANCE_SIM_FINDINGS_v24.md.',
-      'BALANCE: no card changed, fifth pass running. The authorized Mer-King adjustment stays reserved for a dedicated balance pass (this one carries engine and UI work, which its measurement protocol forbids). All control cohorts identical to v23 to the decimal; 0 rule violations across nine ~6,000-game runs.',
     ],
   },
 ];

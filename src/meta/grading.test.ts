@@ -9,6 +9,13 @@ import {
   gradedQuicksellPrice,
   fmtGrade,
   GRADE_WORDS,
+  GRADE_ODDS,
+  gradeOddsFor,
+  expectedGradeMultiplier,
+  expectedSlabValue,
+  chanceOfAtLeast,
+  gradingVoucherFee,
+  VOUCHER_RATE,
 } from './grading';
 import { quicksellPrice } from './economy';
 
@@ -78,5 +85,43 @@ describe('grading economy mirrors', () => {
   it('formats grades without a trailing .0', () => {
     expect(fmtGrade(10)).toBe('10');
     expect(fmtGrade(9.5)).toBe('9.5');
+  });
+
+  // v26 — the odds the screen prints have to be the odds the server rolls.
+  it('the published odds are a probability distribution over the real scale', () => {
+    expect(GRADE_ODDS.map(([g]) => g)).toEqual(GRADE_MULTIPLIERS.map(([g]) => g));
+    const total = GRADE_ODDS.reduce((sum, [, p]) => sum + p, 0);
+    expect(total).toBeCloseTo(1, 10);
+    for (const service of ['tca', 'amg', 'keeper'] as const) {
+      const t = gradeOddsFor(service).reduce((sum, [, p]) => sum + p, 0);
+      expect(t, service).toBeCloseTo(1, 10);
+    }
+  });
+
+  it("Keeper's half-point bump raises its expected grade, and never past 10", () => {
+    expect(expectedGradeMultiplier('keeper')).toBeGreaterThan(expectedGradeMultiplier('tca'));
+    // TCA and AMG roll the identical table — only the premium differs.
+    expect(expectedGradeMultiplier('tca')).toBe(expectedGradeMultiplier('amg'));
+    expect(gradeOddsFor('keeper').every(([g]) => g <= 10)).toBe(true);
+    expect(chanceOfAtLeast('keeper', 9)).toBeGreaterThan(chanceOfAtLeast('tca', 9));
+    expect(chanceOfAtLeast('tca', 5)).toBeCloseTo(1, 10);
+  });
+
+  it('expected slab value ranks the services the way their premiums do', () => {
+    const ev = (s: 'tca' | 'amg' | 'keeper') => expectedSlabValue('Rare', false, s);
+    expect(ev('tca')).toBeGreaterThan(ev('amg'));
+    expect(ev('amg')).toBeGreaterThan(ev('keeper'));
+    // And the average slab is worth more than the raw card, or the whole
+    // mini-game is a credit sink with no upside.
+    expect(ev('keeper')).toBeGreaterThan(quicksellPrice('Rare', false));
+  });
+
+  it('the voucher fee mirrors the 100:1 rate the pack shelf already uses', () => {
+    expect(VOUCHER_RATE).toBe(100);
+    expect(gradingVoucherFee(599)).toBe(6);
+    expect(gradingVoucherFee(3799)).toBe(38);
+    // Never free: the cheapest submission in the game still costs a voucher.
+    expect(gradingVoucherFee(70)).toBe(1);
+    expect(gradingVoucherFee(1)).toBe(1);
   });
 });

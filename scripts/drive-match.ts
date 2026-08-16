@@ -41,8 +41,10 @@
  * skipping it; 0 disables watching, 1 watches every match),
  * STUDY_EVERY (default 2 — of the watching matches, every Nth one drives
  * ❚❚ HOLD / ▸ STEP and checks that a held beat stays put and a step advances
- * exactly one; 0 disables), PLAYWRIGHT_CHROMIUM to point at a preinstalled
- * browser binary.
+ * exactly one; 0 disables), WIN_EVERY (default 3 — every Nth match starts the
+ * CPU on WIN_VIT Vitality so the driver can actually reach the VICTORY
+ * screen; 0 disables) and WIN_VIT (default 3), PLAYWRIGHT_CHROMIUM to point
+ * at a preinstalled browser binary.
  *
  * Exits non-zero on any finding, so it can gate a release.
  */
@@ -58,6 +60,19 @@ const WATCH_EVERY = Number(process.env.WATCH_EVERY ?? 2);
 /** Of the matches that WATCH, every Nth one studies instead — it drives
  * ❚❚ HOLD and ▸ STEP and checks what they promise (v20). 0 disables. */
 const STUDY_EVERY = Number(process.env.STUDY_EVERY ?? 2);
+/**
+ * Every Nth match starts the CPU on `WIN_VIT` Vitality (v26). 0 disables.
+ *
+ * The driver plays legal-but-random lines against a CPU that plays properly,
+ * and across every run this harness has ever done it has lost every single
+ * match. So the VICTORY screen — its reward block, its REMATCH control, its
+ * onResult callback — was the one match state the match-state harness had
+ * never once rendered, and a crash there would have shipped. A handicap is
+ * the honest way in: nothing about the match plays differently, the finish
+ * line is just closer.
+ */
+const WIN_EVERY = Number(process.env.WIN_EVERY ?? 3);
+const WIN_VIT = Number(process.env.WIN_VIT ?? 3);
 
 interface Finding {
   match: number;
@@ -68,6 +83,9 @@ interface Finding {
 }
 
 const findings: Finding[] = [];
+/** How many driven matches actually reached the VICTORY screen. */
+let victories = 0;
+const winnableRun = { total: 0, won: 0 };
 
 /** Console noise the offline harness cannot avoid (no Supabase, no card CDN). */
 const NOISE = /Failed to load resource|net::ERR|ERR_TUNNEL|ERR_PROXY|Failed to fetch|WebSocket/i;
@@ -391,6 +409,8 @@ async function driveMatch(
   width: number,
   /** What to do with the CPU's narration — see NarrationMode. */
   mode: NarrationMode,
+  /** Hand the driver a winnable board — see WIN_EVERY. */
+  winnable: boolean,
 ) {
   const watch = mode !== 'skip';
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
@@ -404,7 +424,7 @@ async function driveMatch(
   // should not be papered over by a slow timer — and a WATCHING one has to
   // sit through every beat in real time, so it wants the short beat too.
   page.setDefaultTimeout(1000);
-  await page.goto(`${BASE}?seed=${seed}&speed=2`, {
+  await page.goto(`${BASE}?seed=${seed}&speed=2${winnable ? `&cpuvit=${WIN_VIT}` : ''}`, {
     waitUntil: 'domcontentloaded',
     timeout: 30_000,
   });
@@ -864,8 +884,13 @@ async function driveMatch(
       detail: 'study mode never reached a narration beat — ❚❚ HOLD / ▸ STEP went unexercised',
     });
   }
+  if (winnable) winnableRun.total += 1;
+  if (outcome === 'VICTORY') {
+    victories += 1;
+    if (winnable) winnableRun.won += 1;
+  }
   console.log(
-    `match ${match} (seed ${seed}, ${width}px, ${
+    `match ${match} (seed ${seed}, ${width}px, ${winnable ? 'winnable, ' : ''}${
       mode === 'skip'
         ? 'skipped'
         : mode === 'study'
@@ -896,11 +921,27 @@ for (let m = 0; m < MATCHES; m++) {
     : STUDY_EVERY > 0 && Math.floor(m / Math.max(1, WATCH_EVERY)) % STUDY_EVERY === 0
       ? 'study'
       : 'watch';
-  await driveMatch(browser, m, SEED0 + m, width, mode);
+  const winnable = WIN_EVERY > 0 && m % WIN_EVERY === 0;
+  await driveMatch(browser, m, SEED0 + m, width, mode, winnable);
 }
 
 await browser.close();
 
+// A run where the handicap never once produced a win measured the victory
+// screen exactly as much as the pre-v26 driver did: not at all. Say so rather
+// than printing a clean sheet for a state nothing rendered.
+if (WIN_EVERY > 0 && winnableRun.total > 0 && winnableRun.won === 0) {
+  findings.push({
+    match: -1,
+    seed: SEED0,
+    width: WIDE,
+    kind: 'unfinished',
+    detail: `${winnableRun.total} winnable match(es) and no VICTORY — the victory screen went unmeasured`,
+  });
+}
+console.log(
+  `\n${victories} VICTORY / ${MATCHES} match(es) (${winnableRun.won}/${winnableRun.total} of the winnable ones)`,
+);
 console.log(`\n=== ${findings.length} finding(s) ===`);
 for (const f of findings) {
   console.log(`match ${f.match} seed ${f.seed} @${f.width} [${f.kind}] ${f.detail}`);

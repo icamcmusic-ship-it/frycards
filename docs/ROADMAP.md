@@ -168,6 +168,21 @@ Everything here has a started implementation and a visible seam.
   Ruin-Walker divergence as a persistent lemon deck in the instrument, not a
   weak kit. Those results are the most important thing on this page.**
 
+  **v26 re-opened the Ruin-Walker item, on eight cohorts.** Its
+  pinned-minus-random gap is negative in EVERY cohort that samples it (−17.9 /
+  −15.8 / −8.0 / −3.5 / −0.5 / −8.2 / −5.4 / −14.7, mean −9.3), including
+  three on a game seed never used before — and one-signedness across every
+  sampling cohort is the exact statistic v22 named as discriminating. The
+  lemon recipe is still real (deck #1, 17.2% cross-cohort mean), but a lemon
+  in one of nine recipes does not make a gap one-signed in eight of eight.
+  This is a DECK-RECIPE question before it is a card question: re-roll
+  Ruin-Walker's deck #1 recipe and re-measure before anyone touches a card.
+  Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v26 re-measurement.
+  v26 also narrowed the `Sacred` item — one-signed positive across all eight
+  cohorts, so the SIGN is stable and only the magnitude (+0.1 … +10.3) is
+  cohort composition; a pass quoting a double-digit Sacred delta off a single
+  cohort is quoting its deck roll.
+
   The pinned Leader suite gave each Leader three decks — and all three were the
   SAME RECIPE with different jitter seeds. `randomArchetype` varies four things
   per deck (a 2–3 keyword subset, a 1–3 effect subset, 32–40 units, 4–6
@@ -312,6 +327,23 @@ Ordered by how much they change what it feels like to own and play the game.
     Wiring it up is a real payout change (duplicates above the cap stop being
     cards and start being credits), which is why it is a call and not a patch.
     The cheap alternative is to delete the plumbing and the type fields.
+  - **Grading is a flat fee on a proportional payout, so it prints credits at
+    the top of the rarity ladder** (found v26, by building the screen that
+    shows the number). A slab quicksells at raw price × grade multiplier ×
+    service premium, and the average grade multiplier is ×3.83 — so a TCA slab
+    averages **×6.14 the raw card** for a flat 400-credit fee. On a Common
+    (raw 10) that is a 339-credit loss and the mini-game is a hobby; on a
+    Mythic (raw 3,000) it is an average +18,000 against the same 400, and
+    quicksell is strictly dominated for every spare Mythic a player will ever
+    own. Nothing is broken — this is exactly what v25 priced — but the v26 Lab
+    now prints "EXPECTED BACK … (+17,000 vs fee)" on the pay bar, so the
+    arbitrage stops being something a player has to work out and starts being
+    something the screen recommends. The shape of the fix is the one real
+    grading houses use: **a declared-value fee** (base + a percentage of the
+    card's raw quicksell price), which leaves Commons cheap, makes Mythics
+    expensive, and keeps the gamble intact at every tier. That is a payout
+    change to a shipped economy, so it is a call and not a patch — recorded
+    here rather than made quietly in a UI pass.
   - **The bounty shop's round trip is a guaranteed profit.** `buy_bounty_card`
     charges 3x a card's base sell price and `sell_bounty_card` pays 5x, and the
     buy/sell block is _same-day only_ (`player_bounty_activity` is keyed on

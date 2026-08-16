@@ -31,6 +31,7 @@
 //   /meta-preview.html?screen=howtoplay
 //   /meta-preview.html?screen=changelog
 //   /meta-preview.html?screen=submissions
+//   /meta-preview.html?screen=grading
 //
 // Append `&role=creator` to any of the above to mount the Creator-only panels
 // (Profile's CREATOR TOOLS, the submission review queue and BULK ADD).
@@ -61,6 +62,7 @@ import { SettingsScreen } from './meta/SettingsScreen';
 import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
 import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
+import { GradingScreen } from './meta/GradingScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { POOL_V4 } from './game/v3/cardpool';
@@ -367,6 +369,8 @@ createRoot(document.getElementById('root')!).render(
       <ChangelogScreen onBack={() => undefined} />
     ) : screen === 'submissions' ? (
       <CardSubmissionsScreen onBack={() => undefined} />
+    ) : screen === 'grading' ? (
+      <GradingScreen onBack={() => undefined} />
     ) : (
       <CollectionScreen onBack={() => undefined} />
     )}
