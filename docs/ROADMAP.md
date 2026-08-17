@@ -271,6 +271,28 @@ Everything here has a started implementation and a visible seam.
 
 Ordered by how much they change what it feels like to own and play the game.
 
+- **The Showroom wants a reason to be open.** v27 built the room
+  (`ShowroomScreen` / `Card3DShowroom`): full 360° yaw on a solid with real
+  stock thickness, ±80° tilt, 0.35–3.2× zoom, momentum, auto-spin, and a
+  distinct environment plus card effects for every rarity at Super-Rare and
+  above. What it does NOT have yet is a reason to stay open, and each of these
+  is a decision rather than a defect:
+  - **No shareable pose.** The camera is not in the URL, so "look at this one
+    from here" cannot be sent to anybody. `Pose` is already a plain
+    `{yaw, pitch, zoom}` and `ShowroomSubject` a two-case union — this is a
+    query-string encode/decode and a COPY LINK button, and it is the cheapest
+    of the three.
+  - **No capture.** A turntable nobody can record is a turntable nobody posts.
+    The obvious version is a still (canvas or `getDisplayMedia`); the version
+    people would actually use is a short looping GIF/WebM of one revolution,
+    which wants an encoder in the bundle and is therefore a real decision.
+  - **The showcase is not a shelf.** `profile.showcase_cards` already holds up
+    to six cards, and the Showroom already renders one object at a time in a
+    room. Standing all six in the same room — a display case a visiting player
+    walks into from the Profile screen — is the feature the two halves are one
+    step away from, and it is what would make the room a destination rather
+    than a detour.
+
 - **Persistent match history and replays.** Store per-match logs; let players
   review past games. The engine already emits a structured event stream (the
   sim harness consumes it), so this is storage and a viewer, not new game code.

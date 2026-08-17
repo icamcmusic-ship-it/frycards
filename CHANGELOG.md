@@ -9,6 +9,90 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v27.0 — The pass where a card became an object
+
+Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
+round, a match QoL round, a flow/CPU-visibility audit, the carry-forward
+re-measurement, and one new feature — the 3D Showroom. **0 invariant
+violations across 47,616 AI games** (the same eight cohorts) plus a 1,200-match
+fuzz soak and a 600-match chaos run; 435 tests (20 new). The engine ships
+behaviourally unchanged — cohorts A/B/C reproduce v26 to the decimal.
+
+**NEW — the 3D Showroom (`src/meta/ShowroomScreen.tsx`,
+`src/components/Card3DShowroom.tsx`).** Its own page off the main menu. The
+existing `Card3DInspector` is a modal that tilts a flat face ±14° under the
+pointer; this is a room with an object standing in it. The card is a
+six-faced solid with real stock thickness, so the yaw is genuinely **360°** —
+drag past the edge and it keeps turning through front, edge, back, edge,
+front. Pitch clamps at ±80° (past that the card is edge-on, and rolling over
+the pole inverts the drag). Zoom runs 0.35×–3.2× on the wheel, a two-finger
+pinch, the +/− keys or the HUD. A flick hands its velocity to a decaying rAF
+loop, so the turntable coasts; auto-spin has three speeds. Arrows tilt, F
+flips, R resets, Escape leaves, and the readout prints yaw/tilt/zoom plus a
+live FRONT / EDGE ON / BACK badge. All CSS 3D — no WebGL dependency — and the
+face in the room is the same `<CardFace>` React tree the rest of the game
+renders.
+
+**Super-Rare and above each get their own environment**, which is the brief's
+line: ION SWEEP (Super-Rare), GILDED HALL (Ultra-Rare), AURORA VAULT
+(Full-Art), PRISM CHAMBER (Alt-Art), EMBER FORGE (Mythic) — each with its own
+backdrop, ambient animation, key/accent light, and **card effects those
+rarities alone receive**: a deterministically-placed ring of motes orbiting at
+the card's own depth (so they pass in front of it and behind it as it turns),
+a rim light that swings with the yaw, a per-room wash over the face, and a
+floor pool in the room's colour. Common through Rare stand in a plain studio,
+deliberately. `isPremiumRarity` reads the floor off `RARITY_ORDER`, and a test
+pins that the room ladder and the rarity ladder cannot drift apart.
+
+**Slabs stand in the room too**, as the thicker object they are (34px of
+acrylic against the card's 9px of stock) — the first time the graded case has
+been viewable from any angle other than dead-on. Reachable from the menu tile,
+from VIEW IN 3D in the Collection's card inspector, and from any slab on the
+Collection shelf or in the Grading Lab vault.
+
+**Bug hunt: the new page's own harness entry paid for itself on the first
+run.** The full 24-screen sweep came back **0 problems** — the last four
+passes' fixes are holding. The two new entries (`showroom`, `showroom-slab`,
+the second because the slab is a different geometry reached only through a
+tab click) came back with **174**, all one bug: the card picker wrapped a
+`<CardFace>` in a `<button>`, and CardFace prints its cost pips and keyword
+links as real buttons. Exactly the v26 slab finding, caught this time by the
+harness entry that shipped WITH the screen instead of two releases later. The
+object in the room is now `inert` for the same reason — a drag surface must
+not have a dozen tab stops rotating inside it.
+
+**The slowest speed was showing the shortest animations.** v26 scaled every
+combat animation's CSS duration by `--gv4-pace` so the narration dial would
+slow down the parts a player is trying to watch. It did not move the three JS
+timers that UNMOUNT those elements, which stayed at their v25 constants: on
+CINEMATIC (pace 2.6) the phase banner, the damage floats and the hit flash
+were torn off screen at ~38% of the animation the same setting had just
+lengthened. The slowest rung in the game showed the shortest version of every
+effect it exists to let you watch. Both halves now come from `FX_MS`, and
+`fxUnmountMs`/`fxPaceFor` are exported and pinned by tests at every rung —
+including rungs added later. The ⏱ tooltips (two of them) and the How to Play
+page also still listed the pre-CINEMATIC three-speed ladder; the tooltips are
+built from `CPU_SPEEDS` now and a drift test pins the prose.
+
+**Match QoL.** The hand dock has always rendered in draw order — the order the
+engine keeps, and no order at all to look at. A dock button cycles **DRAWN /
+PLAYABLE / COST**, persisted by name in `matchPrefs` (PLAYABLE floats exactly
+what `invokeWhy` says is castable right now). Presentation only: `me.hand` is
+untouched, and the Dusk shed picker still lists engine order. The opponent's
+turn also gets a **progress bar on the clash divider**, where the HOLD / STEP
+/ SKIP buttons that act on it live — the count existed, but only inside the
+narration bubble at the top of the board.
+
+**Balance: no card changed, eighth pass running.** Cohorts A/B/C reproduce
+v26 exactly (P1 44.7 / 46.5 / 46.3, avg turns 20.3 / 21.6 / 21.8);
+`invariantViolations` empty in all eight. The Ruin-Walker carry-forward is
+re-measured and **narrowed**: the cross-cohort aggregator flags a lemon deck
+recipe for SEVEN of the nine Leaders, so "deck #1 is a lemon" cannot be the
+explanation for a pinned-minus-random gap that is one-signed negative in all
+eight cohorts when no other Leader's is. Recorded, not acted on — rule #6
+holds, this pass ships a feature. Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v24.md` § v27 re-measurement.
+
 ### v26.0 — The pass where the opponent's turn got a receipt and the slab became an object
 
 Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress

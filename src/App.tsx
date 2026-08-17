@@ -20,6 +20,7 @@ import { MarketplaceScreen } from './meta/MarketplaceScreen';
 import { PlayerShopsScreen } from './meta/PlayerShopsScreen';
 import { CollectionScreen } from './meta/CollectionScreen';
 import { GradingScreen } from './meta/GradingScreen';
+import { ShowroomScreen, ShowroomSubject } from './meta/ShowroomScreen';
 import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
 import { ProfileScreen } from './meta/ProfileScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
@@ -351,6 +352,11 @@ function AppInner() {
     }
   });
   const [match, setMatch] = useState<MatchSetup | null>(null);
+  // What the 3D Showroom opens on when it is reached from a deep link (the
+  // Collection inspector's VIEW IN 3D, a slab in the Grading Lab vault)
+  // rather than from the menu tile. Cleared by the tile itself, so a later
+  // visit from the menu does not silently reopen the last deep-linked card.
+  const [showroomSubject, setShowroomSubject] = useState<ShowroomSubject | null>(null);
   const [gameKey, setGameKey] = useState(0);
   const markHelpSeen = () => {
     try {
@@ -433,10 +439,35 @@ function AppInner() {
       return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
     case 'collection':
       return (
-        <CollectionScreen onBack={() => setScreen('menu')} onGrading={() => setScreen('grading')} />
+        <CollectionScreen
+          onBack={() => setScreen('menu')}
+          onGrading={() => setScreen('grading')}
+          onShowroom={(subject) => {
+            setShowroomSubject(subject);
+            setScreen('showroom');
+          }}
+        />
       );
     case 'grading':
-      return <GradingScreen onBack={() => setScreen('menu')} />;
+      return (
+        <GradingScreen
+          onBack={() => setScreen('menu')}
+          onShowroom={(subject) => {
+            setShowroomSubject(subject);
+            setScreen('showroom');
+          }}
+        />
+      );
+    case 'showroom':
+      return (
+        <ShowroomScreen
+          initial={showroomSubject ?? undefined}
+          onBack={() => {
+            setShowroomSubject(null);
+            setScreen('menu');
+          }}
+        />
+      );
     case 'decks':
       return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
     case 'profile':

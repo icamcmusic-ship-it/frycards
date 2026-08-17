@@ -58,7 +58,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'The opponent’s turn',
-        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. That covers every moment it acts: its Dawn (where a Glaciate can freeze one of your units before it has played anything), its own turn, its blocks the instant you declare an attack, its Dusk sweeps, and its ANSWERS to a card you just played (it can counter you, or kill the unit you were aiming at, before your card resolves). When it declares an attack, your own Vitality plate lights up too — that is what the attackers are pointed at until you guard them. ⏱ sets the pace (SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest (and releases the hold). Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
+        'Never a black box: every move it makes is narrated one action at a time, and the cards involved light up on the board — yellow for what it is acting WITH, red for what it is aimed AT — with the card it just played held up in the middle of the screen. That covers every moment it acts: its Dawn (where a Glaciate can freeze one of your units before it has played anything), its own turn, its blocks the instant you declare an attack, its Dusk sweeps, and its ANSWERS to a card you just played (it can counter you, or kill the unit you were aiming at, before your card resolves). When it declares an attack, your own Vitality plate lights up too — that is what the attackers are pointed at until you guard them. ⏱ sets the pace (CINEMATIC / SLOW / NORMAL / FAST), ❚❚ HOLD freezes a move on screen and ▸ STEP then walks the turn one action at a time, and SKIP ▸▸ fast-forwards the rest (and releases the hold). Missed something? ▴ LOG opens the Battle Log on the newest line, with a divider marking everything that happened since your last turn.',
       ],
     ],
   },
@@ -321,12 +321,16 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Design your own card: send Fry a title, a card type, flavor text and an art link, and he prints the ones he likes into the PLAYERS SHOWCASE 2026 set. One full art and one video Mythic per account; everything else is unlimited. Mechanics are assigned by the game itself, so there is no rules text to write.',
       ],
       [
+        '3D Showroom',
+        'A card as an object, not a picture. Drag it and it turns all the way round — front, edge, back, edge, front — because it has real thickness. Tilt it over the top edge or under the bottom one, zoom from across the room to close enough to read the smallest line of rules text, flick it to set it coasting, or leave it turning by itself. Wheel or pinch to zoom, arrow keys to tilt, F to flip, R to reset, SPACE for auto-spin. SUPER-RARE and above each stand in an environment of their own — ION SWEEP, GILDED HALL, AURORA VAULT, PRISM CHAMBER, EMBER FORGE — with card effects only those rarities get: motes orbiting in the space around the card, a rim light that swings as you turn it, and a floor glow in the room’s colour. Your graded slabs stand in there too. Reach it from the menu, from VIEW IN 3D in the card inspector, or from any slab on your Collection shelf.',
+      ],
+      [
         'News Center',
         'One place for the newest changelog headline, dev blog posts, and a live feed of every Serialized card pulled server-wide.',
       ],
       [
         'Profile & Settings',
-        'Track your stats, equip cosmetics, pick a color theme, set how fast the opponent’s turn is narrated (SLOW / NORMAL / FAST), and opt out of username recognition in the Serialized feed.',
+        'Track your stats, equip cosmetics, pick a color theme, set how fast the opponent’s turn is narrated (CINEMATIC / SLOW / NORMAL / FAST), and opt out of username recognition in the Serialized feed.',
       ],
     ],
   },

@@ -11,6 +11,8 @@ import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { GradedCard, fetchGradedCards } from './grading';
 import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import type { ShowroomSubject } from './ShowroomScreen';
+import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
 import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
 
@@ -78,10 +80,14 @@ async function runBulkQuicksell(
 export function CollectionScreen({
   onBack,
   onGrading,
+  onShowroom,
 }: {
   onBack: () => void;
   /** Navigate to the Grading Lab — the graded shelf's slabs deep-link there. */
   onGrading?: () => void;
+  /** Stand this card (or slab) up in the 3D Showroom. The inspector is a
+   * modal that tilts; the Showroom is a page that turns. */
+  onShowroom?: (subject: ShowroomSubject) => void;
 }) {
   // v7.5: the browse grid printed `full` (240x336) cards. On a 375px phone
   // that is ONE card per row and, at 297 cards plus foil/serialized entries,
@@ -522,7 +528,9 @@ export function CollectionScreen({
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
               <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                Sell or crack slabs in the Grading Lab
+                {onShowroom
+                  ? 'Click a slab for the Grading Lab · ⬛ 3D stands one in the Showroom'
+                  : 'Sell or crack slabs in the Grading Lab'}
               </span>
             </div>
             {/* The slab's own keyframes travel with it — a top-grade case
@@ -530,7 +538,21 @@ export function CollectionScreen({
             <style>{SLAB_CSS}</style>
             <div className="flex flex-wrap gap-2">
               {gradedCards.map((g) => (
-                <GradedSlab key={g.id} g={g} onClick={onGrading} />
+                <div key={g.id} className="flex flex-col gap-1 w-fit">
+                  <GradedSlab g={g} onClick={onGrading} />
+                  {/* Only a GRADED slab can be stood up in the room: a pending
+                      one has a frosted window and no grade to print, so the
+                      3D view would be a blurred card in an empty case. */}
+                  {onShowroom && g.grade != null && (
+                    <button
+                      onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
+                      aria-label={`View ${POOL_BY_ID[g.card_id]?.name ?? 'this slab'} in the 3D Showroom`}
+                      className="btn-pop heading-font text-[9px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs"
+                    >
+                      ⬛ VIEW IN 3D
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -722,6 +744,22 @@ export function CollectionScreen({
           onClose={() => setInspect(null)}
           actions={
             <div className="flex flex-col gap-3">
+              {/* The inspector tilts; the Showroom turns. A card whose rarity
+                  earns its own 3D room says so on the button, because that is
+                  the reason to take the trip. */}
+              {onShowroom && (
+                <PopButton
+                  color="black"
+                  className="w-full"
+                  ariaLabel={`View ${inspect.def.name} in the 3D Showroom`}
+                  onClick={() =>
+                    onShowroom({ kind: 'card', cardId: inspect.def.id, foil: inspect.foil })
+                  }
+                >
+                  ⬛ VIEW IN 3D
+                  {isPremiumRarity(inspect.def.rarity) ? ' ✦' : ''}
+                </PopButton>
+              )}
               <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
               <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
                 {inspectTotal > 0 && (

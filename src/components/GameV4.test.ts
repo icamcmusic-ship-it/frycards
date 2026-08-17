@@ -13,7 +13,8 @@
  * These pin the pure predicate the pill's enabled state is derived from.
  */
 import { describe, expect, test } from 'vitest';
-import { leaderAbilityWhy } from './GameV4';
+import { FX_MS, FX_UNMOUNT_SLACK_MS, fxPaceFor, fxUnmountMs, leaderAbilityWhy } from './GameV4';
+import { CPU_SPEEDS } from '../meta/matchPrefs';
 import { CardDef } from '../game/v3/cards';
 import { DeckDef, GameState, createGame, mulberry32, summonUnit } from '../game/v3/engine';
 
@@ -123,5 +124,54 @@ describe('leaderAbilityWhy', () => {
     const s = game();
     summonUnit(s, 'P2', VANILLA);
     expect(leaderAbilityWhy(s, 'P1', 99, true)).toMatch(/No such ability/i);
+  });
+});
+
+/**
+ * The paced-effect drift.
+ *
+ * v26 scaled every combat animation's CSS duration by `--gv4-pace` so the
+ * narration speed would slow down the parts a player is trying to watch — and
+ * left the three JS timers that UNMOUNT those elements at their v25 constants.
+ * On CINEMATIC (pace 2.6) the phase banner, the damage floats and the hit
+ * flash were therefore torn off screen at ~38% of the animation the setting
+ * had just lengthened: the slowest rung showed the shortest version of every
+ * effect it exists to let you watch.
+ *
+ * Both halves now come from `FX_MS`. These pin that they agree at EVERY rung,
+ * including any rung added later.
+ */
+describe('paced combat effects', () => {
+  test('the element outlives its animation at every narration speed', () => {
+    for (const [idx] of CPU_SPEEDS.entries()) {
+      const pace = fxPaceFor(idx);
+      for (const base of Object.values(FX_MS)) {
+        // The animation runs for `base * pace`; the element must still be
+        // mounted when it ends.
+        expect(fxUnmountMs(base, idx), `${CPU_SPEEDS[idx].label} @ ${base}ms`).toBeGreaterThan(
+          base * pace,
+        );
+      }
+    }
+  });
+
+  test('the pace floor is 1 — FAST shortens waits, never the feedback', () => {
+    const fast = CPU_SPEEDS.findIndex((s) => s.label === 'FAST');
+    expect(CPU_SPEEDS[fast].mult).toBeLessThan(1);
+    expect(fxPaceFor(fast)).toBe(1);
+    expect(fxUnmountMs(FX_MS.float, fast)).toBe(FX_MS.float + FX_UNMOUNT_SLACK_MS);
+  });
+
+  test('a slower rung really does hold every effect longer', () => {
+    const cinematic = CPU_SPEEDS.findIndex((s) => s.label === 'CINEMATIC');
+    const normal = CPU_SPEEDS.findIndex((s) => s.label === 'NORMAL');
+    for (const base of Object.values(FX_MS)) {
+      expect(fxUnmountMs(base, cinematic)).toBeGreaterThan(fxUnmountMs(base, normal));
+    }
+  });
+
+  test('an out-of-range speed index falls back to the unscaled pace', () => {
+    expect(fxPaceFor(-1)).toBe(1);
+    expect(fxPaceFor(999)).toBe(1);
   });
 });

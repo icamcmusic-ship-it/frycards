@@ -18,6 +18,20 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Showroom Pass (v27)',
+    date: 'August 2026',
+    items: [
+      'NEW \u2014 THE 3D SHOWROOM. Its own page, off the main menu, where a card stops being a picture and becomes an object. Drag it and it turns \u2014 all the way round, front to edge to back and out the other side, because it has thickness now. Tilt it over the top edge or under the bottom one. Zoom from across the room to close enough to read the smallest line of rules text. Flick it and the turntable coasts. Or leave it turning by itself at one of three speeds. Wheel, pinch, arrow keys, +/\u2212, F to flip, R to reset, or the on-screen controls \u2014 whatever you have.',
+      'SUPER-RARE AND ABOVE GET THEIR OWN ROOM. A Super-Rare stands in an ION SWEEP, an Ultra-Rare in a GILDED HALL, a Full-Art in an AURORA VAULT, an Alt-Art in a PRISM CHAMBER, a Mythic in an EMBER FORGE \u2014 each with its own light, its own colour, and its own card effects: a ring of motes orbiting in the space around the card, a rim light that swings as you turn it, and a floor pool in the room\u2019s colour. Common through Rare get a clean photographer\u2019s studio, on purpose: the special rooms mean nothing if everything has one.',
+      'YOUR SLABS STAND IN THERE TOO. A graded slab is a much chunkier object than a card, and until now it could only ever be looked at flat-on. Now it stands in the same room and turns like everything else. Reach the Showroom from the menu, from VIEW IN 3D in the card inspector, or from any slab on your Collection shelf or in the Grading Lab vault.',
+      'FIX \u2014 THE SLOWEST SPEED WAS SHOWING THE SHORTEST ANIMATIONS. Last patch made every combat animation slow down with the narration dial. It did not move the timers that take those animations OFF the screen \u2014 so on CINEMATIC the phase banner, the damage numbers and the hit flash were cut off at about a third of the way through. The setting that exists to let you watch a move land was the one that showed you least of it. Both halves come from one number now.',
+      'FIX \u2014 the speed dial\u2019s own tooltips, and the How to Play page, still listed the three-speed ladder from before CINEMATIC existed, so the slowest setting in the game was undiscoverable from the two controls that cycle to it.',
+      'SORT YOUR HAND. The hand dock has always laid cards out in the order you drew them. A button on the dock now switches between DRAWN, PLAYABLE (everything you can actually cast right now, first) and COST (cheapest first). Your choice is remembered.',
+      'A PROGRESS BAR FOR THE OPPONENT\u2019S TURN, next to the HOLD / STEP / SKIP buttons that act on it \u2014 the count existed, but it was at the top of the board while the controls were in the middle.',
+      'BALANCE: no card changed, eighth pass running. 47,616 fresh AI games across the same eight cohorts, plus 1,200 fuzzed matches and 600 chaos matches: ZERO rule violations, and the three control cohorts reproduce last patch to the decimal \u2014 the engine is untouched. The cross-cohort aggregator also settled an open question: nearly every Leader carries one bad deck recipe, so \u201cthat one deck is a lemon\u201d cannot explain why Ruin-Walker Overseer alone underperforms in all eight cohorts. Still flagged, still not acted on.',
+    ],
+  },
+  {
     version: 'The Turn-Gets-A-Receipt Pass (v26)',
     date: 'August 2026',
     items: [
@@ -29,19 +43,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'SLOWER, ON PURPOSE. The narration speed dial used to change only the pause between lines while the animations themselves ran at full speed. Now the whole show slows down together — and there is a new slowest setting, CINEMATIC, for watching every move land. Your existing choice is preserved.',
       'FIX: the Grading Lab shipped last patch without ever being run through the layout harness. Adding it caught a real bug immediately — slabs were built out of nested buttons, which breaks keyboard and screen-reader navigation — plus one crash waiting to happen in the Collection. Both fixed, and the Lab is in the harness for good now.',
       'BALANCE: no card changed, seventh pass running. 47,616 fresh AI games across eight deck cohorts plus raised fuzz and chaos runs: ZERO rule violations, and every control cohort identical to v25 to the decimal. Two long-standing measurement questions moved: Sacred’s advantage is real but small (the big readings were deck luck), and Ruin-Walker Overseer’s pinned decks underperform in every cohort — flagged for the next balance pass.',
-    ],
-  },
-  {
-    version: 'The Slabs-And-Half-Points Pass (v25)',
-    date: 'August 2026',
-    items: [
-      'NEW — THE GRADING LAB. Send spare cards off to be professionally graded and get them back sealed in a display slab. Three services with their own case styles and reputations: TIMELESS CARD AUTHORITY (the premier house — priciest fees, and its slabs command the highest resale premium), ALPHA MINT GRADING (serious grading at volume — 5+ cards in one submission get 20% off, 10+ get 35% off), and KEEPER STANDARD (cheapest and fastest — and known to grade a touch generously, which the resale market prices in). Pick your turnaround: 16-hour standard, 8-hour rush, or INSTANT for a serious premium.',
-      'Grades run the standard 5\u201310 scale with half-points (a 9.5 exists; a straight 10 is the rare gem). A strong grade multiplies the card\u2019s quicksell price MANY times over \u2014 a gem-mint 10 in a TCA case sells for a small fortune \u2014 while a 5 barely covers the fee. That\u2019s the gamble. Graded slabs appear on their own GRADED CARDS shelf in your Collection, each in its service\u2019s case with the grade stamped on. Not feeling the case any more? CRACK THE SLAB and the raw card returns to your collection.',
-      'Deck-locked and Serialized copies can\u2019t be sent for grading \u2014 same protections as quicksell \u2014 and grades are rolled at reveal time on the server, so there is no peeking.',
-      'THE OPPONENT THINKS OUT LOUD EVERYWHERE NOW. Two spots still had the CPU acting instantly inside your own click \u2014 its reaction plays before clash damage and its answer to a card you just cast. Both now open with a visible \ud83e\udd14 thinking beat at your narration speed, honored by HOLD/STEP/SKIP like everything else.',
-      'WHEN THE GAME SAYS NO, IT LOOKS LIKE A NO. Refused actions (illegal targets, unpayable costs, guard-rule violations\u2026) now flash a red shaking banner instead of the same yellow strip a success uses \u2014 and long explanations stay on screen long enough to actually read. The clash bar also shows each attacker\u2019s \u2694 Might right on the guard line, so the numbers you guard around are where the decision happens. The match screen also fully honors your device\u2019s reduced-motion setting now.',
-      'FIX: a sold-out listing in Player Shops proudly announced itself as \u201cSOLD_OUT\u201d in three places. It reads SOLD OUT now. (The full screen-by-screen audit found the rest of the meta screens clean \u2014 the last three passes\u2019 fixes are holding.)',
-      'BALANCE: no card changed, sixth pass running. 23,808 fresh AI games plus raised-volume chaos/fuzz suites: ZERO rule violations, every cohort identical to v24\u2019s numbers to the decimal. The authorized Mer-King adjustment stays reserved for a dedicated balance pass, per its own protocol. Full numbers appended to docs/BALANCE_SIM_FINDINGS_v24.md.',
     ],
   },
 ];

@@ -96,6 +96,12 @@ const ALL_SCREENS = [
   'grading',
   'grading@limbo',
   'grading@vault',
+  // v27 — the 3D Showroom, and its slab geometry separately: the slab is a
+  // different object in the room (thicker solid, taller footprint, its own
+  // edge material) reached only through a source-tab click, so measuring the
+  // card entry measures none of it.
+  'showroom',
+  'showroom-slab',
 ];
 
 /**

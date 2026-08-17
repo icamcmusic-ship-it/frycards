@@ -72,3 +72,52 @@ export function saveCpuSpeed(idx: number): void {
     /* private mode — the choice just won't persist */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Hand order
+// ---------------------------------------------------------------------------
+/**
+ * How the hand dock lays its cards out.
+ *
+ * The hand has always rendered in draw order, which is the order the engine
+ * keeps and no order at all to look at: the card you can afford sits wherever
+ * it happened to be drawn, and finding it in a ten-card fan is a scan of every
+ * face. Every phase. Sorting is presentation only — the engine's `hand` array
+ * is untouched, and the Dusk shed picker still lists cards in engine order, so
+ * nothing about what is legal moves when this changes.
+ *
+ * Stored by NAME rather than index, for the same reason the speed ladder is:
+ * a mode inserted in the middle must not silently become a different one for
+ * everybody who had already chosen.
+ */
+export const HAND_SORTS = [
+  { id: 'drawn', label: '↕ DRAWN', blurb: 'The order you drew them' },
+  { id: 'playable', label: '↕ PLAYABLE', blurb: 'What you can cast now, first' },
+  { id: 'cost', label: '↕ COST', blurb: 'Cheapest first' },
+] as const;
+
+export type HandSort = (typeof HAND_SORTS)[number]['id'];
+
+export const HAND_SORT_KEY = 'frycards:hand-sort';
+export const DEFAULT_HAND_SORT: HandSort = 'drawn';
+
+export function loadHandSort(): HandSort {
+  if (typeof window === 'undefined') return DEFAULT_HAND_SORT;
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(HAND_SORT_KEY);
+  } catch {
+    return DEFAULT_HAND_SORT;
+  }
+  const hit = HAND_SORTS.find((s) => s.id === raw?.trim());
+  return hit ? hit.id : DEFAULT_HAND_SORT;
+}
+
+export function saveHandSort(id: HandSort): void {
+  if (!HAND_SORTS.some((s) => s.id === id)) return;
+  try {
+    window.localStorage.setItem(HAND_SORT_KEY, id);
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+}

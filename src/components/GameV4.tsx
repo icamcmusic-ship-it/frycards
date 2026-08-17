@@ -88,7 +88,15 @@ import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
-import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed } from '../meta/matchPrefs';
+import {
+  CPU_SPEEDS,
+  HAND_SORTS,
+  HandSort,
+  loadCpuSpeed,
+  loadHandSort,
+  saveCpuSpeed,
+  saveHandSort,
+} from '../meta/matchPrefs';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -109,6 +117,49 @@ const CPU: PlayerId = 'P2';
  * ring pulse and the attack lunge are deliberately NOT scaled — they loop for
  * the whole beat, and a slower loop reads as a stall rather than as motion.
  */
+/**
+ * The three timed effects whose ELEMENT is unmounted by a JS timer while its
+ * ANIMATION is a `--gv4-pace`-scaled CSS duration. Both halves have to come
+ * from one number or they drift — which is exactly what happened when v26
+ * scaled the CSS and left the timers at their v25 constants: on CINEMATIC
+ * (pace 2.6) the phase banner, the damage floats and the hit flash were torn
+ * off screen at 38% of the animation the same setting had just lengthened, so
+ * the slowest rung in the game showed the SHORTEST version of every effect it
+ * exists to let you watch.
+ */
+export const FX_MS = {
+  /** Damage/heal number floating off a unit or a Vitality plate. */
+  float: 1150,
+  /** MAIN I / CLASH / YOUR TURN centre-screen banner. */
+  banner: 1150,
+  /** Brightness flash on a clash participant. */
+  unitFlash: 650,
+} as const;
+
+/** Slack between an effect's animation ending and its element unmounting —
+ * without it a rounding difference can blank the last frame. */
+export const FX_UNMOUNT_SLACK_MS = 90;
+
+/**
+ * How long the ELEMENT of a paced effect stays mounted, given the narration
+ * speed. Exported so the drift between this and the CSS duration — the v26
+ * regression this replaces — can be pinned by a test instead of re-found by a
+ * player on CINEMATIC.
+ */
+export function fxUnmountMs(baseMs: number, speedIdx: number): number {
+  // Read through the caller's REF, not a captured value: a timer scheduled
+  // inside a running narration chain must use the speed the player is on now,
+  // not the one the chain started at.
+  const mult = CPU_SPEEDS[speedIdx]?.mult ?? 1;
+  return baseMs * Math.max(1, mult) + FX_UNMOUNT_SLACK_MS;
+}
+
+/** The `--gv4-pace` value for a speed rung — floored at 1 so FAST shortens the
+ * WAIT between beats, never the damage number the player has to read. */
+export function fxPaceFor(speedIdx: number): number {
+  return Math.max(1, CPU_SPEEDS[speedIdx]?.mult ?? 1);
+}
+
 const GAME_CSS = `
 @keyframes gv4-dmg-float {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
@@ -122,7 +173,7 @@ const GAME_CSS = `
   left: 50%;
   z-index: 45;
   pointer-events: none;
-  animation: gv4-dmg-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards;
+  animation: gv4-dmg-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards;
   font-weight: 900;
   font-size: 15px;
   color: #fff;
@@ -138,7 +189,7 @@ const GAME_CSS = `
   left: 50%;
   z-index: 45;
   pointer-events: none;
-  animation: gv4-dmg-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards;
+  animation: gv4-dmg-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards;
   font-weight: 900;
   font-size: 15px;
   color: #fff;
@@ -155,13 +206,13 @@ const GAME_CSS = `
   78% { opacity: 1; }
   100% { opacity: 0; transform: scale(1.02); }
 }
-.gv4-phase-banner { animation: gv4-phase-pop calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
+.gv4-phase-banner { animation: gv4-phase-pop calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
 @keyframes gv4-attack-flash {
   0%, 100% { filter: none; }
   30% { filter: brightness(1.7) saturate(1.5); }
   60% { filter: brightness(0.75); }
 }
-.gv4-attack-flash { animation: gv4-attack-flash calc(0.65s * var(--gv4-pace, 1)) ease-in-out; }
+.gv4-attack-flash { animation: gv4-attack-flash calc(${FX_MS.unitFlash}ms * var(--gv4-pace, 1)) ease-in-out; }
 /* Pulsing outlines on the card the opponent is acting with (yellow) and
  * whatever it's acting on (red) — the same color grammar as the human's own
  * attacker/target rings, just animated since the player isn't driving. */
@@ -234,8 +285,8 @@ const GAME_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
   .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
-  .gv4-phase-banner { animation: gv4-fade calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
-  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(1.15s * var(--gv4-pace, 1)) ease-out forwards; }
+  .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
+  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 }
 `;
 
@@ -1143,12 +1194,20 @@ const PHASE_LABEL: Record<GameState['phase'], string> = {
 const PHASE_ORDER: GameState['phase'][] = ['Dawn', 'Main1', 'Clash', 'Main2', 'Dusk'];
 
 /** Pacing for the narrated replay of the CPU's turn (at NORMAL speed). */
+/** Both ⏱ buttons' tooltip, BUILT from the ladder rather than typed out.
+ * v26 added a fourth rung (CINEMATIC) and both tooltips kept advertising the
+ * three-rung v17 ladder, so the slowest speed in the game was undiscoverable
+ * from either control that cycles to it. Deriving it means the next rung
+ * cannot reintroduce the same drift. */
+const SPEED_TOOLTIP = `Narration speed — click to cycle ${CPU_SPEEDS.map((s) => s.label).join(' / ')}`;
+
 const CPU_PACE = {
   THINK_MS: 900,
   BEAT_MS: 1150,
 } as const;
 
-// Narration speed (SLOW / NORMAL / FAST) — shared with the Settings screen,
+// Narration speed (CINEMATIC / SLOW / NORMAL / FAST) — shared with the Settings
+// screen,
 // which is where a player looks for it when no match is running.
 
 /** One narration beat: a log line plus the board objects it involves, so the
@@ -1551,6 +1610,15 @@ export function GameV4({
   // speed captured when it started.
   const [cpuSpeedIdx, setCpuSpeedIdx] = useState<number>(loadCpuSpeed);
   const cpuSpeedRef = useRef(cpuSpeedIdx);
+  // Hand order (persisted). Presentation only — see HAND_SORTS.
+  const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
+  const cycleHandSort = () => {
+    setHandSort((cur) => {
+      const next = HAND_SORTS[(HAND_SORTS.findIndex((s) => s.id === cur) + 1) % HAND_SORTS.length];
+      saveHandSort(next.id);
+      return next.id;
+    });
+  };
   const cycleCpuSpeed = () => {
     setCpuSpeedIdx((i) => {
       const next = (i + 1) % CPU_SPEEDS.length;
@@ -1710,10 +1778,13 @@ export function GameV4({
     if (fresh.length === 0) return;
     setFloats((f) => [...f, ...fresh]);
     const ids = new Set(fresh.map((f) => f.id));
-    const timeoutId = window.setTimeout(() => {
-      floatTimeoutsRef.current.delete(timeoutId);
-      setFloats((f) => f.filter((x) => !ids.has(x.id)));
-    }, 1250);
+    const timeoutId = window.setTimeout(
+      () => {
+        floatTimeoutsRef.current.delete(timeoutId);
+        setFloats((f) => f.filter((x) => !ids.has(x.id)));
+      },
+      fxUnmountMs(FX_MS.float, cpuSpeedRef.current),
+    );
     floatTimeoutsRef.current.add(timeoutId);
   }
 
@@ -1804,20 +1875,26 @@ export function GameV4({
   const flashPhase = (label: string) => {
     setPhaseFx(label);
     if (phaseTimeoutRef.current !== null) window.clearTimeout(phaseTimeoutRef.current);
-    phaseTimeoutRef.current = window.setTimeout(() => {
-      setPhaseFx(null);
-      phaseTimeoutRef.current = null;
-    }, 1150);
+    phaseTimeoutRef.current = window.setTimeout(
+      () => {
+        setPhaseFx(null);
+        phaseTimeoutRef.current = null;
+      },
+      fxUnmountMs(FX_MS.banner, cpuSpeedRef.current),
+    );
   };
 
   /** Brief brightness flash on a set of clash participants. */
   const flashUnits = (iids: string[]) => {
     setFlashIids(new Set(iids));
     if (flashTimeoutRef.current !== null) window.clearTimeout(flashTimeoutRef.current);
-    flashTimeoutRef.current = window.setTimeout(() => {
-      setFlashIids(new Set());
-      flashTimeoutRef.current = null;
-    }, 680);
+    flashTimeoutRef.current = window.setTimeout(
+      () => {
+        setFlashIids(new Set());
+        flashTimeoutRef.current = null;
+      },
+      fxUnmountMs(FX_MS.unitFlash, cpuSpeedRef.current),
+    );
   };
 
   // Hand-preview hover intent (rest ~80ms before switching).
@@ -2079,6 +2156,33 @@ export function GameV4({
     }
     return undefined;
   };
+
+  /**
+   * The hand in display order.
+   *
+   * Presentation only: `me.hand` — the array every engine call indexes into
+   * and the Dusk shed picker lists from — is left exactly as the engine keeps
+   * it. Sorting is deliberately STABLE inside each group so a re-sort of an
+   * unchanged hand does not reshuffle cards under the player's pointer.
+   *
+   * Deliberately NOT memoized. The engine state is one long-lived mutable
+   * object re-rendered through `bump()`'s version counter — `g` and `g.hand`
+   * keep their identity across every move — so a dependency array would pin
+   * this to the first render and PLAYABLE would never notice an essence tap.
+   * Ten cards is a free sort; a stale hand order is not.
+   */
+  const handView = ((): typeof me.hand => {
+    if (handSort === 'drawn') return me.hand;
+    const cards = me.hand.map((c, i) => ({ c, i }));
+    const key =
+      handSort === 'cost'
+        ? (x: (typeof cards)[number]) => totalCost(effectiveCost(g, HUMAN, x.c.def))
+        : (x: (typeof cards)[number]) => (invokeWhy(x.c) ? 1 : 0);
+    return cards.sort((a, b) => key(a) - key(b) || a.i - b.i).map((x) => x.c);
+  })();
+
+  /** The current hand-order mode's label/blurb, for the dock's toggle. */
+  const handSortEntry = HAND_SORTS.find((x) => x.id === handSort) ?? HAND_SORTS[0];
 
   /**
    * Run the CPU's priority window over whatever is on the stack, NARRATED.
@@ -3630,7 +3734,7 @@ export function GameV4({
           // GAME_CSS. Clamped at 1 so FAST doesn't make the feedback
           // subliminal: a player who wants to skim the opponent's turn wants
           // shorter WAITS, not a damage number they can't read.
-          '--gv4-pace': Math.max(1, CPU_SPEEDS[cpuSpeedIdx].mult),
+          '--gv4-pace': fxPaceFor(cpuSpeedIdx),
         } as React.CSSProperties
       }
     >
@@ -3786,7 +3890,7 @@ export function GameV4({
                 e.stopPropagation();
                 cycleCpuSpeed();
               }}
-              title="Narration speed — click to cycle Slow / Normal / Fast"
+              title={SPEED_TOOLTIP}
               aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
               className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
             >
@@ -4051,7 +4155,8 @@ export function GameV4({
           <>
             <button
               onClick={cycleCpuSpeed}
-              title="Narration speed — click to cycle Slow / Normal / Fast"
+              title={SPEED_TOOLTIP}
+              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
               className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
             >
               ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
@@ -4089,6 +4194,38 @@ export function GameV4({
             >
               SKIP ▸▸
             </button>
+            {/* How far through the opponent's turn this is. The count exists
+                already — "3/52" is printed inside the narration bubble at the
+                TOP of the board — but the controls that act on it (HOLD, STEP,
+                SKIP) are down here, so the one question those controls are
+                pressed to answer ("how much of this is left?") was two feet
+                away from them on a desktop and off screen on a phone. A bar,
+                where the buttons are. */}
+            {cpuBeat && cpuBeat.total > 1 && (
+              <div
+                className="w-full flex items-center gap-1.5 px-1"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={cpuBeat.total}
+                aria-valuenow={cpuBeat.idx + 1}
+                aria-label={`Opponent's turn: action ${cpuBeat.idx + 1} of ${cpuBeat.total}`}
+              >
+                <span className="h-1.5 flex-1 bg-[var(--c-paper)]/15 ink-border-sm overflow-hidden">
+                  <span
+                    className="block h-full bg-[var(--c-red)]"
+                    style={{
+                      width: `${Math.round(((cpuBeat.idx + 1) / cpuBeat.total) * 100)}%`,
+                      // Matched to the beat dwell so the bar creeps forward
+                      // with the narration instead of stepping after it.
+                      transition: 'width 220ms linear',
+                    }}
+                  />
+                </span>
+                <span className="font-mono text-[8px] text-[var(--c-paper)]/70 shrink-0">
+                  {cpuBeat.idx + 1}/{cpuBeat.total}
+                </span>
+              </div>
+            )}
           </>
         ) : stage === 'play' && g.phase === 'Clash' && !g.clash && atkSel.size > 0 ? (
           <>
@@ -4527,6 +4664,23 @@ export function GameV4({
                 ? ' · RESPONDING: Quick & Ambush only'
                 : ''}
           </span>
+          {/* Hand order. The dock has always laid cards out in DRAW order,
+              which is no order at all to look at: the one card you can afford
+              sits wherever it happened to be drawn, and finding it in a
+              ten-card fan is a scan of every face — every phase, every turn.
+              PLAYABLE floats exactly the cards `invokeWhy` says are castable
+              right now, so the answer to "what can I do" is the left-hand end
+              of the dock. */}
+          {me.hand.length > 1 && (
+            <button
+              onClick={cycleHandSort}
+              title={`Hand order: ${handSortEntry.blurb}. Click to change.`}
+              aria-label={`Hand order: ${handSortEntry.blurb}. Click to change`}
+              className="ml-auto btn-pop heading-font text-[8px] bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm shrink-0"
+            >
+              {handSortEntry.label}
+            </button>
+          )}
         </div>
         <div
           className={cn(
@@ -4551,9 +4705,9 @@ export function GameV4({
                 : 'absolute left-1/2 bottom-0 -translate-x-1/2',
             )}
           >
-            {me.hand.map((c, i) => {
+            {handView.map((c, i) => {
               const why = invokeWhy(c);
-              const n = me.hand.length;
+              const n = handView.length;
               const mid = (n - 1) / 2;
               const off = i - mid;
               const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));

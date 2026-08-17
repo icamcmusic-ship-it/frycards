@@ -19,6 +19,7 @@ import {
   Flame,
   Palette,
   Award,
+  Box,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
@@ -39,6 +40,7 @@ export type MetaScreen =
   | 'market'
   | 'shops'
   | 'grading'
+  | 'showroom'
   | 'profile'
   | 'settings'
   | 'changelog'
@@ -288,6 +290,16 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       icon: <Award className="w-8 h-8" />,
       color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
       disabled: guest,
+    },
+    {
+      key: 'showroom',
+      // The one screen here that a guest can use in full: it browses the
+      // CATALOG, not a collection, so gating it on an account would lock a
+      // guest out of a room with nothing private in it.
+      label: '3D SHOWROOM',
+      desc: 'Spin any card in 3D',
+      icon: <Box className="w-8 h-8" />,
+      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
     },
     {
       key: 'social',
