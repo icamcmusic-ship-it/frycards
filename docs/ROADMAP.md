@@ -128,7 +128,16 @@ Everything here has a started implementation and a visible seam.
   game action — so on a phone, aiming at a battlefield unit opened a glossary
   popover instead of selecting an attacker. Fixed at the tier level (chips are
   painted, not pressed, below `full`) plus nine individually undersized
-  controls; all 27 entries now measure zero.
+  controls — and then the DEPTH-TWO sweep found 150 more in states behind a
+  click (the Grading Lab's basket steppers, the Creator queue's art link, seven
+  browser-default checkboxes, the in-sentence keyword mentions). All 27 entries
+  now measure zero at both depths.
+
+  **One class is exempted rather than fixed, and it is declared.** An
+  in-sentence keyword mention sits inside a `-webkit-line-clamp` box whose job
+  is to bound the paragraph, so it cannot be grown at all — WCAG 2.5.8's inline
+  exception, marked on the element rather than inferred from `display`, with
+  the exempted COUNT printed on every run so the carve-out stays visible.
 
   **The lesson the fix taught is worth more than the fix.** The first version
   grew every chip's hit area with a `.tap-target` pseudo-element and the check

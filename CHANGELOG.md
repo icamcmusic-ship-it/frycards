@@ -55,11 +55,36 @@ which is the check that found the real numbers — 22px where 24 had been
 reported — and the `full` chip row gained the clearance to make its own
 declaration true. Nine other controls got the utility or real padding: the pack
 screen's JUST TEAR IT OPEN FOR ME (140×15, the smallest primary control in the
-game), the Social feed's player-name links, the submission form's agreement
-checkbox (a 13×13 UA default gating the whole submit button), the deck
-editor's per-card `details` link, the Collection progress disclosure and the
-Showroom's search field. **All 27 harness entries now measure zero undersized
-controls at 375px.**
+game), the Social feed's player-name links, the deck editor's per-card
+`details` link, the Collection progress disclosure and the Showroom's search
+field.
+
+**Then the depth-two sweep found 150 more, in states only reachable behind a
+click.** The Grading Lab's basket steppers (21×21) and its odds-table close
+(30×22); the Creator queue's "open art source" link (78×14), clipped by
+`truncate` so no pseudo-element could ever have reached past it; **seven bare
+checkboxes at the browser default 13×13**, including the Showcase agreement
+that gates the whole submit button — fixed once in the stylesheet rather than
+seven times, so the next one is fixed before it ships; and the in-sentence
+keyword mentions inside a card's rules paragraph (26×12).
+
+That last one is the exception rather than a fix, and it is declared as one. A
+keyword mention lives inside a `-webkit-line-clamp` box whose entire job is to
+bound the paragraph, so it cannot be grown at all — which is precisely the
+case **WCAG 2.5.8 writes its inline exception for**. The exception is marked on
+the element rather than inferred from CSS (a `<button>` computes to
+inline-block whether or not it is mid-sentence, and an exception the harness
+infers is an exception nobody chose), and every run prints how many it exempted
+and where, so the carve-out cannot quietly become a pile.
+
+One finding survived to the end and was worth the chase: a chip at 35×23 — one
+pixel short — on the card standing inside a graded slab, because **clips
+compose**. A `full` card face clears the minimum on its own; inside the slab's
+window, a second `overflow-hidden` box wrapped tight around it, it does not.
+
+**All 27 harness entries now measure zero undersized controls at 375px, at
+depth one and depth two.** Everything else the sweep checks — overflow, thrown
+renders, console errors, blank bodies — was clean throughout.
 
 **The deck editor had never been swept.** `decks` measures five controls —
 back, forge, import, edit, delete — and everything a deck is actually built
