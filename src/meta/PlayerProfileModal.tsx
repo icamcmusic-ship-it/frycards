@@ -32,7 +32,15 @@ export function PlayerLink({
           e.stopPropagation();
           setOpen(true);
         }}
-        className={cn('hover:text-[var(--c-red)] hover:underline transition-colors', className)}
+        // v28 tap targets: an inline name is a 57x16 target. `.tap-target`
+        // alone is not enough here — these sit inside truncating rows, and a
+        // clipping ancestor clips hit-testing as well as painting — so the
+        // line-height carries the rest. `inline-block` for the padding to
+        // apply at all on an inline element.
+        className={cn(
+          'tap-target inline-block py-1 leading-6 hover:text-[var(--c-red)] hover:underline transition-colors',
+          className,
+        )}
       >
         {name}
         <RoleBadge role={role} />

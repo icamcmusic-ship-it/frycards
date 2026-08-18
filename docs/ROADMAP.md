@@ -114,7 +114,36 @@ Everything here has a started implementation and a visible seam.
   **a screen the player passes THROUGH is not the screen they stop on**, and
   the control count only ever describes the former.
 
-  What that measurement found: **nothing**. All sixteen screens render at 375px
+  **v28 finally ran the first of the three things this item has called
+  unmeasurable since v11.** "Tap-target sizes, text scaling, and real-device
+  scroll/keyboard behaviour" has been the standing description of what is left,
+  and the first of them is a geometry check after all — it just is not the
+  geometry the sweep was doing. `audit:screens` measures every visible control
+  against WCAG 2.5.8 (AA)'s 24x24 CSS px minimum now, counting a `.tap-target`
+  pseudo-element's expansion where one is present, and the first run returned
+  **1,300+ undersized controls across nine screens**. Almost all of them were
+  one shape and it was a real bug rather than a cosmetic one: a card face's
+  keyword chips and cost pips are their own tap targets, they measure as little
+  as 22x9 on a small card, and they sit ON TOP of the card whose own tap is the
+  game action — so on a phone, aiming at a battlefield unit opened a glossary
+  popover instead of selecting an attacker. Fixed at the tier level (chips are
+  painted, not pressed, below `full`) plus nine individually undersized
+  controls; all 27 entries now measure zero.
+
+  **The lesson the fix taught is worth more than the fix.** The first version
+  grew every chip's hit area with a `.tap-target` pseudo-element and the check
+  went green — because the check was reading the DECLARED expansion.
+  `overflow: hidden` clips hit-testing as well as painting, the card face clips
+  its chip row and its rules paragraph to hold a height budget, and inside one
+  of those a declared 24x24 is 22x14 in the hand. The check intersects the
+  expansion with every clipping ancestor now. **A geometry check that reads a
+  CSS declaration rather than a resulting rectangle will certify the utility
+  that was supposed to fix the finding** — which is the same failure this file
+  has recorded three times in other clothes. **What is still genuinely
+  unmeasured is text scaling and real-device behaviour — two of three, not
+  three of three, and the harness is the place to close the rest.**
+
+  What the geometry sweep found: **nothing**. All sixteen screens render at 375px
   with `documentElement.scrollWidth === innerWidth` and zero interactive
   elements outside the viewport, and the same holds after clicking each screen's
   visible controls one at a time (~100 controls, each on a fresh load, checked
@@ -167,6 +196,23 @@ Everything here has a started implementation and a visible seam.
   authorized for the next no-content pass, and ONLY there) and closed the
   Ruin-Walker divergence as a persistent lemon deck in the instrument, not a
   weak kit. Those results are the most important thing on this page.**
+
+  **v28 closed the Ruin-Walker item and revoked the Mer-King lever, and the
+  reason for both is the same one number.** The pinned suite gives every Leader
+  nine decks on nine recipes (v20's fix). It had never been asked whether the
+  NINE matter. `PINNED_RECIPE_SALT` re-rolls recipes #1..#8 without touching a
+  card, a weight or the engine, and across two independent draws — 47,616 games
+  each, every cohort reproducing to the decimal — the suite's Leader ranking
+  correlates at **Spearman rho = 0.417**. Legendary Diver and Ruin-Walker each
+  move four places; Ethereal Sea Witch moves five. So: Ruin-Walker's one-signed
+  negative gap loses its sign under both the re-roll and v27's own pre-
+  registered lemon-exclusion test, settling at -6.0 either way — **item closed,
+  no card touched**. And Mer-King's lever, authorized since v23 on "first in
+  every cohort, nine clear of second", is second on the other draw, 5.1 behind
+  a Leader the first draw ranked below it — **authorization withdrawn**. The
+  standing rule that falls out is short: **two draws, always, for anything
+  about a Leader.** Everything below this paragraph predates that rule and
+  every per-Leader number in it was read off a single draw.
 
   **v26 re-opened the Ruin-Walker item, on eight cohorts.** Its
   pinned-minus-random gap is negative in EVERY cohort that samples it (−17.9 /
@@ -222,7 +268,10 @@ Everything here has a started implementation and a visible seam.
   suite appears to be UNDER-rating it — and per the Sentinel lesson the next
   move is to understand the instrument, **not to buff the card.**
 
-  Standing rules that should not be relearned: **four deck cohorts, not two**
+  Standing rules that should not be relearned: **two recipe draws for anything
+  per-Leader** (v28 — cohorts vary the game RNG and the random arm's decks, and
+  for eight passes nobody noticed they never varied the pinned arm's);
+  **four deck cohorts, not two**
   (two cohorts cannot see a keyword with fewer than ~6 carriers) — but **six
   when the question is about one specific Leader**, since v22's sign flip lived
   in the sixth cohort alone and the cohorts cost thirty seconds each; **never

@@ -363,3 +363,122 @@ rule #6, and this pass ships a feature.
   before v26 there was no cross-cohort run to read it from and in v26 only the
   one Leader under discussion was quoted.
 - No card, price, stat, weight or keyword band changed.
+
+## v28 re-measurement (2026-08-18)
+
+Bug/QoL pass. **Runs:** the same eight cohorts, 5,952 games each —
+**47,616 games** — `npx tsx scripts/simulate-v5.ts 6 32 <gameSeed> <deckSeed>`,
+same seed table as v26/v27 (A 1337/1337, B 1337/42, C 1337/7, D 1337/4242,
+E 1337/9001, F 20260815/20260815, G 20260815/777, H 20260815/31415). Then the
+**same eight again** under `PINNED_RECIPE_SALT=v28` — a second, independent
+draw of the pinned suite's deck-space, 95,232 games in total. Plus the fuzz
+soak at 1,200 seeds and the chaos monkey at 600.
+
+**Neutrality control.** A, B and C reproduce v27 to the decimal — P1 44.7 /
+46.5 / 46.3, avg turns 20.3 / 21.6 / 21.8. `invariantViolations` empty in all
+eight; 0 failures across 1,800 fuzz/chaos matches. An unsalted run is byte-
+identical to the pre-v28 code path (checked directly, `meta.generatedAt` and
+the new `meta.pinnedRecipeSalt` aside), so the knob below is a no-op when
+unset and every historical number stays comparable.
+
+### The instrument: `PINNED_RECIPE_SALT`, and what it found
+
+The v27 carry-forward pre-registered a specific next move: measure
+Ruin-Walker's gap **with the flagged lemon recipe excluded**. That test is run
+below and it answers. But it is worth saying why a second test was run
+alongside it: an exclusion tells you what one deck was doing, and the question
+underneath four passes of Ruin-Walker argument is what the SUITE is doing.
+
+`PINNED_RECIPE_SALT` re-rolls pinned recipes #1..#8 (deck #0 is the historical
+anchor and never moves) without touching a card, a weight, a cost or a line of
+engine. It is one draw of deck-space against another, with everything else
+held fixed — the cleanest available test of whether a per-Leader reading is a
+property of the kit or of the nine decks the kit was dealt.
+
+**The answer is that the suite's Leader ranking does not survive a re-roll.**
+Cross-cohort pinned means, both draws, and the rank each Leader takes:
+
+| Leader                      | draw 1 (unsalted) | draw 2 (salted) | rank move |
+| --------------------------- | ----------------- | --------------- | --------- |
+| Mer-King                    | 65.8 (#1)         | 58.6 (#2)       | −1        |
+| Avatar of the Abyss         | 55.1 (#2)         | 63.7 (#1)       | +1        |
+| Ethereal Sea Witch          | 51.8 (#3)         | 42.8 (#8)       | **−5**    |
+| Kuro, the Unseen            | 49.7 (#4)         | 48.9 (#4)       | 0         |
+| Sovereign of the Dying Star | 48.5 (#5)         | 45.9 (#6)       | −1        |
+| Void Mother                 | 45.4 (#6)         | 41.9 (#9)       | −3        |
+| Legendary Diver             | 45.0 (#7)         | 54.8 (#3)       | **+4**    |
+| Sentinel of the Nether Pit  | 44.5 (#8)         | 43.8 (#7)       | +1        |
+| Ruin-Walker Overseer        | 43.1 (#9)         | 46.3 (#5)       | **+4**    |
+
+**Spearman ρ = 0.417** between the two orderings, at 47,616 games per draw.
+Sampling error is not what is moving these — each cohort's own numbers are
+stable to the decimal across passes — the deck recipes are.
+
+The one-signed gap test moves with it. In draw 1 exactly one Leader is
+one-signed: Ruin-Walker, negative. In draw 2 exactly one Leader is one-signed:
+**Avatar of the Abyss, positive (+9.1)** — and Ruin-Walker is not one-signed
+at all. The statistic v22 named as discriminating, and that v26/v27 built the
+whole Ruin-Walker case on, is conditional on the recipe draw.
+
+### Ruin-Walker Overseer — CLOSED
+
+Both tests agree, and they are independent of each other:
+
+| measurement                            | per-cohort gap                                       | mean | one-signed? |
+| -------------------------------------- | ---------------------------------------------------- | ---- | ----------- |
+| all nine decks (v26, v27, v28 draw 1)   | −3.4 −5.4 −14.6 −0.5 −8.2 −17.9 −15.8 −8.0           | −9.2 | yes         |
+| lemon deck #1 excluded (v27's own test) | −0.1 −1.8 −11.6 **+3.3** −5.6 −15.0 −12.0 −5.0       | −6.0 | **no**      |
+| recipes #1..#8 re-rolled (draw 2)       | −1.8 −1.0 −11.9 **+1.4** −4.3 −15.1 −11.4 −4.3       | −6.0 | **no**      |
+
+Removing the lemon and re-rolling every recipe land on the same residual
+(−6.0) and both break the sign in the same cohort. So the one-signedness —
+the entire basis of the item since v26 — was carried by deck #1. v27's
+counter-argument ("seven of nine Leaders carry a lemon, so a lemon cannot
+explain a statistic only Ruin-Walker exhibits") was the right question asked
+the wrong way: what mattered was never that Ruin-Walker HAS a lemon, but that
+a 17.2% recipe sitting under a kit already at the bottom of the table is
+enough to push all eight cohorts the same way, where the same lemon under a
+mid-table kit is not.
+
+A residual of −6.0 that flips sign across cohorts is an ordinary reading. **No
+card is touched, no lever is opened, and the item comes off the carry-forward
+list.** Four passes of argument, closed by an instrument change rather than a
+balance change — which is what the Sentinel rule has said to do since v20.
+
+### Carry-forward status
+
+1. **Mer-King lever — REVOKED, not carried.** The lever's whole authorization
+   (v20's gate, met in v23 and re-quoted in v25/v26/v27) rests on "first in
+   every cohort at ~65%, nine clear of second". On draw 2 Mer-King is second at
+   58.6, its gap flips to −2.5, and it is 5.1 behind a Leader that draw 1 had
+   ranked below it. The reading was never nine points of kit; a large part of
+   it was the nine decks. Per the Sentinel precedent — **do not spend a lever
+   against an instrument that has just moved** — the authorization is withdrawn
+   and any future Mer-King case must be built on a statistic that survives a
+   recipe re-roll. Nothing about Mer-King's cards changes; what changes is that
+   there is no longer a scheduled lever waiting to be spent on it.
+2. **v23 Leader keyword print** — carried, untouched.
+3. **v24 Event keyword print** — carried, untouched; `UNPRINTED_KEYWORDS`
+   unmodified.
+4. **`Unbreakable` weight 7 — carried, trigger still not met** across sixteen
+   deck rolls in three consecutive passes. The re-check fires on a NEGATIVE
+   carrier delta; it has never fired.
+5. **`Sacred` cohort dependence — carried at v26's narrowed statement.** Sign
+   stable, magnitude is the deck roll. No action.
+6. **Content/balance interleaving** — carried and honoured: no card price,
+   stat, weight or keyword band changed.
+7. **NEW — nothing per-Leader ships off one recipe draw.** ρ = 0.417 is the
+   number to quote. A per-Leader claim is not a measurement until it holds
+   across at least two independent draws of `PINNED_RECIPE_SALT`; the eight
+   cohorts vary the game RNG and the random arm's decks, and it took until v28
+   to notice that they had never varied the pinned arm's at all. The standing
+   "four cohorts, six for one Leader" rule now has a second axis: **two draws,
+   always, for anything about a Leader.**
+
+### New this pass
+
+- `PINNED_RECIPE_SALT` (`scripts/simulate-v5.ts`), and `meta.pinnedRecipeSalt`
+  on every report so two draws can never be mistaken for two cohorts of one.
+- The Ruin-Walker item is closed rather than carried — the first carry-forward
+  item retired since v23.
+- No card, price, stat, weight or keyword band changed.

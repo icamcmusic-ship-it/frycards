@@ -336,7 +336,9 @@ function SubmitPanel({
           <label className="flex items-start gap-2 text-[10px] font-bold">
             <input
               type="checkbox"
-              className="mt-0.5 shrink-0"
+              // v28 tap targets: the UA default checkbox is 13x13. This is the
+              // control that gates the whole submit button.
+              className="mt-0.5 shrink-0 w-6 h-6 accent-[var(--c-red)]"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
             />

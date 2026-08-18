@@ -41,6 +41,27 @@
  * PAIR_CAP (default 24 pairs per screen) to bound it, PLAYWRIGHT_CHROMIUM to
  * point at a preinstalled browser binary.
  *
+ * v28 adds two checks and one entry class:
+ *
+ *  - **tap targets.** The roadmap's mobile item has said since v11 that the
+ *    remaining phone work is "the things a geometry check cannot see — tap
+ *    target sizes, text scaling, real-device behaviour", and then nobody
+ *    measured the first one for sixteen passes. Every visible control is now
+ *    measured against WCAG 2.5.8 (AA)'s 24x24 CSS px minimum, counting a
+ *    `.tap-target` pseudo-element's expansion where one is present. The first
+ *    run found 1,300+ undersized controls across nine screens.
+ *  - **an under-measurement guard.** The load pass and the click sweep read
+ *    the same screen at the same width, so the load pass's count is a LOWER
+ *    BOUND on what the sweep should see. When the sweep settles below it the
+ *    run now reports a problem instead of printing `clicked 0 control(s)` and
+ *    exiting 0 — which is v14's finding recurring through a different door
+ *    (this time `inspect`, whose six controls the load pass had just counted).
+ *  - **`decks@editor` / `decks@new`.** The deck LIST has five controls; the
+ *    EDITOR behind its EDIT button has ~400 (the pool grid, the filters, the
+ *    curve, the deck list, the save bar) and is where a player spends the
+ *    whole session. Same PRELUDE rule v22 wrote for the pack reveal: a screen
+ *    the player passes through is not the screen they stop on.
+ *
  * Exits non-zero on any problem, so it can gate a release the way
  * `verify:pool` does for the catalog.
  */
@@ -102,6 +123,11 @@ const ALL_SCREENS = [
   // card entry measures none of it.
   'showroom',
   'showroom-slab',
+  // v28 — the deck builder's LIST is five controls (back, forge, import, edit,
+  // delete); everything a deck is actually built with lives in the editor
+  // behind EDIT, and had never been swept at either width.
+  'decks@editor',
+  'decks@new',
 ];
 
 /**
@@ -124,6 +150,10 @@ const PRELUDE: Record<string, string[]> = {
   'pack@summary': ['JUST TEAR IT OPEN FOR ME', 'REVEAL ALL'],
   'grading@limbo': ['AT THE GRADERS'],
   'grading@vault': ['MY SLABS'],
+  'decks@editor': ['EDIT'],
+  // The empty editor is a different layout from the full one: no leader, no
+  // curve, an empty deck list and a pool grid with nothing dimmed.
+  'decks@new': ['FORGE NEW DECK'],
 };
 
 /** The `?screen=` value for an entry — `pack@reveal` mounts plain `pack`. */
@@ -167,7 +197,7 @@ const NETWORK_NOISE =
 interface Problem {
   where: string;
   width: number;
-  kind: 'overflow' | 'console' | 'blank';
+  kind: 'overflow' | 'console' | 'blank' | 'tap-target' | 'unmeasured';
   detail: string;
 }
 
@@ -226,7 +256,20 @@ async function settledControlCount(page: import('playwright').Page): Promise<num
  * whose last click changed it is one that opened (or closed) something, which
  * is how the depth-two sweep decides where it is worth descending.
  */
-async function check(screen: string, width: number, path: number[] = []) {
+/**
+ * What the LOAD pass counted for each screen at 375px.
+ *
+ * The click sweep reads the same screen at the same width, so this is a lower
+ * bound on what it should settle at. v14 found a sweep that read 0 and printed
+ * `clicked 0 control(s)` — indistinguishable from "checked, nothing to click"
+ * — and fixed the sampling; v28 found the same line printed again, for
+ * `inspect`, whose six controls the load pass had counted forty seconds
+ * earlier. The sampling is not the durable fix; comparing against a number the
+ * run already has is. See `expect` on `check`.
+ */
+const loadCount = new Map<string, number>();
+
+async function check(screen: string, width: number, path: number[] = [], expect = 0) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -267,7 +310,16 @@ async function check(screen: string, width: number, path: number[] = []) {
       if (now !== before) break;
     }
   }
-  const settled = await settledControlCount(page);
+  let settled = await settledControlCount(page);
+  // A settle far below what the load pass counted is a race, not a screen with
+  // fewer controls — give it a second chance before believing it. `expect` is
+  // already capped at what the sweep can USE (see `sweepFloor`), so this does
+  // not re-sample a 961-tile grid for the sake of the tail it will never
+  // reach; it fires on the order-of-magnitude misses the guard is about.
+  if (expect > 0 && settled < expect) {
+    await page.waitForTimeout(1200);
+    settled = Math.max(settled, await settledControlCount(page));
+  }
 
   const labels: string[] = [];
   for (let step = 0; step < path.length; step++) {
@@ -322,6 +374,92 @@ async function check(screen: string, width: number, path: number[] = []) {
     });
   }
 
+  // Tap targets. WCAG 2.5.8 (AA) asks every pointer target to be at least
+  // 24x24 CSS px. The PAINTED box may legitimately be smaller than that — a
+  // keyword chip on a card face has to be tiny or the card stops being a card
+  // — so what is measured is the box UNION the `.tap-target` pseudo-element's
+  // minimum, which is the whole point of that utility: grow the target, not
+  // the ink. Only the phone width is checked; a 24px target is a thumb rule,
+  // and the desktop pass would report the same elements against a mouse.
+  if (width === 375) {
+    const tiny = await page
+      .evaluate(() => {
+        const out: string[] = [];
+        const sel = 'button, [role="button"], input, select, a[href], summary, textarea';
+        for (const el of Array.from(document.querySelectorAll(sel))) {
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) continue;
+          const st = getComputedStyle(el);
+          if (st.visibility === 'hidden' || st.display === 'none') continue;
+          if ((el as HTMLInputElement).type === 'hidden') continue;
+          let w = r.width;
+          let h = r.height;
+          // A `.tap-target` expands its hit area with an absolutely positioned
+          // ::after carrying min-width/min-height. Count it, or the utility
+          // that fixes the finding looks like the finding.
+          const after = getComputedStyle(el, '::after');
+          if (after && after.content !== 'none' && after.position === 'absolute') {
+            w = Math.max(w, parseFloat(after.minWidth) || 0);
+            h = Math.max(h, parseFloat(after.minHeight) || 0);
+            // ...but only as far as an ancestor lets it out. `overflow: hidden`
+            // clips hit-testing as well as painting, so a declared 24x24 inside
+            // a clipped row (the card face's own chip budget is exactly that)
+            // is not 24x24 in the hand. Measuring the DECLARATION rather than
+            // the result is how a check ends up certifying its own utility.
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            let x0 = cx - w / 2;
+            let x1 = cx + w / 2;
+            let y0 = cy - h / 2;
+            let y1 = cy + h / 2;
+            for (let a = el.parentElement; a; a = a.parentElement) {
+              const st2 = getComputedStyle(a);
+              const clipX = st2.overflowX !== 'visible';
+              const clipY = st2.overflowY !== 'visible';
+              if (!clipX && !clipY) continue;
+              const ar = a.getBoundingClientRect();
+              if (clipX) {
+                x0 = Math.max(x0, ar.left);
+                x1 = Math.min(x1, ar.right);
+              }
+              if (clipY) {
+                y0 = Math.max(y0, ar.top);
+                y1 = Math.min(y1, ar.bottom);
+              }
+            }
+            w = Math.max(r.width, x1 - x0);
+            h = Math.max(r.height, y1 - y0);
+          }
+          if (w >= 24 && h >= 24) continue;
+          const name = (
+            el.getAttribute('aria-label') ||
+            el.textContent ||
+            (el as HTMLInputElement).placeholder ||
+            el.tagName
+          )
+            .trim()
+            .slice(0, 30);
+          out.push(`${el.tagName} "${name}" ${Math.round(w)}x${Math.round(h)}`);
+        }
+        // One row per distinct control shape: a grid of 300 identical card
+        // tiles is ONE finding repeated, and printing it 300 times buries
+        // every other problem in the run.
+        return [...new Set(out)];
+      })
+      .catch(() => [] as string[]);
+    for (const t of tiny.slice(0, 8)) {
+      problems.push({ where, width, kind: 'tap-target', detail: `${t} (min 24x24)` });
+    }
+    if (tiny.length > 8) {
+      problems.push({
+        where,
+        width,
+        kind: 'tap-target',
+        detail: `…and ${tiny.length - 8} more distinct undersized control(s)`,
+      });
+    }
+  }
+
   for (const e of errors.filter((e) => !NETWORK_NOISE.test(e))) {
     problems.push({ where, width, kind: 'console', detail: e.slice(0, 300) });
   }
@@ -371,6 +509,7 @@ async function check(screen: string, width: number, path: number[] = []) {
 for (const screen of SCREENS) {
   for (const width of WIDTHS) {
     const r = await check(screen, width);
+    if (width === 375) loadCount.set(screen, r.count);
     console.log(`${screen} @${width}: ${r.count} controls`);
   }
 }
@@ -382,8 +521,22 @@ if (!process.env.SKIP_CLICKS) {
     let i = 0;
     /** First clicks that revealed controls — the parents worth descending into. */
     const openers: { index: number; after: number }[] = [];
+    const expected = loadCount.get(screen) ?? 0;
+    /**
+     * The number of clicks this screen owes the sweep.
+     *
+     * Not `expected` itself: the sweep stops at CLICK_CAP by design, so a
+     * 961-control Collection owes 41 clicks and not 961. What the guard is
+     * for is the case where the sweep sees a small fraction of a screen the
+     * load pass had just counted — `inspect` reading 0 against 6 — and prints
+     * `clicked 0 control(s)` as though that were an answer.
+     */
+    const sweepFloor = Math.min(expected, CLICK_CAP + 1);
+    /** What the sweep itself settled at, for the guard below. */
+    let sweptCount = 0;
     while (i <= CLICK_CAP) {
-      const r = await check(screen, 375, [i]);
+      const r = await check(screen, 375, [i], sweepFloor);
+      sweptCount = Math.max(sweptCount, r.count);
       if (r.done) break;
       // Only descend where the click ADDED controls. A click that removes them
       // (a filter narrowing a grid, a tab closing a panel) reveals nothing new,
@@ -392,7 +545,22 @@ if (!process.env.SKIP_CLICKS) {
       if (r.after > r.count) openers.push({ index: i, after: r.after });
       i += 1;
     }
-    console.log(`${screen}: clicked ${i} control(s), ${openers.length} opened a panel`);
+    console.log(
+      `${screen}: clicked ${i} control(s), ${openers.length} opened a panel` +
+        (expected ? ` (load pass counted ${expected})` : ''),
+    );
+    // The guard. Say it where the measurement would have been printed.
+    if (sweepFloor > 0 && i < sweepFloor) {
+      problems.push({
+        where: `${screen} click sweep`,
+        width: 375,
+        kind: 'unmeasured',
+        detail:
+          `the load pass counted ${expected} control(s) at this width, so the sweep ` +
+          `owed ${sweepFloor} click(s); it settled at ${sweptCount} and clicked ${i}. ` +
+          `The screen was not measured.`,
+      });
+    }
 
     if (DEPTH < 2) continue;
     let pairs = 0;

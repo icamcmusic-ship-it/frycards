@@ -811,7 +811,10 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                           e.stopPropagation();
                           setInspect(c);
                         }}
-                        className="text-[9px] font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-0.5"
+                        // v28 tap targets: a 9px underline is an 18px-tall
+                        // strip, and it is the only way into the card's full
+                        // rules text from the pool grid.
+                        className="text-[9px] font-bold text-[var(--c-steel)]/70 underline mt-0.5 px-1 py-1.5"
                       >
                         details
                       </button>

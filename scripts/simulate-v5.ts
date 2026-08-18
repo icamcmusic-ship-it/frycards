@@ -1917,6 +1917,35 @@ function strHash(s: string): number {
  * archetype space the random arm samples. Deck #0 is unchanged (same recipe,
  * same seed) so the historical row stays comparable; #1..#N walk the axes.
  */
+/**
+ * v28 — a second, independent draw of deck-space, for the Ruin-Walker item.
+ *
+ * The carry-forward has run out of road on one set of recipes. v22 closed the
+ * Ruin-Walker divergence as a lemon deck; v26 re-opened it because the gap is
+ * one-signed negative in all eight cohorts and a lemon in one of nine recipes
+ * cannot do that; v27 narrowed it further by showing the aggregator flags a
+ * lemon for SEVEN of the nine Leaders, so the lemon is a property of the
+ * BUILDER, not of Ruin-Walker. What none of those passes could do is ask the
+ * only question that separates "this kit is under-rated by the suite" from
+ * "this kit drew a bad nine": run the suite again on a DIFFERENT nine.
+ *
+ * `PINNED_RECIPE_SALT` re-rolls recipes #1..#8 (deck #0 is the historical
+ * anchor and never moves) without touching a card, a weight or the engine.
+ * Empty — the default — reproduces every previous pass byte for byte, which
+ * the A/B/C control cohorts check on every run.
+ *
+ *   PINNED_RECIPE_SALT=v28 npx tsx scripts/simulate-v5.ts 6 32 1337 1337
+ *
+ * A gap that keeps its sign across two independent draws of deck-space is a
+ * statement about the kit. A gap that does not was a statement about the nine
+ * decks all along, and the item closes.
+ */
+const PINNED_RECIPE_SALT = process.env.PINNED_RECIPE_SALT ?? '';
+/** Recipe/jitter key for a pinned deck, salted only when a salt is set — an
+ * unsalted run must hash the exact strings every previous pass hashed. */
+const saltedKey = (base: string) =>
+  PINNED_RECIPE_SALT ? `${base}~salt:${PINNED_RECIPE_SALT}` : base;
+
 function pinnedArchetypeRecipe(
   leaderId: string,
   deckIx: number,
@@ -1937,7 +1966,7 @@ function pinnedArchetypeRecipe(
   // drawn from a seeded stream instead of Math.random so the suite stays
   // pinned. Not literally `randomArchetype`: that also rolls the Leader, and
   // the whole point of this suite is that the Leader is the fixed variable.
-  const rng = mulberry32(strHash(`recipe:${leaderId}#${deckIx}`) >>> 0);
+  const rng = mulberry32(strHash(saltedKey(`recipe:${leaderId}#${deckIx}`)) >>> 0);
   const shuffled = <T>(arr: T[]): T[] => {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
@@ -2003,7 +2032,9 @@ function pinnedDeckForLeader(leaderId: string, deckIx = 0): DeckDef {
     // `pinnedArchetypeRecipe`), is what v19 carry-forward #1 blocked further
     // Leader levers on. It is now NINE, and they differ by recipe as well as
     // by jitter seed.
-    seed: deckIx === 0 ? strHash(leaderId) : strHash(`${leaderId}#${deckIx}`),
+    // Deck #0 keeps the bare leader-id seed in every run, salted or not: it is
+    // the row every pass since v7.7 has compared against.
+    seed: deckIx === 0 ? strHash(leaderId) : strHash(saltedKey(`${leaderId}#${deckIx}`)),
   });
 }
 /**
@@ -2688,6 +2719,10 @@ const report = {
     deckSeed: DECK_SEED,
     decks: NUM_DECKS,
     gamesPerPairing: GAMES_PER_PAIRING,
+    // '' for every run before v28 and every unsalted run since — a report
+    // whose pinned suite is a re-roll has to say so on its own face, or two
+    // JSONs from different deck-spaces look like two cohorts of one.
+    pinnedRecipeSalt: PINNED_RECIPE_SALT,
     games: mech.games,
     poolSize: POOL_V4.length,
     generatedAt: new Date().toISOString(),

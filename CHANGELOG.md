@@ -9,6 +9,131 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v28.0 — The pass where the smallest thing on the card stopped stealing taps
+
+Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
+round, a match QoL round, a flow/CPU-visibility audit, and the carry-forward
+re-measurement. **0 invariant violations across 95,232 AI games** — the eight
+standing cohorts twice over, the second time on an independently re-rolled
+pinned deck-space — plus a 1,200-match fuzz soak and a 600-match chaos run;
+454 tests (19 new). The engine ships behaviourally unchanged: cohorts A/B/C
+reproduce v27 to the decimal, and an unsalted sim run is byte-identical to the
+pre-v28 code path.
+
+**Bug hunt: the roadmap named tap-target sizes in v11 and nobody measured them
+until now.** The mobile item has said since then that the remaining phone work
+is "the things a geometry check cannot see — tap-target sizes, text scaling,
+real-device behaviour", and sixteen passes of overflow sweeps came back clean
+while the first of the three was never run. It is a check in
+`audit:screens` now, against WCAG 2.5.8 (AA)'s 24×24 CSS px minimum, and the
+first run found **1,300+ undersized controls across nine screens** — 646 on
+Collection alone, 429 in the Grading Lab, 202 in the Showroom.
+
+Almost all of them were one shape, and it was not a cosmetic one. **A card
+face's keyword chips, keyword mentions and cost pips are their own tap
+targets, and on a small card they measure as little as 22×9 — sitting on top
+of the card whose own tap IS the game action.** On a phone the small target
+wins the ties, so aiming at a battlefield unit to declare it an attacker, or
+at a card in the deck builder's pool to add it, opened a glossary popover
+instead. Below `full` those chips are now painted rather than pressed: no tab
+stop, no hit area, the whole tile is one clean target, and the full-size face
+one tap away (the hand preview, the inspector, the hover card, the Showroom)
+carries the interactive copies at a size that actually passes. The first-sight
+keyword teaching popover still fires from an inert chip — that is the tier's
+behaviour, not the pointer's.
+
+**`full` is the cut-off because it is the only tier where the alternative
+works.** A new `.tap-target` utility grows a control's hit area with a
+transparent centred pseudo-element, so the target gets bigger and not one
+pixel of what is drawn moves — and the first version of this fix used it on
+every tier and looked like it had worked. It had not: `overflow: hidden` clips
+hit-testing as well as painting, the card face's chip row and rules paragraph
+both clip to hold a height budget, and a 24px expansion inside one of those is
+a declaration rather than a target. **The harness was measuring the
+declaration.** It intersects the expansion with every clipping ancestor now,
+which is the check that found the real numbers — 22px where 24 had been
+reported — and the `full` chip row gained the clearance to make its own
+declaration true. Nine other controls got the utility or real padding: the pack
+screen's JUST TEAR IT OPEN FOR ME (140×15, the smallest primary control in the
+game), the Social feed's player-name links, the submission form's agreement
+checkbox (a 13×13 UA default gating the whole submit button), the deck
+editor's per-card `details` link, the Collection progress disclosure and the
+Showroom's search field. **All 27 harness entries now measure zero undersized
+controls at 375px.**
+
+**The deck editor had never been swept.** `decks` measures five controls —
+back, forge, import, edit, delete — and everything a deck is actually built
+with is behind EDIT: 392 controls of pool grid, filters, search, curve, deck
+list and save bar, where a player spends the whole session. Same rule v22 wrote
+for the pack reveal, applied to the screen it was written about: a screen the
+player passes THROUGH is not the screen they stop on. `decks@editor` and
+`decks@new` are PRELUDE entries now.
+
+**And the harness's own "clicked 0 control(s)" line came back.** v14 found a
+sweep that read zero controls on four screens, printed exactly that, and
+exited 0; it fixed the sampling. This pass it printed again, for `inspect`,
+whose six controls the load pass had counted forty seconds earlier. The
+sampling is not the durable fix — the run already HAS the number. The load
+pass's count is now carried into the sweep as a floor, and a sweep that clicks
+fewer controls than the screen owes reports a problem where the measurement
+would have gone.
+
+**Match QoL: the clash divider's three buttons all print their arithmetic
+now.** DECLARE ATTACK has since v26 (`— 3 · 11 MIGHT · LETHAL IF UNGUARDED`).
+CONFIRM GUARDS printed the incoming damage only while NOTHING was guarded, and
+dropped the number the instant a player assigned their first guard — which is
+precisely when "and what still gets through?" becomes the question; it reads
+`— TAKE 7 · LETHAL` at every stage of the assignment now, and
+`— NOTHING GETS THROUGH` when the answer is none. RESOLVE CLASH, pressed from
+BOTH seats at the moment the answer is already fixed, printed nothing at all;
+it reads `— DEAL 7` from the attacking seat and `— TAKE 7` from the defending
+one, LETHAL at the Vitality total rather than one point past it. All three
+labels are pure exported functions with a test each, because an off-by-one
+here reads perfectly and is wrong on the exact swing that ends the game. The
+Dusk shed picker also follows the hand dock's DRAWN / PLAYABLE / COST order
+(v27 left it on engine order, and this is the one screen where the
+arrangement matters most), and its disabled confirm says what it still wants
+(`— PICK 2 MORE`) instead of being a dead end at the end of an over-full turn.
+
+**CPU visibility: the beat about a unit that died had nothing to point at.**
+Every visibility pass since v18 has closed a silence by asking which CPU
+DECISION has no beat, and by v27 they all had one. The next question is which
+beat has no SUBJECT. A CPU turn is computed in full and narrated afterwards,
+so by the time "Your Ashen Sentinel was shattered." reaches the screen the
+board has already stopped drawing it: the ring machinery scans the two fields,
+finds nothing, and the most consequential line of the opponent's turn is the
+one line with no highlight at all. The card is still in a pile. `buildCpuBeats`
+finds it there, and the board **holds the face up mid-board for the length of
+the beat** under a ☠ UNIT LOST plate — desaturating, tipping and sinking as it
+goes, rather than dropping in and settling the way a played card does, because
+the card it is showing is not on the board any more. Paced by `--gv4-pace`
+like everything else the narration owns, and given the same longer dwell a
+spotlight beat gets. The pile scan is a fallback only: a structured event
+always wins, a unit still on the board is ringed rather than held up, and only
+the tail of a pile is scanned so a fortieth-turn ash pile cannot match a
+coincidence.
+
+**Balance: no card changed, ninth pass running — and a carry-forward CLOSED.**
+The v27 item asked for Ruin-Walker Overseer's flagged lemon recipe to be
+excluded and the gap re-measured. It was, and a second test was run beside it:
+a new `PINNED_RECIPE_SALT` knob re-rolls the pinned suite's recipes #1..#8
+without touching a card, a weight or the engine, giving a genuinely
+independent draw of deck-space. Both tests agree — the gap loses its
+one-signedness and settles at −6.0 either way — so the statistic four passes
+were built on was carried by one deck, and **the item comes off the list.**
+
+The re-roll found something larger on the way. Across the two draws the pinned
+suite's Leader ranking correlates at **Spearman ρ = 0.417** — Legendary Diver
+and Ruin-Walker each move four places, Ethereal Sea Witch five — at 47,616
+games per draw, where every cohort reproduces to the decimal. **The Mer-King
+lever is therefore revoked rather than carried**: its authorization rested
+entirely on "first in every cohort, nine clear of second", and on the second
+draw it is second, 5.1 behind a Leader the first draw ranked below it. Nothing
+about Mer-King's cards changes; what changes is that no scheduled lever is
+waiting to be spent on it. New standing rule: **two draws, always, for
+anything about a Leader.** Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v24.md` § v28 re-measurement.
+
 ### v27.0 — The pass where a card became an object
 
 Six-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
