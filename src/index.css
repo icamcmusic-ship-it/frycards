@@ -94,6 +94,21 @@ h4,
 }
 
 /*
+ * Checkboxes and radios, at a size a thumb can hit.
+ *
+ * v28: the UA default is 13x13 against a 24x24 minimum, and the app has seven
+ * of them — the Showcase submission agreement that gates the whole submit
+ * button, the marketplace and player-shop "list foil copies" toggles, the BULK
+ * ADD overwrite switch. Every one was a separate finding for the same reason,
+ * which is what a global rule is for: the next one is fixed before it ships.
+ */
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+/*
  * Minimum tap target, without a minimum painted box.
  *
  * v28: the first tap-target measurement the project has ever run (the mobile

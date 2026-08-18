@@ -202,6 +202,14 @@ interface Problem {
 }
 
 const problems: Problem[] = [];
+/**
+ * Controls exempted under WCAG 2.5.8's inline rule, by state.
+ *
+ * Printed at the end of every run. An exception that is applied silently is
+ * indistinguishable from a check that stopped looking, which is the failure
+ * this file has recorded three times in other forms.
+ */
+const inlineExempt = new Map<string, number>();
 
 const browser = await chromium.launch(
   process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {},
@@ -382,9 +390,10 @@ async function check(screen: string, width: number, path: number[] = [], expect 
   // the ink. Only the phone width is checked; a 24px target is a thumb rule,
   // and the desktop pass would report the same elements against a mouse.
   if (width === 375) {
-    const tiny = await page
+    const measured = await page
       .evaluate(() => {
         const out: string[] = [];
+        let exempt = 0;
         const sel = 'button, [role="button"], input, select, a[href], summary, textarea';
         for (const el of Array.from(document.querySelectorAll(sel))) {
           const r = el.getBoundingClientRect();
@@ -392,6 +401,18 @@ async function check(screen: string, width: number, path: number[] = [], expect 
           const st = getComputedStyle(el);
           if (st.visibility === 'hidden' || st.display === 'none') continue;
           if ((el as HTMLInputElement).type === 'hidden') continue;
+          // WCAG 2.5.8's INLINE exception: a target inside a sentence, whose
+          // size is constrained by the line-height of the non-target text
+          // around it, is out of scope. It is declared at the element (see
+          // `data-inline-target` on CardFaceV4's KeywordText) rather than
+          // guessed from `display`, because a <button> computes to
+          // inline-block whether or not it is actually mid-sentence — and an
+          // exception the harness infers is an exception nobody chose. The
+          // count is reported either way, so the carve-out stays visible.
+          if (el.getAttribute('data-inline-target') === '1') {
+            exempt++;
+            continue;
+          }
           let w = r.width;
           let h = r.height;
           // A `.tap-target` expands its hit area with an absolutely positioned
@@ -444,9 +465,11 @@ async function check(screen: string, width: number, path: number[] = [], expect 
         // One row per distinct control shape: a grid of 300 identical card
         // tiles is ONE finding repeated, and printing it 300 times buries
         // every other problem in the run.
-        return [...new Set(out)];
+        return { tiny: [...new Set(out)], exempt };
       })
-      .catch(() => [] as string[]);
+      .catch(() => ({ tiny: [] as string[], exempt: 0 }));
+    if (measured.exempt > 0) inlineExempt.set(where, measured.exempt);
+    const tiny = measured.tiny;
     for (const t of tiny.slice(0, 8)) {
       problems.push({ where, width, kind: 'tap-target', detail: `${t} (min 24x24)` });
     }
@@ -582,6 +605,14 @@ if (!process.env.SKIP_CLICKS) {
 
 await browser.close();
 
+const exemptTotal = [...inlineExempt.values()].reduce((a, b) => a + b, 0);
+if (exemptTotal > 0) {
+  const worst = [...inlineExempt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  console.log(
+    `\ntap targets: ${exemptTotal} inline exemption(s) across ${inlineExempt.size} state(s) ` +
+      `(WCAG 2.5.8 inline rule; most in ${worst.map(([w, n]) => `${w} ${n}`).join(', ')})`,
+  );
+}
 console.log(`\n=== ${problems.length} problem(s) ===`);
 for (const p of problems) console.log(`${p.where} @${p.width} [${p.kind}] ${p.detail}`);
 process.exit(problems.length > 0 ? 1 : 0);

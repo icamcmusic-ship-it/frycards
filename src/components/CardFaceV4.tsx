@@ -1126,7 +1126,8 @@ function KeywordText({
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw);
   if (!text) return <>{kw}</>;
   // An in-sentence mention on a small card is the smallest target in the game
-  // (22x9 on a battlefield unit). Below `standard` it is just an underline.
+  // (22x9 on a battlefield unit). Below `full` it is just an underline — see
+  // `chipsInteractive`.
   if (inert)
     return (
       <span
@@ -1144,8 +1145,17 @@ function KeywordText({
         ref={btnRef}
         type="button"
         onClick={open}
+        // WCAG 2.5.8's *inline* exception, declared rather than assumed: this
+        // target sits inside a sentence and its height is the line-height of
+        // the non-target text around it. It cannot be grown without changing
+        // the leading of the paragraph it lives in — and inside a card's
+        // `-webkit-line-clamp` rules box it cannot be grown at all, because
+        // the clamp clips hit-testing along with painting. The harness reads
+        // this attribute, exempts the element, and prints how many it
+        // exempted, so the carve-out can never quietly become a pile.
+        data-inline-target="1"
         className={cn(
-          'font-bold underline decoration-dotted underline-offset-2 cursor-help tap-target',
+          'font-bold underline decoration-dotted underline-offset-2 cursor-help',
           small ? 'text-[6.5px]' : undefined,
         )}
       >

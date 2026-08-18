@@ -491,9 +491,12 @@ export function GradingScreen({
                       </span>
                       {inBasket > 0 && (
                         <div className="flex items-center justify-center gap-1">
+                          {/* v28 tap targets: the basket steppers measured
+                              21x21 against a 24x24 minimum, and they are the
+                              controls a player presses most on this screen. */}
                           <PopButton
                             color="steel"
-                            className="!px-1.5 !py-0.5 !text-[10px]"
+                            className="!px-2 !py-1 !text-[10px] !min-w-6 !min-h-6"
                             onClick={() => bump(s.cardId, s.foil, -1, s.spare)}
                             ariaLabel={`Remove one ${def.name}`}
                           >
@@ -504,7 +507,7 @@ export function GradingScreen({
                           </span>
                           <PopButton
                             color="steel"
-                            className="!px-1.5 !py-0.5 !text-[10px]"
+                            className="!px-2 !py-1 !text-[10px] !min-w-6 !min-h-6"
                             onClick={() => bump(s.cardId, s.foil, s.spare, s.spare)}
                             ariaLabel={`Add every spare ${def.name}`}
                             disabled={inBasket >= s.spare}
@@ -891,7 +894,8 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
             type="button"
             onClick={onClose}
             aria-label="Close the odds table"
-            className="btn-pop ink-border-sm px-1.5 py-0.5"
+            // v28 tap targets: 30x22, and it is the only way out of a modal.
+            className="btn-pop ink-border-sm px-1.5 py-1.5"
           >
             <X className="w-3.5 h-3.5" aria-hidden />
           </button>
