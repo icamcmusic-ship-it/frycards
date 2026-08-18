@@ -65,6 +65,7 @@ import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { GradingScreen } from './meta/GradingScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
+import { ShowroomScreen } from './meta/ShowroomScreen';
 import { POOL_V4 } from './game/v3/cardpool';
 import type { PackPull, PackType, Profile, ShopItem } from './lib/supabase';
 
@@ -369,6 +370,17 @@ createRoot(document.getElementById('root')!).render(
       <ChangelogScreen onBack={() => undefined} />
     ) : screen === 'submissions' ? (
       <CardSubmissionsScreen onBack={() => undefined} />
+    ) : screen === 'showroom' ? (
+      <ShowroomScreen onBack={() => undefined} />
+    ) : screen === 'showroom-slab' ? (
+      // The slab standing in the room is a DIFFERENT geometry (a thicker
+      // solid, a taller object, its own edge material) reached only by a
+      // source-tab click, so it needs its own harness entry — the card entry
+      // above measures none of it.
+      <ShowroomScreen
+        onBack={() => undefined}
+        initial={{ kind: 'slab', gradedId: 'preview-graded-vault-0' }}
+      />
     ) : screen === 'grading' ? (
       <GradingScreen onBack={() => undefined} />
     ) : (

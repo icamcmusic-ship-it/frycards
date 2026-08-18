@@ -280,3 +280,86 @@ n=1619, 58.1 n=2313). The pass's changes are UI-only and the numbers say so.
 - The aggregator (`scripts/aggregate-cohorts.ts`) was run over all eight
   reports at once, which is what makes the two one-signed claims above
   statements rather than impressions.
+
+## v27 re-measurement (2026-08-17)
+
+Feature/bug/QoL pass (the 3D Showroom). **Runs:** the same eight cohorts,
+5,952 games each — **47,616 games** — `npx tsx scripts/simulate-v5.ts 6 32
+<gameSeed> <deckSeed>`, with the same seed table as v26 (A 1337/1337, B
+1337/42, C 1337/7, D 1337/4242, E 1337/9001, F 20260815/20260815, G
+20260815/777, H 20260815/31415). Plus the fuzz soak at **1,200 seeds** and the
+chaos monkey at **600**, through the `FUZZ_SEEDS` / `CHAOS_SEEDS` env knobs.
+
+**Neutrality control.** A, B and C reproduce v26 to the decimal — P1 44.7 /
+46.5 / 46.3, avg turns 20.3 / 21.6 / 21.8. `invariantViolations` empty in all
+eight; 0 failures across 1,800 fuzz/chaos matches. The pass's changes are UI
+and one new screen, and the numbers say so.
+
+**Interactive harnesses.** `audit:screens` 0 problems over the full 24-screen
+sweep (both widths, depth two). `drive:match` 0 findings over 10 matches
+(phone and desktop, watched / studied / skipped narration, 2 VICTORY screens
+reached). The two NEW harness entries (`showroom`, `showroom-slab`) returned
+174 problems on their first run — see the changelog; one bug, fixed, re-run
+clean.
+
+### Carry-forward status
+
+1. **Mer-King lever — STILL UNSPENT, carried.** This pass ships a feature, so
+   the condition's final clause (spent only in a pass containing nothing but
+   the lever) holds for the fifth time. Its pinned-minus-random gap is again
+   not one-signed: +3.5 / +11.2 / +12.0 / +5.0 / −8.9 / +3.8 / +7.7 / — , mean
+   +4.9 — identical to v26, as it must be on an unchanged engine.
+2. **v23 Leader keyword print** — carried, untouched.
+3. **v24 Event keyword print** — carried, untouched; `UNPRINTED_KEYWORDS`
+   unmodified.
+4. **`Unbreakable` weight 7 — carried, trigger still not met.** The re-check
+   fires on a NEGATIVE carrier delta and has now failed to fire across eight
+   deck rolls in two consecutive passes.
+5. **`Sacred` cohort dependence — carried at v26's narrowed statement.** Sign
+   stable, magnitude is the deck roll. No action; a keyword whose worst
+   reading is +0.1 is not a balance problem.
+6. **Content/balance interleaving** — carried and honoured: no card price,
+   stat, weight or keyword band changed.
+
+### Ruin-Walker: the carry-forward, narrowed
+
+v26 opened this as "the strongest single balance signal in the report" and
+recommended re-rolling Ruin-Walker Overseer's deck #1 recipe before touching a
+card. The re-measurement says the recipe is **not** the story.
+
+The pinned-minus-random gap is unchanged and still one-signed negative in all
+eight cohorts (−3.5 / −5.4 / −14.7 / −0.5 / −8.2 / −17.9 / −15.8 / −8.0, mean
+**−9.3**) — the only Leader in the table that is. What is new is the company
+its lemon keeps. Run over all eight reports at once, the aggregator flags a
+15-points-under-median deck recipe for **seven of the nine Leaders**:
+
+| Leader                      | lemon deck | cross-cohort mean |
+| --------------------------- | ---------- | ----------------- |
+| Ethereal Sea Witch          | #8         | 12.8%             |
+| Sentinel of the Nether Pit  | #2         | 15.6%             |
+| Ruin-Walker Overseer        | #1         | 17.2%             |
+| Kuro, the Unseen            | #2         | 30.5%             |
+| Legendary Diver             | #6         | 31.3%             |
+| Mer-King                    | #4         | 36.7%             |
+| Avatar of the Abyss         | #3         | 42.0%             |
+
+Ruin-Walker's lemon is real, and it is the THIRD worst of seven — the two
+Leaders carrying a worse one (Ethereal Sea Witch at 12.8%, Sentinel at 15.6%)
+both post a gap that flips sign across cohorts. A per-Leader lemon is
+therefore a property of the recipe generator, not of Ruin-Walker, and it
+cannot explain a statistic that only Ruin-Walker exhibits.
+
+**Restated carry-forward.** Re-rolling deck #1 is no longer the first move; it
+would change the mean and leave the sign question untouched. The next balance
+pass should instead measure Ruin-Walker's gap with the flagged recipe
+EXCLUDED from both arms — if the sign survives with the lemon removed, it is a
+kit reading and the pinned kit is the thing to price. Recorded, not acted on:
+rule #6, and this pass ships a feature.
+
+### New this pass
+
+- The per-Leader lemon table above is itself new information: seven of nine is
+  a generator property that had never been read off the aggregator, because
+  before v26 there was no cross-cohort run to read it from and in v26 only the
+  one Leader under discussion was quoted.
+- No card, price, stat, weight or keyword band changed.

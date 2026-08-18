@@ -4,7 +4,8 @@
 //
 // Query string (used by `scripts/drive-match.ts`, the Playwright match driver):
 //   ?seed=N    deck roll AND the match RNG, so a run reproduces exactly
-//   ?speed=0|1|2  narration speed (SLOW / NORMAL / FAST) for this page only
+//   ?speed=0|1|2|3  narration speed (CINEMATIC / SLOW / NORMAL / FAST) for this
+//                  page only
 //   ?cpuvit=N  / ?myvit=N   opening Vitality override (harness only) — the
 //     driver clicks random legal actions, so without a handicap it loses every
 //     match and the VICTORY screen never renders. See GameV4's startVitality.

@@ -39,6 +39,7 @@ import { POOL_BY_ID } from '../game/v3/cardpool';
 import { spareSplit } from './CollectionScreen';
 import { fmtCredits, fmtVouchers } from './economy';
 import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import type { ShowroomSubject } from './ShowroomScreen';
 import {
   GradedCard,
   GradingCurrency,
@@ -98,7 +99,15 @@ function Step({ n, title, hint }: { n: number; title: string; hint?: React.React
   );
 }
 
-export function GradingScreen({ onBack }: { onBack: () => void }) {
+export function GradingScreen({
+  onBack,
+  onShowroom,
+}: {
+  onBack: () => void;
+  /** Stand this slab up in the 3D Showroom — the only place the case can be
+   * looked at from any angle other than dead-on. */
+  onShowroom?: (subject: ShowroomSubject) => void;
+}) {
   const {
     profile,
     collection,
@@ -722,6 +731,16 @@ export function GradingScreen({ onBack }: { onBack: () => void }) {
                     return (
                       <div key={g.id} className="flex flex-col gap-1.5 w-fit">
                         <GradedSlab g={g} size="standard" />
+                        {onShowroom && (
+                          <PopButton
+                            color="black"
+                            className="!px-2 !py-1 !text-[10px]"
+                            ariaLabel={`View ${def.name}'s slab in the 3D Showroom`}
+                            onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
+                          >
+                            ⬛ VIEW IN 3D
+                          </PopButton>
+                        )}
                         <PopButton
                           color="yellow"
                           className="!px-2 !py-1 !text-[10px]"
