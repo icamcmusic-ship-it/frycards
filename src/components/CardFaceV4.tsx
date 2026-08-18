@@ -1683,8 +1683,12 @@ function FittedChips({
         // 24px of hit area with 22. The padding gives the expansion somewhere
         // to go; the matching max-height increase keeps the CONTENT budget
         // identical (border-box), so the same chips fit and nothing moves.
+        // The clearance is 7px rather than the 3px that clears a bare card:
+        // a `full` face also stands inside the graded slab's window, which is
+        // a second `overflow-hidden` box wrapped tight around it, and the
+        // clips compose.
         size === 'full'
-          ? 'max-h-[64px] py-[5px]'
+          ? 'max-h-[68px] py-[7px]'
           : size === 'standard'
             ? 'max-h-[30px]'
             : size === 'compact'
