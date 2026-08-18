@@ -433,7 +433,10 @@ export function ShowroomScreen({
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search cards…"
                 aria-label="Search cards"
-                className="text-[11px] font-bold outline-none w-40 bg-transparent"
+                // v28 tap targets: an unstyled input is line-height tall
+                // (17px). The wrapping label is the visual box; the input just
+                // needs a thumb-sized strike area inside it.
+                className="text-[11px] font-bold outline-none w-40 bg-transparent min-h-6 py-1"
               />
             </label>
           </div>

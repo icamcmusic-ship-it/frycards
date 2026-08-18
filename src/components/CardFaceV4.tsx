@@ -898,7 +898,10 @@ const autoIntroInFlight = new Set<string>();
 /** Shared popover behavior for any clickable keyword mention. */
 function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: string) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  // HTMLElement, not HTMLButtonElement: since v28 an inert chip renders as a
+  // <span> and still needs the popover (autoIntroduce fires from it), and the
+  // hook only ever measures this node and contains-tests it.
+  const btnRef = useRef<HTMLElement>(null);
   const autoCloseRef = useRef<number | null>(null);
   const autoOpenRef = useRef<number | null>(null);
   const text = textOverride ?? KEYWORD_GLOSSARY[kw];
@@ -1001,7 +1004,7 @@ function KeywordPopover({
   text: string;
   pos: { top: number; left: number };
   close: () => void;
-  triggerRef?: React.RefObject<HTMLButtonElement | null>;
+  triggerRef?: React.RefObject<HTMLElement | null>;
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1049,6 +1052,7 @@ export function KeywordChip({
   small,
   autoIntroduce,
   accent,
+  inert,
 }: {
   key?: React.Key;
   /** Base keyword name — popover title + "seen keywords" localStorage key. */
@@ -1063,27 +1067,36 @@ export function KeywordChip({
   autoIntroduce?: boolean;
   /** Chip tint (defaults to the neutral ink-on-paper pill). */
   accent?: string;
+  /** Painted, not pressed — see `chipsInteractive` on the tier table. The
+   * popover hook still runs, so `autoIntroduce` is unaffected. */
+  inert?: boolean;
 }) {
   const { pos, btnRef, text: popText, open, close } = useKeywordPopover(kw, autoIntroduce, text);
+  const pill = cn(
+    'inline-flex items-center gap-0.5 max-w-full rounded-full border font-bold leading-tight text-left',
+    small ? 'text-[6.5px] px-1 py-[1px]' : 'text-[8.5px] px-1.5 py-[2px]',
+    inert ? 'pointer-events-none' : 'cursor-help tap-target',
+  );
+  const tint = {
+    color: accent ?? 'var(--c-ink)',
+    borderColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 45%, transparent)`,
+    backgroundColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 10%, var(--c-paper))`,
+  };
 
   return (
     <span className="relative inline-block max-w-full">
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={open}
-        className={cn(
-          'inline-flex items-center gap-0.5 max-w-full rounded-full border font-bold leading-tight cursor-help text-left',
-          small ? 'text-[6.5px] px-1 py-[1px]' : 'text-[8.5px] px-1.5 py-[2px]',
-        )}
-        style={{
-          color: accent ?? 'var(--c-ink)',
-          borderColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 45%, transparent)`,
-          backgroundColor: `color-mix(in srgb, ${accent ?? 'var(--c-ink)'} 10%, var(--c-paper))`,
-        }}
-      >
-        <span className="truncate">{label ?? kw}</span>
-      </button>
+      {inert ? (
+        // A span, not a disabled button: an inert chip is not a control that
+        // happens to be off, it is lettering on the card. No tab stop, no
+        // accessible name of its own, nothing for a pointer to land on.
+        <span ref={btnRef as React.Ref<HTMLSpanElement>} className={pill} style={tint}>
+          <span className="truncate">{label ?? kw}</span>
+        </span>
+      ) : (
+        <button ref={btnRef} type="button" onClick={open} className={pill} style={tint}>
+          <span className="truncate">{label ?? kw}</span>
+        </button>
+      )}
       {pos && popText && (
         <KeywordPopover
           kw={label ?? kw}
@@ -1100,15 +1113,47 @@ export function KeywordChip({
 /** An inline, in-sentence keyword mention — opens the exact same glossary
  * popover as the pill chip, so every recognized keyword word is clickable
  * wherever it appears, not just in the pill row. */
-function KeywordText({ kw, small }: { key?: React.Key; kw: string; small?: boolean }) {
+function KeywordText({
+  kw,
+  small,
+  inert,
+}: {
+  key?: React.Key;
+  kw: string;
+  small?: boolean;
+  inert?: boolean;
+}) {
   const { pos, btnRef, text, open, close } = useKeywordPopover(kw);
   if (!text) return <>{kw}</>;
+  // An in-sentence mention on a small card is the smallest target in the game
+  // (22x9 on a battlefield unit). Below `full` it is just an underline — see
+  // `chipsInteractive`.
+  if (inert)
+    return (
+      <span
+        className={cn(
+          'font-bold underline decoration-dotted underline-offset-2',
+          small ? 'text-[6.5px]' : undefined,
+        )}
+      >
+        {kw}
+      </span>
+    );
   return (
     <span className="relative inline">
       <button
         ref={btnRef}
         type="button"
         onClick={open}
+        // WCAG 2.5.8's *inline* exception, declared rather than assumed: this
+        // target sits inside a sentence and its height is the line-height of
+        // the non-target text around it. It cannot be grown without changing
+        // the leading of the paragraph it lives in — and inside a card's
+        // `-webkit-line-clamp` rules box it cannot be grown at all, because
+        // the clamp clips hit-testing along with painting. The harness reads
+        // this attribute, exempts the element, and prints how many it
+        // exempted, so the carve-out can never quietly become a pile.
+        data-inline-target="1"
         className={cn(
           'font-bold underline decoration-dotted underline-offset-2 cursor-help',
           small ? 'text-[6.5px]' : undefined,
@@ -1130,11 +1175,14 @@ function CostInfoButton({
   text,
   className,
   title,
+  inert,
   children,
 }: {
   text: string;
   className?: string;
   title?: string;
+  /** Painted, not pressed — see `chipsInteractive` on the tier table. */
+  inert?: boolean;
   children: React.ReactNode;
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -1157,6 +1205,7 @@ function CostInfoButton({
         : rect.bottom + 4;
     setPos({ top, left });
   };
+  if (inert) return <span className={className}>{children}</span>;
   return (
     <>
       <button
@@ -1164,7 +1213,7 @@ function CostInfoButton({
         type="button"
         onClick={toggle}
         title={title}
-        className={cn('cursor-help', className)}
+        className={cn('cursor-help tap-target relative', className)}
       >
         {children}
       </button>
@@ -1181,6 +1230,18 @@ function CostInfoButton({
   );
 }
 
+/**
+ * Whether a card face at `size` gives its keyword chips, in-sentence keyword
+ * mentions and cost pips their own tap targets.
+ *
+ * Exported so the ladder can be pinned by a test rather than re-derived: the
+ * rule is a SIZE rule, and the thing that must not drift is that no tier whose
+ * chips paint under the 24x24 minimum is allowed to accept a pointer.
+ */
+export function chipsAreInteractive(size: CardSize): boolean {
+  return TIER[size].chipsInteractive;
+}
+
 /** Sorted longest-first so a multi-word keyword is matched before any
  * single-word keyword it might contain. */
 const KEYWORD_NAMES = Object.keys(KEYWORD_GLOSSARY).sort((a, b) => b.length - a.length);
@@ -1190,7 +1251,7 @@ const KEYWORD_TEXT_RE = new RegExp(`\\b(${KEYWORD_NAMES.map(escapeRegExp).join('
 /** Splits `text` on every recognized keyword mention and renders each one as
  * a clickable `KeywordText`, so any card sentence gets working
  * click-to-define keywords wherever they're mentioned. */
-export function renderKeywordText(text: string, small?: boolean): React.ReactNode {
+export function renderKeywordText(text: string, small?: boolean, inert?: boolean): React.ReactNode {
   if (!text) return text;
   const parts = text.split(KEYWORD_TEXT_RE);
   if (parts.length === 1) return text;
@@ -1198,7 +1259,7 @@ export function renderKeywordText(text: string, small?: boolean): React.ReactNod
     // Odd indices are the captured keyword matches (String.split keeps
     // capture groups in the output array); even indices are plain text.
     i % 2 === 1 ? (
-      <KeywordText key={i} kw={part} small={small} />
+      <KeywordText key={i} kw={part} small={small} inert={inert} />
     ) : (
       part && <React.Fragment key={i}>{part}</React.Fragment>
     ),
@@ -1340,6 +1401,35 @@ const TIER: Record<
     /** Max keyword chips shown; overflow collapses into a "+N" chip. */
     keywordMax: number;
     keywordSmall: boolean;
+    /**
+     * Whether this tier's keyword chips, in-sentence keyword mentions and cost
+     * pips are their own tap targets.
+     *
+     * v28: they always were, at every tier, and below `full` that was a bug
+     * rather than a feature — twice over.
+     *
+     * **They are too small.** A chip on a battlefield unit measures 23x14, a
+     * keyword mention as little as 22x9, a cost pip 28x13; WCAG 2.5.8 (AA)
+     * asks for 24x24. Only at `full` do they clear it without help, and the
+     * help does not fit: the chip row and the rules paragraph both clip their
+     * overflow to hold a height budget, and a clipping ancestor clips
+     * hit-testing too, so a `.tap-target` expansion inside one is a
+     * declaration rather than a target. Growing the boxes themselves would
+     * wreck the layouts these font sizes exist to serve.
+     *
+     * **They steal the card's own tap.** They sit ON TOP of the card whose tap
+     * IS the game action — select this attacker, add this card to the deck —
+     * and on a phone the small target wins the ties. The cheapest thing a
+     * player did constantly, reaching for a card, opened a glossary popover.
+     *
+     * So below `full` the chips are painted, not pressed: no tab stop, no hit
+     * area, the whole tile is one clean target, and the full-size face one tap
+     * away (the hand preview, the inspector, the hover card, the Showroom)
+     * carries the interactive copies at a size that passes. `autoIntroduce`
+     * still fires from an inert chip — the first-sight teaching popover is the
+     * tier's own behaviour, not the pointer's.
+     */
+    chipsInteractive: boolean;
     /** Render the card's rules text (card.text + generated lines). */
     showRules: boolean;
     rulesFont: number;
@@ -1366,6 +1456,7 @@ const TIER: Record<
     textBoxPad: 'p-0.5',
     keywordMax: 2,
     keywordSmall: true,
+    chipsInteractive: false,
     showRules: false,
     rulesFont: 6,
     rulesLines: 0,
@@ -1390,6 +1481,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 4,
     keywordSmall: true,
+    chipsInteractive: false,
     showRules: true,
     rulesFont: 6.5,
     rulesLines: 4,
@@ -1414,6 +1506,7 @@ const TIER: Record<
     textBoxPad: 'p-1',
     keywordMax: 6,
     keywordSmall: false,
+    chipsInteractive: false,
     showRules: true,
     rulesFont: 7.5,
     rulesLines: 6,
@@ -1438,6 +1531,7 @@ const TIER: Record<
     textBoxPad: 'p-1.5',
     keywordMax: 10,
     keywordSmall: false,
+    chipsInteractive: true,
     showRules: true,
     rulesFont: 9,
     rulesLines: 10,
@@ -1583,8 +1677,18 @@ function FittedChips({
       ref={ref}
       className={cn(
         'shrink-0 flex flex-row flex-wrap content-start gap-1 min-h-[9px] overflow-hidden',
+        // v28: `overflow-hidden` clips hit-testing as well as painting, so on
+        // `full` — the one tier whose chips ARE tap targets — it was also
+        // clipping the `.tap-target` expansion, leaving a chip that declares
+        // 24px of hit area with 22. The padding gives the expansion somewhere
+        // to go; the matching max-height increase keeps the CONTENT budget
+        // identical (border-box), so the same chips fit and nothing moves.
+        // The clearance is 7px rather than the 3px that clears a bare card:
+        // a `full` face also stands inside the graded slab's window, which is
+        // a second `overflow-hidden` box wrapped tight around it, and the
+        // clips compose.
         size === 'full'
-          ? 'max-h-[54px]'
+          ? 'max-h-[68px] py-[7px]'
           : size === 'standard'
             ? 'max-h-[30px]'
             : size === 'compact'
@@ -1601,6 +1705,7 @@ function FittedChips({
           small={cfg.keywordSmall}
           autoIntroduce={introduceKeywords}
           accent={k.accent}
+          inert={!cfg.chipsInteractive}
         />
       ))}
       {hidden > 0 && (
@@ -1628,6 +1733,7 @@ function FittedRules({
   onArt,
   className,
   small,
+  inert,
 }: {
   text: string;
   fontPx: number;
@@ -1635,6 +1741,7 @@ function FittedRules({
   onArt: boolean;
   className?: string;
   small: boolean;
+  inert?: boolean;
 }) {
   const [lines, setLines] = useState(maxLines);
   const ref = useRef<HTMLParagraphElement>(null);
@@ -1665,7 +1772,7 @@ function FittedRules({
         textShadow: onArt ? '0 1px 2px rgba(0,0,0,0.9)' : undefined,
       }}
     >
-      {renderKeywordText(text, small)}
+      {renderKeywordText(text, small, inert)}
     </p>
   );
 }
@@ -1913,6 +2020,11 @@ function MicroCard({
                 small
                 autoIntroduce={introduceKeywords}
                 accent={k.accent}
+                // MicroCard is its own component with its own chip row, so the
+                // tier table's `chipsInteractive` never reached it — and micro
+                // is the tier where an interactive chip does the most damage:
+                // this is the board token whose tap declares an attacker.
+                inert={!chipsAreInteractive('micro')}
               />
             ))}
             {hiddenChips > 0 && (
@@ -2261,6 +2373,7 @@ export function CardFace({
           onArt={bleed}
           className={chips.length > 0 ? 'mt-1' : undefined}
           small={size !== 'full'}
+          inert={!cfg.chipsInteractive}
         />
       )}
       {cfg.showRules && def.type === 'Leader' && (def.leaderAbilities?.length ?? 0) > 0 && (
@@ -2284,7 +2397,11 @@ export function CardFace({
                 {ab.resolveDelta > 0 ? `+${ab.resolveDelta}` : ab.resolveDelta}
               </span>
               <span className="font-semibold min-w-0">
-                {renderKeywordText(ab.text ?? describeEffect(ab.effect), size !== 'full')}
+                {renderKeywordText(
+                  ab.text ?? describeEffect(ab.effect),
+                  size !== 'full',
+                  !cfg.chipsInteractive,
+                )}
               </span>
             </div>
           ))}
@@ -2479,6 +2596,7 @@ export function CardFace({
             text={`${costSummary(def) ?? 'Essence Cost: 0'}. Colored pips must be paid with matching essence (exhaust your Locations); generic pips with essence of any type.`}
             className="shrink-0"
             title={costSummary(def) || undefined}
+            inert={!cfg.chipsInteractive}
           >
             <EssenceCostRow cost={def.cost} type={def.type} size={size} onArt={!isFoil} />
           </CostInfoButton>

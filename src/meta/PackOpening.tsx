@@ -472,7 +472,11 @@ function TearStage({
       </div>
       <button
         onClick={finishTear}
-        className="mt-3 text-[10px] font-black text-[var(--c-paper)]/60 underline decoration-2 underline-offset-2 hover:text-[var(--c-paper)] relative"
+        // v28 tap targets: a bare 10px underline is a 140x15 target — the
+        // smallest primary control in the pack flow, and the one a player
+        // reaches for when they have already seen the ceremony. The padding
+        // takes it to 40px tall without moving the text.
+        className="mt-3 px-3 py-3 -mb-1 text-[10px] font-black text-[var(--c-paper)]/60 underline decoration-2 underline-offset-2 hover:text-[var(--c-paper)] relative"
       >
         JUST TEAR IT OPEN FOR ME
       </button>

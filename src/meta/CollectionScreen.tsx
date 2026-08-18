@@ -443,7 +443,8 @@ export function CollectionScreen({
         {/* Collection progress */}
         <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
           <button
-            className="w-full flex items-center justify-between gap-2"
+            // v28 tap targets: full-width but 20px tall.
+            className="w-full flex items-center justify-between gap-2 py-1.5"
             aria-expanded={showProgress}
             onClick={() => setShowProgress((s) => !s)}
           >

@@ -18,6 +18,18 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Fat-Finger Pass (v28)',
+    date: 'August 2026',
+    items: [
+      'FIX \u2014 THE TINY THING ON THE CARD WAS STEALING YOUR TAPS. Every card face prints little keyword pills and cost pips you can tap for an explanation. On a full-size card that is exactly right. On a battlefield unit they are about nine pixels tall, they sit on top of the card, and on a phone they win \u2014 so reaching for a unit to send it into the attack, or for a card in the deck builder to add it, opened a rules popover instead. Below full size those pills are just printing now: the whole card is one clean target, and the big version of the card (tap it to zoom) still explains every keyword on it. The first-time keyword tip still pops up on its own the way it always has.',
+      'FIX \u2014 AND WE MEASURED THE REST WHILE WE WERE THERE. Every button, link and checkbox on all 24 screens got measured against the accessibility minimum for a touch target. Over 1,300 were under it. All of them are fixed \u2014 including the pack screen\u2019s \u201cjust tear it open for me\u201d link, the submission form\u2019s agreement checkbox, the player names in the Social feed and the Showroom\u2019s search box. The check now runs on every release, so they cannot quietly come back.',
+      'THE CLASH BUTTONS ALL DO THE MATHS NOW. DECLARE ATTACK has told you when your swing is lethal since two patches ago. CONFIRM GUARDS now tells you how much is still getting through \u2014 at every stage of the assignment, not just before you have blocked anything \u2014 and says LETHAL when that is what it is. RESOLVE CLASH says DEAL 7 when you are attacking and TAKE 7 when you are defending. No more counting Might off the cards and comparing it to a number at the other end of the board.',
+      'YOU CAN SEE WHAT THE OPPONENT KILLED. The opponent\u2019s turn is replayed to you line by line \u2014 but by the time \u201cyour X was shattered\u201d appears, X is already off the board, so the one line that mattered most was the only line with nothing to point at. Now the card itself is held up in the middle of the board for that beat, marked UNIT LOST, greying out and tipping over as it goes. It slows down with the narration dial like everything else.',
+      'SHEDDING AT END OF TURN IS TIDIER. The shed picker now lays your hand out in whatever order you have the hand dock set to, and the confirm button tells you how many more you still need to pick instead of just sitting there greyed out.',
+      'BALANCE: no card changed, ninth pass running \u2014 and a long-running question finally answered. 95,232 fresh AI games (the usual eight cohorts, run twice over two completely different sets of test decks), plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, control cohorts identical to last patch to the decimal. The answer: the test decks were doing more of the talking than the Leaders were. Re-roll them and the Leader league table barely half agrees with itself \u2014 which closes the Ruin-Walker Overseer question (it was one bad test deck, not a weak Leader) and cancels a planned Mer-King change that turned out to be measuring the same thing.',
+    ],
+  },
+  {
     version: 'The Showroom Pass (v27)',
     date: 'August 2026',
     items: [
@@ -29,20 +41,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'SORT YOUR HAND. The hand dock has always laid cards out in the order you drew them. A button on the dock now switches between DRAWN, PLAYABLE (everything you can actually cast right now, first) and COST (cheapest first). Your choice is remembered.',
       'A PROGRESS BAR FOR THE OPPONENT\u2019S TURN, next to the HOLD / STEP / SKIP buttons that act on it \u2014 the count existed, but it was at the top of the board while the controls were in the middle.',
       'BALANCE: no card changed, eighth pass running. 47,616 fresh AI games across the same eight cohorts, plus 1,200 fuzzed matches and 600 chaos matches: ZERO rule violations, and the three control cohorts reproduce last patch to the decimal \u2014 the engine is untouched. The cross-cohort aggregator also settled an open question: nearly every Leader carries one bad deck recipe, so \u201cthat one deck is a lemon\u201d cannot explain why Ruin-Walker Overseer alone underperforms in all eight cohorts. Still flagged, still not acted on.',
-    ],
-  },
-  {
-    version: 'The Turn-Gets-A-Receipt Pass (v26)',
-    date: 'August 2026',
-    items: [
-      'THE GRADING LAB, REBUILT. Slabs are real cases now — a moulded acrylic shell with a proper grading label (service, card name, rarity line, and the grade stamped big beside its word), glass glare across the window, and a certificate number and barcode unique to that slab. The case changes with the grade: gold at a 10, silver at 9.5, plain grey at the bottom of the scale, with a slow shine on the top two grades. Cards still at the graders sit behind frosted glass marked SEALED — no peeking.',
-      'THE LAB NOW SHOWS ITS ODDS. Every grade and its exact chance, per service, in one table — and the thing it reveals is worth knowing: all three services roll the SAME grades. TCA does not grade higher, it RESELLS higher; Keeper alone nudges 55% of rolls up a half point, which is why its slabs carry no premium. Every service also prints its average return and its chance of a 9+, every spare card shows what its slab would be worth, and the pay bar shows expected return against the fee before you commit.',
-      'PAY FOR GRADING WITH VOUCHERS. Fees can now be paid in vouchers at the same 100-credits-to-1 rate the pack shelf uses. The submit flow is four clear steps with a sticky pay bar, ADD ALL for every spare of a card, a portfolio total and sort orders for your vault, and progress bars while your cards are out.',
-      'SPACE PRESSES THE BUTTON. The middle of the board always offers exactly one main action — DECLARE ATTACK, RESOLVE CLASH, CONFIRM GUARDS, PASS, next phase, SKIP — and the spacebar (or Enter) now presses it. Double-click a card in hand to play it without opening the preview first. DECLARE ATTACK tells you when your swing is LETHAL IF UNGUARDED, and the phase button counts the cards you can still afford to play before you end the turn.',
-      'YOU CAN SEE WHAT THE OPPONENT DID — EVEN IF YOU SKIPPED IT. When the opponent’s turn ends, a recap strip now says what happened: cards played, whether it attacked, the Vitality you lost and what you are on, units you lost, cards you drew — with a jump into the full log. Previously, pressing SKIP meant the board simply changed.',
-      'SLOWER, ON PURPOSE. The narration speed dial used to change only the pause between lines while the animations themselves ran at full speed. Now the whole show slows down together — and there is a new slowest setting, CINEMATIC, for watching every move land. Your existing choice is preserved.',
-      'FIX: the Grading Lab shipped last patch without ever being run through the layout harness. Adding it caught a real bug immediately — slabs were built out of nested buttons, which breaks keyboard and screen-reader navigation — plus one crash waiting to happen in the Collection. Both fixed, and the Lab is in the harness for good now.',
-      'BALANCE: no card changed, seventh pass running. 47,616 fresh AI games across eight deck cohorts plus raised fuzz and chaos runs: ZERO rule violations, and every control cohort identical to v25 to the decimal. Two long-standing measurement questions moved: Sacred’s advantage is real but small (the big readings were deck luck), and Ruin-Walker Overseer’s pinned decks underperform in every cohort — flagged for the next balance pass.',
     ],
   },
 ];

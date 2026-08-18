@@ -249,6 +249,18 @@ const GAME_CSS = `
   100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
 }
 .gv4-cpu-play { animation: gv4-cpu-play calc(0.5s * var(--gv4-pace, 1)) cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+/* v28 — a unit this turn destroyed, held up for the length of the beat that
+ * says so. It arrives the opposite way to gv4-cpu-play: that one drops in and
+ * settles, this one comes up desaturated, tips over and sinks, because the
+ * card it is showing is not on the board any more and the animation should not
+ * suggest otherwise. Paced by --gv4-pace like everything else the narration
+ * owns, so the slowest rung really does show the slowest version. */
+@keyframes gv4-cpu-lost {
+  0% { opacity: 0; transform: translateY(-10px) scale(0.86) rotate(0deg); filter: grayscale(1); }
+  40% { opacity: 1; transform: translateY(0) scale(1) rotate(-2deg); filter: grayscale(0.55); }
+  100% { opacity: 1; transform: translateY(10px) scale(0.97) rotate(-5deg); filter: grayscale(0.85); }
+}
+.gv4-cpu-lost { animation: gv4-cpu-lost calc(1.15s * var(--gv4-pace, 1)) ease-out both; }
 /* An attacking body leans across the clash line for the duration of the
  * attack beat, so a declared attack reads as movement and not as a ring. */
 @keyframes gv4-lunge-down {
@@ -285,6 +297,11 @@ const GAME_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
   .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
+  /* Not gv4-fade: that one ends at opacity 0, which is right for a banner
+   * meant to leave and wrong for a card meant to be LOOKED at for the length
+   * of its beat. The information the motion carries — this card is off the
+   * board — is carried by the desaturation instead, statically. */
+  .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
   .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
   .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 }
@@ -1225,6 +1242,21 @@ export interface CpuBeat {
   cardId?: string;
   /** This beat is a declared attack: the attackers lunge across the line. */
   attacking?: boolean;
+  /**
+   * Cards this line names that are NOT on a battlefield any more — they are in
+   * an ash or void pile, because this turn is what put them there.
+   *
+   * The ring machinery can only point at something the board is drawing, and
+   * the beat a player most needs to see is exactly the one whose subject the
+   * board has stopped drawing: "Your Ashen Sentinel was shattered." arrives
+   * after the compute-then-narrate paths have already rendered the FINAL
+   * board, so the unit is gone from the field before the sentence about it is
+   * on screen, `unitsNamedIn` finds nothing, and the most consequential line
+   * of the opponent's turn is the one line with no highlight at all. These get
+   * held mid-board instead — the same spotlight a played card gets, under a
+   * LOST plate rather than a PLAYS one.
+   */
+  lost?: { iid: string; defId: string; owner: PlayerId }[];
   /** This beat is the PLAYER's own Dawn (it runs inside the endPhase that
    * ends the opponent's turn, so its lines land in the opponent's narrated
    * slice) — the bubble renders it in the player's colours under a YOUR DAWN
@@ -1256,6 +1288,43 @@ function unitsNamedIn(state: GameState, text: string): string[] {
   return hits;
 }
 
+/**
+ * Cards a line names that are sitting in an ash or void pile.
+ *
+ * The companion to `unitsNamedIn`, and the half that was missing. A CPU turn
+ * is narrated from the board it LEFT BEHIND, so anything it killed has already
+ * moved to a pile by the time its own beat plays: the field scan comes back
+ * empty and the line goes out ringless. Scanning the piles finds it — and
+ * `CpuBeat.lost` is a different signal from `targets` on purpose, because
+ * there is no element on the board to ring, only a card to hold up.
+ *
+ * Piles hold every card a turn discards or resolves, so the scan is capped at
+ * the tail: a twentieth-turn ash pile is forty cards deep and a line matching
+ * one buried at the bottom is matching a coincidence, not this turn's event.
+ */
+const PILE_SCAN_DEPTH = 6;
+function pileCardsNamedIn(
+  state: GameState,
+  text: string,
+): { iid: string; defId: string; owner: PlayerId }[] {
+  const hits: { iid: string; defId: string; owner: PlayerId }[] = [];
+  const seen = new Set<string>();
+  for (const pid of ['P1', 'P2'] as PlayerId[]) {
+    const p = state.players[pid];
+    for (const pile of [p.ashPile, p.voidPile]) {
+      for (const c of pile.slice(-PILE_SCAN_DEPTH)) {
+        if (!c.def.name || !text.includes(c.def.name)) continue;
+        if (seen.has(c.iid)) continue;
+        seen.add(c.iid);
+        // The pile is the owner: a beat holding up a dead card should be able
+        // to say WHOSE it was without the board having to remember.
+        hits.push({ iid: c.iid, defId: c.def.id, owner: pid });
+      }
+    }
+  }
+  return hits;
+}
+
 /** Line up the engine-log lines of a CPU turn with the AI's structured event
  * stream. Events are stamped with the log length at the moment they fired
  * (`logAt`), so a log line at absolute index L belongs to the first event
@@ -1278,7 +1347,20 @@ export function buildCpuBeats(
       // cards they are about ("… was shattered.", "Glaciate freezes X"), and a
       // beat with no rings is a sentence the player has to find on the board
       // themselves — which is the whole thing the rings exist to save them.
-      if (state) beat.targets.push(...unitsNamedIn(state, text));
+      if (state) {
+        beat.targets.push(...unitsNamedIn(state, text));
+        const lost = pileCardsNamedIn(state, text);
+        // Only when the field scan came back empty. A line naming a unit that
+        // is STILL on the board is about that unit, and a same-named copy in
+        // the ash pile is a coincidence the spotlight should not act on.
+        if (lost.length > 0 && beat.targets.length === 0) {
+          beat.lost = lost;
+          // Fed to `targets` as well, purely for the dwell: `beatMs` gives a
+          // beat aimed at something of the player's a longer hold, and a unit
+          // of theirs that just DIED is the clearest case there is.
+          beat.targets.push(...lost.map((l) => l.iid));
+        }
+      }
       return beat;
     }
     switch (ev.kind) {
@@ -1399,6 +1481,35 @@ export function humanizeLog(s: string, cpuLabel: string): string {
   // `P1` and of a third-person FIRST verb, so it passed it straight through.
   const agreed = fixed.startsWith('You ') ? fixed.replace(/\band loses\b/, 'and lose') : fixed;
   return agreed.charAt(0).toUpperCase() + agreed.slice(1);
+}
+
+/**
+ * The clash divider's three primary buttons, as pure label functions.
+ *
+ * The divider carries exactly one loud control at a time, and by v28 all three
+ * of the ones that commit a clash print the arithmetic they are asking the
+ * player to commit to. Pure and exported for the same reason `humanizeLog` is:
+ * the sentence a player reads at the moment they take lethal is not something
+ * a review catches, and every one of these has an off-by-one that reads fine
+ * (`>` instead of `>=` prints LETHAL one point late — on the exact swing that
+ * ends the game).
+ */
+export function guardConfirmLabel(incoming: number, myVitality: number, anyGuards: boolean) {
+  if (incoming <= 0) return '🛡 CONFIRM GUARDS — NOTHING GETS THROUGH';
+  const head = anyGuards ? 'CONFIRM GUARDS' : 'NO GUARDS';
+  return `🛡 ${head} — TAKE ${incoming}${incoming >= myVitality ? ' · LETHAL' : ''}`;
+}
+
+/**
+ * `atMe` distinguishes the two seats that press RESOLVE CLASH: the attacker,
+ * for whom the number is damage DEALT, and the defender coming out of the
+ * reaction window, for whom it is damage TAKEN. A label that said the same
+ * thing to both would be wrong for one of them every single clash.
+ */
+export function resolveClashLabelFor(might: number, targetVitality: number, atMe: boolean) {
+  if (might <= 0) return '💥 RESOLVE CLASH';
+  const lethal = targetVitality > 0 && might >= targetVitality;
+  return `💥 RESOLVE CLASH — ${atMe ? 'TAKE' : 'DEAL'} ${might}${lethal ? ' · LETHAL' : ''}`;
 }
 
 /** The opponent's last turn in numbers — see `turnRecap`. */
@@ -1639,7 +1750,10 @@ export function GameV4({
    * to actually locate on the board before the ring leaves, and they were
    * getting exactly the same 1150ms as "Kuro plays a Tide Wellspring". */
   const beatMs = (beat?: CpuBeat) => {
-    const spotlit = beat?.cardId || beat?.attacking ? 1.45 : 1;
+    // v28 — a beat holding up a destroyed unit is a spotlight beat too. It
+    // shows a card face and it is about something of somebody's dying; both
+    // halves of this multiplier's justification apply.
+    const spotlit = beat?.cardId || beat?.attacking || beat?.lost?.length ? 1.45 : 1;
     // iidOwnerRef, not just me.field: a unit of mine that DIED during the
     // turn is gone from the field by narration time — and its beat is exactly
     // the one that most needs the longer dwell.
@@ -3413,6 +3527,42 @@ export function GameV4({
     }, 0);
   })();
 
+  /**
+   * Might that will reach a Vitality plate when this clash resolves.
+   *
+   * v28 completes the set the divider started in v26. Three buttons commit a
+   * clash — DECLARE ATTACK, CONFIRM GUARDS and RESOLVE CLASH — and the first
+   * has printed its arithmetic since v26, the second since earlier in this
+   * pass, and the third printed nothing at all. RESOLVE CLASH is pressed by
+   * BOTH seats (the attacker after guards are set, the defender out of the
+   * reaction window) at the exact moment the answer is already determined:
+   * guards are locked, the reaction window is the last thing that can change
+   * it, and the player is being asked to commit to a number the board is
+   * making them add up off the cards.
+   *
+   * `guardedOnce`, not `guards` — a blocker removed during the reaction window
+   * still absorbed its attacker (see ClashState), and a readout keyed on the
+   * live map would promise damage the engine is not going to deal.
+   */
+  const clashFaceDamage = ((): { might: number; at: PlayerId } | null => {
+    if (!g.clash || g.clash.step === 'done') return null;
+    const defender = g.active === HUMAN ? CPU : HUMAN;
+    const might = g.clash.attackers.reduce((sum, iid) => {
+      if (g.clash!.guardedOnce.includes(iid)) return sum;
+      const u = findUnit(g, iid);
+      return sum + (u ? effMight(g, u) : 0);
+    }, 0);
+    return { might, at: defender };
+  })();
+  /** RESOLVE CLASH's own label — the same sentence from either seat. */
+  const resolveClashLabel = clashFaceDamage
+    ? resolveClashLabelFor(
+        clashFaceDamage.might,
+        (clashFaceDamage.at === HUMAN ? me : foe).vitality,
+        clashFaceDamage.at === HUMAN,
+      )
+    : '💥 RESOLVE CLASH';
+
   const confirmGuards = () => {
     if (guardProblem) {
       refuse(guardProblem);
@@ -3664,6 +3814,16 @@ export function GameV4({
 
   /** The card face held mid-board for the current CPU narration beat. */
   const cpuSpotlight = cpuFocus?.cardId ? (POOL_BY_ID[cpuFocus.cardId] ?? null) : null;
+  /**
+   * The unit this beat destroyed, held mid-board because the board has already
+   * stopped drawing it (see `CpuBeat.lost`). At most two — a line naming three
+   * dead units is a sweep, and three faces stacked in the middle of the board
+   * is worse than the sentence on its own.
+   */
+  const cpuLostCards = (cpuFocus?.lost ?? [])
+    .map((l) => ({ iid: l.iid, mine: l.owner === HUMAN, def: POOL_BY_ID[l.defId] ?? null }))
+    .filter((x): x is { iid: string; mine: boolean; def: CardDef } => !!x.def)
+    .slice(0, 2);
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
@@ -3824,6 +3984,27 @@ export function GameV4({
             </span>
             <div className="drop-shadow-[0_10px_28px_rgba(0,0,0,0.7)]">
               <CardFace def={cpuSpotlight} size="standard" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* The unit that just left the board, held for the length of the beat
+          that says it left. Rendered only when nothing is already being
+          spotlit — the played card wins the middle of the board, and a beat is
+          never both a play and a death. */}
+      {!cpuSpotlight && cpuLostCards.length > 0 && (
+        <div className="absolute inset-0 z-[55] pointer-events-none flex items-center justify-center">
+          <div className="flex flex-col items-center gap-1">
+            <span className="heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-red)] px-2 py-0.5 ink-border-sm">
+              ☠ {cpuLostCards.length > 1 ? 'UNITS LOST' : 'UNIT LOST'}
+            </span>
+            <div className="flex items-center gap-2">
+              {cpuLostCards.map((c) => (
+                <div key={c.iid} className="gv4-cpu-lost drop-shadow-[0_10px_28px_rgba(0,0,0,0.7)]">
+                  <CardFace def={c.def} size="standard" badge={c.mine ? 'YOURS' : undefined} />
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -4272,7 +4453,7 @@ export function GameV4({
             data-primary="1"
             className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
-            💥 RESOLVE CLASH
+            {resolveClashLabel}
           </button>
         ) : guardStep ? (
           <>
@@ -4309,11 +4490,18 @@ export function GameV4({
                   : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
               )}
             >
-              {Object.keys(guardSel).length > 0
-                ? '🛡 CONFIRM GUARDS'
-                : incomingIfConfirmed > 0
-                  ? `🛡 NO GUARDS — TAKE ${incomingIfConfirmed}`
-                  : '🛡 CONFIRM GUARDS'}
+              {/* v28 — the attacker's side of this divider has printed the
+                  arithmetic since v26 (`DECLARE ATTACK — 3 · 11 MIGHT ·
+                  LETHAL IF UNGUARDED`); the defender's side printed it only
+                  while NOTHING was guarded, and dropped it the moment the
+                  player assigned their first guard — which is precisely when
+                  "and what still gets through?" becomes the question. Same
+                  sentence, both directions, at every stage of the assignment. */}
+              {guardConfirmLabel(
+                incomingIfConfirmed,
+                me.vitality,
+                Object.keys(guardSel).length > 0,
+              )}
             </button>
           </>
         ) : reactionStep ? (
@@ -4322,7 +4510,7 @@ export function GameV4({
             data-primary="1"
             className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
           >
-            💥 RESOLVE CLASH
+            {resolveClashLabel}
           </button>
         ) : inMyResponse ? (
           <button
@@ -4845,8 +5033,17 @@ export function GameV4({
                 )}
               </div>
             </div>
+            {/* v28 — `handView`, not `me.hand`. v27 gave the dock a DRAWN /
+                PLAYABLE / COST order and deliberately left this picker on
+                engine order, on the grounds that the sort is presentation. It
+                is — and this is the one screen where the presentation matters
+                MOST: the player is being asked to choose the worst cards in
+                their hand, ✦ SUGGEST answers by cost, and the picker was
+                showing them a different arrangement from the dock they had
+                just been reading. The engine still receives iids, so nothing
+                about what is shed changes. */}
             <div className="flex flex-wrap gap-2 justify-center">
-              {me.hand.map((c) => {
+              {handView.map((c) => {
                 const sel = shedPick.includes(c.iid);
                 // A <div role="button">, not a <button>: CardFace renders its
                 // own interactive Essence Cost info button internally, and a
@@ -4927,7 +5124,14 @@ export function GameV4({
                     : 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/40 cursor-not-allowed',
                 )}
               >
-                SHED &amp; END TURN ▸
+                {/* v28 — a disabled primary that does not say what it wants
+                    is a dead end, and this one is reached under time pressure
+                    at the end of every over-full turn. Same rule the rest of
+                    the divider follows in this pass: the button states its
+                    own condition. */}
+                {shedPick.length === me.hand.length - MAX_HAND
+                  ? 'SHED & END TURN ▸'
+                  : `SHED & END TURN ▸ — PICK ${me.hand.length - MAX_HAND - shedPick.length} MORE`}
               </button>
             </div>
           </div>

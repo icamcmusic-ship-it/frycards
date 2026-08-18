@@ -336,7 +336,9 @@ function SubmitPanel({
           <label className="flex items-start gap-2 text-[10px] font-bold">
             <input
               type="checkbox"
-              className="mt-0.5 shrink-0"
+              // Sized globally since v28 (see index.css); the accent is this
+              // form's own.
+              className="mt-0.5 shrink-0 accent-[var(--c-red)]"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
             />
@@ -1008,7 +1010,9 @@ function ReviewCard({
             href={sub.image_url}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-[9px] font-bold underline text-[var(--c-steel)] max-w-[220px] truncate"
+            // v28 tap targets: 78x14, and `truncate` (overflow: hidden) clips
+            // any pseudo-element expansion, so the box itself has to grow.
+            className="text-[9px] font-bold underline text-[var(--c-steel)] max-w-[220px] truncate block py-1.5 leading-5"
           >
             open art source ↗
           </a>
