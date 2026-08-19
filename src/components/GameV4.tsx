@@ -298,10 +298,11 @@ const GAME_CSS = `
   100% { opacity: 0; transform: translate(-50%, 0); }
 }
 /* The SPACE shortcut, printed where it is usable (v30).
-   The divider fires its one primary control from the space bar — since v26,
-   documented nowhere a player would find it, and worth ~80 pointer round
-   trips in a twenty-turn match. A shortcut nobody knows about is a shortcut
-   nobody uses, so the button says so itself.
+   The divider fires its one primary control from the space bar — worth ~80
+   pointer round trips in a twenty-turn match — and v26 advertised it with a
+   chip at the far LEFT of a full-width divider whose primary is centred. A
+   hint 460px from the only control it describes is a hint about nothing, so
+   the button carries it instead.
 
    Pointer:fine only (a phone has no space bar and the hint would be pure
    noise), never on a disabled primary, and gated on the divider's own

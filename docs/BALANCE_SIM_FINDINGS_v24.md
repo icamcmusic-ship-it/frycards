@@ -518,10 +518,15 @@ first next pass, with a fourth draw."* Run without regard to the claim:
 | Sentinel of the Nether Pit  | 44.5 #8 | 43.8 #7 | 40.3 #9 | 43.3 #8 | 2          |
 | Ruin-Walker Overseer        | 43.1 #9 | 46.3 #5 | 53.2 #4 | 47.0 #7 | **5**      |
 
-**The claim holds.** Mer-King and Avatar take #1 and #2 in all four draws, in
-one order or the other, and no third Leader has ever been within 1.4 points of
-second. The same three Leaders keep a rank range of ≤1 that did in v29
-(Mer-King, Avatar, Sovereign); six of nine are still readings of the decks.
+**The claim holds, and it is narrower than it sounds.** Mer-King and Avatar
+take #1 and #2 in all four draws, in one order or the other — that is the
+claim, and four independent draws is the most evidence any per-Leader statement
+here has ever had. What it is NOT is "clear of the field": the gap from second
+to third is 3.3, 3.8, **0.5** and 5.3 across the four draws, so on draw 3 the
+pair was half a point from being a trio. The set is stable; its separation is
+not. The same three Leaders keep a rank range of ≤1 that did in v29 (Mer-King,
+Avatar, Sovereign of the Dying Star); six of nine are still readings of the
+decks they were dealt.
 
 The ρ triangle becomes a hexagon, and it is wider than three draws suggested:
 **1↔2 = 0.417, 1↔3 = 0.733, 1↔4 = 0.833, 2↔3 = 0.450, 2↔4 = 0.367, 3↔4 =

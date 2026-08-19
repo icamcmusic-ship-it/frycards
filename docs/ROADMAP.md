@@ -248,7 +248,7 @@ Everything here has a started implementation and a visible seam.
   so one divider button, one bubble and one tile arrived as forty-odd distinct
   rows nobody had pressed. Three `data-*` hooks (the same convention as
   `data-card-id`, `data-tip`, `data-primary`) and the census went from **269
-  distinct controls to 109**.
+  distinct controls to 80**, and the never-pressed list from 44 rows to 16.
 
   The rest was real, and two of them were the census earning its keep: the `⏱`
   speed control (948 offers, 0 presses — the driver clicks by visible text and

@@ -49,6 +49,11 @@ document, through the browser's own chrome, and back in at the TOP of the page
 board's **✕ CONCEDE from inside the mulligan dialog**, on the first run that
 looked. `useFocusTrap` is the one shared hook that actually holds it, all
 fifteen use it, and a test scans for the next dialog that ships without it.
+**All 29 harness entries now measure 100%**: Tab reaches 2,081 of 2,081
+enabled visible controls, every one of them draws a focus ring, no state has a
+trap, and all 29 completed a full focus cycle inside the press cap — which is
+reported separately, because "nothing unreachable" out of a walk that stopped
+early is the silent cap this harness has caught itself taking three times.
 
 **And then the fix had to be fixed twice, both times because two dialogs can be
 open at once.** The concede confirm can be raised over the shed picker; either
@@ -78,7 +83,14 @@ a prelude that swaps a button's label or adds a field moves it. `decks@editor`
 was the same detector failing the other way: the sweep replays the prelude on
 every one of its ~41 loads, one of them missed, and the run stopped after
 **5 clicks of the 41 it owed** — reported by v28's under-measurement guard,
-which is the only reason anybody knew. Three attempts with a growing wait now.
+which is the only reason anybody knew. Three attempts with a growing wait now, in ONE
+implementation instead of three: the text-resize pass and the keyboard walk had
+their own copies that clicked once and waited 600ms, which is why
+`grading@vault` measured the SUBMIT tab under the vault's name in one run and
+the vault in the next. **The full sweep after both fixes is clean at every
+depth**: no overflow at 375, 1280 or 320, none under a doubled browser font, no
+undersized tap target, no thrown render, no console error, no blank body, no
+unmeasured entry.
 
 **Stress: two branches of the driver have been pressing the wrong control for
 thirteen passes, and the census found both.** v29 built the control census to
@@ -104,9 +116,10 @@ name. A clash line keys on its matchup (`#1 Galaxy Jellyfish ⚔4 → you`), so 
 divider button arrived as twenty never-pressed rows; the narration bubble keys
 on the beat inside it, so every sentence an opponent's turn produces was its
 own control; and a Location tile keys on the card standing in it, so twelve
-Sanctum names censused as twelve controls nobody had pressed. **269 distinct
-controls became 109**, and the never-pressed list went from 44 to a list this
-pass could actually work through.
+Sanctum names censused as twelve controls nobody had pressed. Three `data-*`
+hooks later — the same convention `data-card-id`, `data-tip` and `data-primary`
+already use — **269 distinct controls became 80, and the never-pressed list
+went from 44 rows to 16.**
 
 **The impatient player, driven for the first time.** Every action this harness
 has ever taken has been a single, patient, well-spaced click, which is not how
@@ -116,8 +129,12 @@ the two clicks land on either side of a React render with the engine's mutable
 `GameState` shared between them, which is the classic double-submit and is a
 different execution from two clicks a second apart — and every sixtieth step
 fires three Escapes and two Spaces into whatever the last action started.
-**916 double presses, 147 of which landed a second click, and 47 keyboard
-mashes: no crash, no hang, no stalled narration, no console error.**
+**The run it all has to survive:** eight driven matches — one in landscape, one
+at 200% text, one resigned, three handicapped, half of them watching the
+narration — eight rematches, **1,038 double presses of which 171 landed a
+second click, 50 keyboard mashes, and 0 findings.** No crash, no hang, no
+stale ring, no stalled narration, no clipped control, and every Tab walk
+reaching 100% of the board's controls.
 
 **Match QoL: the third thing a button press makes permanent.** Two of the
 divider's labels warn about something a press throws away — `· N PLAYABLE`
@@ -157,8 +174,10 @@ as the words that changed.
 answered on schedule.** v29 recorded the first per-Leader statement ever to
 clear the two-draws rule (Mer-King and Avatar of the Abyss take #1 and #2 in
 every draw, in one order or the other) and scheduled a fourth draw to test it.
-**It holds**: four independent draws, the same two Leaders on top every time,
-and no third Leader ever within 1.4 points of second. The MAGNITUDE claim still
+**It holds, and it is narrower than it sounds**: four independent draws, the
+same two Leaders on top every time — but the gap from second place to third is
+3.3, 3.8, **0.5** and 5.3 across those draws, so the pair is a stable SET
+rather than a pair clear of the field. The MAGNITUDE claim still
 has nothing behind it — the leader's margin over second is +10.7, −5.1, +6.5,
 −1.3, changing sign twice and varying eightfold — so the rule stands and no
 lever is authorized. The ρ triangle became a hexagon and is wider than three
