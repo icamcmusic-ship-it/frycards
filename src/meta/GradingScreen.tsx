@@ -430,10 +430,15 @@ export function GradingScreen({
               hint="Tap to add. Deck-locked and Serialized copies can't be graded."
             />
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="flex items-center gap-1.5">
-                <Search className="w-4 h-4 text-[var(--c-steel)]" aria-hidden />
+              {/* The wrapper takes the clamp as well as the field: `max-w-full`
+                  on an input inside a content-sized span is 100% of a span
+                  that has already grown to fit it. `w-56` is 14rem — 448px at
+                  a doubled browser font — and v29's text-resize sweep read
+                  this row at 524px against a 375px viewport. */}
+              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                <Search className="w-4 h-4 shrink-0 text-[var(--c-steel)]" aria-hidden />
                 <input
-                  className="ink-border-sm bg-[var(--c-paper)] px-2 py-1.5 text-xs font-bold w-56 placeholder:text-[var(--c-steel)]/50"
+                  className="ink-border-sm bg-[var(--c-paper)] px-2 py-1.5 text-xs font-bold w-56 min-w-0 max-w-full placeholder:text-[var(--c-steel)]/50"
                   placeholder="Search name or rarity…"
                   aria-label="Search your spare cards"
                   value={search}

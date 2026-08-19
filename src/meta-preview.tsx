@@ -63,6 +63,7 @@ import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
 import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { GradingScreen } from './meta/GradingScreen';
+import { AuthScreen } from './meta/AuthScreen';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { Card3DInspector } from './components/Card3DInspector';
 import { ShowroomScreen } from './meta/ShowroomScreen';
@@ -383,6 +384,14 @@ createRoot(document.getElementById('root')!).render(
       />
     ) : screen === 'grading' ? (
       <GradingScreen onBack={() => undefined} />
+    ) : screen === 'auth' ? (
+      // v29 — the FIRST screen every player sees, and the one screen the
+      // sweep had never loaded. `App` renders it above the whole meta shell
+      // (`if (!session && !guest) return <AuthScreen />`), so it never
+      // appeared in this switch and seventeen passes of phone measurement
+      // went past it: the sign-in form, the password field, the OAuth button
+      // and PLAY AS GUEST have never been measured at 375px at all.
+      <AuthScreen />
     ) : (
       <CollectionScreen onBack={() => undefined} />
     )}

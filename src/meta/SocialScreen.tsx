@@ -407,7 +407,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     placeholder="Search by username…"
-                    className="flex-1 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
                   />
                   <PopButton
                     color="black"
@@ -473,7 +473,12 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                     {incoming.map((f) => (
                       <div
                         key={f.id}
-                        className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
+                        // flex-wrap: the name column already shrinks and
+                        // truncates, but ACCEPT + DECLINE are `shrink-0` and
+                        // together they are wider than a phone at a doubled
+                        // browser font size — so the row needs to be allowed
+                        // to put them on their own line (v29 text resize).
+                        className="flex flex-wrap items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                       >
                         <span className="text-xs font-bold min-w-0 truncate">
                           <PlayerLink
@@ -482,7 +487,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             role={profiles.get(f.requester)?.role}
                           />
                         </span>
-                        <div className="flex gap-2 shrink-0">
+                        <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0">
                           <PopButton
                             color="red"
                             disabled={busy}
@@ -531,7 +536,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         </span>
                       )}
                     </div>
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0">
                       <PopButton
                         color="yellow"
                         disabled={busy || !other}

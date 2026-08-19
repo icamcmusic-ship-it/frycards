@@ -34,22 +34,56 @@ const vitParam = (key: string): number | undefined => {
 };
 const startVitality = { human: vitParam('myvit'), cpu: vitParam('cpuvit') };
 
-const a = randomArchetype(mulberry32(seed || 7));
-const b = randomArchetype(mulberry32(seed ? seed * 7919 + 1 : 99));
+/**
+ * One match, mounted under a key so REMATCH can remount it.
+ *
+ * v29 — the preview passed no `onRematch`, so the control never rendered here
+ * and the match driver could never press it: a remount that tears down a live
+ * narration chain, three sets of timers and an in-flight reward round-trip,
+ * and rebuilds the whole component beside them, was the single largest
+ * unexercised path in the match screen. `onExit` used to be a no-op too, which
+ * made a resignation invisible to the harness — the board simply stayed on
+ * screen — so it now renders the state the real app navigates to.
+ */
+function Preview() {
+  const [round, setRound] = React.useState(0);
+  const [exited, setExited] = React.useState(false);
+  // A fresh deck roll per round, derived from the seed so a run still
+  // reproduces exactly.
+  const roundSeed = (seed || 7) + round * 104729;
+  const a = randomArchetype(mulberry32(roundSeed));
+  const b = randomArchetype(mulberry32(seed ? roundSeed * 7919 + 1 : 99 + round));
+  if (exited) {
+    return (
+      <div className="p-8 heading-font text-lg">
+        LEFT THE MATCH
+        <button className="ml-4 underline" onClick={() => setExited(false)}>
+          BACK TO THE BOARD
+        </button>
+      </div>
+    );
+  }
+  // Keyed on the Fragment rather than on GameV4 itself: the component's props
+  // are a plain object type, so `key` is not one of them.
+  return (
+    <React.Fragment key={round}>
+      <GameV4
+        humanDeck={buildDeck(a)}
+        cpuDeck={buildDeck(b)}
+        humanLabel={a.label}
+        cpuLabel={b.label}
+        playerName="Preview"
+        seed={seed ? roundSeed : undefined}
+        startVitality={
+          startVitality.human !== undefined || startVitality.cpu !== undefined
+            ? startVitality
+            : undefined
+        }
+        onExit={() => setExited(true)}
+        onRematch={() => setRound((r) => r + 1)}
+      />
+    </React.Fragment>
+  );
+}
 
-createRoot(document.getElementById('root')!).render(
-  <GameV4
-    humanDeck={buildDeck(a)}
-    cpuDeck={buildDeck(b)}
-    humanLabel={a.label}
-    cpuLabel={b.label}
-    playerName="Preview"
-    seed={seed || undefined}
-    startVitality={
-      startVitality.human !== undefined || startVitality.cpu !== undefined
-        ? startVitality
-        : undefined
-    }
-    onExit={() => undefined}
-  />,
-);
+createRoot(document.getElementById('root')!).render(<Preview />);

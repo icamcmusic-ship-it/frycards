@@ -36,6 +36,7 @@ import {
   declareAttackers,
   declareGuards,
   discardLiveClash,
+  concedeGame,
   resolveClash,
   canInvokeLeader,
   canPayCost,
@@ -44,6 +45,7 @@ import {
   settleStack,
   potentialEssence,
   canTarget,
+  canGuardAttacker,
   effectiveCost,
   mulliganHand,
   finishDuskShed,
@@ -533,7 +535,7 @@ function Tip({
   // badges wearing these sit inside overflow-scrolling field lanes, where an
   // absolute popover was clipped by the lane edge — and pushed fully
   // off-screen for the leftmost unit on a phone.
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const open = pos !== null;
   const setOpen = (v: boolean | ((prev: boolean) => boolean)) => {
     const next = typeof v === 'function' ? v(open) : v;
@@ -544,10 +546,23 @@ function Tip({
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const vw = window.visualViewport?.width ?? window.innerWidth;
-    const width = 160; // matches the popover's w-40
+    // v29 — the width the popover will actually BE, not a number that happened
+    // to match it once.
+    //
+    // The popover was `w-40` and this clamp was the literal `160` with a
+    // comment saying the two matched. `w-40` is 10rem: at the browser's font
+    // size doubled it is 320px, the clamp was still holding 160px back from
+    // the right edge, and the popover ran 160px off the side of a 390px phone
+    // — the same mixed-units failure this pass found ten times in CSS, here in
+    // JavaScript instead. Derive it from the root font size, cap it at the
+    // viewport, and hand the same number to the element so the two cannot
+    // disagree again.
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const width = Math.max(160, Math.min(10 * rem, vw - 16));
     setPos({
       top: rect.bottom + 4,
-      left: Math.min(Math.max(8, rect.right - width), vw - width - 8),
+      left: Math.min(Math.max(8, rect.right - width), Math.max(8, vw - width - 8)),
+      width,
     });
   };
   const ref = useRef<HTMLSpanElement>(null);
@@ -574,6 +589,13 @@ function Tip({
       role="button"
       tabIndex={0}
       aria-label={text}
+      // v29 — a hook for the match driver, for the same reason the card face's
+      // keyword chips got one. Every Tip on the board (the coin-flip badge,
+      // the essence explainer, the ash-pile count, the EXHAUSTED and JUST
+      // INVOKED badges) is a real control with a real portal behind it, they
+      // are among the most-offered controls in the whole census, and not one
+      // of them had ever been pressed by anything.
+      data-tip="1"
       className={cn('relative', className)}
       onClick={(e) => {
         e.stopPropagation();
@@ -591,8 +613,8 @@ function Tip({
       {open &&
         createPortal(
           <span
-            className="fixed z-[9995] w-40 text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
-            style={{ top: pos!.top, left: pos!.left }}
+            className="fixed z-[9995] text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
+            style={{ top: pos!.top, left: pos!.left, width: pos!.width }}
           >
             {text}
           </span>,
@@ -1097,6 +1119,14 @@ function LeaderLane({
           }
         }}
         title={`${isHuman ? 'Your' : "Opponent's"} Vitality — win by reducing the opponent's to 0`}
+        // v29 — a name. The plate is a `role="button"` whenever a Charm can be
+        // aimed at it, and its only accessible name was the heart glyph and a
+        // number; `title` is a fallback a screen reader may or may not read,
+        // and it is not something a harness can aim at. It reads its own value
+        // now, and says when it is a target.
+        aria-label={`${isHuman ? 'Your' : "Opponent's"} Vitality: ${Math.max(0, p.vitality)}${
+          onVitClick ? ' — tap to target' : ''
+        }`}
         className={cn(
           'relative flex items-center gap-1 px-2 py-0.5 ink-border-sm heading-font bg-[var(--c-paper)] text-[var(--c-red)] shrink-0',
           vitTargetable && 'ring-4 ring-[var(--c-red)] cursor-pointer',
@@ -1451,6 +1481,35 @@ export function buildGuardBeats(state: GameState, cpuLabel: string): CpuBeat[] {
 }
 
 /**
+ * Every verb the engine writes directly after a seat id, in its third-person
+ * `-s` form.
+ *
+ * Exported and enumerated rather than inlined in the regex below because the
+ * v18 suite's list of these was maintained BY HAND — "update BOTH when a new
+ * one is added" — and v29 immediately proved what that is worth: adding
+ * `${pid} concedes.` to the engine printed "You concedes." on the defeat
+ * screen, with 454 tests passing. The v29 suite derives its list from
+ * `engine.ts` itself and checks it against this one, so the next engine line
+ * fails the build instead of shipping bad English. The scan found `recovers`
+ * missing too — "You recovers 2 Vitality at Dawn.", on a line the narration
+ * has been reading aloud since v22.
+ */
+export const SEAT_VERBS = [
+  'invokes',
+  'plays',
+  'attacks',
+  'sheds',
+  'mulligans',
+  're-bonds',
+  'casts',
+  'concedes',
+  'recovers',
+] as const;
+
+/** Seat-prefixed words that are already correct in the second person. */
+export const SEAT_VERBS_INVARIANT = ['must'] as const;
+
+/**
  * The engine log speaks in seat ids ("P2 invokes…"); the narration bubble and
  * the battle log should speak in names. Verb agreement is fixed for the second
  * person ("You invoke", not "You invokes").
@@ -1465,8 +1524,11 @@ export function humanizeLog(s: string, cpuLabel: string): string {
     .replace(/\bP1's\b/g, 'your')
     .replace(/\bP2's\b/g, `${cpuLabel}'s`)
     .replace(
-      /\bP1 (invokes|plays|attacks|sheds|mulligans|re-bonds|casts|must)\b/g,
-      (_, v: string) => (v === 'must' ? 'You must' : `You ${v.slice(0, -1)}`),
+      new RegExp(`\\bP1 (${[...SEAT_VERBS, ...SEAT_VERBS_INVARIANT].join('|')})\\b`, 'g'),
+      (_, v: string) =>
+        (SEAT_VERBS_INVARIANT as readonly string[]).includes(v)
+          ? `You ${v}`
+          : `You ${v.slice(0, -1)}`,
     )
     .replace(/\bP1\b/g, 'you')
     .replace(/\bP2\b/g, cpuLabel);
@@ -1512,6 +1574,75 @@ export function resolveClashLabelFor(might: number, targetVitality: number, atMe
   return `💥 RESOLVE CLASH — ${atMe ? 'TAKE' : 'DEAL'} ${might}${lethal ? ' · LETHAL' : ''}`;
 }
 
+/**
+ * The third of the three, and the one v28 left inline.
+ *
+ * v28 pulled CONFIRM GUARDS and RESOLVE CLASH out into pure functions and gave
+ * each a test, on the argument that "an off-by-one here reads perfectly and is
+ * wrong on the exact swing that ends the game" — and then left DECLARE ATTACK,
+ * which is the first of the three a player presses and the one that has
+ * printed arithmetic the longest, spelled out in the JSX where nothing could
+ * pin it.
+ *
+ * It also gains the number it was missing. `LETHAL IF UNGUARDED` has been an
+ * honest hedge since v26 and a frustrating one: the whole question the hedge
+ * raises — *can* it be guarded? — is answerable from the board, and answering
+ * it costs the player a pass over the opposing field checking exhaustion,
+ * Aerial and Nimble against each attacker they picked. `blockers` is that
+ * count, computed through the ENGINE's own rule (`canGuardAttacker`), so the
+ * board cannot promise something the engine will refuse. Zero of them is worth
+ * saying loudly: an attack nothing over there can legally block is the
+ * strongest position this game offers, and until now the board never mentioned
+ * it.
+ */
+export function declareAttackLabel(
+  count: number,
+  might: number,
+  foeVitality: number,
+  blockers: number,
+) {
+  const head = `⚔ DECLARE ATTACK — ${count} · ${might} MIGHT`;
+  const lethal = foeVitality > 0 && might >= foeVitality;
+  // "UNGUARDABLE" outranks "LETHAL IF UNGUARDED" because it settles the
+  // condition the other one is hedging on: if nothing can guard, the hedge is
+  // just noise in front of the word the player needs.
+  if (blockers === 0) return `${head} · ${lethal ? 'LETHAL — UNGUARDABLE' : 'UNGUARDABLE'}`;
+  const tail = lethal ? ' · LETHAL IF UNGUARDED' : '';
+  return `${head}${tail} · ${blockers} CAN GUARD`;
+}
+
+/**
+ * The phase button's label — the fourth of the divider's labels to become a
+ * pure function, and the one that carries the turn's two standing warnings.
+ *
+ * v26 gave it `· N PLAYABLE`, because essence does not carry over and a turn
+ * ended with an affordable card in hand throws a card's worth of tempo away.
+ * v29 adds the other one, which is worse: a Wellspring allowance does not
+ * carry either, and a turn ended without spending it leaves the player a
+ * Location short for the whole rest of the match. Both are counted from the
+ * same predicates the board itself uses, so neither can disagree with what the
+ * hand and the Wellspring row will actually allow.
+ */
+export function phaseAdvanceLabel(
+  phase: GameState['phase'],
+  opts: { playable: number; shed: number; wellspringWasted: boolean },
+): string {
+  const warn = `${opts.playable > 0 ? ` · ${opts.playable} PLAYABLE` : ''}${
+    opts.wellspringWasted ? ' · WELLSPRING UNPLAYED' : ''
+  }`;
+  if (phase === 'Main1') return `TO CLASH ▸${warn}`;
+  if (phase === 'Clash') return 'SKIP TO MAIN II ▸';
+  if (phase === 'Main2') {
+    // The shed count replaces the playable count — the picker is the next
+    // thing that happens either way — but NOT the Wellspring warning, which
+    // is the one thing pressing this button makes permanent.
+    return opts.shed > 0
+      ? `END TURN (shed ${opts.shed}) ▸${opts.wellspringWasted ? ' · WELLSPRING UNPLAYED' : ''}`
+      : `END TURN ▸${warn}`;
+  }
+  return 'NEXT ▸';
+}
+
 /** The opponent's last turn in numbers — see `turnRecap`. */
 interface TurnRecap {
   vitalityLost: number;
@@ -1521,6 +1652,17 @@ interface TurnRecap {
   cardsDrawnByMe: number;
   /** Log lines the turn produced — the "read the whole thing" affordance. */
   lines: number;
+  /**
+   * The opponent played nothing, attacked with nothing and took nothing off
+   * the player (v29).
+   *
+   * This used to return `null` and render no strip at all, which is the same
+   * thing the board shows when a turn has not happened yet — so a player who
+   * SKIPPED an empty turn got no signal whatsoever that a turn had gone by.
+   * The watching player gets a beat for it now; this is the skipping player's
+   * copy of the same sentence.
+   */
+  noAction?: boolean;
 }
 
 /** A targeting/bonding choice in progress — resolved by clicking a
@@ -2073,13 +2215,42 @@ export function GameV4({
     }
   }, [stage, g.winner, onResult]);
 
-  // Conceding is a resignation, not a free way to dodge a loss on the record.
+  /**
+   * Conceding is a resignation, not a free way to dodge a loss on the record —
+   * and, since v29, not a way to dodge the result screen either.
+   *
+   * It used to call `onResult(false)` and `onExit()` in the same tick. That
+   * fired the reward round-trip (up to three attempts, 1.5s apart) into a
+   * component the very next line unmounted: `setRewardError` landed on a dead
+   * tree, so the one message written for exactly this case — "couldn't record
+   * this match's result" — could never be shown for the ending most likely to
+   * be pressed on a bad connection. The player was returned to the menu with
+   * no confirmation that anything had happened at all.
+   *
+   * A resignation is now an ordinary engine outcome (`concedeGame`), so it
+   * reaches the same game-over screen every other ending does: the existing
+   * effect reports the result once, the reward block or its error renders, and
+   * REMATCH and BACK TO MENU are both there. Nothing about the loss changes;
+   * what changes is that the player sees it land.
+   */
   const concede = () => {
-    if (stage !== 'over' && !resultSent.current) {
-      resultSent.current = true;
-      onResult?.(false);
+    if (stage === 'over' || g.winner) {
+      onExit();
+      return;
     }
-    onExit();
+    stopCpuTimer();
+    if (cpuThinkTimeoutRef.current !== null) {
+      window.clearTimeout(cpuThinkTimeoutRef.current);
+      cpuThinkTimeoutRef.current = null;
+    }
+    // A narration mid-flight would keep ticking beats over the result screen.
+    setNarratingBoth(false);
+    cpuBeatsRef.current = [];
+    cpuDoneRef.current = null;
+    setCpuBeat(null);
+    setCpuFocus(null);
+    concedeGame(g, HUMAN);
+    checkWinner();
   };
 
   // Escape closes whatever overlay is frontmost / cancels a pending pick.
@@ -2320,6 +2491,9 @@ export function GameV4({
     const events: CpuTurnEvent[] = [];
     let plays = 0;
     let guard = 8;
+    /** Did the CPU ever actually hold priority here? If it never did there was
+     * no decision to report — see the `plays === 0` branch below. */
+    const heldPriority = hasPriority(g, CPU);
     // Loop, not a single call: the human's answer can hand priority back and
     // forth, and settleStack halts whenever the CPU holds it.
     while (!g.winner && hasPriority(g, CPU) && guard-- > 0) {
@@ -2350,7 +2524,24 @@ export function GameV4({
       // of the click rather than as the opponent's reply to it.
       beats.unshift({ text: `🤔 ${cpuLabel} considers a response…`, actors: [], targets: [] });
       narrateBeats(beats, () => onDone(plays));
-    } else onDone(plays);
+    } else {
+      // v29 — the opponent HELD priority over the player's card and chose to
+      // do nothing with it, and that decision arrived completely silently: the
+      // card simply resolved, and nothing on the board ever admitted the
+      // window had opened. Every visibility pass since v18 has closed a
+      // silence by asking which CPU decision has no beat; this is the shape
+      // those passes kept missing, because the decision was to ACT and the
+      // silences left are all decisions NOT to.
+      //
+      // A banner rather than a beat, deliberately. A beat costs a full dwell
+      // on every single card the player casts, which would be a pacing tax
+      // paid twenty times a match to report a non-event; the banner says it
+      // and gets out of the way. And it says only what is public — that they
+      // passed — never whether they HAD an answer, which is hidden
+      // information and would change how the game is played.
+      if (heldPriority) say(`${cpuLabel} passes — no response.`);
+      onDone(plays);
+    }
   };
 
   /** Actually invoke a hand card (auto-taps Locations for its cost). */
@@ -2726,6 +2917,25 @@ export function GameV4({
     return sum + (u ? effMight(g, u) : 0);
   }, 0);
 
+  /**
+   * How many of the opponent's units could legally guard at least one of the
+   * attackers currently selected — the number DECLARE ATTACK prints beside the
+   * Might (v29).
+   *
+   * Through the engine's own `canGuardAttacker`, never a re-implementation:
+   * exhaustion, Aerial/Skywatch and Nimble all decide this, and a board that
+   * counted "unexhausted units" would tell a player their Aerial swing can be
+   * blocked by a ground unit that cannot reach it. At least ONE, not all —
+   * a guard that can stop any attacker in the group is a guard the group has
+   * to reckon with.
+   */
+  const guardableCount = foe.field.filter((u) =>
+    [...atkSel].some((iid) => {
+      const atk = findUnit(g, iid);
+      return atk ? canGuardAttacker(g, atk, u) : false;
+    }),
+  ).length;
+
   const toggleAttacker = (iid: string) => {
     setAtkSel((s) => {
       const n = new Set(s);
@@ -3014,6 +3224,13 @@ export function GameV4({
      * `CpuBeat.mine`. The callers that narrate a completed CPU turn compute
      * it from `g.dawnLog`; mid-turn narrations pass nothing. */
     mineTail = 0,
+    /**
+     * This narration covers a WHOLE completed opponent turn, so an empty beat
+     * list means the turn itself was empty — see `IDLE_TURN_BEAT`. Mid-turn
+     * segments (a clash reaction, a resumed remainder) pass nothing: those
+     * legitimately narrate nothing when nothing happened in them.
+     */
+    wholeTurn = false,
   ) => {
     const beats = buildCpuBeats(
       lines.map((l) => humanize(l)),
@@ -3022,6 +3239,37 @@ export function GameV4({
       g,
     );
     for (let i = Math.max(0, beats.length - mineTail); i < beats.length; i++) beats[i].mine = true;
+    /**
+     * v29 — the turn that says nothing.
+     *
+     * Every CPU-visibility pass since v18 has closed a silence by asking which
+     * DECISION has no beat, and v28 asked which beat has no SUBJECT. This is
+     * the one neither question reaches: a turn on which the opponent plays
+     * nothing, attacks with nothing and triggers nothing writes no log lines,
+     * so `beats` is empty, `narrateBeats` calls its continuation on the same
+     * frame, and `buildTurnRecap` returns null because nothing happened. The
+     * player sees the handoff banner, roughly a second of "thinking", and
+     * their own turn again — which is indistinguishable from the narration
+     * having broken, and it happens most in the opening turns when a new
+     * player is least able to tell the difference.
+     *
+     * Doing nothing is a real thing to have done — it usually means they are
+     * stuck on essence or colour, which is worth knowing — so it gets a beat
+     * like any other move. The sentence stays on what is public: that the turn
+     * passed with no action, never why.
+     */
+    if (wholeTurn && beats.length === 0) {
+      beats.push({
+        text: `${cpuLabel} takes no action this turn.`,
+        actors: [],
+        targets: [],
+        // The subject of the sentence, ringed like any other beat's. v28's
+        // finding was a beat whose subject the board had stopped drawing; a
+        // beat with no subject at all would be the same hole one step further
+        // out, and the subject here is the opponent themselves.
+        leaderActing: true,
+      });
+    }
     narrateBeats(beats, onDone);
   };
 
@@ -3081,7 +3329,6 @@ export function GameV4({
     cpuTurnSnapshotRef.current = null;
     if (!snap) return null;
     const lines = g.log.slice(snap.logAt);
-    if (lines.length === 0) return null;
     const theirs = lines.filter((l) => l.startsWith('P2 '));
     const recap: TurnRecap = {
       vitalityLost: Math.max(0, snap.vitality - me.vitality),
@@ -3091,14 +3338,18 @@ export function GameV4({
       cardsDrawnByMe: Math.max(0, me.hand.length - snap.hand),
       lines: lines.length,
     };
-    // Nothing worth a strip: no damage, no losses, no plays, no attack.
+    // v29 — this used to `return null`, on the reasoning that a turn with no
+    // damage, no losses, no plays and no attack has nothing worth a strip. It
+    // has exactly one thing worth a strip, and it is the thing the player
+    // cannot otherwise find out: that the opponent's turn HAPPENED and did
+    // nothing. Silence here is indistinguishable from a narration that broke.
     if (
       recap.vitalityLost === 0 &&
       recap.unitsLost === 0 &&
       recap.cardsPlayed === 0 &&
       !recap.attacked
     ) {
-      return null;
+      recap.noAction = true;
     }
     return recap;
   };
@@ -3296,6 +3547,9 @@ export function GameV4({
         }
       },
       pause ? 0 : humanDawnTailLen(),
+      // A paused turn is not over — the beats it has so far are a segment, and
+      // the guard step or response window it paused for is the next one.
+      !pause,
     );
   };
 
@@ -3438,6 +3692,11 @@ export function GameV4({
         }
       },
       paused ? 0 : humanDawnTailLen(),
+      // Never here. This is a REMAINDER — everything it can narrate happened
+      // after a guard step or a response window the player has just been
+      // through — so an empty one means "nothing left to do in Main II", not
+      // "the opponent did nothing this turn", and the idle-turn beat would be
+      // plainly wrong on the exact turn the player was attacked.
     );
   };
 
@@ -3858,16 +4117,31 @@ export function GameV4({
       ? me.hand.filter((c) => !invokeWhy(c)).length
       : 0;
 
-  const phaseButtonLabel =
-    g.phase === 'Main1'
-      ? `TO CLASH ▸${playableInHand > 0 ? ` · ${playableInHand} PLAYABLE` : ''}`
-      : g.phase === 'Clash'
-        ? 'SKIP TO MAIN II ▸'
-        : g.phase === 'Main2'
-          ? me.hand.length > MAX_HAND
-            ? `END TURN (shed ${me.hand.length - MAX_HAND}) ▸`
-            : `END TURN ▸${playableInHand > 0 ? ` · ${playableInHand} PLAYABLE` : ''}`
-          : 'NEXT ▸';
+  /**
+   * A Wellspring the turn is about to throw away (v29).
+   *
+   * The allowance does not carry: a turn ended without playing one is a
+   * Location the player never gets back, and it compounds — every later turn
+   * is a Location short for the rest of the match. It is the most expensive
+   * thing a new player forgets, and the only warning was a sentence in the
+   * hint bar that competes with four other sentences.
+   *
+   * Gated on there actually being a colour to play, not merely on the
+   * allowance: `wellspringChoices` is what the row offers, and warning about a
+   * drop that cannot be taken would be a button telling the player off for the
+   * engine's rules.
+   */
+  const wellspringWasted =
+    stage === 'play' &&
+    g.active === HUMAN &&
+    wellspringsLeft > 0 &&
+    wellspringChoices(g, HUMAN).length > 0;
+
+  const phaseButtonLabel = phaseAdvanceLabel(g.phase, {
+    playable: playableInHand,
+    shed: Math.max(0, me.hand.length - MAX_HAND),
+    wellspringWasted,
+  });
 
   const showPhaseButton =
     stage === 'play' &&
@@ -3886,7 +4160,19 @@ export function GameV4({
   // ---------------------------------------------------------------------------
   return (
     <div
-      className="w-full h-screen flex flex-col overflow-hidden select-none"
+      /* v29 — `overflow-hidden` became `overflow-x-hidden overflow-y-auto`.
+         The board is one screen by design and the lanes do their own
+         scrolling, so on a viewport tall enough to hold it nothing changes:
+         `auto` shows no scrollbar when there is nothing to scroll. What it
+         fixes is the case where the board does NOT fit, where a clipping root
+         does not degrade — it deletes. On a phone in LANDSCAPE (844x390) the
+         first measurement of this found TWENTY controls clipped to nothing
+         with no way to reach them: the player's own Leader, ⚜ INVOKE LEADER,
+         the ash-pile, and every card in hand. The match was unplayable and
+         nothing said so, because a control that has been clipped away looks
+         exactly like a control the board chose not to draw. Same failure at
+         390x667 with the browser font doubled, one control at a time. */
+      className="w-full h-screen flex flex-col overflow-x-hidden overflow-y-auto select-none"
       style={
         {
           background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
@@ -4090,6 +4376,11 @@ export function GameV4({
             <span className="heading-font text-[10px] text-[var(--c-red)]">
               ⟲ {cpuLabel.toUpperCase()}&apos;S TURN
             </span>
+            {turnRecap.noAction && (
+              <span className="text-[10px] font-bold text-[var(--c-paper)]/70">
+                no cards played · did not attack
+              </span>
+            )}
             {turnRecap.cardsPlayed > 0 && (
               <span className="text-[10px] font-bold">
                 {turnRecap.cardsPlayed} card{turnRecap.cardsPlayed === 1 ? '' : 's'} played
@@ -4443,8 +4734,7 @@ export function GameV4({
                   of the board — to the player, which is exactly the arithmetic
                   it exists to do. "IF UNGUARDED" because the opponent still
                   gets its guard step; this is the ceiling, not a promise. */}
-              ⚔ DECLARE ATTACK — {atkSel.size} · {selectedMight} MIGHT
-              {selectedMight >= foe.vitality && foe.vitality > 0 ? ' · LETHAL IF UNGUARDED' : ''}
+              {declareAttackLabel(atkSel.size, selectedMight, foe.vitality, guardableCount)}
             </button>
           </>
         ) : stage === 'play' && g.clash && g.clash.step !== 'done' ? (

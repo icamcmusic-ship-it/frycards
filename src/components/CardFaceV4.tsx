@@ -928,7 +928,12 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
     if (!rect) return null;
     const left = Math.min(
       Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
-      window.innerWidth - POPOVER_WIDTH - 8,
+      // v29 — `Math.max(8, …)` on the upper bound too. On a viewport narrower
+      // than the popover the clamp's ceiling goes NEGATIVE and the whole box
+      // lands off the left edge; the width is a fixed 180px, so any phone
+      // under 196px does that, and so does a 320px one once a browser zoom
+      // shrinks the layout viewport further.
+      Math.max(8, window.innerWidth - POPOVER_WIDTH - 8),
     );
     const top =
       rect.bottom + 4 + POPOVER_EST_HEIGHT > window.innerHeight
@@ -1093,7 +1098,19 @@ export function KeywordChip({
           <span className="truncate">{label ?? kw}</span>
         </span>
       ) : (
-        <button ref={btnRef} type="button" onClick={open} className={pill} style={tint}>
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={open}
+          // v29 — a hook for the match driver. The glossary popover is a real
+          // control with real state behind it and nothing had ever opened one
+          // from a driven match; a chip has no stable text (it is whatever
+          // keyword the card prints) so there was nothing for the harness to
+          // aim at.
+          data-keyword-chip="1"
+          className={pill}
+          style={tint}
+        >
           <span className="truncate">{label ?? kw}</span>
         </button>
       )}
@@ -1197,7 +1214,12 @@ function CostInfoButton({
     if (!rect) return;
     const left = Math.min(
       Math.max(8, rect.left + rect.width / 2 - POPOVER_WIDTH / 2),
-      window.innerWidth - POPOVER_WIDTH - 8,
+      // v29 — `Math.max(8, …)` on the upper bound too. On a viewport narrower
+      // than the popover the clamp's ceiling goes NEGATIVE and the whole box
+      // lands off the left edge; the width is a fixed 180px, so any phone
+      // under 196px does that, and so does a 320px one once a browser zoom
+      // shrinks the layout viewport further.
+      Math.max(8, window.innerWidth - POPOVER_WIDTH - 8),
     );
     const top =
       rect.bottom + 4 + POPOVER_EST_HEIGHT > window.innerHeight

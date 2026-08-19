@@ -561,7 +561,7 @@ export function CollectionScreen({
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <input
-            className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
+            className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
             placeholder="Search cards…"
             aria-label="Search cards"
             value={search}

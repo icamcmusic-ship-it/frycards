@@ -449,7 +449,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           <>
             <div className="flex flex-wrap gap-2 mb-4">
               <input
-                className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
+                className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
                 placeholder="Search listings…"
                 aria-label="Search listings"
                 value={search}
@@ -539,7 +539,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 min={0}
                 aria-label="Bid amount"
                 onChange={(e) => setBidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
-                className="flex-1 px-2 py-1 ink-border-sm font-bold text-sm"
+                className="flex-1 min-w-0 px-2 py-1 ink-border-sm font-bold text-sm"
               />
               <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
                 = <Credits amount={bidAmount} />
@@ -710,7 +710,7 @@ function SellForm({
     <div className="max-w-2xl">
       <div className="heading-font text-xs mb-1">1 · PICK A CARD</div>
       <input
-        className={cn(select, 'w-56 mb-2 placeholder:text-[var(--c-steel)]/50')}
+        className={cn(select, 'w-56 max-w-full mb-2 placeholder:text-[var(--c-steel)]/50')}
         placeholder="Search your collection…"
         aria-label="Search your collection"
         value={search}

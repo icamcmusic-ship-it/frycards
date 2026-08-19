@@ -367,7 +367,17 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                       {term}
                     </div>
                   ) : (
-                    <div key={term} className="grid grid-cols-[8.5rem_1fr] gap-2 items-baseline">
+                    // minmax(0, …) on BOTH tracks: a bare `1fr` track is
+                    // `minmax(auto, 1fr)`, so the definition column refuses to
+                    // shrink below its own min-content and the row pushes the
+                    // page sideways the moment the 8.5rem term column grows —
+                    // which it does, in rem, the instant a player raises their
+                    // browser's font size (v29's text-resize sweep read 432px
+                    // against a 375px viewport here).
+                    <div
+                      key={term}
+                      className="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-2 items-baseline"
+                    >
                       <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
                         {sec.title.includes('Essence Identity') && (
                           <span
