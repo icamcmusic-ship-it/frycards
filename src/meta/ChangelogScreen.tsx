@@ -18,6 +18,19 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Every-Button Pass (v29)',
+    date: 'August 2026',
+    items: [
+      'FIX \u2014 THE BOARD WAS UNPLAYABLE SIDEWAYS. Turn a phone to landscape and twenty things you need were simply not there: your own Leader, the INVOKE LEADER button, your ash-pile, and every card in your hand. The board is built to be exactly one screen, and when it did not fit it did not shrink or scroll \u2014 it cut the rest off, silently, which looks exactly like the game choosing not to show you those things. It scrolls now, and only when it has to, so nothing changes on a screen it already fits.',
+      'FIX \u2014 CONCEDING SHOWS YOU THE RESULT. Giving up used to drop you straight back to the menu: no result screen, no rewards, and if the game could not save the loss there was no way for it to tell you. A resignation now ends the match like any other one \u2014 the result screen, the credits and XP, and REMATCH.',
+      'THE ATTACK BUTTON TELLS YOU WHAT CAN BLOCK IT. DECLARE ATTACK already showed your total Might and warned you when it was lethal. It now also counts how many of their units can legally guard what you have picked \u2014 flying, Nimble and exhaustion all taken into account \u2014 and when the answer is none, it says UNGUARDABLE.',
+      'END TURN WARNS YOU ABOUT AN UNPLAYED WELLSPRING. You get one a turn and it does not carry over, so ending a turn without playing one leaves you a Location behind for the rest of the match. The button says so, next to the count of cards you could still cast.',
+      'YOU CAN TELL WHEN THE OPPONENT DID NOTHING. A turn where they play nothing and attack with nothing used to produce no narration at all \u2014 a second of \u201cthinking\u201d and then your turn back, which is indistinguishable from something breaking. It says so now, and the turn summary says it too if you skipped past it. When they hold priority over a card you cast and decline to answer, the board mentions that as well.',
+      'FIX \u2014 BIG TEXT AND SMALL SCREENS, ACROSS NINE SCREENS. If you run a larger font in your browser, ten places pushed content off the side of a phone: search boxes, tab rows, the How to Play glossary, the Showroom. All fixed, and the check runs on every release now. The sign-in screen \u2014 the first screen in the game \u2014 turned out never to have been measured at phone width at all; its show-password button was a third of the minimum tap size.',
+      'BALANCE: no card changed, tenth pass running. 142,848 fresh AI games \u2014 the usual eight cohorts, run three times over three completely different sets of test decks \u2014 plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, and the control cohorts identical to last patch to the decimal. The three-draw comparison finished what last patch started: only three of the nine Leaders keep their place in the league table when the test decks are re-rolled, and the single statistic that has driven Leader balance arguments for four patches names a different Leader every time it is asked. It is retired.',
+    ],
+  },
+  {
     version: 'The Fat-Finger Pass (v28)',
     date: 'August 2026',
     items: [
@@ -29,26 +42,17 @@ export const ENTRIES: ChangelogEntry[] = [
       'BALANCE: no card changed, ninth pass running \u2014 and a long-running question finally answered. 95,232 fresh AI games (the usual eight cohorts, run twice over two completely different sets of test decks), plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, control cohorts identical to last patch to the decimal. The answer: the test decks were doing more of the talking than the Leaders were. Re-roll them and the Leader league table barely half agrees with itself \u2014 which closes the Ruin-Walker Overseer question (it was one bad test deck, not a weak Leader) and cancels a planned Mer-King change that turned out to be measuring the same thing.',
     ],
   },
-  {
-    version: 'The Showroom Pass (v27)',
-    date: 'August 2026',
-    items: [
-      'NEW \u2014 THE 3D SHOWROOM. Its own page, off the main menu, where a card stops being a picture and becomes an object. Drag it and it turns \u2014 all the way round, front to edge to back and out the other side, because it has thickness now. Tilt it over the top edge or under the bottom one. Zoom from across the room to close enough to read the smallest line of rules text. Flick it and the turntable coasts. Or leave it turning by itself at one of three speeds. Wheel, pinch, arrow keys, +/\u2212, F to flip, R to reset, or the on-screen controls \u2014 whatever you have.',
-      'SUPER-RARE AND ABOVE GET THEIR OWN ROOM. A Super-Rare stands in an ION SWEEP, an Ultra-Rare in a GILDED HALL, a Full-Art in an AURORA VAULT, an Alt-Art in a PRISM CHAMBER, a Mythic in an EMBER FORGE \u2014 each with its own light, its own colour, and its own card effects: a ring of motes orbiting in the space around the card, a rim light that swings as you turn it, and a floor pool in the room\u2019s colour. Common through Rare get a clean photographer\u2019s studio, on purpose: the special rooms mean nothing if everything has one.',
-      'YOUR SLABS STAND IN THERE TOO. A graded slab is a much chunkier object than a card, and until now it could only ever be looked at flat-on. Now it stands in the same room and turns like everything else. Reach the Showroom from the menu, from VIEW IN 3D in the card inspector, or from any slab on your Collection shelf or in the Grading Lab vault.',
-      'FIX \u2014 THE SLOWEST SPEED WAS SHOWING THE SHORTEST ANIMATIONS. Last patch made every combat animation slow down with the narration dial. It did not move the timers that take those animations OFF the screen \u2014 so on CINEMATIC the phase banner, the damage numbers and the hit flash were cut off at about a third of the way through. The setting that exists to let you watch a move land was the one that showed you least of it. Both halves come from one number now.',
-      'FIX \u2014 the speed dial\u2019s own tooltips, and the How to Play page, still listed the three-speed ladder from before CINEMATIC existed, so the slowest setting in the game was undiscoverable from the two controls that cycle to it.',
-      'SORT YOUR HAND. The hand dock has always laid cards out in the order you drew them. A button on the dock now switches between DRAWN, PLAYABLE (everything you can actually cast right now, first) and COST (cheapest first). Your choice is remembered.',
-      'A PROGRESS BAR FOR THE OPPONENT\u2019S TURN, next to the HOLD / STEP / SKIP buttons that act on it \u2014 the count existed, but it was at the top of the board while the controls were in the middle.',
-      'BALANCE: no card changed, eighth pass running. 47,616 fresh AI games across the same eight cohorts, plus 1,200 fuzzed matches and 600 chaos matches: ZERO rule violations, and the three control cohorts reproduce last patch to the decimal \u2014 the engine is untouched. The cross-cohort aggregator also settled an open question: nearly every Leader carries one bad deck recipe, so \u201cthat one deck is a lemon\u201d cannot explain why Ruin-Walker Overseer alone underperforms in all eight cohorts. Still flagged, still not acted on.',
-    ],
-  },
 ];
 
 export function ChangelogScreen({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
+      {/* flex-wrap: a back button and a title on one unbreakable line is
+          wider than a phone at a large browser font size (v29's text-resize
+          sweep read 432px against 375). Every other screen's header goes
+          through MetaHeader; this one is hand-rolled and was the only one that
+          could not break. */}
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>

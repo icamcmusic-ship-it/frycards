@@ -128,6 +128,14 @@ const ALL_SCREENS = [
   // behind EDIT, and had never been swept at either width.
   'decks@editor',
   'decks@new',
+  // v29 — the sign-in screen, which is the FIRST screen every player sees and
+  // the only one this sweep had never loaded. `App` renders it above the meta
+  // shell entirely (`if (!session && !guest) return <AuthScreen />`), so it
+  // was never in `meta-preview.tsx`'s switch and seventeen passes of phone
+  // measurement went straight past it. Both modes: CREATE ACCOUNT adds a
+  // third field and is a different layout, not a different label.
+  'auth',
+  'auth@signup',
 ];
 
 /**
@@ -154,6 +162,7 @@ const PRELUDE: Record<string, string[]> = {
   // The empty editor is a different layout from the full one: no leader, no
   // curve, an empty deck list and a pool grid with nothing dimmed.
   'decks@new': ['FORGE NEW DECK'],
+  'auth@signup': ['CREATE ACCOUNT'],
 };
 
 /** The `?screen=` value for an entry — `pack@reveal` mounts plain `pack`. */
@@ -185,6 +194,53 @@ if (ONLY.length && SCREENS.length === 0) {
 }
 
 const WIDTHS = [375, 1280];
+/**
+ * WCAG 1.4.10 (Reflow, AA) — the width content must survive without a
+ * horizontal scrollbar. 320 CSS px is the standard's own floor, and it is
+ * also what a 1280px desktop window becomes at 400% browser zoom.
+ *
+ * v29. The sweep has measured 375 and 1280 since v12, and the roadmap's
+ * mobile item has said since v11 that "text scaling" is one of the three
+ * things a geometry check cannot see. Two of those three turn out to be
+ * geometry after all — v28 did tap targets, and this is the page-zoom half of
+ * text scaling. See TEXT_SCALE below for the browser-font half.
+ *
+ * Load pass only: a full click sweep at a third width would add an hour to a
+ * run that already takes one, and the failure this catches (a fixed-width
+ * element pushing the page wider than the viewport) is a property of the
+ * layout, not of what has been clicked.
+ */
+const REFLOW_W = Number(process.env.REFLOW_W ?? 320);
+const SKIP_REFLOW = process.env.SKIP_REFLOW === '1';
+/**
+ * WCAG 1.4.4 (Resize text, AA) — text at 200% of the user's chosen size.
+ *
+ * Emulated the way a browser actually does it: `Page.setFontSizes` is the CDP
+ * behind Chromium's own Settings → Appearance → Font size, so what this
+ * measures is precisely what happens to a player who sets their browser font
+ * to Very Large. Text sized in `px` does not move under that setting — by
+ * design, in every browser — so on a design that sizes everything in px the
+ * honest reading is a COUNT of how much of the page responds at all, printed
+ * every run, rather than a gate that can only be satisfied by a rewrite.
+ *
+ * The first run predicted a low number and a clean sheet — a px-locked design
+ * would simply not move, and the conformant path for one is page zoom (which
+ * the reflow pass above measures). The number came back **40%**, and TEN
+ * states across nine screens overflowed. The app is not px-locked; it is
+ * MIXED.
+ * Tailwind's named sizes (`text-sm`, `text-xs`, `text-3xl`) are rem and grow,
+ * the arbitrary ones (`text-[10px]`) are px and do not, and both are used side
+ * by side inside the same rows — so at 200% a row's label doubles while the
+ * fixed-width thing beside it does not, and the row pushes off the side of the
+ * phone. That is a real defect and it is gated, not printed: overflow under
+ * text resize is reported exactly like overflow at 375px, with the widest
+ * offending element named.
+ *
+ * The COUNT stays a printed measurement rather than a target. There is no
+ * right value for it — a design may legitimately fix some type in px — and a
+ * number that moves is what is worth looking at.
+ */
+const TEXT_SCALE = Number(process.env.TEXT_SCALE ?? 200);
 const CONTROLS = 'button:visible, [role="button"]:visible';
 
 /** Console noise an offline preview cannot avoid. The realtime client retries
@@ -197,7 +253,7 @@ const NETWORK_NOISE =
 interface Problem {
   where: string;
   width: number;
-  kind: 'overflow' | 'console' | 'blank' | 'tap-target' | 'unmeasured';
+  kind: 'overflow' | 'console' | 'blank' | 'tap-target' | 'unmeasured' | 'text-scale';
   detail: string;
 }
 
@@ -307,15 +363,47 @@ async function check(screen: string, width: number, path: number[] = [], expect 
       .$$(CONTROLS)
       .then((c) => c.length)
       .catch(() => 0);
-    const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
-    await target.click({ timeout: 4000 }).catch(() => undefined);
-    for (let i = 0; i < 16; i++) {
-      await page.waitForTimeout(250);
-      const now = await page
-        .$$(CONTROLS)
-        .then((c) => c.length)
-        .catch(() => 0);
-      if (now !== before) break;
+    /**
+     * Click the prelude step and wait for it to LAND — then say so when it
+     * does not.
+     *
+     * v29: the wait alone was not enough. `pack@reveal` measured **1 control**
+     * at 375px in a full run and 6 at 1280px on the very next load — the tear
+     * click missed or the 850ms reveal timer outran the wait, the entry
+     * measured the unopened wrapper it was supposed to be leaving, and every
+     * check downstream (the control count, the tap targets, the text-resize
+     * pass) ran on the wrong screen while the run printed a clean pass. This
+     * is v14's finding and v28's, arriving through the third door: the sweep
+     * has to be able to tell "this screen is fine" from "I never got to it".
+     *
+     * So: retry the click once, and if the control set still has not moved,
+     * report it where the measurement would have gone.
+     */
+    let landed = false;
+    for (let attempt = 0; attempt < 2 && !landed; attempt++) {
+      const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
+      await target.click({ timeout: 4000 }).catch(() => undefined);
+      for (let i = 0; i < 16; i++) {
+        await page.waitForTimeout(250);
+        const now = await page
+          .$$(CONTROLS)
+          .then((c) => c.length)
+          .catch(() => 0);
+        if (now !== before) {
+          landed = true;
+          break;
+        }
+      }
+    }
+    if (!landed) {
+      problems.push({
+        where: `${screen} prelude`,
+        width,
+        kind: 'unmeasured',
+        detail:
+          `the prelude step "${label}" left the control count at ${before} after two clicks ` +
+          `and 8s of waiting, so this entry measured the state it was supposed to be leaving.`,
+      });
     }
   }
   let settled = await settledControlCount(page);
@@ -324,8 +412,17 @@ async function check(screen: string, width: number, path: number[] = [], expect 
   // already capped at what the sweep can USE (see `sweepFloor`), so this does
   // not re-sample a 961-tile grid for the sake of the tail it will never
   // reach; it fires on the order-of-magnitude misses the guard is about.
-  if (expect > 0 && settled < expect) {
-    await page.waitForTimeout(1200);
+  //
+  // v29: ONE extra chance was not enough. The full 29-entry run fired this
+  // guard on `pack@reveal` (clicked 4 of 6) and `pack@summary` (3 of 12) while
+  // the same two entries measured perfectly under `ONLY=pack` — the difference
+  // being that the full run had a balance sim on the other three cores. A
+  // sampling window tuned on an idle machine is a sampling window that
+  // reports "not measured" whenever the machine is busy, which is exactly when
+  // a long sweep runs. Keep asking, with a longer wait each time, and stop the
+  // moment the count reaches the number it is being compared against.
+  for (let tries = 0; tries < 3 && expect > 0 && settled < expect; tries++) {
+    await page.waitForTimeout(1200 * (tries + 1));
     settled = Math.max(settled, await settledControlCount(page));
   }
 
@@ -529,12 +626,165 @@ async function check(screen: string, width: number, path: number[] = [], expect 
   return { done: false, count: settled, after };
 }
 
+/** Run totals for the 1.4.4 measurement, printed with the summary. */
+const textScaleTotals = { responded: 0, leaves: 0 };
+
+/**
+ * Load `screen` at phone width, double the browser's font-size setting, and
+ * report what moved.
+ *
+ * `Page.setFontSizes` is Chromium's own font-size preference, so a text node
+ * that does not grow under it is a text node that will not grow for a player
+ * who sets their browser font larger either. Counting the LEAVES (elements
+ * with text and no element children) rather than every node keeps one
+ * paragraph from counting as six.
+ */
+async function textScale(screen: string) {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}?screen=${screenQuery(screen)}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20_000,
+  });
+  await page.waitForTimeout(700);
+  for (const label of PRELUDE[screen] ?? []) {
+    await page
+      .locator(`${CONTROLS}`, { hasText: label })
+      .first()
+      .click({ timeout: 4000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(600);
+  }
+  const SAMPLE = `(() => {
+    var out = [];
+    var els = document.querySelectorAll('body *');
+    for (var i = 0; i < els.length && out.length < 600; i++) {
+      var el = els[i];
+      if (el.children.length > 0) continue;
+      var t = (el.textContent || '').trim();
+      if (!t) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      out.push(parseFloat(getComputedStyle(el).fontSize) || 0);
+    }
+    return out;
+  })()`;
+  const before = (await page.evaluate(SAMPLE).catch(() => [])) as number[];
+  const cdp = await ctx.newCDPSession(page);
+  // Chromium's defaults are 16 (standard) and 13 (fixed); scale both.
+  await cdp
+    .send('Page.setFontSizes', {
+      fontSizes: {
+        standard: Math.round((16 * TEXT_SCALE) / 100),
+        fixed: Math.round((13 * TEXT_SCALE) / 100),
+      },
+    })
+    .catch(() => undefined);
+  await page.waitForTimeout(500);
+  const after = (await page.evaluate(SAMPLE).catch(() => [])) as number[];
+  const geom = await page
+    .evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }))
+    .catch(() => ({ scrollWidth: 0, innerWidth: 1 }));
+  // Name the element, not just the number. An overflow report that says
+  // `392 > 375` sends whoever reads it back to the browser to find out WHAT
+  // is 17px too wide; the page already knows.
+  //
+  // CLIPS COMPOSE — the lesson v28's tap-target check paid for twice. An
+  // element inside an `overflow-x: auto` strip (the Showroom's HUD row, the
+  // Collection's filter rail) sticks out of the viewport by its own rect and
+  // contributes NOTHING to the document's scroll width, because its ancestor
+  // scrolls instead. Reporting it names a control that is working as designed
+  // and buries the one that is not, so every candidate's right edge is
+  // intersected with every clipping ancestor before it counts.
+  const offenders = (await page
+    .evaluate(() => {
+      const out: string[] = [];
+      const w = window.innerWidth;
+      const bad: Element[] = [];
+      for (const el of Array.from(document.querySelectorAll('body *'))) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right <= w + 1) continue;
+        let right = r.right;
+        for (let a = el.parentElement; a; a = a.parentElement) {
+          if (getComputedStyle(a).overflowX === 'visible') continue;
+          right = Math.min(right, a.getBoundingClientRect().right);
+        }
+        if (right <= w + 1) continue;
+        bad.push(el);
+      }
+      // Innermost only: an overflowing child makes every ancestor overflow,
+      // and the ancestors are not the bug.
+      for (const el of bad) {
+        if (bad.some((o) => o !== el && el.contains(o))) continue;
+        const cls = String((el as HTMLElement).className || '').slice(0, 70);
+        const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+        out.push(
+          `<${el.tagName.toLowerCase()}${cls ? ` class="${cls}"` : ''}> "${txt}" right=${Math.round(
+            el.getBoundingClientRect().right,
+          )}`,
+        );
+        if (out.length >= 3) break;
+      }
+      return out;
+    })
+    .catch(() => [])) as string[];
+  const n = Math.min(before.length, after.length);
+  let responded = 0;
+  for (let i = 0; i < n; i++) if (after[i] > before[i] + 0.01) responded++;
+  await cdp.detach().catch(() => undefined);
+  await ctx.close();
+  return {
+    leaves: n,
+    responded,
+    overflow: geom.scrollWidth > geom.innerWidth + 1,
+    scrollWidth: geom.scrollWidth,
+    innerWidth: geom.innerWidth,
+    offenders,
+  };
+}
+
 for (const screen of SCREENS) {
   for (const width of WIDTHS) {
     const r = await check(screen, width);
     if (width === 375) loadCount.set(screen, r.count);
     console.log(`${screen} @${width}: ${r.count} controls`);
   }
+  if (!SKIP_REFLOW) {
+    const r = await check(screen, REFLOW_W);
+    console.log(`${screen} @${REFLOW_W} (reflow): ${r.count} controls`);
+  }
+}
+
+// ---- WCAG 1.4.4, measured (v29) -------------------------------------------
+if (TEXT_SCALE > 0) {
+  console.log(`\n=== text resize to ${TEXT_SCALE}% (WCAG 1.4.4) ===`);
+  let respond = 0;
+  let total = 0;
+  for (const screen of SCREENS) {
+    const r = await textScale(screen);
+    respond += r.responded;
+    total += r.leaves;
+    console.log(
+      `${screen}: ${r.responded}/${r.leaves} text node(s) grew · ` +
+        `overflow ${r.overflow ? `YES (${r.scrollWidth} > ${r.innerWidth})` : 'no'}`,
+    );
+    if (r.overflow) {
+      problems.push({
+        where: `${screen} @${TEXT_SCALE}% text`,
+        width: 375,
+        kind: 'text-scale',
+        detail:
+          `scrollWidth ${r.scrollWidth} > innerWidth ${r.innerWidth} with the browser font at ` +
+          `${TEXT_SCALE}%${r.offenders.length ? ` — widest: ${r.offenders.join(' | ')}` : ''}`,
+      });
+    }
+  }
+  textScaleTotals.responded = respond;
+  textScaleTotals.leaves = total;
 }
 
 // Click sweep at phone width only — the tighter of the two, and the one an
@@ -611,6 +861,17 @@ if (exemptTotal > 0) {
   console.log(
     `\ntap targets: ${exemptTotal} inline exemption(s) across ${inlineExempt.size} state(s) ` +
       `(WCAG 2.5.8 inline rule; most in ${worst.map(([w, n]) => `${w} ${n}`).join(', ')})`,
+  );
+}
+if (TEXT_SCALE > 0 && textScaleTotals.leaves > 0) {
+  const pct = Math.round((textScaleTotals.responded / textScaleTotals.leaves) * 100);
+  console.log(
+    `\ntext resize (WCAG 1.4.4): ${textScaleTotals.responded}/${textScaleTotals.leaves} ` +
+      `sampled text node(s) — ${pct}% — grow when the browser's font size is set to ` +
+      `${TEXT_SCALE}%. The app is MIXED: Tailwind's named sizes are rem and grow, its ` +
+      `arbitrary \`text-[Npx]\` ones do not, and both sit in the same rows — which is why ` +
+      `the OVERFLOW column beside each screen is gated and this percentage is not. ` +
+      `There is no right value for it; a number that MOVES is the thing to look at.`,
   );
 }
 console.log(`\n=== ${problems.length} problem(s) ===`);

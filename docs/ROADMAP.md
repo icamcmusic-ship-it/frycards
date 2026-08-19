@@ -148,9 +148,39 @@ Everything here has a started implementation and a visible seam.
   expansion with every clipping ancestor now. **A geometry check that reads a
   CSS declaration rather than a resulting rectangle will certify the utility
   that was supposed to fix the finding** — which is the same failure this file
-  has recorded three times in other clothes. **What is still genuinely
-  unmeasured is text scaling and real-device behaviour — two of three, not
-  three of three, and the harness is the place to close the rest.**
+  has recorded three times in other clothes.
+
+  **v29 measured the second of the three, and the prediction was wrong in the
+  useful direction.** `audit:screens` now runs a WCAG 1.4.4 pass — the browser's
+  own font-size preference, doubled, through Chromium's `Page.setFontSizes` —
+  plus a WCAG 1.4.10 reflow load pass at 320px. The expectation going in was a
+  clean sheet and a near-zero number: this game sizes its type in `px`, and px
+  does not move under that setting in any browser. The number came back **40%**,
+  because the app is MIXED — Tailwind's named sizes (`text-sm`, `text-xl`) are
+  rem and grow, its arbitrary `text-[10px]` ones do not, and both sit in the
+  same rows. So at 200% a row's label doubles while the thing beside it does
+  not, and **ten states across nine screens pushed off the side of a phone**:
+  four fixed-rem search boxes, four rows of controls that could not wrap, the
+  How to Play definition grid, and the Showroom's search field. All fixed; the
+  overflow half is gated on every run, the percentage is printed rather than
+  gated (there is no right value for it — a design may legitimately fix some
+  type in px — and what matters is that the number MOVES).
+
+  The reflow pass at 320px came back clean everywhere, first time.
+
+  **The match board got the same treatment from the other harness, and it found
+  the worse bug.** `drive:match` now drives one match at 200% text and one in
+  phone LANDSCAPE (844x390), and measures a thing the meta sweep cannot: the
+  board's root CLIPS rather than scrolls, so a control that no longer fits is
+  not pushed off the edge, it is deleted in place. In landscape, at the default
+  font, **twenty controls were unreachable** — the player's own Leader,
+  INVOKE LEADER, the ash-pile and every card in hand. Fixed by letting the root
+  scroll when and only when it has to (`overflow-y-auto`), which changes
+  nothing on a viewport that already fits.
+
+  **What is still genuinely unmeasured is real-device behaviour — one of
+  three.** Scroll momentum, the software keyboard, and what a real thumb does to
+  a 24px target are not things a headless Chromium can answer.
 
   What the geometry sweep found: **nothing**. All sixteen screens render at 375px
   with `documentElement.scrollWidth === innerWidth` and zero interactive
@@ -192,6 +222,23 @@ Everything here has a started implementation and a visible seam.
   card under 520px, the way `Card3DInspector` clamps — so `✕ CLOSE` and INVOKE
   stay on-screen on a phone.
 
+- **The match driver's control census is a report; the next pass should make it
+  a gate** (new in v29). Every stress round before this one grew `drive:match`
+  by adding an action somebody had noticed it never took — SKIP until v19,
+  RE-BOND until v22, the VICTORY screen until v26 — which is a coverage
+  instrument made of one person's attention. The driver reads the whole board
+  on every step, so it already knows every control the match OFFERS; it now
+  counts which ones it ever PRESSES and prints the difference. The first run:
+  **360 distinct controls, 306 never pressed** — two thirds of that being the
+  census wrong about itself (card wrappers, `display:none` panels, labels that
+  embed their own state), and the rest real. v29 taught the driver the ones it
+  could reach and left ~60 rows, so the count is deliberately NOT part of the
+  exit code: a coverage row is a gap in the harness, not a defect in the game,
+  and folding the two into one number says "the match is broken" when what is
+  true is "the driver is not finished". **Close the list by pressing the
+  controls, never by widening `CENSUS_EXEMPT`,** and make it gating when it is
+  short enough to hold.
+
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
@@ -222,6 +269,28 @@ Everything here has a started implementation and a visible seam.
   standing rule that falls out is short: **two draws, always, for anything
   about a Leader.** Everything below this paragraph predates that rule and
   every per-Leader number in it was read off a single draw.
+
+  **v29 gave that rule an instrument and then a third draw, and retired the
+  statistic underneath all of it.** The rule shipped with nothing to apply it
+  with: the rho above was computed by hand from two nine-row tables assembled
+  by hand out of sixteen reports, which is the exact situation
+  `aggregate-cohorts.ts` exists to end for the sign table, one axis over.
+  `scripts/leader-rank-stability.ts` takes N draws, labels each by its recipe
+  salt, refuses a group whose reports disagree about it, and prints the
+  cross-cohort mean, the rank, every pairwise rho, and each Leader's **rank
+  RANGE** — which is the number the rule actually needs. On three draws
+  (142,848 games) the triangle is **rho = 0.417 / 0.733 / 0.450**, and exactly
+  three of nine Leaders hold their rank to within one place across all three:
+  Mer-King, Avatar of the Abyss, Sovereign of the Dying Star. Everything else
+  on that table is a reading of the decks.
+
+  The one-signed gap test goes with it. Draw 1 flags Ruin-Walker (negative),
+  draw 2 flags Avatar (positive), draw 3 flags **nobody**. A statistic that
+  names a different Leader every time it is asked is not identifying a Leader:
+  it is **retired as a standalone discriminator and kept as a filter**, and a
+  case now needs the same Leader one-signed the same way in two independent
+  draws. Nothing meets that bar today. Ruin-Walker, closed in v28, comes out
+  4th of nine at 53.2% on the draw that had never seen the argument.
 
   **v26 re-opened the Ruin-Walker item, on eight cohorts.** Its
   pinned-minus-random gap is negative in EVERY cohort that samples it (−17.9 /
@@ -279,7 +348,9 @@ Everything here has a started implementation and a visible seam.
 
   Standing rules that should not be relearned: **two recipe draws for anything
   per-Leader** (v28 — cohorts vary the game RNG and the random arm's decks, and
-  for eight passes nobody noticed they never varied the pinned arm's);
+  for eight passes nobody noticed they never varied the pinned arm's; v29 gave
+  the rule an instrument, `scripts/leader-rank-stability.ts`, and a third draw
+  that retired the one-signed gap test as a discriminator);
   **four deck cohorts, not two**
   (two cohorts cannot see a keyword with fewer than ~6 carriers) — but **six
   when the question is about one specific Leader**, since v22's sign flip lived

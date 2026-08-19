@@ -747,7 +747,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         <div className="flex-1 min-w-0 min-h-[55vh] sm:min-h-0 flex flex-col">
           <div className="flex gap-2 items-center p-3 pb-2 shrink-0 flex-wrap">
             <input
-              className={cn(select, 'w-44 placeholder:text-[var(--c-steel)]/50')}
+              className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
               placeholder="Search…"
               aria-label="Search owned cards"
               value={search}

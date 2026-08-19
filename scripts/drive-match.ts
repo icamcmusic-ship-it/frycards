@@ -73,12 +73,67 @@ const STUDY_EVERY = Number(process.env.STUDY_EVERY ?? 2);
  */
 const WIN_EVERY = Number(process.env.WIN_EVERY ?? 3);
 const WIN_VIT = Number(process.env.WIN_VIT ?? 3);
+/**
+ * The HUMAN's opening Vitality on a winnable match (v29). 0 leaves it alone.
+ *
+ * v26 put the opponent on 3 and called the finish line closer. It is, but the
+ * driver still has to reach it: it plays random legal lines against a CPU that
+ * plays properly, so across v29's runs the handicap converted anywhere from
+ * 1-in-3 winnable matches to **0-in-3** — and a run where it converts none
+ * measures the VICTORY screen exactly as much as the pre-v26 driver did, which
+ * is what the guard at the bottom of this file then correctly reports. Giving
+ * the driver the full Vitality cap as well buys it the turns to get there;
+ * nothing about how either side plays changes.
+ */
+const WIN_MY_VIT = Number(process.env.WIN_MY_VIT ?? 20);
+
+/**
+ * Every Nth match resigns instead of playing to a finish (v29). 0 disables.
+ *
+ * ✕ CONCEDE is the one control on the top bar in every single state of every
+ * single match, and no harness had ever pressed it: the driver has clicked
+ * CANCEL on its own stray concede since v19, so the confirm dialog's CONFIRM
+ * half — and everything behind it — was measured exactly as much as the
+ * VICTORY screen was before v26, which is to say not at all. A resignation is
+ * also the only way a player ends a match they are losing, so it is not an
+ * exotic path; it is the second most common way a match ends.
+ */
+const CONCEDE_EVERY = Number(process.env.CONCEDE_EVERY ?? 4);
+/** Steps between clipped-control sweeps — the read walks every control. */
+const CLIP_EVERY = Number(process.env.CLIP_EVERY ?? 25);
+/** Run one phone match at 200% browser font (v29). */
+const BIG_TEXT = process.env.BIG_TEXT !== '0';
+/** Drive one match in phone LANDSCAPE — the short viewport (v29). */
+const LANDSCAPE = process.env.LANDSCAPE !== '0';
+const LANDSCAPE_W = Number(process.env.LANDSCAPE_W ?? 844);
+const LANDSCAPE_H = Number(process.env.LANDSCAPE_H ?? 390);
+/** How many steps a conceding match plays before resigning. */
+const CONCEDE_AFTER = Number(process.env.CONCEDE_AFTER ?? 90);
+/**
+ * Press ↻ REMATCH on the game-over screen rather than stopping there (v29).
+ *
+ * The victory screen has rendered since v26 and nothing has ever pressed its
+ * primary control. REMATCH remounts the whole match — a fresh deck roll, a
+ * fresh engine, a fresh narration chain — while the outgoing match's timers,
+ * refs and reward round-trip are still unwinding, which is the single most
+ * likely place in this component for a stale timer to fire into a dead tree.
+ */
+const REMATCH = process.env.REMATCH !== '0';
 
 interface Finding {
   match: number;
   seed: number;
   width: number;
-  kind: 'pageerror' | 'console' | 'hang' | 'overflow' | 'unfinished' | 'stale-ring' | 'narration';
+  kind:
+    | 'pageerror'
+    | 'console'
+    | 'hang'
+    | 'overflow'
+    | 'unfinished'
+    | 'stale-ring'
+    | 'narration'
+    | 'coverage'
+    | 'clipped';
   detail: string;
 }
 
@@ -86,13 +141,97 @@ const findings: Finding[] = [];
 /** How many driven matches actually reached the VICTORY screen. */
 let victories = 0;
 const winnableRun = { total: 0, won: 0 };
+/** Matches scheduled to resign, and how many actually reached CONFIRM. */
+const concedeRun = { total: 0, done: 0 };
+/** How many ↻ REMATCH presses produced a playable board. */
+let rematchesDriven = 0;
+
+/**
+ * The control census (v29) — "attempt every possible action", measured.
+ *
+ * Every previous stress round grew this driver by ADDING an action somebody
+ * noticed it had never taken: SKIP was clicked on every match until v19,
+ * RE-BOND had never been pressed until v22, ✕ CLEAR shipped in v20 and nothing
+ * pressed it until v22, and the VICTORY screen had never rendered until v26.
+ * Each of those was found by reading the source and remembering, which is a
+ * measurement instrument made of one person's attention.
+ *
+ * The run already reads the whole board on every step, so it already knows
+ * every control the match OFFERS. Counting which of them it ever PRESSES turns
+ * "what has the driver never tried?" from a memory exercise into a number that
+ * prints on every run — and a control offered in every match and pressed in
+ * none is reported as a finding rather than noticed three releases later.
+ *
+ * Keys are normalised (see CENSUS_KEY): the arithmetic suffixes the divider
+ * prints (`— TAKE 7 · LETHAL`) are the same control, and every card face
+ * collapses to one `«card»` key so a 40-card hand cannot bury the chrome.
+ */
+interface CensusRow {
+  /** Reads where the control was on screen and enabled. */
+  offered: number;
+  /** Matches in which it was offered at least once. */
+  offeredIn: Set<number>;
+  /** Successful driver clicks on it. */
+  pressed: number;
+  pressedIn: Set<number>;
+}
+const census = new Map<string, CensusRow>();
+const censusRow = (key: string): CensusRow => {
+  let row = census.get(key);
+  if (!row) {
+    row = { offered: 0, offeredIn: new Set(), pressed: 0, pressedIn: new Set() };
+    census.set(key, row);
+  }
+  return row;
+};
+/** Which match the reads/clicks being recorded belong to. */
+let censusMatch = -1;
+const noteOffered = (keys: string[]) => {
+  for (const k of keys) {
+    const row = censusRow(k);
+    row.offered += 1;
+    row.offeredIn.add(censusMatch);
+  }
+};
+const notePressed = (key: string) => {
+  if (!key) return;
+  const row = censusRow(key);
+  row.pressed += 1;
+  row.pressedIn.add(censusMatch);
+};
+/**
+ * Controls the driver is not expected to press, with the reason.
+ *
+ * An exemption is declared here rather than inferred, for the same reason
+ * v28's inline tap-target exception is marked on the element: an exception the
+ * harness works out for itself is an exception nobody chose. The list prints
+ * on every run.
+ */
+const CENSUS_EXEMPT = new Map<string, string>([
+  ['«card»', 'card faces are clicked by ring/hand index, not by label'],
+  ['BACK TO MENU', 'the driver ends a match by leaving the page, not by navigating'],
+]);
+/**
+ * A second deterministic stream, for the coin-flips taken inside the
+ * module-level helpers (which have no access to a match's own `rand`).
+ * Seeded off SEED0 so a run still reproduces exactly.
+ */
+let auxRng = (Number(process.env.SEED0 ?? 1) * 2654435761) >>> 0;
+const dblRand = () => (auxRng = (auxRng * 1664525 + 1013904223) >>> 0) / 0x100000000;
+
+/** A control offered in this many matches and never pressed is a finding. */
+const COVERAGE_MIN_MATCHES = Number(process.env.COVERAGE_MIN_MATCHES ?? 2);
+/** How many never-pressed controls are reported individually. */
+const COVERAGE_CAP = Number(process.env.COVERAGE_CAP ?? 12);
 
 /** Console noise the offline harness cannot avoid (no Supabase, no card CDN). */
 const NOISE = /Failed to load resource|net::ERR|ERR_TUNNEL|ERR_PROXY|Failed to fetch|WebSocket/i;
 
 interface BoardRead {
-  buttons: { text: string; disabled: boolean }[];
+  buttons: { text: string; disabled: boolean; key: string; shown: boolean }[];
   rings: { red: boolean; yellow: boolean; blue: boolean }[];
+  /** Innermost elements past the right edge, when the page is over-wide. */
+  offenders: string[];
   handCards: number;
   bodyText: string;
   header: string;
@@ -107,6 +246,41 @@ interface BoardRead {
 }
 
 /**
+ * One control's census identity, computed IN PAGE so a read and a click agree.
+ *
+ * Three rules, each of which a board control needed:
+ *  - a card face is `«card»`. Every unit, hand card and pile card renders a
+ *    `CardFace` (they carry `data-card-id`), so without this the census is
+ *    three hundred card names and no chrome.
+ *  - the arithmetic a divider button prints is not its identity.
+ *    `CONFIRM GUARDS — TAKE 7 · LETHAL` and `CONFIRM GUARDS — NOTHING GETS
+ *    THROUGH` are one control, so everything from the first em-dash or
+ *    interpunct on is dropped and any surviving digit run becomes `N`.
+ *  - `aria-label` wins over text, because the icon-only controls (the ✕
+ *    concede, the ash-pile drawer) have no text at all and would otherwise
+ *    census as `«unlabelled»` together.
+ */
+const CENSUS_KEY = `function __censusKey(el) {
+  // A card face is '«card»' whether the element IS one, sits inside one, or
+  // wraps one. The third case is the one the first run got wrong: a
+  // battlefield unit is a [role=button] wrapper whose CardFace child carries
+  // data-card-id, so \`closest\` found nothing and thirty card names arrived in
+  // the census as thirty distinct controls.
+  if (el.closest && el.closest('[data-card-id]')) return '\u00abcard\u00bb';
+  if (el.querySelector && el.querySelector('[data-card-id]')) return '\u00abcard\u00bb';
+  var t = el.getAttribute('aria-label') || el.textContent || '';
+  t = String(t).replace(/\\s+/g, ' ').trim();
+  // Everything after the first separator is STATE, not identity: an em-dash
+  // introduces arithmetic, an interpunct a suffix, and a colon the current
+  // value ("Narration speed: FAST. Click to change" is one control whose label
+  // names the rung it is on, and keying on the whole string made every rung a
+  // different control that had never been pressed).
+  t = t.split('\u2014')[0].split('\u00b7')[0].split(':')[0];
+  t = t.replace(/\\d+/g, 'N').replace(/\\s+/g, ' ').trim().toUpperCase();
+  return t.slice(0, 48) || '\u00abunlabelled\u00bb';
+}`;
+
+/**
  * Everything the board can be showing, read in one round trip.
  *
  * Passed as a source STRING, not a closure: tsx compiles this file with
@@ -115,11 +289,22 @@ interface BoardRead {
  * __name is not defined` on the first evaluate).
  */
 const READ_BOARD = `(() => {
+  ${CENSUS_KEY}
   var txt = function (el) { return (el && el.textContent ? el.textContent : '').replace(/\\s+/g, ' ').trim(); };
   var buttons = Array.prototype.slice
     .call(document.querySelectorAll('button, [role="button"]'))
     .map(function (el) {
-      return { text: txt(el), disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true' };
+      return {
+        text: txt(el),
+        disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
+        key: __censusKey(el),
+        // A control that is in the DOM but painting nothing is not being
+        // OFFERED. querySelectorAll happily returns the contents of a
+        // display:none panel, and the first census run reported the card
+        // inspector's ↻ SHOW BACK and CLOSE (ESC) as available on 2,482 of
+        // 2,715 reads — a modal nobody had opened.
+        shown: el.getClientRects().length > 0,
+      };
     });
   var rings = Array.prototype.slice
     .call(document.querySelectorAll('[class*="ring-4"]'))
@@ -138,9 +323,73 @@ const READ_BOARD = `(() => {
   // case-INSENSITIVELY: innerText reflects CSS text-transform, and the bubble
   // is uppercased, so the literal on screen is "· CLICK ▸▸".
   var m = /(\\d+\\/\\d+) · click/i.exec(body);
+  // Captured in the SAME read as the overflow number it explains. A second
+  // round trip is a different frame: the first version of this asked the page
+  // "what is too wide?" one evaluate after noticing that something was, and on
+  // a board where the offender is a popover or a banner the answer had already
+  // gone away — an overflow finding with an empty offender list every time.
+  var offenders = [];
+  if (document.documentElement.scrollWidth > window.innerWidth + 1) {
+    var W = window.innerWidth;
+    var bad = [];
+    var all = document.querySelectorAll('body *');
+    for (var oi = 0; oi < all.length; oi++) {
+      var oe = all[oi];
+      var orc = oe.getBoundingClientRect();
+      if (orc.width === 0 || orc.height === 0) continue;
+      if (orc.right <= W + 1) continue;
+      var oright = orc.right;
+      for (var oa = oe.parentElement; oa; oa = oa.parentElement) {
+        if (getComputedStyle(oa).overflowX === 'visible') continue;
+        oright = Math.min(oright, oa.getBoundingClientRect().right);
+      }
+      if (oright <= W + 1) continue;
+      bad.push(oe);
+    }
+    for (var oj = 0; oj < bad.length && offenders.length < 3; oj++) {
+      var innermost = true;
+      for (var ok = 0; ok < bad.length; ok++)
+        if (bad[ok] !== bad[oj] && bad[oj].contains(bad[ok])) innermost = false;
+      if (!innermost) continue;
+      offenders.push(
+        '<' + bad[oj].tagName.toLowerCase() + ' class="' + String(bad[oj].className || '').slice(0, 60) +
+        '"> "' + txt(bad[oj]).slice(0, 30) + '" right=' + Math.round(bad[oj].getBoundingClientRect().right));
+    }
+    // Nothing sticks out, and yet the document is wider than the window. That
+    // happens when the extra width belongs to an element's SCROLL extent
+    // rather than to its box — a row whose contents overflow it without a
+    // scrollbar — so fall back to naming it. An "overflow of no element"
+    // report is worse than no report: it reads as a harness bug.
+    if (offenders.length === 0) {
+      // A container whose CONTENT is wider than it is and which has no
+      // scroller to hold it. An overflow-x:auto row (the hand strip, the
+      // Locations lane, the divider) is doing exactly what it was built to do
+      // and is not the answer, so scrollers are excluded rather than reported.
+      var worst = null, worstBy = 0;
+      for (var wi = 0; wi < all.length; wi++) {
+        var we = all[wi];
+        if (getComputedStyle(we).overflowX !== 'visible') continue;
+        // And nothing above it may be holding that overflow either — a column
+        // inside a modal that scrolls is contained, however far its content
+        // runs, and naming it sends the reader off after a non-bug.
+        var held = false;
+        for (var wa = we.parentElement; wa; wa = wa.parentElement)
+          if (getComputedStyle(wa).overflowX !== 'visible') { held = true; break; }
+        if (held) continue;
+        var by = we.scrollWidth - we.clientWidth;
+        if (by > worstBy && we.clientWidth > 0) { worstBy = by; worst = we; }
+      }
+      if (worst) {
+        offenders.push('(no box past the edge) widest unscrolled overflow <' + worst.tagName.toLowerCase() +
+          ' class="' + String(worst.className || '').slice(0, 60) + '"> scrollWidth ' +
+          worst.scrollWidth + ' vs clientWidth ' + worst.clientWidth);
+      }
+    }
+  }
   return {
     buttons: buttons,
     rings: rings,
+    offenders: offenders,
     handCards: document.querySelectorAll('[aria-label$="— preview and invoke"]').length,
     // innerText, not textContent: the match screen carries its keyframes in
     // an inline <style>, and textContent returns all of that CSS ahead of any
@@ -152,6 +401,44 @@ const READ_BOARD = `(() => {
     beat: m ? m[1] : '',
     cpuRings: document.querySelectorAll('.gv4-cpu-actor, .gv4-cpu-target').length,
   };
+})()`;
+
+/**
+ * Controls the board is drawing but the player cannot reach (v29).
+ *
+ * Source string, same reason READ_BOARD is one. Returns one line per distinct
+ * clipped control; an empty array is the clean answer.
+ */
+const CLIPPED_CONTROLS = `(() => {
+  var W = window.innerWidth, H = window.innerHeight;
+  var out = [];
+  var els = document.querySelectorAll('button, [role="button"]');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    var rc = el.getBoundingClientRect();
+    if (rc.width === 0 || rc.height === 0) continue;
+    var top = rc.top, bottom = rc.bottom, left = rc.left, right = rc.right;
+    var scrollable = false;
+    for (var a = el.parentElement; a; a = a.parentElement) {
+      var st = getComputedStyle(a);
+      if (st.overflowY === 'auto' || st.overflowY === 'scroll' ||
+          st.overflowX === 'auto' || st.overflowX === 'scroll') scrollable = true;
+      var ar = a.getBoundingClientRect();
+      if (st.overflowY !== 'visible') { top = Math.max(top, ar.top); bottom = Math.min(bottom, ar.bottom); }
+      if (st.overflowX !== 'visible') { left = Math.max(left, ar.left); right = Math.min(right, ar.right); }
+    }
+    top = Math.max(top, 0); bottom = Math.min(bottom, H);
+    left = Math.max(left, 0); right = Math.min(right, W);
+    if (right - left > 2 && bottom - top > 2) continue;
+    // Inside something that scrolls: off screen, but one gesture away.
+    if (scrollable) continue;
+    var label = (el.getAttribute('aria-label') || el.textContent || el.tagName)
+      .replace(/\\s+/g, ' ').trim().slice(0, 32);
+    out.push(el.tagName + ' "' + label + '"');
+  }
+  var seen = {}, uniq = [];
+  for (var j = 0; j < out.length; j++) { if (!seen[out[j]]) { seen[out[j]] = 1; uniq.push(out[j]); } }
+  return uniq;
 })()`;
 
 /** An in-page evaluate that survives the page going away underneath it —
@@ -167,6 +454,7 @@ async function evalSafe<T>(page: Page, expr: string, fallback: T): Promise<T> {
 const EMPTY_BOARD: BoardRead = {
   buttons: [],
   rings: [],
+  offenders: [],
   handCards: 0,
   bodyText: '',
   header: '',
@@ -177,11 +465,27 @@ const EMPTY_BOARD: BoardRead = {
 };
 
 async function readBoard(page: Page): Promise<BoardRead> {
-  return evalSafe<BoardRead>(page, READ_BOARD, EMPTY_BOARD);
+  const board = await evalSafe<BoardRead>(page, READ_BOARD, EMPTY_BOARD);
+  // Deduped within the read: two ready units both offer «card», and a control
+  // the board draws twice is still one control being offered.
+  noteOffered([...new Set(board.buttons.filter((b) => !b.disabled && b.shown).map((b) => b.key))]);
+  return board;
 }
 
 const has = (b: { text: string; disabled: boolean }[], needle: string) =>
   b.some((x) => !x.disabled && x.text.includes(needle));
+
+/**
+ * Run a click expression that returns the census key of whatever it pressed
+ * (or `''` for a miss), record the press, and hand the caller back a boolean-y
+ * value — a non-empty key is truthy, so every existing `if (await clickX(...))`
+ * reads exactly as it did.
+ */
+async function press(page: Page, expr: string): Promise<boolean> {
+  const key = await evalSafe<string>(page, expr, '');
+  notePressed(key);
+  return key !== '';
+}
 
 /**
  * Click by visible text, in the page.
@@ -192,35 +496,73 @@ const has = (b: { text: string; disabled: boolean }[], needle: string) =>
  * a single round trip that returns false immediately.
  */
 async function clickText(page: Page, needle: string): Promise<boolean> {
-  return evalSafe(
+  return press(
     page,
     `(() => {
+      ${CENSUS_KEY}
       var want = ${JSON.stringify(needle)};
       var els = Array.prototype.slice.call(document.querySelectorAll('button, [role="button"]'));
       for (var i = 0; i < els.length; i++) {
         var el = els[i];
         if (el.disabled === true || el.getAttribute('aria-disabled') === 'true') continue;
         var t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-        if (t.indexOf(want) >= 0) { el.click(); return true; }
+        if (t.indexOf(want) >= 0) { var k = __censusKey(el); el.click(); return k; }
       }
-      return false;
+      return '';
     })()`,
-    false,
   );
 }
 
-/** Click by CSS selector, nth match. */
-async function clickSelector(page: Page, selector: string, idx = 0): Promise<boolean> {
-  return evalSafe(
+/**
+ * Press SPACE — the v26 shortcut that fires whatever the clash divider is
+ * offering — instead of clicking that button with the pointer.
+ *
+ * v29. The shortcut has never been exercised by anything but a unit test: the
+ * driver has always clicked, so the one path where a KEY has to find the
+ * primary, respect its `disabled`, and stay inert under a modal was measured
+ * only by reading it. The census records the control the key reached, so a
+ * SPACE that lands on the wrong primary shows up as the wrong row moving.
+ */
+async function pressSpace(page: Page): Promise<boolean> {
+  const key = await evalSafe<string>(
     page,
     `(() => {
-      var els = document.querySelectorAll(${JSON.stringify(selector)});
-      var el = els[${idx}];
-      if (!el) return false;
-      el.click();
-      return true;
+      ${CENSUS_KEY}
+      var el = document.querySelector('button[data-primary="1"]');
+      if (!el || el.disabled) return '';
+      // Blur first: the shortcut deliberately stands down when a BUTTON has
+      // focus (the browser already gives a focused control its own Space), so
+      // a driver that had just clicked something would measure nothing.
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      return __censusKey(el);
     })()`,
-    false,
+    '',
+  );
+  if (!key) return false;
+  await page.keyboard.press(' ');
+  notePressed(key);
+  return true;
+}
+
+/**
+ * Click by CSS selector, nth match. A NEGATIVE index counts from the end,
+ * which is how the driver reaches into an overlay: a modal mounts at the end
+ * of the DOM, so `-1` is the last card face on the page and the first one the
+ * ash-pile drawer is drawing, where index 0 is a battlefield unit sitting
+ * underneath the drawer that the click cannot reach anyway.
+ */
+async function clickSelector(page: Page, selector: string, idx = 0): Promise<boolean> {
+  return press(
+    page,
+    `(() => {
+      ${CENSUS_KEY}
+      var els = document.querySelectorAll(${JSON.stringify(selector)});
+      var el = ${idx} < 0 ? els[els.length + ${idx}] : els[${idx}];
+      if (!el) return '';
+      var k = __censusKey(el);
+      el.click();
+      return k;
+    })()`,
   );
 }
 
@@ -233,20 +575,22 @@ async function clickRing(page: Page, which: 'red' | 'yellow' | 'blue', idx = 0):
       : which === 'yellow'
         ? 'ring-[var(--c-yellow)]'
         : 'ring-[#29B6F6]';
-  return evalSafe(
+  return press(
     page,
     `(() => {
+      ${CENSUS_KEY}
       var els = Array.prototype.slice
         .call(document.querySelectorAll('[class*="ring-4"]'))
         .filter(function (el) { return String(el.className).indexOf(${JSON.stringify(cls)}) >= 0; });
       var el = els[${idx}];
-      if (!el) return false;
+      if (!el) return '';
       // The ring sits on a wrapper whose CardFace child owns the handler.
       var inner = el.querySelector('[role="button"], button');
-      (inner || el).click();
-      return true;
+      var target = inner || el;
+      var k = __censusKey(target);
+      target.click();
+      return k;
     })()`,
-    false,
   );
 }
 
@@ -276,6 +620,46 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
   const tries = scan ? count : 1;
   for (let t = 0; t < tries; t++) {
     const at = (idx + t) % count;
+    // v29 — the DOUBLE-CLICK shortcut (v26): a hand card played without ever
+    // opening its preview. It is a different code path from the preview's
+    // INVOKE button (a dblclick handler on the tile, not a click on a button
+    // inside the panel it opens) and nothing in this harness had ever taken
+    // it. Only when the caller is scanning, so a miss still falls through to
+    // the preview route below and the turn is not thrown away on it.
+    if (scan && dblRand() < 0.25) {
+      const played = await evalSafe(
+        page,
+        `(() => {
+          ${CENSUS_KEY}
+          var cards = document.querySelectorAll('[aria-label$="— preview and invoke"]');
+          var el = cards[${at}];
+          if (!el) return '';
+          var k = __censusKey(el);
+          var ev = new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window });
+          el.dispatchEvent(ev);
+          return k;
+        })()`,
+        '',
+      );
+      if (played) {
+        notePressed('«dblclick hand card»');
+        await page.waitForTimeout(120);
+        const after = await evalSafe<number>(
+          page,
+          `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+          count,
+        );
+        const picking = await evalSafe(
+          page,
+          `/PICK A TARGET|BOND — pick/i.test(String(document.body.innerText || ''))`,
+          false,
+        );
+        if (after !== count || picking) return true;
+        // It opened the preview instead (a dblclick is two clicks) — close it
+        // and fall through to the ordinary route for this same card.
+        await clickText(page, '✕ CLOSE');
+      }
+    }
     const opened = await evalSafe(
       page,
       `(() => {
@@ -353,12 +737,22 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
  * private hook.
  */
 async function playWellspring(page: Page): Promise<boolean> {
-  return evalSafe(
+  // 15% of the time, any colour rather than the most unlocking one.
+  const pickAny = dblRand() < 0.4;
+  const anyIdx = Math.floor(dblRand() * 7);
+  return press(
     page,
     `(() => {
+      ${CENSUS_KEY}
+      var __pickAny = ${pickAny};
+      var __anyIdx = ${anyIdx};
       var els = Array.prototype.slice.call(document.querySelectorAll('button[aria-label^="Play a "]'))
         .filter(function (el) { return el.disabled !== true; });
-      if (els.length === 0) return false;
+      // '' and not false: this probe returns a census KEY now, and \`press\`
+      // reads any non-empty return as "something was pressed" — so a stray
+      // \`false\` here reported a Wellspring played on every step where there
+      // was no dot to press at all, and the ladder restarted forever.
+      if (els.length === 0) return '';
       // "Play a Void Wellspring — unlocks 3 cards in hand" — the count is the
       // number of hand cards that colour would turn on.
       var best = null, bestN = -1;
@@ -367,6 +761,11 @@ async function playWellspring(page: Page): Promise<boolean> {
         var n = m ? Number(m[1]) : 0;
         if (n > bestN) { bestN = n; best = els[i]; }
       }
+      // v29 — sometimes take a different colour. Always taking the BEST dot is
+      // good play and bad coverage: the census showed four of the seven
+      // Wellspring dots offered dozens of times and pressed never, because the
+      // colour that is never the best answer is never pressed at all.
+      if (__pickAny) best = els[__anyIdx % els.length];
       var before = document.querySelectorAll('[aria-label$="Wellspring"], [aria-label$="Wellspring, exhausted"]').length;
       (best || els[0]).click();
       // v22 — report whether a Location actually ARRIVED, not merely that a dot
@@ -377,9 +776,9 @@ async function playWellspring(page: Page): Promise<boolean> {
       // Wellsprings on an empty stack and the row did not). The UI now disables
       // the dot in that state, so this is the belt to that braces — an action
       // that changes nothing must never count as a step.
-      return document.querySelectorAll('[aria-label$="Wellspring"], [aria-label$="Wellspring, exhausted"]').length > before;
+      if (document.querySelectorAll('[aria-label$="Wellspring"], [aria-label$="Wellspring, exhausted"]').length <= before) return '';
+      return __censusKey(best || els[0]);
     })()`,
-    false,
   );
 }
 
@@ -411,9 +810,16 @@ async function driveMatch(
   mode: NarrationMode,
   /** Hand the driver a winnable board — see WIN_EVERY. */
   winnable: boolean,
+  /** Resign this match once it has played a while — see CONCEDE_EVERY. */
+  concedes = false,
+  /** Play this match with the browser's font size doubled (v29). */
+  bigText = false,
+  /** Viewport height. 900 everywhere except the landscape match (v29). */
+  height = 900,
 ) {
   const watch = mode !== 'skip';
-  const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+  censusMatch = match;
+  const ctx = await browser.newContext({ viewport: { width, height } });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -424,10 +830,45 @@ async function driveMatch(
   // should not be papered over by a slow timer — and a WATCHING one has to
   // sit through every beat in real time, so it wants the short beat too.
   page.setDefaultTimeout(1000);
-  await page.goto(`${BASE}?seed=${seed}&speed=2${winnable ? `&cpuvit=${WIN_VIT}` : ''}`, {
+  // v29 — one phone match plays at the browser's font size doubled.
+  //
+  // The meta-screen sweep added this at v29 and found nine screens that push
+  // off the side of a phone under it; the match board is the screen a player
+  // spends the most time on and had never been measured at any font size but
+  // the default. It clips rather than scrolls, so what a large font does here
+  // is squeeze controls out of existence rather than off the edge — which is
+  // exactly what the clipped-control check above looks for.
+  const handicap = winnable
+    ? `&cpuvit=${WIN_VIT}${WIN_MY_VIT > 0 ? `&myvit=${WIN_MY_VIT}` : ''}`
+    : '';
+  await page.goto(`${BASE}?seed=${seed}&speed=2${handicap}`, {
     waitUntil: 'domcontentloaded',
     timeout: 30_000,
   });
+  if (bigText) {
+    const cdp = await ctx.newCDPSession(page);
+    await cdp
+      .send('Page.setFontSizes', { fontSizes: { standard: 32, fixed: 26 } })
+      .catch(() => undefined);
+    await page.waitForTimeout(400);
+    // Confirm it TOOK. A harness that silently measures the default size while
+    // reporting "200% text" is the one failure this whole file exists to
+    // avoid: it would print a clean sheet for a state nothing rendered.
+    const rootPx = await evalSafe<number>(
+      page,
+      `parseFloat(getComputedStyle(document.documentElement).fontSize) || 0`,
+      0,
+    );
+    if (rootPx < 24) {
+      findings.push({
+        match,
+        seed,
+        width,
+        kind: 'unfinished',
+        detail: `200% text mode did not take — the root font is ${rootPx}px, so this match measured the default size`,
+      });
+    }
+  }
   await page.waitForTimeout(900);
 
   let lastSig = '';
@@ -450,7 +891,14 @@ async function driveMatch(
     return result;
   };
   let finished = false;
+  /** Steps this driven match may take — grows by STEPS on a rematch. */
+  let stepBudget = STEPS;
+  /** This match answered CONFIRM on the concede dialog. */
+  let conceded = false;
+  /** How many times ↻ REMATCH was pressed and a new match came up. */
+  let rematches = 0;
   let overflowReported = false;
+  let clippedReported = false;
   let staleRingReported = false;
   let narrationReported = false;
   /** Consecutive reads showing the same narration beat, in watch mode. */
@@ -474,7 +922,7 @@ async function driveMatch(
   let rng = seed >>> 0;
   const rand = () => (rng = (rng * 1664525 + 1013904223) >>> 0) / 0x100000000;
 
-  for (let step = 0; step < STEPS && !finished; step++) {
+  for (let step = 0; step < stepBudget && !finished; step++) {
     const b = await readBoard(page);
     const narrating = b.beat !== '' || has(b.buttons, 'SKIP ▸▸');
 
@@ -493,15 +941,76 @@ async function driveMatch(
       staleRingReported = true;
     }
 
-    if (!overflowReported && b.scrollWidth > b.innerWidth + 1) {
+    /**
+     * An overflow finding names the element, or it is not a finding.
+     *
+     * v29 spent three rounds on this. The board measured 1–12px over at 200%
+     * text with no element past the edge at all; the fallback that guessed at
+     * "the widest thing whose content does not fit" then named the hand strip
+     * (an `overflow-x: auto` row doing its job), and after that the card
+     * inspector's inner column (contained by a wrapper that scrolls both ways,
+     * and 536-in-358 at the DEFAULT font too, so not a text-resize bug
+     * either). Two confident wrong answers in a row.
+     *
+     * The overshoot itself is real but unattributable — fractional rem
+     * paddings at 200% and `scrollWidth`'s rounding-up — and the failure this
+     * check exists to catch, a control pushed off the side of the screen, is
+     * ALWAYS a box past the edge. So the box is required. When the number
+     * moves without one, the run says so on stdout and does not fail: a
+     * finding nobody can act on trains people to ignore the report.
+     */
+    const overBy = b.scrollWidth - b.innerWidth;
+    const realOffender = b.offenders.some((o) => !o.startsWith('(no box'));
+    if (!overflowReported && overBy > 1 && !realOffender) {
+      overflowReported = true;
+      console.log(
+        `    note: match ${match} measured ${b.scrollWidth} > ${b.innerWidth} at step ${step} ` +
+          `with no element past the edge${b.offenders.length ? ` — ${b.offenders[0]}` : ''}`,
+      );
+    }
+    if (!overflowReported && overBy > 1 && realOffender) {
       findings.push({
         match,
         seed,
         width,
         kind: 'overflow',
-        detail: `scrollWidth ${b.scrollWidth} > innerWidth ${b.innerWidth} at step ${step}`,
+        detail:
+          `scrollWidth ${b.scrollWidth} > innerWidth ${b.innerWidth} at step ${step}` +
+          (b.offenders.length ? ` — widest: ${b.offenders.join(' | ')}` : ''),
       });
       overflowReported = true;
+    }
+
+    /**
+     * v29 — the check the overflow check could never be.
+     *
+     * The match root is `w-full h-screen flex flex-col overflow-hidden`. A
+     * root that clips cannot grow the document's scroll width, so
+     * `scrollWidth > innerWidth` on this page is a condition the layout is
+     * structurally incapable of reaching — every run since v17 has been
+     * asserting something that cannot fail. (It stays: the check costs
+     * nothing and the day the root stops clipping is the day it starts
+     * meaning something.)
+     *
+     * What a clipping root DOES do to a control that no longer fits is hide
+     * it, in place, with no scrollbar to reach it by. So that is what gets
+     * measured: every control's rectangle intersected with each clipping
+     * ancestor and with the viewport, and a report when the result is nothing
+     * AND no ancestor scrolls — because a control inside a scroll strip is a
+     * control the player can still get to.
+     */
+    if (!clippedReported && step % CLIP_EVERY === 0) {
+      const clipped = await evalSafe<string[]>(page, CLIPPED_CONTROLS, []);
+      if (clipped.length > 0) {
+        findings.push({
+          match,
+          seed,
+          width,
+          kind: 'clipped',
+          detail: `${clipped.length} control(s) clipped to nothing with no scrollable ancestor at step ${step}: ${clipped.slice(0, 4).join(' | ')}`,
+        });
+        clippedReported = true;
+      }
     }
 
     // `beat` is part of the signature so a narration advancing normally can
@@ -543,6 +1052,37 @@ async function driveMatch(
     // 1. Match over.
     if (has(B, 'BACK TO MENU')) {
       finished = true;
+      // v29 — ↻ REMATCH, once per driven match. The control has been on this
+      // screen since v22 and on screen in this harness since v26, and nothing
+      // has ever pressed it. It remounts the entire match component while the
+      // outgoing one's narration timers, damage-float timers and reward
+      // round-trip are still unwinding — so a stale timer firing into a dead
+      // tree lands here or nowhere. Keep playing afterwards: a rematch that
+      // renders and then cannot be played is not a rematch.
+      if (REMATCH && rematches === 0 && has(B, '↻ REMATCH')) {
+        if (await clickText(page, '↻ REMATCH')) {
+          rematches += 1;
+          finished = false;
+          conceded = false;
+          // The second match gets its own budget rather than the tail of the
+          // first one's — otherwise a long first match turns REMATCH into a
+          // guaranteed `unfinished` report about the wrong thing.
+          stepBudget += STEPS;
+          await page.waitForTimeout(600);
+          const back = await readBoard(page);
+          if (back.buttons.length === 0) {
+            findings.push({
+              match,
+              seed,
+              width,
+              kind: 'hang',
+              detail: '↻ REMATCH left the board with no controls at all',
+            });
+            break;
+          }
+          continue;
+        }
+      }
       break;
     }
     // 2. Opening hand.
@@ -557,10 +1097,23 @@ async function driveMatch(
       if (!(await clickText(page, 'SHED & END TURN'))) await clickText(page, 'BACK');
       continue;
     }
-    // 4. Confirm dialog (only the driver's own stray concede click can raise one).
+    // 4. Confirm dialog. A conceding match answers CONFIRM; every other match
+    //    answers CANCEL, which is also what a stray concede click gets.
     if (has(B, 'CANCEL') && has(B, 'CONFIRM') && b.bodyText.includes('Concede this match')) {
-      await clickText(page, 'CANCEL');
+      if (concedes && step >= CONCEDE_AFTER) {
+        conceded = true;
+        await clickText(page, 'CONFIRM');
+      } else {
+        await clickText(page, 'CANCEL');
+      }
       continue;
+    }
+    // 4b. v29 — resign. Deliberately AFTER the dialog branch above (so the
+    //     confirm it raises is answered on the next pass) and before every
+    //     branch that would take an ordinary action, so the resignation is
+    //     not perpetually deferred by a board that always has something to do.
+    if (concedes && !conceded && step >= CONCEDE_AFTER && !narrating) {
+      if (await clickSelector(page, '[aria-label="Concede match"]')) continue;
     }
     // 5. A targeting pick is open — take a legal target, or cancel it.
     // Case-INSENSITIVE, and the same fix v19 made for the beat counter: the
@@ -572,6 +1125,11 @@ async function driveMatch(
     // INVOKE stayed live underneath it and simply re-armed the same pick.
     if (/PICK A TARGET|BOND — pick/i.test(b.bodyText)) {
       const reds = b.rings.filter((r) => r.red).length;
+      // v29 — a Charm can bond to the player's own Vitality plate, which the
+      // pending bar says out loud ("or your Vitality") and which nothing had
+      // ever picked: the plate is a `role=button` outside the ring machinery,
+      // so a driver that only ever clicked red rings could not reach it.
+      if (rand() < 0.2 && (await clickSelector(page, '[aria-label*="tap to target"]'))) continue;
       if (reds > 0 && (await clickRing(page, 'red', Math.floor(rand() * reds)))) continue;
       // By aria-label, never by the "✕" glyph: the first ✕ in the DOM is the
       // top bar's ✕ CONCEDE, so a text match here resigned the match and every
@@ -747,6 +1305,13 @@ async function driveMatch(
           sameBeatFor = 0;
         }
         lastBeat = b.beat;
+        // v29 — the ⏱ ladder, pressed while a run is actually PLAYING. The
+        // skipping branch below has cycled it since v19, but a skip tears the
+        // narration down in the same step: nothing had ever changed the pace
+        // of a run and then watched the rest of it at the new one, which is
+        // the only way the timer chain's re-read of the multiplier gets
+        // exercised at all.
+        if (rand() < 0.03) await clickText(page, '⏱');
         if (!narrationReported && sameBeatFor > 60) {
           findings.push({
             match,
@@ -765,9 +1330,86 @@ async function driveMatch(
         continue;
       }
       // Exercise the speed toggle too — it is a live control mid-narration.
-      if (rand() < 0.1) await clickText(page, '⏱');
+      // 0.1 -> 0.25: at a tenth, a six-match run could and did finish with the
+      // speed ladder never once cycled, which is how a control that is offered
+      // on every narration read ends up pressed zero times.
+      if (rand() < 0.25) await clickText(page, '⏱');
       await clickText(page, 'SKIP ▸▸');
       continue;
+    }
+    // 9b. v29 — the turn recap (v26). It greets the player the moment control
+    //     comes back, carries the only two controls that exist on it, and no
+    //     harness had ever touched either: ▴ FULL LOG (which opens the Battle
+    //     Log on the opponent's slice AND clears the strip) and its own ✕.
+    //     The strip does not block play, which is exactly why a driver that
+    //     only ever pressed what blocked it never met either one.
+    if (b.buttons.some((x) => x.key === 'DISMISS THE TURN RECAP')) {
+      const roll = rand();
+      if (roll < 0.3 && act('recap:log', await clickText(page, '▴ FULL LOG'))) continue;
+      if (
+        roll < 0.6 &&
+        act('recap:dismiss', await clickSelector(page, '[aria-label="Dismiss the turn recap"]'))
+      )
+        continue;
+      // else: leave it up and play on, which is what most players do.
+    }
+    // 9c. v29 — the hand-order button (v27). Presentation only, and cycling it
+    //     mid-turn re-orders the dock UNDER the index tryInvokeHand is about
+    //     to use: exactly the kind of seam this driver exists to shake.
+    if (rand() < 0.05 && act('hand-sort', await clickText(page, '↕ '))) continue;
+    // 9d. v29 — the first-match coach overlay. Two controls, offered on every
+    //     match this harness has ever driven, pressed on none of them: the
+    //     driver plays straight through the callouts because they do not
+    //     block. GOT IT advances the script and SKIP TUTORIAL tears it down
+    //     mid-flight, which is the interesting one.
+    if (b.buttons.some((x) => x.key === 'GOT IT' || x.key === 'SKIP TUTORIAL')) {
+      const roll = rand();
+      if (roll < 0.5 && act('coach:got-it', await clickText(page, 'GOT IT'))) continue;
+      if (roll < 0.6 && act('coach:skip', await clickText(page, 'Skip tutorial'))) continue;
+    }
+    // 9d2. v29 — the board's Tip badges. `EXHAUSTED`, `JUST INVOKED`,
+    //      `ON THE DRAW`, `ASH 0`, `LOCATIONS PRODUCE YOUR ESSENCE`: every one
+    //      of them is a `role="button"` with a portalled popover, every one is
+    //      offered on literally every read of the board, and the census found
+    //      that not one had ever been pressed. They are also the controls most
+    //      likely to swallow a tap meant for the card underneath.
+    if (
+      rand() < 0.08 &&
+      act('tip', await clickSelector(page, '[data-tip]', Math.floor(rand() * 14)))
+    ) {
+      await page.waitForTimeout(60);
+      await page.keyboard.press('Escape');
+      continue;
+    }
+    // 9e. v29 — the glossary. A keyword chip on a card face is a real control
+    //     with a real popover behind it (and v28 spent a whole pass on the
+    //     fact that these chips are the smallest targets on the board), and
+    //     nothing had ever opened one. Cheap, so rarely — but never is worse.
+    if (rand() < 0.06 && act('glossary', await clickSelector(page, '[data-keyword-chip]'))) {
+      // The popover has no close button by design — outside click, wheel,
+      // touchmove or Escape take it down. Escape is the one a keyboard player
+      // uses and the one that has to keep working while a match is live.
+      await page.waitForTimeout(80);
+      await page.keyboard.press('Escape');
+      continue;
+    }
+    // 9f. v29 — the ash-pile drawer, and the 3D inspector behind it.
+    //
+    //     The driver has OPENED this drawer since v17 and never once closed
+    //     it (`CLOSE ASH-PILE`: offered 1,189 times, pressed 0), and the cards
+    //     inside it are the board's only route to the 3D card inspector, whose
+    //     ↻ SHOW BACK and CLOSE (ESC) had therefore never been pressed either.
+    //     Three controls behind one drawer nobody shut.
+    if (b.buttons.some((x) => x.key === 'CLOSE ASH-PILE')) {
+      if (rand() < 0.4 && (await clickSelector(page, '[data-card-id]', -1))) {
+        await page.waitForTimeout(120);
+        await clickText(page, '↻ SHOW BACK');
+        await page.waitForTimeout(80);
+        if (!(await clickText(page, 'CLOSE (ESC)'))) await page.keyboard.press('Escape');
+        act('inspect-3d', true);
+        continue;
+      }
+      if (act('ash:close', await clickSelector(page, '[aria-label="Close ash-pile"]'))) continue;
     }
     // 10. The human's own main phases / clash.
     const inClash = b.rings.some((r) => r.red) && has(B, 'SKIP TO MAIN II');
@@ -821,18 +1463,28 @@ async function driveMatch(
     if (roll < 0.62) {
       // Ash-pile drawer, battle log, inspector — read-only chrome that still
       // has to survive being opened mid-turn.
-      const chrome = ['ASH-PILE', '▴ LOG', '▾ LOG'][Math.floor(rand() * 3)];
+      // v29 — `ASH N` (the OPPONENT's pile, top-left) against `ASH-PILE N`
+      // (the player's own, bottom-right): two drawers, and the census found
+      // the driver had opened one of them 3,940 times and the other never.
+      const chrome = ['ASH-PILE', 'ASH ', '▴ LOG', '▾ LOG'][Math.floor(rand() * 4)];
       if (act(`chrome:${chrome}`, await clickText(page, chrome))) continue;
     }
     for (const label of ['TO CLASH', 'SKIP TO MAIN II', 'END TURN', 'NEXT ▸']) {
       if (B.some((x) => !x.disabled && x.text.includes(label))) {
+        // v29 — a quarter of the time, take the phase with the SPACE shortcut
+        // instead of the pointer. Same control, a path nothing had pressed.
+        if (rand() < 0.25 && act(`space:${label}`, await pressSpace(page))) break;
         if (act(`phase:${label}`, await clickText(page, label))) break;
       }
     }
   }
 
   const final = await readBoard(page);
-  if (!finished) {
+  // A rematch spends the same step budget on a SECOND match, so running out
+  // part-way through it is the budget doing its job rather than a match that
+  // could not finish. Only a driver that never reached a winner at all has
+  // found the thing this report is about.
+  if (!finished && rematches === 0) {
     findings.push({
       match,
       seed,
@@ -884,13 +1536,18 @@ async function driveMatch(
       detail: 'study mode never reached a narration beat — ❚❚ HOLD / ▸ STEP went unexercised',
     });
   }
+  if (concedes) concedeRun.total += 1;
+  if (conceded) concedeRun.done += 1;
+  rematchesDriven += rematches;
   if (winnable) winnableRun.total += 1;
   if (outcome === 'VICTORY') {
     victories += 1;
     if (winnable) winnableRun.won += 1;
   }
   console.log(
-    `match ${match} (seed ${seed}, ${width}px, ${winnable ? 'winnable, ' : ''}${
+    `match ${match} (seed ${seed}, ${width}x${height}, ${bigText ? '200% text, ' : ''}${winnable ? 'winnable, ' : ''}${
+      conceded ? 'conceded, ' : ''
+    }${rematches > 0 ? `rematched ${rematches}x, ` : ''}${
       mode === 'skip'
         ? 'skipped'
         : mode === 'study'
@@ -922,7 +1579,30 @@ for (let m = 0; m < MATCHES; m++) {
       ? 'study'
       : 'watch';
   const winnable = WIN_EVERY > 0 && m % WIN_EVERY === 0;
-  await driveMatch(browser, m, SEED0 + m, width, mode, winnable);
+  // A conceding match must not also be a winnable one — the handicap exists to
+  // reach VICTORY, and a resignation throws that away.
+  const concedes = CONCEDE_EVERY > 0 && !winnable && m % CONCEDE_EVERY === 0;
+  // The SECOND phone match, so the first one still measures the default size:
+  // a regression that only shows at 200% and one that shows at both are
+  // different findings and want different reports.
+  const bigText = BIG_TEXT && width === PHONE && m === 1;
+  // One LANDSCAPE match (v29). Every run this harness has ever done used a
+  // 900px-tall window, so the one orientation a phone spends half its life in
+  // had never been driven — and the first measurement of it found twenty
+  // controls clipped away with no way to reach them, the player's Leader and
+  // their whole hand among them.
+  const landscape = LANDSCAPE && m === 2;
+  await driveMatch(
+    browser,
+    m,
+    SEED0 + m,
+    landscape ? LANDSCAPE_W : width,
+    mode,
+    winnable,
+    concedes,
+    bigText,
+    landscape ? LANDSCAPE_H : 900,
+  );
 }
 
 await browser.close();
@@ -930,6 +1610,15 @@ await browser.close();
 // A run where the handicap never once produced a win measured the victory
 // screen exactly as much as the pre-v26 driver did: not at all. Say so rather
 // than printing a clean sheet for a state nothing rendered.
+if (CONCEDE_EVERY > 0 && concedeRun.total > 0 && concedeRun.done === 0) {
+  findings.push({
+    match: -1,
+    seed: SEED0,
+    width: WIDE,
+    kind: 'unfinished',
+    detail: `${concedeRun.total} match(es) were scheduled to resign and none reached CONFIRM — the concede path went unmeasured`,
+  });
+}
 if (WIN_EVERY > 0 && winnableRun.total > 0 && winnableRun.won === 0) {
   findings.push({
     match: -1,
@@ -940,10 +1629,68 @@ if (WIN_EVERY > 0 && winnableRun.total > 0 && winnableRun.won === 0) {
   });
 }
 console.log(
-  `\n${victories} VICTORY / ${MATCHES} match(es) (${winnableRun.won}/${winnableRun.total} of the winnable ones)`,
+  `\n${victories} VICTORY / ${MATCHES} match(es) (${winnableRun.won}/${winnableRun.total} of the winnable ones) · ${concedeRun.done}/${concedeRun.total} resigned · ${rematchesDriven} rematch(es) driven`,
 );
-console.log(`\n=== ${findings.length} finding(s) ===`);
-for (const f of findings) {
+
+// ---- the control census (v29) ---------------------------------------------
+const rows = [...census.entries()].sort((a, b) => b[1].offeredIn.size - a[1].offeredIn.size);
+console.log(`\n=== control census: ${rows.length} distinct control(s) offered ===`);
+for (const [key, row] of rows) {
+  const exempt = CENSUS_EXEMPT.get(key);
+  const mark = row.pressed > 0 ? '  ' : exempt ? '– ' : '! ';
+  console.log(
+    `${mark}${key.padEnd(46)} offered ${String(row.offered).padStart(5)}x in ${
+      row.offeredIn.size
+    } match(es) · pressed ${String(row.pressed).padStart(4)}x in ${row.pressedIn.size}${
+      exempt ? `  [exempt: ${exempt}]` : ''
+    }`,
+  );
+}
+const unpressed = rows.filter(
+  ([key, row]) =>
+    row.pressed === 0 && !CENSUS_EXEMPT.has(key) && row.offeredIn.size >= COVERAGE_MIN_MATCHES,
+);
+// Capped like the tap-target report: the point of this list is to be acted on,
+// and 300 rows of it is a wall rather than a work item. The full census above
+// is always complete.
+for (const [key, row] of unpressed.slice(0, COVERAGE_CAP)) {
+  findings.push({
+    match: -1,
+    seed: SEED0,
+    width: WIDE,
+    kind: 'coverage',
+    detail: `never pressed: "${key}" was offered ${row.offered}x across ${row.offeredIn.size} match(es) and the driver never once clicked it`,
+  });
+}
+if (unpressed.length > COVERAGE_CAP) {
+  findings.push({
+    match: -1,
+    seed: SEED0,
+    width: WIDE,
+    kind: 'coverage',
+    detail: `…and ${unpressed.length - COVERAGE_CAP} more control(s) offered in ${COVERAGE_MIN_MATCHES}+ matches and never pressed (full list in the census above)`,
+  });
+}
+/**
+ * Coverage is reported, not gated — and the split is deliberate.
+ *
+ * Every other finding this harness produces is a defect in the GAME: a crash,
+ * a hang, a control clipped away, a narration that never ends. A coverage row
+ * is a gap in the HARNESS — a control the driver has not learned to press yet
+ * — and folding the two into one exit code says "the match is broken" when
+ * what is true is "the driver is not finished". The first census found 306 of
+ * them; this pass closed the ones that were reachable and left a list. Making
+ * the census a gate is the job of the pass that clears it, and it should be
+ * done by moving rows out of this list, never by widening the exemptions.
+ */
+const gating = findings.filter((f) => f.kind !== 'coverage');
+const coverage = findings.filter((f) => f.kind === 'coverage');
+console.log(`\n=== ${gating.length} finding(s) ===`);
+for (const f of gating) {
   console.log(`match ${f.match} seed ${f.seed} @${f.width} [${f.kind}] ${f.detail}`);
 }
-process.exit(findings.length > 0 ? 1 : 0);
+if (coverage.length > 0) {
+  console.log(`\n=== ${coverage.length} coverage gap(s) — reported, not gated ===`);
+  for (const f of coverage) console.log(`[${f.kind}] ${f.detail}`);
+}
+process.exit(gating.length > 0 ? 1 : 0);

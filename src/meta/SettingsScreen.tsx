@@ -145,8 +145,13 @@ export function SettingsScreen({
               <Sparkles className="w-6 h-6 text-[var(--c-ink)]" />
               <h2 className="heading-font text-lg">NEWS CENTER PRIVACY</h2>
             </div>
-            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex items-center justify-between gap-4">
-              <div>
+            {/* flex-wrap + min-w-0: the label block and the toggle sit on one
+                line, and at a large browser font size the pair is wider than a
+                phone (v29's text-resize sweep read 418px against 375). The
+                prose column has to be allowed to shrink AND the row has to be
+                allowed to break — either one alone still overflows. */}
+            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
                 <div className="heading-font text-sm">HIDE MY USERNAME</div>
                 <p className="text-[11px] font-bold text-[var(--c-steel)] mt-1 max-w-md">
                   When you pull a Serialized card, the News Center always announces it — this only

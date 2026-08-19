@@ -1510,6 +1510,33 @@ export function discardLiveClash(state: GameState): void {
 }
 
 /**
+ * Resign: `pid` loses on the spot.
+ *
+ * v29. Conceding used to be the one way a match could end that the ENGINE
+ * never heard about — the UI fired its own `onResult(false)` and unmounted
+ * itself in the same tick. Two things fell out of that. The reward round-trip
+ * it had just started (three attempts, 1.5s apart) was left writing into a
+ * component that no longer existed, so a player whose loss failed to record
+ * could not be told; and the battle log's last line was whatever the board had
+ * been doing, because a resignation wrote nothing.
+ *
+ * Making it a real engine outcome fixes both by deleting the special case: the
+ * match reaches the same `winner`/`stage: 'over'` the other endings reach, so
+ * the existing result-reporting effect fires exactly once, the game-over
+ * screen shows the same reward block (or the same error), and the log carries
+ * the sentence that explains the result.
+ *
+ * A no-op once the game is decided — a concede pressed on the game-over
+ * screen must not overwrite the winner.
+ */
+export function concedeGame(state: GameState, pid: PlayerId): boolean {
+  if (state.winner) return false;
+  state.winner = opponentOf(pid);
+  state.log.push(`${pid} concedes.`);
+  return true;
+}
+
+/**
  * Complete Dusk from the shed step on: shed to MAX_HAND (the `picked` cards
  * first, then from the end), clear the clash, pass the turn and run the next
  * player's Dawn. Exported so a UI whose `chooseShed` hook paused the turn
@@ -2165,21 +2192,31 @@ export function declareAttackers(state: GameState, iids: string[]): boolean {
 
 /** Defender's units that could legally guard `attackerIid` (individually —
  * Swarmproof's 2+ rule is checked at declareGuards). */
+/**
+ * Can `guard` legally block `attacker`? Exhaustion, Aerial/Skywatch, Nimble.
+ *
+ * Split out of `legalGuardsFor` in v29 so the match UI can answer "could
+ * anything over there stop this?" BEFORE a clash exists. The alternative was
+ * for the board to re-implement three keyword rules next to the attack button,
+ * which is how a UI ends up promising a lethal swing the engine then blocks.
+ */
+export function canGuardAttacker(state: GameState, attacker: UnitInst, guard: UnitInst): boolean {
+  if (guard.exhausted) return false;
+  if (unitHasKw(attacker, 'Aerial') && !unitHasKw(guard, 'Aerial') && !unitHasKw(guard, 'Skywatch'))
+    return false;
+  // v6.9 Nimble: only a smaller body can catch it. Strictly less Might, so
+  // an equal-Might guard does not qualify.
+  if (unitHasKw(attacker, 'Nimble') && effMight(state, guard) >= effMight(state, attacker))
+    return false;
+  return true;
+}
+
 export function legalGuardsFor(state: GameState, attackerIid: string): UnitInst[] {
   if (!state.clash || !state.clash.attackers.includes(attackerIid)) return [];
   const attacker = findUnit(state, attackerIid);
   if (!attacker) return [];
   const defender = state.players[opponentOf(state.active)];
-  return defender.field.filter((g) => {
-    if (g.exhausted) return false;
-    if (unitHasKw(attacker, 'Aerial') && !unitHasKw(g, 'Aerial') && !unitHasKw(g, 'Skywatch'))
-      return false;
-    // v6.9 Nimble: only a smaller body can catch it. Strictly less Might, so
-    // an equal-Might guard does not qualify.
-    if (unitHasKw(attacker, 'Nimble') && effMight(state, g) >= effMight(state, attacker))
-      return false;
-    return true;
-  });
+  return defender.field.filter((g) => canGuardAttacker(state, attacker, g));
 }
 
 /**

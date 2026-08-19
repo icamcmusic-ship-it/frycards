@@ -183,7 +183,12 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="MISSIONS & ACHIEVEMENTS" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
-        <div className="flex gap-2 mb-4">
+        {/* flex-wrap: the second tab's label carries a live count, and at a
+            large browser font size the two of them are wider than a phone —
+            v29's text-resize sweep measured this row at 548px against a 375px
+            viewport. A tab row is the last thing that should push a screen
+            sideways. */}
+        <div className="flex flex-wrap gap-2 mb-4">
           <PopButton
             color={tab === 'missions' ? 'black' : 'yellow'}
             onClick={() => setTab('missions')}

@@ -426,8 +426,14 @@ export function ShowroomScreen({
                 {t.label}
               </button>
             ))}
-            <label className="flex items-center gap-1 ml-auto ink-border-sm bg-white px-2 py-1">
-              <Search className="w-3.5 h-3.5 text-[var(--c-steel)]" aria-hidden />
+            {/* min-w-0 / max-w-full, on the box AND on the field inside it:
+                `w-40` is 10rem, so the field is 320px the moment a player
+                doubles their browser font size, and with the icon and the box
+                padding beside it the row is wider than a phone (v29's
+                text-resize sweep read 424px against 375). Growing with the
+                type it holds is right; running off the screen is not. */}
+            <label className="flex min-w-0 max-w-full items-center gap-1 ml-auto ink-border-sm bg-white px-2 py-1">
+              <Search className="w-3.5 h-3.5 shrink-0 text-[var(--c-steel)]" aria-hidden />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -436,7 +442,7 @@ export function ShowroomScreen({
                 // v28 tap targets: an unstyled input is line-height tall
                 // (17px). The wrapping label is the visual box; the input just
                 // needs a thumb-sized strike area inside it.
-                className="text-[11px] font-bold outline-none w-40 bg-transparent min-h-6 py-1"
+                className="text-[11px] font-bold outline-none w-40 min-w-0 max-w-full bg-transparent min-h-6 py-1"
               />
             </label>
           </div>

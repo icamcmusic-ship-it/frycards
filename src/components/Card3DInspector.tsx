@@ -181,12 +181,20 @@ export function Card3DInspector({
       aria-modal="true"
       aria-label={`Inspecting ${def.name}`}
     >
+      {/* v29 — `max-w-full` and `min-w-0`, on the row and on both columns.
+          The backdrop is `fixed inset-0 … p-4 overflow-y-auto`: it scrolls
+          VERTICALLY, so anything wider than it simply escapes sideways with
+          nothing to reach it by. At the browser's font size doubled this row
+          measured 536px of content inside a 359px box — the buttons and the
+          240px metadata panel both grow, and neither column was allowed to
+          shrink. The card itself cannot shrink (it is a fixed-scale object),
+          which is why the columns have to. */}
       <div
-        className="flex flex-col md:flex-row items-center md:items-start justify-center gap-4 my-auto"
+        className="flex min-w-0 max-w-full flex-col md:flex-row items-center md:items-start justify-center gap-4 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Card column */}
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex min-w-0 max-w-full flex-col items-center gap-3">
           <div style={{ perspective: 1100 }}>
             <div
               ref={cardRef}
@@ -369,7 +377,7 @@ export function Card3DInspector({
         </div>
 
         {/* Metadata + actions column */}
-        <div className="flex flex-col gap-3 shrink-0 max-w-full pb-4 md:pb-0">
+        <div className="flex min-w-0 flex-col gap-3 max-w-full pb-4 md:pb-0">
           {meta && meta.length > 0 && (
             <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] max-w-full">
               <div className="heading-font text-xs mb-2">

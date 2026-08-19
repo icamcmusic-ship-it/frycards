@@ -9,6 +9,237 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v29.0 — The pass where the harness asked what it had never pressed
+
+Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
+round, a match QoL round, a flow/CPU-visibility audit, and the carry-forward
+re-measurement. **0 invariant violations across 142,848 AI games** — the eight
+standing cohorts three times over, on three independent draws of the pinned
+deck-space — plus a 1,200-seed fuzz soak and a 600-seed chaos run; 472 tests
+(18 new). The engine ships behaviourally unchanged except for one new terminal
+outcome (`concedeGame`): cohorts A/B/C reproduce v28 to the decimal, and draws
+1 and 2 reproduce v28's own two draws entry for entry.
+
+**Bug hunt: the second of the three things the mobile item has called
+unmeasurable since v11 — and the prediction was wrong.** v28 measured tap
+targets and left "text scaling and real-device behaviour". `audit:screens` now
+runs a WCAG 1.4.4 pass (the browser's own font-size preference, doubled,
+through Chromium's `Page.setFontSizes` — the same setting a player changes in
+Settings → Appearance) and a WCAG 1.4.10 reflow load pass at 320px.
+
+The expectation was a clean sheet and a number near zero. This game sizes its
+type in `px`; px does not move under that setting in any browser, so the plan
+was to print the number, declare the exception, and gate on reflow instead.
+**The number came back 40%, and nine screens overflowed.** The app is not
+px-locked, it is MIXED: Tailwind's named sizes (`text-sm`, `text-xl`) are rem
+and grow, its arbitrary `text-[10px]` ones do not, and both sit in the same
+rows — so at 200% a label doubles while the fixed thing beside it does not, and
+the row leaves the phone. Ten states, all fixed: four search fields at a fixed
+`w-44`/`w-56`/`w-40` (Collection, Marketplace, the Grading Lab, the Showroom —
+`max-w-full` and `min-w-0`, because `max-w-full` on a field inside a
+content-sized wrapper is 100% of a wrapper that already grew to fit it), four
+rows of controls that could not wrap (the Achievements tabs, the Settings
+privacy toggle, the Changelog's hand-rolled header, the Social request row's
+ACCEPT/DECLINE pair), and the How to Play definition grid, whose `1fr` column
+was `minmax(auto, 1fr)` and so refused to shrink below its own min-content. The
+320px reflow pass came back clean everywhere on the first run.
+
+**The offender detector learned v28's lesson the same day it was written.** The
+first version named "the widest element past the right edge" and its first
+report was the Showroom's HUD row — which lives in an `overflow-x: auto` strip,
+sticks out by its own rectangle, and contributes nothing to the document's
+scroll width. Clips compose: every candidate is intersected with its clipping
+ancestors before it counts, exactly as the tap-target check has done since v28.
+
+**And the first screen in the game had never been loaded by the sweep.** `App`
+renders `AuthScreen` above the whole meta shell (`if (!session && !guest)`), so
+it was never in `meta-preview.tsx`'s switch and seventeen passes of phone
+measurement went past it. Two entries now (`auth`, `auth@signup` — CREATE
+ACCOUNT is a different layout, not a different label), and the first run found
+the show/hide password toggle at **16x16** against a 24x24 minimum: a bare 4x4
+icon with no padding, on the first screen of the game.
+
+**The under-measurement guard fired on a busy machine, which is when long
+sweeps run.** v28's guard reported `pack@reveal` and `pack@summary` as not
+measured; both measured perfectly under `ONLY=pack`, and the difference was a
+balance sim on the other three cores. A settle window tuned on an idle machine
+is a settle window that cries "unmeasured" whenever the machine is busy — it
+gets three chances now, with a longer wait each time, and stops the moment the
+count reaches the number it is being compared against.
+
+**And a third door onto the same failure: a prelude that missed.** A PRELUDE
+entry drives a screen into a deeper state by clicking a button label before the
+sweep begins. `pack@reveal` measured **one control** at 375px in the full run
+and six at 1280px on the very next load — the tear click missed, or the reveal's
+850ms timer outran the wait, and the entry measured the unopened wrapper it was
+supposed to be leaving while every check downstream (controls, tap targets,
+text resize) ran on the wrong screen and the run printed a clean pass. The
+prelude retries its click once and reports where the measurement would have
+gone if the control set still has not moved. Two consecutive `ONLY=pack` runs
+now measure 6 and 12.
+
+**All 29 entries are clean at both depths**: no overflow at 375, 1280 or 320,
+no undersized tap target, no thrown render, no console error, no blank body,
+and no overflow under a doubled browser font.
+
+**Stress round: the driver now measures what it has never pressed.** Every
+previous stress pass grew this harness by ADDING an action somebody noticed it
+had never taken — SKIP was clicked on every match until v19, RE-BOND until v22,
+the VICTORY screen never rendered until v26. That is a measurement instrument
+made of one person's attention. The run already reads the whole board every
+step, so it already knows every control the match OFFERS; counting which of
+them it ever PRESSES turns the question into a number that prints on every run.
+
+**The first census: 360 distinct controls, 306 of them never pressed.** Two
+thirds of that was the census being wrong about itself, and fixing it was the
+interesting part — a battlefield unit is a `[role=button]` wrapper whose
+`CardFace` child carries `data-card-id`, so `closest()` found nothing and thirty
+card names arrived as thirty distinct controls; `querySelectorAll` returns the
+contents of a `display:none` panel, so the 3D inspector's two controls read as
+available on 2,482 of 2,715 reads of a modal nobody had opened; and a label
+that embeds its own state (`Narration speed: FAST. Click to change`) is a
+different key on every rung. What survived is a real list, and the driver now
+takes those actions: the turn recap's two controls, the hand-order button, the
+first-match coach overlay's GOT IT and Skip tutorial, the glossary popover on a
+keyword chip, the board's Tip badges, the ash-pile drawer's own CLOSE (opened
+since v17, closed never), the 3D card inspector behind it, SPACE instead of the
+pointer on a quarter of phase advances, the double-click play route, a
+Wellspring colour that is not the best one, ✕ CONCEDE followed by CONFIRM, and
+↻ REMATCH.
+
+**The handicap that was supposed to guarantee a VICTORY screen converted
+0-in-3.** v26 put the opponent on 3 Vitality so a random-clicking driver could
+actually close a game out, and its own guard reports when a run's winnable
+matches produce no win — which is what happened, so the VICTORY screen went
+unmeasured in a run that otherwise looked clean. The driver gets the Vitality
+cap on those matches too now: nothing about how either side plays changes, it
+simply survives long enough to reach the finish line the handicap moved.
+
+**Two of those had never been reachable at all, and both were app bugs.**
+`board-preview.tsx` passed no `onRematch`, so the control never rendered in the
+harness and the single largest unexercised path in the match screen — a remount
+that tears down a live narration chain and three sets of timers while the
+outgoing match's reward round-trip is still in flight — had never once run.
+And conceding called `onResult(false)` and `onExit()` in the same tick: the
+reward round-trip it had just started (three attempts, 1.5s apart) was left
+writing into a component the next line unmounted, so the one message written
+for exactly this case — "couldn't record this match's result" — could never be
+shown for the ending most likely to be pressed on a bad connection, and the
+player was returned to the menu with no confirmation that anything had
+happened. **A resignation is an engine outcome now** (`concedeGame`), so it
+reaches the same game-over screen every other ending reaches, with the same
+reward block, the same error, REMATCH and BACK TO MENU.
+
+**The run it all has to survive:** eight driven matches — one in landscape, one
+at 200% text, one resigned, three handicapped, half of them watching the
+narration and a quarter of those stepping through it — eight rematches, and
+**0 findings**. No crash, no hang, no stale ring, no stalled narration, no
+clipped control, no unfinished match.
+
+**Which immediately printed "You concedes." on the defeat screen.** The v18
+suite enumerates every `${pid} <verb>` line the engine writes so the humanizer
+can be checked against it, with a comment reading "update BOTH when a new one
+is added" — a hand-maintained list, and one engine line was enough. The v29
+suite reads the list out of `engine.ts` at test time instead, and the same scan
+found `recovers` missing since v22: the Dawn beat has been reading **"You
+recovers 2 Vitality at Dawn."** aloud for seven passes.
+
+**Match QoL: the third clash button, and the warning the phase button was
+missing.** v28 made CONFIRM GUARDS and RESOLVE CLASH pure tested functions
+because "an off-by-one here reads perfectly and is wrong on the exact swing
+that ends the game", and left DECLARE ATTACK — the first of the three a player
+presses — inline in the JSX where nothing could pin it. It is a function now,
+and it gains the number it was missing: **how many of the opponent's units can
+legally guard what you just selected**, counted through the engine's own
+`canGuardAttacker` (exhaustion, Aerial/Skywatch, Nimble) so the board cannot
+promise a swing the engine will refuse. When the answer is none it reads
+**UNGUARDABLE**, which replaces the LETHAL IF UNGUARDED hedge rather than
+stacking with it — the hedge is hedging on exactly that condition. The phase
+button became a pure function too, and carries the other standing warning: a
+Wellspring allowance does not carry over any more than essence does, and a turn
+ended without spending it leaves the player a Location short for the rest of
+the match. `END TURN ▸ · 2 PLAYABLE · WELLSPRING UNPLAYED`.
+
+**CPU visibility: the decision to do nothing is still a decision.** Every pass
+since v18 has closed a silence by asking which CPU DECISION has no beat, and
+v28 asked which beat has no SUBJECT. Neither question reaches the two that were
+left, because both are decisions NOT to act. A turn on which the opponent plays
+nothing, attacks with nothing and triggers nothing writes no log lines at all:
+the beat list is empty, the continuation runs on the same frame, the recap
+returns null because nothing happened, and the player gets the handoff banner,
+a second of "thinking", and their own turn back — which is indistinguishable
+from the narration having broken, and it happens most in the opening turns when
+a new player is least able to tell. It gets a beat now
+(`<opponent> takes no action this turn.`) and the recap says `no cards played ·
+did not attack` for the player who skipped. The other one: when the opponent
+holds priority over a card you just cast and declines to answer it, the card
+simply resolved and nothing ever admitted the window had opened. A banner
+rather than a beat, deliberately — a beat costs a full dwell on a non-event —
+and it says only what is public, that they passed, never whether they had
+anything to pass with.
+
+**Flow: the board was unplayable in landscape, and nothing said so.** The match
+root is `h-screen flex flex-col overflow-hidden`. A clipping root does not
+degrade when its content stops fitting — it deletes: a control that no longer
+fits is not pushed off the edge with a scrollbar to reach it by, it is simply
+gone, and a control that has been clipped away looks exactly like a control the
+board chose not to draw. Every run this harness has ever done used a 900px-tall
+window. At **844x390 — a phone in landscape, at the default font — twenty
+controls were unreachable**: the player's own Leader, ⚜ INVOKE LEADER, the
+ash-pile, and every single card in hand. The same failure appeared one control
+at a time at 390x667 with the browser font doubled. The root scrolls now, and
+only when it has to (`overflow-y-auto` shows nothing on a viewport that fits),
+and the driver drives one landscape match and one 200%-text match every run,
+with a check that measures each control's rectangle against every clipping
+ancestor and reports the ones clipped to nothing that no scroll can reach.
+
+**And the mixed-units bug turned up once more, in JavaScript.** The board's
+`Tip` popover — the badge explainers on WARDED, EXHAUSTED, JUST INVOKED, the
+coin-flip chip — is a `w-40` box positioned by hand, and the clamp that keeps
+it on screen was the literal `160` with a comment saying the two matched.
+`w-40` is 10rem: at a doubled browser font the popover is 320px wide and the
+clamp was still holding 160px back from the right edge, so it ran 160px off the
+side of a 390px phone. It derives the width from the root font size now and
+hands the same number to the element, so the two cannot disagree again. The
+card face's keyword popover, which sizes itself in real px and so never had
+that problem, had the other half of it: its clamp's upper bound goes NEGATIVE
+on a viewport narrower than the popover, putting the whole box off the LEFT
+edge.
+
+**The overflow check, and three wrong answers about it.** While measuring the
+above, the match root turned out to make `scrollWidth > innerWidth` almost
+structurally impossible — the check the driver has run on every step since v17
+has been asserting something a clipping root can barely violate. It stays, and
+it now captures the offending element in the SAME read that noticed the number
+(asking one evaluate later is a different frame, and on a board whose offender
+is a banner or a popover the answer has already gone). Then the answers came
+back wrong twice: at 200% text the board measures 1–12px over with **no element
+past the edge at all**, and the fallback that guessed "the widest thing whose
+content does not fit" named first the hand strip — an `overflow-x: auto` row
+doing exactly its job — and then the card inspector's inner column, which is
+contained by a wrapper that scrolls both ways and reads 536-in-358 at the
+default font too, so not a text-resize finding either. Clips compose, in the
+fallback as much as anywhere else. **An overflow finding names the element or
+it is not a finding**: the box is required now, the unattributable overshoot
+prints as a note on stdout, and the failure this check exists to catch — a
+control pushed off the side of the screen — is always a box past the edge.
+
+**Balance: no card changed, tenth pass running — and the discriminating
+statistic is retired.** v28's parting rule was "two draws, always, for anything
+about a Leader" and it shipped with no instrument; the ρ it quoted was computed
+by hand from two nine-row tables assembled by hand out of sixteen reports.
+`scripts/leader-rank-stability.ts` is the instrument, and a third independent
+draw is the test. **ρ = 0.417 / 0.733 / 0.450** across the three pairs; only
+three of nine Leaders hold their rank to within one place across all three
+draws. The one-signed pinned-minus-random gap — the statistic v22 named, v26
+and v27 built the Ruin-Walker case on, and v28 showed was draw-dependent —
+fires on Ruin-Walker in draw 1, on Avatar of the Abyss in draw 2, and on
+**nobody** in draw 3. Three draws, three different answers: it is retired as a
+standalone discriminator and kept as a filter. Ruin-Walker itself, closed in
+v28, comes out **4th of nine at 53.2%** on a draw that had never seen the
+argument. Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v29
+re-measurement.
+
 ### v28.0 — The pass where the smallest thing on the card stopped stealing taps
 
 Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress

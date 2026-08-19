@@ -482,3 +482,133 @@ balance change — which is what the Sentinel rule has said to do since v20.
 - The Ruin-Walker item is closed rather than carried — the first carry-forward
   item retired since v23.
 - No card, price, stat, weight or keyword band changed.
+
+## v29 re-measurement (2026-08-18)
+
+Bug/QoL pass. **Runs:** the same eight cohorts, 5,952 games each —
+`npx tsx scripts/simulate-v5.ts 6 32 <gameSeed> <deckSeed>`, same seed table as
+v26/v27/v28 (A 1337/1337, B 1337/42, C 1337/7, D 1337/4242, E 1337/9001,
+F 20260815/20260815, G 20260815/777, H 20260815/31415) — **three times over**:
+unsalted, `PINNED_RECIPE_SALT=v28`, and a new `PINNED_RECIPE_SALT=v29`.
+**142,848 games**, `invariantViolations` empty in all twenty-four reports.
+Plus the fuzz soak and the chaos monkey (volumes in the changelog entry).
+
+**Neutrality control, and an instrument control.** Draws 1 and 2 reproduce v28
+to the decimal — draw 1's cross-cohort Leader means are 65.8 / 55.1 / 51.8 /
+49.7 / 48.5 / 45.4 / 45.0 / 44.5 / 43.1 and draw 2's are 63.7 / 58.6 / 54.8 /
+48.9 / 46.3 / 45.9 / 43.8 / 42.8 / 41.9, both matching the v28 tables entry for
+entry; cohort A/B/C outcomes are P1 44.7 / 46.5 / 46.3 at 20.3 / 21.6 / 21.8
+turns, unchanged since v26. So the third draw is measured on an instrument two
+draws have already been shown to reproduce.
+
+### The instrument: `scripts/leader-rank-stability.ts`
+
+v28 ended with a standing rule — *two draws, always, for anything about a
+Leader* — and shipped no way to apply it. The ρ = 0.417 it quoted was computed
+by hand from two nine-row tables that were themselves assembled by hand out of
+sixteen reports. That is precisely the situation `aggregate-cohorts.ts` was
+written to end for the sign table ("either the sim gains a cross-run mode or
+the sign table gets assembled by hand each pass"), one axis over, and a rule
+that costs an afternoon to apply is a rule that gets applied when somebody
+remembers it.
+
+`leader-rank-stability.ts` takes N draws — cohort reports grouped by `--`,
+labelled off `meta.pinnedRecipeSalt`, and refusing a group whose reports
+disagree about the salt — and prints the cross-cohort mean and rank per draw,
+every pairwise Spearman ρ, and the statistic the rule actually needs: each
+Leader's **rank RANGE** across the draws.
+
+### Three draws, and what survives them
+
+| Leader                      | draw 1 (unsalted) | draw 2 (salt v28) | draw 3 (salt v29) | rank range |
+| --------------------------- | ----------------- | ----------------- | ----------------- | ---------- |
+| Mer-King                    | 65.8 (#1)         | 58.6 (#2)         | 60.6 (#1)         | 1          |
+| Avatar of the Abyss         | 55.1 (#2)         | 63.7 (#1)         | 54.1 (#2)         | 1          |
+| Ethereal Sea Witch          | 51.8 (#3)         | 42.8 (#8)         | 53.6 (#3)         | **5**      |
+| Kuro, the Unseen            | 49.7 (#4)         | 48.9 (#4)         | 48.7 (#6)         | 2          |
+| Sovereign of the Dying Star | 48.5 (#5)         | 45.9 (#6)         | 50.4 (#5)         | 1          |
+| Void Mother                 | 45.4 (#6)         | 41.9 (#9)         | 45.7 (#7)         | 3          |
+| Legendary Diver             | 45.0 (#7)         | 54.8 (#3)         | 41.2 (#8)         | **5**      |
+| Sentinel of the Nether Pit  | 44.5 (#8)         | 43.8 (#7)         | 40.3 (#9)         | 2          |
+| Ruin-Walker Overseer        | 43.1 (#9)         | 46.3 (#5)         | 53.2 (#4)         | **5**      |
+
+Pairwise Spearman ρ: **1↔2 = 0.417** (v28's number, reproduced), **1↔3 =
+0.733**, **2↔3 = 0.450**. So v28's ρ was not a low outlier and it was not the
+whole story either — the three draws agree on the top of the table and disagree
+almost everywhere else.
+
+**Three of nine Leaders hold their rank to within one place across all three
+draws:** Mer-King, Avatar of the Abyss, Sovereign of the Dying Star. Everything
+else on that table is a reading of the decks the kit was dealt, however clean
+any single draw's eight cohorts looked.
+
+### The one-signed gap test, measured across draws — RETIRED
+
+v22 named the discriminating statistic (a pinned-minus-random gap that is
+one-signed across every cohort that samples the Leader), v26 and v27 built the
+Ruin-Walker case on it, and v28 showed it was conditional on the recipe draw by
+finding a different Leader carrying it in draw 2. The third draw settles what
+kind of statistic it is:
+
+| draw            | Leaders one-signed across all eight cohorts |
+| --------------- | ------------------------------------------- |
+| 1 (unsalted)    | Ruin-Walker Overseer, negative (−9.3)       |
+| 2 (salt v28)    | Avatar of the Abyss, positive (+9.1)        |
+| 3 (salt v29)    | **none**                                    |
+
+Three independent draws of deck-space; three different answers, one of them
+empty. A statistic that names a different Leader every time it is asked is not
+identifying a Leader. **It is retired as a standalone discriminator.** It stays
+useful as a filter — it is cheap and it still narrows nine rows to one or zero
+— but a one-signed gap is now only the START of a case, and the case is not
+made until the SAME Leader is one-signed in the SAME direction in at least two
+independent draws. Nothing in the three draws run this pass meets that bar.
+
+### Ruin-Walker Overseer, once more, as the closure's own control
+
+v28 closed the Ruin-Walker item on two agreeing tests. Draw 3 was run without
+regard to it and is the cleanest possible check on that closure: Ruin-Walker
+comes out **4th of nine at 53.2%**, ten points above the 43.1% that four passes
+of argument were built on, with a gap of +0.9 that flips sign in three cohorts.
+The kit that "sat at the bottom of the table" sits in the top half on an
+independent draw. Closing it was right, and it stays closed.
+
+### Carry-forward status
+
+1. **Mer-King lever — stays revoked, and the reason is now sharper.** v28
+   withdrew the authorization because the "first in every cohort, nine clear of
+   second" reading did not survive a re-roll. Three draws refine that: the
+   ORDERING claim survives (Mer-King is #1, #2, #1 — top two in every draw, and
+   Avatar is the other half of that pair every time), and the MAGNITUDE claim
+   does not (the lead over second is +10.7, −5.1, +6.5, and in draw 3 second
+   place is only 0.5 clear of third). A lever is spent on a magnitude, not on
+   an ordering. It stays revoked, and any future case must quote a margin that
+   holds across draws rather than a rank that does.
+2. **NEW — the top two are a kit reading, and it is the first per-Leader
+   statement to clear the two-draws rule.** Mer-King and Avatar of the Abyss
+   take #1 and #2 in all three draws, in one order or the other. That is a
+   statement about the kits. It is recorded, not acted on — the interleaving
+   rule (#7) holds and this pass ships no card change — and it is the thing to
+   re-measure first next pass, with a fourth draw.
+3. **v23 Leader keyword print** — carried, untouched.
+4. **v24 Event keyword print** — carried, untouched; `UNPRINTED_KEYWORDS`
+   unmodified.
+5. **`Unbreakable` weight 7 — carried, trigger still not met** across
+   twenty-four deck rolls in four consecutive passes. The re-check fires on a
+   NEGATIVE carrier delta; it has never fired.
+6. **`Sacred` cohort dependence — carried at v26's narrowed statement.** Sign
+   stable, magnitude is the deck roll. No action.
+7. **Content/balance interleaving** — carried and honoured: no card price,
+   stat, weight or keyword band changed.
+8. **The one-signed gap test** — retired as a standalone discriminator, kept as
+   a filter, per the section above.
+
+### New this pass
+
+- `scripts/leader-rank-stability.ts`, and the rank-range statistic the v28 rule
+  needed in order to be applicable at all.
+- A third independent draw (`PINNED_RECIPE_SALT=v29`), and the first
+  three-draw ρ triangle: 0.417 / 0.733 / 0.450.
+- The one-signed gap test retired as a discriminator; a two-draw requirement
+  written in its place.
+- No card, price, stat, weight or keyword band changed.

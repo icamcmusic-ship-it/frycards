@@ -183,10 +183,16 @@ export function AuthScreen() {
               minLength={6}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {/* v29 — 16x16 against WCAG 2.5.8's 24x24, and on the first
+                screen of the game: the reveal toggle was a bare 4x4 icon with
+                no padding at all. Real padding rather than the `.tap-target`
+                pseudo-element, because that utility sets `position: relative`
+                and this control is absolutely positioned; `right-0.5` pays the
+                padding back so the icon does not move a pixel. */}
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-steel)] hover:text-[var(--c-ink)]"
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 p-1.5 text-[var(--c-steel)] hover:text-[var(--c-ink)]"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
