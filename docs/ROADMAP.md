@@ -239,11 +239,67 @@ Everything here has a started implementation and a visible seam.
   controls, never by widening `CENSUS_EXEMPT`,** and make it gating when it is
   short enough to hold.
 
+  **v30 worked the list and it is still not a gate.** Two thirds of the
+  remainder was the census wrong about ITSELF again, in three shapes that are
+  all the identity rule v29 wrote for card faces arriving through a different
+  door — *a label that describes the board's current contents is not the
+  control's name*. A clash line keys on its matchup, the narration bubble keys
+  on the beat inside it, and a Location tile keys on the card standing in it,
+  so one divider button, one bubble and one tile arrived as forty-odd distinct
+  rows nobody had pressed. Three `data-*` hooks (the same convention as
+  `data-card-id`, `data-tip`, `data-primary`) and the census went from **269
+  distinct controls to 80**, and the never-pressed list from 44 rows to 16.
+
+  The rest was real, and two of them were the census earning its keep: the `⏱`
+  speed control (948 offers, 0 presses — the driver clicks by visible text and
+  the narration bubble CONTAINS the speed button, so every click since v20 has
+  landed on SKIP) and the Leader's ability pills (560 offers, 0 presses — the
+  branch selected `[role="button"][aria-disabled="false"]`, which a `CardFace`
+  with an `onClick` also matches, and matches first). Both had been believed
+  exercised for thirteen passes.
+
+  **Still not a gate, and the reason is worth writing down rather than
+  exempting away.** Some of the remaining rows are controls the driver
+  deliberately does not press because pressing them is bad play — a manual
+  Location tap wastes the Location for the rest of the turn, which v20 cut to
+  2% for exactly that reason. v30 presses those in MAIN II, where the waste
+  costs nothing (the Location recovers at Dawn either way), and that is the
+  shape the remaining rows should be closed in: find the state where the action
+  is free, rather than raise the probability of taking a bad line.
+
 - **Accessibility pass.** Keyboard navigation, screen-reader labels for card
   actions, contrast audit of the monochrome theme. Partially underway — see the
   "Bug hunt / accessibility" entries in `CHANGELOG.md`. The viewport meta in
-  `index.html` already refuses to break pinch-zoom; the rest of WCAG has not
-  been walked.
+  `index.html` already refuses to break pinch-zoom.
+
+  **v30 walked the keyboard half, and it was the first non-pointer axis this
+  project has ever measured.** Everything before it — overflow, the 24x24
+  minimum, reflow at 320px, text at 200% — is about a finger or a thumb. Both
+  sweeps press the real Tab key now: `audit:screens` walks every meta screen
+  and `drive:match` walks the live match board and its dialogs, against WCAG
+  2.1.1 (Tab reaches every enabled visible control), 2.4.7 (it draws a ring
+  when it gets there) and 2.1.2 (focus is never stuck). Neither reports "clean"
+  out of a walk that stopped early: a walk that did not complete a full focus
+  cycle inside its press cap is reported as UNMEASURED, which is this file's
+  own standing lesson applied to a new instrument on the day it was written.
+
+  **The first run found that all fifteen modals leaked the keyboard**, on a
+  comment copied between them since v4.24 claiming they did not — Tab out of
+  the mulligan dialog landed on the match board's ✕ CONCEDE. `useFocusTrap` is
+  the one hook that holds it and a test scans for the next dialog that ships
+  without it. Two dialogs can be open at once, so trap ownership is decided by
+  DOCUMENT ORDER (the last dialog in the DOM is the one painted on top);
+  deciding it by mount order was wrong and produced a board where Tab did
+  nothing at all.
+
+  What is left of this item is the part a Tab key cannot answer: **contrast**
+  (WCAG 1.4.3/1.4.11 — and the monochrome theme is the whole point of the
+  design, so that measurement probably wants a declared exception list rather
+  than a fix list), **screen-reader semantics beyond labels** (v30 gave the
+  opponent's narration beat a live region — the turn SUMMARY had one since v26
+  and the moves inside it did not — but nothing here has ever been run through
+  an actual screen reader), and **real-device behaviour**, which has been the
+  standing third of three since v11.
 - **One balance pass per release, against the findings doc.** The whole live
   list is `docs/BALANCE_SIM_FINDINGS_v23.md` carry-forward. **v19 froze the
   per-Leader levers pending a widened instrument; v20 widened it; v22 measured

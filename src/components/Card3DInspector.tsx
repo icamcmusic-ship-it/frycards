@@ -14,6 +14,7 @@ import { CardFace, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
+import { useFocusTrap } from './useFocusTrap';
 
 const MAX_TILT_DEG = 14;
 
@@ -76,7 +77,6 @@ export function Card3DInspector({
   // the card, used to place the glare/holo highlight.
   const [tilt, setTilt] = useState<{ rx: number; ry: number; px: number; py: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -86,15 +86,12 @@ export function Card3DInspector({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // v4.24: move focus into the dialog on open and restore it to whatever
-  // triggered the inspector on close — previously a keyboard user opening
-  // this via Enter/Space could Tab straight through to background page
-  // elements still sitting behind the (only visually) fixed overlay.
-  useEffect(() => {
-    const prevFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => prevFocused?.focus?.();
-  }, []);
+  // v4.24 moved focus into the dialog on open and restored it to the trigger
+  // on close, with a comment saying that stopped a keyboard user Tabbing
+  // through to the background elements still sitting behind the overlay.
+  // v30 measured that claim and it was false in every browser — see
+  // `useFocusTrap`, which does hold the keyboard here.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   // Enlarged size: ~2x the normal full card, clamped so the whole card (plus
   // some room for the side panels) always fits on screen. Recomputed on

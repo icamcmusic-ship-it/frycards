@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
 import { RoleBadge } from './RoleBadge';
@@ -7,6 +7,7 @@ import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { cn } from '../lib/utils';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 /** Renders a username as a click-to-view-profile link — the shared control
  * used everywhere a player's name is shown (leaderboards, friends, trades,
@@ -58,19 +59,12 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
   const [card, setCard] = useState<PlayerProfileCard | null | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
   const isSelf = session?.user?.id === userId;
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  // Move focus into the dialog on open (it previously stayed wherever it was
-  // on the trigger button behind the overlay, so keyboard/screen-reader users
-  // landed nowhere near the modal that just appeared) and restore it to
-  // whatever triggered the modal once it closes.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => {
-      previouslyFocused?.focus?.();
-    };
-  }, []);
+  // v30 — this used to be a `useRef` plus an effect that focused the dialog
+  // once. Moving focus in does not keep it there: a dialog mounts at the end
+  // of the DOM, so Tab from its last control walks off the document and back
+  // in at the TOP of the page, which is what the dialog is covering. See
+  // `useFocusTrap`.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     let cancelled = false;

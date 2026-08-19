@@ -53,6 +53,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
       [
+        'Keyboard',
+        'The clash bar carries exactly one loud button at a time — TO CLASH, DECLARE ATTACK, CONFIRM GUARDS, RESOLVE CLASH, PASS, END TURN, SKIP — and the SPACE bar presses whichever one it is currently showing, so a whole match can be played without moving the pointer back to the middle of the board eighty times. The button says SPACE on it whenever the key is live. Escape is the other half: it cancels a target pick, clears an attacker or guard assignment, and closes whatever overlay is frontmost, one layer per press.',
+      ],
+      [
         'Dusk',
         '"At Dusk" keywords and triggers fire — Entropic and Blighted erode cards off the opponent\'s deck, Scorched-Earth sweeps their whole board — then you Shed (discard) down to 7 cards and the turn passes.',
       ],

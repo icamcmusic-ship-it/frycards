@@ -11,6 +11,7 @@ import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
 import { useMeta } from './MetaContext';
 import { fmtCredits, quicksellPrice } from './economy';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 /**
  * Full-screen pack-opening experience:
@@ -197,7 +198,12 @@ export function PackOpening({
   // An empty pull list (bad server response) would strand the player on a
   // reveal stage that renders nothing — go straight to the summary instead.
   const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
-  const dialogRef = useRef<HTMLDivElement>(null);
+  // v30 — this used to be a `useRef` plus an effect that focused the dialog
+  // once. Moving focus in does not keep it there: a dialog mounts at the end
+  // of the DOM, so Tab from its last control walks off the document and back
+  // in at the TOP of the page, which is what the dialog is covering. See
+  // `useFocusTrap`.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   // The pack/collection grant already happened server-side before this modal
   // ever mounts (see StoreScreen's openPack callers) — this whole component
@@ -211,11 +217,6 @@ export function PackOpening({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onDone]);
-  useEffect(() => {
-    const prevFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => prevFocused?.focus?.();
-  }, []);
 
   return (
     <div

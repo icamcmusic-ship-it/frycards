@@ -97,6 +97,7 @@ import {
   rateShopPurchase,
   reportListing,
 } from '../lib/supabase';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 // Mirror rarity.ts's ladder — a local copy drifted once already (missing
 // 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
@@ -222,9 +223,17 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
 
   const visibleCards = (pool?.cards ?? []).filter((c) => showSpent || c.remaining > 0);
 
+  // v30 — a dialog that announces itself as modal has to hold the keyboard
+  // too; `aria-modal` alone tells sequential focus navigation nothing, and Tab
+  // walked straight out of these onto the page behind them. See
+  // `useFocusTrap`.
+  const poolDialogRef = useFocusTrap<HTMLDivElement>();
+
   return (
     <div
-      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      ref={poolDialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -1095,9 +1104,17 @@ function ReportModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // v30 — a dialog that announces itself as modal has to hold the keyboard
+  // too; `aria-modal` alone tells sequential focus navigation nothing, and Tab
+  // walked straight out of these onto the page behind them. See
+  // `useFocusTrap`.
+  const reportDialogRef = useFocusTrap<HTMLDivElement>();
+
   return (
     <div
-      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      ref={reportDialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

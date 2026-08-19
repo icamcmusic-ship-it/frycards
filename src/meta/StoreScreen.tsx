@@ -30,6 +30,7 @@ import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 function bountyDefFor(card: BountyCard): CardDef {
   return (
@@ -732,9 +733,17 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // v30 — a dialog that announces itself as modal has to hold the keyboard
+  // too; `aria-modal` alone tells sequential focus navigation nothing, and Tab
+  // walked straight out of these onto the page behind them. See
+  // `useFocusTrap`.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
+
   return (
     <div
-      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+      ref={dialogRef}
+      tabIndex={-1}
+      className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
