@@ -42,6 +42,7 @@ import {
 } from '../meta/rarity';
 import { cardColors, COLORS, Color } from '../game/v3/colors';
 import { KEYWORD_TEXT } from '../game/v3/keywords';
+import { useFocusTrap } from './useFocusTrap';
 import { COLOR_PIP, GENERIC_PIP, COLOR_LETTER, colorBg } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 
@@ -2847,14 +2848,10 @@ export function CardInspectorModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Focus management — a keyboard user opening this via Enter/Space should
-  // land inside the dialog, and return to the trigger on close.
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const prevFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => prevFocused?.focus?.();
-  }, []);
+  // Focus management — a keyboard user opening this via Enter/Space lands
+  // inside the dialog, stays there while it is open (v30 — see
+  // `useFocusTrap`), and returns to the trigger on close.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   return (
     <div

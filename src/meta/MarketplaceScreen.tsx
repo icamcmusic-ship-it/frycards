@@ -24,6 +24,7 @@ import { RARITY_CHIP, RARITY_ORDER } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import { spareSplit } from './CollectionScreen';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 type Tab = 'browse' | 'mine' | 'sell';
 
@@ -373,6 +374,10 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // only the fallback for the frame where a sold row has already left the
   // browse list.
   const bidForLive = bidFor ? (listings.find((x) => x.id === bidFor.id) ?? bidFor) : null;
+  // v30 — the bid modal announces itself as `aria-modal` and did nothing to
+  // hold the keyboard; Tab walked out of it onto the listing grid behind.
+  const bidDialogRef = useFocusTrap<HTMLDivElement>(!!(bidFor && bidForLive));
+
   const bidForEnded =
     !!bidFor &&
     (!listings.some((x) => x.id === bidFor.id) ||
@@ -503,7 +508,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       {/* Bid modal */}
       {bidFor && bidForLive && (
         <div
-          className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4"
+          ref={bidDialogRef}
+          tabIndex={-1}
+          className="fixed inset-0 bg-[var(--c-ink)]/90 z-50 flex items-center justify-center p-4 outline-none"
           onClick={() => setBidFor(null)}
           role="dialog"
           aria-modal="true"

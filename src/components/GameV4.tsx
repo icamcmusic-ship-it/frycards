@@ -14,6 +14,7 @@
  * moments of the opponent's Clash.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { useFocusTrap } from './useFocusTrap';
 import { createPortal } from 'react-dom';
 import {
   GameState,
@@ -296,6 +297,32 @@ const GAME_CSS = `
   80% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, 0); }
 }
+/* The SPACE shortcut, printed where it is usable (v30).
+   The divider fires its one primary control from the space bar — since v26,
+   documented nowhere a player would find it, and worth ~80 pointer round
+   trips in a twenty-turn match. A shortcut nobody knows about is a shortcut
+   nobody uses, so the button says so itself.
+
+   Pointer:fine only (a phone has no space bar and the hint would be pure
+   noise), never on a disabled primary, and gated on the divider's own
+   data-space-armed flag so the hint disappears in exactly the states the key
+   handler stands down in — a modal, a target pick, the shed picker. A hint
+   that is wrong in one state is worse than no hint. */
+@media (pointer: fine) {
+  [data-space-armed='1'] button[data-primary='1']:not(:disabled)::after {
+    content: 'SPACE';
+    display: inline-block;
+    margin-left: 0.5em;
+    padding: 0 0.3em;
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    vertical-align: middle;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    opacity: 0.55;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
   .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
@@ -504,21 +531,14 @@ function useLongPress(onLongPress: () => void, onEnd: () => void, onTap?: () => 
   };
 }
 
-/** Focus management for this component's inline modal overlays (confirm
- * dialog, mulligan, game-over) — same fix as Card3DInspector/
- * CardInspectorModal (v4.24): move focus into the dialog while `active`,
- * and restore it to whatever triggered it on close, so a keyboard user can't
- * Tab through to the (only visually) obscured board underneath. */
-function useDialogFocus(active: boolean) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!active) return;
-    const prevFocused = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    return () => prevFocused?.focus?.();
-  }, [active]);
-  return ref;
-}
+/**
+ * Focus management for this component's inline modal overlays (confirm dialog,
+ * mulligan, shed picker, game-over).
+ *
+ * A thin alias over the shared `useFocusTrap` — see that hook for what v30
+ * found and why moving focus in once was never enough.
+ */
+const useDialogFocus = (active: boolean) => useFocusTrap<HTMLDivElement>(active);
 
 /** `title=` tooltips never appear on touch devices — this wraps a badge so
  * tapping it also reveals the same text in a small popover. */
@@ -754,6 +774,11 @@ function LocationTile({
             : label
       }
       aria-label={`${label}${loc.exhausted ? ', exhausted' : ''}`}
+      // v30 — a harness hook, like `data-tip` and `data-primary`. A Location
+      // tile's only label is the card standing in it, so the match driver's
+      // control census counted twelve Sanctum names as twelve controls that
+      // had never been pressed. It is one control; the card is its contents.
+      data-location="1"
       className={cn(
         'flex items-center gap-1 px-1 py-0.5 ink-border-sm shrink-0 text-left',
         loc.exhausted ? 'opacity-40 rotate-3' : 'btn-pop',
@@ -932,6 +957,14 @@ function AbilityPill({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       aria-disabled={onClick ? !usable : undefined}
+      // v30 — a harness hook. `drive:match` reached for these with
+      // `[role="button"][aria-disabled="false"]`, on a comment claiming the
+      // ability pills were the only such element on the board; a `CardFace`
+      // with an `onClick` is one too, and comes first in the DOM — so the
+      // branch that has "exercised the Leader's abilities" since v17 has been
+      // clicking a card face the whole time. The census caught it at 560
+      // offers and 0 presses.
+      data-ability="1"
       onClick={onClick}
       onKeyDown={(e) => {
         if (!onClick) return;
@@ -1622,16 +1655,30 @@ export function declareAttackLabel(
  * Location short for the whole rest of the match. Both are counted from the
  * same predicates the board itself uses, so neither can disagree with what the
  * hand and the Wellspring row will actually allow.
+ *
+ * v30 adds the third, and it is the largest of the three. Both existing
+ * warnings are on the button that ENDS the turn; the button that leaves the
+ * CLASH carried none, and it is the only one of the four whose omission costs
+ * a whole combat step. `SKIP TO MAIN II ▸` is a truthful label and a silent
+ * one: a player who has not yet worked out that attacking is a separate
+ * declaration inside its own phase reads it as "next", presses it, and their
+ * ready units simply do not swing this turn — and nothing on the board ever
+ * says that a thing was given up, because the phase advanced exactly as asked.
+ * Counted from the same `legalAttackers` the attack UI itself uses, so the
+ * button cannot offer a swing the Clash would refuse.
  */
 export function phaseAdvanceLabel(
   phase: GameState['phase'],
-  opts: { playable: number; shed: number; wellspringWasted: boolean },
+  opts: { playable: number; shed: number; wellspringWasted: boolean; readyAttackers?: number },
 ): string {
   const warn = `${opts.playable > 0 ? ` · ${opts.playable} PLAYABLE` : ''}${
     opts.wellspringWasted ? ' · WELLSPRING UNPLAYED' : ''
   }`;
   if (phase === 'Main1') return `TO CLASH ▸${warn}`;
-  if (phase === 'Clash') return 'SKIP TO MAIN II ▸';
+  if (phase === 'Clash') {
+    const ready = opts.readyAttackers ?? 0;
+    return ready > 0 ? `SKIP TO MAIN II ▸ · ${ready} CAN ATTACK` : 'SKIP TO MAIN II ▸';
+  }
   if (phase === 'Main2') {
     // The shed count replaces the playable count — the picker is the next
     // thing that happens either way — but NOT the Wellspring warning, which
@@ -4070,6 +4117,7 @@ export function GameV4({
   const confirmDialogRef = useDialogFocus(!!confirmDialog);
   const mulliganDialogRef = useDialogFocus(stage === 'mulligan');
   const gameOverDialogRef = useDialogFocus(stage === 'over' && !!g.winner);
+  const shedDialogRef = useDialogFocus(shedPick !== null);
 
   /** The card face held mid-board for the current CPU narration beat. */
   const cpuSpotlight = cpuFocus?.cardId ? (POOL_BY_ID[cpuFocus.cardId] ?? null) : null;
@@ -4141,7 +4189,31 @@ export function GameV4({
     playable: playableInHand,
     shed: Math.max(0, me.hand.length - MAX_HAND),
     wellspringWasted,
+    // The same list the ⚔ ALL ×N control and the attacker rings are drawn
+    // from, so the count on the button and the units it refers to cannot
+    // disagree. Empty once they have swung (or are exhausted), which is why
+    // this reads as a warning rather than as a running total.
+    readyAttackers: myAttackers.length,
   });
+
+  /**
+   * Is the space bar currently wired to the divider's primary? (v30)
+   *
+   * The same predicate the key handler uses, minus its focused-element check
+   * (which is per-frame and per-element, and where it applies the browser
+   * fires the focused control on Space anyway — so the hint stays true). This
+   * exists to be handed to the divider so the printed hint and the handler
+   * cannot drift: two copies of a condition is how a shortcut hint ends up
+   * advertising a key that does nothing.
+   */
+  const spaceArmed =
+    stage !== 'over' &&
+    stage !== 'mulligan' &&
+    !confirmDialog &&
+    !inspect &&
+    !pending &&
+    !showAsh &&
+    shedPick === null;
 
   const showPhaseButton =
     stage === 'play' &&
@@ -4344,7 +4416,22 @@ export function GameV4({
                 {cpuFocus?.mine && (
                   <span className="mr-1 text-[8px] font-black">☀ YOUR DAWN —</span>
                 )}
-                {renderKeywordText(cpuBeat.text)}
+                {/* v30 — the opponent's move, announced.
+                    Every CPU-visibility pass since v18 has been about what the
+                    board SHOWS: rings, spotlights, dwell times, a recap strip.
+                    None of it reaches a player who is not looking at the
+                    screen. The turn recap has carried `role="status"` since
+                    v26 — so the summary of the turn was announced and not one
+                    of the moves in it — while the bubble that replaces its own
+                    text every beat announced nothing at all, which for a
+                    screen-reader user is the opponent playing its whole turn
+                    in silence. `polite`, so it queues behind whatever the
+                    player is doing rather than interrupting it, and `atomic`
+                    so a beat is read as one sentence instead of as the words
+                    that changed. */}
+                <span role="status" aria-live="polite" aria-atomic="true">
+                  {renderKeywordText(cpuBeat.text)}
+                </span>
                 <span className="ml-2 text-[8px] font-mono opacity-80">
                   {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
                 </span>
@@ -4474,6 +4561,11 @@ export function GameV4({
             {clashLines.map((line) => (
               <button
                 key={line.iid}
+                // v30 — a harness hook. The line's whole label is the matchup
+                // it describes ("#1 Galaxy Jellyfish ⚔4 → you"), so the census
+                // counted every attacker/target pairing the board happened to
+                // roll as its own never-pressed control.
+                data-clash-line="1"
                 onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
                 className={cn(
                   'text-[8.5px] font-bold px-1 py-0.5 leading-tight text-left',
@@ -4611,6 +4703,7 @@ export function GameV4({
           unconditionally would shift every other branch's centred primary
           action (DECLARE ATTACK, RESOLVE CLASH) off centre. */}
       <div
+        data-space-armed={spaceArmed ? '1' : undefined}
         className={cn(
           'relative shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35',
           // guardStep too: SUGGEST + CLEAR + CONFIRM GUARDS wrap on a phone,
@@ -4828,17 +4921,17 @@ export function GameV4({
             — CLASH LINE —
           </span>
         )}
-        {/* The Space shortcut, where the thing it presses is. A shortcut
-            nobody is told about is a shortcut nobody uses; pointer-only
-            screens (phones) don't have the key, so they don't get the chip. */}
-        {viewportW >= 640 && stage !== 'over' && stage !== 'mulligan' && (
-          <span
-            className="absolute left-2 heading-font text-[8px] text-[var(--c-paper)]/40 tracking-[1px] hidden sm:inline"
-            aria-hidden
-          >
-            ␣ SPACE
-          </span>
-        )}
+        {/* v26 put a "␣ SPACE" chip here, `absolute left-2`, with a comment
+            saying it was "where the thing it presses is". It was not: the
+            divider is full width and its primary is CENTRED, so on a desktop
+            board the chip sat ~460px away from the only control it describes,
+            named none of them, and — because it was gated on nothing but
+            `over` and `mulligan` — went on advertising the key in the five
+            states where the handler deliberately stands down (a target pick,
+            the ash drawer, the inspector, the confirm dialog, the shed
+            picker). v30 moves it onto the button, as a `::after` in GAME_CSS
+            keyed off `data-space-armed` — see `spaceArmed`, which is the key
+            handler's own predicate rather than a second copy of it. */}
         {/* Battle log lives on the divider so it never competes with either
             player's lane for vertical space. */}
         <button
@@ -5286,7 +5379,19 @@ export function GameV4({
       {/* Dusk shed picker — choose which cards go to the ash-pile. */}
       {shedPick !== null && (
         <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-[var(--c-ink)] ink-border-md p-3 max-w-[720px] w-full max-h-[80vh] overflow-y-auto">
+          {/* v30 — the fourth modal, and the only one that was never declared
+              as one. It covers the whole board, it is opened BY the button it
+              hides, and until now it was neither announced to a screen reader
+              nor holding the keyboard: Tab walked straight out of it onto a
+              board the player is in the middle of leaving. */}
+          <div
+            ref={shedDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Shed down to ${MAX_HAND} cards`}
+            tabIndex={-1}
+            className="bg-[var(--c-ink)] ink-border-md p-3 max-w-[720px] w-full max-h-[80vh] overflow-y-auto outline-none"
+          >
             <div className="flex items-center justify-between mb-2">
               <span className="heading-font text-sm text-[var(--c-yellow)]">
                 SHED TO {MAX_HAND} — pick {me.hand.length - MAX_HAND} card

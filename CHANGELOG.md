@@ -9,6 +9,165 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v30.0 — The pass where the keyboard was pressed for the first time
+
+Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress
+round, a match QoL round, a flow/CPU-visibility audit, and the carry-forward
+re-measurement. **0 invariant violations across 190,464 AI games** — the eight
+standing cohorts four times over, on four independent draws of the pinned
+deck-space — plus a 1,200-seed fuzz soak and a 600-seed chaos run; 480 tests
+(8 new). The engine ships behaviourally unchanged: cohorts A/B/C reproduce
+v26–v29 to the decimal, and draws 1–3 reproduce v29's whole Leader table entry
+for entry.
+
+**Every axis this project has ever measured is a POINTER axis.** Overflow is
+what a finger cannot scroll to. The 24x24 minimum is what a thumb cannot hit.
+Reflow at 320px and the 200% text pass are both about a phone. Eighteen passes
+of geometry, and the question *can this be operated without a pointer at all*
+had never once been asked — which matters more here than in most apps, because
+this one draws a large share of its controls as `<div role="button">` (a card
+face cannot be a `<button>`: it prints its own keyword and cost chips as
+buttons, and nesting those is invalid HTML). A `div` is not focusable unless
+somebody remembered `tabIndex` and does not fire unless somebody remembered
+`onKeyDown`, and "somebody remembered" is exactly the class of claim a harness
+exists to stop trusting. Both sweeps press the real Tab key now — the meta
+screens in `audit:screens`, the live match board and its dialogs in
+`drive:match` — against WCAG 2.1.1 (reachable), 2.4.7 (a visible focus ring)
+and 2.1.2 (no trap).
+
+**The first run found that every modal in the app leaks the keyboard.** Fifteen
+dialogs across the match board, the card inspectors and the meta screens all
+declare `role="dialog"` and `aria-modal="true"`, and most of them carry an
+effect that focuses the dialog on open — with a comment, copied from one to the
+next since v4.24, saying that this is *"so a keyboard user can't Tab through to
+the (only visually) obscured page underneath"*. **It is not, in any browser.**
+`aria-modal` is a statement to the accessibility tree and says nothing to
+sequential focus navigation, and moving focus in once does not keep it there: a
+dialog mounts at the END of the DOM, so Tab from its last control walks off the
+document, through the browser's own chrome, and back in at the TOP of the page
+— which is the thing the dialog is covering. The Tab walk landed on the match
+board's **✕ CONCEDE from inside the mulligan dialog**, on the first run that
+looked. `useFocusTrap` is the one shared hook that actually holds it, all
+fifteen use it, and a test scans for the next dialog that ships without it.
+
+**And then the fix had to be fixed twice, both times because two dialogs can be
+open at once.** The concede confirm can be raised over the shed picker; either
+can sit under the card inspector. Two active traps FIGHT — on every Tab the
+outer one yanks focus into itself and the inner one yanks it back, so focus
+lands in the same place on every press and the keyboard stops working
+altogether, which the driver reported as "focus did not move across 4 Tab
+presses on CONFIRM". A trap stack fixed that and was still wrong: it made the
+most recently MOUNTED trap the owner, and mount order does not agree with
+paint order (open the inspector first and the shed picker second and the
+later-mounted trap is the one underneath). Ownership is decided by **document
+order** now — these dialogs are siblings at one stacking level, so the last one
+in the DOM is the one on top.
+
+**Bug hunt: v29's newest harness entry was measuring the wrong screen from the
+day it shipped.** A PRELUDE entry drives a screen into a deeper state by
+clicking a button label, and it decided the click had LANDED by watching the
+control COUNT change. `auth@signup` presses CREATE ACCOUNT, whose difference
+from SIGN IN is a third *field* — and a field is an `<input>`, which the
+control selector does not select. The count went 6 → 6, the harness concluded
+the click had missed, and every check it then ran — overflow at three widths,
+tap targets, text resize, the whole click sweep — ran on the SIGN IN screen
+under the signup screen's name. That is the third time this file has recorded
+an entry measuring the state it was supposed to be leaving. The landing test is
+a screen SIGNATURE now (control count, field count, and the control labels), so
+a prelude that swaps a button's label or adds a field moves it. `decks@editor`
+was the same detector failing the other way: the sweep replays the prelude on
+every one of its ~41 loads, one of them missed, and the run stopped after
+**5 clicks of the 41 it owed** — reported by v28's under-measurement guard,
+which is the only reason anybody knew. Three attempts with a growing wait now.
+
+**Stress: two branches of the driver have been pressing the wrong control for
+thirteen passes, and the census found both.** v29 built the control census to
+turn "what has this harness never tried?" from a memory exercise into a number.
+Its second run is where it pays for itself:
+
+- **`⏱` narration speed: offered 948 times across eight matches, pressed 0.**
+  The driver clicks by visible text and takes the FIRST control whose text
+  contains the needle — and the narration bubble is itself a `role="button"`
+  that CONTAINS the speed button, so its own text contains `⏱` too and it won
+  every time. The speed ladder has been "exercised" since v20 by a click that
+  has been landing on SKIP.
+- **The Leader's ability pills: offered 560 times, pressed 0.** The driver
+  reached for them with `[role="button"][aria-disabled="false"]`, on a comment
+  claiming the pills were the only such element on the board. A `CardFace` with
+  an `onClick` is one too, and comes first in the DOM. Since v17, the branch
+  labelled `leader-ability` has been clicking a card face.
+
+**The census was also still wrong about itself, in three more shapes**, all of
+them the identity rule v29 wrote for card faces arriving through a different
+door: a label that describes the board's CURRENT CONTENTS is not the control's
+name. A clash line keys on its matchup (`#1 Galaxy Jellyfish ⚔4 → you`), so one
+divider button arrived as twenty never-pressed rows; the narration bubble keys
+on the beat inside it, so every sentence an opponent's turn produces was its
+own control; and a Location tile keys on the card standing in it, so twelve
+Sanctum names censused as twelve controls nobody had pressed. **269 distinct
+controls became 109**, and the never-pressed list went from 44 to a list this
+pass could actually work through.
+
+**The impatient player, driven for the first time.** Every action this harness
+has ever taken has been a single, patient, well-spaced click, which is not how
+anybody plays a game whose board pauses for a second of "thinking" after half
+of them. Every sixth press is now issued TWICE with no wait between the two —
+the two clicks land on either side of a React render with the engine's mutable
+`GameState` shared between them, which is the classic double-submit and is a
+different execution from two clicks a second apart — and every sixtieth step
+fires three Escapes and two Spaces into whatever the last action started.
+**916 double presses, 147 of which landed a second click, and 47 keyboard
+mashes: no crash, no hang, no stalled narration, no console error.**
+
+**Match QoL: the third thing a button press makes permanent.** Two of the
+divider's labels warn about something a press throws away — `· N PLAYABLE`
+since v26, `· WELLSPRING UNPLAYED` since v29 — and both are on the button that
+ENDS the turn. The button that LEAVES THE CLASH carried nothing, and its
+omission is the largest of the three: a player who has not yet worked out that
+attacking is a separate declaration inside its own phase reads `SKIP TO MAIN
+II ▸` as "next", presses it, and their ready units simply do not swing this
+turn, with nothing on the board ever saying a thing was given up. It reads
+`SKIP TO MAIN II ▸ · 3 CAN ATTACK` now, counted through the same
+`legalAttackers` the attack UI itself uses.
+
+**And the SPACE shortcut was being advertised 460 pixels away from the button
+it presses.** v26 put a `␣ SPACE` chip on the divider with a comment saying it
+was "where the thing it presses is". It was not: the divider is full width and
+its primary is CENTRED, so on a desktop board the chip sat at the far left,
+named none of the seven controls it could refer to, and — gated on nothing but
+the game-over and mulligan states — went on advertising the key in the five
+states where the handler deliberately stands down. It is a small `SPACE` badge
+on the primary button itself now, drawn only where a keyboard exists
+(`pointer: fine`) and only while the key is actually armed, off the key
+handler's own predicate rather than a second copy of it. How to Play gained the
+entry it never had: what SPACE presses, and what Escape cancels.
+
+**CPU visibility: the opponent's turn, out loud.** Every pass since v18 has
+closed a silence by asking what the board SHOWS — rings, spotlights, dwell
+times, a recap strip — and none of that reaches a player who is not looking at
+the screen. The turn recap has carried `role="status"` since v26, so the
+SUMMARY of the opponent's turn was announced and not one of the moves in it,
+while the bubble that replaces its own text on every beat announced nothing at
+all: for a screen-reader user the opponent played its whole turn in silence.
+The beat is a polite, atomic live region now — it queues behind whatever the
+player is doing rather than interrupting, and reads as one sentence rather than
+as the words that changed.
+
+**Balance: no card changed, eleventh pass running — and v29's carry-forward
+answered on schedule.** v29 recorded the first per-Leader statement ever to
+clear the two-draws rule (Mer-King and Avatar of the Abyss take #1 and #2 in
+every draw, in one order or the other) and scheduled a fourth draw to test it.
+**It holds**: four independent draws, the same two Leaders on top every time,
+and no third Leader ever within 1.4 points of second. The MAGNITUDE claim still
+has nothing behind it — the leader's margin over second is +10.7, −5.1, +6.5,
+−1.3, changing sign twice and varying eightfold — so the rule stands and no
+lever is authorized. The ρ triangle became a hexagon and is wider than three
+draws suggested: **0.417 / 0.733 / 0.833 / 0.450 / 0.367 / 0.700**, with draw 2
+the odd one out against every other draw and draws 1, 3 and 4 agreeing at
+0.70–0.83. Worth saying plainly: v28's standing rule was quoted on ρ = 0.417,
+which is the weakest of the six pairs rather than a typical one. Full numbers:
+`docs/BALANCE_SIM_FINDINGS_v24.md` § v30 re-measurement.
+
 ### v29.0 — The pass where the harness asked what it had never pressed
 
 Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress

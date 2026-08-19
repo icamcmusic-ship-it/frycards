@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { POOL_LEADERS } from '../game/v3/cardpool';
 import { LEADER_COLORS } from '../game/v3/colors';
 import { COLOR_PIP } from './colors';
@@ -8,6 +8,7 @@ import { PopButton } from './ui';
 import { RARITY_CHIP } from './rarity';
 import { RARITIES } from '../types';
 import { cn } from '../lib/utils';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 // Deck Box picks are capped at Rare or below — enforced again server-side
 // by claim_deck_box (this filter is UI-only, not the source of truth).
@@ -38,7 +39,12 @@ export function LeaderPicker({
   const deckBoxLeaders = POOL_LEADERS.filter(
     (l) => RARITIES.indexOf(l.rarity || 'Common') <= DECK_BOX_MAX_RARITY_IDX,
   );
-  const dialogRef = useRef<HTMLDivElement>(null);
+  // v30 — this used to be a `useRef` plus an effect that focused the dialog
+  // once. Moving focus in does not keep it there: a dialog mounts at the end
+  // of the DOM, so Tab from its last control walks off the document and back
+  // in at the TOP of the page, which is what the dialog is covering. See
+  // `useFocusTrap`.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
   // The parent's `busy` prop only flips true after onPick's async claim call
   // actually starts — a fast double-click on a tile (or two different tiles)
   // before that re-render lands could fire onPick twice. This local latch
@@ -59,15 +65,6 @@ export function LeaderPicker({
   useEffect(() => {
     if (!busy) setPickStarted(false);
   }, [busy]);
-
-  // Move focus into the dialog on open and restore it to whatever triggered
-  // the Deck Box on close — otherwise a keyboard user opening this stays
-  // focused on the (now hidden-behind-overlay) trigger button.
-  useEffect(() => {
-    const prevFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => prevFocused?.focus?.();
-  }, []);
 
   return (
     <div

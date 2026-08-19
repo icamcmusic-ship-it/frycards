@@ -30,6 +30,7 @@ import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
+import { useFocusTrap } from '../components/useFocusTrap';
 
 type Tab = 'friends' | 'trades' | 'leaderboard';
 
@@ -819,18 +820,16 @@ function TradeComposerModal({
   const [requestCredits, setRequestCredits] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  // v30 — this used to be a `useRef` plus an effect that focused the dialog
+  // once. Moving focus in does not keep it there: a dialog mounts at the end
+  // of the DOM, so Tab from its last control walks off the document and back
+  // in at the TOP of the page, which is what the dialog is covering. See
+  // `useFocusTrap`.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   // Move focus into the dialog on open and restore it to the trigger on
   // close, matching PlayerProfileModal — otherwise keyboard focus stays
   // behind the overlay.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
-    return () => {
-      previouslyFocused?.focus?.();
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

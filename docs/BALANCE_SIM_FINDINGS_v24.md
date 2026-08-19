@@ -483,6 +483,118 @@ balance change — which is what the Sentinel rule has said to do since v20.
   item retired since v23.
 - No card, price, stat, weight or keyword band changed.
 
+## v30 re-measurement (2026-08-19)
+
+Bug/QoL pass. **Runs:** the same eight cohorts, 5,952 games each —
+`npx tsx scripts/simulate-v5.ts 6 32 <gameSeed> <deckSeed>`, same seed table as
+v26–v29 (A 1337/1337, B 1337/42, C 1337/7, D 1337/4242, E 1337/9001,
+F 20260815/20260815, G 20260815/777, H 20260815/31415) — **four times over**:
+unsalted, `PINNED_RECIPE_SALT=v28`, `=v29`, and a new `=v30`. **190,464 games**,
+`invariantViolations` empty in all thirty-two reports. Plus a 1,200-seed fuzz
+soak and a 600-seed chaos run (volumes in the changelog entry).
+
+**Neutrality control.** All four draws reproduce cohorts A/B/C to the decimal —
+P1 44.7 / 46.5 / 46.3 at 20.3 / 21.6 / 21.8 turns, unchanged since v26 — and
+draws 1–3 reproduce v29's whole nine-row Leader table entry for entry. The
+fourth draw is measured on an instrument three draws have now been shown to
+reproduce.
+
+### Carry-forward #2, answered: the top two survive a fourth draw
+
+v29's newest item was the first per-Leader statement to clear the two-draws
+rule, and it recorded rather than acted on it: *"Mer-King and Avatar of the
+Abyss take #1 and #2 in all three draws, in one order or the other… re-measure
+first next pass, with a fourth draw."* Run without regard to the claim:
+
+| Leader                      | draw 1 | draw 2 | draw 3 | draw 4 | rank range |
+| --------------------------- | ------ | ------ | ------ | ------ | ---------- |
+| Mer-King                    | 65.8 #1 | 58.6 #2 | 60.6 #1 | 58.0 #2 | 1          |
+| Avatar of the Abyss         | 55.1 #2 | 63.7 #1 | 54.1 #2 | 59.3 #1 | 1          |
+| Ethereal Sea Witch          | 51.8 #3 | 42.8 #8 | 53.6 #3 | 49.4 #5 | **5**      |
+| Kuro, the Unseen            | 49.7 #4 | 48.9 #4 | 48.7 #6 | 52.7 #3 | 3          |
+| Sovereign of the Dying Star | 48.5 #5 | 45.9 #6 | 50.4 #5 | 47.5 #6 | 1          |
+| Void Mother                 | 45.4 #6 | 41.9 #9 | 45.7 #7 | 51.7 #4 | **5**      |
+| Legendary Diver             | 45.0 #7 | 54.8 #3 | 41.2 #8 | 38.7 #9 | **6**      |
+| Sentinel of the Nether Pit  | 44.5 #8 | 43.8 #7 | 40.3 #9 | 43.3 #8 | 2          |
+| Ruin-Walker Overseer        | 43.1 #9 | 46.3 #5 | 53.2 #4 | 47.0 #7 | **5**      |
+
+**The claim holds.** Mer-King and Avatar take #1 and #2 in all four draws, in
+one order or the other, and no third Leader has ever been within 1.4 points of
+second. The same three Leaders keep a rank range of ≤1 that did in v29
+(Mer-King, Avatar, Sovereign); six of nine are still readings of the decks.
+
+The ρ triangle becomes a hexagon, and it is wider than three draws suggested:
+**1↔2 = 0.417, 1↔3 = 0.733, 1↔4 = 0.833, 2↔3 = 0.450, 2↔4 = 0.367, 3↔4 =
+0.700.** Draw 2 is the odd one out against every other draw (0.417 / 0.450 /
+0.367) and draws 1, 3 and 4 agree with each other at 0.70–0.83. That is worth
+saying plainly: **v28 built the "two draws, always" rule on a single pair, and
+that pair is the weakest of the six.** The rule is right and the number it was
+quoted on was the worst case, not the typical one.
+
+**What is now sayable, and what is still not.** The ORDERING claim about the
+top pair has four independent draws behind it and is the strongest per-Leader
+statement this project has. The MAGNITUDE claim still has nothing: the leader's
+margin over second is +10.7, −5.1, +6.5, −1.3 across the four draws — it
+changes SIGN twice and its size varies eightfold. v29's rule stands unchanged
+and is now better evidenced: **a lever is spent on a margin that holds across
+draws, never on a rank that does.** No lever is authorized.
+
+### The one-signed gap test, fourth draw — still empty
+
+| draw         | Leaders one-signed across all eight cohorts |
+| ------------ | ------------------------------------------- |
+| 1 (unsalted) | Ruin-Walker Overseer, negative (−9.3)       |
+| 2 (salt v28) | Avatar of the Abyss, positive (+9.1)        |
+| 3 (salt v29) | none                                        |
+| 4 (salt v30) | **none**                                    |
+
+Four draws, two different names and two blanks. v29 retired it as a standalone
+discriminator and kept it as a filter, requiring the same Leader one-signed the
+same way in two independent draws before a case can even start. Nothing has met
+that bar in four draws. The retirement stands.
+
+Ruin-Walker Overseer, closed in v28 and re-checked in v29 at 4th/53.2%, comes
+out **7th of nine at 47.0%** on draw 4 with a gap of −5.4 that flips sign in
+three cohorts. Two independent draws now put it mid-table with a sign-unstable
+gap; the closure stands.
+
+### Carry-forward status
+
+1. **Mer-King lever — stays revoked.** Four draws sharpen v29's reading rather
+   than change it: ordering survives, magnitude does not, and the margin over
+   second now changes sign twice. Any future case must quote a margin that
+   holds across draws.
+2. **The top-two pair — CLOSED as a measurement, not as an action.** It cleared
+   the two-draws bar in v29 and a four-draw bar here. It is a statement about
+   the two kits and it is recorded as one. No card change follows from it: the
+   interleaving rule (#7) holds, and an ordering is not a lever (#1).
+3. **v23 Leader keyword print** — carried, untouched.
+4. **v24 Event keyword print** — carried, untouched; `UNPRINTED_KEYWORDS`
+   unmodified.
+5. **`Unbreakable` weight 7 — carried, trigger still not met** across
+   thirty-two deck rolls in five consecutive passes. The re-check fires on a
+   NEGATIVE carrier delta; it has never fired.
+6. **`Sacred` cohort dependence — carried at v26's narrowed statement.** Sign
+   stable, magnitude is the deck roll. No action.
+7. **Content/balance interleaving** — carried and honoured: no card price,
+   stat, weight or keyword band changed this pass.
+8. **The one-signed gap test** — retired as a discriminator, kept as a filter,
+   and still firing on nobody two draws running.
+9. **NEW — draw 2 is the outlier, and the standing rule was quoted on it.**
+   Its ρ against the other three draws is 0.417 / 0.450 / 0.367 while those
+   three agree at 0.700–0.833. Nothing is done about it this pass and nothing
+   should be: one draw of eight cohorts is exactly as legitimate as the other
+   three, and a draw that disagrees is the entire reason the rule exists. It is
+   recorded so that the next pass quoting "ρ = 0.417" knows it is quoting the
+   worst pair of six rather than a typical one.
+
+### New this pass
+
+- A fourth independent draw (`PINNED_RECIPE_SALT=v30`) and the first six-pair
+  ρ hexagon.
+- v29's carry-forward #2 answered as scheduled, and closed as a measurement.
+- No card, price, stat, weight or keyword band changed.
+
 ## v29 re-measurement (2026-08-18)
 
 Bug/QoL pass. **Runs:** the same eight cohorts, 5,952 games each —

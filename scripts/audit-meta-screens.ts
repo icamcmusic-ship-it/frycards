@@ -241,7 +241,124 @@ const SKIP_REFLOW = process.env.SKIP_REFLOW === '1';
  * number that moves is what is worth looking at.
  */
 const TEXT_SCALE = Number(process.env.TEXT_SCALE ?? 200);
+/**
+ * WCAG 2.1.1 / 2.4.7 / 2.1.2 — the keyboard, measured (v30).
+ *
+ * Every axis this sweep has ever measured is a POINTER axis. Overflow is what
+ * a finger cannot scroll to, the 24x24 minimum is what a thumb cannot hit, the
+ * reflow and text-resize passes are both about a phone. Eighteen passes, and
+ * the question "can this screen be operated without a pointer at all" had
+ * never once been asked — which matters more here than in most apps, because
+ * this one draws a large share of its controls as `<div role="button">` (a
+ * card face cannot be a `<button>`: it prints its own keyword and cost chips
+ * as buttons, and nesting those is invalid HTML). A `div` is not focusable
+ * unless somebody remembered `tabIndex`, and "somebody remembered" is exactly
+ * the kind of claim a harness exists to stop trusting.
+ *
+ * Three checks, all driven by pressing the real Tab key rather than by
+ * reasoning about the DOM — the browser's own sequential focus navigation is
+ * the thing under test, and `el.focus()` would answer a different question
+ * (and set `:focus-visible` under a different heuristic):
+ *
+ *  - **reachable (2.1.1)**: an enabled, visible control the Tab walk never
+ *    lands on. Only reported once the walk has WRAPPED — a screen with more
+ *    controls than MAX_TABS reports the shortfall as an unmeasured note
+ *    instead, because "never reached" out of a walk that stopped early is the
+ *    same silent cap this file has caught itself taking three times.
+ *  - **visible focus (2.4.7)**: a control the walk lands on that matches
+ *    `:focus-visible` and draws nothing — no outline and no box-shadow. The
+ *    stylesheet has a global focus ring; `outline-none` is applied by hand in
+ *    a dozen places, and which of the two wins is a specificity/source-order
+ *    question that is much better measured than argued.
+ *  - **no trap (2.1.2)**: focus that stops moving under repeated Tab presses,
+ *    which is a keyboard user stuck on a screen with no way out.
+ */
+const MAX_TABS = Number(process.env.MAX_TABS ?? 1400);
+const SKIP_KEYBOARD = process.env.SKIP_KEYBOARD === '1';
 const CONTROLS = 'button:visible, [role="button"]:visible';
+
+/**
+ * A screen's identity for the purposes of "did that prelude click land?" (v30).
+ *
+ * It used to be the CONTROL COUNT, and the count is blind in exactly the case
+ * v29 added its newest entry for. `auth@signup` drives the sign-in screen into
+ * CREATE ACCOUNT mode, whose difference from SIGN IN is a third *field* — and
+ * a field is an `<input>`, which `CONTROLS` does not select. The count went
+ * 6 → 6, the harness concluded the click had missed, and it reported that
+ * honestly; what it could not do was land. So every check `auth@signup` ran —
+ * overflow at three widths, tap targets, text resize, the click sweep — ran on
+ * the SIGN IN screen under the signup screen's name, which is the third time
+ * this file has caught an entry measuring a state it was supposed to be
+ * leaving.
+ *
+ * The fix is to stop using a number that only counts one kind of thing. The
+ * signature is the control count, the fields, and the control LABELS — a tab
+ * row that swaps two labels without changing the count moves it too, which the
+ * count never did either.
+ */
+const SCREEN_SIG = `(() => {
+  var btns = Array.prototype.slice.call(document.querySelectorAll('button, [role="button"]'));
+  var labels = btns
+    .map(function (el) {
+      return (el.getAttribute('aria-label') || el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 24);
+    })
+    .join('|');
+  var fields = document.querySelectorAll('input, select, textarea').length;
+  return btns.length + ':' + fields + ':' + labels.slice(0, 4000);
+})()`;
+const screenSig = (page: import('playwright').Page) =>
+  page.evaluate(SCREEN_SIG).catch(() => '') as Promise<string>;
+
+/**
+ * Walk an entry's PRELUDE into the state being measured, and say so when it
+ * does not land.
+ *
+ * v30: this was three copies, and only one of them (the click sweep's) had the
+ * retry and the signature test. `textScale` and the keyboard walk clicked once
+ * and waited 600ms — so `grading@vault` measured the SUBMIT tab under the
+ * vault's name in one run and the vault in the next, silently, and the
+ * keyboard walk's candidate count moved between 16 and 254 depending on which
+ * screen it happened to get. A prelude that is unreliable in one pass is
+ * unreliable in all of them; there is one implementation now.
+ */
+async function runPrelude(
+  page: import('playwright').Page,
+  screen: string,
+  width: number,
+  where = `${screen} prelude`,
+) {
+  for (const label of PRELUDE[screen] ?? []) {
+    const before = await screenSig(page);
+    let landed = false;
+    // Three attempts, with a growing wait: a prelude that has to mount 241
+    // controls (the deck editor) settles slower than one that swaps a form,
+    // and the click sweep replays the prelude on EVERY one of its ~41 loads —
+    // so a prelude that lands 39 times out of 41 stops the sweep dead at
+    // whichever load missed, which is what `decks@editor` reported this pass
+    // (settled at 241, clicked 5).
+    for (let attempt = 0; attempt < 3 && !landed; attempt++) {
+      const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
+      await target.click({ timeout: 4000 }).catch(() => undefined);
+      for (let i = 0; i < 16 + attempt * 8; i++) {
+        await page.waitForTimeout(250);
+        if ((await screenSig(page)) !== before) {
+          landed = true;
+          break;
+        }
+      }
+    }
+    if (!landed) {
+      problems.push({
+        where,
+        width,
+        kind: 'unmeasured',
+        detail:
+          `the prelude step "${label}" did not change the screen after three clicks and ` +
+          `~28s of waiting, so this entry measured the state it was supposed to be leaving.`,
+      });
+    }
+  }
+}
 
 /** Console noise an offline preview cannot avoid. The realtime client retries
  * its socket on every screen that subscribes, so the WebSocket/tunnel variants
@@ -253,7 +370,7 @@ const NETWORK_NOISE =
 interface Problem {
   where: string;
   width: number;
-  kind: 'overflow' | 'console' | 'blank' | 'tap-target' | 'unmeasured' | 'text-scale';
+  kind: 'overflow' | 'console' | 'blank' | 'tap-target' | 'unmeasured' | 'text-scale' | 'keyboard';
   detail: string;
 }
 
@@ -358,54 +475,7 @@ async function check(screen: string, width: number, path: number[] = [], expect 
   // — and the entry measured the state it was supposed to be leaving while
   // still printing a clean pass. Exactly the failure `settledControlCount`'s own
   // header describes, arriving through a timer instead of a progressive render.
-  for (const label of PRELUDE[screen] ?? []) {
-    const before = await page
-      .$$(CONTROLS)
-      .then((c) => c.length)
-      .catch(() => 0);
-    /**
-     * Click the prelude step and wait for it to LAND — then say so when it
-     * does not.
-     *
-     * v29: the wait alone was not enough. `pack@reveal` measured **1 control**
-     * at 375px in a full run and 6 at 1280px on the very next load — the tear
-     * click missed or the 850ms reveal timer outran the wait, the entry
-     * measured the unopened wrapper it was supposed to be leaving, and every
-     * check downstream (the control count, the tap targets, the text-resize
-     * pass) ran on the wrong screen while the run printed a clean pass. This
-     * is v14's finding and v28's, arriving through the third door: the sweep
-     * has to be able to tell "this screen is fine" from "I never got to it".
-     *
-     * So: retry the click once, and if the control set still has not moved,
-     * report it where the measurement would have gone.
-     */
-    let landed = false;
-    for (let attempt = 0; attempt < 2 && !landed; attempt++) {
-      const target = page.locator(`${CONTROLS}`, { hasText: label }).first();
-      await target.click({ timeout: 4000 }).catch(() => undefined);
-      for (let i = 0; i < 16; i++) {
-        await page.waitForTimeout(250);
-        const now = await page
-          .$$(CONTROLS)
-          .then((c) => c.length)
-          .catch(() => 0);
-        if (now !== before) {
-          landed = true;
-          break;
-        }
-      }
-    }
-    if (!landed) {
-      problems.push({
-        where: `${screen} prelude`,
-        width,
-        kind: 'unmeasured',
-        detail:
-          `the prelude step "${label}" left the control count at ${before} after two clicks ` +
-          `and 8s of waiting, so this entry measured the state it was supposed to be leaving.`,
-      });
-    }
-  }
+  await runPrelude(page, screen, width);
   let settled = await settledControlCount(page);
   // A settle far below what the load pass counted is a race, not a screen with
   // fewer controls — give it a second chance before believing it. `expect` is
@@ -647,14 +717,7 @@ async function textScale(screen: string) {
     timeout: 20_000,
   });
   await page.waitForTimeout(700);
-  for (const label of PRELUDE[screen] ?? []) {
-    await page
-      .locator(`${CONTROLS}`, { hasText: label })
-      .first()
-      .click({ timeout: 4000 })
-      .catch(() => undefined);
-    await page.waitForTimeout(600);
-  }
+  await runPrelude(page, screen, 375, `${screen} prelude (text resize)`);
   const SAMPLE = `(() => {
     var out = [];
     var els = document.querySelectorAll('body *');
@@ -747,6 +810,292 @@ async function textScale(screen: string) {
   };
 }
 
+/** Run totals for the keyboard pass, printed with the summary. */
+const keyboardTotals = { reached: 0, candidates: 0, wrapped: 0, screens: 0 };
+
+/**
+ * Tab through a screen and report what the keyboard cannot do.
+ *
+ * The walk runs at desktop width: a keyboard is a desktop/AT input, and the
+ * phone widths the rest of this file measures would only change which controls
+ * are on screen, not whether Tab reaches them.
+ */
+async function keyboard(screen: string) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}?screen=${screenQuery(screen)}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 20_000,
+  });
+  await page.waitForTimeout(700);
+  await runPrelude(page, screen, 1280, `${screen} prelude (keyboard)`);
+  await page.waitForTimeout(400);
+
+  // Tag every candidate so a Tab landing can be identified by index rather
+  // than by a selector re-derived per press (which would not survive a screen
+  // that re-renders mid-walk).
+  const candidates = (await page
+    .evaluate(() => {
+      const sel = [
+        'button:not([disabled])',
+        '[role="button"]',
+        'a[href]',
+        'input:not([disabled])',
+        'select:not([disabled])',
+        'textarea:not([disabled])',
+        'summary',
+      ].join(', ');
+      const out: { i: number; name: string; optedOut: boolean }[] = [];
+      let i = 0;
+      for (const el of Array.from(document.querySelectorAll(sel))) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        const st = getComputedStyle(el);
+        if (st.visibility === 'hidden' || st.display === 'none') continue;
+        if ((el as HTMLInputElement).type === 'hidden') continue;
+        if (el.getAttribute('aria-disabled') === 'true') continue;
+        if (el.closest('[aria-hidden="true"], [inert]')) continue;
+        const name = (
+          el.getAttribute('aria-label') ||
+          el.textContent ||
+          (el as HTMLInputElement).placeholder ||
+          el.tagName
+        )
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 34);
+        el.setAttribute('data-kbd-i', String(i));
+        out.push({
+          i,
+          name: `<${el.tagName.toLowerCase()}> "${name}"`,
+          // An explicit `tabindex="-1"` is a DECLARATION that this control is
+          // not in the tab order — sometimes correct (a roving-tabindex group,
+          // a programmatically focused dialog), sometimes the bug itself. It
+          // is counted and named separately rather than folded into the
+          // unreachable list, the same way v28's inline tap-target exception
+          // is declared at the element rather than inferred.
+          optedOut: el.getAttribute('tabindex') === '-1',
+        });
+        i++;
+      }
+      return out;
+    })
+    .catch(() => [] as { i: number; name: string; optedOut: boolean }[])) as {
+    i: number;
+    name: string;
+    optedOut: boolean;
+  }[];
+
+  // Start the walk from the top of the document, not from wherever the
+  // PRELUDE left focus. A prelude clicks a button, which focuses it, and Tab
+  // then continues FORWARD from there — so every control ahead of the prelude
+  // button in the tab order was only reachable after a wrap the walk stops at,
+  // and the first run reported "< MENU", "SIGN IN" and "CREATE ACCOUNT" as
+  // unreachable on screens where they are the first things a Tab press finds.
+  await page
+    .evaluate(() => {
+      (window as unknown as { __kbdFirst?: Element | null }).__kbdFirst = null;
+      const el = document.activeElement as HTMLElement | null;
+      el?.blur?.();
+      // Reset the browser's SEQUENTIAL FOCUS NAVIGATION STARTING POINT, which
+      // is not the same thing as focus and is not cleared by `blur()`: a click
+      // sets it, so after a PRELUDE click Tab carries on from the clicked
+      // control and everything ahead of it in the tab order is only reachable
+      // after a wrap. Focusing the body moves the starting point to the top of
+      // the document, which is where a fresh Tab press should begin.
+      const b = document.body;
+      const had = b.getAttribute('tabindex');
+      b.setAttribute('tabindex', '-1');
+      b.focus();
+      if (had === null) b.removeAttribute('tabindex');
+    })
+    .catch(() => undefined);
+  const reached = new Set<number>();
+  /** Controls that were focused but drew no focus indicator. */
+  const invisible = new Set<string>();
+  /**
+   * Controls that took `:focus-visible` AND drew something.
+   *
+   * Printed beside the failures on purpose. A 2.4.7 check that reports "0
+   * without a ring" is indistinguishable from a 2.4.7 check whose
+   * `:focus-visible` predicate never matches anything — a green light and a
+   * dead instrument print the same line — so the run also prints how many
+   * times the check FIRED positively.
+   */
+  let ringed = 0;
+  let wrapped = false;
+  let trap = '';
+  let lastKey = '';
+  let sameRun = 0;
+
+  for (let t = 0; t < MAX_TABS; t++) {
+    await page.keyboard.press('Tab');
+    const at = (await page
+      .evaluate(() => {
+        const w = window as unknown as { __kbdFirst?: Element | null };
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body || el === document.documentElement) {
+          return { key: 'body', i: -1, indicator: true, name: 'body', isFirst: false };
+        }
+        // NODE identity for "have we come back to the start", not the label:
+        // two controls can share a name, and a walk that decides it has
+        // wrapped the second time it sees a familiar-looking one then reports
+        // everything it had not yet visited as unreachable.
+        let isFirst = false;
+        if (!w.__kbdFirst) w.__kbdFirst = el;
+        else isFirst = w.__kbdFirst === el;
+        const st = getComputedStyle(el);
+        const outline = st.outlineStyle !== 'none' && (parseFloat(st.outlineWidth) || 0) >= 1;
+        const shadow = st.boxShadow !== 'none' && st.boxShadow !== '';
+        // Only elements the browser itself has decided to show a ring for are
+        // held to 2.4.7 — `:focus-visible` is the standard's own "did this
+        // focus come from the keyboard" answer, and second-guessing it here
+        // would report every mouse click as a violation.
+        const visible = el.matches(':focus-visible');
+        const iAttr = el.getAttribute('data-kbd-i');
+        const name = (
+          el.getAttribute('aria-label') ||
+          el.textContent ||
+          (el as HTMLInputElement).placeholder ||
+          el.tagName
+        )
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 34);
+        return {
+          key: `${iAttr ?? 'x'}:${el.tagName}:${name}`,
+          i: iAttr === null ? -1 : Number(iAttr),
+          focusVisible: visible,
+          indicator: !visible || outline || shadow,
+          name: `<${el.tagName.toLowerCase()}> "${name}"`,
+          isFirst,
+        };
+      })
+      .catch(() => null)) as {
+      key: string;
+      i: number;
+      focusVisible: boolean;
+      indicator: boolean;
+      name: string;
+      isFirst: boolean;
+    } | null;
+    if (!at) break;
+
+    if (at.key === lastKey) {
+      sameRun += 1;
+      // Four presses that do not move focus is not a slow screen; it is a
+      // control that has taken the keyboard and will not give it back —
+      // UNLESS the screen has exactly one tabbable control, in which case Tab
+      // has nowhere else to go and landing on it again is the cycle, not a
+      // trap. The pack screen (one control before the pack is torn) reported
+      // a keyboard trap on JUST TEAR IT OPEN FOR ME for exactly that reason.
+      if (sameRun >= 4 && at.key !== 'body' && candidates.length > 1) {
+        trap = at.name;
+        break;
+      }
+      if (sameRun >= 4) {
+        wrapped = true;
+        break;
+      }
+    } else {
+      sameRun = 0;
+    }
+    lastKey = at.key;
+
+    if (at.i >= 0) {
+      if (at.isFirst && reached.size > 1) {
+        wrapped = true;
+        break;
+      }
+      reached.add(at.i);
+      if (!at.indicator) invisible.add(at.name);
+      else if (at.focusVisible) ringed += 1;
+    } else if (at.key === 'body' && reached.size > 0) {
+      // Tab has walked off the end of the document and back to the browser
+      // chrome — the walk is complete for this screen.
+      wrapped = true;
+      break;
+    }
+  }
+
+  await ctx.close();
+
+  const optedOut = candidates.filter((c) => c.optedOut);
+  const unreached = candidates.filter((c) => !c.optedOut && !reached.has(c.i));
+
+  if (trap) {
+    problems.push({
+      where: `${screen} keyboard`,
+      width: 1280,
+      kind: 'keyboard',
+      detail: `focus did not move across 4 Tab presses on ${trap} (WCAG 2.1.2, no keyboard trap)`,
+    });
+  }
+  for (const name of [...invisible].slice(0, 6)) {
+    problems.push({
+      where: `${screen} keyboard`,
+      width: 1280,
+      kind: 'keyboard',
+      detail: `${name} takes :focus-visible and draws no outline or shadow (WCAG 2.4.7)`,
+    });
+  }
+  if (invisible.size > 6) {
+    problems.push({
+      where: `${screen} keyboard`,
+      width: 1280,
+      kind: 'keyboard',
+      detail: `…and ${invisible.size - 6} more focused control(s) with no visible focus indicator`,
+    });
+  }
+  if (wrapped) {
+    // One row per distinct control shape, same rule the tap-target check uses:
+    // a grid of 300 identical tiles is one finding repeated.
+    const shapes = [...new Set(unreached.map((c) => c.name))];
+    for (const name of shapes.slice(0, 6)) {
+      problems.push({
+        where: `${screen} keyboard`,
+        width: 1280,
+        kind: 'keyboard',
+        detail: `${name} is enabled and visible and Tab never reaches it (WCAG 2.1.1)`,
+      });
+    }
+    if (shapes.length > 6) {
+      problems.push({
+        where: `${screen} keyboard`,
+        width: 1280,
+        kind: 'keyboard',
+        detail: `…and ${shapes.length - 6} more distinct control shape(s) Tab never reaches`,
+      });
+    }
+  } else if (candidates.length > 0) {
+    // NOT a pass. The walk stopped at the cap, so "never reached" is unknown
+    // for whatever is past it — say so where the answer would have gone.
+    problems.push({
+      where: `${screen} keyboard`,
+      width: 1280,
+      kind: 'unmeasured',
+      detail:
+        `the Tab walk hit its ${MAX_TABS}-press cap after reaching ${reached.size} of ` +
+        `${candidates.length} candidate control(s) without wrapping, so 2.1.1 is unmeasured ` +
+        `for the rest. Raise MAX_TABS to measure this screen.`,
+    });
+  }
+
+  keyboardTotals.reached += reached.size;
+  keyboardTotals.candidates += candidates.length;
+  keyboardTotals.screens += 1;
+  if (wrapped) keyboardTotals.wrapped += 1;
+  return {
+    reached: reached.size,
+    candidates: candidates.length,
+    optedOut: optedOut.length,
+    invisible: invisible.size,
+    ringed,
+    unreached: wrapped ? unreached.length : -1,
+    trap,
+  };
+}
+
 for (const screen of SCREENS) {
   for (const width of WIDTHS) {
     const r = await check(screen, width);
@@ -785,6 +1134,21 @@ if (TEXT_SCALE > 0) {
   }
   textScaleTotals.responded = respond;
   textScaleTotals.leaves = total;
+}
+
+// ---- WCAG 2.1.1 / 2.4.7 / 2.1.2, measured (v30) ---------------------------
+if (!SKIP_KEYBOARD) {
+  console.log(`\n=== keyboard walk (WCAG 2.1.1 / 2.4.7 / 2.1.2) ===`);
+  for (const screen of SCREENS) {
+    const r = await keyboard(screen);
+    console.log(
+      `${screen}: Tab reached ${r.reached}/${r.candidates} control(s)` +
+        (r.unreached >= 0 ? ` · ${r.unreached} unreachable` : ' · did not wrap') +
+        ` · ${r.ringed} drew a focus ring, ${r.invisible} did not` +
+        (r.optedOut ? ` · ${r.optedOut} tabindex=-1` : '') +
+        (r.trap ? ` · TRAP on ${r.trap}` : ''),
+    );
+  }
 }
 
 // Click sweep at phone width only — the tighter of the two, and the one an
@@ -874,6 +1238,36 @@ if (TEXT_SCALE > 0 && textScaleTotals.leaves > 0) {
       `There is no right value for it; a number that MOVES is the thing to look at.`,
   );
 }
-console.log(`\n=== ${problems.length} problem(s) ===`);
-for (const p of problems) console.log(`${p.where} @${p.width} [${p.kind}] ${p.detail}`);
+if (!SKIP_KEYBOARD && keyboardTotals.candidates > 0) {
+  const pct = Math.round((keyboardTotals.reached / keyboardTotals.candidates) * 100);
+  console.log(
+    `\nkeyboard (WCAG 2.1.1): Tab reached ${keyboardTotals.reached}/` +
+      `${keyboardTotals.candidates} enabled visible control(s) — ${pct}% — across ` +
+      `${keyboardTotals.screens} state(s), of which ${keyboardTotals.wrapped} completed a full ` +
+      `focus cycle inside the ${MAX_TABS}-press cap. A state that did not wrap is reported as ` +
+      `UNMEASURED rather than counted as a pass: "nothing unreachable" out of a walk that ` +
+      `stopped early is the silent cap this file has caught itself taking three times.`,
+  );
+}
+/**
+ * One line per distinct problem, with the number of times it was hit.
+ *
+ * The click sweep replays a screen's prelude on every one of its ~41 loads, so
+ * a prelude that cannot land reports itself ~41 times — v30's `auth@signup`
+ * printed seven identical paragraphs in an eleven-line report, which buries
+ * the other finding rather than emphasising this one. The COUNT is kept
+ * because it is the interesting part: a prelude that fails once is a race and
+ * one that fails every time is a detector that cannot see the change.
+ */
+const seen = new Map<string, { p: Problem; n: number }>();
+for (const p of problems) {
+  const k = `${p.where}|${p.width}|${p.kind}|${p.detail}`;
+  const row = seen.get(k);
+  if (row) row.n += 1;
+  else seen.set(k, { p, n: 1 });
+}
+console.log(`\n=== ${seen.size} distinct problem(s) (${problems.length} total) ===`);
+for (const { p, n } of seen.values()) {
+  console.log(`${p.where} @${p.width} [${p.kind}]${n > 1 ? ` (x${n})` : ''} ${p.detail}`);
+}
 process.exit(problems.length > 0 ? 1 : 0);

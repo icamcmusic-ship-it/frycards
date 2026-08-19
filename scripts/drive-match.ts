@@ -119,6 +119,54 @@ const CONCEDE_AFTER = Number(process.env.CONCEDE_AFTER ?? 90);
  * likely place in this component for a stale timer to fire into a dead tree.
  */
 const REMATCH = process.env.REMATCH !== '0';
+/**
+ * Every Nth successful press is issued TWICE, back to back (v30). 0 disables.
+ *
+ * Every action this driver has ever taken has been a single, patient,
+ * well-spaced click — which is not how anybody plays a game whose board pauses
+ * for a second of "thinking" after half of them. The realistic input is the
+ * impatient one: a player who does not see the board move presses again, and
+ * the two presses land on either side of a React render with the engine's
+ * mutable `GameState` shared between them. That is a different execution than
+ * two presses a second apart, and it is the one that produces the classic
+ * double-submit — two `declareAttackers`, two phase advances, two
+ * `onResult` round-trips — none of which any harness here had ever attempted.
+ *
+ * The second press is deliberately NOT a copy of the first: it re-evaluates
+ * the same expression against whatever the board now shows, which is exactly
+ * what a second physical click does. A control that has gone away, or gone
+ * disabled, simply misses — that is the outcome under test.
+ */
+const DOUBLE_EVERY = Number(process.env.DOUBLE_EVERY ?? 6);
+/**
+ * Steps between keyboard MASHES (v30). 0 disables.
+ *
+ * Escape has cancelled things since v17 and Space has fired the divider's
+ * primary since v26, both driven one deliberate press at a time. A player
+ * clearing a stuck-looking board hits Escape three times and Space twice
+ * inside half a second, and every one of those lands on a different frame of
+ * whatever the last press started — a narration mid-beat, a target pick
+ * half-open, a modal on its way out.
+ */
+const MASH_EVERY = Number(process.env.MASH_EVERY ?? 60);
+/**
+ * Step at which each match runs one Tab walk over the board (v30). 0 disables.
+ *
+ * The match board is the screen a player spends the most time on, it draws a
+ * large share of its controls as `<div role="button">` (a `CardFace` cannot be
+ * a `<button>` — it prints its own keyword and cost chips as buttons, and
+ * nesting those is invalid HTML), and no harness here has ever pressed a Tab
+ * key at it. A `div` is not focusable unless somebody remembered `tabIndex`
+ * and does not fire unless somebody remembered `onKeyDown`; "somebody
+ * remembered" is exactly the class of claim this file exists to stop trusting.
+ *
+ * Run mid-match rather than at load, because the board at step 40 has a hand,
+ * a battlefield, Locations and a divider, and the board at step 0 has a
+ * mulligan dialog.
+ */
+const KEYBOARD_AT = Number(process.env.KEYBOARD_AT ?? 40);
+/** Tab presses the walk may spend before giving up on wrapping. */
+const KEYBOARD_TABS = Number(process.env.KEYBOARD_TABS ?? 220);
 
 interface Finding {
   match: number;
@@ -133,7 +181,8 @@ interface Finding {
     | 'stale-ring'
     | 'narration'
     | 'coverage'
-    | 'clipped';
+    | 'clipped'
+    | 'keyboard';
   detail: string;
 }
 
@@ -268,14 +317,36 @@ const CENSUS_KEY = `function __censusKey(el) {
   // the census as thirty distinct controls.
   if (el.closest && el.closest('[data-card-id]')) return '\u00abcard\u00bb';
   if (el.querySelector && el.querySelector('[data-card-id]')) return '\u00abcard\u00bb';
+  // v30 — two more shapes the census was counting as many controls.
+  //
+  // A CLASH LINE is one control per attacker/target pairing
+  // ("#1 Galaxy Jellyfish ⚔4 → you"), so a single divider button arrived as
+  // twenty rows of never-pressed, one per matchup the board happened to roll.
+  // And the NARRATION BUBBLE keys on the beat currently inside it, so every
+  // sentence the opponent's turn produces was its own control — including the
+  // ones prefixed "❚❚ HELD". Both are the identity rule v29 wrote for card
+  // faces, arriving through a different door: a label that describes the
+  // board's CURRENT CONTENTS is not the control's name.
+  if (el.querySelector && el.querySelector('[aria-label^="Narration speed"]'))
+    return '\u00abnarration bubble\u00bb';
+  // A LOCATION TILE is one control whose label is the card standing in it, so
+  // twelve Sanctum names censused as twelve never-pressed controls. Same rule
+  // as the card face, one row of the board over.
+  if (el.hasAttribute && el.hasAttribute('data-location')) return '\u00ablocation\u00bb';
+  var t0 = String(el.getAttribute('aria-label') || el.textContent || '');
+  if (/\u2694/.test(t0) && /^#\\d/.test(t0.replace(/\\s+/g, ' ').trim()))
+    return '\u00abclash line\u00bb';
   var t = el.getAttribute('aria-label') || el.textContent || '';
   t = String(t).replace(/\\s+/g, ' ').trim();
   // Everything after the first separator is STATE, not identity: an em-dash
-  // introduces arithmetic, an interpunct a suffix, and a colon the current
-  // value ("Narration speed: FAST. Click to change" is one control whose label
-  // names the rung it is on, and keying on the whole string made every rung a
-  // different control that had never been pressed).
-  t = t.split('\u2014')[0].split('\u00b7')[0].split(':')[0];
+  // introduces arithmetic, an interpunct a suffix, a colon the current value
+  // ("Narration speed: FAST. Click to change" is one control whose label names
+  // the rung it is on, and keying on the whole string made every rung a
+  // different control that had never been pressed) — and, since v30, a comma,
+  // which is how a Location tile appends its own exhaustion ("Secret Lair,
+  // exhausted") and so censused as two controls, one of which can never be
+  // pressed because a tile is only clickable in the other state.
+  t = t.split('\u2014')[0].split('\u00b7')[0].split(':')[0].split(',')[0];
   t = t.replace(/\\d+/g, 'N').replace(/\\s+/g, ' ').trim().toUpperCase();
   return t.slice(0, 48) || '\u00abunlabelled\u00bb';
 }`;
@@ -481,10 +552,27 @@ const has = (b: { text: string; disabled: boolean }[], needle: string) =>
  * value — a non-empty key is truthy, so every existing `if (await clickX(...))`
  * reads exactly as it did.
  */
+/** Successful presses so far, for DOUBLE_EVERY's cadence. */
+let pressCount = 0;
+/** How many presses were issued twice, and how many of the seconds landed. */
+const doubleRun = { issued: 0, landed: 0 };
+
 async function press(page: Page, expr: string): Promise<boolean> {
   const key = await evalSafe<string>(page, expr, '');
   notePressed(key);
-  return key !== '';
+  if (key === '') return false;
+  pressCount += 1;
+  if (DOUBLE_EVERY > 0 && pressCount % DOUBLE_EVERY === 0) {
+    doubleRun.issued += 1;
+    // No wait between them on purpose — see DOUBLE_EVERY. A second key means
+    // the board still offered the control and the driver pressed it again.
+    const second = await evalSafe<string>(page, expr, '');
+    if (second !== '') {
+      doubleRun.landed += 1;
+      notePressed(second);
+    }
+  }
+  return true;
 }
 
 /**
@@ -556,7 +644,15 @@ async function clickSelector(page: Page, selector: string, idx = 0): Promise<boo
     page,
     `(() => {
       ${CENSUS_KEY}
-      var els = document.querySelectorAll(${JSON.stringify(selector)});
+      // Disabled elements are filtered OUT rather than clicked and counted.
+      // \`.click()\` on a disabled button does nothing, and returning its key
+      // anyway recorded a press that never happened — a census that lies in
+      // the optimistic direction is worse than one that lies pessimistically,
+      // because the pessimistic one shows up as a row somebody goes and fixes.
+      var all = Array.prototype.slice.call(document.querySelectorAll(${JSON.stringify(selector)}));
+      var els = all.filter(function (e) {
+        return e.disabled !== true && e.getAttribute('aria-disabled') !== 'true';
+      });
       var el = ${idx} < 0 ? els[els.length + ${idx}] : els[${idx}];
       if (!el) return '';
       var k = __censusKey(el);
@@ -568,6 +664,34 @@ async function clickSelector(page: Page, selector: string, idx = 0): Promise<boo
 
 /** Click the n'th element carrying a ring of the given color. Same string-body
  * rule as READ_BOARD above (esbuild keep-names). */
+/**
+ * Click a RANDOM enabled match of `selector`, choosing the index in page (v30).
+ *
+ * `clickSelector` takes a fixed index, and the driver was passing
+ * `floor(rand() * 14)` for the board's Tip badges — a guess at how many there
+ * are. The board draws more than fourteen on a developed field, so every badge
+ * past the fourteenth was unreachable by construction, which is how RESOLVE and
+ * RESOLUTE came to be offered 571 times each and pressed never. Let the page
+ * count its own controls.
+ */
+async function clickAny(page: Page, selector: string, r: number): Promise<boolean> {
+  return press(
+    page,
+    `(() => {
+      ${CENSUS_KEY}
+      var els = Array.prototype.slice.call(document.querySelectorAll(${JSON.stringify(selector)}))
+        .filter(function (e) {
+          return e.disabled !== true && e.getAttribute('aria-disabled') !== 'true' && e.getClientRects().length > 0;
+        });
+      if (els.length === 0) return '';
+      var el = els[Math.floor(${r} * els.length) % els.length];
+      var k = __censusKey(el);
+      el.click();
+      return k;
+    })()`,
+  );
+}
+
 async function clickRing(page: Page, which: 'red' | 'yellow' | 'blue', idx = 0): Promise<boolean> {
   const cls =
     which === 'red'
@@ -801,6 +925,296 @@ async function playWellspring(page: Page): Promise<boolean> {
  */
 type NarrationMode = 'skip' | 'watch' | 'study';
 
+/**
+ * Tag every control the keyboard ought to be able to reach, in page.
+ *
+ * The predicate matches `audit:screens`'s keyboard walk exactly, so a control
+ * that counts on a meta screen counts here: visible, enabled, not
+ * `aria-disabled`, not inside an `aria-hidden`/`inert` subtree. A card face
+ * with no `onClick` renders `tabIndex={-1}` AND `aria-disabled` — it is scenery
+ * rather than a control, and it is excluded by the second of those, not the
+ * first, so an interactive element that someone marked `tabindex="-1"` still
+ * counts and still has to be reachable.
+ */
+const KEYBOARD_TAG = `(() => {
+  var sel = 'button:not([disabled]), [role="button"], a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])';
+  // A modal owns the screen when one is up, and the controls behind it are not
+  // what a keyboard user is being asked to reach. Scope to it — and report
+  // separately (see \`escaped\`) when Tab walks straight out of it onto the
+  // board it is covering, which is the thing an \`aria-modal\` alone does not
+  // prevent in any browser.
+  // The TOPMOST modal, not the first in the DOM. Two can be open at once —
+  // the concede confirm can be raised over the shed picker — and
+  // \`querySelector\` returns the one that mounted EARLIEST, which is the one
+  // underneath. Scoping to it measured four shed-picker controls while focus
+  // was cycling correctly inside the confirm dialog on top, and printed
+  // "dialog Tab 0/4" for a dialog that was working.
+  var __modals = document.querySelectorAll('[aria-modal="true"]');
+  var modal = __modals.length ? __modals[__modals.length - 1] : null;
+  var root = modal || document;
+  var els = root.querySelectorAll(sel);
+  var out = [];
+  for (var n = 0; n < els.length; n++) {
+    var el = els[n];
+    var r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    var st = getComputedStyle(el);
+    if (st.visibility === 'hidden' || st.display === 'none') continue;
+    if (el.getAttribute('aria-disabled') === 'true') continue;
+    if (el.closest('[aria-hidden="true"], [inert]')) continue;
+    var name = (el.getAttribute('aria-label') || el.textContent || el.tagName)
+      .replace(/\\s+/g, ' ').trim().slice(0, 34);
+    // Keyed by SHAPE, not by a tag written onto the node: this board
+    // re-renders under its own timers while the walk is running, and a React
+    // re-render that replaces a node takes any attribute the harness wrote on
+    // it with it — an identity scheme that does not survive the thing being
+    // measured measures nothing. The report is per distinct shape anyway.
+    out.push('<' + el.tagName.toLowerCase() + '> "' + name + '"');
+  }
+  var seen = {}, uniq = [];
+  for (var u = 0; u < out.length; u++) if (!seen[out[u]]) { seen[out[u]] = 1; uniq.push(out[u]); }
+  return { modal: !!modal, shapes: uniq };
+})()`;
+
+/** Where focus is now, whether the browser draws a ring on it, and whether it
+ * is still inside the modal that was up when the walk began. */
+const KEYBOARD_AT_FOCUS = `(() => {
+  var el = document.activeElement;
+  // NODE identity, not label identity, for the "did focus move?" question.
+  // The shape key deliberately collapses controls that look alike, and a
+  // player with five basic Wellsprings has five tiles all labelled
+  // WELLSPRING — so Tab walking correctly across four of them read as focus
+  // stuck on one, and the keyboard-trap check reported a trap on a row that
+  // was working. A replaced node (a React re-render) is correctly a DIFFERENT
+  // node here, which is the other half of the same question.
+  var same = el === window.__kbdLast;
+  window.__kbdLast = el;
+  // Wrap detection is a NODE question too, for the same reason the trap check
+  // is: the shape key deliberately collapses controls that look alike, so a
+  // board with two identical units (or two basic Wellspring tiles) reported a
+  // completed focus cycle the second time Tab reached a control shaped like
+  // the first one — and then declared every control it had not yet visited
+  // unreachable, including ✕ CONCEDE.
+  var isFirst = false;
+  if (!window.__kbdFirst) window.__kbdFirst = el;
+  else isFirst = el === window.__kbdFirst;
+  if (!el || el === document.body || el === document.documentElement)
+    return {
+      key: 'body',
+      shape: '',
+      indicator: true,
+      focusVisible: false,
+      inModal: false,
+      same: same,
+      isFirst: false,
+    };
+  var st = getComputedStyle(el);
+  var outline = st.outlineStyle !== 'none' && (parseFloat(st.outlineWidth) || 0) >= 1;
+  var shadow = st.boxShadow !== 'none' && st.boxShadow !== '';
+  var fv = el.matches(':focus-visible');
+  var name = (el.getAttribute('aria-label') || el.textContent || el.tagName)
+    .replace(/\\s+/g, ' ').trim().slice(0, 34);
+  var shape = '<' + el.tagName.toLowerCase() + '> "' + name + '"';
+  return {
+    key: shape,
+    shape: shape,
+    indicator: !fv || outline || shadow,
+    focusVisible: fv,
+    inModal: !!el.closest('[aria-modal="true"]'),
+    same: same,
+    isFirst: isFirst,
+  };
+})()`;
+
+/**
+ * One Tab walk over a live match board (v30).
+ *
+ * Reports three things, all of them WCAG-anchored and none of them reachable
+ * from any check this harness already runs: a control the keyboard cannot get
+ * to (2.1.1), a control it gets to that draws nothing (2.4.7), and focus that
+ * stops moving (2.1.2 — on a board whose only escape is ✕ CONCEDE, a trap is
+ * a match a keyboard player cannot finish).
+ *
+ * The walk leaves the board where it found it as far as it can: hand cards
+ * open their preview on FOCUS, so the last thing it does is Escape and blur.
+ */
+async function keyboardWalk(page: Page, match: number, seed: number, width: number, step: number) {
+  const tagged = await evalSafe<{ modal: boolean; shapes: string[] }>(page, KEYBOARD_TAG, {
+    modal: false,
+    shapes: [],
+  });
+  const candidates = tagged.shapes;
+  if (candidates.length === 0) return null;
+  await evalSafe(
+    page,
+    // The last clause resets the browser's SEQUENTIAL FOCUS NAVIGATION
+    // STARTING POINT, which a click sets and \`blur()\` does not clear — without
+    // it the walk carries on from whatever the driver last clicked and reports
+    // everything ahead of that control in the tab order as unreachable.
+    `(window.__kbdFirst = null, window.__kbdLast = null,
+      document.activeElement && document.activeElement.blur && document.activeElement.blur(),
+      (function () {
+        var b = document.body, had = b.getAttribute('tabindex');
+        b.setAttribute('tabindex', '-1');
+        b.focus();
+        if (had === null) b.removeAttribute('tabindex');
+      })(), 1)`,
+    1,
+  );
+  const reached = new Set<string>();
+  const invisible = new Set<string>();
+  let ringed = 0;
+  let wrapped = false;
+  let escaped = '';
+  /**
+   * Tab presses that landed on nothing (`document.body`).
+   *
+   * A live match board re-renders under its own timers — floats, beats, phase
+   * flashes — and focusing a hand card opens its preview, which changes the
+   * DOM under the walk. If a re-render replaces the focused node, focus falls
+   * back to the body and the next Tab restarts from the TOP of the document,
+   * which for a keyboard player means being bounced back to the start of the
+   * board every few hundred milliseconds. Counted rather than assumed: a walk
+   * that fails to wrap is a different problem depending on whether this number
+   * is 0 or 100.
+   */
+  let bodyLandings = 0;
+  let sameRun = 0;
+  let trap = '';
+  for (let t = 0; t < KEYBOARD_TABS; t++) {
+    await page.keyboard.press('Tab').catch(() => undefined);
+    const at = await evalSafe<{
+      key: string;
+      shape: string;
+      indicator: boolean;
+      focusVisible: boolean;
+      inModal: boolean;
+      same: boolean;
+      isFirst: boolean;
+    } | null>(page, KEYBOARD_AT_FOCUS, null);
+    if (!at) break;
+    if (at.same) {
+      sameRun += 1;
+      if (sameRun >= 4 && at.key !== 'body') {
+        trap = at.shape;
+        break;
+      }
+    } else sameRun = 0;
+    if (at.key === 'body') {
+      bodyLandings += 1;
+      // Tab has walked off the end of the document into the browser's own
+      // chrome. On a plain board that is the end of the cycle. With a modal
+      // open it is NOT: the dialog mounts at the end of the DOM, so the only
+      // way to observe focus escaping onto the board underneath is to keep
+      // pressing — the next landings are the TOP of the document, which is
+      // exactly the obscured board. Breaking here is why the first version of
+      // this check reported no escape from a dialog that does not trap.
+      if (reached.size > 0 && !tagged.modal) {
+        wrapped = true;
+        break;
+      }
+      continue;
+    }
+    if (tagged.modal && !at.inModal && !escaped) escaped = at.shape;
+    if (at.isFirst && reached.size > 1) {
+      wrapped = true;
+      break;
+    }
+    reached.add(at.shape);
+    if (!at.indicator) invisible.add(at.shape);
+    else if (at.focusVisible) ringed += 1;
+  }
+  // Put the board back: focusing a hand card opens its preview.
+  await page.keyboard.press('Escape').catch(() => undefined);
+  await evalSafe(
+    page,
+    `(document.activeElement && document.activeElement.blur && document.activeElement.blur(), 1)`,
+    1,
+  );
+
+  if (trap) {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'keyboard',
+      detail: `focus did not move across 4 Tab presses on ${trap} at step ${step} (WCAG 2.1.2)`,
+    });
+  }
+  if (escaped) {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'keyboard',
+      detail:
+        `Tab walked out of an aria-modal="true" dialog onto ${escaped} at step ${step} — the ` +
+        `board underneath is only visually obscured (WCAG 2.4.3)`,
+    });
+  }
+  for (const name of [...invisible].slice(0, 4)) {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'keyboard',
+      detail: `${name} takes :focus-visible and draws no outline or shadow at step ${step} (WCAG 2.4.7)`,
+    });
+  }
+  if (wrapped) {
+    const unreached = candidates.filter((c) => !reached.has(c));
+    for (const name of unreached.slice(0, 5)) {
+      findings.push({
+        match,
+        seed,
+        width,
+        kind: 'keyboard',
+        detail: `${name} is enabled and visible${
+          tagged.modal ? ' in the open dialog' : ' on the board'
+        } and Tab never reaches it at step ${step} (WCAG 2.1.1)`,
+      });
+    }
+    if (unreached.length > 5) {
+      findings.push({
+        match,
+        seed,
+        width,
+        kind: 'keyboard',
+        detail: `…and ${unreached.length - 5} more distinct control shape(s) Tab never reaches at step ${step}`,
+      });
+    }
+  } else {
+    // Same rule the meta sweep uses: a walk that did not wrap has not measured
+    // 2.1.1, and saying "nothing unreachable" out of it would be the silent
+    // cap this harness has caught itself taking before.
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'unfinished',
+      detail:
+        `the Tab walk hit its ${KEYBOARD_TABS}-press cap after reaching ${reached.size} of ` +
+        `${candidates.length} distinct control shape(s) without wrapping — 2.1.1 is unmeasured ` +
+        `for the rest. Focus fell back to document.body ${bodyLandings}x during the walk` +
+        `${bodyLandings > 4 ? ', which is a board re-render taking the focused node with it' : ''}`,
+    });
+  }
+  // Reported against the list it was measured against. A live board renders
+  // new controls while the walk is running (a beat's spotlight, a banner), so
+  // the raw landing count can exceed the census and print `18/17` — a ratio
+  // over 100% is a report nobody can read.
+  const known = [...reached].filter((c) => candidates.includes(c)).length;
+  return {
+    candidates: candidates.length,
+    reached: known,
+    appeared: reached.size - known,
+    ringed,
+    wrapped,
+    bodyLandings,
+    modal: tagged.modal,
+  };
+}
+
 async function driveMatch(
   browser: import('playwright').Browser,
   match: number,
@@ -898,6 +1312,33 @@ async function driveMatch(
   /** How many times ↻ REMATCH was pressed and a new match came up. */
   let rematches = 0;
   let overflowReported = false;
+  /** Keyboard mashes fired into this match — see MASH_EVERY. */
+  let mashes = 0;
+  /** The one Tab walk this match owes, and what it found. */
+  let keyboardWalked = false;
+  /** The dialog walks — the modal half of the same check. The mulligan dialog
+   * is guaranteed once a match; the concede confirm is the one raised over a
+   * LIVE board, which is where escaping into it actually costs something. */
+  let modalWalked = false;
+  let confirmWalked = false;
+  let kbdModal: {
+    candidates: number;
+    reached: number;
+    appeared: number;
+    ringed: number;
+    wrapped: boolean;
+    bodyLandings: number;
+    modal: boolean;
+  } | null = null;
+  let kbd: {
+    candidates: number;
+    reached: number;
+    appeared: number;
+    ringed: number;
+    wrapped: boolean;
+    bodyLandings: number;
+    modal: boolean;
+  } | null = null;
   let clippedReported = false;
   let staleRingReported = false;
   let narrationReported = false;
@@ -1013,6 +1454,46 @@ async function driveMatch(
       }
     }
 
+    // One Tab walk per match, once the board has a hand and a battlefield to
+    // walk (v30). Skipped while a narration owns the screen: the controls
+    // change under the walk and half of it would measure a bubble.
+    // `>=`, not `===`: the first attempt landed on a narration often enough
+    // that a whole run could finish with the walk never taken — a check that
+    // silently does not run is the failure mode this harness keeps catching
+    // itself in. Take the first quiet step at or after the mark instead.
+    if (KEYBOARD_AT > 0 && step >= KEYBOARD_AT && !narrating && !keyboardWalked) {
+      // ...and with no dialog on top of it. The first version took the first
+      // quiet step and, in three of eight matches, took it while a card
+      // inspector or the shed picker was open — so the walk scoped itself to
+      // that dialog and the BOARD, the thing this walk exists to measure, went
+      // unmeasured while the run printed a keyboard column that looked fine.
+      const modalUp = await evalSafe<boolean>(
+        page,
+        `!!document.querySelector('[aria-modal="true"]')`,
+        false,
+      );
+      if (!modalUp) {
+        keyboardWalked = true;
+        kbd = await keyboardWalk(page, match, seed, width, step);
+      }
+    }
+
+    /**
+     * The impatient keyboard (v30) — see MASH_EVERY.
+     *
+     * Fired from the driver rather than from a branch of the action ladder,
+     * because the point is that it lands on a board in whatever state the last
+     * action left it: mid-narration, mid-target-pick, with a modal animating
+     * out. Nothing is asserted about the RESULT — Escape is allowed to do
+     * nothing — only that the board survives it, which the crash, hang and
+     * unfinished checks around this loop already answer.
+     */
+    if (MASH_EVERY > 0 && step > 0 && step % MASH_EVERY === 0) {
+      mashes += 1;
+      for (let i = 0; i < 3; i++) await page.keyboard.press('Escape').catch(() => undefined);
+      for (let i = 0; i < 2; i++) await page.keyboard.press(' ').catch(() => undefined);
+    }
+
     // `beat` is part of the signature so a narration advancing normally can
     // never read as a frozen board — its own text is inside bodyText, but two
     // consecutive beats can happen to be the same length.
@@ -1087,6 +1568,16 @@ async function driveMatch(
     }
     // 2. Opening hand.
     if (has(B, 'KEEP THIS HAND')) {
+      // The one modal every match is guaranteed to show, and therefore the
+      // only reliable place to ask the question an `aria-modal="true"`
+      // attribute cannot answer for itself: does the Tab key stay inside the
+      // dialog, or does it walk straight out onto the board the dialog is
+      // only visually covering? `useDialogFocus` moves focus IN once; nothing
+      // in any browser keeps it there.
+      if (KEYBOARD_AT > 0 && !modalWalked) {
+        modalWalked = true;
+        kbdModal = await keyboardWalk(page, match, seed, width, step);
+      }
       if (rand() < 0.3 && has(B, 'MULLIGAN — draw')) await clickText(page, 'MULLIGAN — draw');
       else await clickText(page, 'KEEP THIS HAND');
       continue;
@@ -1100,6 +1591,14 @@ async function driveMatch(
     // 4. Confirm dialog. A conceding match answers CONFIRM; every other match
     //    answers CANCEL, which is also what a stray concede click gets.
     if (has(B, 'CANCEL') && has(B, 'CONFIRM') && b.bodyText.includes('Concede this match')) {
+      // The second modal walk, and the one that matters most: unlike the
+      // mulligan dialog this one is raised OVER a live board, so it is the
+      // state in which "Tab escapes onto the obscured board" can actually
+      // happen. Every match raises it — a stray concede click gets CANCEL.
+      if (KEYBOARD_AT > 0 && !confirmWalked) {
+        confirmWalked = true;
+        kbdModal = (await keyboardWalk(page, match, seed, width, step)) ?? kbdModal;
+      }
       if (concedes && step >= CONCEDE_AFTER) {
         conceded = true;
         await clickText(page, 'CONFIRM');
@@ -1130,6 +1629,12 @@ async function driveMatch(
       // ever picked: the plate is a `role=button` outside the ring machinery,
       // so a driver that only ever clicked red rings could not reach it.
       if (rand() < 0.2 && (await clickSelector(page, '[aria-label*="tap to target"]'))) continue;
+      // v30 — ✕ CANCEL TARGETING was offered in seven of eight matches and
+      // pressed in none, because the driver only ever reached for it when
+      // there was no legal target to take instead. Backing out of a pick is an
+      // ordinary thing a player does — and the state it returns to (a card
+      // half-invoked, its cost not yet paid) is one only this control reaches.
+      if (rand() < 0.12 && (await clickSelector(page, '[aria-label="Cancel targeting"]'))) continue;
       if (reds > 0 && (await clickRing(page, 'red', Math.floor(rand() * reds)))) continue;
       // By aria-label, never by the "✕" glyph: the first ✕ in the DOM is the
       // top bar's ✕ CONCEDE, so a text match here resigned the match and every
@@ -1333,7 +1838,14 @@ async function driveMatch(
       // 0.1 -> 0.25: at a tenth, a six-match run could and did finish with the
       // speed ladder never once cycled, which is how a control that is offered
       // on every narration read ends up pressed zero times.
-      if (rand() < 0.25) await clickText(page, '⏱');
+      // By aria-label, not by the ⏱ glyph. `clickText` walks the DOM in order
+      // and takes the FIRST control whose text contains the needle — and the
+      // narration bubble is a `role="button"` that CONTAINS the speed button,
+      // so its own textContent contains ⏱ too and it always won. The speed
+      // ladder has been "exercised" since v20 by a click that has been landing
+      // on SKIP the whole time; the census caught it at 948 offers and 0
+      // presses across eight matches.
+      if (rand() < 0.25) act('speed', await clickSelector(page, '[aria-label^="Narration speed"]'));
       await clickText(page, 'SKIP ▸▸');
       continue;
     }
@@ -1373,10 +1885,7 @@ async function driveMatch(
     //      offered on literally every read of the board, and the census found
     //      that not one had ever been pressed. They are also the controls most
     //      likely to swallow a tap meant for the card underneath.
-    if (
-      rand() < 0.08 &&
-      act('tip', await clickSelector(page, '[data-tip]', Math.floor(rand() * 14)))
-    ) {
+    if (rand() < 0.08 && act('tip', await clickAny(page, '[data-tip]', rand()))) {
       await page.waitForTimeout(60);
       await page.keyboard.press('Escape');
       continue;
@@ -1385,7 +1894,7 @@ async function driveMatch(
     //     with a real popover behind it (and v28 spent a whole pass on the
     //     fact that these chips are the smallest targets on the board), and
     //     nothing had ever opened one. Cheap, so rarely — but never is worse.
-    if (rand() < 0.06 && act('glossary', await clickSelector(page, '[data-keyword-chip]'))) {
+    if (rand() < 0.06 && act('glossary', await clickAny(page, '[data-keyword-chip]', rand()))) {
       // The popover has no close button by design — outside click, wheel,
       // touchmove or Escape take it down. Escape is the one a keyboard player
       // uses and the one that has to keep working while a match is live.
@@ -1411,6 +1920,12 @@ async function driveMatch(
       }
       if (act('ash:close', await clickSelector(page, '[aria-label="Close ash-pile"]'))) continue;
     }
+    // v30 — the clash lines on the divider. One control per attacker (its own
+    // guard-assignment focus), offered in every match this harness has driven
+    // and pressed in none: the driver has always assigned guards by clicking
+    // the RING on the unit, which is the other way in.
+    if (rand() < 0.1 && act('clash-line', await clickAny(page, '[data-clash-line]', rand())))
+      continue;
     // 10. The human's own main phases / clash.
     const inClash = b.rings.some((r) => r.red) && has(B, 'SKIP TO MAIN II');
     if (inClash && rand() < 0.8) {
@@ -1441,12 +1956,12 @@ async function driveMatch(
     if (rand() < 0.7 && act('re-bond', await clickText(page, 'RE-BOND'))) continue;
 
     const roll = rand();
-    if (
-      roll < 0.3 &&
-      act('leader-ability', await clickSelector(page, '[role="button"][aria-disabled="false"]'))
-    ) {
-      // Leader ability pills are the only aria-disabled="false" role=button
-      // on the board; a usable one resolves, an unusable one just says why.
+    if (roll < 0.3 && act('leader-ability', await clickAny(page, '[data-ability]', rand()))) {
+      // By `data-ability`, not by `[role="button"][aria-disabled="false"]`:
+      // a `CardFace` with an onClick carries exactly that too and comes first
+      // in the DOM, so this branch spent thirteen passes clicking a card face
+      // and calling it a Leader ability (v30). A usable pill resolves; an
+      // unusable one says why.
       continue;
     }
     // v20: 0.08 -> 0.02. A manual Location tap is a control worth exercising
@@ -1455,9 +1970,23 @@ async function driveMatch(
     // tapped in Main I and not spent is a Location the driver has thrown away
     // for Main II. At eight percent of a long turn it was doing that several
     // times a turn, every turn.
+    if (roll < 0.32 && act('tap-location', await clickAny(page, '[data-location]', rand())))
+      continue;
+    // v30 — and once more in MAIN II, where it is free.
+    //
+    // v20 cut the manual Location tap to 2% because a pip tapped in Main I and
+    // not spent is a Location thrown away for Main II. In Main II there is no
+    // later phase to throw it away for: the Location recovers at Dawn either
+    // way. So the one control the census had at 1,763 offers and zero presses
+    // across eight matches gets pressed in the one phase where pressing it
+    // costs the match nothing.
+    // Main II is read off the phase button, not the header: the header is the
+    // turn line ("TURN 6 · CPU") and never carried a phase, so the first
+    // version of this branch could not fire at all.
     if (
-      roll < 0.32 &&
-      act('tap-location', await clickSelector(page, 'button[aria-label$="Wellspring"]'))
+      has(B, 'END TURN') &&
+      rand() < 0.4 &&
+      act('tap-location:main2', await clickAny(page, '[data-location]', rand()))
     )
       continue;
     if (roll < 0.62) {
@@ -1467,6 +1996,16 @@ async function driveMatch(
       // (the player's own, bottom-right): two drawers, and the census found
       // the driver had opened one of them 3,940 times and the other never.
       const chrome = ['ASH-PILE', 'ASH ', '▴ LOG', '▾ LOG'][Math.floor(rand() * 4)];
+      // v30 — the two Vitality plates. Both are `role="button"` (they are the
+      // bond/Charm target outside a pick, and a Tip inside one), both are on
+      // screen on every single read, and the census had them at 1,675 offers
+      // and zero presses: the driver only ever reached for a plate while a
+      // bond pick was open, which is one of the two things it does.
+      if (
+        rand() < 0.15 &&
+        act('vitality-plate', await clickAny(page, '[aria-label*="Vitality"]', rand()))
+      )
+        continue;
       if (act(`chrome:${chrome}`, await clickText(page, chrome))) continue;
     }
     for (const label of ['TO CLASH', 'SKIP TO MAIN II', 'END TURN', 'NEXT ▸']) {
@@ -1536,6 +2075,17 @@ async function driveMatch(
       detail: 'study mode never reached a narration beat — ❚❚ HOLD / ▸ STEP went unexercised',
     });
   }
+  // A walk that never found a quiet step measured nothing, and a run that
+  // prints no keyboard column looks exactly like a run whose keyboard was fine.
+  if (KEYBOARD_AT > 0 && !keyboardWalked) {
+    findings.push({
+      match,
+      seed,
+      width,
+      kind: 'unfinished',
+      detail: `the Tab walk never ran — no step at or after ${KEYBOARD_AT} was free of narration, so the board's keyboard access went unmeasured in this match`,
+    });
+  }
   if (concedes) concedeRun.total += 1;
   if (conceded) concedeRun.done += 1;
   rematchesDriven += rematches;
@@ -1554,6 +2104,16 @@ async function driveMatch(
           ? `studied (${stepsTaken} STEPs), ${beatsWatched} beats`
           : `watched ${beatsWatched} beats`
     }): ${outcome} · ${final.header} · ${errors.length} console error(s)${
+      mashes > 0 ? ` · ${mashes} keyboard mash(es)` : ''
+    }${
+      kbd
+        ? ` · Tab reached ${kbd.reached}/${kbd.candidates} shape(s)${
+            kbd.modal ? ' in a dialog' : ''
+          }, ${kbd.ringed} drew a ring${
+            kbd.bodyLandings > 0 ? `, focus lost ${kbd.bodyLandings}x` : ''
+          }`
+        : ''
+    }${kbdModal ? ` · dialog Tab ${kbdModal.reached}/${kbdModal.candidates}` : ''}${
       why ? `\n    ↳ ${why}` : ''
     }`,
   );
@@ -1627,6 +2187,12 @@ if (WIN_EVERY > 0 && winnableRun.total > 0 && winnableRun.won === 0) {
     kind: 'unfinished',
     detail: `${winnableRun.total} winnable match(es) and no VICTORY — the victory screen went unmeasured`,
   });
+}
+if (DOUBLE_EVERY > 0) {
+  console.log(
+    `\ndouble presses: ${doubleRun.issued} issued, ${doubleRun.landed} landed a second click ` +
+      `(every ${DOUBLE_EVERY}th press, with no wait between the two — see DOUBLE_EVERY)`,
+  );
 }
 console.log(
   `\n${victories} VICTORY / ${MATCHES} match(es) (${winnableRun.won}/${winnableRun.total} of the winnable ones) · ${concedeRun.done}/${concedeRun.total} resigned · ${rematchesDriven} rematch(es) driven`,
