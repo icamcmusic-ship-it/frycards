@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { fetchCardTemplates, recordMatchResult, MatchResult } from './lib/supabase';
+import React, { useEffect, useRef, useState } from 'react';
+import { fetchCardTemplates, recordMatchResult, beginMatch, MatchResult } from './lib/supabase';
 import { GameV4 } from './components/GameV4';
 import { HowToPlayScreen } from './components/HowToPlay';
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
@@ -219,14 +219,21 @@ function Game({
   // show a "calculating…" placeholder instead of a blank gap.
   const [rewardPending, setRewardPending] = useState(false);
 
-  // One idempotency key per mounted match: retries reuse it, so the server
-  // can tell "same match, reply got lost" from a genuinely new match and
-  // never double-pays (the receipt lives in match_receipts server-side).
-  const [matchId] = useState(() =>
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`.replace('.', ''),
-  );
+  // One SERVER-MINTED ticket per mounted match, requested as the match starts.
+  // Retries reuse it, so the server still tells "same match, reply got lost"
+  // from a genuinely new match — but it is now the server that decides a match
+  // happened at all, rather than the client naming one. See `beginMatch`.
+  const matchIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!session) return; // guests never earn a reward, so never mint a ticket
+    let cancelled = false;
+    beginMatch().then(({ matchId }) => {
+      if (!cancelled) matchIdRef.current = matchId;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   // recordMatchResult used to return bare `null` on both "no reward data"
   // and an outright RPC failure, so a transient network/server error meant
@@ -239,7 +246,7 @@ function Game({
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-        const { data, error } = await recordMatchResult(won, matchId);
+        const { data, error } = await recordMatchResult(won, matchIdRef.current ?? undefined);
         if (data) {
           setReward(data);
           // Fire-and-forget with an explicit catch: a rejected refresh here
