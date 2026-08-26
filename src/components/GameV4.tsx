@@ -91,6 +91,7 @@ import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
+import { recordMatch } from '../meta/matchHistory';
 import {
   CPU_SPEEDS,
   HAND_SORTS,
@@ -1037,7 +1038,7 @@ function PhaseStepper({
 
 /** Leader Resolve as filled dots rather than a bare number — the resource is
  * spent and regained in ones, so a countable row reads faster than digits. */
-function ResolveDots({ resolve, max, mine }: { resolve: number; max: number; mine: boolean }) {
+function ResolveDotsBase({ resolve, max, mine }: { resolve: number; max: number; mine: boolean }) {
   // `total` is the number of dots drawn; it stays defensive against a Resolve
   // above the printed maximum even though `activateLeaderAbility` now caps
   // builders there. The LABEL must read the printed maximum either way: the
@@ -1061,6 +1062,9 @@ function ResolveDots({ resolve, max, mine }: { resolve: number; max: number; min
     </span>
   );
 }
+/** Primitive props only, and it re-renders on every board bump — see the
+ * note on the memoised leaves in CardFaceV4 (finding 2.2). */
+const ResolveDots = React.memo(ResolveDotsBase);
 
 /**
  * A player's status lane: Leader thumbnail (the real card template at its
@@ -1816,9 +1820,14 @@ export function GameV4({
   // state via a lazy initializer (stable identity for the whole match) and a
   // version counter forces re-renders after each mutation.
   const [g] = useState<GameState>(() => {
-    const rng = mulberry32(seed ?? Date.now() % 2147483647);
+    // Resolved once and passed to createGame as well as used for the rng, so
+    // `g.seed` carries it: a player who hits a bug in a real match now has a
+    // reproducible seed to attach to the report (finding 1.5).
+    const matchSeed = seed ?? Date.now() % 2147483647;
+    const rng = mulberry32(matchSeed);
     const game = createGame(humanDeck, cpuDeck, POOL_BY_ID, {
       rng,
+      seed: matchSeed,
       // Coin-flip for the first turn. The human seat is fixed at P1, so
       // without this the player was permanently on the play every single
       // match — and the second-player compensation (the extra opening
@@ -2261,6 +2270,21 @@ export function GameV4({
   useEffect(() => {
     if (stage === 'over' && g.winner && !resultSent.current) {
       resultSent.current = true;
+      // Finding 2.5: a local record of the match, keyed on the seed it ran on
+      // (finding 1.5), so a bug report can name an exact match and a replay
+      // viewer has something to replay from.
+      if (g.seed !== undefined) {
+        recordMatch({
+          seed: g.seed,
+          finishedAt: Date.now(),
+          won: g.winner === HUMAN,
+          turns: g.turn,
+          humanLabel,
+          cpuLabel,
+          humanVitality: g.players[HUMAN].vitality,
+          cpuVitality: g.players[CPU].vitality,
+        });
+      }
       onResult?.(g.winner === HUMAN);
     }
   }, [stage, g.winner, onResult]);
@@ -5747,12 +5771,19 @@ export function GameV4({
             <div className="heading-font text-3xl mb-2">
               {g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
             </div>
-            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-4">
+            <div className="text-[11px] font-bold text-[var(--c-steel)] mb-2">
               {g.log
                 .slice(-2)
                 .map((l) => humanize(l))
                 .join(' · ')}
             </div>
+            {/* Finding 1.5: the seed this match ran on. A player who hits a bug
+                in a real match now has something reproducible to quote. */}
+            {g.seed !== undefined && (
+              <div className="text-[10px] font-mono text-[var(--c-steel)] mb-4 select-all">
+                MATCH SEED {g.seed} · TURN {g.turn}
+              </div>
+            )}
             {reward != null && (
               <div className="flex flex-col items-center gap-1 mb-4">
                 <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs">

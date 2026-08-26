@@ -471,9 +471,10 @@ export interface GameOptions {
   /** Which seat takes the first turn. Defaults to 'P1'. */
   firstPlayer?: PlayerId;
   /**
-   * Seed for the default RNG. Ignored when `rng` is supplied. Defaults to a
-   * wall-clock draw — which is fine, except that it used to be unrecoverable;
-   * whatever is used ends up on `GameState.seed`.
+   * Seed for the default RNG, and/or the seed to RECORD when the caller
+   * supplies its own `rng` built from one. Defaults to a wall-clock draw —
+   * which is fine, except that it used to be unrecoverable; whatever is used
+   * ends up on `GameState.seed`.
    */
   seed?: number;
   /** Per-game telemetry hooks (sim harness instrumentation; unset in play). */
@@ -546,7 +547,10 @@ export function createGame(
     dawnLog: [],
     rng,
     iidCounter: ids.iidCounter,
-    seed: opts.rng ? undefined : seed,
+    // An explicit `seed` is recorded even alongside a caller-supplied `rng`:
+    // the UI builds its own mulberry32 from a match seed and still wants the
+    // seed on the state (bug reports, replays).
+    seed: opts.seed ?? (opts.rng ? undefined : seed),
     telemetry: opts.telemetry,
   };
   const handSize = opts.handSize ?? STARTING_HAND;
