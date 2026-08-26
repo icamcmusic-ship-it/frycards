@@ -17,6 +17,7 @@ import {
 } from '../game/v3/decks';
 import { cardColors, Color, isColorLegal, LEADER_COLORS } from '../game/v3/colors';
 import { deriveDeckAdvice } from './deckAdvice';
+import { checkProducibleColors, drawTestHand } from './goldfish';
 import { COLOR_HEX } from './colors';
 import { cn } from '../lib/utils';
 import { EssenceIcon } from '../components/EssenceIcon';
@@ -491,6 +492,25 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     return { curve, maxCurve, topKeywords };
   }, [grouped]);
 
+  // Finding 2.6: producible-colour check. The sim's own `keptColorDeadHand`
+  // lapse counter exists because an uncastable hand is a real failure mode,
+  // and nothing here told a player their deck demanded a colour it could not
+  // make essence in.
+  const colorCheck = useMemo(
+    () => checkProducibleColors(leaderId, cardIds, POOL_BY_ID),
+    [leaderId, cardIds],
+  );
+
+  // Finding 2.6: seeded goldfish draw. The engine is headless and seedable, so
+  // a test hand is nearly free — and being SEEDED is what makes it worth
+  // anything: the same seed deals the same hand, so a suspicious opener can be
+  // quoted rather than described.
+  const [handSeed, setHandSeed] = useState<number | null>(null);
+  const testHand = useMemo(
+    () => (handSeed === null ? null : drawTestHand(cardIds, POOL_BY_ID, handSeed)),
+    [handSeed, cardIds],
+  );
+
   // Archetype/curve/color guidance derived from the sim's own deck knowledge
   // (see src/meta/deckAdvice.ts — thresholds sourced from game/v3/decks.ts
   // and game/v3/colors.ts, not invented here).
@@ -875,6 +895,69 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                     {kw} ×{n}
                   </span>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Producible colours + seeded test hand (finding 2.6) */}
+          <div
+            className="px-3 py-2.5 border-b-2 border-[var(--c-ink)]/40 shrink-0"
+            aria-label="Colour and draw check"
+          >
+            <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1.5">
+              COLOUR &amp; DRAW
+            </div>
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {colorCheck.producible.map((c) => (
+                <span
+                  key={c}
+                  className="text-[8px] font-black px-1 py-0.5 bg-[var(--c-ink)]/50 text-[var(--c-paper)]"
+                  title={`${c} essence is producible: Leader identity or one of this deck's Sanctums`}
+                >
+                  {c} ✓{colorCheck.demand[c] ? ` ${colorCheck.demand[c]} pips` : ' unused'}
+                </span>
+              ))}
+            </div>
+            {colorCheck.unproducible.length > 0 && (
+              <div
+                role="alert"
+                className="text-[9px] font-black text-[var(--c-ink)] bg-[var(--c-yellow)] ink-border-sm px-1.5 py-1 mb-1.5"
+              >
+                UNCASTABLE: this deck asks for {colorCheck.unproducible.join(', ')} essence it
+                cannot produce. Add a Sanctum that makes it, or cut those cards.
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <PopButton
+                color="yellow"
+                onClick={() => setHandSeed(Math.floor(Math.random() * 0x7fffffff))}
+              >
+                TEST HAND
+              </PopButton>
+              {testHand && (
+                <span className="text-[8px] font-mono font-bold text-[var(--c-paper)]/70 select-all">
+                  SEED {testHand.seed}
+                </span>
+              )}
+            </div>
+            {testHand && (
+              <div className="mt-1.5" aria-live="polite">
+                <div className="text-[9px] font-bold text-[var(--c-paper)]/80 mb-1">
+                  avg cost {testHand.averageCost} · {testHand.turnOnePlays} turn-1 play
+                  {testHand.turnOnePlays === 1 ? '' : 's'}
+                  {testHand.noUnits ? ' · NO UNITS — the CPU would mulligan this' : ''}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {testHand.cards.map((c, i) => (
+                    <button
+                      key={`${c.id}-${i}`}
+                      onClick={() => setInspect(c)}
+                      className="text-[8px] font-bold px-1 py-0.5 bg-[var(--c-ink)]/50 text-[var(--c-paper)] text-left"
+                    >
+                      {c.name} ({totalCost(c.cost)})
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

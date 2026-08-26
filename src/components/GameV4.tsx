@@ -4257,6 +4257,38 @@ export function GameV4({
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+  /**
+   * Finding 2.7: a screen-reader board report.
+   *
+   * v30's opponent-narration live region was real work, but it was the ONLY
+   * aria-live in a 5,812-line board — a screen-reader user got the CPU's turn
+   * narrated and then total silence for their own: no action results, no
+   * essence pool, no phase transitions, no damage totals, nothing entering or
+   * leaving the board.
+   *
+   * This is derived text, not an effect: a live region re-announces whenever
+   * its content changes, so composing the sentence from current state means it
+   * fires on exactly the transitions that matter and can never go stale
+   * against the mutated GameState. It stays quiet during the CPU's turn, where
+   * the narration bubble already speaks.
+   */
+  const myEssence = essenceTotal(me.essence);
+  const boardReport =
+    g.active === HUMAN && !g.winner
+      ? [
+          `Turn ${g.turn}, ${g.phase}.`,
+          `Your vitality ${me.vitality}, ${cpuLabel} ${foe.vitality}.`,
+          `${myEssence} essence floating, ${me.hand.length} cards in hand.`,
+          `Your board: ${me.field.length} unit${me.field.length === 1 ? '' : 's'}, ` +
+            `${me.locations.length} location${me.locations.length === 1 ? '' : 's'}. ` +
+            `${cpuLabel}: ${foe.field.length} unit${foe.field.length === 1 ? '' : 's'}, ` +
+            `${foe.locations.length} location${foe.locations.length === 1 ? '' : 's'}.`,
+          g.log.length > 0 ? humanize(g.log[g.log.length - 1]) : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : '';
+
   return (
     <div
       /* v29 — `overflow-hidden` became `overflow-x-hidden overflow-y-auto`.
@@ -4287,6 +4319,12 @@ export function GameV4({
 
       {/* Top bar: concede, turn/phase tracker, actions */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
+        {/* The board report for screen readers (finding 2.7). Visually
+            hidden; `atomic` so each update reads as one sentence rather than
+            as the words that changed. */}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {boardReport}
+        </div>
         <button
           onClick={() => {
             if (stage === 'over') concede();
