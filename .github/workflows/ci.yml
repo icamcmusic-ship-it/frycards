@@ -40,6 +40,11 @@ jobs:
   # them locally.
   harnesses:
     runs-on: ubuntu-latest
+    # These are slow: a full 29-state screen sweep plus six driven matches
+    # measured ~78min and ~35min respectively on a shared-CPU box. Bounded so a
+    # hang fails the job rather than burning the 6-hour default, and generous
+    # enough that a slow runner does not.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,9 +57,13 @@ jobs:
       # board-preview.html), the same way they are run locally.
       - name: Start dev server
         run: |
-          npm run dev > /tmp/vite.log 2>&1 &
+          # setsid + nohup so the server outlives this step's shell.
+          setsid nohup npm run dev > /tmp/vite.log 2>&1 &
           for i in $(seq 1 60); do
-            curl -sf http://localhost:3000/ > /dev/null && exit 0
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "dev server up after $((i * 2))s"
+              exit 0
+            fi
             sleep 2
           done
           echo "dev server did not come up"; cat /tmp/vite.log; exit 1
