@@ -8,10 +8,8 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # `playwright` is a devDependency purely so `scripts/audit-cardface.ts`
-    # typechecks — that audit is a manual tool run against a local dev server
-    # and CI never invokes it, so there is no reason to pull ~500MB of browser
-    # binaries on every install.
+    # The browser-driven harnesses live in the `harnesses` job below, which
+    # installs Chromium; this job never needs the binaries.
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
@@ -25,5 +23,38 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
-      - run: npm run sim:v4 -- 20
+      - run: npm run verify:pool
+      # 4 games/pairing, not 20. The sim now EXITS NON-ZERO on an engine
+      # invariant violation, so this step is a real gate — and at ~11,000
+      # games it was by far the most expensive step in the pipeline while
+      # being incapable of failing. Invariant regressions show up at 4
+      # games/pairing too; balance passes are run by hand at higher counts.
+      - run: npm run sim:v4 -- 4
       - run: npm run build
+
+  # The tap-target, reflow, focus-trap and WCAG harnesses. All three exit
+  # non-zero on a finding and none of them was invoked by CI, so every
+  # accessibility fix they protect only held when someone remembered to run
+  # them locally.
+  harnesses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Both harnesses drive the Vite dev server (meta-preview.html /
+      # board-preview.html), the same way they are run locally.
+      - name: Start dev server
+        run: |
+          npm run dev > /tmp/vite.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/ > /dev/null && exit 0
+            sleep 2
+          done
+          echo "dev server did not come up"; cat /tmp/vite.log; exit 1
+      - run: npm run audit:screens
+      - run: npm run drive:match

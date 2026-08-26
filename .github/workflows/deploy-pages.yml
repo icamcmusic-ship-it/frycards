@@ -1,7 +1,14 @@
 name: Deploy to GitHub Pages
 
+# Gated on CI (report finding 1.2). This used to trigger on `push` to main
+# independently of ci.yml — no `needs:`, no workflow_run — so a commit that
+# failed typecheck, lint, format or the entire test suite still deployed to
+# production, in parallel with CI going red. It now runs only after the CI
+# workflow has COMPLETED SUCCESSFULLY on main.
 on:
-  push:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -17,13 +24,24 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # workflow_dispatch has no `workflow_run` context, so allow it through;
+    # otherwise require the CI conclusion to be `success`.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Deploy exactly the commit CI went green on, not whatever is at the
+          # head of main by the time this job starts.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
