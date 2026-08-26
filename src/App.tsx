@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fetchCardTemplates, recordMatchResult, beginMatch, MatchResult } from './lib/supabase';
-import { GameV4 } from './components/GameV4';
-import { HowToPlayScreen } from './components/HowToPlay';
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
@@ -12,21 +10,7 @@ import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
 import { MainMenu, MetaScreen } from './meta/MainMenu';
-import { StoreScreen } from './meta/StoreScreen';
-import { BattlePassScreen } from './meta/BattlePassScreen';
-import { AchievementsScreen } from './meta/AchievementsScreen';
-import { SocialScreen } from './meta/SocialScreen';
-import { MarketplaceScreen } from './meta/MarketplaceScreen';
-import { PlayerShopsScreen } from './meta/PlayerShopsScreen';
-import { CollectionScreen } from './meta/CollectionScreen';
-import { GradingScreen } from './meta/GradingScreen';
-import { ShowroomScreen, ShowroomSubject } from './meta/ShowroomScreen';
-import { DeckBuilderScreen } from './meta/DeckBuilderScreen';
-import { ProfileScreen } from './meta/ProfileScreen';
-import { SettingsScreen } from './meta/SettingsScreen';
-import { ChangelogScreen } from './meta/ChangelogScreen';
-import { NewsCenterScreen } from './meta/NewsCenterScreen';
-import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
+import type { ShowroomSubject } from './meta/ShowroomScreen';
 import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
@@ -34,6 +18,85 @@ import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import { MotionConfig } from 'motion/react';
 import type { MotionMode } from './meta/matchPrefs';
+
+/**
+ * Route-level code splitting (finding 2.1).
+ *
+ * Everything below used to be a static import, so all 17 screens — plus the
+ * 5,800-line board, the 3D showroom and the 3,200-line Player Shops screen —
+ * were downloaded and parsed before the LOGIN screen could paint, in a single
+ * 1.33 MB bundle. None of the existing harnesses could see it: they measure
+ * geometry, not time. Each of these is now its own chunk, fetched when the
+ * player actually navigates to it.
+ *
+ * Eager on purpose: MainMenu and AuthScreen (the first thing every session
+ * renders), and the small shared UI in `./meta/ui`.
+ */
+const GameV4 = React.lazy(() => import('./components/GameV4').then((m) => ({ default: m.GameV4 })));
+const HowToPlayScreen = React.lazy(() =>
+  import('./components/HowToPlay').then((m) => ({ default: m.HowToPlayScreen })),
+);
+const StoreScreen = React.lazy(() =>
+  import('./meta/StoreScreen').then((m) => ({ default: m.StoreScreen })),
+);
+const BattlePassScreen = React.lazy(() =>
+  import('./meta/BattlePassScreen').then((m) => ({ default: m.BattlePassScreen })),
+);
+const AchievementsScreen = React.lazy(() =>
+  import('./meta/AchievementsScreen').then((m) => ({ default: m.AchievementsScreen })),
+);
+const SocialScreen = React.lazy(() =>
+  import('./meta/SocialScreen').then((m) => ({ default: m.SocialScreen })),
+);
+const MarketplaceScreen = React.lazy(() =>
+  import('./meta/MarketplaceScreen').then((m) => ({ default: m.MarketplaceScreen })),
+);
+const PlayerShopsScreen = React.lazy(() =>
+  import('./meta/PlayerShopsScreen').then((m) => ({ default: m.PlayerShopsScreen })),
+);
+const CollectionScreen = React.lazy(() =>
+  import('./meta/CollectionScreen').then((m) => ({ default: m.CollectionScreen })),
+);
+const GradingScreen = React.lazy(() =>
+  import('./meta/GradingScreen').then((m) => ({ default: m.GradingScreen })),
+);
+const ShowroomScreen = React.lazy(() =>
+  import('./meta/ShowroomScreen').then((m) => ({ default: m.ShowroomScreen })),
+);
+const DeckBuilderScreen = React.lazy(() =>
+  import('./meta/DeckBuilderScreen').then((m) => ({ default: m.DeckBuilderScreen })),
+);
+const ProfileScreen = React.lazy(() =>
+  import('./meta/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
+);
+const SettingsScreen = React.lazy(() =>
+  import('./meta/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
+);
+const ChangelogScreen = React.lazy(() =>
+  import('./meta/ChangelogScreen').then((m) => ({ default: m.ChangelogScreen })),
+);
+const NewsCenterScreen = React.lazy(() =>
+  import('./meta/NewsCenterScreen').then((m) => ({ default: m.NewsCenterScreen })),
+);
+const CardSubmissionsScreen = React.lazy(() =>
+  import('./meta/CardSubmissionsScreen').then((m) => ({ default: m.CardSubmissionsScreen })),
+);
+
+/** Shown while a route chunk is in flight. Deliberately the same shape as the
+ * boot splash so a slow connection reads as loading, not as a broken screen. */
+function ScreenFallback() {
+  return (
+    <div
+      className="w-full min-h-screen bg-[var(--c-ink)] flex items-center justify-center"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-xl px-5 py-2.5 ink-border-md shadow-hard-yellow animate-pulse">
+        LOADING…
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Error boundary — a render crash anywhere below used to white-screen the
@@ -629,7 +692,12 @@ export default function App() {
         }
       >
         <MetaProvider>
-          <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+          {/* One boundary above the route switch: every screen below is a
+              lazy chunk, and a route transition is the only thing that can
+              suspend here. */}
+          <React.Suspense fallback={<ScreenFallback />}>
+            <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+          </React.Suspense>
         </MetaProvider>
       </MotionConfig>
     </ErrorBoundary>
