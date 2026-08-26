@@ -121,3 +121,69 @@ export function saveHandSort(id: HandSort): void {
     /* private mode — the choice just won't persist */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Motion
+// ---------------------------------------------------------------------------
+/**
+ * How much animation the app is allowed to play.
+ *
+ * The CSS half of reduced-motion was already meticulous — two
+ * `prefers-reduced-motion` blocks covering foil sweeps, mythic frames, ultra
+ * sparkles, alt-art holo and the serialized spin. The JS half was missing
+ * entirely: the motion library is used at ~10 sites in GameV4 and ~13 in
+ * CardFaceV4, and Framer-style motion does not honour the OS setting unless
+ * you opt in with a `MotionConfig`. So the decorative card bling stopped
+ * correctly while the match board — the screen a player spends the most time
+ * on — animated at full tilt regardless (finding 1.8).
+ *
+ * 'system' maps to MotionConfig's `reducedMotion="user"`, which is the fix on
+ * its own. The explicit 'reduced' / 'full' rungs are the in-app override
+ * finding 2.4 asked for: a player should not have to change an OS-level
+ * setting to calm one game's board.
+ */
+export const MOTION_MODES = [
+  { id: 'system', label: 'SYSTEM', blurb: 'Follow your device accessibility setting' },
+  { id: 'full', label: 'FULL', blurb: 'Every animation, always' },
+  { id: 'reduced', label: 'REDUCED', blurb: 'Calm the board and the card effects' },
+] as const;
+
+export type MotionMode = (typeof MOTION_MODES)[number]['id'];
+
+export const MOTION_KEY = 'frycards:motion';
+export const DEFAULT_MOTION: MotionMode = 'system';
+
+export function loadMotionMode(): MotionMode {
+  if (typeof window === 'undefined') return DEFAULT_MOTION;
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(MOTION_KEY);
+  } catch {
+    return DEFAULT_MOTION;
+  }
+  const hit = MOTION_MODES.find((m) => m.id === raw?.trim());
+  return hit ? hit.id : DEFAULT_MOTION;
+}
+
+export function saveMotionMode(id: MotionMode): void {
+  if (!MOTION_MODES.some((m) => m.id === id)) return;
+  try {
+    window.localStorage.setItem(MOTION_KEY, id);
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+}
+
+/** True when motion should be suppressed right now, resolving 'system'
+ * against the OS setting. Used for the `<html data-motion>` attribute that the
+ * CSS override keys off. */
+export function motionIsReduced(mode: MotionMode): boolean {
+  if (mode === 'reduced') return true;
+  if (mode === 'full') return false;
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}

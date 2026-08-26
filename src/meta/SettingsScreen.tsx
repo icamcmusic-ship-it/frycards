@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { Palette, Sparkles, Timer } from 'lucide-react';
+import { Palette, Sparkles, Timer, Waves } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
 import { setHideSerializedAnnouncements } from '../lib/supabase';
-import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed } from './matchPrefs';
+import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed, MOTION_MODES, MotionMode } from './matchPrefs';
 
 export function SettingsScreen({
   currentTheme,
   onThemeChange,
+  motionMode,
+  onMotionModeChange,
   onBack,
 }: {
   currentTheme: ThemeName;
   onThemeChange: (theme: ThemeName) => void;
+  motionMode: MotionMode;
+  onMotionModeChange: (mode: MotionMode) => void;
   onBack: () => void;
 }) {
   const themeList = Object.values(THEMES);
@@ -132,6 +136,33 @@ export function SettingsScreen({
                   onClick={() => pickSpeed(i)}
                 >
                   {s.label} — {s.blurb}
+                </PopButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Motion (findings 1.8 / 2.4) */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">MOTION</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How much the board and the card effects move. SYSTEM follows your device's
+              accessibility setting; the other two override it here, so you don't have to change an
+              OS-level preference to calm one game down. Saved locally, so guests keep it too.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MOTION_MODES.map((m) => (
+                <PopButton
+                  key={m.id}
+                  color={motionMode === m.id ? 'black' : 'yellow'}
+                  ariaPressed={motionMode === m.id}
+                  onClick={() => onMotionModeChange(m.id)}
+                >
+                  {m.label} — {m.blurb}
                 </PopButton>
               ))}
             </div>

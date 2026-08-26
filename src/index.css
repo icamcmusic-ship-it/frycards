@@ -224,49 +224,6 @@ input[type='radio'] {
     15px 15px;
 }
 
-/* Pop-in animation for modals and keyword popups */
-@keyframes banner-pop-kf {
-  0% {
-    transform: scale(0.7) rotate(-2deg);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.06) rotate(1deg);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1) rotate(0deg);
-    opacity: 1;
-  }
-}
-.banner-pop {
-  animation: banner-pop-kf 0.22s ease-out;
-}
-
-/* Action toast: punch in, hold, fade out */
-@keyframes action-toast-kf {
-  0% {
-    transform: translateY(14px) scale(0.6);
-    opacity: 0;
-  }
-  10% {
-    transform: translateY(0) scale(1.05);
-    opacity: 1;
-  }
-  16% {
-    transform: scale(1);
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-.action-toast {
-  animation: action-toast-kf 2.4s ease-out forwards;
-}
-
 @layer utilities {
   .mask-linear {
     mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
@@ -332,28 +289,9 @@ input[type='radio'] {
     opacity: 0;
   }
 }
-
-/* Rolling die — spin + scale while its value is mid-reveal. */
-@keyframes die-rolling-kf {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  25% {
-    transform: rotate(120deg) scale(1.15);
-  }
-  50% {
-    transform: rotate(240deg) scale(0.9);
-  }
-  75% {
-    transform: rotate(340deg) scale(1.1);
-  }
-  100% {
-    transform: rotate(360deg) scale(1);
-  }
-}
-.die-rolling {
-  animation: die-rolling-kf 0.4s ease-in-out infinite;
-  filter: blur(0.5px);
+html[data-motion='reduced'] .foil-shimmer::after {
+  animation: none;
+  opacity: 0;
 }
 
 /* Rarity card treatments — Rare tint background, Super-Rare sheen, Ultra-Rare
@@ -662,8 +600,11 @@ input[type='radio'] {
 /* Accessibility: honor the OS-level "reduce motion" preference. Purely
  * decorative infinite loops (rarity bling, foil sweeps, ember drifts) stop
  * entirely; the static gradients/frames they animate still render. The
- * die-rolling wobble stays because it communicates game state ("this die is
- * still rolling"), but it's capped to a few cycles instead of looping. */
+ *
+ * v31: also honours the IN-APP override (Settings -> Motion), because asking a
+ * player to change an OS setting to calm the board is not an answer. The
+ * `[data-motion]` attribute is set on <html> by the App root, which drives the
+ * JS-side MotionConfig from the same preference. */
 @media (prefers-reduced-motion: reduce) {
   .foil-shimmer::after,
   .rarity-sheen,
@@ -681,9 +622,22 @@ input[type='radio'] {
   .serialized-sheen {
     animation: none;
   }
-  .die-rolling {
-    animation-iteration-count: 3;
-  }
+}
+html[data-motion='reduced'] .foil-shimmer::after,
+html[data-motion='reduced'] .rarity-sheen,
+html[data-motion='reduced'] .rarity-pulse,
+html[data-motion='reduced'] .mythic-frame,
+html[data-motion='reduced'] .mythic-bg,
+html[data-motion='reduced'] .mythic-embers,
+html[data-motion='reduced'] .ultra-frame,
+html[data-motion='reduced'] .ultra-banner,
+html[data-motion='reduced'] .ultra-sparkle,
+html[data-motion='reduced'] .aa-frame,
+html[data-motion='reduced'] .aa-holo,
+html[data-motion='reduced'] .serialized-frame,
+html[data-motion='reduced'] .serialized-frame::before,
+html[data-motion='reduced'] .serialized-sheen {
+  animation: none;
 }
 
 /* ---------------------------------------------------------------------------

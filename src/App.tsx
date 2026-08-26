@@ -31,6 +31,9 @@ import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
+import { useMotionMode } from './meta/useMotionMode';
+import { MotionConfig } from 'motion/react';
+import type { MotionMode } from './meta/matchPrefs';
 
 // ---------------------------------------------------------------------------
 // Error boundary — a render crash anywhere below used to white-screen the
@@ -344,7 +347,13 @@ function BootSplash({ onRetry }: { onRetry: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-function AppInner() {
+function AppInner({
+  motionMode,
+  changeMotionMode,
+}: {
+  motionMode: MotionMode;
+  changeMotionMode: (m: MotionMode) => void;
+}) {
   const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
   // First-ever visit auto-opens the How to Play page — previously this was
@@ -489,6 +498,8 @@ function AppInner() {
         <SettingsScreen
           currentTheme={currentTheme}
           onThemeChange={changeTheme}
+          motionMode={motionMode}
+          onMotionModeChange={changeMotionMode}
           onBack={() => setScreen('menu')}
         />
       );
@@ -518,6 +529,10 @@ function AppInner() {
 }
 
 export default function App() {
+  // 1.8/2.4: the motion preference. The hook sets the <html data-motion>
+  // attribute the CSS override keys off; the mode drives the MotionConfig
+  // below, which is what makes the motion library honour any of it at all.
+  const { mode: motionMode, changeMode: changeMotionMode } = useMotionMode();
   const [poolReady, setPoolReady] = useState(false);
   const [progress, setProgress] = useState({ loaded: 0, total: 0 });
   const [poolError, setPoolError] = useState<string | null>(null);
@@ -602,9 +617,21 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <MetaProvider>
-        <AppInner />
-      </MetaProvider>
+      {/* 1.8: the CSS half of reduced-motion was thorough; the JS half did not
+          exist. Framer-style motion animates at full tilt unless a MotionConfig
+          opts in, so the match board — 10 motion sites in GameV4, 13 in
+          CardFaceV4 — ignored the accessibility preference entirely while the
+          decorative card bling honoured it. `reducedMotion="user"` is the whole
+          fix; the in-app override on top of it lives in Settings. */}
+      <MotionConfig
+        reducedMotion={
+          motionMode === 'system' ? 'user' : motionMode === 'reduced' ? 'always' : 'never'
+        }
+      >
+        <MetaProvider>
+          <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+        </MetaProvider>
+      </MotionConfig>
     </ErrorBoundary>
   );
 }

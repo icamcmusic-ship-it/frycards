@@ -602,7 +602,9 @@ function Tip({
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [open]);
+    // setOpen is a stable useState setter; listing it satisfies the rule
+    // without changing when the effect re-runs.
+  }, [open, setOpen]);
   return (
     <span
       ref={ref}
