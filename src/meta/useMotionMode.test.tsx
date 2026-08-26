@@ -8,7 +8,7 @@
  * geometry sweeps cannot see.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { useMotionMode } from './useMotionMode';
 import { MOTION_KEY } from './matchPrefs';
 
@@ -26,12 +26,6 @@ function stubMatchMedia(matches: boolean) {
   })) as unknown as typeof window.matchMedia;
 }
 
-let hook: ReturnType<typeof useMotionMode>;
-function Probe() {
-  hook = useMotionMode();
-  return null;
-}
-
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute('data-motion');
@@ -41,44 +35,44 @@ afterEach(cleanup);
 
 describe('useMotionMode', () => {
   test('defaults to system and leaves the attribute off when the OS is happy', () => {
-    render(<Probe />);
-    expect(hook.mode).toBe('system');
+    const { result: hook } = renderHook(() => useMotionMode());
+    expect(hook.current.mode).toBe('system');
     expect(document.documentElement.hasAttribute('data-motion')).toBe(false);
   });
 
   test('follows the OS setting when the mode is system', () => {
     stubMatchMedia(true);
-    render(<Probe />);
-    expect(hook.reduced).toBe(true);
+    const { result: hook } = renderHook(() => useMotionMode());
+    expect(hook.current.reduced).toBe(true);
     expect(document.documentElement.getAttribute('data-motion')).toBe('reduced');
   });
 
   test('an explicit REDUCED choice overrides an OS setting that is off', () => {
-    render(<Probe />);
-    act(() => hook.changeMode('reduced'));
+    const { result: hook } = renderHook(() => useMotionMode());
+    act(() => hook.current.changeMode('reduced'));
     expect(document.documentElement.getAttribute('data-motion')).toBe('reduced');
     expect(localStorage.getItem(MOTION_KEY)).toBe('reduced');
   });
 
   test('an explicit FULL choice overrides an OS setting that is on', () => {
     stubMatchMedia(true);
-    render(<Probe />);
-    expect(hook.reduced).toBe(true);
-    act(() => hook.changeMode('full'));
-    expect(hook.reduced).toBe(false);
+    const { result: hook } = renderHook(() => useMotionMode());
+    expect(hook.current.reduced).toBe(true);
+    act(() => hook.current.changeMode('full'));
+    expect(hook.current.reduced).toBe(false);
     expect(document.documentElement.hasAttribute('data-motion')).toBe(false);
   });
 
   test('a stored choice is restored on the next visit', () => {
     localStorage.setItem(MOTION_KEY, 'reduced');
-    render(<Probe />);
-    expect(hook.mode).toBe('reduced');
+    const { result: hook } = renderHook(() => useMotionMode());
+    expect(hook.current.mode).toBe('reduced');
     expect(document.documentElement.getAttribute('data-motion')).toBe('reduced');
   });
 
   test('a junk stored value falls back to system rather than throwing', () => {
     localStorage.setItem(MOTION_KEY, 'not-a-mode');
-    render(<Probe />);
-    expect(hook.mode).toBe('system');
+    const { result: hook } = renderHook(() => useMotionMode());
+    expect(hook.current.mode).toBe('system');
   });
 });
