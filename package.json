@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
+    "typecheck:game": "tsc -p tsconfig.game.json --noEmit",
     "lint": "eslint src scripts",
     "format": "prettier --write src scripts",
     "format:check": "prettier --check src scripts",

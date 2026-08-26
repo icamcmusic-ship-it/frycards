@@ -16,6 +16,7 @@ import {
   applyCardPool,
 } from './cardpool';
 import { itemSurvives, totalCost } from './cards';
+import type { Effect } from './cards';
 import { GENERATED_CARDS } from '../generated-cards';
 import { KEYWORDS, UNPRINTED_KEYWORDS } from './keywords';
 import { LEADER_COLORS, cardColors, isColorLegal } from './colors';
@@ -218,7 +219,9 @@ test('every card has human-readable rules text (except vanilla units)', () => {
 
 test('effect values are modest (1-7)', () => {
   const effects = (c: (typeof POOL_V4)[number]) => {
-    const out = [];
+    // Annotated: with no initial element `[]` infers as `never[]`, which is
+    // invisible until strictNullChecks turns the pushes into errors.
+    const out: Effect[] = [];
     if (c.onInvoke) out.push(c.onInvoke);
     for (const t of c.triggers ?? []) out.push(t.effect);
     for (const a of c.leaderAbilities ?? []) out.push(a.effect);

@@ -20,6 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # strictNullChecks, scoped to src/game/** (finding 1.11).
+      - run: npm run typecheck:game
       - run: npm run lint
       - run: npm run format:check
       - run: npm test

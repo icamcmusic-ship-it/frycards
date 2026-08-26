@@ -1943,7 +1943,9 @@ function mapLeader(c: CardTemplate): CardDef {
     : leaderMinusAbility(seed, minusColorFor(identity));
   const minusOverride = LEADER_MINUS_RESOLVE_OVERRIDE[c.id];
   if (minusOverride !== undefined) {
-    minus.text = minus.text.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);
+    // `text` is optional on the ability type; the override only rewrites the
+    // Resolve prefix, so an ability with no printed text just keeps none.
+    minus.text = minus.text?.replace(`${minus.resolveDelta}:`, `${minusOverride}:`);
     minus.resolveDelta = minusOverride;
   }
   const plus = LEADER_PLUS_ABILITY_OVERRIDE[c.id]
