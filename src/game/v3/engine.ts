@@ -227,6 +227,25 @@ export interface GameState {
    * their behavior is byte-identical to before.
    */
   chooseShed?: (state: GameState, pid: PlayerId, count: number) => string[] | undefined;
+  /**
+   * Monotonic instance-id counter. Seeded per game rather than per process so
+   * that two runs of the same seed + the same action list produce identical
+   * iids — the precondition for deterministic replay and for a
+   * server-authoritative reducer whose clients address units by iid.
+   */
+  iidCounter: number;
+  /**
+   * The seed `createGame` actually used, so a bug report or a replay can name
+   * the exact game. Undefined only when the caller supplied its own `rng`
+   * function (in which case the seed lives with them).
+   */
+  seed?: number;
+  /**
+   * Per-game telemetry hooks, installed via `GameOptions.telemetry`. Was a
+   * module-level singleton, which would have cross-contaminated two concurrent
+   * matches inside one server process.
+   */
+  telemetry?: EngineTelemetry;
 }
 
 /** A deck definition: a Leader id plus a flat card-id list (one per copy). */
@@ -236,13 +255,30 @@ export interface DeckDef {
   label?: string;
 }
 
-let iidCounter = 0;
-function nextIid(base: string): string {
-  return `${base}#${++iidCounter}`;
+/**
+ * Anything that can hand out instance ids. `GameState` satisfies it, which is
+ * the point: instance ids used to come from a module-global counter, so two
+ * processes replaying the same actions from the same seed produced DIFFERENT
+ * iids. Every PvP action references an iid, so that was a silent desync (and
+ * it blocked deterministic replay). The counter now lives on the state.
+ */
+export interface IidSource {
+  iidCounter: number;
 }
 
-export function makeCardInst(def: CardDef): CardInst {
-  return { iid: nextIid(def.id), def };
+/**
+ * Fallback counter for fixtures that build instances with no state in hand
+ * (unit tests, preview data). Never used by the engine itself — every
+ * engine-internal call site passes the state.
+ */
+const looseIids: IidSource = { iidCounter: 0 };
+
+function nextIid(src: IidSource, base: string): string {
+  return `${base}#${++src.iidCounter}`;
+}
+
+export function makeCardInst(def: CardDef, src?: IidSource): CardInst {
+  return { iid: nextIid(src ?? looseIids, def.id), def };
 }
 
 export function opponentOf(pid: PlayerId): PlayerId {
@@ -264,7 +300,7 @@ export function summonUnit(
   opts: { exhausted?: boolean; sick?: boolean } = {},
 ): UnitInst {
   const u: UnitInst = {
-    iid: nextIid(def.id),
+    iid: nextIid(state, def.id),
     def,
     owner: pid,
     damage: 0,
@@ -415,7 +451,7 @@ function payCost(pool: Partial<Record<EssenceType, number>>, cost?: EssenceCost)
 }
 
 function clearEssence(state: GameState): void {
-  telemetry.onEssenceCleared?.(state);
+  state.telemetry?.onEssenceCleared?.(state);
   state.players.P1.essence = {};
   state.players.P2.essence = {};
 }
@@ -434,6 +470,14 @@ export interface GameOptions {
   handSize?: number;
   /** Which seat takes the first turn. Defaults to 'P1'. */
   firstPlayer?: PlayerId;
+  /**
+   * Seed for the default RNG. Ignored when `rng` is supplied. Defaults to a
+   * wall-clock draw — which is fine, except that it used to be unrecoverable;
+   * whatever is used ends up on `GameState.seed`.
+   */
+  seed?: number;
+  /** Per-game telemetry hooks (sim harness instrumentation; unset in play). */
+  telemetry?: EngineTelemetry;
 }
 
 function shuffleArr<T>(arr: T[], rng: Rng): void {
@@ -449,7 +493,11 @@ export function createGame(
   poolById: Record<string, CardDef>,
   opts: GameOptions = {},
 ): GameState {
-  const rng = opts.rng ?? mulberry32(Date.now() & 0xffffffff);
+  const seed = opts.seed ?? Date.now() & 0xffffffff;
+  const rng = opts.rng ?? mulberry32(seed);
+  // Instances are minted while the players are being built, before the state
+  // object exists; the running total is copied onto the state below.
+  const ids: IidSource = { iidCounter: 0 };
   const mk = (id: PlayerId, dd: DeckDef): PlayerState => {
     const leaderDef = poolById[dd.leaderId];
     if (!leaderDef) throw new Error(`Unknown leader id: ${dd.leaderId}`);
@@ -457,7 +505,7 @@ export function createGame(
       .map((cid) => {
         const def = poolById[cid];
         if (!def) throw new Error(`Unknown card id: ${cid}`);
-        return makeCardInst(def);
+        return makeCardInst(def, ids);
       })
       .filter((c) => c.def.type !== 'Leader');
     return {
@@ -497,6 +545,9 @@ export function createGame(
     log: [],
     dawnLog: [],
     rng,
+    iidCounter: ids.iidCounter,
+    seed: opts.rng ? undefined : seed,
+    telemetry: opts.telemetry,
   };
   const handSize = opts.handSize ?? STARTING_HAND;
   for (const p of [state.players.P1, state.players.P2]) {
@@ -841,9 +892,21 @@ export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string
   // so a shatter is never pointed at a whiff while a killable target sits
   // legal, and IS pointed at a wall whose shield is already down.
   const excludeUnbreakable = eff.action === 'shatter';
-  const biggestEnemy = [...opp.field]
-    .filter((u) => !unitHasKw(u, 'Warded') && !(excludeUnbreakable && unbreakableUp(u)))
-    .sort((a, b) => effMight(state, b) - effMight(state, a))[0];
+  const enemyByThreat = [...opp.field]
+    .filter((u) => !(excludeUnbreakable && unbreakableUp(u)))
+    .sort((a, b) => effMight(state, b) - effMight(state, a));
+  const biggestEnemy = enemyByThreat.filter((u) => !unitHasKw(u, 'Warded'))[0];
+  // v31 (report finding 1.7): Warded is target DENIAL, and denial had no
+  // telemetry hook at all — it reported `activations: 0` forever while showing
+  // a large carrier win-rate delta. It counts as activated exactly when it
+  // pushed this effect off the unit it would otherwise have hit.
+  if (
+    enemyByThreat.length > 0 &&
+    unitHasKw(enemyByThreat[0], 'Warded') &&
+    (eff.target === 'enemyUnit' || eff.target === 'anyTarget')
+  ) {
+    state.telemetry?.onKeywordProc?.('Warded', 1);
+  }
   switch (eff.target) {
     case 'enemyUnit': {
       // v6.9: exhausting an already-exhausted unit does nothing — prefer the
@@ -906,9 +969,23 @@ export interface EngineTelemetry {
    * reaction window (`reserved` true), and again at end of turn with whether
    * the reservation was ever cashed in. */
   onReservation?: (pid: PlayerId, cardIid: string, cost: number) => void;
+  /** Fired by `chooseGuards` (ai.ts) at the moment it returns, with the live
+   * state it decided from and the assignment it picked. The per-assignment
+   * `onGuardAssign` hook above cannot support an INDEPENDENT audit of guard
+   * quality — a shadow check that runs per attacker is a subset of the greedy
+   * per-attacker policy and can never disagree with it. A harness needs the
+   * whole assignment, on the live board, to compare against a globally
+   * optimal one. */
+  onGuardDecision?: (
+    state: GameState,
+    pid: PlayerId,
+    assignments: Record<string, string[]>,
+  ) => void;
 }
-/** Mutable hook registry — the sim harness assigns, the UI leaves empty. */
-export const telemetry: EngineTelemetry = {};
+// The registry used to be a module-level singleton (`export const telemetry`).
+// It now lives on `GameState` (installed via `GameOptions.telemetry`) so two
+// concurrent matches in one process cannot cross-contaminate each other's
+// counters.
 
 /** Siphon vitality gain, capped at starting Vitality (same cap as healing). */
 function siphonGain(state: GameState, source: UnitInst, amount: number): void {
@@ -916,7 +993,7 @@ function siphonGain(state: GameState, source: UnitInst, amount: number): void {
   const gained = Math.min(LEADER_HP, p.vitality + amount) - p.vitality;
   p.vitality += gained;
   if (gained > 0) {
-    telemetry.onKeywordProc?.('Siphon', gained);
+    state.telemetry?.onKeywordProc?.('Siphon', gained);
     // Logged (v23): the one keyword that moves a VITALITY total upward had no
     // line — the opponent's life went up "from nowhere" mid-clash.
     state.log.push(`${source.def.name}'s Siphon restores ${gained} Vitality to ${source.owner}.`);
@@ -931,7 +1008,7 @@ function damageUnit(state: GameState, u: UnitInst, amount: number, source?: Unit
   // v6.0 Hardened: every packet of damage dealt to this unit is reduced by 1.
   if (unitHasKw(u, 'Hardened')) {
     amount -= 1;
-    telemetry.onKeywordProc?.('Hardened', 1);
+    state.telemetry?.onKeywordProc?.('Hardened', 1);
     if (amount <= 0) return 0; // fully absorbed: no venom mark, no siphon
   }
   u.damage += amount;
@@ -942,7 +1019,7 @@ function damageUnit(state: GameState, u: UnitInst, amount: number, source?: Unit
   // marked damage clears, the shrunken body does not.
   if (source && unitHasKw(source, 'Withering')) {
     u.permGrit -= 1;
-    telemetry.onKeywordProc?.('Withering', 1);
+    state.telemetry?.onKeywordProc?.('Withering', 1);
   }
   return amount;
 }
@@ -953,7 +1030,7 @@ function damagePlayer(state: GameState, pid: PlayerId, amount: number, source?: 
   // gains only what actually landed.
   const reduced = Math.max(0, amount - bulwarkReduction(state.players[pid]));
   if (reduced <= 0) return 0;
-  if (reduced < amount) telemetry.onKeywordProc?.('Bulwark', amount - reduced);
+  if (reduced < amount) state.telemetry?.onKeywordProc?.('Bulwark', amount - reduced);
   state.players[pid].vitality -= reduced;
   if (source && unitHasKw(source, 'Siphon')) siphonGain(state, source, reduced);
   return reduced;
@@ -1114,7 +1191,7 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
     // v6.0 Soulbound: the Item returns to its owner's hand instead of dying
     // with (or outliving) its unit.
     if (hasKw(item.def, 'Soulbound')) {
-      telemetry.onKeywordProc?.('Soulbound', 1);
+      state.telemetry?.onKeywordProc?.('Soulbound', 1);
       p.hand.push({ iid: item.iid, def: item.def });
     } else if (itemSurvives(item.def.subtype)) p.unbondedItems.push(item);
     else p.ashPile.push({ iid: item.iid, def: item.def });
@@ -1127,7 +1204,7 @@ function removeUnit(state: GameState, u: UnitInst, dest: 'ash' | 'void'): void {
   // v6.9 Wildfire: a parting shot at the enemy player. Fires on banish too,
   // for the same reason 'dies' triggers do (see below).
   if (wildfire) {
-    telemetry.onKeywordProc?.('Wildfire', 2);
+    state.telemetry?.onKeywordProc?.('Wildfire', 2);
     const landed = damagePlayer(state, opponentOf(u.owner), 2);
     // Logged (v23): the player lost Vitality with only "X was shattered." on
     // the record to explain it — the parting shot itself had no line.
@@ -1156,7 +1233,7 @@ export function unbreakableUp(u: UnitInst): boolean {
 export function shatterUnit(state: GameState, u: UnitInst): boolean {
   if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
     u.unbreakableSpent = true;
-    telemetry.onKeywordProc?.('Unbreakable', 1);
+    state.telemetry?.onKeywordProc?.('Unbreakable', 1);
     return false;
   }
   removeUnit(state, u, 'ash');
@@ -1209,12 +1286,12 @@ export function stateBasedChecks(state: GameState): void {
         // price it. This one never did — it read as 0 activations however many
         // lethal hits it walked away from, which is exactly the signal that
         // matters for the most expensive keyword in the table.
-        telemetry.onKeywordProc?.('Unbreakable', 1);
+        state.telemetry?.onKeywordProc?.('Unbreakable', 1);
         continue;
       }
       const byVenom = u.venomed && u.damage < eff;
       removeUnit(state, u, 'ash');
-      if (byVenom) telemetry.onKeywordProc?.('Venomous', 1);
+      if (byVenom) state.telemetry?.onKeywordProc?.('Venomous', 1);
     }
   }
   if (state.clash) {
@@ -1262,7 +1339,7 @@ function runDawn(state: GameState): void {
     u.enteredThisTurn = false;
     // v6.0 Regenerate: heals all marked damage at its controller's Dawn.
     if (u.damage > 0 && unitHasKw(u, 'Regenerate')) {
-      telemetry.onKeywordProc?.('Regenerate', u.damage);
+      state.telemetry?.onKeywordProc?.('Regenerate', u.damage);
       u.damage = 0;
       regenerated++;
     }
@@ -1270,20 +1347,20 @@ function runDawn(state: GameState): void {
     if (unitHasKw(u, 'Thriving')) {
       u.permMight += 1;
       u.permGrit += 1;
-      telemetry.onKeywordProc?.('Thriving', 1);
+      state.telemetry?.onKeywordProc?.('Thriving', 1);
       thriving++;
     }
     // v6.9 Radiant: a slow drip of Vitality while it holds the field.
     if (unitHasKw(u, 'Radiant') && p.vitality < LEADER_HP) {
       p.vitality += 1;
-      telemetry.onKeywordProc?.('Radiant', 1);
+      state.telemetry?.onKeywordProc?.('Radiant', 1);
       vitalityGained++;
     }
     // v7.3 Empowering: each Empowering Item grows the unit it is bonded to.
     const empowering = u.items.filter((c) => hasKw(c.def, 'Empowering')).length;
     if (empowering > 0) {
       u.permMight += empowering;
-      telemetry.onKeywordProc?.('Empowering', empowering);
+      state.telemetry?.onKeywordProc?.('Empowering', empowering);
       empowered++;
     }
   }
@@ -1331,7 +1408,7 @@ function runDawn(state: GameState): void {
   for (const l of p.locations) {
     if (l.def && hasKw(l.def, 'Sacred') && p.vitality < LEADER_HP) {
       p.vitality += 1;
-      telemetry.onKeywordProc?.('Sacred', 1);
+      state.telemetry?.onKeywordProc?.('Sacred', 1);
       vitalityGained++;
     }
   }
@@ -1344,7 +1421,7 @@ function runDawn(state: GameState): void {
   if (sanctumCount(p) >= 3) {
     const archivists = p.locations.filter((l) => l.def && hasKw(l.def, 'Archivist')).length;
     if (archivists > 0) {
-      telemetry.onKeywordProc?.('Archivist', archivists);
+      state.telemetry?.onKeywordProc?.('Archivist', archivists);
       state.log.push(`${p.id}'s Archivist deals ${archivists} extra card(s).`);
       dealCards(state, state.active, archivists);
     }
@@ -1373,7 +1450,7 @@ function runDawn(state: GameState): void {
       continue;
     }
     l.glaciateAsleep = true;
-    telemetry.onKeywordProc?.('Glaciate', 1);
+    state.telemetry?.onKeywordProc?.('Glaciate', 1);
     // Named, not counted. This is the one Dawn keyword that reaches across the
     // table — a unit the OPPONENT owns stops being able to attack or guard —
     // and until v22 it did that with no log line and no beat: the player found
@@ -1393,7 +1470,7 @@ function runDawn(state: GameState): void {
   const L = p.leader;
   if (L.invoked && !L.shattered && hasKw(L.def, 'Resolute') && L.resolve < (L.def.resolve ?? 0)) {
     L.resolve += 1;
-    telemetry.onKeywordProc?.('Resolute', 1);
+    state.telemetry?.onKeywordProc?.('Resolute', 1);
     state.log.push(`${p.id}'s Leader recovers 1 Resolve (Resolute).`);
   }
   // v23 Beacon: an invoked Leader restores 1 Vitality at its Dawn — Radiant's
@@ -1401,7 +1478,7 @@ function runDawn(state: GameState): void {
   // the match narrator has a line for it. Not yet printed on any Leader.
   if (L.invoked && !L.shattered && hasKw(L.def, 'Beacon') && p.vitality < LEADER_HP) {
     p.vitality += 1;
-    telemetry.onKeywordProc?.('Beacon', 1);
+    state.telemetry?.onKeywordProc?.('Beacon', 1);
     state.log.push(`${p.id}'s Leader restores 1 Vitality (Beacon).`);
   }
   runTriggers(state, state.active, 'atDawn');
@@ -1420,7 +1497,7 @@ function runDusk(state: GameState): void {
   // v6.9 Entropic: each one mills the opponent for 1 at its controller's Dusk.
   const entropic = p.field.filter((u) => unitHasKw(u, 'Entropic')).length;
   if (entropic > 0) {
-    telemetry.onKeywordProc?.('Entropic', entropic);
+    state.telemetry?.onKeywordProc?.('Entropic', entropic);
     // Logged (v22): eroding the opponent's deck is a real clock on a real win
     // condition — deck-out ends the game — and it happened silently. The Ash
     // pile grew, the deck counter ticked down, and no line anywhere connected
@@ -1433,7 +1510,7 @@ function runDusk(state: GameState): void {
   // v7.3 Blighted: Entropic's Location-side counterpart.
   const blighted = p.locations.filter((l) => l.def && hasKw(l.def, 'Blighted')).length;
   if (blighted > 0) {
-    telemetry.onKeywordProc?.('Blighted', blighted);
+    state.telemetry?.onKeywordProc?.('Blighted', blighted);
     state.log.push(
       `${p.id}'s Blighted erodes ${blighted} card(s) from ${opponentOf(state.active)}'s deck.`,
     );
@@ -1452,7 +1529,7 @@ function runDusk(state: GameState): void {
   // every-Dusk board wipe should have to be built toward.
   const scorched = p.locations.filter((l) => l.def && hasKw(l.def, 'Scorched-Earth')).length;
   if (scorched > 0 && sanctumCount(p) >= 3) {
-    telemetry.onKeywordProc?.('Scorched-Earth', scorched);
+    state.telemetry?.onKeywordProc?.('Scorched-Earth', scorched);
     // A repeating board sweep is the loudest thing either player can do and it
     // was the quietest: units died at the opponent's Dusk with only the
     // shatter lines to explain them, and those name the unit, not the cause.
@@ -1653,7 +1730,7 @@ export function playWellspring(state: GameState, pid: PlayerId, type: EssenceTyp
   // them into turn 2 rather than handing them a turn-1 tempo swing. A ready
   // one measured far too strong (P1 41.9%, a 19-point overcorrection).
   p.locations.push({
-    iid: nextIid(`wellspring_${type}`),
+    iid: nextIid(state, `wellspring_${type}`),
     produces: type,
     exhausted: p.wellspringsPlayedThisTurn > 0,
   });
@@ -1677,7 +1754,7 @@ export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: s
   loc.exhausted = true;
   // v6.0 Bountiful Sanctums produce 2 essence per exhaust.
   const amount = locationYield(loc);
-  if (amount === 2) telemetry.onKeywordProc?.('Bountiful', 1);
+  if (amount === 2) state.telemetry?.onKeywordProc?.('Bountiful', 1);
   p.essence[loc.produces] = (p.essence[loc.produces] ?? 0) + amount;
   return true;
 }
@@ -1792,7 +1869,7 @@ export function invokeCard(
   if (!['Unit', 'Event', 'Item', 'Location'].includes(def.type)) return false;
 
   const cost = effectiveCost(state, pid, def);
-  if (hasKw(def, 'Surge') && cost !== def.cost) telemetry.onKeywordProc?.('Surge', 1);
+  if (hasKw(def, 'Surge') && cost !== def.cost) state.telemetry?.onKeywordProc?.('Surge', 1);
   payCost(p.essence, cost);
   p.hand.splice(p.hand.indexOf(card), 1);
   p.invokedCardThisTurn = true;
@@ -1811,7 +1888,7 @@ export function invokeCard(
 
   // v6.0 Resonant: the Event's effect resolves twice.
   const times = def.type === 'Event' && hasKw(def, 'Resonant') ? 2 : 1;
-  if (times === 2) telemetry.onKeywordProc?.('Resonant', 1);
+  if (times === 2) state.telemetry?.onKeywordProc?.('Resonant', 1);
   pushStack(state, {
     kind: 'card',
     controller: pid,
@@ -1883,7 +1960,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // v7.3 Echoing: the Event replaces itself. Draws once however many
       // times its effect resolved — Resonant doubles the effect, not the card.
       if (!fizzled && hasKw(def, 'Echoing')) {
-        telemetry.onKeywordProc?.('Echoing', 1);
+        state.telemetry?.onKeywordProc?.('Echoing', 1);
         dealCards(state, pid, 1);
       }
       // v7.5 Fate: Void's denial half. Erode puts a card in the ash-pile,
@@ -1894,7 +1971,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         const top = state.players[opponentOf(pid)].deck.pop();
         if (top) {
           state.players[opponentOf(pid)].voidPile.push(top);
-          telemetry.onKeywordProc?.('Fate', 1);
+          state.telemetry?.onKeywordProc?.('Fate', 1);
           state.log.push(`${def.name} banishes the top card of ${opponentOf(pid)}'s deck.`);
         }
       }
@@ -1912,7 +1989,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
           const i = unitIdxs[Math.floor(state.rng() * unitIdxs.length)];
           const [unit] = p.ashPile.splice(i, 1);
           p.hand.push(unit);
-          telemetry.onKeywordProc?.('Exhume', 1);
+          state.telemetry?.onKeywordProc?.('Exhume', 1);
           state.log.push(`${def.name} exhumes ${unit.def.name}.`);
         }
       }
@@ -1920,7 +1997,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // face. Routed through damagePlayer so Bulwark reads it like any other
       // damage, and suppressed on fizzle like the riders above.
       if (!fizzled && hasKw(def, 'Kindle')) {
-        telemetry.onKeywordProc?.('Kindle', 1);
+        state.telemetry?.onKeywordProc?.('Kindle', 1);
         const landed = damagePlayer(state, opponentOf(pid), 1);
         if (landed > 0) {
           state.log.push(`${def.name}'s Kindle deals ${landed} damage to ${opponentOf(pid)}.`);
@@ -1940,14 +2017,14 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         if (tired.length > 0) {
           const u = tired[Math.floor(state.rng() * tired.length)];
           u.exhausted = false;
-          telemetry.onKeywordProc?.('Tailwind', 1);
+          state.telemetry?.onKeywordProc?.('Tailwind', 1);
           state.log.push(`${def.name}'s Tailwind recovers ${u.def.name}.`);
         } else {
           const spent = p.locations.filter((l) => l.exhausted);
           if (spent.length > 0) {
             const l = spent[Math.floor(state.rng() * spent.length)];
             l.exhausted = false;
-            telemetry.onKeywordProc?.('Tailwind', 1);
+            state.telemetry?.onKeywordProc?.('Tailwind', 1);
             state.log.push(
               `${def.name}'s Tailwind recovers ${l.def ? l.def.name : `a ${l.produces} Wellspring`}.`,
             );
@@ -1958,7 +2035,7 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // capped at the start value like every other restore.
       if (!fizzled && hasKw(def, 'Luminous') && p.vitality < LEADER_HP) {
         p.vitality += 1;
-        telemetry.onKeywordProc?.('Luminous', 1);
+        state.telemetry?.onKeywordProc?.('Luminous', 1);
         state.log.push(`${def.name}'s Luminous restores 1 Vitality to ${pid}.`);
       }
       p.ashPile.push(card);
@@ -2003,26 +2080,26 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       }
       // v6.0 Runic: bonding this Item from hand Deals its controller a card.
       if (hasKw(def, 'Runic')) {
-        telemetry.onKeywordProc?.('Runic', 1);
+        state.telemetry?.onKeywordProc?.('Runic', 1);
         dealCards(state, pid, 1);
       }
       // v7.3 Tethered: bonding untaps the unit it lands on, so an Item can
       // buy back an attack or a guard the turn it is played.
       if (hasKw(def, 'Tethered') && bondTarget.exhausted) {
-        telemetry.onKeywordProc?.('Tethered', 1);
+        state.telemetry?.onKeywordProc?.('Tethered', 1);
         bondTarget.exhausted = false;
       }
       // v7.5 Freeze-Dry: Tethered's mirror image — the same one-shot tempo
       // swing, pointed across the table instead of at your own board.
       if (hasKw(def, 'Freeze-Dry')) {
-        telemetry.onKeywordProc?.('Freeze-Dry', 1);
+        state.telemetry?.onKeywordProc?.('Freeze-Dry', 1);
         applyEffect(state, pid, { action: 'exhaust', target: 'enemyUnit' });
       }
       // v7.5 Blessed: the Light-side one-shot, priced with Runic.
       if (hasKw(def, 'Blessed') && p.vitality < LEADER_HP) {
         const gained = Math.min(3, LEADER_HP - p.vitality);
         p.vitality += gained;
-        telemetry.onKeywordProc?.('Blessed', gained);
+        state.telemetry?.onKeywordProc?.('Blessed', gained);
       }
       if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
@@ -2339,14 +2416,14 @@ export function resolveClash(state: GameState): boolean {
     drainStack(state); // death triggers land before the normal-damage sub-step
     if (step === 'first' && packets.length > 0) {
       const died = preFieldCount - (state.players.P1.field.length + state.players.P2.field.length);
-      if (died > 0) telemetry.onKeywordProc?.('Quickstrike', died);
+      if (died > 0) state.telemetry?.onKeywordProc?.('Quickstrike', died);
     }
   }
   for (const u of dealtBy.values()) {
     if (state.winner) break;
     // v6.9 Tidecaller: connecting in a clash refills the hand.
     if (unitHasKw(u, 'Tidecaller')) {
-      telemetry.onKeywordProc?.('Tidecaller', 1);
+      state.telemetry?.onKeywordProc?.('Tidecaller', 1);
       dealCards(state, u.owner, 1);
     }
     runTriggers(state, u.owner, 'dealsClashDamage', u);
@@ -2384,7 +2461,7 @@ function collectStepWithHistory(
     // valuation reads effMight and therefore prices this keyword slightly
     // conservatively — fine for an unprinted keyword; revisit if it prints.
     let might = effMight(state, attacker) + onslaughtBonus(state.players[attacker.owner]);
-    if (might > effMight(state, attacker)) telemetry.onKeywordProc?.('Onslaught', 1);
+    if (might > effMight(state, attacker)) state.telemetry?.onKeywordProc?.('Onslaught', 1);
     if (guards.length === 0) {
       if (!everGuarded.has(attackerIid)) {
         // Never guarded: hits the defender for full Might.
@@ -2395,7 +2472,7 @@ function collectStepWithHistory(
         const spill = Math.max(0, might - (absorbed.get(attackerIid) ?? 0));
         if (spill > 0) {
           packets.push({ source: attacker, targetPlayer: defenderId, amount: spill });
-          telemetry.onKeywordProc?.('Overrun', spill);
+          state.telemetry?.onKeywordProc?.('Overrun', spill);
         }
       }
       continue;
@@ -2419,7 +2496,7 @@ function collectStepWithHistory(
     }
     if (might > 0 && unitHasKw(attacker, 'Overrun')) {
       packets.push({ source: attacker, targetPlayer: defenderId, amount: might });
-      telemetry.onKeywordProc?.('Overrun', might);
+      state.telemetry?.onKeywordProc?.('Overrun', might);
     }
   }
   return packets;

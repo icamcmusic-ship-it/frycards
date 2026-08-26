@@ -222,12 +222,13 @@ import {
   essenceTotal,
   unitHasKw,
   wellspringChoices,
-  telemetry,
+  EngineTelemetry,
 } from '../src/game/v3/engine';
 import { LEADER_COLORS, KEYWORDS_OF_COLOR } from '../src/game/v3/colors';
 import { POOL_BY_ID, POOL_V4, POOL_LEADERS } from '../src/game/v3/cardpool';
 import { buildDeck, randomArchetype } from '../src/game/v3/decks';
 import { playTurn, maybeMulliganPlayer } from '../src/game/v3/ai';
+import { legalGuardsFor } from '../src/game/v3/engine';
 import type { DeckDef } from '../src/game/v3/engine';
 
 const GAMES_PER_PAIRING = Number(process.argv[2] ?? 4);
@@ -490,8 +491,12 @@ const cpuDecisions = {
   // could only speculate about.
   attackSnapshotDivergence: 0,
   attackSnapshotOpportunities: 0,
-  guardDivergence: 0, // shadow guard assignment leaves different residual damage
+  // v31: fired when an exhaustive global guard assignment beats the CPU's,
+  // measured on the live board at the moment chooseGuards returns. Genuinely
+  // independent of ai.ts's greedy per-attacker heuristic.
+  guardDivergence: 0,
   guardOpportunities: 0,
+  guardSearchSkipped: 0, // clash too large to search exhaustively
   targetSuboptimal: 0, // removal aimed at a live enemy when a bigger one was legal
   targetOpportunities: 0,
   reactionWindowOpportunities: 0, // clashes where the defender had an open reaction window
@@ -512,7 +517,11 @@ for (const a of COLORS) {
 }
 
 // --- v5.3: keyword carrier stats by carrier cost band ----------------------
-type CostBand = '1-2' | '3-4' | '5+';
+// v31: 'leader' is a real band. Leader keywords (Commander, Resolute) are
+// carried by a card that has no essence cost and never appears in the played
+// list, so they used to report `byCostBand: {}` on thousands of carrier games
+// — an empty object that read as "no data" when it was a bucketing miss.
+type CostBand = '1-2' | '3-4' | '5+' | 'leader';
 const bandOf = (t: number): CostBand => (t <= 2 ? '1-2' : t <= 4 ? '3-4' : '5+');
 const kwBandStats: Record<string, Record<CostBand, { games: number; wins: number }>> = {};
 for (const kw of KEYWORDS)
@@ -520,6 +529,7 @@ for (const kw of KEYWORDS)
     '1-2': { games: 0, wins: 0 },
     '3-4': { games: 0, wins: 0 },
     '5+': { games: 0, wins: 0 },
+    leader: { games: 0, wins: 0 },
   };
 
 // --- v6.1: leader-vs-leader matchup matrix ---------------------------------
@@ -567,7 +577,6 @@ const mech = {
 };
 
 const lapses = {
-  missedLethal: 0, // had unguardable lethal available, didn't take it, game continued
   tookGuardableLethal: 0, // defender died to clash while holding unused ready guards
   venomousSuicide: 0, // attacked a board with a ready Venomous guard and lost the unit
   // v6.2 (carry-forward #3): split venomousSuicide into a MUTUAL trade (the
@@ -631,9 +640,11 @@ function lis(id: string) {
 // telemetry (Siphon/Hardened/Soulbound/Venomous/Regenerate/Sacred/Resolute/
 // Bountiful/Surge/Resonant/Runic/Quickstrike/Overrun/Ambush) never actually
 // fired despite being on the battlefield/played that game. Passive always-on
-// keywords with no discrete "activation" (Aerial, Warded, Unbreakable, Alert,
+// keywords with no discrete "activation" (Aerial, Unbreakable, Alert,
 // Swarmproof, Skywatch, Immobile, Commander) are excluded — they have no
 // telemetry hook and "never activated" wouldn't mean anything for them.
+// v31: Warded moved INTO this set — it now has a denial hook (engine
+// `autoTarget`), so "carried it and it never denied anything" is meaningful.
 const TELEMETRY_KEYWORDS = new Set([
   'Siphon',
   'Hardened',
@@ -649,6 +660,7 @@ const TELEMETRY_KEYWORDS = new Set([
   'Quickstrike',
   'Overrun',
   'Ambush',
+  'Warded',
 ]);
 const kwDeadWeight: Record<string, { carrierGames: number; neverActivatedGames: number }> = {};
 for (const kw of TELEMETRY_KEYWORDS) kwDeadWeight[kw] = { carrierGames: 0, neverActivatedGames: 0 };
@@ -671,20 +683,145 @@ function stageOf(turn: number): keyof typeof essenceFloatByStage {
 // the engine at the moment things actually happen. Disabled during the
 // seat-swap suite so it can't pollute the main tournament counters.
 let telemetryEnabled = false;
-telemetry.onKeywordProc = (kw, amount) => {
+// One registry, handed to every createGame call via GameOptions.telemetry.
+export const simTelemetry: EngineTelemetry = {};
+simTelemetry.onKeywordProc = (kw, amount) => {
   if (!telemetryEnabled) return;
   if (kwStats[kw]) kwStats[kw].activations += amount;
   if (TELEMETRY_KEYWORDS.has(kw)) gameKwActivations[kw] = (gameKwActivations[kw] ?? 0) + amount;
 };
 // v6.5: ground-truth mustSurvive flag per guard assignment, straight from
 // ai.ts's chooseGuards — no re-derivation/approximation in the harness.
-telemetry.onGuardAssign = (attackerIid, guardIid, mustSurvive) => {
+simTelemetry.onGuardAssign = (attackerIid, guardIid, mustSurvive) => {
   if (!telemetryEnabled) return;
   guardMustSurvive[`${attackerIid}|${guardIid}`] = mustSurvive;
 };
+// v31: INDEPENDENT guard-quality canary (report finding 1.6).
+//
+// The old canary asked "did the CPU miss a block that kills and survives?" —
+// exactly the case ai.ts's scoring function ranks first, so it was auditing a
+// policy with a subset of that policy and returned 0.0% forever. This one is
+// built the other way round: it enumerates EVERY assignment of ready blockers
+// to attackers (bounded, see MAX_GUARD_SEARCH) and scores the resulting board
+// with a value function of its own — vitality is worth more than material,
+// material is Might+Grit — then flags the turn when the best assignment beats
+// the CPU's by a real margin. A greedy per-attacker heuristic can lose to a
+// global assignment (it commits its best blocker to the first attacker it
+// looks at), so this check CAN disagree, which is the whole point.
+const MAX_GUARD_SEARCH = 20000;
+const GUARD_DIVERGENCE_EPSILON = 1.0;
+
+function bodyValue(state: GameState, u: UnitInst): number {
+  return effMight(state, u) + remainingGrit(state, u);
+}
+
+/** Score one candidate assignment from the DEFENDER's point of view. */
+function scoreGuardPlan(
+  state: GameState,
+  defender: PlayerId,
+  attackers: UnitInst[],
+  plan: (UnitInst | undefined)[],
+): number {
+  let vitalityLost = 0;
+  let ownBodiesLost = 0;
+  let enemyBodiesKilled = 0;
+  attackers.forEach((a, i) => {
+    const g = plan[i];
+    const might = effMight(state, a);
+    if (!g) {
+      vitalityLost += might;
+      return;
+    }
+    const aFirst = unitHasKw(a, 'Quickstrike') || unitHasKw(a, 'Doublestrike');
+    const gFirst = unitHasKw(g, 'Quickstrike') || unitHasKw(g, 'Doublestrike');
+    const onGuard = shadowPacketDamage(g, might) * (unitHasKw(a, 'Doublestrike') ? 2 : 1);
+    const onAttacker =
+      shadowPacketDamage(a, effMight(state, g)) * (unitHasKw(g, 'Doublestrike') ? 2 : 1);
+    let guardDies =
+      !unitHasKw(g, 'Unbreakable') &&
+      (onGuard >= remainingGrit(state, g) || (unitHasKw(a, 'Venomous') && onGuard > 0));
+    let attackerDies =
+      !unitHasKw(a, 'Unbreakable') &&
+      (onAttacker >= remainingGrit(state, a) || (unitHasKw(g, 'Venomous') && onAttacker > 0));
+    if (attackerDies && aFirst && !gFirst && guardDies) attackerDies = false;
+    if (guardDies && gFirst && !aFirst && attackerDies) guardDies = false;
+    if (guardDies) ownBodiesLost += bodyValue(state, g);
+    if (attackerDies) enemyBodiesKilled += bodyValue(state, a);
+    // Overrun spills past a guard that survives the hit.
+    if (unitHasKw(a, 'Overrun') && !guardDies) {
+      vitalityLost += Math.max(0, might - remainingGrit(state, g));
+    }
+  });
+  const vitality = state.players[defender].vitality;
+  // Dying is worth an order of magnitude more than any board consideration.
+  const lethal = vitalityLost >= vitality ? 1000 : 0;
+  return -(lethal + vitalityLost * 3 + ownBodiesLost) + enemyBodiesKilled;
+}
+
+function shadowGuardDivergence(
+  state: GameState,
+  defender: PlayerId,
+  chosen: Record<string, string[]>,
+): void {
+  const clash = state.clash;
+  if (!clash) return;
+  const attackers = clash.attackers
+    .map((iid) => findUnit(state, iid))
+    .filter((a): a is UnitInst => !!a);
+  const blockers = state.players[defender].field.filter((u) => !u.exhausted);
+  if (attackers.length === 0 || blockers.length === 0) return;
+  // Swarmproof needs two blockers at once; the single-blocker-per-attacker
+  // enumeration below cannot represent that legally, so skip those clashes
+  // rather than score them wrong.
+  if (attackers.some((a) => unitHasKw(a, 'Swarmproof'))) return;
+  if (Math.pow(blockers.length + 1, attackers.length) > MAX_GUARD_SEARCH) {
+    cpuDecisions.guardSearchSkipped++;
+    return;
+  }
+  cpuDecisions.guardOpportunities++;
+
+  const legalFor = attackers.map((a) => {
+    const legal = new Set(legalGuardsFor(state, a.iid).map((g) => g.iid));
+    return blockers.filter((b) => legal.has(b.iid));
+  });
+
+  let best = -Infinity;
+  const plan: (UnitInst | undefined)[] = new Array(attackers.length).fill(undefined);
+  const used = new Set<string>();
+  const walk = (i: number): void => {
+    if (i === attackers.length) {
+      best = Math.max(best, scoreGuardPlan(state, defender, attackers, plan));
+      return;
+    }
+    plan[i] = undefined;
+    walk(i + 1);
+    for (const g of legalFor[i]) {
+      if (used.has(g.iid)) continue;
+      used.add(g.iid);
+      plan[i] = g;
+      walk(i + 1);
+      used.delete(g.iid);
+    }
+    plan[i] = undefined;
+  };
+  walk(0);
+
+  const actual = attackers.map((a) => {
+    const iid = chosen[a.iid]?.[0];
+    return iid ? blockers.find((b) => b.iid === iid) : undefined;
+  });
+  const actualScore = scoreGuardPlan(state, defender, attackers, actual);
+  if (best - actualScore > GUARD_DIVERGENCE_EPSILON) cpuDecisions.guardDivergence++;
+}
+
+simTelemetry.onGuardDecision = (state, defender, assignments) => {
+  if (!telemetryEnabled) return;
+  shadowGuardDivergence(state, defender, assignments);
+};
+
 // v6.6: ground-truth attack decision — the shadow heuristic is evaluated
 // against the live state ai.ts itself decided from, at that exact moment.
-telemetry.onAttackDecision = (state, pid, chosen) => {
+simTelemetry.onAttackDecision = (state, pid, chosen) => {
   if (!telemetryEnabled) return;
   cpuDecisions.attackOpportunities++;
   const shadow = shadowAttackers(state, pid);
@@ -695,11 +832,11 @@ telemetry.onAttackDecision = (state, pid, chosen) => {
 // v6.6: reaction-window reservations, keyed per game so a card re-reserved
 // across several turns counts once.
 let gameReservations: Set<string> = new Set();
-telemetry.onReservation = (_pid, cardIid) => {
+simTelemetry.onReservation = (_pid, cardIid) => {
   if (!telemetryEnabled) return;
   gameReservations.add(cardIid);
 };
-telemetry.onEssenceCleared = (state) => {
+simTelemetry.onEssenceCleared = (state) => {
   if (!telemetryEnabled) return;
   const stage = essenceFloatByStage[stageOf(state.turn)];
   stage.turns++;
@@ -939,7 +1076,7 @@ function shadowAttackers(state: GameState, pid: PlayerId): Set<string> {
 function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | null {
   telemetryEnabled = false;
   const rng = mulberry32(seed);
-  const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
+  const state = createGame(deckA, deckB, POOL_BY_ID, { rng, telemetry: simTelemetry });
   maybeMulliganPlayer(state, 'P1', rng);
   maybeMulliganPlayer(state, 'P2', rng);
   let turns = 0;
@@ -953,7 +1090,7 @@ function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | 
 function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): void {
   const rng = mulberry32(seed);
   telemetryEnabled = false; // createGame runs Dawn; enable after setup
-  const state = createGame(deckA, deckB, POOL_BY_ID, { rng });
+  const state = createGame(deckA, deckB, POOL_BY_ID, { rng, telemetry: simTelemetry });
   const mulled: Record<PlayerId, boolean> = { P1: false, P2: false };
   if (maybeMulliganPlayer(state, 'P1', rng)) {
     mech.mulligans++;
@@ -1213,8 +1350,13 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
       preOppDeck - state.players[opponentOf(pid)].deck.length - oppReactionDraws,
     );
 
-    // --- lapse: missed lethal (had it pre-turn, opponent still alive) ---
-    if (couldLethal && !state.winner) lapses.missedLethal++;
+    // v31: `lapses.missedLethal` lived here and was deleted. It read 0 across
+    // 2,208 games because it was structurally incapable of firing: it tested
+    // the board AFTER the turn (where every attacker is exhausted, so its own
+    // readiness precondition is false), against a lethal condition ai.ts's
+    // chooseAttackers already takes unconditionally. A permanently-green
+    // light is worse than no light.
+    void couldLethal;
 
     // --- v5.2 CPU decision-quality taxonomy -----------------------------
     const attackEv = events.find((e) => e.kind === 'attack') as { iids: string[] } | undefined;
@@ -1232,29 +1374,15 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
 
     const guardEv = events.find((e) => e.kind === 'guard') as
       { assignments: Record<string, string[]> } | undefined;
-    if (guardEv) {
-      const defender = opponentOf(pid);
-      const defField = state.players[defender].field;
-      cpuDecisions.guardOpportunities++;
-      // Shadow guard: for each attacker, if a ready blocker exists that both
-      // kills the attacker AND survives, was it used? (Ignores the "must
-      // chump for lethal" branch — that's covered by tookGuardableLethal.)
-      const usedByActual = new Set(Object.values(guardEv.assignments).flat());
-      let missedProfitable = false;
-      for (const [attackerIid, guards] of Object.entries(guardEv.assignments)) {
-        if (guards.length > 0) continue;
-        const attacker = findUnit(state, attackerIid);
-        if (!attacker) continue;
-        const readyBlockers = defField.filter((g) => !g.exhausted && !usedByActual.has(g.iid));
-        const profitable = readyBlockers.find(
-          (g) =>
-            effMight(state, g) >= remainingGrit(state, attacker) &&
-            effMight(state, attacker) < remainingGrit(state, g),
-        );
-        if (profitable) missedProfitable = true;
-      }
-      if (missedProfitable) cpuDecisions.guardDivergence++;
-    }
+    // v31: the guard canary used to live here — a post-turn re-derivation
+    // asking "was a kill-and-survive block available and unused?". It read
+    // 0.0% across 18,813 opportunities and always would have: ai.ts's
+    // chooseGuards scores kills (+3) and survives (+2) FIRST, so the check
+    // was a strict subset of the policy it was auditing. It is replaced by
+    // an independent global-assignment search fed by the new
+    // `onGuardDecision` telemetry hook (see `shadowGuardDivergence` below),
+    // which optimises across ALL attackers at once and therefore can — and
+    // does — disagree with a greedy per-attacker policy.
 
     // v5.3: venomous suicide — a non-Unbreakable attacker walked into a
     // declared Venomous guard and died in the exchange. (Guards are declared
@@ -1718,6 +1846,11 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     for (const id of played[pid]) {
       const d = POOL_BY_ID[id];
       for (const kw of d?.keywords ?? []) kwBandSeen.add(`${kw}|${bandOf(totalCost(d?.cost))}`);
+    }
+    // Mirror the carrier-game convention above: an invoked (or shattered)
+    // Leader carried its own keywords this game, in the 'leader' band.
+    if (p.leader.invoked || p.leader.shattered) {
+      for (const kw of p.leader.def.keywords ?? []) kwBandSeen.add(`${kw}|leader`);
     }
     for (const key of kwBandSeen) {
       const [kw, band] = key.split('|') as [string, CostBand];
@@ -2473,20 +2606,40 @@ for (const c of cardReport) {
 // cohort's (carrierWin - cohortBaselineWin) by that cohort's carrier-game
 // count, so a keyword's headline number reflects performance NET of which
 // Leaders happened to carry it, not raw win%.
-function archNormalizedDelta(kw: string): { delta: number; games: number } {
+function archNormalizedDelta(kw: string): {
+  delta: number | null;
+  games: number;
+  degenerate: boolean;
+} {
   let weighted = 0;
   let games = 0;
+  // v31: when a keyword is carried in EVERY game of every cohort it appears
+  // in — which is exactly the case for Leader keywords, since the cohort IS
+  // the Leader — the carrier win rate and the cohort baseline are the same
+  // number and the delta is identically 0 by construction. That is not a
+  // finding; report it as "not measurable" rather than as a zero.
+  let degenerate = true;
   for (const [arch, s] of Object.entries(kwArchetypeStats[kw])) {
     if (s.games === 0) continue;
     const baseline = archetypeStats[arch];
     if (!baseline || baseline.games === 0) continue;
+    if (s.games < baseline.games) degenerate = false;
     const cohortWin = (100 * s.wins) / s.games;
     const cohortBaseline = (100 * baseline.wins) / baseline.games;
     weighted += s.games * (cohortWin - cohortBaseline);
     games += s.games;
   }
-  return { delta: games > 0 ? +(weighted / games).toFixed(1) : 0, games };
+  if (games === 0) return { delta: null, games: 0, degenerate: false };
+  return { delta: degenerate ? null : +(weighted / games).toFixed(1), games, degenerate };
 }
+
+/**
+ * v31 (report finding 3.10): a keyword sitting on fewer than this many pool
+ * cards is not measuring keyword health, it is measuring one specific card's
+ * win rate with extra steps. Those rows are split out of the headline table
+ * and flagged, the same discipline the docs already apply to Leader numbers.
+ */
+const MIN_KEYWORD_CARRIERS = 5;
 
 const kwReport = Object.entries(kwStats)
   .filter(([, s]) => s.carrierGames > 0)
@@ -2497,17 +2650,26 @@ const kwReport = Object.entries(kwStats)
         .filter(([, b]) => b.games > 0)
         .map(([band, b]) => [band, { winPct: pct(b.wins, b.games), games: b.games }]),
     );
+    const poolCarriers = POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw)).length;
     return {
       keyword: kw,
       carrierWin: pct(s.carrierWins, s.carrierGames),
       carrierGames: s.carrierGames,
       activations: s.activations,
-      poolCarriers: POOL_V4.filter((c: CardDef) => c.keywords?.includes(kw)).length,
+      poolCarriers,
+      /** Null when the cohort normalization is degenerate — see
+       * `archNormalizedDelta`. Read that as "not measurable here", not 0. */
       archetypeNormalizedDelta: norm.delta,
+      normalizationDegenerate: norm.degenerate,
+      /** True when the keyword sits on too few pool cards to be a keyword
+       * signal at all (finding 3.10). */
+      singleCardProxy: poolCarriers < MIN_KEYWORD_CARRIERS,
       byCostBand: bands,
     };
   })
   .sort((a, b) => b.carrierWin - a.carrierWin);
+const kwReportMeasured = kwReport.filter((k) => !k.singleCardProxy);
+const kwReportLowCarrier = kwReport.filter((k) => k.singleCardProxy);
 
 // v5.2: per-cost-tier win rates + residual vs that tier's deck baseline.
 const tierReport = Object.entries(tierStats)
@@ -2539,8 +2701,14 @@ const cpuDecisionReport = {
     opportunities: cpuDecisions.attackSnapshotOpportunities,
   },
   guard: {
+    /** v31: rate at which an exhaustive global assignment beat the CPU's, on
+     * the live board. Replaces the tautological "missed a kill-and-survive
+     * block" check, which was structurally pinned at 0.0%. */
     divergenceRate: pct(cpuDecisions.guardDivergence, cpuDecisions.guardOpportunities),
     opportunities: cpuDecisions.guardOpportunities,
+    /** Clashes too large (or with Swarmproof attackers) to enumerate. Reported
+     * so the denominator is never silently truncated. */
+    searchSkipped: cpuDecisions.guardSearchSkipped,
   },
   removalTargeting: {
     suboptimalRate: pct(cpuDecisions.targetSuboptimal, cpuDecisions.targetOpportunities),
@@ -2836,7 +3004,11 @@ const report = {
       { winPct: pct(s.wins, s.games), games: s.games },
     ]),
   ),
-  keywords: kwReport,
+  // v31: split per finding 3.10 — the headline table only carries keywords
+  // with enough pool carriers to be about the KEYWORD.
+  keywords: kwReportMeasured,
+  keywordsLowCarrier: kwReportLowCarrier,
+  keywordCarrierFloor: MIN_KEYWORD_CARRIERS,
   costBands: Object.fromEntries(
     Object.entries(costBands).map(([b, s]) => [
       b,
@@ -3412,6 +3584,18 @@ for (const name of unsampledLeaders) {
 }
 console.log('\nColors:', JSON.stringify(report.colors, null, 2));
 console.log('\nKeywords:', JSON.stringify(report.keywords, null, 2));
+console.log(
+  `\nKeywords on <${MIN_KEYWORD_CARRIERS} pool carriers — NOT keyword health, these are ` +
+    `one or two specific cards' win rates (finding 3.10). Do not act on them as keyword data:`,
+);
+for (const k of report.keywordsLowCarrier)
+  console.log(
+    `  ${k.keyword}: ${k.poolCarriers} carrier card(s), win ${k.carrierWin}% over ` +
+      `${k.carrierGames} carrier-games` +
+      (k.archetypeNormalizedDelta === null
+        ? ' (normalized delta not measurable)'
+        : ` (normalized ${k.archetypeNormalizedDelta >= 0 ? '+' : ''}${k.archetypeNormalizedDelta})`),
+  );
 console.log('\nCost bands:', JSON.stringify(report.costBands, null, 2));
 console.log('\nCost tiers (v5.2):', JSON.stringify(report.costTiers, null, 2));
 console.log('\nCPU decision taxonomy (v5.2):', JSON.stringify(report.cpuDecisionTaxonomy, null, 2));
@@ -3564,3 +3748,20 @@ console.log(
   JSON.stringify(report.reactionWindowContent, null, 2),
 );
 console.log(`\nReport written: ${outPath}`);
+
+// ---------------------------------------------------------------------------
+// Exit status (v31 — report finding 1.1)
+// ---------------------------------------------------------------------------
+// This harness collected engine invariant violations, printed them, and then
+// exited 0 — so the single most expensive step in CI could not fail, and the
+// one check that would catch an engine rules regression was decorative. It
+// now gates.
+if (invariants.length > 0) {
+  console.error(
+    `\nENGINE INVARIANT VIOLATIONS: ${invariants.length} (first ${Math.min(50, invariants.length)} in ${outPath}):`,
+  );
+  for (const v of invariants.slice(0, 50)) console.error(`  ${v}`);
+  process.exit(1);
+}
+console.log('\nEngine invariants: clean.');
+process.exit(0);

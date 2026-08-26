@@ -51,7 +51,6 @@ import {
   remainingGrit,
   resolveClash,
   tapLocationForEssence,
-  telemetry,
   unitHasKw,
   wellspringChoices,
 } from './engine';
@@ -476,7 +475,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   if (reservedIid) {
     const rc = p.hand.find((c) => c.iid === reservedIid);
     if (!rc || !reserveLocationsForCost(state, pid, rc.def.cost)) reservedIid = undefined;
-    else telemetry.onReservation?.(pid, rc.iid, totalCost(rc.def.cost));
+    else state.telemetry?.onReservation?.(pid, rc.iid, totalCost(rc.def.cost));
   }
 
   if (!reservedIid) tapAllLocations(state, pid);
@@ -782,7 +781,7 @@ export function chooseAttackers(state: GameState, pid: PlayerId): string[] {
   }
   if (throughDamage >= opp.vitality) {
     const allIn = candidates.map((u) => u.iid);
-    telemetry.onAttackDecision?.(state, pid, allIn);
+    state.telemetry?.onAttackDecision?.(state, pid, allIn);
     return allIn;
   }
   const picked: string[] = [];
@@ -816,7 +815,7 @@ export function chooseAttackers(state: GameState, pid: PlayerId): string[] {
       kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost) + itemTax;
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
-  telemetry.onAttackDecision?.(state, pid, picked);
+  state.telemetry?.onAttackDecision?.(state, pid, picked);
   return picked;
 }
 
@@ -914,7 +913,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         assignments[attacker.iid] = pair;
         pair.forEach((iid) => {
           used.add(iid);
-          telemetry.onGuardAssign?.(attacker.iid, iid, mustSurvive);
+          state.telemetry?.onGuardAssign?.(attacker.iid, iid, mustSurvive);
         });
       }
       continue;
@@ -923,7 +922,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
     if (mustSurvive || best.kills || best.survives) {
       assignments[attacker.iid] = [best.g.iid];
       used.add(best.g.iid);
-      telemetry.onGuardAssign?.(attacker.iid, best.g.iid, mustSurvive);
+      state.telemetry?.onGuardAssign?.(attacker.iid, best.g.iid, mustSurvive);
     }
   }
   // Facing lethal after profitable blocks: chump-guard everything we can,
@@ -944,7 +943,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         assignments[attacker.iid] = pair;
         pair.forEach((iid) => {
           used.add(iid);
-          telemetry.onGuardAssign?.(attacker.iid, iid, true);
+          state.telemetry?.onGuardAssign?.(attacker.iid, iid, true);
         });
       } else {
         // Cheapest body soaks the hit.
@@ -956,7 +955,7 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
         )[0];
         assignments[attacker.iid] = [chump.iid];
         used.add(chump.iid);
-        telemetry.onGuardAssign?.(attacker.iid, chump.iid, true);
+        state.telemetry?.onGuardAssign?.(attacker.iid, chump.iid, true);
       }
     }
   }
@@ -974,12 +973,13 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       const extra = legal.sort((x, y) => remainingGrit(state, y) - remainingGrit(state, x))[0];
       assignments[a.iid].push(extra.iid);
       used.add(extra.iid);
-      telemetry.onGuardAssign?.(a.iid, extra.iid, true);
+      state.telemetry?.onGuardAssign?.(a.iid, extra.iid, true);
       added = true;
       break;
     }
     if (!added) break;
   }
+  state.telemetry?.onGuardDecision?.(state, defender, assignments);
   return assignments;
 }
 
