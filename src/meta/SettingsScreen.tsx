@@ -54,11 +54,17 @@ export function SettingsScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
+      {/* flex-wrap + min-w-0, the same idiom as the privacy row below: at the
+          browser's 200% font size on a 375px phone this row measured 388px
+          wide in CI (the `text-xl` heading is rem-based and doubles), pushing
+          the whole screen sideways. Letting the row break and the heading
+          shrink costs nothing at normal size and is the v29 fix for exactly
+          this shape. */}
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">SETTINGS</h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">SETTINGS</h1>
       </div>
 
       <div className="p-6 max-w-4xl mx-auto">

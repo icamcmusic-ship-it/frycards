@@ -580,14 +580,21 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   if (!leader) {
     return (
       <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-        <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
+        {/* flex-wrap + min-w-0 for the same reason SettingsScreen's header
+            has them: the shared MetaHeader carries both, and every header that
+            hand-rolls the shape instead has to. "CHOOSE YOUR LEADER" beside a
+            button, at the browser's 200% font size on a phone, is exactly the
+            row that pushes a screen sideways. */}
+        <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
           {/* Routed through handleBack, not onDone directly — reaching this
               step with a dirty draft (e.g. CHANGE LEADER on an edited deck,
               or a just-imported code) must still get the discard confirm. */}
           <PopButton onClick={handleBack} color="yellow">
             &lt; BACK
           </PopButton>
-          <h1 className="heading-font text-xl text-[var(--c-yellow)]">CHOOSE YOUR LEADER</h1>
+          <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">
+            CHOOSE YOUR LEADER
+          </h1>
         </div>
         <div className="p-6 flex flex-wrap gap-5 justify-center">
           {ownedLeaders.map((l) => {

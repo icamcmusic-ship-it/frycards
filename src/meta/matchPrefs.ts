@@ -142,10 +142,14 @@ export function saveHandSort(id: HandSort): void {
  * finding 2.4 asked for: a player should not have to change an OS-level
  * setting to calm one game's board.
  */
+// Blurbs kept SHORT on purpose: each renders inside one PopButton, and a
+// button's intrinsic width floors at its longest word — at the browser's 200%
+// font size on a 375px phone, "accessibility" alone was wider than the rungs
+// beside it. The narration-speed ladder above is the length to match.
 export const MOTION_MODES = [
-  { id: 'system', label: 'SYSTEM', blurb: 'Follow your device accessibility setting' },
-  { id: 'full', label: 'FULL', blurb: 'Every animation, always' },
-  { id: 'reduced', label: 'REDUCED', blurb: 'Calm the board and the card effects' },
+  { id: 'system', label: 'SYSTEM', blurb: 'Match your device' },
+  { id: 'full', label: 'FULL', blurb: 'Every animation' },
+  { id: 'reduced', label: 'REDUCED', blurb: 'Calm the board' },
 ] as const;
 
 export type MotionMode = (typeof MOTION_MODES)[number]['id'];
