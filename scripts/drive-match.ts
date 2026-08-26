@@ -72,7 +72,17 @@ const STUDY_EVERY = Number(process.env.STUDY_EVERY ?? 2);
  * line is just closer.
  */
 const WIN_EVERY = Number(process.env.WIN_EVERY ?? 3);
-const WIN_VIT = Number(process.env.WIN_VIT ?? 3);
+/**
+ * v31: 3 -> 1. The comment on `WIN_MY_VIT` below already records that the
+ * handicap converted "anywhere from 1-in-3 winnable matches to 0-in-3", and
+ * the guard at the bottom of this file correctly reports a run that converted
+ * none. That was tolerable while this harness ran by hand; it is not, now that
+ * CI gates on it — a gate that fails on a coin flip teaches everyone to ignore
+ * it, which is the same failure class as a gate that can never fail. A CPU on
+ * 1 Vitality converts on essentially any connected attack, and nothing about
+ * how either side plays changes.
+ */
+const WIN_VIT = Number(process.env.WIN_VIT ?? 1);
 /**
  * The HUMAN's opening Vitality on a winnable match (v29). 0 leaves it alone.
  *
