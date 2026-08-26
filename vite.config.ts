@@ -30,6 +30,19 @@ export default defineConfig(() => {
         },
       },
     },
+    test: {
+      // Finding (Robustness): 480 tests, all pure logic, zero DOM — ~20,000
+      // lines of React were covered only by Playwright geometry sweeps that
+      // check for overflow and console errors, not behaviour. A shed-picker
+      // showing the wrong cards, a target selector picking the wrong unit or a
+      // reward screen rendering a stale value were all uncatchable.
+      //
+      // Per-file environment: the engine/AI suites stay in the default (fast)
+      // node environment; each `.test.tsx` opts into jsdom with a
+      // `@vitest-environment jsdom` docblock, so only the DOM suites pay for
+      // it.
+      environment: 'node',
+    },
     server: {
       // HMR/file watching can be disabled via DISABLE_HMR to save CPU in
       // agent-driven editing sessions.
