@@ -66,6 +66,7 @@
  * `verify:pool` does for the catalog.
  */
 import { chromium } from 'playwright';
+import { leftTheApp } from './lib/left-the-app';
 
 const BASE = `${process.env.AUDIT_BASE ?? 'http://localhost:3000'}/meta-preview.html`;
 const CLICK_CAP = Number(process.env.CLICK_CAP ?? 40);
@@ -534,6 +535,28 @@ async function check(screen: string, width: number, path: number[] = [], expect 
       ? screen
       : `${screen}[${path.map((n, i) => `#${n} "${labels[i]}"`).join(' → ')}]`;
 
+  // v31: a control that NAVIGATES OFF-SITE is not a finding — and none of the
+  // checks below mean anything once the document is somebody else's.
+  //
+  // `SIGN IN WITH DISCORD` starts a full-page OAuth redirect. Click it with
+  // egress and the document is discord.com by the time the body is read:
+  // `body text length 0`, the most serious thing this harness reports, twice,
+  // on a control working exactly as designed — plus whatever overflow, tiny
+  // targets and console errors discord.com happens to have, all filed against
+  // Fry Cards. It never surfaced locally because a sandbox with no egress
+  // leaves the app page in place, so the harness passed everywhere it had ever
+  // been run by hand and failed the first time CI (which HAS egress) ran it.
+  //
+  // The lesson this file keeps relearning: an instrument that cannot tell "the
+  // screen broke" from "the screen is no longer the thing I was measuring" is
+  // measuring neither. Leaving is reported by name and not gated, so a state
+  // that leaves UNEXPECTEDLY is still visible in that line.
+  if (leftTheApp(page.url(), BASE)) {
+    navigatedAway.set(where, page.url());
+    await ctx.close();
+    return { done: false, count: settled, after: settled };
+  }
+
   const overflow = await page
     .evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
@@ -695,6 +718,9 @@ async function check(screen: string, width: number, path: number[] = [], expect 
   await ctx.close();
   return { done: false, count: settled, after };
 }
+
+/** States whose click walked the browser off the app, by where -> final URL. */
+const navigatedAway = new Map<string, string>();
 
 /** Run totals for the 1.4.4 measurement, printed with the summary. */
 const textScaleTotals = { responded: 0, leaves: 0 };
@@ -1226,6 +1252,14 @@ if (exemptTotal > 0) {
     `\ntap targets: ${exemptTotal} inline exemption(s) across ${inlineExempt.size} state(s) ` +
       `(WCAG 2.5.8 inline rule; most in ${worst.map(([w, n]) => `${w} ${n}`).join(', ')})`,
   );
+}
+if (navigatedAway.size > 0) {
+  console.log(
+    `\nleft the app (reported, NOT gated): ${navigatedAway.size} state(s) navigated off the ` +
+      `preview page — a control that goes somewhere else on purpose, not a blank render. ` +
+      `A state listed here that you did NOT expect to leave is the finding:`,
+  );
+  for (const [w, url] of navigatedAway) console.log(`  ${w} -> ${url.slice(0, 120)}`);
 }
 if (TEXT_SCALE > 0 && textScaleTotals.leaves > 0) {
   const pct = Math.round((textScaleTotals.responded / textScaleTotals.leaves) * 100);

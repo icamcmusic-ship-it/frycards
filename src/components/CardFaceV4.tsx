@@ -364,7 +364,21 @@ ensurePremiumStyles();
  * light-traces (cyan clockwise, violet counter-clockwise), and faceted gem
  * ornaments at the side midpoints. Non-uniform viewBox scaling is fine —
  * everything drawn is decorative line-work meant to hug the card edges. */
-function UltraFiligree({ size }: { size: CardSize }) {
+/**
+ * v31 (finding 2.2): the board holds the GameState object in useState, mutates
+ * it in place and forces renders with a version counter, so EVERY essence tap
+ * and hover re-renders the whole tree — including this SVG/gradient work.
+ *
+ * The pure, prop-stable leaves below are memoised on that basis. The larger
+ * memoisation the finding asks for (BoardUnit / LocationTile / CardFace /
+ * LeaderLane) cannot be done safely first: those take the mutated GameState
+ * object, whose identity never changes, and fresh `onClick` closures per
+ * render — so a default comparator would render stale cards and a custom one
+ * would need a hand-written field hash per component. That is the same work
+ * the reducer refactor (PVP_DESIGN) does properly, and it is why finding 2.8
+ * calls the GameV4 extraction a prerequisite for both.
+ */
+function UltraFiligreeBase({ size }: { size: CardSize }) {
   // v4.22: was a plain `absolute inset-0` — flush with the card's padding
   // edge (inside the outer border), not its true outer edge, so the whole
   // hand-drawn frame sat visibly inset from the real border. Negative-inset
@@ -405,12 +419,13 @@ function UltraFiligree({ size }: { size: CardSize }) {
     </svg>
   );
 }
+const UltraFiligree = React.memo(UltraFiligreeBase);
 
 /** Inline-SVG sigil for Mythic "Void Eclipse" (full tier only): an eclipse
  * disc with a thin corona ring at the top-center of the frame plus beveled
  * corner shards — unique frame geometry no other rarity has. Pulses gently
  * via .my-crest. */
-function MythicCrest() {
+function MythicCrestBase() {
   return (
     <svg
       aria-hidden
@@ -446,6 +461,7 @@ function MythicCrest() {
     </svg>
   );
 }
+const MythicCrest = React.memo(MythicCrestBase);
 
 /** Border width (px) of each tier's outer card frame — see `TIER[size].
  * outerBorder` (border / border-2 / border-[3px] / border-4). An absolutely-
@@ -1331,7 +1347,7 @@ function isVideoSrc(src: string): boolean {
 }
 
 /** Card art with a graceful fallback if the image 404s or never loads. */
-function CardArt({
+function CardArtBase({
   def,
   onLoaded,
   cover,
@@ -1385,6 +1401,7 @@ function CardArt({
     />
   );
 }
+const CardArt = React.memo(CardArtBase);
 
 /** The fixed pixel sizes for `CardFace`'s `size` prop — exported so any
  * wrapper that needs to reserve exact space for a card can read the real

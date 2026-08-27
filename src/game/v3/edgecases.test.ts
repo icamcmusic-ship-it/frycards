@@ -208,7 +208,7 @@ describe('declareGuards rejects illegal assignments', () => {
   test('a failed declareGuards leaves the previous assignment untouched', () => {
     const s = game();
     const a = summonUnit(s, 'P1', VANILLA);
-    const g = summonUnit(s, 'P2', VANILLA);
+    summonUnit(s, 'P2', VANILLA);
     summonUnit(s, 'P2', VANILLA);
     s.phase = 'Clash';
     declareAttackers(s, [a.iid]);

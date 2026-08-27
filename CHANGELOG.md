@@ -9,6 +9,165 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v31.0 — The pass where the gates were wired to something
+
+The report this pass answers opens with the CI finding, and it is the right
+place to start: **`scripts/simulate-v5.ts` contained no `process.exit` call
+anywhere.** It collected engine invariant violations into an array, sliced to
+50, wrote them to JSON, printed them — and always exited 0. CI ran it at 20
+games/pairing across 24 decks: roughly 11,000 games, by far the most expensive
+step in the pipeline, and structurally incapable of failing. Meanwhile the
+three scripts that DO exit non-zero on a finding — `audit:screens`,
+`drive:match`, `verify:pool` — were invoked by CI exactly never. Every
+tap-target fix, reflow fix, focus-trap fix and WCAG pass from v28-v30 was
+protected by a harness that only ran when somebody remembered.
+
+The sim gates now, at 4 games/pairing rather than 20 (invariant regressions do
+not need 11,000 games; balance passes are run by hand at higher counts), and
+the browser harnesses have their own CI job with Chromium and a dev server.
+Net pipeline time goes down.
+
+**`deploy-pages.yml` did not depend on `ci.yml`.** Both triggered on push to
+main with no `needs:` and no `workflow_run`, so a commit that failed typecheck,
+lint, format or the entire test suite deployed to production in parallel with
+CI going red. Deploy now runs on `workflow_run: CI completed`, requires
+`conclusion == success`, and checks out the exact SHA CI passed on rather than
+whatever is at the head of main by the time the job starts.
+
+**Two permanently-green canaries were removed, one of them replaced.**
+`cpuDecisionTaxonomy.guard.divergenceRate` read 0.0% across 18,813
+opportunities, and would have forever: the shadow check asked "was a
+kill-and-survive block available and unused?", which is the case `ai.ts`'s
+`chooseGuards` scoring function ranks first, so the audit was a strict subset
+of the policy it was auditing. It is now an exhaustive search over every legal
+assignment of blockers to attackers, scored by its own value function, fed by a
+new `onGuardDecision` telemetry hook that hands the harness the live board at
+the moment the decision is made. A greedy per-attacker policy loses to a global
+assignment, so the check can disagree — and does: 36.4% on a smoke run.
+`lapses.missedLethal` (0 across 2,208 games) was deleted rather than rebuilt:
+it tested the board AFTER the turn, where every attacker is exhausted and its
+own readiness precondition is false, against a lethal condition the CPU already
+takes unconditionally. A permanently-green light is worse than no light.
+
+**The engine is now as pure as the PvP spike assumes.** Instance ids came from
+a module-global counter, so two processes replaying identical actions from an
+identical seed produced different iids — and every action in `PVP_DESIGN.md`'s
+proposed reducer references iids. That was a silent desync waiting to happen
+and it blocked deterministic replay outright; the counter is a field on
+`GameState` now. `export const telemetry` was a shared singleton hook registry,
+which would have cross-contaminated two concurrent matches in one Edge Function
+instance the moment PvP landed; it moves onto `GameState` via
+`GameOptions.telemetry`. Both were cheap now and expensive later. `createGame`
+also records the seed it ran on, so a player who hits a bug in a real match has
+something reproducible to attach — the seed is printed on the game-over screen
+and written to a local match history.
+
+**The economy was client-asserted.** The match ran client-side and the client
+told the server it won; the idempotency receipt stopped the same match being
+paid twice and did nothing against a loop rolling fresh UUIDs with
+`p_won: true`, with the publishable key shipping in the bundle. Marketplace,
+Player Shops, Grading, the Battle Pass, achievements and missions are all
+denominated in that currency, so any economy tuning done before this was tuning
+a number nobody had to earn. `begin_match()` now mints the match id server-side
+and timestamps it; `record_match_result` claims the ticket atomically and
+refuses one that is too young (<45s), stale (>6h), already spent, or not the
+caller's, with per-hour minting and per-day payout ceilings on top. Throughput
+is bounded by wall clock per account rather than by loop speed. The real close
+is still server-authoritative matches — this is the half that does not need an
+engine on the server, and it is the strongest argument for the PvP spike.
+`deleteDeck`'s RLS policy was checked and is correct.
+
+**The sim did not sample the format.** `randomArchetype` drafted only 54.5% of
+the 288-card non-Leader pool across 2,208 games, and the unseen half included
+cards flagged UNDER FLOOR — so every balance conclusion inherited a 45% blind
+spot. Widening the score jitter and rolling per-card copy counts (rather than
+always taking the maximum legal copies, which left a 60-card deck holding ~15
+distinct cards) takes coverage to **79.2%**. This is the change every other
+finding in section 3 was waiting on, which is why no card or Leader number was
+touched this pass: the instrument was fixed first, and the re-baseline runs
+against it.
+
+**Keyword telemetry.** `Warded` reported `activations: 0` while showing a +4.8
+normalized carrier delta, because target denial had no hook at all; it has one
+now, fired when a ward actually pushes an effect off the unit it would have
+hit. `Commander` reported `archetypeNormalizedDelta: 0` with an empty
+`byCostBand: {}` across 2,019 carrier games — two separate bugs, not a real
+zero: Leader keywords were bucketed only from the played-card list (they now
+have a `leader` band), and a cohort keyed on the Leader makes a Leader
+keyword's carrier win rate identical to its own baseline by construction (the
+delta reports `null`, "not measurable", rather than 0). Keyword rows sitting on
+fewer than five pool carriers are split out of the headline table entirely —
+they measure one specific card's win rate with extra steps, and the docs
+already apply that discipline to Leader numbers.
+
+**Reduced motion was half-implemented.** The CSS half was meticulous — two
+`prefers-reduced-motion` blocks covering foil sweeps, mythic frames, ultra
+sparkles, alt-art holo and the serialized spin. The JS half did not exist:
+motion is used at 10 sites in `GameV4.tsx` and 13 in `CardFaceV4.tsx`, and
+Framer-style motion does not honour the OS setting without a `MotionConfig`. So
+the decorative card bling stopped correctly while the match board — the screen
+a player spends the most time on — animated at full tilt. One `<MotionConfig
+reducedMotion="user">` at the App root closes it, and Settings gains an in-app
+override on top, because asking a player to change an OS-level setting to calm
+one game's board is not an answer.
+
+**1.33 MB in one chunk.** No `React.lazy`, no `Suspense`, no dynamic import, no
+`manualChunks` anywhere: all 17 screens, the 5,812-line board, the 3D showroom
+and the 3,196-line Player Shops screen were downloaded and parsed before the
+login screen could paint. Invisible to every existing harness, because they all
+measure geometry rather than time. Route-level `lazy()` plus vendor chunks take
+the entry from **1,331 kB to 241 kB** (gzip 385 -> 71).
+
+**The first component tests in the repo.** 480 tests, all pure logic, zero DOM:
+no jsdom, no testing-library, no `.test.tsx`, and roughly 20,000 lines of React
+covered only by Playwright sweeps that check for overflow and console errors —
+not behaviour. A shed-picker showing the wrong cards, a target selector picking
+the wrong unit, a reward screen rendering a stale value: none of them catchable.
+32 new tests across four suites (512 total), starting with `CardFace` (live
+stats vs printed, keyboard activation, the `aria-disabled` contract for
+non-interactive cards), the new motion wiring, the match history, and the deck
+analysis helpers.
+
+Also: `strictNullChecks` enabled on `src/game/**` and gated in CI
+(`npm run typecheck:game`) — the engine was two real errors away from clean, and
+the root config has no `strict` of any kind; `npm audit fix` (3 high-severity
+transitive advisories to 0); the genuine lint findings cleared (an
+`exhaustive-deps` miss in `GameV4`, an unused variable, an unused import, both
+stale `eslint-disable` directives); ~90 lines of dead CSS from the dice
+prototype deleted (`die-rolling`, `banner-pop`, `action-toast` — `foil-sweep`
+and `serialized-spin` are NOT dead, they are keyframe names referenced from
+`.foil-shimmer::after` and `.serialized-frame::before` in the same file); a
+second `aria-live` region on the board reporting the player's own turn, phase,
+both vitalities, essence and board counts, where v30's narration region only
+covered the CPU's; and the Deck Builder gains a producible-colour check and a
+seeded test hand.
+
+**What this pass deliberately did not do**, each a decision rather than an
+omission:
+
+- **No card or Leader number was touched.** Section 3 of the report is one
+  draw, the standing v28 rule is two, and — more decisively — the sampling fix
+  above re-baselines the whole pool. Acting on 3.1 (first player at 43.3%
+  overall, 40.6% in the clean seat-swap arm) or 3.2 (Mer-King first in both
+  arms) before re-running against a widened instrument would be tuning against
+  the old blind spot. 3.1 in particular wants its own isolated pass: it is a
+  rules change, not a card change.
+- **No mid-match resume.** Serialising a live `GameState` cannot restore
+  mulberry32's internal position, so a "resume" would silently diverge from the
+  match the player left. The honest route is the action log the reducer
+  refactor introduces — seed plus ordered actions replays to any point, and the
+  same log IS the replay viewer. The seed and the match record land now so that
+  work has something to build on.
+- **`BoardUnit` / `LocationTile` / `CardFace` are not memoised.** They take the
+  mutated `GameState` (whose identity never changes) and fresh `onClick`
+  closures per render, so a default comparator would render stale cards and a
+  custom one needs a hand-written field hash per component — which is the work
+  the reducer refactor does properly, and why the report's own 2.8 calls the
+  `GameV4` extraction a prerequisite. The prop-stable SVG leaves are memoised;
+  the rest waits for the extraction.
+- **No audio, no i18n, no account management, no `GameV4` extraction.** Each is
+  a pass of its own, not a line item in a robustness sweep.
+
 ### v30.0 — The pass where the keyboard was pressed for the first time
 
 Five-part pass in the brief's order: a meta-screen bug hunt, a gameplay stress

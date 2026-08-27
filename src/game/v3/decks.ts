@@ -49,6 +49,23 @@ export interface Archetype {
    * top slice. buildDeck is deterministic for a given archetype (same seed =
    * same deck); omitted = no jitter (legacy handcrafted archetypes). */
   seed?: number;
+  /**
+   * Amplitude of the per-deck score jitter (v31). The default of 6 was small
+   * relative to the score spread, so many random decks still converged on the
+   * same greedy top slice: a 2,208-game sim drafted only 54.5% of the
+   * non-Leader pool, which means every balance conclusion it drew inherited a
+   * 45% blind spot. Raising it widens which cards can make a cut without
+   * abandoning archetype coherence.
+   */
+  jitter?: number;
+  /**
+   * Per-card copy ceiling for this build (v31). The builder used to take the
+   * maximum legal copies of everything, so a 60-card deck held ~15 distinct
+   * cards. Rolling 1..copyCeiling copies instead roughly doubles the distinct
+   * cards per deck, which is the other half of the coverage problem. Rarity
+   * caps and the rulebook's 4-copy max still apply on top.
+   */
+  copyCeiling?: number;
 }
 
 /** Color-identity-filtered pool for a Leader — every generated deck must be
@@ -99,9 +116,10 @@ function take(
 ): [string, number][] {
   // Seeded jitter on top of the archetype score: rankings stay coherent but
   // vary per deck, so the full pool gets exercised across many random decks.
+  const jitter = arch.jitter ?? 6;
   const ranked = pool
     .filter((c) => !used.has(c.id))
-    .map((c) => ({ c, s: score(c, arch) + rng() * 6 }))
+    .map((c) => ({ c, s: score(c, arch) + rng() * jitter }))
     .sort((a, b) => b.s - a.s)
     .map((x) => x.c);
   const out: [string, number][] = [];
@@ -113,7 +131,13 @@ function take(
     const b = curveBucket(c);
     const total = bucketCounts[0] + bucketCounts[1] + bucketCounts[2];
     if (total >= 8 && bucketCounts[b] / DECK_SIZE >= CURVE_TARGETS[b] + 0.1) continue;
-    const copies = Math.min(maxCopiesForRarity(c.rarity), MAX_COPIES, remaining);
+    const ceiling = arch.copyCeiling ?? MAX_COPIES;
+    const copies = Math.min(
+      maxCopiesForRarity(c.rarity),
+      MAX_COPIES,
+      remaining,
+      1 + Math.floor(rng() * ceiling),
+    );
     out.push([c.id, copies]);
     used.add(c.id);
     bucketCounts[b] += copies;
@@ -224,5 +248,10 @@ export function randomArchetype(rng: () => number = Math.random): Archetype {
     spells,
     sanctums,
     seed: Math.floor(rng() * 0x7fffffff),
+    // v31 (report finding 3.11): widen the sampling. See `Archetype.jitter`
+    // and `Archetype.copyCeiling` — this is the change that lets the sim see
+    // the format rather than a coherent 55% slice of it.
+    jitter: 14,
+    copyCeiling: 2 + Math.floor(rng() * 3),
   };
 }

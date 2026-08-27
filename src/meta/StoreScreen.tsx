@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -1156,7 +1156,6 @@ function BountiesTab({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
 
   const soldToday = bounties.filter((b) => b.already_sold).length;

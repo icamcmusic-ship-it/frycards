@@ -1,0 +1,21 @@
+{
+  // Finding 1.11: the root tsconfig has no `strict`, no `strictNullChecks`, no
+  // `noUncheckedIndexedAccess` — so `npm run typecheck` passing means
+  // considerably less than it looks in a 60k-line codebase whose rules engine
+  // is full of `findUnit(...)` lookups that return `undefined`.
+  //
+  // Enabling `strict` repo-wide is a multi-day migration. Enabling
+  // `strictNullChecks` on `src/game/**` is not: the engine, the AI and the
+  // keyword tables were already clean under it. This config pins that, and
+  // `npm run typecheck:game` runs it in CI so the engine cannot drift back.
+  //
+  // The natural next steps, in cost order: `strictNullChecks` on `src/lib/**`,
+  // then `noUncheckedIndexedAccess` here, then the screens.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strictNullChecks": true,
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/game/**/*.ts", "src/svg.d.ts"]
+}

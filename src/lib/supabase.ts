@@ -401,11 +401,31 @@ export async function setShowcaseCards(cardIds: string[]): Promise<string | null
   return rpcError(error);
 }
 
+/**
+ * Mint a server-side ticket for a match that is starting NOW, and hold onto
+ * the id it returns — `recordMatchResult` will not pay out without it.
+ *
+ * The match id used to be a client-generated UUID, which made the whole
+ * economy client-asserted: the idempotency receipt stopped one match being
+ * paid twice, but a loop rolling fresh UUIDs with `won: true` was free money,
+ * and the publishable key ships in the bundle. The server now issues the id,
+ * timestamps it, and refuses to redeem one that is too young, too old,
+ * already spent, or not the caller's. Reward throughput is bounded by wall
+ * clock per account rather than by loop speed. The real close is
+ * server-authoritative matches (the PvP spike); this is the half of it that
+ * does not need an engine on the server.
+ */
+export async function beginMatch(): Promise<{ matchId: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('begin_match');
+  const id = (data as { match_id?: string } | null)?.match_id ?? null;
+  return { matchId: id, error: rpcError(error) };
+}
+
 export async function recordMatchResult(
   won: boolean,
-  /** Client-generated idempotency key (one UUID per match). The server keeps
-   * a receipt per id, so retrying after a lost reply can never double-pay
-   * the same match — the retry returns null data instead. */
+  /** The server-minted ticket from `beginMatch()`. Retries reuse it: the
+   * ticket is claimed atomically, so a retry after a lost reply returns null
+   * data rather than paying twice. Omitting it is now an error server-side. */
   matchId?: string,
 ): Promise<{ data: MatchResult | null; error: string | null }> {
   const { data, error } = await supabase.rpc('record_match_result', {

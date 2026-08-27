@@ -117,7 +117,6 @@ export function NewsCenterScreen({
     };
     // `load` is a stable closure over refs/setters recreated each render;
     // re-subscribing on every render would churn the socket.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isCreator = profile?.role === 'creator';

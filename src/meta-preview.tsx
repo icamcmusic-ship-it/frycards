@@ -361,6 +361,8 @@ createRoot(document.getElementById('root')!).render(
       <SettingsScreen
         currentTheme="classic"
         onThemeChange={() => undefined}
+        motionMode="system"
+        onMotionModeChange={() => undefined}
         onBack={() => undefined}
       />
     ) : screen === 'menu' ? (

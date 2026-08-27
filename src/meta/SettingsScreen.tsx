@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { Palette, Sparkles, Timer } from 'lucide-react';
+import { Palette, Sparkles, Timer, Waves } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
 import { setHideSerializedAnnouncements } from '../lib/supabase';
-import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed } from './matchPrefs';
+import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed, MOTION_MODES, MotionMode } from './matchPrefs';
 
 export function SettingsScreen({
   currentTheme,
   onThemeChange,
+  motionMode,
+  onMotionModeChange,
   onBack,
 }: {
   currentTheme: ThemeName;
   onThemeChange: (theme: ThemeName) => void;
+  motionMode: MotionMode;
+  onMotionModeChange: (mode: MotionMode) => void;
   onBack: () => void;
 }) {
   const themeList = Object.values(THEMES);
@@ -50,11 +54,17 @@ export function SettingsScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
+      {/* flex-wrap + min-w-0, the same idiom as the privacy row below: at the
+          browser's 200% font size on a 375px phone this row measured 388px
+          wide in CI (the `text-xl` heading is rem-based and doubles), pushing
+          the whole screen sideways. Letting the row break and the heading
+          shrink costs nothing at normal size and is the v29 fix for exactly
+          this shape. */}
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
-        <h1 className="heading-font text-xl text-[var(--c-yellow)]">SETTINGS</h1>
+        <h1 className="heading-font text-xl text-[var(--c-yellow)] min-w-0">SETTINGS</h1>
       </div>
 
       <div className="p-6 max-w-4xl mx-auto">
@@ -132,6 +142,33 @@ export function SettingsScreen({
                   onClick={() => pickSpeed(i)}
                 >
                   {s.label} — {s.blurb}
+                </PopButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Motion (findings 1.8 / 2.4) */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">MOTION</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How much the board and the card effects move. SYSTEM follows your device's
+              accessibility setting; the other two override it here, so you don't have to change an
+              OS-level preference to calm one game down. Saved locally, so guests keep it too.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MOTION_MODES.map((m) => (
+                <PopButton
+                  key={m.id}
+                  color={motionMode === m.id ? 'black' : 'yellow'}
+                  ariaPressed={motionMode === m.id}
+                  onClick={() => onMotionModeChange(m.id)}
+                >
+                  {m.label} — {m.blurb}
                 </PopButton>
               ))}
             </div>

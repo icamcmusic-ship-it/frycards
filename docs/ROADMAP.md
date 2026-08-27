@@ -198,7 +198,12 @@ Everything here has a started implementation and a visible seam.
   first, same contract as `audit:cardface`): every screen in `meta-preview.tsx`
   at 375px and 1280px, then each screen's visible controls clicked one at a
   time on a fresh load, checking for overflow, a thrown render and a real
-  console error. It exits non-zero on any finding, so it can gate a release.
+  console error. It exits non-zero on any finding, so it can gate a release —
+  and since v31 it does: `audit:screens` and `drive:match` run as their own CI
+  job (Chromium plus a dev server), and `verify:pool` joined the checks job.
+  For four releases this sentence said "can" while CI invoked none of the
+  three, so every fix they protect held only when somebody remembered to run
+  them locally.
 
   **v13 closed the last hole in it:** the harness always mounted a `player`
   profile, so the Creator-only panels — the submission review queue, its
