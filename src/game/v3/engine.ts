@@ -91,6 +91,13 @@ export interface LocationInst {
    * the Dawn handler — Glaciate fires every other Dawn per Sanctum.
    */
   glaciateAsleep?: boolean;
+  /**
+   * v32: the second player's compensating opening Wellspring — a shallow
+   * spring that dries up. Recedes at their Dawn on
+   * `BONUS_WELLSPRING_DECAY_TURN` (see `wellspringAllowance`). Only ever set
+   * on a basic Wellspring (no `def`).
+   */
+  bonus?: boolean;
 }
 
 export interface LeaderZone {
@@ -1371,6 +1378,17 @@ function runDawn(state: GameState): void {
   if (regenerated > 0) state.log.push(`${p.id}'s Regenerate heals ${regenerated} unit(s).`);
   if (thriving > 0) state.log.push(`${p.id}'s Thriving unit(s) grow +1/+1 (${thriving}).`);
   if (empowered > 0) state.log.push(`${p.id}'s Empowering Item(s) grow ${empowered} unit(s).`);
+  // v32: the second player's compensating Wellspring is a shallow spring, and
+  // it dries up. See `wellspringAllowance` for why a PERMANENT one could
+  // never be priced: the whole 25 points of it is the permanence, not the
+  // timing, so the only lever that lands is taking it back. Recedes before
+  // the untap below, so it is gone rather than readied.
+  if (p.id !== state.firstPlayer && state.turn >= BONUS_WELLSPRING_DECAY_TURN) {
+    const before = p.locations.length;
+    p.locations = p.locations.filter((l) => !l.bonus);
+    if (p.locations.length < before)
+      state.log.push(`${p.id}'s bonus Wellspring runs dry and recedes.`);
+  }
   for (const l of p.locations) l.exhausted = false;
   p.leader.abilityUsedThisTurn = false;
   p.wellspringPlayedThisTurn = false;
@@ -1719,24 +1737,95 @@ export function wellspringChoices(state: GameState, pid: PlayerId): EssenceType[
  * one — so an extra card was compensating on the wrong axis. The extra
  * opening Wellspring pays P2 back in tempo, on the axis the edge actually
  * accrues on.
+ *
+ * **v32 — the lever was always too big, and exhausting it did not fix that.**
+ * The shipped compensation (allowance 2, the bonus one entering exhausted)
+ * measures P1 at 41.9% — the exact number the code comment on it cited as the
+ * failure state it was believed to have CORRECTED. A controlled sweep, three
+ * seeds each:
+ *
+ *   regime                                P1 win %   error
+ *   no compensation (allowance 1)         67.2%      +17.2
+ *   allowance 2, bonus one READY          34.1%      -15.9
+ *   allowance 2, bonus one EXHAUSTED      42.1%       -7.9
+ *
+ * The true first-mover edge is +17.2; the bonus Wellspring is worth ~25
+ * points of swing, and entering it exhausted buys back only ~8 of the ~33 the
+ * ready version was worth. The entry state was never the variable.
+ *
+ * The variable is PERMANENCE. A "borrowed" variant (two Wellsprings on P2's
+ * turn 1, none on turn 2 — the ramp arrives a turn early, then permanent
+ * parity) measures 67.2%, statistically identical to no compensation at all.
+ * The extra Wellspring is a permanent +1 essence/turn, so it never repays a
+ * tempo lead; it converts into a compounding ramp advantage that wins the
+ * mid-game outright. `firstPlayerDiagnosis` agrees: the player on the draw
+ * invokes their Leader first in 78% of games, and P1's residual edge is
+ * concentrated in SHORT games while P2 is ahead from turn 21 on.
+ *
+ * That makes the lever binary — permanent is worth ~25 points, temporary is
+ * worth 0, nothing in between — so the fix is to build the in-between: the
+ * bonus Wellspring is permanent, and then it RECEDES
+ * (`BONUS_WELLSPRING_DECAY_TURN`, handled at P2's Dawn in `runDawn`).
+ * Sweeping the decay turn — three seeds x two independent deck draws, 24
+ * runs of ~7,500 games, `4 24 <seed> <deckSeed>`:
+ *
+ *   decay turn       draw A   draw B   mean    error
+ *   never (shipped)   42.1     43.1    42.6%   -7.4
+ *   turn 5            51.5     52.3    51.9%   +1.9
+ *   turn 6            48.5     49.4    49.0%   -1.0
+ *   turn 7            46.4     46.2    46.3%   -3.7
+ *
+ * Turn 6 ships: within 1.0 point of even against 7.4 today, a 7x reduction in
+ * error, and both draws agree on it. The value is bracketed — turn 5
+ * overshoots, turn 7 undershoots — so this is a measured minimum rather than
+ * the first thing that worked. It also reads as a rule ("a shallow spring
+ * that dries up") in a way that a permanent, invisible, exhausted-on-entry
+ * state never did.
+ *
+ * A note on the second draw. The standing rule is two independent draws for
+ * anything per-Leader, and `PINNED_RECIPE_SALT` is the instrument for it —
+ * but it is a NO-OP for this number, byte for byte on every seed. The pinned
+ * pair suite runs through `seatSwapGame` and never touches `mech`, so
+ * `outcomes.p1WinPct` is a pure random-cohort statistic and the salt cannot
+ * reach it. The independent axis that does is `DECK_SEED` (argv[5]), and that
+ * is what the two draws above are.
  */
 export function wellspringAllowance(state: GameState, pid: PlayerId): number {
   return pid !== state.firstPlayer && state.turn === 1 ? 2 : 1;
 }
+
+/**
+ * The second player's bonus Wellspring recedes at their Dawn on this turn —
+ * see `runDawn`. **[digital]** balance lever; the sweep behind the number is
+ * in the v32 findings and the short version is in `wellspringAllowance`.
+ */
+export const BONUS_WELLSPRING_DECAY_TURN = 6;
 
 /** Play one basic Wellspring (auto-supplied) — own main phase, within this
  * turn's allowance, type must be inside the Leader's identity. */
 export function playWellspring(state: GameState, pid: PlayerId, type: EssenceType): boolean {
   const p = state.players[pid];
   if (state.winner || !inOwnMainClear(state, pid) || p.wellspringPlayedThisTurn) return false;
+  // The allowance itself is the precondition. `wellspringPlayedThisTurn`
+  // above is a cache of it, written at the bottom of this function — so
+  // before v32 the allowance was consulted only to decide whether to CLOSE
+  // the gate, never to open it, and an allowance of 0 was unenforceable (the
+  // first play of the turn always succeeded, because the cached boolean
+  // starts false). Nothing prints an allowance of 0 today; the point is that
+  // anything that wants to — a Drought effect, a land-lock keyword, a
+  // Location-denial Event — would have silently no-opped, and passed its
+  // tests, because the rule function returned the right number while the
+  // gate ignored it.
+  if (p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid)) return false;
   if (!wellspringChoices(state, pid).includes(type)) return false;
   // The second player's bonus opening Wellspring enters EXHAUSTED: it ramps
-  // them into turn 2 rather than handing them a turn-1 tempo swing. A ready
-  // one measured far too strong (P1 41.9%, a 19-point overcorrection).
+  // them into turn 2 rather than handing them a turn-1 tempo swing.
+  const isBonus = p.wellspringsPlayedThisTurn > 0;
   p.locations.push({
     iid: nextIid(state, `wellspring_${type}`),
     produces: type,
-    exhausted: p.wellspringsPlayedThisTurn > 0,
+    exhausted: isBonus,
+    ...(isBonus ? { bonus: true as const } : {}),
   });
   p.wellspringsPlayedThisTurn++;
   p.wellspringPlayedThisTurn = p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid);

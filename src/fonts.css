@@ -1,0 +1,111 @@
+/*
+ * Self-hosted Montserrat + Space Grotesk, latin and latin-ext subsets only.
+ *
+ * These used to come from `@import url(https://fonts.googleapis.com/...)` at
+ * the top of `index.css`, which is the worst-case shape for a webfont. An
+ * `@import` inside a stylesheet serialises the entire chain ahead of first
+ * paint: fetch the app CSS, parse it, then DNS + TLS + fetch Google's CSS
+ * from a second origin, and only THEN discover the .woff2 URLs and fetch
+ * those from a THIRD origin. Two extra round-trips to two third parties
+ * before the first character can be painted, on every cold load. The
+ * cross-site cache that used to pay for that is gone — browsers have
+ * partitioned the HTTP cache per top-level site since 2020, so a visitor who
+ * loaded Montserrat on some other site downloads it again here regardless.
+ *
+ * Self-hosted, the files are same-origin, discovered in the first CSS parse,
+ * and content-hashed by Vite, so they cache immutably and can never go stale.
+ *
+ * Both families ship as VARIABLE fonts, which is why there are six files and
+ * not eighteen: Google serves one file per (family, style, subset) covering
+ * the whole weight axis, under a different URL per requested weight. The
+ * per-weight requests return byte-identical files (verified by checksum), so
+ * every weight the app uses — Montserrat 700/900, Space Grotesk 400/500/700 —
+ * is an instance of the single face declared below.
+ *
+ * Only the subsets the app renders are vendored; the cyrillic, cyrillic-ext
+ * and vietnamese faces Google serves alongside them are dropped. `unicode-
+ * range` means a browser rendering English never fetches latin-ext at all.
+ *
+ * `font-display: swap` is carried over from the Google CSS: text paints in
+ * the fallback immediately and swaps when the face lands.
+ *
+ * To refresh (a Google Fonts version bump, or a new family): re-fetch
+ * https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Space+Grotesk:wght@300..700&display=swap
+ * with a modern browser User-Agent (the UA is what selects woff2 over ttf),
+ * keep the `latin` and `latin-ext` blocks, and re-point their urls here.
+ */
+
+/* Montserrat italic, latin-ext */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/montserrat-italic-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* Montserrat italic, latin */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/montserrat-italic-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Montserrat normal, latin-ext */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/montserrat-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* Montserrat normal, latin */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/montserrat-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Space Grotesk normal, latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('./assets/fonts/space-grotesk-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* Space Grotesk normal, latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('./assets/fonts/space-grotesk-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

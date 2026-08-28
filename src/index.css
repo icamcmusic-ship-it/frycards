@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,900;1,900&family=Space+Grotesk:wght@400;500;700&display=swap');
+/* Self-hosted webfonts — see fonts.css for why this is not a Google @import. */
+@import './fonts.css';
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------

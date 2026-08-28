@@ -125,7 +125,8 @@
  *    flat abilityUsesPerGame by WHICH of a Leader's two abilities actually
  *    got picked and its win rate when used, keyed by the ability's own rules
  *    text — surfaces a kit where one ability is close to dead weight.
- *  - Guard-trade quality (guardTradeQuality / lapses.guardDiesForNothing): of
+ *  - Guard-trade quality (guardTradeQuality /
+ *    lapses.guardDiesForNothingDiscretionary): of
  *    every guard block actually assigned, whether it killed the attacker,
  *    traded with it, or died for nothing — a defender-side lapse signal
  *    distinct from the existing attacker-side venomousSuicide and the
@@ -175,7 +176,8 @@
  *    ai.ts's chooseGuards with whether its `mustSurvive` branch was active
  *    at the moment each guard was assigned, so guardDiesForNothing splits
  *    into guardDiesForNothingForced (a correct chump-block to survive
- *    lethal — not a lapse) and guardDiesForNothingDiscretionary (a real
+ *    lethal — not a lapse, and as of v32 the only form the `lapses` bag
+ *    carries it in) and guardDiesForNothingDiscretionary (a real
  *    defender-side blunder) instead of conflating the two.
  *
  * v6.7 additions (v6.6 balance-pass carry-forward items):
@@ -594,13 +596,22 @@ const lapses = {
   // producible colors — handIsKeepable (ai.ts) checks cost/type but not color,
   // so a "keepable" hand can still be functionally dead this game.
   keptColorDeadHand: 0,
-  // v6.4: a defender-assigned guard died without killing (or even scratching
-  // meaningfully — see guardOutcomes for the full breakdown) its attacker.
-  guardDiesForNothing: 0,
-  // v6.5: the mustSurvive-aware split of the above — only the discretionary
-  // half (mustSurvive was false at assignment) is a genuine CPU lapse; the
-  // forced half is a correct chump-block to survive lethal.
+  // v6.4/v6.5: a defender-assigned guard died without killing (or even
+  // scratching meaningfully — see guardOutcomes for the full breakdown) its
+  // attacker, split by whether chooseGuards had mustSurvive set at
+  // assignment. Only the DISCRETIONARY half is a lapse.
+  //
+  // v32: the combined `guardDiesForNothing` counter used to sit here too, and
+  // it was the largest number in this bag by an order of magnitude (12,778 on
+  // a 7,500-game run) while the lapse it supposedly named was 624 — 95% of it
+  // is forced chump-blocking, i.e. correct play. A lapse bag whose biggest
+  // entry is mostly not a lapse invites exactly the wrong conclusion, so the
+  // combined figure is gone from here; `guardTradeQuality` still reports it
+  // (as `guardDiesForNothingPct`) where the full breakdown gives it context.
   guardDiesForNothingDiscretionary: 0,
+  /** Context for the above, not a lapse: a correct chump-block to survive
+   * lethal. Kept beside it so the ratio is readable without cross-reference. */
+  guardDiesForNothingForced: 0,
   // --- v6.6 new reasoning-lapse categories -------------------------------
   /** A reaction card + the locations to pay for it were reserved through a
    * whole turn (skipping development) and the reaction window never cashed
@@ -1425,7 +1436,6 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
           else if (!attackerAlive && !guardAlive) guardOutcomes.mutualTrade++;
           else if (attackerAlive && !guardAlive) {
             guardOutcomes.guardDiesForNothing++;
-            lapses.guardDiesForNothing++;
             // v6.5: mustSurvive true at assignment = forced chump to survive
             // lethal (correct play, not a lapse); false = a discretionary
             // block that gained nothing (a genuine lapse). Default to
@@ -1433,8 +1443,10 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
             // assignment goes through the telemetry hook) rather than
             // inflating the discretionary/lapse count on a gap.
             const forced = guardMustSurvive[`${attackerIid}|${guardIid}`] ?? true;
-            if (forced) guardOutcomes.guardDiesForNothingForced++;
-            else {
+            if (forced) {
+              guardOutcomes.guardDiesForNothingForced++;
+              lapses.guardDiesForNothingForced++;
+            } else {
               guardOutcomes.guardDiesForNothingDiscretionary++;
               lapses.guardDiesForNothingDiscretionary++;
             }

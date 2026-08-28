@@ -155,11 +155,17 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   Full-Art up to 2, Alt-Art / Mythic 1.
 - Opening hand: **7 cards** for both players. **[digital]** the second player
   instead offsets the first-mover advantage on their opening turn, when they
-  may play **two** basic Wellsprings — the second one enters **exhausted**,
-  so it ramps them into turn 2 rather than handing them a turn-1 swing.
+  may play **two** basic Wellsprings. The second one is a **shallow spring**:
+  it enters **exhausted**, so it ramps them into turn 2 rather than handing
+  them a turn-1 swing, and it **runs dry at the start of their turn 6** — it
+  recedes, leaving them level on essence from then on.
   (Sims located the first-mover edge as a _tempo_ lead that decays in long
   games, so the previous 8th-card compensation was on the wrong axis and
-  measured worth under a point.)
+  measured worth under a point. A PERMANENT second Wellspring then
+  overcorrected just as badly in the other direction, for the same reason
+  read backwards: a permanent +1 essence/turn is a compounding ramp
+  advantage, not a tempo repayment. Draining it on turn 6 is what measures
+  even — see the v32 changelog entry for the sweep.)
 - **Mulligan** (rulebook §3): before the first turn you may shuffle your
   hand back into your deck and draw **one card fewer** — repeatable
   (7 → 6 → 5 → …). **[digital]** the CPU mulls once on a hand with no
@@ -170,10 +176,12 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 1. **Dawn Phase** — Recover all your exhausted permanents; Regenerate units
    heal; Sacred Locations, Archivist Sanctums and Resolute Leaders tick;
    Empowering Items grow their bonded unit; "at Dawn" triggers;
+   the second player's bonus Wellspring recedes on turn 6 (§3);
    Deal one card (the first player skips this on turn 1).
 2. **Main Phase I** — Invoke Units, Items, Events, Sanctums, or your
    Leader; play one basic Wellspring (once per turn — the second player gets
-   two on their opening turn, see §3).
+   two on their opening turn, and loses the second one at their turn-6 Dawn,
+   see §3).
 3. **Clash Phase** — Declare attackers (they exhaust unless Alert) →
    defender assigns guards → a priority round both players may act in (§6) →
    clash damage, simultaneous unless Quickstrike/Doublestrike changes the
