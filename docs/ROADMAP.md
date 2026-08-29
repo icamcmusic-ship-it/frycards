@@ -457,6 +457,66 @@ Everything here has a started implementation and a visible seam.
   `format`-on-save contract, or a CI step that pushes the reformat instead of
   failing on it. Cheap, and it retires a recurring class of red build.
 
+- **The 25 `react-hooks/set-state-in-effect` warnings are TWO problems, not
+  one, and the shared-hook fix only retires half of them.** The v32 audit read
+  them as a single `setLoading(true); setLoadErr(null); fetch()` pattern that
+  one `useAsync` helper would retire in a single edit. It is not. Roughly ten
+  of them are that shape — `ui.tsx`'s `CardMarketValuePanel`, `StoreScreen`'s
+  bounty load, most of `SocialScreen` — and a hook fits those cleanly. The
+  rest are DERIVED-STATE syncs, which is a different bug with a different
+  fix: `PlayerShopsScreen`'s `setSlotSpecs` from `tSize` and its guarantee
+  clamp, `LeaderPicker`, `SafeImage`. Those are React's actual "you might not
+  need an effect" case — the state should be computed during render or keyed
+  off the prop, and each one needs its own read. Ten of the twenty-five are in
+  `PlayerShopsScreen` alone.
+
+  Nothing here is a live defect: all 25 are warnings, and the screens work.
+  What makes it worth scheduling rather than ignoring is the failure mode —
+  React 19's compiler is tightening on this rule, and a minor bump that turns
+  27 warnings into 27 errors would land as a red build across thirteen product
+  screens at once, at whatever moment it happens to arrive. Do the ten
+  hook-shaped ones as one pass and the derived-state ones individually; do
+  **not** do it in the same pass as an engine or balance change.
+
+- **The Supabase client is on the first-paint critical path for guests who
+  never authenticate.** `supabase-*.js` is 208 kB raw / 54 kB gzip, the
+  second-largest chunk after `index`, and it is fetched on first load whether
+  or not the visitor ever signs in. Route-splitting is otherwise done well
+  here — every meta screen is its own chunk, the largest being
+  `PlayerShopsScreen` at 16 kB gzip — which is what makes this one stand out.
+
+  It is not a small change, and that is the item: `src/lib/supabase.ts` is
+  2,158 lines re-exported into 26 modules, so moving it behind the auth gate
+  means converting that whole surface to a dynamic import and making every
+  consumer tolerate its absence. That is an architecture pass with its own
+  test story, not a build-config tweak. Blocked on someone deciding the guest
+  path is worth it — which needs a number: what fraction of first loads never
+  authenticate?
+
+- **Three v32 sim signals recorded, none of them acted on.** Each is one
+  measurement short of being a lever, and the standing rule is not to spend a
+  lever against a one-pass-old instrument:
+
+  - **Essence waste is 26% of all essence generated** (`wastedEssencePerGame`
+    36.58 against `essenceSpentPerGame` 104.6), and `wastedEssenceWithPlay`
+    616 says only a small slice of it is CPU misplay. So it is structural —
+    colour screw, or a curve gap at the top end — but the report cannot say
+    which. Needs a per-colour breakdown of the waste counter before it means
+    anything.
+  - **A 22-point Leader spread on one draw** (Avatar of the Abyss 62.5% down
+    to Sentinel of the Nether Pit 40.5%). Deliberately not a finding: v28/v29
+    measured the pinned suite's Leader ranking at ρ = 0.417 across recipe
+    draws, so a single-draw ranking is not evidence. Run
+    `scripts/leader-rank-stability.ts` across ≥2 salts first. **Avatar is the
+    one to point it at** — it was also flagged one-signed positive in draw 2
+    of the v29 triangle, which is the only part of this spread with any
+    corroboration.
+  - **`turnLimitDraws` at 19 in ~7,560 games** (0.25%). Acceptable in
+    aggregate, but a non-zero draw rate means the turn cap binds sometimes,
+    and nobody knows whether those 19 are spread evenly or concentrated in
+    specific matchups. The report does not currently break them down by
+    pairing; it should.
+
 ## Next — the things players will notice
 
 Ordered by how much they change what it feels like to own and play the game.

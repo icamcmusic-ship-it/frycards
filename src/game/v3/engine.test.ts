@@ -7,6 +7,7 @@ import { describe, expect, test } from 'vitest';
 import { CardDef, LEADER_HP, MAX_HAND, charmSelfHeal } from './cards';
 import {
   BOND_TARGET_SELF,
+  BONUS_WELLSPRING_DECAY_TURN,
   DeckDef,
   GameState,
   activateLeaderAbility,
@@ -161,7 +162,8 @@ describe('wellsprings', () => {
   });
 
   // v6.6 first-mover compensation: the player who did NOT take the first
-  // turn gets a second opening Wellspring, and it arrives exhausted.
+  // turn gets a second opening Wellspring, and it arrives exhausted. v32
+  // added the other half of the rule — it recedes on turn 6; see below.
   test('second player gets two opening Wellsprings, the second exhausted', () => {
     // Needs real cards: the second player Deals on their opening Dawn, and an
     // empty deck would end the game there.
@@ -196,6 +198,71 @@ describe('wellsprings', () => {
     const s = game();
     s.turn = 2;
     expect(wellspringAllowance(s, 'P2')).toBe(1);
+  });
+
+  // v32: the allowance is the PRECONDITION, not a report on one. Before this,
+  // playWellspring gated only on `wellspringPlayedThisTurn` and consulted
+  // wellspringAllowance afterwards, purely to decide whether to close the
+  // gate — so the allowance could never refuse a play, only end a sequence of
+  // them. This pins the direction of that dependency: with the count already
+  // at or past the allowance, the play is refused even though the cached
+  // boolean says the gate is open.
+  test('the allowance is enforced, not merely consulted afterwards', () => {
+    const s = game();
+    s.turn = 2; // P1's allowance is 1 here
+    s.players.P1.wellspringsPlayedThisTurn = 1;
+    s.players.P1.wellspringPlayedThisTurn = false;
+    expect(playWellspring(s, 'P1', 'Ember')).toBe(false);
+    expect(s.players.P1.locations).toHaveLength(0);
+  });
+
+  // v32: the compensation is a SHALLOW spring. A permanent one is a
+  // compounding ramp advantage rather than a tempo repayment (see
+  // wellspringAllowance for the measurements), so it recedes.
+  test("the bonus Wellspring recedes at the second player's decay-turn Dawn", () => {
+    const s = game({ deck: Array(40).fill(VANILLA.id) });
+    // Hand the turn to P2 and take both opening Wellsprings.
+    endPhase(s);
+    endPhase(s);
+    endPhase(s);
+    expect(s.active).toBe('P2');
+    expect(playWellspring(s, 'P2', 'Ember')).toBe(true);
+    expect(playWellspring(s, 'P2', 'Ember')).toBe(true);
+    expect(s.players.P2.locations.filter((l) => l.bonus)).toHaveLength(1);
+
+    // Pass turns until P1's Main1 on the decay turn — P2's Dawn has NOT run
+    // yet, so the spring is still there. It is permanent up to this point,
+    // which is the whole reason it is worth what it is worth.
+    while (!(s.turn === BONUS_WELLSPRING_DECAY_TURN && s.active === 'P1')) {
+      endPhase(s);
+      endPhase(s);
+      endPhase(s);
+    }
+    expect(s.players.P2.locations.filter((l) => l.bonus)).toHaveLength(1);
+
+    // One more pass runs P2's Dawn on the decay turn: the bonus one is gone,
+    // and nothing else P2 owns went with it.
+    endPhase(s);
+    endPhase(s);
+    endPhase(s);
+    expect(s.turn).toBe(BONUS_WELLSPRING_DECAY_TURN);
+    expect(s.active).toBe('P2');
+    expect(s.players.P2.locations.filter((l) => l.bonus)).toHaveLength(0);
+    expect(s.players.P2.locations).toHaveLength(1);
+    expect(s.log.some((l) => l.includes('runs dry'))).toBe(true);
+  });
+
+  test('the first player never has a bonus Wellspring to lose', () => {
+    const s = game({ deck: Array(40).fill(VANILLA.id) });
+    expect(playWellspring(s, 'P1', 'Ember')).toBe(true);
+    expect(s.players.P1.locations[0].bonus).toBeUndefined();
+    while (s.turn <= BONUS_WELLSPRING_DECAY_TURN) {
+      endPhase(s);
+      endPhase(s);
+      endPhase(s);
+    }
+    expect(s.players.P1.locations.filter((l) => l.bonus)).toHaveLength(0);
+    expect(s.players.P1.locations).toHaveLength(1);
   });
 });
 

@@ -9,6 +9,190 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v32.0 — The fix that never moved the number
+
+`engine.ts` carried this comment on the shipped first-mover compensation:
+
+> The second player's bonus opening Wellspring enters EXHAUSTED: it ramps them
+> into turn 2 rather than handing them a turn-1 tempo swing. A ready one
+> measured far too strong (P1 41.9%, a 19-point overcorrection).
+
+**The shipped code measures P1 at 41.9%.** The number the comment cites as the
+failure state it corrected is the number it produces. Five independent seeds at
+4 games/pairing, 24 decks, ~7,500 games each: 43.2 / 41.3 / 41.9 / 40.6 / 42.4,
+mean 41.9%, one-signed across all five. The player on the draw wins 58.1% of
+games — a 16-point swing, in a game whose whole compensation mechanism exists
+to prevent exactly that.
+
+Exhausting the bonus Wellspring was believed to have bought back a 19-point
+overcorrection. Measured against its own alternatives, three seeds each:
+
+| regime                            | P1 win % | error vs 50% |
+| --------------------------------- | -------- | ------------ |
+| no compensation (allowance 1)     | 67.2%    | +17.2        |
+| allowance 2, bonus one **ready**  | 34.1%    | −15.9        |
+| allowance 2, bonus one _exhausted_ | 42.1%   | −7.9         |
+
+The true first-mover edge is +17.2 points. The bonus Wellspring is worth about
+**25 points of swing**, and entering it exhausted buys back only ~8 of the ~33
+the ready version was worth. The entry state was never the variable; the lever
+was always too big, and exhausting it made it slightly less too big.
+
+**What the variable is: permanence.** A "borrowed" variant — two Wellsprings on
+P2's turn 1, none on turn 2, so the ramp arrives a turn early and then the
+players are level forever — measures 66.6 / 67.0 / 67.9, statistically
+identical to no compensation at all. The entire 25 points is the permanence,
+not the timing. An extra Wellspring is a permanent +1 essence/turn, so it never
+repays a tempo lead; it converts into a compounding ramp advantage that wins
+the mid-game outright. Three things in the sim's own diagnosis agree and were
+sitting there unread: the player on the draw invokes their Leader first in
+**78%** of games (5,851 to 1,690) and wins when they do; P1's residual edge is
+concentrated in SHORT games (30.2% at ≤10 turns, 37.5% at 11–20) while P2 is
+ahead from turn 21 on (54.5%, 53.4%); and `vitalityDiffByTurn` shows the
+even-turn swings compounding from −0.2 to −3.7 while the odd-turn ones stay
+flat at +1 to +2.
+
+That makes the lever binary — permanent is worth ~25 points, temporary is worth
+0, nothing in between — so **v32 builds the in-between.** The bonus Wellspring
+is permanent, and then it recedes: it **runs dry at the start of the second
+player's turn 6** (`BONUS_WELLSPRING_DECAY_TURN`, handled at their Dawn). A
+shallow spring that dries up, which is also a rule a player can be told; the
+permanent invisible exhausted-on-entry state was not.
+
+Sweeping the decay turn, three seeds × two independent deck draws, 24 runs:
+
+| decay turn        | draw A | draw B | mean  | error |
+| ----------------- | ------ | ------ | ----- | ----- |
+| never (shipped)   | 42.1   | 43.1   | 42.6% | −7.4  |
+| turn 5            | 51.5   | 52.3   | 51.9% | +1.9  |
+| **turn 6**        | 48.5   | 49.4   | 48.97% | **−1.0** |
+| turn 7            | 46.4   | 46.2   | 46.3% | −3.7  |
+
+Turn 6 ships: a **7× reduction in error**, both draws agreeing, and the value
+bracketed on both sides rather than being the first thing that worked.
+
+Re-run on the five seeds the audit opened with, so the headline is directly
+comparable: **49.0 / 48.4 / 48.1 / 47.8 / 49.5, mean 48.6%**, against 43.2 /
+41.3 / 41.9 / 40.6 / 42.4, mean 41.9% before. The one-signed 16-point swing is
+gone; what is left is a 2.8-point residual that no longer picks a side of 50
+consistently.
+
+**A note on what "two draws" means for this number, because the instrument for
+it does not apply.** The standing rule since v28 is two independent recipe
+draws for anything per-Leader, with `PINNED_RECIPE_SALT` as the instrument.
+Run against `outcomes.p1WinPct` it produces **byte-identical results on every
+seed** — not a weak signal, a no-op. The reason is structural: the pinned pair
+suite runs through `seatSwapGame` and never touches `mech`, so `p1WinPct` is a
+pure random-cohort statistic that the salt cannot reach. The axis that _is_
+independent for it is `DECK_SEED` (argv[5]), which re-rolls the random arm's
+decks, and that is what the two draws above are. Worth recording as a property
+of the harness: **the salt is not a general-purpose second draw.**
+
+#### The second bug: `wellspringAllowance` was never a precondition
+
+Found while building the above, and independently real. `playWellspring` gated
+on the cached boolean and consulted the allowance only afterwards, to decide
+whether to close the gate:
+
+```ts
+if (state.winner || !inOwnMainClear(state, pid) || p.wellspringPlayedThisTurn) return false;
+// ... pushes the Wellspring ...
+p.wellspringPlayedThisTurn = p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid);
+```
+
+So the allowance could end a sequence of plays but never refuse one. Today that
+is not exploitable — the allowance is only ever 1 or 2, and the boolean closes
+correctly. **An allowance of 0 was unenforceable**: the first play of every
+turn succeeded regardless, because the cached boolean starts false. This is how
+it was found — a `return 0` in an experimental variant did nothing at all.
+
+It matters for what comes next rather than for what ships: a Drought effect, a
+land-lock keyword, a Location-denial Event, a mulligan penalty — anything that
+wants an allowance of 0 would have silently no-opped **and passed its tests**,
+because the rule function returns the right number while the gate ignores it.
+That is the same failure the docs have now named three times in a different
+costume ("a geometry check that reads a CSS declaration rather than a resulting
+rectangle"): a rule function consulted for reporting rather than for
+enforcement. The gate now reads the allowance:
+
+```ts
+if (p.wellspringsPlayedThisTurn >= wellspringAllowance(state, pid)) return false;
+```
+
+Verified behaviour-neutral before the balance change went in: the shipped
+config with only this fix applied measures 43.2 / 41.3 / 41.9, byte-identical.
+
+#### The largest number in the lapse report was mostly not a lapse
+
+`lapses.guardDiesForNothing` read **12,778** on a 7,500-game run, an order of
+magnitude above every other counter in the bag, while
+`guardDiesForNothingDiscretionary` — the half that is actually a CPU error —
+read 624. 95% of the headline is forced chump-blocking, i.e. correct play. A
+lapse report whose biggest entry is mostly not a lapse invites exactly the
+wrong conclusion, so the combined counter is gone from `lapses` and the forced
+count sits beside the discretionary one instead. `guardTradeQuality` still
+reports the combined figure, where the full four-way breakdown gives it
+context. (`venomousSuicide` was checked the same way and is healthy: 1,638 of
+which 1,567 deliberate, 95.7% — the CPU trades Venomous units correctly.)
+
+#### Backend: a second door into the whole catalog, and eight functions off-convention
+
+`supabase/migrations/20260828000000_grading_search_path_and_setless_draw.sql`,
+shipped as a file and **not applied** — this pass does not touch production.
+
+`random_card_of_rarity` is overloaded: `(p_rarity text, p_sets text[])` honours
+the caller's set restriction and a legacy `(p_rarity text)` arm ignores sets
+entirely. The README states the invariant this breaks — every `pack_types` row
+pins its own `allowed_sets` precisely so a new set cannot silently re-weight
+shipped packs — and the 1-arg arm cannot honour it, having nowhere to put the
+restriction. Audited before dropping and it is unreachable today: the only
+function in the database whose body mentions it is `grant_pack_contents`, which
+calls the 2-arg form, and its ACL is `postgres`/`service_role` only where the
+2-arg arm carries `authenticated`. Dead code that only becomes dangerous later,
+which is the worst shape for this hazard. Dropped, with its body reproduced in
+the migration so the drop is reversible from that file alone.
+
+Eight `grading_*` helpers had no `search_path` set (`proconfig` null on all
+eight, non-null on every other function in the database): `grading_base_fee`,
+`grading_bulk_mult`, `grading_grade_mult`, `grading_roll`,
+`grading_service_premium`, `grading_speed_mult`, `grading_turnaround`,
+`grading_voucher_fee`. All SECURITY INVOKER, so the exposure is small, but
+Supabase's own linter flags a mutable search_path and "every function but these
+eight" is not a convention worth keeping a hole in.
+
+#### Fonts: the render-blocking third-party request is gone
+
+`index.css` opened with `@import url(https://fonts.googleapis.com/...)`, which
+is the worst-case shape for a webfont: an `@import` inside a stylesheet
+serialises the whole chain ahead of first paint — fetch the app CSS, parse it,
+then DNS + TLS + fetch Google's CSS from a second origin, and only then
+discover the `.woff2` URLs and fetch those from a third. Two extra round-trips
+to two third parties before the first character can be painted, on every cold
+load, and the cross-site cache that used to pay for it has been gone since
+browsers partitioned the HTTP cache per top-level site in 2020.
+
+Montserrat and Space Grotesk are now self-hosted in `src/assets/fonts` and
+declared in `src/fonts.css`, content-hashed by Vite so they cache immutably.
+Six files, not eighteen: both families ship as **variable** fonts, and Google's
+per-weight URLs return byte-identical files (verified by checksum), so one face
+per (family, style, subset) covers every weight the app uses. Only `latin` and
+`latin-ext` are vendored — the cyrillic, cyrillic-ext and vietnamese faces are
+dropped, and `unicode-range` means a browser rendering English never fetches
+`latin-ext` either. `font-display: swap` is carried over unchanged.
+
+#### Recorded, not acted on
+
+Per the standing rules — do not spend a lever against a one-pass-old
+instrument, and never interleave content with balance — four findings went to
+`docs/ROADMAP.md` instead of into this diff: the 25 `set-state-in-effect`
+warnings (which are **two** problems, not the one the audit described — about
+ten are fetch-effects a shared hook would retire, the rest are derived-state
+syncs each needing its own read); the Supabase client's 54 kB gzip on the guest
+first-paint path; the 26% essence waste, which needs a per-colour breakdown
+before it means anything; and a 22-point Leader spread on a single draw, which
+per v28/v29's ρ = 0.417 is not evidence until `leader-rank-stability.ts` has
+run across two salts — Avatar of the Abyss is the one to point it at.
+
 ### v31.0 — The pass where the gates were wired to something
 
 The report this pass answers opens with the CI finding, and it is the right
