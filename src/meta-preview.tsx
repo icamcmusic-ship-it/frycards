@@ -98,6 +98,7 @@ const profile: Profile = {
   hide_serialized_announcements: false,
   login_streak: 3,
   last_login_claim_at: null,
+  last_account_reset_at: null,
 };
 
 // Own a few copies of everything, so the collection grid renders at its real
