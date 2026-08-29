@@ -9,6 +9,211 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+### v33.0 — The experiment was the variable
+
+#### Leader stability: the design of a draw matters as much as the number of them
+
+v28 wrote the standing rule — *two draws, always, for anything about a Leader*
+— and v29 gave it an instrument and a three-draw triangle that measured
+Spearman rho = 0.417 / 0.733 / 0.450, mean **0.53**. The conclusion drawn from
+that was that the pinned suite's Leader ranking barely survives a recipe
+re-roll, and that everything except the extremes is "a reading of the decks".
+
+Run PAIRED — the same four game seeds (1337 / 4242 / 9001 / 777) in every
+draw, so the recipe salt is the only thing that changes between them — a fresh
+three-draw triangle measures rho = **0.883 / 0.850 / 0.767, mean 0.833**.
+
+That is not luck, it is the experiment. The question this instrument exists to
+ask is "does the ranking survive a RECIPE re-roll." An unpaired triangle varies
+the recipe salt *and* the game RNG at once, so its rho is a joint measure of
+both variances and under-states recipe stability by however much game-RNG noise
+is in the cohorts. Holding the seeds fixed cancels that term and leaves the
+question actually being asked. **v29's 0.53 was measuring two things and
+reporting one**, and nothing on the instrument's output would have caught it.
+
+So `leader-rank-stability.ts` now reads the seeds off the reports it is handed
+and says which experiment it was given. An unpaired rho still prints — it is a
+real number about a real pair of draws — but labelled `UNPAIRED — conflated`,
+with a note that it under-states recipe stability, next to where the number
+appears. (Per the standing rule that a harness which cannot measure something
+must say so where it would have printed the measurement.)
+
+This partially reopens a question v29 closed. Under a paired design, four of
+nine Leaders clear the rank-range bar rather than the extremes alone:
+
+| Leader                      | draw 1    | draw 2    | draw 3    | range |
+| --------------------------- | --------- | --------- | --------- | ----- |
+| Avatar of the Abyss         | 64.8 (#1) | 64.9 (#1) | 59.2 (#1) | **0** |
+| Mer-King                    | 59.3 (#2) | 53.5 (#3) | 57.2 (#2) | 1     |
+| Void Mother                 | 50.0 (#4) | 50.5 (#4) | 56.3 (#3) | 1     |
+| Sentinel of the Nether Pit  | 39.5 (#9) | 40.9 (#9) | 41.3 (#8) | 1     |
+
+Measured on the CURRENT engine, i.e. **after** the v32 first-player fix, which
+answers the open question about whether that fix would move Avatar on its own:
+it does not. Avatar is #1 in all three draws at a 63.0% mean against Sentinel's
+40.6% — a **22.4-point spread between two Leaders that both clear the
+quotability bar.** Three levers have been spent on Sentinel; none has ever been
+spent on Avatar.
+
+#### The Avatar mechanism is a step, not a ramp — and that changes the lever
+
+The single-draw reading of `leaderKitDiagnostics` looks like a monotonic rise
+with game length, which points the lever at Avatar's late game. Aggregated
+across all twelve reports of this pass (n = 5,520 Avatar games rather than a
+few hundred), it is not a ramp:
+
+| Leader                     | 1st invoke | ≤10 turns    | 11–20         | 21–30         | >30          |
+| -------------------------- | ---------- | ------------ | ------------- | ------------- | ------------ |
+| Avatar of the Abyss        | **7.98**   | 22.2 (n=81)  | 65.5 (n=2619) | 69.5 (n=2127) | 66.7 (n=693) |
+| Sentinel of the Nether Pit | 6.48       | 29.1 (n=93)  | 46.8 (n=5769) | 35.6 (n=3405) | 31.8 (n=1188)|
+
+Avatar's `avgFirstInvokeTurn` is 7.98, the latest of any Leader by a clear
+margin (every other one is 6.0–6.65). And its win rate is a **step function**:
+22% before the kit lands, then 65.5 / 69.5 / 66.7 — flat, within noise of
+itself, from turn 11 onward.
+
+That matters for what to do about it. A late-game lever aimed at turns 21+
+would leave 65.5% at 11–20 untouched, which is most of the games and most of
+the edge. The transition is the INVOKE, around turn 8, and what the kit is
+worth in the turns immediately after it. Sentinel is the opposite shape and
+decays after landing (46.8 → 35.6 → 31.8), which is worth stating plainly:
+these two are not a symmetric pair and one lever will not address both.
+
+**The lever is named and deliberately not spent.** The rule this project has
+broken four times is "do not spend a lever against a one-pass-old instrument",
+and the paired design is one pass old today. This pass establishes it, records
+the measurement, and leaves the swing to the next one with a clean before/after
+— which now has a specific target (the turn-8 landing, not the endgame) rather
+than a direction.
+
+#### The 26% essence waste is not a colour problem or a curve problem
+
+`wastedEssencePerGame` has read ~36 against ~105 spent for several passes with
+no way to act on it, and the standing hypothesis was that it must be structural
+— colour screw, or a gap at the top of the curve. One aggregate cannot tell
+those apart, so the sim now splits the waste at the point it happens, by
+amount, into the four cases that call for different fixes. Two seeds at 4
+games/pairing, 24 decks:
+
+| bucket                                              | seed 1337 | seed 4242 |
+| --------------------------------------------------- | --------- | --------- |
+| `handEmptyPct` — nothing in hand to buy at any price | **83.4%** | **78.0%** |
+| `curveShortPct` — not enough for the cheapest card   | 12.4%     | 16.5%     |
+| `colorShortPct` — enough essence, wrong colours      | 3.0%      | 3.5%      |
+| `spendablePct` — affordable and went uncast (misplay)| 1.2%      | 2.0%      |
+
+**Colour screw is 3% of it.** Roughly 80% is essence generated on turns where
+the hand is empty — the late-game topdeck state, where a player with six
+Wellsprings and no cards has nowhere to put the essence and never could have.
+That is not a resource-system defect; it is an arithmetic consequence of games
+running long, and the headline number was never measuring what it was read as
+measuring. The roadmap item closes on a negative result. `byColor` ships
+alongside for the narrower question of whether one identity strands more than
+the rest.
+
+#### Backend: three findings in the pack-granting path, all armed by the next set
+
+`supabase/migrations/20260829000000_set_aware_draws_and_live_rarity_validation.sql`,
+shipped as a **file and not applied**, consistent with v32. The whole migration
+was validated by applying it to the live schema inside a transaction and
+rolling back, so it is known to parse, create and behave — not known to be
+deployed.
+
+**1. The 1-arg `random_card_of_rarity` call is ambiguous, not merely
+set-unaware.** v32 dropped it as dead code. It is worse than dead: the 2-arg
+arm declares `p_sets text[] DEFAULT NULL`, so both overloads are candidates for
+a one-argument call and Postgres refuses to choose —
+`ERROR: 42725: function random_card_of_rarity(unknown) is not unique`. The next
+person to write the obvious `random_card_of_rarity(v_rarity)` inside a pack
+grant gets that at run time inside a SECURITY DEFINER transaction, i.e. a pack
+open that fails after the currency is debited. Dropping the 1-arg arm removes
+the ambiguity but not the trap that made it: with the DEFAULT still there, a
+1-arg call resolves silently with `p_sets := NULL`, which means "draw from the
+whole table" — the exact behaviour v32 set out to make unreachable, through the
+front door instead of the back. **The DEFAULT is gone.** A 1-arg call now fails
+to resolve at all, at function-creation time rather than at run time, and set
+restriction becomes a decision the caller makes out loud.
+
+**2. A pack pinned to an empty set silently paid out a different set.** The
+old function's last resort was `select id from cards order by random()` with no
+set predicate. This is not hypothetical: `Players Showcase 2026 Booster` is a
+real `pack_types` row, priced at 699 credits, pinned to
+`allowed_sets = ['Players Showcase 2026']` — and that set contains **zero of
+the 297 live cards.** It is `is_active = false` today, which is the only reason
+this is latent; the pass that flips that flag is the pass that ships the
+Showcase set, and if the flag moves first the pack sells Volume #1 cards under
+a Showcase name. The fallback now raises. Raising is correct here *because* the
+caller is SECURITY DEFINER: the exception rolls the transaction back, so the
+player is not debited for a pack that could not be filled. A refused purchase
+is recoverable; a mis-delivered one is a support ticket.
+
+**3. Leader draws bypassed `allowed_sets` entirely.**
+`random_leader_of_rarity(p_rarity text)` had no set parameter at all and its
+own fallback drew from the whole catalog, so every Leader ever pulled from a
+set-pinned pack ignored the pin. The README names three functions that honour
+`allowed_sets`; this is the fourth that should have. Replaced (not overloaded)
+with a 2-arg version, deliberately **without** a default on `p_sets` — adding
+one beside the existing 1-arg version would have recreated finding 1 verbatim,
+one function over. `grant_pack_contents` now passes the pack's own
+`allowed_sets` to it, symmetric with the card draw it already did that for.
+
+#### A shop owner can advertise a guaranteed Alt-Art. There are no Alt-Arts.
+
+`create_mystery_template` is a player feature — shop owners build mystery packs
+to sell — and it validated rarities against three hardcoded literal lists that
+all include `Alt-Art`. The live catalogue is Common 120 · Uncommon 76 · Rare 46
+· Full-Art 29 · Super-Rare 12 · Mythic 8 · Ultra-Rare 6 · **Alt-Art 0**. So a
+shop owner could build and sell a pack promising a guaranteed Alt-Art that
+cannot contain one, and the rarity ladder falls *downward* on an empty tier, so
+it silently pays a Full-Art instead. The roadmap files Alt-Art under "Later" as
+harmless dead plumbing; it is reachable from a player-facing surface, and in an
+economy with `shop_reports` and `shop_fraud_strikes` tables, mis-advertised
+pack contents is exactly what those tables exist for — except here the game
+generates the misrepresentation itself and no shop owner did anything wrong.
+
+The fix is not a shorter literal list — a literal list is what let this outlive
+the catalogue it described. `rarity_is_deliverable(text)` asks the catalogue, so
+Alt-Art becomes legal by itself on the day an Alt-Art card is printed, with no
+migration and nobody remembering. A weight of *zero* on an unprintable rarity
+stays legal, since it is never rolled.
+
+**And a dead guard found while replacing those lists.** `rarity_tier` ends
+`... when 'Mythic' then 8 else 1 end`, so an unknown rarity returns tier 1
+(Common) rather than NULL — which means the
+`rarity_tier(gg->>'rarity') is null` guard in the guarantee validator **has
+never once fired**. The hardcoded literal beside it was doing all of the rarity
+validation, silently, and the other two validators had no such guard at all.
+Replacing the literals with that guard, which is the obvious refactor, would
+have removed rarity validation outright. `rarity_is_known(text)` now carries
+the canonical list once; `rarity_tier` is left alone, because its `else 1` is
+load-bearing for callers that rank arbitrary rarities and must not get a NULL.
+
+#### Audited and clean — recorded so nobody re-audits them
+
+- **RLS posture is correct and consistent.** All 37 tables have RLS enabled,
+  every policy is SELECT-only, there are no INSERT/UPDATE/DELETE policies
+  anywhere except `decks` (own-row delete), and every write goes through an
+  RPC. Every `admin_*` / `creator_*` function calls `assert_creator()`
+  internally while being granted to `authenticated`. Internal helpers
+  (`apply_card_upsert`, `grant_xp`, `grant_bp_xp`, `track_stat`,
+  `transfer_cards`) are `postgres`/`service_role` only. No `anon` grants on any
+  privileged function.
+- **`create_mystery_template` is not a privilege hole.** It stands out as
+  granted to `authenticated` with no `assert_creator()`, which reads like an
+  outlier; it is a legitimate player feature gated on `player_shops` ownership
+  with thorough input validation. Negative result recorded so the next audit
+  does not spend time on it. (Its *rarity* validation was wrong — see above —
+  which is a correctness bug, not an authorization one.)
+- **`match_receipts` and `match_tickets` have RLS on and zero policies**, which
+  is deny-all to clients despite table-level grants, and is intentional
+  (server-only, through SECURITY DEFINER functions). Confirmed rather than
+  assumed: a client read of these returns an empty set rather than an error,
+  which is the silent-failure shape worth pinning down deliberately.
+- **No live-vs-code drift.** 297 live cards against 297 bundled; template,
+  rarity and the derived mechanics columns all agree. The v23 fix held.
+  `resolve` is on exactly 9 rows (the Leaders), `might`/`grit` on 131 (Units),
+  `essence_cost`/`rules_text` on all 297.
+
 ### v32.0 — The fix that never moved the number
 
 `engine.ts` carried this comment on the shipped first-mover compensation:
