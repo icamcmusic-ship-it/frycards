@@ -214,6 +214,64 @@ load-bearing for callers that rank arbitrary rarities and must not get a NULL.
   `resolve` is on exactly 9 rows (the Leaders), `might`/`grit` on 131 (Units),
   `essence_cost`/`rules_text` on all 297.
 
+### v34.0 — Reset your account
+
+Settings gains a RESET ACCOUNT danger zone: wipe your collection, decks,
+inventory and stats back to a brand-new account (starting credits/vouchers, a
+fresh Deck Box waiting to be opened, zeroed win/loss/xp), once every 7 days.
+`creator` (Fry) is exempt from the cooldown; `founder` is not — the ask was
+specifically for admin/Fry, not for every privileged role.
+
+**What actually gets wiped, and what deliberately doesn't.** `reset_account()`
+(SECURITY DEFINER) clears `player_cards`, `player_serialized_cards`, `decks`,
+`player_inventory`, `player_cosmetics`, `player_achievements`, `graded_cards`,
+`friendships`, and the player's own `mystery_pack_templates`, then resets
+`profiles` (credits/vouchers to the plain signup default, wins/losses/xp/level
+to zero, equipped cosmetics cleared) and re-grants the same Deck Box
+`handle_new_user` gives a new signup. Left alone, on purpose:
+
+- **Identity and moderation state** — username, role,
+  `submissions_banned`/`submissions_ban_reason`, `card_submissions`,
+  `shop_fraud_strikes`, `shop_reports`, `shop_buyer_ratings`,
+  `player_shop_ratings`. A reset is not a way to launder a ban, a strike, or a
+  report against you.
+- **The anti-cheat ledger** — `match_tickets`, `match_receipts` (see the v32
+  migration for why that ledger exists). Not player-visible progress, and
+  wiping it changes nothing about what a ticket can redeem.
+- **Anything that gates an already-paid reward on a calendar or seasonal
+  cycle** — `last_free_pack_at`, `last_login_claim_at`, `login_streak`,
+  `player_battle_pass`, `player_missions`, `player_bounty_activity`.
+  `claim_daily_login` and `claim_daily_pack` both gate on a `last_*_at`
+  timestamp read straight off the date; nulling either one on every weekly
+  reset would let a player re-open a reward window that already paid.
+  Bounded to once a week, but still a real exploit, and there is no version
+  of "reset your account" that should include "and also re-grant rewards
+  you already collected." The founder-slot +3000 credit bonus
+  (`handle_new_user`, first 25 accounts) is not re-run for the same reason —
+  credits reset to the flat 1500 regardless of role.
+- **A live auction someone else has bid on.** `reset_account()` refuses
+  outright if the player has an active `market_listings` row with
+  `bid_count > 0` — that bidder's credits are in escrow, and force-cancelling
+  would hand this player decision authority over money that is no longer
+  only theirs (`cancel_listing` already refuses the same case for the same
+  reason).
+
+**Everything else the player owns outright is unwound through the SAME
+vetted paths the UI already uses** — `cancel_listing`, `close_shop`,
+`cancel_trade`, `respond_trade` — rather than re-deriving escrow-safe unwind
+logic inside the reset function. None of the three move a counterparty's
+money: `cancel_listing` only returns this player's own escrowed cards,
+`close_shop` refunds this player's own slot collateral, and a `trades` row
+escrows nothing until `respond_trade` accepts — declining or cancelling a
+pending trade is a pure status change.
+
+Validated the same way as the v32/v33 backend migrations: applied to the live
+schema inside a transaction and rolled back. Confirmed in that harness: a
+loaded account (cards, high stats, an inventory pack) resets to exactly the
+fresh-signup shape; a second call inside the 7-day window is refused with the
+exact retry timestamp; the `creator` role runs it twice back to back with no
+cooldown; production is unaffected (checked after).
+
 ### v32.0 — The fix that never moved the number
 
 `engine.ts` carried this comment on the shipped first-mover compensation:

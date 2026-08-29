@@ -111,6 +111,9 @@ export interface Profile {
   login_streak: number;
   /** When the daily login reward was last claimed (one claim per UTC day). */
   last_login_claim_at: string | null;
+  /** When this account was last wiped via `resetAccount()`. Gates the
+   * once-per-7-days cooldown — `creator` (Fry) is exempt, see the RPC. */
+  last_account_reset_at: string | null;
 }
 
 export interface ShopItem {
@@ -382,6 +385,19 @@ export async function buyShopItem(
     p_currency: currency,
     p_foil: foil,
   });
+  return rpcError(error);
+}
+
+/**
+ * Wipe this account's collection, decks, inventory and stats back to a
+ * fresh-signup state — credits/vouchers to the plain default, a new Deck Box
+ * waiting to be opened, everything else at zero. Once every 7 days per
+ * account; `creator` (Fry) is exempt — see `reset_account()` for exactly
+ * what is and isn't touched (moderation state and already-paid reward
+ * ledgers survive on purpose).
+ */
+export async function resetAccount(): Promise<string | null> {
+  const { error } = await supabase.rpc('reset_account');
   return rpcError(error);
 }
 
