@@ -575,6 +575,16 @@ const mech = {
   quickEventPlays: 0,
   slowEventPlays: 0,
   wastedEssenceTotal: 0,
+  // v33: the same wasted essence, split by WHY it went unspent. See
+  // `wasteDiagnosis` below — 26% of all essence generated is never spent, and
+  // the aggregate alone cannot say whether that is colour screw or a curve
+  // gap, which is the only thing that decides what to do about it.
+  wastedByColor: Object.fromEntries(COLORS.map((c) => [c, 0])) as Record<string, number>,
+  wastedHandEmpty: 0,
+  wastedSpendable: 0,
+  wastedColorShort: 0,
+  wastedCurveShort: 0,
+  wasteEvents: 0,
   gameLengths: [] as number[],
 };
 
@@ -857,17 +867,45 @@ simTelemetry.onEssenceCleared = (state) => {
     const tot = essenceTotal(p.essence);
     if (tot <= 0) continue;
     mech.wastedEssenceTotal += tot;
+    for (const c of COLORS) mech.wastedByColor[c] += p.essence[c] ?? 0;
+
+    // v33: WHY this essence went unspent. `wastedEssencePerGame` has read ~26%
+    // of everything generated for several passes with no way to act on it,
+    // because the aggregate cannot separate the two explanations that call for
+    // opposite fixes — colour screw (the essence is there, the pips are wrong:
+    // a mana-base/identity problem) from a curve gap (there is simply not
+    // enough of it yet, or nothing left to buy: a curve/content problem).
+    //
+    // Each clear is classified once, against the hand as it stands. The
+    // candidate filter is the same one the lapse below uses, so the four
+    // buckets partition the same population it samples.
+    const candidates = p.hand.filter(
+      (c) =>
+        c.def.type !== 'Leader' &&
+        !(c.def.type === 'Item' && p.field.length === 0 && itemSurvives(c.def.subtype)),
+    );
+    mech.wasteEvents++;
+    if (candidates.length === 0) {
+      // Nothing to spend it on at any price. Not a resource problem.
+      mech.wastedHandEmpty += tot;
+    } else if (candidates.some((c) => canPayCost(p.essence, c.def.cost))) {
+      // Something was affordable and went uncast. The CPU's problem, not the
+      // format's — this is the population `wastedEssenceWithPlay` counts.
+      mech.wastedSpendable += tot;
+    } else if (candidates.some((c) => tot >= totalCost(c.def.cost))) {
+      // Enough essence in total, but not of the right colours. COLOUR SCREW.
+      mech.wastedColorShort += tot;
+    } else {
+      // Not enough essence for the cheapest thing in hand at any colour.
+      mech.wastedCurveShort += tot;
+    }
+
     // Lapse only when the ACTIVE player ends a main phase with essence that
     // could pay for a castable hand card right now.
     if (
       pid === state.active &&
       (state.phase === 'Main1' || state.phase === 'Main2') &&
-      p.hand.some(
-        (c) =>
-          c.def.type !== 'Leader' &&
-          canPayCost(p.essence, c.def.cost) &&
-          !(c.def.type === 'Item' && p.field.length === 0 && itemSurvives(c.def.subtype)),
-      )
+      candidates.some((c) => canPayCost(p.essence, c.def.cost))
     ) {
       lapses.wastedEssenceWithPlay++;
     }
@@ -2941,6 +2979,42 @@ const report = {
     ).toFixed(1),
     essenceSpentPerGame: +(essenceSpentTotal / Math.max(1, mech.games)).toFixed(1),
   },
+  /**
+   * v33: what the 26% of unspent essence actually IS.
+   *
+   * `wastedEssencePerGame` has read ~36 against ~105 spent for several passes
+   * and has never been actionable, because one number cannot distinguish the
+   * two causes that call for opposite fixes. Split at the point of waste:
+   *
+   *  - `handEmptyPct`   nothing in hand to buy at any price. Not a resource
+   *                     problem at all — this is the late-game topdeck state,
+   *                     and a high share here means the aggregate is mostly
+   *                     an artefact of games running long.
+   *  - `spendablePct`   something WAS affordable and went uncast. CPU misplay
+   *                     (the population `lapses.wastedEssenceWithPlay` counts).
+   *  - `colorShortPct`  enough essence in total, wrong colours. COLOUR SCREW —
+   *                     a mana-base / identity problem, and the lever is deck
+   *                     construction or Wellspring fixing.
+   *  - `curveShortPct`  not enough for the cheapest card in hand at any
+   *                     colour. A CURVE problem — the lever is what gets
+   *                     printed at the bottom of the curve.
+   *
+   * The four partition the waste by amount, not by event, so they answer "how
+   * much of the wasted essence" rather than "how often". `byColor` is the raw
+   * per-colour total underneath, for asking whether one identity strands more
+   * than the rest.
+   */
+  essenceWasteDiagnosis: {
+    wastedTotal: mech.wastedEssenceTotal,
+    events: mech.wasteEvents,
+    handEmptyPct: pct(mech.wastedHandEmpty, mech.wastedEssenceTotal),
+    spendablePct: pct(mech.wastedSpendable, mech.wastedEssenceTotal),
+    colorShortPct: pct(mech.wastedColorShort, mech.wastedEssenceTotal),
+    curveShortPct: pct(mech.wastedCurveShort, mech.wastedEssenceTotal),
+    byColor: Object.fromEntries(
+      COLORS.map((c) => [c, pct(mech.wastedByColor[c], mech.wastedEssenceTotal)]),
+    ),
+  },
   // v6.0: board/clash texture, mulligan outcomes, comeback rate.
   boardMetrics: {
     avgUnitsOnBoard: +(
@@ -3646,6 +3720,10 @@ console.log(
   JSON.stringify(report.leaderIdleAbility, null, 2),
 );
 console.log('\nKept color-dead hands (v6.3):', lapses.keptColorDeadHand);
+console.log(
+  '\nEssence waste diagnosis (v33):',
+  JSON.stringify(report.essenceWasteDiagnosis, null, 2),
+);
 console.log('\nLeader ability usage (v6.4):', JSON.stringify(report.leaderAbilityUsage, null, 2));
 console.log('\nGuard-trade quality (v6.4):', JSON.stringify(report.guardTradeQuality, null, 2));
 console.log(

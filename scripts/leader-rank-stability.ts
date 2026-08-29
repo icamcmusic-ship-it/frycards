@@ -37,6 +37,32 @@
  * reports in a draw must agree — a mixed draw is a mistake worth refusing
  * rather than averaging, because the whole point is that one draw is one draw).
  *
+ * ---------------------------------------------------------------------------
+ * v33 — the design of a draw matters as much as the number of them, and the
+ * instrument was not checking it.
+ *
+ * v29 ran a three-draw triangle and measured rho = 0.417 / 0.733 / 0.450
+ * (mean 0.53), then concluded that the pinned suite's Leader ranking barely
+ * survives a recipe re-roll and that everything except the extremes is "a
+ * reading of the decks". A three-draw triangle run PAIRED — the same four
+ * game seeds (1337/4242/9001/777) in every draw, so the ONLY thing that
+ * changes between draws is the recipe salt — measures rho = 0.933 / 0.850 /
+ * 0.817, mean 0.87.
+ *
+ * That is not luck, it is the experiment. The question this file exists to
+ * ask is "does the ranking survive a RECIPE re-roll". An unpaired triangle
+ * varies the recipe salt AND the game RNG at once, so its rho is a joint
+ * measure of both variances and under-states recipe stability by however much
+ * game-RNG noise happens to be in the cohorts. Holding the seeds fixed
+ * cancels that term and leaves the question actually being asked.
+ *
+ * So the instrument now READS the seeds off the reports and says which design
+ * it was handed. An unpaired rho is still printed — it is a real number about
+ * a real pair of draws — but it is labelled, because quoting it as a recipe
+ * stability figure is the mistake v29 made and nothing on the old output
+ * would have caught it. (Per the standing rule: a harness that cannot measure
+ * something must say so where it would have printed the measurement.)
+ *
  * Exits 0 always — a reading instrument, not a gate.
  */
 import { readFileSync } from 'node:fs';
@@ -47,7 +73,7 @@ interface SuiteRow {
   winPct: number;
 }
 interface Report {
-  meta?: { pinnedRecipeSalt?: string; gameSeed?: number; deckSeed?: number };
+  meta?: { pinnedRecipeSalt?: string; seed?: number; deckSeed?: number };
   leaderPairSuiteSummary: SuiteRow[];
 }
 
@@ -78,6 +104,16 @@ interface Draw {
   mean: Map<string, number>;
   /** Leader name -> rank, 1 = highest mean. */
   rank: Map<string, number>;
+  /**
+   * v33: the cohort game seeds this draw was built from, sorted and joined.
+   * Two draws with the SAME signature differ only in their recipe salt, which
+   * is the paired design this file wants; two draws with different signatures
+   * vary the game RNG as well, and their rho measures both variances at once.
+   * `deckSig` is the same for `deckSeed` — a draw that also re-rolls the
+   * random arm's decks is doubly unpaired.
+   */
+  seedSig: string;
+  deckSig: string;
 }
 
 const readDraw = (files: string[], idx: number): Draw => {
@@ -106,11 +142,18 @@ const readDraw = (files: string[], idx: number): Draw => {
   const ordered = [...mean.entries()].sort((a, b) => b[1] - a[1]);
   const rank = new Map<string, number>();
   ordered.forEach(([name], i) => rank.set(name, i + 1));
+  const sig = (vals: (number | undefined)[]) =>
+    vals
+      .map((v) => (v === undefined ? '?' : String(v)))
+      .sort()
+      .join(',');
   return {
     label: salt ? `salt:${salt}` : '(unsalted)',
     cohorts: reports.length,
     mean,
     rank,
+    seedSig: sig(reports.map((r) => r.meta?.seed)),
+    deckSig: sig(reports.map((r) => r.meta?.deckSeed)),
   };
 };
 
@@ -171,12 +214,41 @@ for (const name of allNames) {
   console.log(`  ${pad(name, 30)}${cells.join('')}${pad(String(range), 12)}${flag}`);
 }
 
+// v33: which experiment was this? A pair of draws sharing a game-seed
+// signature differs only in its recipe salt, and its rho is a clean reading of
+// recipe stability. A pair that does not varies the game RNG too, and its rho
+// is a joint measure that under-states recipe stability. Say which, next to
+// the number, rather than leaving the reader to assume the good case.
+const pairedWith = (i: number, j: number): boolean =>
+  parsed[i].seedSig === parsed[j].seedSig && parsed[i].deckSig === parsed[j].deckSig;
+const allPaired = parsed.every((_, i) => i === 0 || pairedWith(0, i));
+const anyUnknown = parsed.some((d) => d.seedSig.includes('?'));
+
+console.log('\nDraw design (v33):');
+for (const [i, d] of parsed.entries())
+  console.log(`  draw ${i + 1} (${d.label}): game seeds [${d.seedSig}], deck seeds [${d.deckSig}]`);
+if (anyUnknown)
+  console.log(
+    '  ! At least one report predates the seed being written to meta, so the\n' +
+      '    design cannot be determined. Treat every rho below as UNPAIRED.',
+  );
+console.log(
+  allPaired && !anyUnknown
+    ? '  PAIRED: every draw uses the same seeds, so the recipe salt is the only\n' +
+        '  thing varying. The rho below is a clean reading of RECIPE stability.'
+    : '  UNPAIRED: the draws vary the game RNG as well as the recipe salt, so\n' +
+        '  each rho below measures both variances at once and UNDER-STATES recipe\n' +
+        '  stability. Re-run the draws on one fixed set of seeds before quoting a\n' +
+        '  number from this table — see the v33 note at the top of this file.',
+);
+
 console.log('\nPairwise Spearman rho between draw rankings:');
 for (let i = 0; i < parsed.length; i++) {
   for (let j = i + 1; j < parsed.length; j++) {
     const rho = spearman(parsed[i].rank, parsed[j].rank);
+    const tag = anyUnknown || !pairedWith(i, j) ? 'UNPAIRED — conflated' : 'paired';
     console.log(
-      `  draw ${i + 1} (${parsed[i].label}) vs draw ${j + 1} (${parsed[j].label}):  rho = ${rho.toFixed(3)}`,
+      `  draw ${i + 1} (${parsed[i].label}) vs draw ${j + 1} (${parsed[j].label}):  rho = ${rho.toFixed(3)}  (${tag})`,
     );
   }
 }

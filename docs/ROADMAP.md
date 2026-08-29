@@ -437,6 +437,15 @@ Everything here has a started implementation and a visible seam.
   three-deck suite. Pre-v16 Leader tables are historical only — do not
   compare against them without saying so.
 
+- **The v13 Creator override system has never been used once.**
+  `template.overrides` is present on **0 of 297** cards. The client editor, the
+  diffing, the server-side re-validation and the `mapCard` layering are all
+  built, tested and shipped. It is not dead code — Showcase approvals need it —
+  but it is unexercised in production, which is the same shape as the rest of
+  the social/economy layer (v32 recorded eleven tables with full RPC surfaces
+  and zero rows). Worth one deliberate end-to-end run before the Showcase
+  approvals depend on it in anger.
+
 - **A live-vs-code drift guard that actually gates.** v13 found the database's
   `cards.essence_cost` one generic higher than the shipped `cardpool.ts` on 16
   cards — `apex_nanite_shinobi`, `astral_shoal`, `cruel_effervescence` and 13
@@ -497,20 +506,62 @@ Everything here has a started implementation and a visible seam.
   measurement short of being a lever, and the standing rule is not to spend a
   lever against a one-pass-old instrument:
 
-  - **Essence waste is 26% of all essence generated** (`wastedEssencePerGame`
-    36.58 against `essenceSpentPerGame` 104.6), and `wastedEssenceWithPlay`
-    616 says only a small slice of it is CPU misplay. So it is structural —
-    colour screw, or a curve gap at the top end — but the report cannot say
-    which. Needs a per-colour breakdown of the waste counter before it means
-    anything.
-  - **A 22-point Leader spread on one draw** (Avatar of the Abyss 62.5% down
-    to Sentinel of the Nether Pit 40.5%). Deliberately not a finding: v28/v29
-    measured the pinned suite's Leader ranking at ρ = 0.417 across recipe
-    draws, so a single-draw ranking is not evidence. Run
-    `scripts/leader-rank-stability.ts` across ≥2 salts first. **Avatar is the
-    one to point it at** — it was also flagged one-signed positive in draw 2
-    of the v29 triangle, which is the only part of this spread with any
-    corroboration.
+  - ~~**Essence waste is 26% of all essence generated.**~~ **CLOSED in v33 on a
+    negative result.** The sim now splits the waste at the point it happens
+    (`essenceWasteDiagnosis`), and the structural hypothesis was wrong:
+    **~80% of it is `handEmpty`** — essence generated on turns where there is
+    nothing in hand to buy at any price. Colour screw is **3%**, curve gap
+    12–17%, CPU misplay 1–2%. That is not a resource-system defect, it is an
+    arithmetic consequence of games running long, and the headline number was
+    never measuring what it was read as measuring. Do not re-open this on the
+    aggregate; if it is re-opened it should be on `curveShortPct`, which is
+    the only bucket with a lever behind it.
+  - **The 22-point Avatar/Sentinel spread is real, and the lever on it is
+    named but not spent.** v33 ran the stability instrument across three
+    PAIRED draws (same four game seeds throughout, recipe salt the only
+    variable) and Avatar of the Abyss is **#1 in all three, rank range 0**, at
+    a 63.0% mean against Sentinel's 40.6%. Measured after the v32 first-player
+    fix, so the open question about whether that fix moves Avatar on its own
+    is answered: it does not. Three levers have been spent on Sentinel, none
+    ever on Avatar.
+
+    **The lever targets the turn-8 landing, not the endgame.** Aggregated
+    across twelve reports (n = 5,520 Avatar games), the kit is a step
+    function, not a ramp: `avgFirstInvokeTurn` 7.98 — the latest of any Leader
+    by a wide margin, every other one is 6.0–6.65 — and a win rate of 22.2%
+    before it lands, then 65.5 / 69.5 / 66.7 across 11–20 / 21–30 / >30, flat
+    within noise. A single-draw reading looks monotonic and points at the late
+    game; on the full sample a late-game lever would leave 65.5% at 11–20
+    untouched, which is most of the games and most of the edge. Sentinel is
+    the opposite shape and DECAYS after landing (46.8 → 35.6 → 31.8), so one
+    lever will not address both — they are not a symmetric pair.
+
+    Deliberately not spent this pass: the paired design is one pass old, and
+    "do not spend a lever against a one-pass-old instrument" is the rule this
+    project has broken four times. The next pass spends it, with a clean
+    before/after and a specific target.
+  - **Six implemented keywords are unreachable, and that is the cheapest depth
+    on the board.** `UNPRINTED_KEYWORDS` is Onslaught, Beacon and Dread
+    (Leader) plus Kindle, Tailwind and Luminous (Event). All six are
+    engine-implemented and unit-tested; none is printed on a card. That is six
+    mechanics' worth of finished work sitting behind a content decision, and
+    the Event three have a known-shape home — the 76–100 Event band currently
+    prints nothing.
+
+  - **Leaders carry 3 printed keywords where every other card type carries
+    6–7.** Structural shallowness on the card a player sees in every game and
+    stares at for the whole of it. Related to the above: three of the six
+    unreachable keywords are Leader keywords.
+
+  - **The reaction window is content-starved, and it is the engine's best
+    work.** The sim's own audit across a 297-card pool: `legalInWindow: 13`,
+    `aiCandidates: 4`. Two Leaders (Ethereal Sea Witch, Ruin-Walker Overseer)
+    have zero AI-playable reactions at all. The priority/stack system is the
+    most sophisticated part of the engine and is exercised by four cards.
+    Printing instant-speed cards is the single highest-leverage content lever
+    available for making depth that already exists visible — it needs no
+    engine work, only cards.
+
   - **`turnLimitDraws` at 19 in ~7,560 games** (0.25%). Acceptable in
     aggregate, but a non-zero draw rate means the turn cap binds sometimes,
     and nobody knows whether those 19 are spread evenly or concentrated in
