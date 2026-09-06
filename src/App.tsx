@@ -3,7 +3,6 @@ import { fetchCardTemplates, recordMatchResult, beginMatch, MatchResult } from '
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
-import { preloadImages } from './lib/preload';
 import { withTimeout } from './lib/utils';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
@@ -619,10 +618,8 @@ export default function App() {
       .then((templates) => {
         if (cancelled) return;
         if (templates) applyCardPool(templates);
-        const images = POOL_V4.map((c) => c.image);
-        return preloadImages(images, (loaded, total) => {
-          if (!cancelled) setProgress({ loaded, total });
-        });
+        // Media loads on demand. Fetching the entire catalog here can transfer
+        // over a gigabyte before a player sees a single card.
       })
       .then(() => {
         if (!cancelled) setPoolReady(true);
