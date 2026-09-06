@@ -150,6 +150,8 @@ export interface StackItem {
   card?: CardInst;
   /** kind 'trigger': the ability's effect. */
   effect?: Effect;
+  /** Target locked for a Tool's independent weaken rider. */
+  toolTargetIid?: string;
   targetIid?: string;
   bondTargetIid?: string;
   /** Event-only: how many times its effect resolves (Resonant prints 2). */
@@ -897,8 +899,8 @@ export function canTarget(state: GameState, pid: PlayerId, eff: Effect, iid: str
 export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string | undefined {
   const me = state.players[pid];
   const opp = state.players[opponentOf(pid)];
-  // Shatter whiffs on an Unbreakable unit that still holds this turn's save
-  // (v7.5 — it is once per turn now, so one that has already spent it is a
+  // Shatter whiffs on an Unbreakable unit that still holds its once-per-game save
+  // (one that has already spent it is a
   // legal, killable target). Exclude only the ones the effect would no-op on,
   // so a shatter is never pointed at a whiff while a killable target sits
   // legal, and IS pointed at a wall whose shield is already down.
@@ -1260,7 +1262,7 @@ export function stateBasedChecks(state: GameState): void {
       const eff = effGrit(state, u);
       // A unit whose Grit has been weakened to 0 dies as a state-based rule
       // regardless of Unbreakable — that keyword saves from damage/shatter, not
-      // a Grit deficit — and, critically, must NOT consume the once-per-turn
+      // a Grit deficit — and, critically, must NOT consume the once-per-game
       // save. Handling it before the Unbreakable branch avoids burning the save
       // on a death it can't prevent (the deficit persists, so the next SBC
       // would kill the unit anyway a tick later within the same action).
@@ -1271,7 +1273,7 @@ export function stateBasedChecks(state: GameState): void {
       const lethal = u.damage >= eff || u.venomed;
       if (!lethal) continue;
       if (unitHasKw(u, 'Unbreakable') && !u.unbreakableSpent) {
-        // v7.5: the save is spent for the turn. v16: the unit survives AT THE
+        // v7.5: the save is spent. v16: the unit survives AT THE
         // BRINK — marked damage is set to one below its effective Grit — where
         // v7.5 reset it to 0. The 0 was only ever there to stop this check
         // re-firing on the same marked damage a tick later, but it
@@ -1838,10 +1840,14 @@ export function playWellspring(state: GameState, pid: PlayerId, type: EssenceTyp
 export function tapLocationForEssence(state: GameState, pid: PlayerId, locIid: string): boolean {
   const p = state.players[pid];
   if (state.winner) return false;
-  // Holding priority is enough: a response window is worthless if you cannot
-  // produce the essence to pay for the response.
-  if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid) && !hasPriority(state, pid))
+  // Once a card is pending, only the priority holder may produce essence.
+  // In particular, the active player's own-main shortcut must not let them
+  // tap while the opponent is deciding whether to answer.
+  if (state.stack.length > 0) {
+    if (!hasPriority(state, pid)) return false;
+  } else if (!inOwnMain(state, pid) && !reactionOpenFor(state, pid) && !hasPriority(state, pid)) {
     return false;
+  }
   const loc = p.locations.find((l) => l.iid === locIid);
   if (!loc || loc.exhausted) return false;
   loc.exhausted = true;
@@ -1888,8 +1894,14 @@ export function effectiveCost(
 }
 
 function timingLegal(state: GameState, pid: PlayerId, def: CardDef): boolean {
+  if (state.stack.length > 0) {
+    const top = state.stack[state.stack.length - 1];
+    // Pending cards may only be answered at instant speed, by the player who
+    // holds priority, and only when the top card belongs to their opponent.
+    return isInstantSpeed(def) && hasPriority(state, pid) && top.controller !== pid;
+  }
   // Instant speed: any window where this player holds priority — including
-  // holding a response over something already on the stack.
+  // an empty-stack reaction window.
   if (isInstantSpeed(def)) {
     return inOwnMain(state, pid) || reactionOpenFor(state, pid) || hasPriority(state, pid);
   }
@@ -1952,12 +1964,24 @@ export function invokeCard(
       bondTargetIid = bondTarget.iid;
     }
   }
-  if (
-    def.onInvoke &&
-    opts.targetIid !== undefined &&
-    SINGLE_TARGETS.includes(def.onInvoke.target)
-  ) {
-    if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
+  let targetIid = opts.targetIid;
+  if (def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
+    targetIid = opts.targetIid ?? autoTarget(state, pid, def.onInvoke);
+    if (targetIid === undefined || !canTarget(state, pid, def.onInvoke, targetIid)) return false;
+  }
+
+  let toolTargetIid: string | undefined;
+  if (def.type === 'Item' && def.subtype === 'Tool' && def.nerf) {
+    const nerfEff: Effect = { action: 'weaken', value: def.nerf, target: 'enemyUnit' };
+    // A Tool with its own targeted onInvoke still has only one public target
+    // option. Reserve that option for onInvoke and choose the Tool rider
+    // automatically until the UI/API supports independent targets.
+    const onInvokeOwnsTarget = !!def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target);
+    const requestedToolTarget = onInvokeOwnsTarget ? undefined : opts.targetIid;
+    if (requestedToolTarget !== undefined && !canTarget(state, pid, nerfEff, requestedToolTarget)) {
+      return false;
+    }
+    toolTargetIid = requestedToolTarget ?? autoTarget(state, pid, nerfEff);
   }
   if (!['Unit', 'Event', 'Item', 'Location'].includes(def.type)) return false;
 
@@ -1969,14 +1993,15 @@ export function invokeCard(
   // Name the target in the log line — the battle log and the CPU-turn
   // narration are built from these lines, and "invokes X" alone left the
   // player guessing what X was pointed at.
-  const targetNote =
-    opts.targetIid && SINGLE_TARGETS.includes(def.onInvoke?.target ?? '')
-      ? opts.targetIid === 'P1' || opts.targetIid === 'P2'
-        ? ` targeting ${opts.targetIid}`
-        : findUnit(state, opts.targetIid)
-          ? ` targeting ${findUnit(state, opts.targetIid)!.def.name}`
-          : ''
-      : '';
+  const loggedTargetIid =
+    targetIid && SINGLE_TARGETS.includes(def.onInvoke?.target ?? '') ? targetIid : toolTargetIid;
+  const targetNote = loggedTargetIid
+    ? loggedTargetIid === 'P1' || loggedTargetIid === 'P2'
+      ? ` targeting ${loggedTargetIid}`
+      : findUnit(state, loggedTargetIid)
+        ? ` targeting ${findUnit(state, loggedTargetIid)!.def.name}`
+        : ''
+    : '';
   state.log.push(`${pid} invokes ${def.name}${targetNote}.`);
 
   // v6.0 Resonant: the Event's effect resolves twice.
@@ -1987,7 +2012,8 @@ export function invokeCard(
     controller: pid,
     sourceName: def.name,
     card,
-    targetIid: opts.targetIid,
+    targetIid,
+    toolTargetIid,
     bondTargetIid,
     resolveTimes: times,
   });
@@ -2164,12 +2190,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       // is honored; otherwise autoTarget picks (the CPU's path, unchanged).
       if (def.subtype === 'Tool' && def.nerf) {
         const nerfEff: Effect = { action: 'weaken', value: def.nerf, target: 'enemyUnit' };
-        const wantsOwnTarget = !!def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target);
-        const chosen =
-          !wantsOwnTarget && item.targetIid && canTarget(state, pid, nerfEff, item.targetIid)
-            ? item.targetIid
-            : undefined;
-        applyEffect(state, pid, nerfEff, chosen);
+        // The target was locked on invocation. If it became illegal in the
+        // response window, only the debuff is lost; the successful bond stays.
+        if (item.toolTargetIid && canTarget(state, pid, nerfEff, item.toolTargetIid)) {
+          applyEffect(state, pid, nerfEff, item.toolTargetIid);
+        }
       }
       // v6.0 Runic: bonding this Item from hand Deals its controller a card.
       if (hasKw(def, 'Runic')) {
@@ -2288,6 +2313,13 @@ export function activateLeaderAbility(
   const ability = L.def.leaderAbilities?.[abilityIndex];
   if (!ability) return false;
   if (ability.resolveDelta < 0 && L.resolve + ability.resolveDelta < 0) return false;
+  let lockedTargetIid = targetIid;
+  if (SINGLE_TARGETS.includes(ability.effect.target)) {
+    lockedTargetIid = targetIid ?? autoTarget(state, pid, ability.effect);
+    if (lockedTargetIid === undefined || !canTarget(state, pid, ability.effect, lockedTargetIid)) {
+      return false;
+    }
+  }
   L.abilityUsedThisTurn = true;
   // A builder ability can never take Resolve ABOVE the Leader's printed value.
   // `Resolute` has always said "up to its printed value" and the UI models the
@@ -2309,17 +2341,17 @@ export function activateLeaderAbility(
   // the CPU narration and battle log had no line for them at all, so the
   // opponent's Resolve changed and units took damage "from nowhere".
   {
-    const targetUnit = targetIid ? findUnit(state, targetIid) : undefined;
+    const targetUnit = lockedTargetIid ? findUnit(state, lockedTargetIid) : undefined;
     const abilityNote =
       ability.text ?? `${ability.resolveDelta > 0 ? '+' : ''}${ability.resolveDelta}`;
     const targetNote = targetUnit
       ? ` on ${targetUnit.def.name}`
-      : targetIid === 'P1' || targetIid === 'P2'
-        ? ` on ${targetIid}`
+      : lockedTargetIid === 'P1' || lockedTargetIid === 'P2'
+        ? ` on ${lockedTargetIid}`
         : '';
     state.log.push(`${pid}'s Leader ${L.def.name} uses "${abilityNote}"${targetNote}.`);
   }
-  applyEffect(state, pid, ability.effect, targetIid);
+  applyEffect(state, pid, ability.effect, lockedTargetIid);
   if (L.resolve <= 0) {
     L.shattered = true;
     L.invoked = false;

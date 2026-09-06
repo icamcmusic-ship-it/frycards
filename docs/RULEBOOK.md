@@ -38,7 +38,7 @@ Unit keywords (rulebook §1):
 | Swarmproof   | Must be guarded by two or more units                                                     |
 | Skywatch     | Can guard Aerial units                                                                   |
 | Warded       | Can't be targeted by an opponent                                                         |
-| Unbreakable  | Once per game, prevent the first effect that would shatter this or deal it lethal damage |
+| Unbreakable  | Once per game, prevent the first shatter or lethal-damage effect; 0 Grit and banish bypass it |
 | Ambush       | Can be invoked at any time, even outside your main phase                                 |
 | Immobile     | Can't attack                                                                             |
 | Regenerate   | At Dawn, heal all damage marked on this unit                                             |
@@ -56,10 +56,11 @@ Unit keywords (rulebook §1):
 | Withering (Shadow)     | Clash damage this deals to a unit permanently reduces that unit's Grit by 1 |
 | Entropic (Void)        | At your Dusk, the enemy erodes 1                                            |
 
-Wildfire and Withering fire on banish as well as shatter, and an Item that
-grants either still grants it at the moment its bearer leaves the field.
-Withering's Grit loss is permanent: unlike marked damage, healing does not
-restore it, and a unit withered to 0 Grit is shattered by the state checks.
+Wildfire fires when its unit leaves the field, including through banish, and
+an Item that grants Wildfire still grants it at that moment. Withering applies
+only when its unit deals clash damage to another unit. Its Grit loss is
+permanent: unlike marked damage, healing does not restore it, and a unit
+withered to 0 Grit is shattered by the state checks.
 
 **v6.0:** every other card type has its own keyword pair:
 
@@ -94,6 +95,17 @@ Locations none in Ember or Gale:
 | Blessed (Item — Light)            | When this Item bonds to a unit from your hand, restore 3 Vitality                 |
 | Scorched-Earth (Location — Ember) | At your Dusk, if you control 3 or more Sanctums, deal 1 damage to each enemy unit |
 | Glaciate (Location — Gale)        | At every other Dawn, exhaust a target enemy unit                                  |
+
+**v23–v24:** implemented Leader and Event keywords:
+
+| Keyword (type — Essence Type) | Meaning                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Onslaught (Leader — Ember)    | While your Leader is invoked, your attacking units get +1 Might                                            |
+| Beacon (Leader — Light)       | At your Dawn, your invoked Leader restores 1 Vitality                                                     |
+| Dread (Leader — Void)         | While your Leader is invoked, enemy units get -1 Might                                                    |
+| Kindle (Event — Ember)        | When this Event resolves, deal 1 damage to the enemy player                                               |
+| Tailwind (Event — Gale)       | When this Event resolves, recover a random exhausted friendly unit, or a Location if no unit is exhausted |
+| Luminous (Event — Light)      | When this Event resolves, restore 1 Vitality                                                              |
 
 Fate and Erode are deliberately different sizes of the same idea: Erode puts
 the card in the ash-pile, where Exhume and the rest of Shadow can still reach
@@ -142,8 +154,11 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
   - _Quick_ — invokable any time you have a priority window.
   - _Slow_ — own main phases only.
 - **Leader** — one per deck, starts in the Leader zone, always available to
-  invoke once you can afford it. Has **Resolve** instead of Might/Grit; its
-  abilities cost (or build) Resolve; at 0 Resolve it is shattered.
+  invoke in your own main phase with the stack empty once you can afford it.
+  Has **Resolve** instead of Might/Grit; one ability may be activated per turn,
+  in your own main phase with the stack empty. **[digital]** Leader invocation
+  and abilities resolve immediately instead of using the stack. At 0 Resolve
+  the Leader is shattered.
 
 ## 3. Objective & Setup
 
@@ -208,9 +223,10 @@ Field (permanents in play) · Ash-pile (discard) · Deck · Hand · The Void
 
 ## 6. The Stack & Priority
 
-Nothing takes effect the instant it is played. An invoked card or a triggered
-ability goes on **the stack** and waits there while both players get a chance
-to respond.
+Invoked Units, Events, Items and Sanctums, plus triggered abilities, go on
+**the stack** and wait there while both players get a chance to respond.
+**[digital]** Leader invocation and Leader abilities resolve immediately and
+do not use the stack.
 
 - **Order of priority is APNAP** — Active Player, then Non-Active Player. The
   player whose turn it is always speaks first in a round.
@@ -218,9 +234,10 @@ to respond.
   **last in, first out**, so a response resolves _before_ the thing it
   answers. With an empty stack, passing simply closes the window.
 - **Only instant-speed cards can be played into an open stack**: Quick Events
-  and Ambush units. Everything else waits for your own main phase with the
-  stack empty.
-- **Targets are re-checked on resolution.** If the target is gone or has
+  and Ambush units, by the priority holder, in response to an opponent's top
+  item. Everything else waits for your own main phase with the stack empty.
+- **Targets are chosen and locked on invocation, then re-checked on
+  resolution.** If the target is gone or has
   become illegal (a unit that died in response, or one that gained Warded),
   the item **fizzles**: an Event does nothing and still goes to the Ash-pile,
   a Unit still enters the field and loses only its rider, and an Item whose
@@ -263,7 +280,8 @@ not only in your own main phase — an answer you cannot pay for is no answer.
 Before any player acts, the game automatically checks: 0-or-less Vitality
 loses; Dealing from an empty deck loses; lethal damage (or 0 Grit)
 shatters a unit (an Unbreakable unit with its once-per-game save still
-unspent survives instead — wounded, at one below its effective Grit);
+unspent survives instead — wounded, with 1 remaining Grit after marked
+damage); banish and a reduction to 0 Grit bypass Unbreakable;
 illegally bonded Items unbond.
 When a unit leaves the field, its Charms go to the Ash-pile, its Weapons and
 Tools stay on the field unbonded, and Soulbound Items return to their

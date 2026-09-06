@@ -260,7 +260,7 @@ export const KEYWORD_TEXT: Record<Keyword, string> = {
   Skywatch: 'Can guard Aerial units.',
   Warded: "Can't be targeted by an opponent.",
   Unbreakable:
-    'Once per game, prevent the first effect that would shatter this or deal it lethal damage.',
+    'Once per game, prevent the first shatter or lethal-damage effect. Banish and 0 Grit bypass this save.',
   Ambush: 'Can be invoked at any time, even outside your main phase.',
   Immobile: "Can't attack.",
   Regenerate: 'At Dawn, heal all damage marked on this unit.',
