@@ -87,7 +87,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Responding (the stack)',
-        'An invoked card does not resolve instantly — it goes on the stack, and the other player gets a window to answer with a Quick Event or Ambush unit before it takes effect. Responses resolve last-in-first-out, and a response whose target is gone by the time it resolves fizzles. PASS when you have no answer (or don’t want to spend one).',
+        'Invoked Units, Events, Items and Sanctums go on the stack, and the other player gets a window to answer with a Quick Event or Ambush unit before they take effect. Responses resolve last-in-first-out, and a response whose locked target is gone or illegal when it resolves fizzles. Leaders and Leader abilities are immediate digital actions and do not use the stack. PASS when you have no answer (or don’t want to spend one).',
       ],
     ],
   },
@@ -112,7 +112,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Leader',
-        'Starts in the Leader zone; invoke it once you can afford its cost. It has Resolve instead of Might/Grit: its abilities spend (or build) Resolve, one activation per turn — at 0 Resolve it is shattered and gone for the game.',
+        'Starts in the Leader zone; invoke it during your own main phase with the stack empty once you can afford its cost. It has Resolve instead of Might/Grit: one ability may be activated per turn, during your own main phase with the stack empty. Leader invocation and abilities resolve immediately in this digital client; at 0 Resolve the Leader is shattered and gone for the game.',
       ],
     ],
   },
@@ -145,7 +145,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'State checks',
-        'Lethal damage (or 0 Grit) shatters a unit to the Ash-pile — an Unbreakable unit shrugs off the FIRST such effect of the game (once per game, and it survives wounded, at 1 effective Grit). A unit shrunk to 0 Grit by Withering or a -X/-X effect is shattered the same way, and unlike marked damage that shrinking is permanent: healing will not bring it back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
+        'Lethal damage shatters a unit to the Ash-pile — an Unbreakable unit prevents the first lethal-damage or shatter effect once per game and survives wounded with 1 remaining Grit (effective Grit minus marked damage). Banish and being reduced to 0 Grit bypass that save. Grit lost to Withering or a -X/-X effect is permanent, so healing cannot bring a 0-Grit unit back. 0-or-less Vitality, or Dealing from an empty deck, loses immediately.',
       ],
     ],
   },
