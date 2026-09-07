@@ -28,6 +28,7 @@ import { createPortal } from 'react-dom';
 import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect, EssenceCost, totalCost } from '../game/v3/cards';
 import { cn } from '../lib/utils';
+import { isVideoSrc, mediaUrl, originalMediaUrl } from '../lib/media';
 import {
   rarityBorder,
   rarityGlow,
@@ -1342,27 +1343,35 @@ function setStyle(set?: string): { label: string; className: string; bar: string
   }
 }
 
-/** True when `src` points at a video file rather than a still image. */
-function isVideoSrc(src: string): boolean {
-  return /\.(mp4|webm|mov)(\?|#|$)/i.test(src);
-}
-
 /** Card art with a graceful fallback if the image 404s or never loads. */
 function CardArtBase({
   def,
   onLoaded,
   cover,
+  boxWidth,
 }: {
   def: CardDef;
   onLoaded?: () => void;
   /** Full-Art template: the image fills its box edge-to-edge (object-cover)
    * instead of ever letterboxing. */
   cover?: boolean;
+  /** Width of the art box in CSS pixels. Drives the resized derivative that
+   * actually gets fetched — card art is multi-megabyte generator output and
+   * paints into a box at most 240px wide, so this is the difference between
+   * tens of kilobytes and tens of megabytes per card. */
+  boxWidth?: number;
 }) {
   const [broken, setBroken] = useState(false);
+  // A resized derivative that fails falls back to the untransformed original
+  // once before the card gives up: image transformation is a paid add-on and
+  // may be off on the project, in which case art must still paint.
+  const [fullSize, setFullSize] = useState(false);
   // Reset whenever the image URL actually changes (a caller may swap `def`
   // without remounting).
-  useEffect(() => setBroken(false), [def.image]);
+  useEffect(() => {
+    setBroken(false);
+    setFullSize(false);
+  }, [def.image]);
   if (!def.image || broken) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)]">
@@ -1390,14 +1399,20 @@ function CardArtBase({
       />
     );
   }
+  const resolved = fullSize
+    ? originalMediaUrl(def.image)
+    : (mediaUrl(def.image, boxWidth) ?? def.image);
   return (
     <img
-      src={def.image}
+      src={resolved}
       alt=""
       className={artClass}
       draggable={false}
       loading="lazy"
-      onError={() => setBroken(true)}
+      onError={() => {
+        if (!fullSize && resolved !== originalMediaUrl(def.image!)) setFullSize(true);
+        else setBroken(true);
+      }}
       onLoad={onLoaded}
     />
   );
@@ -1984,7 +1999,7 @@ function MicroCard({
     >
       {/* Full-bleed art layer */}
       <div className="absolute inset-0">
-        <CardArt def={def} cover />
+        <CardArt def={def} cover boxWidth={w} />
       </div>
       {/* Top + bottom legibility scrims — one continuous gradient so text
           always reads over any art, with a clear window in the middle. */}
@@ -2587,7 +2602,7 @@ export function CardFace({
               hasn't painted yet (or failed to load). */}
           {mythicArt && !dimmed && <div aria-hidden className="fc-my-scan absolute inset-0" />}
           <div className="absolute inset-0">
-            <CardArt def={def} cover />
+            <CardArt def={def} cover boxWidth={SIZES[size].w} />
           </div>
           <div
             aria-hidden
@@ -2652,7 +2667,7 @@ export function CardFace({
               'relative overflow-hidden aspect-[4/3] shrink-0 mx-1.5 mt-1 border border-[var(--c-ink)]',
             )}
           >
-            <CardArt def={def} />
+            <CardArt def={def} boxWidth={SIZES[size].w} />
             <div
               aria-hidden
               className="absolute inset-0 pointer-events-none"

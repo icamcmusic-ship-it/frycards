@@ -7,12 +7,7 @@ const PER_IMAGE_TIMEOUT_MS = 12_000;
  * recovering from it. */
 const CONCURRENCY = 24;
 
-/** True when `url` points at a video file rather than a still image — kept in
- * sync with CardFaceV4's isVideoSrc, since Full-Art/Mythic cards print .mp4
- * art (see CardArt). */
-function isVideoSrc(url: string): boolean {
-  return /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
-}
+import { isVideoSrc, mediaUrl } from './media';
 
 function loadOne(url: string): Promise<void> {
   // A video URL fed to `new Image()` fails to decode immediately — the
@@ -78,8 +73,15 @@ function loadOne(url: string): Promise<void> {
 export function preloadImages(
   urls: (string | null | undefined)[],
   onProgress?: (loaded: number, total: number) => void,
+  /** Warm the resized derivative for a box this wide rather than the
+   * full-resolution original — preloading originals is how a single screen
+   * transition turns into hundreds of megabytes of egress. Defaults to the
+   * largest card tier. */
+  boxWidth = 240,
 ): Promise<void> {
-  const unique = [...new Set(urls.filter((u): u is string => !!u))];
+  const unique = [
+    ...new Set(urls.map((u) => mediaUrl(u, boxWidth)).filter((u): u is string => !!u)),
+  ];
   const total = unique.length;
   if (total === 0) {
     onProgress?.(0, 0);

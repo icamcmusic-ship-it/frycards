@@ -217,6 +217,7 @@ function PlayScreen({
                       <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
                         <SafeImage
                           src={leader?.image}
+                          boxWidth={224}
                           className="w-full h-full object-cover"
                           fallbackText={leader?.name}
                         />
