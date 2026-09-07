@@ -20,7 +20,6 @@ import {
   subscribeTable,
   OwnedSerializedCard,
 } from '../lib/supabase';
-import { preloadImages } from '../lib/preload';
 
 /** Unlike `withTimeout` (which resolves to a fallback value so callers can
  * treat "timed out" and "succeeded with this value" identically), a timeout
@@ -180,7 +179,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setShopItems(items);
         setPackTypes(packs);
-        return preloadImages([...items.map((i) => i.image_url), ...packs.map((p) => p.image_url)]);
+        // Store images already load lazily when their cards become visible.
       })
       .catch(() => {
         // Leave shopItems/packTypes at their default `[]` — the Store screen

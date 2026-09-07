@@ -23,6 +23,7 @@
  * Full-Art full-bleed).
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { VisibleVideo } from './VisibleVideo';
 import { createPortal } from 'react-dom';
 import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
 import { CardDef, CardType, Effect, EssenceCost, totalCost } from '../game/v3/cards';
@@ -1375,7 +1376,7 @@ function CardArtBase({
   const artClass = cn('w-full h-full bg-[var(--c-ink)]', cover ? 'object-cover' : 'object-contain');
   if (isVideoSrc(def.image)) {
     return (
-      <video
+      <VisibleVideo
         src={def.image}
         className={artClass}
         autoPlay
