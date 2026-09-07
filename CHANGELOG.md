@@ -9,6 +9,39 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+#### Re-encoding the masters, so cheap art does not depend on a paid add-on
+
+The egress fix below routes card art through the storage image transformation
+endpoint. That endpoint is a paid add-on, which makes the saving conditional on
+a billing setting. `scripts/reencode-card-art.ts` removes the condition by
+fixing the originals: every still in the bucket is capped at 1024px on its
+longest edge — roughly 2x headroom over the 480 device pixels the largest card
+tier can display — and re-encoded to WebP at quality 82.
+
+It rewrites **in place, under the same object key**, so `…/art.png` ends up
+serving `image/webp`. That is deliberate. The image URLs are referenced from
+`public.cards.template`, `image_url` on several tables, player-owned cosmetics
+and shop banners, and the bundled `generated-cards.ts`; renaming the objects
+would mean rewriting every one of those in lockstep, while keeping the key
+means nothing else changes at all. Browsers dispatch on `Content-Type`, and the
+only extension test in the app (`isVideoSrc`) asks about `.mp4` alone.
+
+Destructive scripts earn their safeguards. It is a dry run until `--apply`;
+every original is downloaded to `.art-backup/` and its size verified on disk
+*before* the object it came from is overwritten; `--restore` puts them back;
+`--limit` exists so the first run can be three files rather than three hundred.
+Videos, animated stills, undecodable objects and art that would not get
+meaningfully smaller (under a 25% saving) are skipped rather than mangled, and
+a single failure is recorded and stepped over instead of aborting the batch
+halfway through a bucket.
+
+The decision logic lives in `scripts/lib/reencode.ts` with no network and no
+filesystem, because rules that govern a one-way bucket rewrite should be
+testable. Ten tests cover the edge cap and aspect-ratio preservation, the
+refusal to upscale a source already under the ceiling, agreement between the
+reported dimensions and the bytes actually produced, boundedness across square
+and extreme-ratio inputs, and each skip path.
+
 #### Cached egress: the CDN was shipping 6 MB PNGs into 140-pixel boxes
 
 The backend's cached egress was pinned at its ceiling. Two causes, both in the

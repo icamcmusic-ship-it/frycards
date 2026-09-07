@@ -22,7 +22,8 @@
     "sim:v4": "tsx scripts/simulate-v5.ts",
     "audit:cardface": "tsx scripts/audit-cardface.ts",
     "audit:screens": "tsx scripts/audit-meta-screens.ts",
-    "drive:match": "tsx scripts/drive-match.ts"
+    "drive:match": "tsx scripts/drive-match.ts",
+    "art:reencode": "tsx scripts/reencode-card-art.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
@@ -49,6 +50,7 @@
     "jsdom": "^30.0.1",
     "playwright": "^1.62.0",
     "prettier": "^3.9.4",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

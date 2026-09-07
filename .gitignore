@@ -16,3 +16,6 @@ scripts/live-cards.json
 # the latest run or two are ever needed, and they stay on disk locally after
 # a run rather than living in git.
 docs/sim-runs/
+
+# Local backup written by scripts/reencode-card-art.ts
+.art-backup/
