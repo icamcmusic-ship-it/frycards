@@ -9,6 +9,31 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+#### Image transformation was the next ceiling: disabled the rewrite, kept the real fix
+
+Fixing cached egress by routing card art through Supabase's image
+transformation endpoint (`mediaUrl()` in `src/lib/media.ts`, previous entry)
+traded one billing ceiling for another: that endpoint bills per **distinct
+origin image transformed in the billing period**, not per request and not per
+size variant. Browsing the ~300-card catalog touches close to the whole
+`Card Images` bucket once a month, which maxes the transformation quota by
+itself regardless of how few requests any one card gets.
+
+`mediaUrl()` and `originalMediaUrl()` are now identity functions — they return
+the URL unchanged and never touch `/storage/v1/render/image/...`. `CardArt`
+and `SafeImage` keep calling them with a `boxWidth` so neither needs to change
+again if a quota that can actually take this comes along later, but nothing is
+rewritten today. The real fix for image size stands on its own:
+`scripts/reencode-card-art.ts` (previous entry) shrinks the stored originals
+themselves at upload time, so small files are the default with no
+transformation involved at request time — and the 30-day `cache-control`
+migration means a shrunk original is fetched once per player, not once an
+hour.
+
+`media-egress.test.ts` now pins the pass-through instead of the rewrite: every
+still, video, foreign host, and null input returns unchanged, and
+`originalMediaUrl` is confirmed to be a no-op alongside it.
+
 #### Re-encoding the masters, so cheap art does not depend on a paid add-on
 
 The egress fix below routes card art through the storage image transformation

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { isTransformedUrl, mediaUrl, originalMediaUrl } from '../lib/media';
+import { mediaUrl, originalMediaUrl } from '../lib/media';
 
 const OBJECT = 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images';
 
@@ -21,61 +21,39 @@ test('card videos use visibility-gated loading', () => {
   expect(source).toContain("removeEventListener('visibilitychange', update)");
 });
 
-test('storage stills are fetched at the size they are rendered', () => {
-  const url = mediaUrl(`${OBJECT}/art.png`, 140)!;
-  expect(isTransformedUrl(url)).toBe(true);
-  expect(url).toContain('/storage/v1/render/image/public/Card%20Images/art.png');
-  expect(url).toContain('width=');
-  expect(url).toContain('quality=');
-  // The escaped path survives the rewrite — a decoded space would 404.
-  expect(url).not.toContain('Card Images');
-});
+// mediaUrl() used to rewrite storage URLs onto Supabase's image
+// transformation endpoint. That endpoint bills per DISTINCT ORIGIN IMAGE
+// touched in the billing period, not per request or per size variant, so
+// browsing the ~300-card catalog touched the whole bucket once a month and
+// maxed the transformation quota by itself — trading the cached-egress
+// ceiling for a worse one. It is an identity function now; sizing happens
+// once, at upload time, via scripts/reencode-card-art.ts. These tests pin
+// that down so a future change doesn't quietly reintroduce the rewrite.
+test('mediaUrl never rewrites onto the transformation endpoint', () => {
+  const stillUrl = `${OBJECT}/art.png`;
+  expect(mediaUrl(stillUrl, 140)).toBe(stillUrl);
+  expect(mediaUrl(stillUrl, 140)).not.toContain('/storage/v1/render/image/');
 
-test('requested widths snap to a shared ladder so derivatives stay cacheable', () => {
-  const widths = [90, 110, 140, 240].map((w) =>
-    new URL(mediaUrl(`${OBJECT}/a.png`, w)!).searchParams.get('width'),
-  );
-  // Four distinct layout widths, far fewer distinct origin transformations.
-  expect(new Set(widths).size).toBeLessThan(widths.length);
-  for (const w of widths) expect(Number(w)).toBeLessThanOrEqual(960);
-});
-
-test('a bigger box never asks for fewer pixels than a smaller one', () => {
-  const at = (w: number) =>
-    Number(new URL(mediaUrl(`${OBJECT}/a.png`, w)!).searchParams.get('width'));
-  expect(at(78)).toBeLessThanOrEqual(at(140));
-  expect(at(140)).toBeLessThanOrEqual(at(240));
-});
-
-test('videos, foreign hosts and already-transformed URLs pass through untouched', () => {
   const video = `${OBJECT}/clip.mp4`;
   expect(mediaUrl(video, 140)).toBe(video);
   expect(mediaUrl('https://example.com/avatar.png', 140)).toBe('https://example.com/avatar.png');
   expect(mediaUrl('/local/asset.png', 140)).toBe('/local/asset.png');
-  const once = mediaUrl(`${OBJECT}/a.png`, 140)!;
-  expect(mediaUrl(once, 640)).toBe(once);
   expect(mediaUrl(null, 140)).toBe(null);
+  expect(mediaUrl(undefined, 140)).toBe(null);
 });
 
-test('every transformed URL can be reversed to its original', () => {
-  const original = `${OBJECT}/a.png`;
-  expect(originalMediaUrl(mediaUrl(original, 140)!)).toBe(original);
-  // Reversing an untransformed URL is a no-op, so callers can use it blindly.
-  expect(originalMediaUrl(original)).toBe(original);
+test('originalMediaUrl is a no-op alongside the disabled rewrite', () => {
+  const stillUrl = `${OBJECT}/art.png`;
+  expect(originalMediaUrl(stillUrl)).toBe(stillUrl);
 });
 
-test('image callers fall back to the original when a derivative fails', () => {
-  // Image transformation is a paid add-on; art must still paint without it.
+test('image callers still hold a fallback to the original on load error', () => {
+  // Dead today (mediaUrl no longer produces a different URL to fall back
+  // from) but deliberately kept so a future reintroduction of server-side
+  // resizing doesn't also need to re-thread this error path.
   for (const path of ['src/meta/SafeImage.tsx', 'src/components/CardFaceV4.tsx']) {
     const source = readFileSync(path, 'utf8');
     expect(source).toContain('originalMediaUrl');
     expect(source).toMatch(/setFullSize\(true\)/);
-  }
-});
-
-test('card art is requested at its tier width, not full resolution', () => {
-  const source = readFileSync('src/components/CardFaceV4.tsx', 'utf8');
-  for (const match of source.matchAll(/<CardArt\b[^>]*>/g)) {
-    expect(match[0]).toContain('boxWidth=');
   }
 });
