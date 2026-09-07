@@ -244,6 +244,7 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                 <div className="aspect-[16/7] overflow-hidden ink-border-sm m-2">
                   <SafeImage
                     src={leader?.image}
+                    boxWidth={240}
                     alt={leader?.name || 'Leader'}
                     className="w-full h-full object-cover"
                     fallbackText={leader?.name}
@@ -625,6 +626,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 <div className="ink-border-sm m-1.5 overflow-hidden aspect-[4/3]">
                   <SafeImage
                     src={l.image}
+                    boxWidth={200}
                     alt={l.name || 'Leader'}
                     className="w-full h-full object-cover"
                     fallbackText={l.name}

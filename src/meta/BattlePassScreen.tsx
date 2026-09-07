@@ -105,6 +105,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
           {pack?.image_url ? (
             <SafeImage
               src={pack.image_url}
+              boxWidth={96}
               alt={pack.name}
               className="w-full h-full object-cover"
             />

@@ -117,6 +117,7 @@ export function LeaderPicker({
                   <div className="relative aspect-[3/4] overflow-hidden ink-border-sm m-2 bg-[var(--c-steel)]">
                     <SafeImage
                       src={leader.image || null}
+                      boxWidth={240}
                       alt={leader.name}
                       className="w-full h-full object-cover"
                       fallbackText={leader.name}

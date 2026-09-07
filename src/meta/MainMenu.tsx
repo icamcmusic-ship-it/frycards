@@ -349,6 +349,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             {avatar?.image_url ? (
               <SafeImage
                 src={avatar.image_url}
+                boxWidth={96}
                 alt="Profile avatar"
                 className="w-full h-full object-cover"
                 fallbackText={avatar.name}

@@ -9,6 +9,51 @@ recent entries. This file is the archive; that screen is not.
 
 ## Unreleased
 
+#### Cached egress: the CDN was shipping 6 MB PNGs into 140-pixel boxes
+
+The backend's cached egress was pinned at its ceiling. Two causes, both in the
+media path, and neither of them the amount of art the game has.
+
+The `Card Images` bucket is raw generator output: 149 PNGs averaging **5.9 MB**
+(the largest is 11 MB), 140 webp masters at ~740 kB, and 8 mp4 full-arts at
+~5.5 MB — a little over a gigabyte. Every one of those was served
+byte-for-byte to paint a card face, and a card face is at most 240 CSS pixels
+wide. A player scrolling the deck builder pulled tens of megabytes to render
+thumbnails a hundredth of that size.
+
+`src/lib/media.ts` now rewrites public storage URLs onto the image
+transformation endpoint at a width that matches the box they render into.
+`CardArt` passes its tier width (78 / 110 / 140 / 240), `SafeImage` takes a
+`boxWidth` and otherwise caps at 480, and the preloader warms the derivative
+rather than the original. Requested widths snap to a five-rung ladder so all
+cards at a tier share one cached derivative instead of minting an origin
+transformation per pixel size, and the device-pixel multiplier is capped at 2x
+— a phone's third pixel buys nothing visible on art this small and costs 2.25x
+the bytes. Videos pass through untouched; they were already gated behind
+visibility.
+
+Transformation is a paid add-on that can be switched off on the project, so a
+derivative that fails to load falls back to the untransformed original once
+before the card shows its placeholder. Turning the add-on off changes what this
+costs, never whether art appears.
+
+The second cause was quieter and cost more. All 302 objects carried the upload
+default `cache-control: max-age=3600`, so a returning player re-downloaded the
+art of every card they had already seen, once an hour, forever — and every one
+of those re-downloads billed as cached egress off the CDN. Widened to 30 days
+(`20260907000000_storage_cache_control.sql`), which retires the repeat traffic
+entirely: the browser answers from its own cache without reaching the CDN. Not
+a year, deliberately — the filenames carry generation UUIDs and are effectively
+immutable, but a file that *is* replaced in place should self-heal within a
+month rather than being pinned in caches until 2027. Append `?v=` to a catalog
+URL to force an earlier refresh.
+
+Nine tests in `media-egress.test.ts` lock the sizing behaviour, the ladder's
+monotonicity, the pass-throughs, the reversibility of a transformed URL, and
+the two structural guarantees that decay silently: every `<CardArt>` call site
+passes a `boxWidth`, and both image callers keep their fallback to the
+original.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them
