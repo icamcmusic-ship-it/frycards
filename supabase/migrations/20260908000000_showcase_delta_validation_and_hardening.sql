@@ -199,6 +199,13 @@ alter function public.grading_speed_mult(text, text)      set search_path to 'pu
 alter function public.grading_turnaround(text)            set search_path to 'public';
 alter function public.grading_voucher_fee(integer)        set search_path to 'public';
 
+-- `grading_voucher_fee` additionally carried an EXPLICIT `anon=X/postgres`
+-- grant on top of the PUBLIC one — the only function in the schema with a
+-- named grant to the pre-sign-in role. It is a pure pricing helper, so this
+-- was harmless, but it is an outlier with no reason to exist and
+-- `authenticated` carries its own grant, so nothing signed in loses access.
+revoke execute on function public.grading_voucher_fee(integer) from anon;
+
 -- ---------------------------------------------------------------------------
 -- 5. `match_receipts` / `match_tickets` — RLS on, zero policies.
 --
