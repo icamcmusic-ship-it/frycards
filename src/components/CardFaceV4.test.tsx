@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { CardFace, cardRuleLines, costSummary, kwList } from './CardFaceV4';
+import { CardFace, CardReadingPanel, cardRuleLines, costSummary, kwList } from './CardFaceV4';
 import type { CardDef } from '../game/v3/cards';
 
 afterEach(cleanup);
@@ -115,5 +115,21 @@ describe('cost summary', () => {
     const summary = costSummary(UNIT);
     expect(summary).toBeTruthy();
     expect(summary!).toMatch(/Tide/);
+  });
+});
+
+describe('CardReadingPanel', () => {
+  test('keeps long mechanics, keyword reminders and flavor outside card clamps', () => {
+    const def: CardDef = {
+      ...UNIT,
+      onInvoke: EVENT.onInvoke,
+      flavor: 'A long story worth reading in full.',
+    };
+    const { container } = render(<CardReadingPanel def={def} />);
+    expect(screen.getByRole('region', { name: 'Complete card rules' })).toBeTruthy();
+    for (const line of cardRuleLines(def)) expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.getByText('Aerial:')).toBeTruthy();
+    expect(screen.getByText(def.flavor!)).toBeTruthy();
+    expect(container.querySelector('[style*="line-clamp"]')).toBeNull();
   });
 });

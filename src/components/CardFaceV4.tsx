@@ -1630,13 +1630,6 @@ const MASTHEAD_H: Record<CardSize, number> = { micro: 14, compact: 18, standard:
  */
 const PLATE_CLEARANCE: Record<CardSize, number> = { micro: 8, compact: 17, standard: 24, full: 28 };
 
-const RIBBON: Record<CardSize, { top: number; left: number; font: number; padX: number }> = {
-  micro: { top: 4, left: -16, font: 5, padX: 16 },
-  compact: { top: 5, left: -18, font: 5.5, padX: 20 },
-  standard: { top: 6, left: -22, font: 6.5, padX: 26 },
-  full: { top: 9, left: -32, font: 8, padX: 38 },
-};
-
 /** A chip printed in the rules box — keywords, Item bond/Re-bond, Location
  * passive/produce — each with its glossary/explainer popover text. */
 export interface FaceChip {
@@ -1811,14 +1804,21 @@ function FittedRules({
   useLayoutEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
-    if (el && box && box.scrollHeight > box.clientHeight + 1) {
+    if (
+      el &&
+      box &&
+      !box.querySelector('[data-fc="flavor"]') &&
+      box.scrollHeight > box.clientHeight + 1
+    ) {
       setLines((l) => (l > 1 ? l - 1 : l));
     }
   });
   return (
     <p
       ref={ref}
-      className={cn('leading-snug break-words font-semibold', className)}
+      data-fc="rules"
+      title={text}
+      className={cn('shrink-0 leading-snug break-words font-semibold', className)}
       style={{
         fontSize: fontPx,
         display: '-webkit-box',
@@ -1861,7 +1861,11 @@ function FittedFlavor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && el.scrollHeight > el.clientHeight + 1) {
+    if (
+      el &&
+      (el.scrollHeight > el.clientHeight + 1 ||
+        (el.parentElement && el.parentElement.scrollHeight > el.parentElement.clientHeight + 1))
+    ) {
       setLines((l) => (l > 0 ? l - 1 : l));
     }
   });
@@ -2380,7 +2384,6 @@ export function CardFace({
   const overArt: React.CSSProperties | undefined = bleed
     ? { textShadow: '0 1px 2px rgba(0,0,0,0.9)' }
     : undefined;
-  const rib = RIBBON[size];
 
   /** Type line + rarity marker — "Type — Subtype" on the left, the short
    * rarity abbreviation stamped on an ink plate on the right (the design's
@@ -2686,21 +2689,16 @@ export function CardFace({
               </>
             )}
             {isFoil && <div aria-hidden className="fc-foil-wash absolute inset-0" />}
-            {/* Ultra-Rare and up: a struck gold ribbon across the art's
-                top-left corner. */}
+            {/* Keep the rarity stamp clear of the top-left ownership badges. */}
             {ribbon && (
               <span
                 aria-hidden
-                className="fc-ribbon absolute z-20 heading-font"
+                className="fc-ribbon absolute z-20 heading-font bottom-1 right-1 rounded-sm px-1.5 py-0.5"
                 style={{
-                  top: rib.top,
-                  left: rib.left,
-                  transform: 'rotate(-38deg)',
-                  fontSize: rib.font,
-                  padding: `2px ${rib.padX}px`,
+                  fontSize: size === 'full' ? 9 : 7,
                 }}
               >
-                ULTRA
+                ULTRA-RARE
               </span>
             )}
             {badgeStack}
@@ -2857,6 +2855,41 @@ export function CardFace({
   );
 }
 
+/** Unclipped mechanics for touch, keyboard and long cards in either inspector. */
+export function CardReadingPanel({ def }: { def: CardDef }) {
+  const lines = cardRuleLines(def);
+  return (
+    <section
+      aria-label="Complete card rules"
+      className="w-[300px] max-w-full bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm p-3 text-sm leading-relaxed break-words"
+    >
+      <h3 className="heading-font text-base">{def.name}</h3>
+      <p className="text-xs font-bold mb-2">
+        {typeLineText(def)} · {def.rarity ?? 'Unspecified rarity'}
+      </p>
+      {costSummary(def) && <p>{costSummary(def)}</p>}
+      {def.type === 'Unit' && (
+        <p>
+          Printed Might {def.might} / Grit {def.grit}
+        </p>
+      )}
+      {def.type === 'Leader' && <p>Starting Resolve {def.resolve}</p>}
+      {lines.map((line, i) => (
+        <p className="mt-2" key={i}>
+          {line}
+        </p>
+      ))}
+      {lines.length === 0 && def.text && <p className="mt-2">{def.text}</p>}
+      {kwList(def).map((kw) => (
+        <p className="mt-2" key={kw}>
+          <strong>{kw}:</strong> {KEYWORD_TEXT[kw]}
+        </p>
+      ))}
+      {def.flavor && <p className="mt-3 border-t pt-2 italic">{def.flavor}</p>}
+    </section>
+  );
+}
+
 /**
  * Universal expanded/zoomed card view — same CardFace used everywhere else,
  * just large and centered in a modal. Pass `actions` for context-specific
@@ -2888,7 +2921,7 @@ export function CardInspectorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[var(--c-ink)]/80 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-[var(--c-ink)]/80 flex items-start justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -2901,6 +2934,7 @@ export function CardInspectorModal({
         aria-label={`Inspecting ${def.name}`}
       >
         <CardFace def={def} size="full" foil={foil} />
+        <CardReadingPanel def={def} />
         {actions}
         <button
           onClick={onClose}

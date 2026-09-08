@@ -18,6 +18,7 @@ import { useFocusTrap } from './useFocusTrap';
 import { createPortal } from 'react-dom';
 import {
   GameState,
+  StackItem,
   PlayerState,
   UnitInst,
   LocationInst,
@@ -101,6 +102,26 @@ import {
   saveCpuSpeed,
   saveHandSort,
 } from '../meta/matchPrefs';
+
+/** Describe locked choices without guessing a replacement when a target leaves. */
+export function pendingChoices(g: GameState, item: StackItem): string[] {
+  const name = (iid: string) =>
+    iid === 'P1' || iid === 'P2'
+      ? `${iid === 'P1' ? 'Your' : 'Opponent’s'} Vitality`
+      : (findUnit(g, iid)?.def.name ?? 'Target left the field');
+  const choices: string[] = [];
+  const effect = item.effect ?? item.card?.def.onInvoke;
+  if (item.targetIid) {
+    const illegal = effect && !canTarget(g, item.controller, effect, item.targetIid);
+    choices.push(`Target: ${name(item.targetIid)}${illegal ? ' (no longer legal)' : ''}`);
+  }
+  if (item.bondTargetIid)
+    choices.push(
+      `Bond: ${name(item.bondTargetIid === BOND_TARGET_SELF ? item.controller : item.bondTargetIid)}`,
+    );
+  if (item.toolTargetIid) choices.push(`Weaken: ${name(item.toolTargetIid)}`);
+  return choices;
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -4114,7 +4135,7 @@ export function GameV4({
             wellspringsLeft > 0 && topWellspringNeed
               ? `A ${topWellspringNeed} Wellspring would unlock ${wellspringNeed[topWellspringNeed]} card(s) in your hand — its dot is ringed. `
               : ''
-          }Play a Wellspring (once per turn), tap Locations for essence — or just INVOKE: the cost auto-taps. ${
+          }${wellspringsLeft > 0 ? `${wellspringsLeft} Wellspring${wellspringsLeft > 1 ? 's' : ''} left this turn${wellspringsLeft > 1 ? '; the second enters exhausted' : ''}. ` : 'Wellspring allowance used. '}INVOKE auto-pays from Locations. Unspent essence clears when you change phase. ${
             g.phase === 'Main1'
               ? // Named as the button is LABELLED (v22). The hint bar said
                 // "NEXT" in three places and the phase button never reads NEXT
@@ -4373,13 +4394,9 @@ export function GameV4({
       <PhaseStepper phase={g.phase} yours={g.active === HUMAN} />
 
       {/* Contextual hint bar */}
-      {/* v20: `truncate` clipped this to one line. At 9px on a 375px phone
-          that is ~60 characters, and the hint that matters most is the guard
-          one — "Unguarded hits incoming: 12 Vitality (you have 9)" sits at the
-          END of a ~150-character string, so the single number the bar exists
-          to deliver was the first thing cut. Two lines, then clip. */}
+      {/* Instructions must wrap: touch users cannot recover clipped text by hovering. */}
       {hint && stage !== 'over' && stage !== 'mulligan' && (
-        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight z-20 line-clamp-2 sm:line-clamp-1">
+        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[11px] font-bold text-[var(--c-yellow)]/90 leading-snug z-20">
           💡 {hint}
         </div>
       )}
@@ -4659,18 +4676,23 @@ export function GameV4({
       {g.stack.length > 0 && (
         <div className="absolute left-1/2 top-[7.4rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-col gap-0.5">
           <span className="heading-font text-[9px] text-[#29B6F6]">
-            ▤ STACK — resolves top-first
+            ▤ PENDING CARDS — top resolves first
           </span>
           {[...g.stack].reverse().map((item, i) => (
             <span
               key={item.id}
               className={cn(
-                'text-[8.5px] font-bold leading-tight',
+                'text-xs font-bold leading-snug',
                 i === 0 ? 'text-[var(--c-yellow)]' : 'text-[var(--c-paper)]/70',
               )}
             >
               {item.controller === HUMAN ? 'YOU' : cpuLabel} · {item.sourceName}
               {item.kind === 'trigger' ? ' (trigger)' : ''}
+              {pendingChoices(g, item).map((choice, j) => (
+                <span className="block font-normal" key={j}>
+                  {choice}
+                </span>
+              ))}
             </span>
           ))}
           {inMyResponse && (
