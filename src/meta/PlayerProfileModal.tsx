@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useMeta } from './MetaContext';
 import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
 import { RoleBadge } from './RoleBadge';
-import { PopButton } from './ui';
+import { PopButton, UnavailableShowcaseTile } from './ui';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -209,7 +209,8 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 <div className="flex flex-wrap gap-2">
                   {(card.showcase_cards || []).map((id) => {
                     const def = POOL_BY_ID[id];
-                    if (!def) return null;
+                    if (!def)
+                      return <UnavailableShowcaseTile key={id} cardId={id} size="compact" />;
                     return <CardFace key={id} def={def} size="compact" />;
                   })}
                 </div>

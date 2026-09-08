@@ -20,7 +20,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Deck',
-        'At least 60 cards (Units, Sanctums, Items, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic exactly 1.',
+        'At least 60 cards (Units, Sanctums, Items, Events; up to 100) plus one Leader kept separate in the Leader zone. No more than 4 copies of any card; premium rarities are capped tighter — Super-Rare/Ultra-Rare/Full-Art up to 2, Alt-Art/Mythic up to 1.',
       ],
       [
         'Color legality',
@@ -51,7 +51,10 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
         'Clash',
         'Declare attackers → the defender assigns guards → a reaction window (Quick Events / Ambush units) → simultaneous clash damage.',
       ],
-      ['Main Phase II', 'A second full main phase — spend fresh essence, keep developing.'],
+      [
+        'Main Phase II',
+        'A second main phase. Unspent essence from the previous phase is gone; Locations stay exhausted until Dawn. Use any Locations still ready to keep developing.',
+      ],
       [
         'Keyboard',
         'The clash bar carries exactly one loud button at a time — TO CLASH, DECLARE ATTACK, CONFIRM GUARDS, RESOLVE CLASH, PASS, END TURN, SKIP — and the SPACE bar presses whichever one it is currently showing, so a whole match can be played without moving the pointer back to the middle of the board eighty times. The button says SPACE on it whenever the key is live. Escape is the other half: it cancels a target pick, clears an attacker or guard assignment, and closes whatever overlay is frontmost, one layer per press.',
@@ -347,6 +350,39 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="HOW TO PLAY" onBack={onBack} />
       <div className="p-6 max-w-3xl mx-auto flex flex-col gap-2">
+        <section
+          aria-label="Your first turn"
+          className="ink-border-sm p-4 mb-3 text-sm leading-relaxed"
+        >
+          <h2 className="heading-font text-lg mb-2">YOUR FIRST TURN</h2>
+          <ol className="list-decimal pl-5 space-y-2">
+            <li>Keep your opening hand, or mulligan for one fewer card.</li>
+            <li>
+              Play a free Wellspring in a color your hand needs. Going second? You may play a second
+              on your first turn; that one enters exhausted.
+            </li>
+            <li>
+              Select a card and INVOKE. Ready Locations pay its cost automatically. If asked, choose
+              a highlighted target.
+            </li>
+            <li>
+              TO CLASH opens combat. Select ready units, then DECLARE ATTACK, or SKIP TO MAIN II.
+              New units cannot attack without Reckless, but can guard while ready.
+            </li>
+            <li>
+              After guards, play a Quick Event or Ambush unit if useful, then RESOLVE CLASH. During
+              a response to a pending card, PASS lets it resolve; it does not end your turn.
+            </li>
+            <li>
+              Main II lets you play more cards. END TURN runs Dusk, asks you to discard down to 7 if
+              needed, then gives the opponent their turn.
+            </li>
+          </ol>
+          <p className="mt-3 font-bold">
+            Essence clears every phase. Locations recover at Dawn. Reduce the opponent to 0 Vitality
+            to win; drawing from an empty deck also loses.
+          </p>
+        </section>
         {SECTIONS.map((sec, i) => (
           <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
             <button

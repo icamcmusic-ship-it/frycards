@@ -682,3 +682,37 @@ html[data-motion='reduced'] .serialized-sheen {
     transform: translate(-50%, -50%);
   }
 }
+
+/* Splash loading bar — indeterminate.
+ *
+ * The splash bar was a determinate `width: {pct}%` fill driven by a boot-time
+ * image-preload counter. That preload is gone (media loads on demand now), so
+ * nothing ever advanced the counter and the bar sat at 0% for the whole
+ * splash — an indicator that reads as a hung app. There is no byte-progress
+ * to report on the one remaining request, so the honest presentation is a
+ * sweep that says "working" without claiming a number. */
+@keyframes splash-indeterminate-kf {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.splash-indeterminate {
+  animation: splash-indeterminate-kf 1.1s ease-in-out infinite;
+}
+/* Reduced motion gets a static filled bar rather than nothing at all — the
+ * point of the element is to show the app is alive. */
+@media (prefers-reduced-motion: reduce) {
+  .splash-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+html[data-motion='reduced'] .splash-indeterminate {
+  animation: none;
+  width: 100%;
+  opacity: 0.5;
+}

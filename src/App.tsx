@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { fetchCardTemplates, recordMatchResult, beginMatch, MatchResult } from './lib/supabase';
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
-import { POOL_BY_ID, POOL_V4, applyCardPool } from './game/v3/cardpool';
+import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
 import { withTimeout } from './lib/utils';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
@@ -597,7 +597,6 @@ export default function App() {
   // below, which is what makes the motion library honour any of it at all.
   const { mode: motionMode, changeMode: changeMotionMode } = useMotionMode();
   const [poolReady, setPoolReady] = useState(false);
-  const [progress, setProgress] = useState({ loaded: 0, total: 0 });
   const [poolError, setPoolError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -643,7 +642,6 @@ export default function App() {
         <button
           onClick={() => {
             setPoolError(null);
-            setProgress({ loaded: 0, total: 0 });
             setAttempt((n) => n + 1);
           }}
           className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
@@ -655,22 +653,30 @@ export default function App() {
   }
 
   if (!poolReady) {
-    const pct = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
+    // The bar used to be DETERMINATE, driven by a `progress` counter that
+    // was fed by the boot-time image preload. That preload was removed when
+    // media went load-on-demand, and nothing has called its setter since —
+    // so `progress.total` was permanently 0, the label was permanently
+    // "FETCHING CARD DATABASE…" and the bar was permanently frozen at 0%
+    // for the entire splash. A progress indicator that never moves reads as
+    // a hung app, which is worse than no indicator at all.
+    //
+    // There is only one request left to wait on (`fetchCardTemplates`) and
+    // it reports no byte progress, so there is no percentage to show. The
+    // bar is indeterminate now: it says "still working" honestly instead of
+    // claiming 0% forever.
     return (
       <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
         <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
           FRY CARDS
         </div>
-        <div className="text-[var(--c-paper)] font-mono text-xs">
-          {progress.total > 0
-            ? `LOADING CARD ART… ${progress.loaded}/${progress.total}`
-            : 'FETCHING CARD DATABASE…'}
-        </div>
-        <div className="w-64 h-2 ink-border-sm bg-[var(--c-paper)]/10 overflow-hidden">
-          <div
-            className="h-full bg-[var(--c-yellow)] transition-all duration-150"
-            style={{ width: `${pct}%` }}
-          />
+        <div className="text-[var(--c-paper)] font-mono text-xs">FETCHING CARD DATABASE…</div>
+        <div
+          className="w-64 h-2 ink-border-sm bg-[var(--c-paper)]/10 overflow-hidden"
+          role="progressbar"
+          aria-label="Loading the card database"
+        >
+          <div className="h-full w-1/3 bg-[var(--c-yellow)] splash-indeterminate" />
         </div>
       </div>
     );

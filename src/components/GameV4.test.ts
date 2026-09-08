@@ -13,7 +13,14 @@
  * These pin the pure predicate the pill's enabled state is derived from.
  */
 import { describe, expect, test } from 'vitest';
-import { FX_MS, FX_UNMOUNT_SLACK_MS, fxPaceFor, fxUnmountMs, leaderAbilityWhy } from './GameV4';
+import {
+  FX_MS,
+  FX_UNMOUNT_SLACK_MS,
+  fxPaceFor,
+  fxUnmountMs,
+  leaderAbilityWhy,
+  pendingChoices,
+} from './GameV4';
 import { CPU_SPEEDS } from '../meta/matchPrefs';
 import { CardDef } from '../game/v3/cards';
 import { DeckDef, GameState, createGame, mulberry32, summonUnit } from '../game/v3/engine';
@@ -173,5 +180,46 @@ describe('paced combat effects', () => {
   test('an out-of-range speed index falls back to the unscaled pace', () => {
     expect(fxPaceFor(-1)).toBe(1);
     expect(fxPaceFor(999)).toBe(1);
+  });
+});
+
+describe('pendingChoices', () => {
+  test('shows the locked target and flags a target that becomes Warded', () => {
+    const s = game();
+    summonUnit(s, 'P2', VANILLA);
+    const target = s.players.P2.field[0];
+    const item = {
+      id: 'pending',
+      kind: 'trigger' as const,
+      controller: 'P1' as const,
+      sourceName: 'Removal',
+      targetIid: target.iid,
+      effect: { action: 'shatter' as const, target: 'enemyUnit' as const },
+    };
+    expect(pendingChoices(s, item)).toEqual(['Target: Vanilla']);
+    target.def = WARDED;
+    expect(pendingChoices(s, item)).toEqual(['Target: Warded (no longer legal)']);
+    s.players.P2.field = [];
+    expect(pendingChoices(s, item)).toEqual(['Target: Target left the field (no longer legal)']);
+  });
+  test('shows a self Charm as its controller’s Vitality and separates Tool choices', () => {
+    const s = game();
+    summonUnit(s, 'P1', VANILLA);
+    const base = {
+      id: 'pending',
+      kind: 'card' as const,
+      controller: 'P2' as const,
+      sourceName: 'Item',
+    };
+    expect(pendingChoices(s, { ...base, bondTargetIid: 'self' })).toEqual([
+      'Bond: Opponent’s Vitality',
+    ]);
+    expect(
+      pendingChoices(s, {
+        ...base,
+        bondTargetIid: s.players.P1.field[0].iid,
+        toolTargetIid: 'gone',
+      }),
+    ).toEqual(['Bond: Vanilla', 'Weaken: Target left the field']);
   });
 });

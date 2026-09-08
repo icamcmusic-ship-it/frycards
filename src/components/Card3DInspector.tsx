@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CardDef } from '../game/v3/cards';
-import { CardFace, CARD_SIZES } from './CardFaceV4';
+import { CardFace, CardReadingPanel, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
@@ -393,6 +393,7 @@ export function Card3DInspector({
               </div>
             </div>
           )}
+          <CardReadingPanel def={def} />
           {actions}
         </div>
       </div>
