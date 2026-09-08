@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
-import { Coins, Ticket, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Coins, Ticket, TrendingUp } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
 import { fetchCardMarketValue } from '../lib/supabase';
+import { CARD_SIZES } from '../components/CardFaceV4';
 
 /** Comic-pop button used across all meta screens. */
 export function PopButton({
@@ -123,14 +124,23 @@ export function VoucherChip({ amount }: { amount: number }) {
  * average computed server-side by get_card_market_value.
  */
 export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: boolean }) {
-  const [value, setValue] = useState<{ sales: number; avg_price: number | null } | null>(null);
+  // The fetched value is stored WITH the key it was fetched for, rather than
+  // being cleared by a `setValue(null)` in the effect body. That reset ran
+  // synchronously on every card the player opened, so each market-value
+  // lookup cost an extra render pass before the request had even been sent
+  // (react-hooks/set-state-in-effect). Keying the state instead makes the
+  // stale value unreadable during render at zero render cost.
+  const key = `${cardId}|${foil ? 'foil' : 'normal'}`;
+  const [state, setState] = useState<{
+    key: string;
+    value: { sales: number; avg_price: number | null } | null;
+  }>({ key, value: null });
 
   useEffect(() => {
     let cancelled = false;
-    setValue(null);
     fetchCardMarketValue(cardId, !!foil).then(
       (v) => {
-        if (!cancelled) setValue(v);
+        if (!cancelled) setState({ key: `${cardId}|${foil ? 'foil' : 'normal'}`, value: v });
       },
       () => undefined,
     );
@@ -139,6 +149,8 @@ export function CardMarketValuePanel({ cardId, foil }: { cardId: string; foil?: 
     };
   }, [cardId, foil]);
 
+  // A value fetched for a different card is treated as not-yet-loaded.
+  const value = state.key === key ? state.value : null;
   if (!value) return null;
   return (
     <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px]">
@@ -290,6 +302,90 @@ export function Notice({ text, kind = 'error' }: { text: string; kind?: 'error' 
       )}
     >
       {text}
+    </div>
+  );
+}
+
+/**
+ * Placeholder for a showcase slot whose card id no longer resolves to
+ * anything in the live pool.
+ *
+ * ProfileScreen, CollectionScreen and PlayerProfileModal all used to render
+ * `if (!def) return null` here. That is the worst possible handling of the
+ * case: the slot is still occupied server-side and still counts toward the
+ * 6-card cap, but the player sees an unexplained gap with no way to act on
+ * it — the same "silent nothing" shape as the showcase lock-out this shipped
+ * alongside (see the 2026-09-08 migration). A visible tile that names the
+ * problem and, where the viewer owns the profile, offers the unpin, is the
+ * difference between a recoverable state and a dead slot.
+ */
+export function UnavailableShowcaseTile({
+  cardId,
+  size = 'standard',
+  onUnpin,
+}: {
+  key?: React.Key;
+  cardId: string;
+  size?: 'compact' | 'standard';
+  /** Own-profile views pass this to render the tile as an unpin button. */
+  onUnpin?: () => void;
+}) {
+  const { w, h } = CARD_SIZES[size];
+  const body = (
+    <>
+      <AlertTriangle
+        className={size === 'compact' ? 'w-5 h-5' : 'w-7 h-7'}
+        aria-hidden
+        strokeWidth={2.5}
+      />
+      <span
+        className={cn(
+          'heading-font leading-tight',
+          size === 'compact' ? 'text-[9px]' : 'text-[11px]',
+        )}
+      >
+        CARD UNAVAILABLE
+      </span>
+      <span
+        className={cn(
+          'font-bold text-[var(--c-steel)] break-all leading-tight',
+          size === 'compact' ? 'text-[7px]' : 'text-[8px]',
+        )}
+      >
+        {cardId}
+      </span>
+      {onUnpin && (
+        <span
+          className={cn(
+            'heading-font bg-[var(--c-red)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm',
+            size === 'compact' ? 'text-[8px]' : 'text-[9px]',
+          )}
+        >
+          ★ UNPIN
+        </span>
+      )}
+    </>
+  );
+  const shell = cn(
+    'flex flex-col items-center justify-center gap-1 text-center px-1.5',
+    'bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm text-[var(--c-ink)]',
+  );
+  if (onUnpin) {
+    return (
+      <button
+        type="button"
+        onClick={onUnpin}
+        style={{ width: w, height: h }}
+        className={cn(shell, 'btn-pop')}
+        aria-label={`Unpin unavailable showcase card ${cardId}`}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <div style={{ width: w, height: h }} className={shell} role="img" aria-label="Card unavailable">
+      {body}
     </div>
   );
 }

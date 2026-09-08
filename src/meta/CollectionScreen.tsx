@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, ProgressBar, CardMarketValuePanel, Credits } from './ui';
+import {
+  MetaHeader,
+  PopButton,
+  Notice,
+  ProgressBar,
+  CardMarketValuePanel,
+  Credits,
+  UnavailableShowcaseTile,
+} from './ui';
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CardFace } from '../components/CardFaceV4';
@@ -506,7 +514,17 @@ export function CollectionScreen({
             <div className="flex flex-wrap gap-2">
               {showcase.map((id) => {
                 const def = POOL_BY_ID[id];
-                if (!def) return null;
+                // This is the player's own showcase, so the placeholder is
+                // the recovery path: tapping it unpins the dead slot.
+                if (!def)
+                  return (
+                    <UnavailableShowcaseTile
+                      key={id}
+                      cardId={id}
+                      size="compact"
+                      onUnpin={() => toggleShowcase(id)}
+                    />
+                  );
                 return (
                   <CardFace
                     key={id}

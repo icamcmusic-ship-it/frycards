@@ -12,7 +12,14 @@ import {
   PlayerRole,
   ShopItem,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, ProgressBar, levelProgress } from './ui';
+import {
+  MetaHeader,
+  PopButton,
+  Notice,
+  ProgressBar,
+  levelProgress,
+  UnavailableShowcaseTile,
+} from './ui';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
 import { POOL_V4 } from '../game/v3/cardpool';
@@ -276,7 +283,10 @@ export function ProfileScreen({
             <div className="flex flex-wrap gap-3">
               {(profile.showcase_cards || []).map((id) => {
                 const def = POOL_BY_ID[id];
-                if (!def) return null;
+                // An id that no longer resolves still occupies its slot and
+                // still counts toward the 6-card cap, so it gets a tile that
+                // says so rather than the silent gap this used to render.
+                if (!def) return <UnavailableShowcaseTile key={id} cardId={id} size="standard" />;
                 return <CardFace key={id} def={def} size="standard" />;
               })}
             </div>
