@@ -1,0 +1,133 @@
+name: Art pipeline
+
+# Runs the card-art pipeline on GitHub's runners instead of a laptop.
+#
+# Two reasons this lives here rather than in a README:
+#
+# - The one-time migration moves ~1 GB and needs Node, sharp and ffmpeg. A
+#   runner has all three, 14 GB of disk, and a fast link to Supabase.
+# - New art needs deriving forever, not once. The scheduled run below is what
+#   makes that automatic: drop a file in the Supabase dashboard and its resized
+#   copies appear without anyone remembering to do anything.
+#
+# CREDENTIALS. This repository is PUBLIC, so what is stored in secrets matters.
+# The pipeline talks S3 throughout, which means a Supabase *S3 access key* —
+# scoped to storage — rather than the service-role key, which would bypass RLS
+# across every table and function in the project. Create a pair under
+# Storage > S3 access keys in the Supabase dashboard and add them as
+# ART_S3_ACCESS_KEY_ID and ART_S3_SECRET_ACCESS_KEY under
+# Settings > Secrets and variables > Actions.
+#
+# Secrets are never exposed to workflows triggered by pull requests from forks,
+# and neither trigger below can be fired by anyone without write access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'What to run'
+        required: true
+        default: sync
+        type: choice
+        options:
+          # Derive and upload anything new or changed. Safe, additive, and what
+          # the schedule runs.
+          - sync
+          # The one-time cleanup: archive, derive, upload the ladder, then
+          # replace the stored masters with 1200px copies. Needs `confirm`.
+          - full-migration
+          # Re-encode the mp4 full-arts. Independent of the rest.
+          - shrink-video
+      confirm:
+        description: 'Type SHRINK to allow full-migration to replace stored files'
+        required: false
+        default: ''
+        type: string
+
+  schedule:
+    # Weekly, Monday 04:00 UTC. New art gets its derivatives within the week
+    # without anyone doing anything; a daily run would re-verify ~300 objects
+    # for nothing most days.
+    - cron: '0 4 * * 1'
+
+concurrency:
+  # Two runs mutating the same bucket is the one way this corrupts something.
+  group: art-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # The archive is ~1 GB and the full migration re-encodes every image.
+    timeout-minutes: 90
+    env:
+      ART_S3_ACCESS_KEY_ID: ${{ secrets.ART_S3_ACCESS_KEY_ID }}
+      ART_S3_SECRET_ACCESS_KEY: ${{ secrets.ART_S3_SECRET_ACCESS_KEY }}
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The archive is what `sync` diffs against and what `shrink-originals`
+      # verifies against. Without it every run re-downloads the whole bucket,
+      # which is billed egress — the thing this pipeline exists to reduce.
+      # restore-keys lets a new run start from the previous week's archive.
+      - name: Restore art archive
+        uses: actions/cache@v4
+        with:
+          path: art-archive
+          key: art-archive-${{ github.run_id }}
+          restore-keys: art-archive-
+
+      - name: Refuse an unconfirmed full migration
+        if: inputs.phase == 'full-migration' && inputs.confirm != 'SHRINK'
+        run: |
+          echo "full-migration replaces the stored masters with smaller copies."
+          echo "It is lossy and the bucket cannot undo it."
+          echo "Re-run with confirm: SHRINK once you have a backup of the masters."
+          exit 1
+
+      - name: Sync new and changed art
+        if: inputs.phase == 'sync' || github.event_name == 'schedule'
+        run: npm run media:sync
+
+      - name: Full migration
+        if: inputs.phase == 'full-migration'
+        run: |
+          set -euo pipefail
+          npm run media:migrate archive
+          npm run media:migrate derive
+          # --derivatives-only, and before the shrink: a plain upload pushes the
+          # archived master back to its key, which would restore every file the
+          # next step is about to replace.
+          npm run media:migrate upload -- --derivatives-only
+          npm run media:shrink-originals -- --yes
+
+      # ffmpeg is preinstalled on ubuntu-latest, which is most of why running
+      # this here beats asking someone to install it.
+      - name: Re-encode video art
+        if: inputs.phase == 'shrink-video'
+        run: npm run media:shrink-video
+
+      # The video phase rewrites generated-cards.ts to point at the .min.mp4
+      # keys. That change has to reach the repo or the next deploy undoes it.
+      - name: Surface a catalog change
+        if: inputs.phase == 'shrink-video'
+        run: |
+          if ! git diff --quiet -- src/game/generated-cards.ts; then
+            echo "::warning::generated-cards.ts changed. Download the patch artifact and commit it."
+            git diff -- src/game/generated-cards.ts > catalog.patch
+          fi
+
+      - name: Upload catalog patch
+        if: inputs.phase == 'shrink-video' && hashFiles('catalog.patch') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-patch
+          path: catalog.patch

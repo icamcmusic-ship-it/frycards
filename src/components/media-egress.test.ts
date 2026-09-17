@@ -187,7 +187,13 @@ test('shrunk video art keeps the bucket-wide cache-control', () => {
   // A fresh upload lands on the 1-hour default and would quietly undo the
   // 20260907000000 migration for exactly the largest files in the bucket.
   const source = readFileSync('scripts/shrink-video-art.ts', 'utf8');
-  expect(source).toContain("cacheControl: '2592000'");
+  // Shared with every other upload, rather than restated here — a fresh upload
+  // on the 1-hour default would quietly undo the 20260907000000 migration for
+  // the largest files in the bucket.
+  expect(source).toContain('ORIGINAL_CACHE_CONTROL');
+  expect(readFileSync('scripts/lib/storage.ts', 'utf8')).toContain(
+    "ORIGINAL_CACHE_CONTROL = 'public, max-age=2592000'",
+  );
   expect(source).toContain('+faststart');
   expect(source).toContain("'-an'");
 });
@@ -226,6 +232,16 @@ test('new art added to the bucket has a route to derivatives', () => {
   expect(source).not.toMatch(/phaseSync[\s\S]*?storage\.from\(BUCKET\)\.remove/);
 });
 
+test('the pipeline never needs a credential broader than the bucket', () => {
+  // This repo is public and the pipeline runs in Actions, so the secret it
+  // stores matters: a service-role key bypasses RLS across every table and
+  // function in the project, while an S3 access key reaches one bucket.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).not.toContain('SERVICE_ROLE');
+  expect(source).not.toContain('@supabase/supabase-js');
+  expect(source).toContain('ART_S3_ACCESS_KEY_ID');
+});
+
 test('shrinking an original never runs without a verified archive copy', () => {
   // The replacement is lossy and the bucket cannot undo it, so the archive is
   // the only way back — the same three refusals purge makes.
@@ -254,5 +270,6 @@ test('uploading cannot silently restore the originals shrink-originals replaced'
   // that has already been shrunk — it would undo the whole storage win.
   const source = readFileSync('scripts/migrate-art.ts', 'utf8');
   expect(source).toContain('--derivatives-only');
-  expect(source).toMatch(/derivativesOnly \? 0 : await put\(key, archivePath\(key\)/);
+  // The guarded branch: the master upload only happens when NOT derivatives-only.
+  expect(source).toMatch(/if \(!derivativesOnly\) \{[\s\S]{0,300}archivePath\(key\)/);
 });

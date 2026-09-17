@@ -32,16 +32,18 @@
  * from without compounding the loss. Keep `./art-archive` somewhere durable
  * before running `purge`. It is gitignored — it is ~1 GB.
  *
- * Environment:
- *   SUPABASE_SERVICE_ROLE_KEY   required by `archive`, `purge` and `sync`
- *   ART_S3_ENDPOINT             required by `upload` — the S3 API endpoint of
- *                               the destination bucket
- *   ART_S3_ACCESS_KEY_ID        required by `upload`
- *   ART_S3_SECRET_ACCESS_KEY    required by `upload`
- *   ART_S3_BUCKET               required by `upload` (default: frycards-art)
- *   ART_S3_REGION               optional (default: auto)
- *   VITE_ART_BASE_URL           required by `rewrite` — the public base the
- *                               bucket is served from, no trailing slash
+ * Environment. Everything talks S3, including to Supabase, so ONE
+ * storage-scoped credential covers every phase — no service-role key, which
+ * would reach the whole database rather than one bucket:
+ *
+ *   ART_S3_ACCESS_KEY_ID        Supabase dashboard: Storage > S3 access keys
+ *   ART_S3_SECRET_ACCESS_KEY    the secret from that same key pair
+ *   ART_S3_ENDPOINT             optional; defaults to this project's Supabase
+ *                               S3 endpoint. Point it elsewhere to move hosts.
+ *   ART_S3_BUCKET               optional (default: 'Card Images')
+ *   ART_S3_REGION               optional (default: us-east-1, the project's)
+ *   VITE_ART_BASE_URL           required by `rewrite` only — the public base
+ *                               the bucket is served from, no trailing slash
  *
  * After `rewrite`, set VITE_ART_BASE_URL in the deploy environment too: the
  * app reads it to find the derivatives, and without it every URL is served at
@@ -50,15 +52,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 import { WIDTH_LADDER, derivedKey } from '../src/lib/media';
 import { DERIVED_QUALITY, masterBytes } from './lib/derive';
-
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const BUCKET = 'Card Images';
+import {
+  BUCKET,
+  CONTENT_TYPES,
+  DERIVED_CACHE_CONTROL,
+  ORIGINAL_CACHE_CONTROL,
+  SUPABASE_URL,
+  deleteObjects,
+  die,
+  getObject,
+  listAll,
+  publicUrl,
+  putObject,
+} from './lib/storage';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -67,47 +76,8 @@ const DERIVED = path.join(ARCHIVE, '.derived');
 const MANIFEST = path.join(ARCHIVE, 'manifest.json');
 const CATALOG = path.join(ROOT, 'src', 'game', 'generated-cards.ts');
 
-/** Long cache lifetime for the derivatives. A derived key is a pure function
- * of its source key and a width, and the source keys carry generation UUIDs,
- * so these are immutable in practice — unlike the originals, which the
- * 20260907000000 migration capped at 30 days precisely so a file replaced in
- * place would self-heal. */
-const DERIVED_CACHE_CONTROL = 'public, max-age=31536000, immutable';
-const ORIGINAL_CACHE_CONTROL = 'public, max-age=2592000';
-
-const CONTENT_TYPES: Record<string, string> = {
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-};
-
 const isImage = (key: string) => /\.(png|webp|jpe?g)$/i.test(key);
 const mb = (n: number) => (n / 1048576).toFixed(1);
-
-function die(message: string): never {
-  console.error(message);
-  process.exit(1);
-}
-
-function requireEnv(...names: string[]): void {
-  const missing = names.filter((n) => !process.env[n]);
-  if (missing.length) die(`Missing required environment: ${missing.join(', ')}`);
-}
-
-function supabaseClient() {
-  if (!SERVICE_KEY) die('SUPABASE_SERVICE_ROLE_KEY is required for this phase.');
-  return createClient(SUPABASE_URL, SERVICE_KEY);
-}
-
-/** The public URL for `key`, in the form the catalog stores — `encodeURI`,
- * not `encodeURIComponent`, so the path separators survive. */
-function publicUrl(key: string): string {
-  return `${SUPABASE_URL}/storage/v1/object/public/${encodeURI(BUCKET)}/${encodeURI(key)}`;
-}
 
 /** Local path for an object key. Keys contain spaces, colons and slashes; the
  * slashes become real directories and everything else is kept verbatim so the
@@ -123,25 +93,8 @@ function readManifest(): { keys: string[] } {
 
 // ---------------------------------------------------------------- archive
 
-async function listAll(
-  supabase: ReturnType<typeof supabaseClient>,
-  prefix = '',
-): Promise<{ key: string; size: number }[]> {
-  const { data, error } = await supabase.storage.from(BUCKET).list(prefix, { limit: 1000 });
-  if (error) throw new Error(`list(${prefix || '/'}): ${error.message}`);
-  const found: { key: string; size: number }[] = [];
-  for (const entry of data ?? []) {
-    const key = prefix ? `${prefix}/${entry.name}` : entry.name;
-    // A folder comes back with no `id`; a file always has one.
-    if (!entry.id) found.push(...(await listAll(supabase, key)));
-    else found.push({ key, size: Number(entry.metadata?.size ?? 0) });
-  }
-  return found;
-}
-
 async function phaseArchive(): Promise<void> {
-  const supabase = supabaseClient();
-  const objects = await listAll(supabase);
+  const objects = await listAll();
   if (objects.length === 0) die('Listed zero objects — refusing to write an empty manifest.');
   console.log(`${objects.length} objects, ${mb(objects.reduce((n, o) => n + o.size, 0))} MB total`);
 
@@ -156,13 +109,13 @@ async function phaseArchive(): Promise<void> {
       skipped++;
       continue;
     }
-    const { data, error } = await supabase.storage.from(BUCKET).download(key);
-    if (error || !data) {
-      console.error(`  FAILED ${key}: ${error?.message ?? 'no body'}`);
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, await getObject(key));
+    } catch (err) {
+      console.error(`  FAILED ${key}: ${(err as Error).message}`);
       continue;
     }
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, Buffer.from(await data.arrayBuffer()));
     fetched++;
     if (fetched % 25 === 0) console.log(`  ${fetched} downloaded…`);
   }
@@ -221,87 +174,61 @@ async function phaseDerive(): Promise<void> {
 
 // ----------------------------------------------------------------- upload
 
-/** An S3 client for the destination bucket. Any S3-compatible host works —
- * the endpoint is what selects it, so switching hosts is a config change
- * rather than a code change. */
-function bucketClient(): S3Client {
-  requireEnv('ART_S3_ENDPOINT', 'ART_S3_ACCESS_KEY_ID', 'ART_S3_SECRET_ACCESS_KEY');
-  return new S3Client({
-    region: process.env.ART_S3_REGION || 'auto',
-    endpoint: process.env.ART_S3_ENDPOINT!,
-    // Most S3-compatible hosts serve the bucket as a path, not a subdomain.
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.ART_S3_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.ART_S3_SECRET_ACCESS_KEY!,
-    },
-  });
-}
-
-type Uploader = (key: string) => Promise<{ count: number; bytes: number }>;
-
-/** An uploader for one key and all of its derivatives. */
-function uploaderFor(client: S3Client, bucket: string, derivativesOnly = false): Uploader {
-  const put = async (key: string, file: string, cacheControl: string): Promise<number> => {
-    const body = fs.readFileSync(file);
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: CONTENT_TYPES[path.extname(key).toLowerCase()] || 'application/octet-stream',
-        CacheControl: cacheControl,
-      }),
-    );
-    return body.length;
-  };
-
-  return async (key: string) => {
-    // `derivativesOnly` exists because the archived original is the FULL-SIZE
-    // master. Pushing it to its key is right when populating a fresh host, and
-    // exactly wrong once `shrink-originals` has run against the same bucket —
-    // it would restore every multi-megabyte file that phase just replaced,
-    // silently undoing the storage win.
-    let count = derivativesOnly ? 0 : 1;
-    let bytes = derivativesOnly ? 0 : await put(key, archivePath(key), ORIGINAL_CACHE_CONTROL);
-    if (isImage(key)) {
-      for (const width of WIDTH_LADDER) {
-        const dKey = derivedKey(key, width);
-        const file = path.join(DERIVED, dKey);
-        if (!fs.existsSync(file)) die(`Missing derivative ${dKey} — run the derive phase first.`);
-        bytes += await put(dKey, file, DERIVED_CACHE_CONTROL);
-        count++;
-      }
+/** Upload one key's archived master and/or its whole ladder.
+ *
+ * `derivativesOnly` exists because the archived master is the FULL-SIZE file.
+ * Pushing it to its key is right when populating a fresh host, and exactly
+ * wrong once `shrink-originals` has run against the same bucket — it would
+ * restore every multi-megabyte file that phase just replaced, silently undoing
+ * the storage win and leaving no symptom but a bill that does not move.
+ */
+async function uploadOne(
+  key: string,
+  derivativesOnly: boolean,
+): Promise<{ count: number; bytes: number }> {
+  let count = 0;
+  let bytes = 0;
+  if (!derivativesOnly) {
+    const body = fs.readFileSync(archivePath(key));
+    const type = CONTENT_TYPES[path.extname(key).toLowerCase()] || 'application/octet-stream';
+    bytes += await putObject(key, body, type, ORIGINAL_CACHE_CONTROL);
+    count++;
+  }
+  if (isImage(key)) {
+    for (const width of WIDTH_LADDER) {
+      const dKey = derivedKey(key, width);
+      const file = path.join(DERIVED, dKey);
+      if (!fs.existsSync(file)) die(`Missing derivative ${dKey} — run the derive phase first.`);
+      bytes += await putObject(dKey, fs.readFileSync(file), 'image/webp', DERIVED_CACHE_CONTROL);
+      count++;
     }
-    return { count, bytes };
-  };
+  }
+  return { count, bytes };
 }
 
 async function phaseUpload(): Promise<void> {
   const { keys } = readManifest();
-  const bucket = process.env.ART_S3_BUCKET || 'frycards-art';
-  // Staying on Supabase means the destination bucket is the one the originals
-  // already live in, so only the ladder needs pushing — see `derivativesOnly`.
+  // Staying put means the destination bucket is the one the masters already
+  // live in, so only the ladder needs pushing — see `uploadOne`.
   const derivativesOnly = process.argv.includes('--derivatives-only');
-  const upload = uploaderFor(bucketClient(), bucket, derivativesOnly);
-  if (derivativesOnly) console.log('Derivatives only — stored originals left alone.');
+  if (derivativesOnly) console.log('Derivatives only — stored masters left alone.');
 
   let count = 0;
   let bytes = 0;
   for (const key of keys) {
-    const one = await upload(key);
+    const one = await uploadOne(key, derivativesOnly);
     count += one.count;
     bytes += one.bytes;
     if (count % 100 === 0) console.log(`  ${count} objects uploaded…`);
   }
-  console.log(`Uploaded ${count} objects, ${mb(bytes)} MB to s3://${bucket}`);
+  console.log(`Uploaded ${count} objects, ${mb(bytes)} MB to ${BUCKET}`);
 }
 
 // ---------------------------------------------------------------- rewrite
 
 function phaseRewrite(): void {
-  requireEnv('VITE_ART_BASE_URL');
-  const base = process.env.VITE_ART_BASE_URL!.replace(/\/+$/, '');
+  if (!process.env.VITE_ART_BASE_URL) die('VITE_ART_BASE_URL is required for this phase.');
+  const base = process.env.VITE_ART_BASE_URL.replace(/\/+$/, '');
   const from = `${SUPABASE_URL}/storage/v1/object/public/${encodeURI(BUCKET)}/`;
   const catalog = fs.readFileSync(CATALOG, 'utf8');
   if (!catalog.includes(from)) die(`No catalog entries point at ${from} — nothing to rewrite.`);
@@ -317,7 +244,6 @@ function phaseRewrite(): void {
 
 async function phasePurge(): Promise<void> {
   const { keys } = readManifest();
-  const supabase = supabaseClient();
 
   // Refuse to delete anything the catalog still points at. A half-applied
   // rewrite plus a purge is how art disappears from production.
@@ -326,7 +252,7 @@ async function phasePurge(): Promise<void> {
     die('The catalog still points at Supabase — run the rewrite phase (and deploy) first.');
   }
 
-  const objects = await listAll(supabase);
+  const objects = await listAll();
   const doomed: string[] = [];
   for (const { key, size } of objects) {
     const archived = archivePath(key);
@@ -350,8 +276,7 @@ async function phasePurge(): Promise<void> {
   if (doomed.length !== objects.length) {
     die(`${objects.length - doomed.length} objects failed verification — nothing deleted.`);
   }
-  const { error } = await supabase.storage.from(BUCKET).remove(doomed);
-  if (error) die(`Delete failed: ${error.message}`);
+  await deleteObjects(doomed);
   console.log(`Deleted ${doomed.length} objects from Supabase. Masters remain in ${ARCHIVE}.`);
 }
 
@@ -376,8 +301,7 @@ async function phasePurge(): Promise<void> {
 async function phaseSync(): Promise<void> {
   const { keys } = readManifest();
   const known = new Set(keys);
-  const supabase = supabaseClient();
-  const objects = await listAll(supabase);
+  const objects = await listAll();
 
   const fresh = objects.filter(({ key, size }) => {
     if (!known.has(key)) return true;
@@ -396,29 +320,26 @@ async function phaseSync(): Promise<void> {
   // Uploading is optional: with no bucket configured this still archives and
   // derives, which is all that is needed while the art is served from
   // Supabase itself.
-  const uploading = Boolean(process.env.ART_S3_ENDPOINT);
-  const upload = uploading
-    ? uploaderFor(bucketClient(), process.env.ART_S3_BUCKET || 'frycards-art')
-    : null;
-  if (!uploading) console.log('ART_S3_ENDPOINT unset — archiving and deriving only.');
+  const uploading = !process.argv.includes('--no-upload');
+  if (!uploading) console.log('--no-upload — archiving and deriving only.');
 
   const added: string[] = [];
   for (const { key } of fresh) {
-    const { data, error } = await supabase.storage.from(BUCKET).download(key);
-    if (error || !data) {
-      console.error(`  FAILED ${key}: ${error?.message ?? 'no body'}`);
+    const dest = archivePath(key);
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, await getObject(key));
+    } catch (err) {
+      console.error(`  FAILED ${key}: ${(err as Error).message}`);
       continue;
     }
-    const dest = archivePath(key);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, Buffer.from(await data.arrayBuffer()));
     // A replaced original invalidates its derivatives — drop them so deriveOne
     // regenerates rather than skipping the ones already on disk.
     for (const width of WIDTH_LADDER) {
       fs.rmSync(path.join(DERIVED, derivedKey(key, width)), { force: true });
     }
     const { made } = await deriveOne(key);
-    if (upload) await upload(key);
+    if (uploading) await uploadOne(key, true);
     added.push(key);
     console.log(`  ${key} (${made} derivatives${uploading ? ', uploaded' : ''})`);
   }
@@ -455,7 +376,6 @@ async function phaseSync(): Promise<void> {
  */
 async function phaseShrinkOriginals(): Promise<void> {
   const { keys } = readManifest();
-  const supabase = supabaseClient();
   if (!process.argv.includes('--yes')) {
     die(
       'shrink-originals overwrites objects in the bucket with smaller copies.\n' +
@@ -464,7 +384,7 @@ async function phaseShrinkOriginals(): Promise<void> {
     );
   }
 
-  const live = await listAll(supabase);
+  const live = await listAll();
   const bySize = new Map(live.map((o) => [o.key, o.size]));
 
   let replaced = 0;
@@ -502,13 +422,10 @@ async function phaseShrinkOriginals(): Promise<void> {
       continue;
     }
 
-    const { error } = await supabase.storage.from(BUCKET).upload(key, body, {
-      contentType: 'image/webp',
-      cacheControl: '2592000',
-      upsert: true,
-    });
-    if (error) {
-      console.error(`  FAILED ${key}: ${error.message}`);
+    try {
+      await putObject(key, body, 'image/webp', ORIGINAL_CACHE_CONTROL);
+    } catch (err) {
+      console.error(`  FAILED ${key}: ${(err as Error).message}`);
       skipped++;
       continue;
     }
@@ -557,7 +474,6 @@ async function phaseAdd(): Promise<void> {
     if (!fs.existsSync(file)) die(`No such file: ${file}`);
   }
 
-  const supabase = supabaseClient();
   const { keys } = readManifest();
   const added: string[] = [];
 
@@ -567,13 +483,10 @@ async function phaseAdd(): Promise<void> {
     const key = `${prefix.replace(/\/+$/, '')}/${base}.webp`;
     const body = await masterBytes(file);
 
-    const { error } = await supabase.storage.from(BUCKET).upload(key, body, {
-      contentType: 'image/webp',
-      cacheControl: '2592000',
-      upsert: true,
-    });
-    if (error) {
-      console.error(`  FAILED ${key}: ${error.message}`);
+    try {
+      await putObject(key, body, 'image/webp', ORIGINAL_CACHE_CONTROL);
+    } catch (err) {
+      console.error(`  FAILED ${key}: ${(err as Error).message}`);
       continue;
     }
 
@@ -587,22 +500,13 @@ async function phaseAdd(): Promise<void> {
     }
     const { made } = await deriveOne(key);
 
-    // Derivatives go wherever the art is served from. With no bucket
-    // configured that is this same Supabase bucket, which is the supported
-    // "stay put, just get small" path.
-    if (process.env.ART_S3_ENDPOINT) {
-      const upload = uploaderFor(bucketClient(), process.env.ART_S3_BUCKET || 'frycards-art');
-      await upload(key);
-    } else {
-      for (const width of WIDTH_LADDER) {
-        const dKey = derivedKey(key, width);
-        const dBody = fs.readFileSync(path.join(DERIVED, dKey));
-        const { error: dErr } = await supabase.storage.from(BUCKET).upload(dKey, dBody, {
-          contentType: 'image/webp',
-          cacheControl: '31536000',
-          upsert: true,
-        });
-        if (dErr) console.error(`  WARN ${dKey}: ${dErr.message}`);
+    for (const width of WIDTH_LADDER) {
+      const dKey = derivedKey(key, width);
+      const dBody = fs.readFileSync(path.join(DERIVED, dKey));
+      try {
+        await putObject(dKey, dBody, 'image/webp', DERIVED_CACHE_CONTROL);
+      } catch (err) {
+        console.error(`  WARN ${dKey}: ${(err as Error).message}`);
       }
     }
 

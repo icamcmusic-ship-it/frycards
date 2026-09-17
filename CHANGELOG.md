@@ -233,6 +233,36 @@ upscaled but still produces that rung, and a card-tier rung lands in tens of
 kilobytes. Extracted rather than tested in place because the script is a
 top-level-await CLI: importing it to test anything would run it.
 
+#### The art pipeline runs on GitHub, on a storage-scoped key
+
+Two changes that go together, because the second is what makes the first safe.
+
+**It runs in Actions now.** `.github/workflows/art-pipeline.yml` does the whole
+pipeline on a runner: a manual *full-migration* for the one-time cleanup, a
+*shrink-video* phase (ffmpeg is preinstalled there, which is most of why this
+beats asking anyone to install it), and a **weekly `sync`** — which is what
+finally makes new art automatic. Drop a file in the Supabase dashboard and its
+resized copies appear within the week with nobody remembering to do anything.
+The archive is kept in the Actions cache between runs, so `sync` diffs against
+it instead of re-downloading a gigabyte of billed egress every time.
+
+`full-migration` refuses to run unless `SHRINK` is typed into a confirm box: it
+replaces stored files and the bucket cannot undo it.
+
+**Everything talks S3, including to Supabase.** That is what changed the
+credential. supabase-js needs the service-role key, which bypasses RLS across
+every table and every one of the ~100 Postgres functions in the project. This
+pipeline only ever lists, reads, writes and deletes files in one bucket, and
+Supabase's S3 access keys are scoped to exactly that. **This repository is
+public and the pipeline now runs in CI**, so the secret it stores should reach
+one bucket, not the backend. `scripts/lib/storage.ts` holds the shared layer;
+both `migrate-art.ts` and `shrink-video-art.ts` use it, and neither imports
+supabase-js any more. A test pins that.
+
+Incidentally simpler: one credential pair instead of a service-role key plus a
+separate set of S3 keys for the destination, and the same code path locally and
+in CI. Pointing `ART_S3_ENDPOINT` elsewhere still moves the art off Supabase.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them
