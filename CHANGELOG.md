@@ -139,6 +139,50 @@ the generator imports the ladder rather than restating it (a rung the app asks
 for that was never generated is a 404 into the full-size fallback), and that
 purge's three refusals are all still there.
 
+#### New art can no longer slip back onto the metered host
+
+Two gaps the migration left, both of which would have quietly undone it.
+
+**The bucket keeps growing.** The migration derived the 302 objects that
+existed when it ran. Anything added afterwards had no derivatives, so the app
+fell back to serving it full size, from the metered host, forever.
+`npm run media:sync` closes that: it archives, derives and (if a bucket is
+configured) uploads whatever is new or changed, then updates the manifest. An
+original replaced in place has its stale derivatives dropped and regenerated.
+It is additive by construction — it never deletes and never rewrites the
+catalog, because the archive is the backup and `purge` stays the only
+destructive phase.
+
+**Pasted links.** Worth being precise about, because the earlier note here was
+not: the app has **no binary upload path at all**. Every image in the product —
+card submissions, bulk imports, shop banners — is a URL somebody typed into a
+form. So the way art reappears on the metered host is not an upload, it is a
+paste: a link to the project's own storage looks like any other https link, and
+nothing downstream resizes it. `isMeteredStorageUrl()` catches it at all four
+entry points, and the rejection names the fix rather than just refusing, since
+"not allowed" with no alternative just gets pasted somewhere else. This is
+stricter than `submit_card`, which accepts any https URL — a cost control, not
+a security boundary.
+
+Off-site links (`cdn.midjourney.com`, an avatar service) stay allowed: they
+cost this project no egress. They are also outside every guarantee here,
+including against the host expiring them.
+
+#### The art host is now a config value, not a vendor
+
+Cloudflare turned out not to be an option, which exposed an assumption worth
+removing: the resizing and the hosting were never the same decision. Serving
+pre-generated derivatives is a ~50-100x cut on its own, and Supabase can serve
+them perfectly well — a card face costs ~30-70 kB instead of ~6 MB whoever
+hosts it. Moving hosts is a separate, later choice that takes the art off the
+egress quota entirely.
+
+So `scripts/migrate-art-to-r2.ts` is now `scripts/migrate-art.ts`, and `upload`
+talks plain S3 against `ART_S3_ENDPOINT` — Backblaze B2, Wasabi, R2, or
+Supabase's own S3 endpoint, whichever the endpoint points at. `upload` and
+`purge` are skippable: run archive, derive and rewrite alone and the art stays
+where it is, just small. `docs/ART_MIGRATION.md` covers both routes.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them

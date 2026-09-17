@@ -121,6 +121,37 @@ function ladderWidth(needed: number): number {
   return WIDTH_LADDER.find((w) => w >= needed) ?? WIDTH_LADDER[WIDTH_LADDER.length - 1];
 }
 
+/** Marks a public object on Supabase storage. */
+const SUPABASE_OBJECT_PATH = '/storage/v1/object/public/';
+
+/**
+ * True when `url` is a full-size original on Supabase storage — i.e. every
+ * request for it is billed egress against the project's quota, and no
+ * pre-generated derivative exists to serve instead.
+ *
+ * The app has no binary upload path: every image in the product is a URL
+ * somebody pasted into a form. A pasted Supabase storage link is therefore the
+ * one way new art can quietly reappear on the metered host after the migration
+ * — it looks like any other link, and nothing downstream resizes it. This is
+ * what the submission forms check so that it is caught at the point of entry
+ * rather than discovered on a bill.
+ *
+ * A URL already on the configured art host is not metered, and neither is an
+ * off-site link (Midjourney, an avatar service): those cost this project
+ * nothing.
+ */
+export const METERED_ART_MESSAGE =
+  'That image is on the project’s own storage, which is billed per view at ' +
+  'full resolution. Link the original source instead, or add it through the ' +
+  'art pipeline (npm run media:sync) so a resized copy exists.';
+
+export function isMeteredStorageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const base = artBase();
+  if (base && url.startsWith(`${base}/`)) return false;
+  return url.includes(SUPABASE_OBJECT_PATH);
+}
+
 /** The derived key for `key` at `width`, as both the app and the generator
  * must compute it. Exported so the generator cannot drift from the app. */
 export function derivedKey(key: string, width: number): string {

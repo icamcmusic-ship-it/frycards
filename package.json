@@ -24,7 +24,8 @@
     "audit:screens": "tsx scripts/audit-meta-screens.ts",
     "drive:match": "tsx scripts/drive-match.ts",
     "media:shrink-video": "tsx scripts/shrink-video-art.ts",
-    "media:migrate": "tsx scripts/migrate-art-to-r2.ts"
+    "media:migrate": "tsx scripts/migrate-art.ts",
+    "media:sync": "tsx scripts/migrate-art.ts sync"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

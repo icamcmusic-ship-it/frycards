@@ -1,24 +1,31 @@
 /**
- * Moves the card art off Supabase storage and onto Cloudflare R2, generating
- * the pre-sized derivatives `src/lib/media.ts` expects on the way.
+ * Generates the pre-sized derivatives `src/lib/media.ts` expects, and
+ * optionally moves the card art off Supabase storage onto another host.
  *
- * Why the move: cached egress is billed on every byte the Supabase CDN serves,
- * and the art is a gigabyte of raw generator output. The obvious fix — resize
- * on demand through Supabase's image transformation endpoint — needs a paid
- * add-on that is not enabled on this project, so every request for a
+ * Why: egress is billed on every byte served, and the art is a gigabyte of raw
+ * generator output painted into boxes at most 240 CSS px wide. The obvious fix
+ * — resize on demand through Supabase's image transformation endpoint — needs a
+ * paid add-on that is not enabled on this project, so every request for a
  * derivative was failing and falling back to the full-resolution original.
- * R2 charges nothing for egress, and the derivatives are generated once here
- * rather than per request, so neither cost applies after this runs.
+ * Generating the derivatives once, here, removes the add-on from the picture:
+ * a card face costs ~30-70 kB instead of ~6 MB whoever serves it.
  *
- * Five phases, run in order, each resumable and independently verifiable.
- * Nothing is deleted from Supabase until `purge`, and `purge` refuses to touch
- * an object it cannot find a byte-identical archive copy of.
+ * The host is a separate decision from the resizing, and `upload` targets any
+ * S3-compatible bucket via ART_S3_ENDPOINT — R2, Backblaze B2, Wasabi, or
+ * Supabase's own S3 endpoint. Serving the derivatives from Supabase is a
+ * ~50-100x cut on its own; moving hosts takes the art off the egress quota
+ * entirely. Skip `upload` and `purge` to do the first without the second.
  *
- *   npx tsx scripts/migrate-art-to-r2.ts archive   # Supabase -> ./art-archive
- *   npx tsx scripts/migrate-art-to-r2.ts derive    # archive -> webp ladder
- *   npx tsx scripts/migrate-art-to-r2.ts upload    # archive + derivatives -> R2
- *   npx tsx scripts/migrate-art-to-r2.ts rewrite   # point the catalog at R2
- *   npx tsx scripts/migrate-art-to-r2.ts purge     # delete the Supabase copies
+ * Phases run in order, each resumable and independently verifiable. Nothing is
+ * deleted from Supabase until `purge`, and `purge` refuses to touch an object
+ * it cannot find a byte-identical archive copy of.
+ *
+ *   npx tsx scripts/migrate-art.ts archive   # Supabase -> ./art-archive
+ *   npx tsx scripts/migrate-art.ts derive    # archive -> webp ladder
+ *   npx tsx scripts/migrate-art.ts upload    # archive + derivatives -> the bucket
+ *   npx tsx scripts/migrate-art.ts rewrite   # point the catalog at the new host
+ *   npx tsx scripts/migrate-art.ts purge     # delete the Supabase copies
+ *   npx tsx scripts/migrate-art.ts sync      # archive+derive+upload whatever is NEW
  *
  * `archive` is also your off-platform backup of the masters: the PNGs are the
  * only lossless copies that exist, and a webp derivative cannot be re-derived
@@ -26,11 +33,13 @@
  * before running `purge`. It is gitignored — it is ~1 GB.
  *
  * Environment:
- *   SUPABASE_SERVICE_ROLE_KEY   required by `archive` and `purge`
- *   R2_ACCOUNT_ID               required by `upload`
- *   R2_ACCESS_KEY_ID            required by `upload`
- *   R2_SECRET_ACCESS_KEY        required by `upload`
- *   R2_BUCKET                   required by `upload` (default: frycards-art)
+ *   SUPABASE_SERVICE_ROLE_KEY   required by `archive`, `purge` and `sync`
+ *   ART_S3_ENDPOINT             required by `upload` — the S3 API endpoint of
+ *                               the destination bucket
+ *   ART_S3_ACCESS_KEY_ID        required by `upload`
+ *   ART_S3_SECRET_ACCESS_KEY    required by `upload`
+ *   ART_S3_BUCKET               required by `upload` (default: frycards-art)
+ *   ART_S3_REGION               optional (default: auto)
  *   VITE_ART_BASE_URL           required by `rewrite` — the public base the
  *                               bucket is served from, no trailing slash
  *
@@ -166,55 +175,70 @@ async function phaseArchive(): Promise<void> {
 
 // ----------------------------------------------------------------- derive
 
+/** Generate every missing ladder rung for one archived key. Returns how many
+ * were written and their total size, so both `derive` and `sync` can report. */
+async function deriveOne(key: string): Promise<{ made: number; bytes: number }> {
+  // Video is not resized here — the ladder is a still-image concept, and
+  // scripts/shrink-video-art.ts re-encodes the clips instead.
+  if (!isImage(key)) return { made: 0, bytes: 0 };
+  const source = archivePath(key);
+  const meta = await sharp(source).metadata();
+  const sourceWidth = meta.width ?? Math.max(...WIDTH_LADDER);
+  let made = 0;
+  let bytes = 0;
+  for (const width of WIDTH_LADDER) {
+    const dest = path.join(DERIVED, derivedKey(key, width));
+    if (fs.existsSync(dest)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    // Never upscale: a rung wider than the source is generated at the
+    // source's own width. The rung must still exist as an object — the app
+    // picks a rung from the ladder without knowing any source's dimensions,
+    // and a missing one 404s into the full-size fallback.
+    await sharp(source)
+      .resize({ width: Math.min(width, sourceWidth), withoutEnlargement: true })
+      .webp({ quality: QUALITY })
+      .toFile(dest);
+    bytes += fs.statSync(dest).size;
+    made++;
+  }
+  return { made, bytes };
+}
+
 async function phaseDerive(): Promise<void> {
   const { keys } = readManifest();
   let made = 0;
   let bytes = 0;
   for (const key of keys) {
-    // Video is not resized here — the transformation ladder is a still-image
-    // concept, and scripts/shrink-video-art.ts re-encodes the clips instead.
-    if (!isImage(key)) continue;
-    const source = archivePath(key);
-    const meta = await sharp(source).metadata();
-    const sourceWidth = meta.width ?? Math.max(...WIDTH_LADDER);
-    for (const width of WIDTH_LADDER) {
-      const dest = path.join(DERIVED, derivedKey(key, width));
-      if (fs.existsSync(dest)) continue;
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      // Never upscale: a rung wider than the source is generated at the
-      // source's own width. The rung must still exist as an object — the app
-      // picks a rung from the ladder without knowing any source's dimensions,
-      // and a missing one 404s into the full-size fallback.
-      await sharp(source)
-        .resize({ width: Math.min(width, sourceWidth), withoutEnlargement: true })
-        .webp({ quality: QUALITY })
-        .toFile(dest);
-      bytes += fs.statSync(dest).size;
-      made++;
-    }
+    const one = await deriveOne(key);
+    made += one.made;
+    bytes += one.bytes;
   }
   console.log(`Generated ${made} derivatives, ${mb(bytes)} MB`);
 }
 
 // ----------------------------------------------------------------- upload
 
-function r2Client(): S3Client {
-  requireEnv('R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY');
+/** An S3 client for the destination bucket. Any S3-compatible host works —
+ * the endpoint is what selects it, so switching hosts is a config change
+ * rather than a code change. */
+function bucketClient(): S3Client {
+  requireEnv('ART_S3_ENDPOINT', 'ART_S3_ACCESS_KEY_ID', 'ART_S3_SECRET_ACCESS_KEY');
   return new S3Client({
-    region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    region: process.env.ART_S3_REGION || 'auto',
+    endpoint: process.env.ART_S3_ENDPOINT!,
+    // Most S3-compatible hosts serve the bucket as a path, not a subdomain.
+    forcePathStyle: true,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      accessKeyId: process.env.ART_S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.ART_S3_SECRET_ACCESS_KEY!,
     },
   });
 }
 
-async function phaseUpload(): Promise<void> {
-  const { keys } = readManifest();
-  const client = r2Client();
-  const bucket = process.env.R2_BUCKET || 'frycards-art';
+type Uploader = (key: string) => Promise<{ count: number; bytes: number }>;
 
+/** An uploader for one key and all of its derivatives. */
+function uploaderFor(client: S3Client, bucket: string): Uploader {
   const put = async (key: string, file: string, cacheControl: string): Promise<number> => {
     const body = fs.readFileSync(file);
     await client.send(
@@ -229,11 +253,9 @@ async function phaseUpload(): Promise<void> {
     return body.length;
   };
 
-  let count = 0;
-  let bytes = 0;
-  for (const key of keys) {
-    bytes += await put(key, archivePath(key), ORIGINAL_CACHE_CONTROL);
-    count++;
+  return async (key: string) => {
+    let count = 1;
+    let bytes = await put(key, archivePath(key), ORIGINAL_CACHE_CONTROL);
     if (isImage(key)) {
       for (const width of WIDTH_LADDER) {
         const dKey = derivedKey(key, width);
@@ -243,9 +265,24 @@ async function phaseUpload(): Promise<void> {
         count++;
       }
     }
+    return { count, bytes };
+  };
+}
+
+async function phaseUpload(): Promise<void> {
+  const { keys } = readManifest();
+  const bucket = process.env.ART_S3_BUCKET || 'frycards-art';
+  const upload = uploaderFor(bucketClient(), bucket);
+
+  let count = 0;
+  let bytes = 0;
+  for (const key of keys) {
+    const one = await upload(key);
+    count += one.count;
+    bytes += one.bytes;
     if (count % 100 === 0) console.log(`  ${count} objects uploaded…`);
   }
-  console.log(`Uploaded ${count} objects, ${mb(bytes)} MB to r2://${bucket}`);
+  console.log(`Uploaded ${count} objects, ${mb(bytes)} MB to s3://${bucket}`);
 }
 
 // ---------------------------------------------------------------- rewrite
@@ -306,6 +343,81 @@ async function phasePurge(): Promise<void> {
   console.log(`Deleted ${doomed.length} objects from Supabase. Masters remain in ${ARCHIVE}.`);
 }
 
+// ------------------------------------------------------------------- sync
+
+/**
+ * Catch up on art added to the Supabase bucket since the last run: archive it,
+ * derive its ladder, upload it, and add it to the manifest.
+ *
+ * This is the phase that keeps the migration from being a one-off. The app has
+ * no binary upload path — every image in the product is a pasted URL — so new
+ * art reaches the bucket only by someone putting it there through the Supabase
+ * dashboard, and until this runs that object has no derivatives: the app falls
+ * back to serving it full size, from the metered host, forever. Run it after
+ * any art drop, or on a schedule.
+ *
+ * Deliberately additive. It never deletes and never rewrites the catalog: a
+ * key that has vanished from the bucket stays in the manifest and in the
+ * archive, because the archive is the backup and `purge` is the only phase
+ * allowed to be destructive.
+ */
+async function phaseSync(): Promise<void> {
+  const { keys } = readManifest();
+  const known = new Set(keys);
+  const supabase = supabaseClient();
+  const objects = await listAll(supabase);
+
+  const fresh = objects.filter(({ key, size }) => {
+    if (!known.has(key)) return true;
+    // Known, but replaced in place: the archive copy no longer matches, so its
+    // derivatives are stale too.
+    const local = archivePath(key);
+    return !fs.existsSync(local) || (size > 0 && fs.statSync(local).size !== size);
+  });
+
+  if (fresh.length === 0) {
+    console.log(`Nothing new — all ${objects.length} objects are archived and derived.`);
+    return;
+  }
+  console.log(`${fresh.length} new or changed object(s)`);
+
+  // Uploading is optional: with no bucket configured this still archives and
+  // derives, which is all that is needed while the art is served from
+  // Supabase itself.
+  const uploading = Boolean(process.env.ART_S3_ENDPOINT);
+  const upload = uploading
+    ? uploaderFor(bucketClient(), process.env.ART_S3_BUCKET || 'frycards-art')
+    : null;
+  if (!uploading) console.log('ART_S3_ENDPOINT unset — archiving and deriving only.');
+
+  const added: string[] = [];
+  for (const { key } of fresh) {
+    const { data, error } = await supabase.storage.from(BUCKET).download(key);
+    if (error || !data) {
+      console.error(`  FAILED ${key}: ${error?.message ?? 'no body'}`);
+      continue;
+    }
+    const dest = archivePath(key);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, Buffer.from(await data.arrayBuffer()));
+    // A replaced original invalidates its derivatives — drop them so deriveOne
+    // regenerates rather than skipping the ones already on disk.
+    for (const width of WIDTH_LADDER) {
+      fs.rmSync(path.join(DERIVED, derivedKey(key, width)), { force: true });
+    }
+    const { made } = await deriveOne(key);
+    if (upload) await upload(key);
+    added.push(key);
+    console.log(`  ${key} (${made} derivatives${uploading ? ', uploaded' : ''})`);
+  }
+
+  const merged = [...new Set([...keys, ...added])].sort();
+  fs.writeFileSync(MANIFEST, JSON.stringify({ keys: merged }, null, 2) + '\n');
+  console.log(`Synced ${added.length} object(s); manifest now has ${merged.length}.`);
+  if (added.length < fresh.length) die('Some objects failed — re-run sync.');
+  console.log('If any of these are new card art, remember to point the catalog at them.');
+}
+
 // ------------------------------------------------------------------- main
 
 const phase = process.argv[2];
@@ -325,6 +437,9 @@ switch (phase) {
   case 'purge':
     await phasePurge();
     break;
+  case 'sync':
+    await phaseSync();
+    break;
   default:
-    die('Usage: migrate-art-to-r2.ts <archive|derive|upload|rewrite|purge>');
+    die('Usage: migrate-art.ts <archive|derive|upload|rewrite|purge|sync>');
 }
