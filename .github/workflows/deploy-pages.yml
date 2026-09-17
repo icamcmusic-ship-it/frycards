@@ -45,6 +45,19 @@ jobs:
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          # Where the card art is served from. Vite inlines VITE_* at BUILD
+          # time, so this has to be set here rather than anywhere at runtime —
+          # a Pages deploy is static files, there is no server to read env
+          # from later.
+          #
+          # Setting it is what switches the app onto the pre-sized derivatives
+          # (see src/lib/media.ts). Left unset, every image resolves to the
+          # stored master instead: correct, but larger than anything on screen
+          # needs, which is the bill this whole pipeline exists to cut.
+          #
+          # Not a secret — it is the bucket's public base URL, the same one
+          # already embedded in every catalog entry in generated-cards.ts.
+          VITE_ART_BASE_URL: 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
