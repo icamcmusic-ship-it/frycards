@@ -99,6 +99,46 @@ before any of this work. It is the one switch that dominates every number
 above, and it is worth confirming before reading anything into the bill.
 
 
+#### The transformation add-on is off, so the resizing moves offline — and the art moves to R2
+
+Both passes above assumed Supabase's image transformation endpoint was
+available. It is not enabled on this project. Every card face was requesting a
+derivative, getting an error, and falling back to the full-resolution original:
+a wasted round trip per image, and none of the 50-150x cut the first pass
+described. The 30-day cache-control from that pass was doing real work; the URL
+rewriting was not.
+
+Resizing therefore happens ahead of time instead of on demand.
+`scripts/migrate-art-to-r2.ts` generates a webp at each ladder width and
+uploads it alongside the original, and `mediaUrl()` points at those static
+objects. Same saving, no add-on, no per-transformation cost — storage, which is
+cheap, is traded for egress, which is not. The derived key keeps the source's
+own extension (`art.png` becomes `derived/320/art.png.webp`), which is what
+makes the rewrite reversible and stops two sources that differ only by
+extension from colliding.
+
+Because the derivatives are ordinary objects, the host stops mattering — so the
+art moves to Cloudflare R2, where egress is free. `VITE_ART_BASE_URL` points
+the app at it. Until that variable is set, every URL still resolves to the
+Supabase original and `mediaUrl()` returns it untouched: no saving, but no
+wasted request pretending at one either, which is the honest behaviour for a
+project without the add-on.
+
+The migration is five phases — archive, derive, upload, rewrite, purge — each
+resumable and separately verifiable, with the runbook in
+`docs/ART_MIGRATION.md`. `purge` is the only destructive one, and it refuses to
+delete anything unless the catalog has stopped pointing at Supabase, every
+object has an archive copy on disk, and every copy matches byte-for-byte; one
+failure and nothing is deleted. The archive it verifies against is the only
+lossless copy of the PNG masters that survives, so it is a backup to keep, not
+a temp directory.
+
+Six new tests cover the scheme: that nothing is rewritten while no art host is
+configured, that no code path can ask for a Supabase transformation again, that
+the generator imports the ladder rather than restating it (a rung the app asks
+for that was never generated is a 404 into the full-size fallback), and that
+purge's three refusals are all still there.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them

@@ -35,17 +35,17 @@ export function SafeImage({
    * it mounts (the pack-opening tear animation). */
   eager?: boolean;
   /** Rendered width of this image in CSS pixels. Supplying it serves a
-   * resized derivative out of storage instead of the full-resolution
-   * original — the difference between a ~60 kB thumbnail and a 6 MB PNG.
+   * pre-generated derivative instead of the full-resolution original — the
+   * difference between a ~60 kB thumbnail and a 6 MB PNG.
    * Defaults to DEFAULT_BOX_WIDTH, which is a ceiling rather than a fit:
    * pass the real width wherever it is known and smaller. */
   boxWidth?: number;
   onLoad?: (e: React.SyntheticEvent<HTMLImageElement>) => void;
 }) {
   const [broken, setBroken] = useState(false);
-  // When a resized derivative fails, fall back to the untransformed original
-  // once before giving up: image transformation is a paid add-on that can be
-  // switched off on the project, and art must still paint when it is.
+  // When a resized derivative fails, fall back to the full-size original once
+  // before giving up: the derivatives are pre-generated, so a key the
+  // generator has not reached yet 404s, and art must still paint when it does.
   const [fullSize, setFullSize] = useState(false);
   // Reset the broken flag whenever the source changes — otherwise a
   // component instance that's reused across a changing `src` (e.g. an

@@ -1362,9 +1362,9 @@ function CardArtBase({
   boxWidth?: number;
 }) {
   const [broken, setBroken] = useState(false);
-  // A resized derivative that fails falls back to the untransformed original
-  // once before the card gives up: image transformation is a paid add-on and
-  // may be off on the project, in which case art must still paint.
+  // A resized derivative that fails falls back to the full-size original once
+  // before the card gives up: the derivatives are pre-generated, so a key the
+  // generator has not reached yet 404s, and art must still paint when it does.
   const [fullSize, setFullSize] = useState(false);
   // Reset whenever the image URL actually changes (a caller may swap `def`
   // without remounting).
