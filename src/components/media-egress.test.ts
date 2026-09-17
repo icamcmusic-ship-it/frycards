@@ -247,3 +247,12 @@ test('new art is resized before it is stored, not after', () => {
   // a width or a quality of their own.
   expect(source).toMatch(/import \{[^}]*masterBytes[^}]*\} from '\.\/lib\/derive'/);
 });
+
+test('uploading cannot silently restore the originals shrink-originals replaced', () => {
+  // The archived original is the full-size master. Pushing it back to its key
+  // is correct when populating a fresh host and exactly wrong against a bucket
+  // that has already been shrunk — it would undo the whole storage win.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('--derivatives-only');
+  expect(source).toMatch(/derivativesOnly \? 0 : await put\(key, archivePath\(key\)/);
+});

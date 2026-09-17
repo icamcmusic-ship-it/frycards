@@ -241,7 +241,7 @@ function bucketClient(): S3Client {
 type Uploader = (key: string) => Promise<{ count: number; bytes: number }>;
 
 /** An uploader for one key and all of its derivatives. */
-function uploaderFor(client: S3Client, bucket: string): Uploader {
+function uploaderFor(client: S3Client, bucket: string, derivativesOnly = false): Uploader {
   const put = async (key: string, file: string, cacheControl: string): Promise<number> => {
     const body = fs.readFileSync(file);
     await client.send(
@@ -257,8 +257,13 @@ function uploaderFor(client: S3Client, bucket: string): Uploader {
   };
 
   return async (key: string) => {
-    let count = 1;
-    let bytes = await put(key, archivePath(key), ORIGINAL_CACHE_CONTROL);
+    // `derivativesOnly` exists because the archived original is the FULL-SIZE
+    // master. Pushing it to its key is right when populating a fresh host, and
+    // exactly wrong once `shrink-originals` has run against the same bucket —
+    // it would restore every multi-megabyte file that phase just replaced,
+    // silently undoing the storage win.
+    let count = derivativesOnly ? 0 : 1;
+    let bytes = derivativesOnly ? 0 : await put(key, archivePath(key), ORIGINAL_CACHE_CONTROL);
     if (isImage(key)) {
       for (const width of WIDTH_LADDER) {
         const dKey = derivedKey(key, width);
@@ -275,7 +280,11 @@ function uploaderFor(client: S3Client, bucket: string): Uploader {
 async function phaseUpload(): Promise<void> {
   const { keys } = readManifest();
   const bucket = process.env.ART_S3_BUCKET || 'frycards-art';
-  const upload = uploaderFor(bucketClient(), bucket);
+  // Staying on Supabase means the destination bucket is the one the originals
+  // already live in, so only the ladder needs pushing — see `derivativesOnly`.
+  const derivativesOnly = process.argv.includes('--derivatives-only');
+  const upload = uploaderFor(bucketClient(), bucket, derivativesOnly);
+  if (derivativesOnly) console.log('Derivatives only — stored originals left alone.');
 
   let count = 0;
   let bytes = 0;

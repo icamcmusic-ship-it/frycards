@@ -70,8 +70,8 @@ full-resolution masters are already safe on your own disk:
 ```
 npm run media:migrate archive            # 1. pull the bucket down (~1 GB, once)
 npm run media:migrate derive             # 2. build the ladder locally
-npm run media:shrink-originals -- --yes  # 3. replace the stored originals
-npm run media:migrate upload             # 4. push the ladder back up
+npm run media:migrate upload -- --derivatives-only   # 3. push the ladder up
+npm run media:shrink-originals -- --yes             # 4. shrink the stored originals
 npm run media:shrink-video               # 6. re-encode the 8 mp4s
 ```
 
@@ -117,7 +117,28 @@ Spot-check a few before continuing:
 open art-archive/.derived/derived/320/
 ```
 
-### 3. `npm run media:shrink-originals -- --yes`
+### 3. `npm run media:migrate upload`
+
+**Order matters, and `--derivatives-only` is not optional on the stay-put
+path.** The archived original is the full-size master, so a plain `upload`
+against a bucket that has already been shrunk restores every multi-megabyte
+file — undoing step 4 entirely. Either pass `--derivatives-only`, or upload
+before shrinking, or both. The sequence above does both.
+
+Staying on Supabase? Point `ART_S3_ENDPOINT` at Supabase's own S3 API
+(`https://<project>.supabase.co/storage/v1/s3`, with an S3 access key pair from
+the storage settings page) and `ART_S3_BUCKET` at `Card Images`. The
+derivatives then land in the same bucket the catalog already uses.
+
+Pushes the originals and every derivative to the configured bucket. Originals get 30-day
+cache-control (matching what the `20260907000000` migration set); derivatives
+get a year and `immutable`, because a derived key is a pure function of its
+source key and a width, and the source keys carry generation UUIDs.
+
+Verify the bucket is actually public before continuing — fetch one derivative
+in a browser.
+
+### 4. `npm run media:shrink-originals -- --yes`
 
 **This is the phase that reduces storage.** Everything above only adds files.
 
@@ -137,21 +158,6 @@ in the dashboard.
 It refuses to touch an object unless a byte-identical archive copy exists on
 disk, exactly as `purge` does, because the replacement is lossy and the bucket
 cannot undo it. It also refuses to run without `--yes`.
-
-### 4. `npm run media:migrate upload`
-
-Staying on Supabase? Point `ART_S3_ENDPOINT` at Supabase's own S3 API
-(`https://<project>.supabase.co/storage/v1/s3`, with an S3 access key pair from
-the storage settings page) and `ART_S3_BUCKET` at `Card Images`. The
-derivatives then land in the same bucket the catalog already uses.
-
-Pushes the originals and every derivative to the configured bucket. Originals get 30-day
-cache-control (matching what the `20260907000000` migration set); derivatives
-get a year and `immutable`, because a derived key is a pure function of its
-source key and a width, and the source keys carry generation UUIDs.
-
-Verify the bucket is actually public before continuing — fetch one derivative
-in a browser.
 
 ### 5. `npm run media:migrate rewrite`
 
