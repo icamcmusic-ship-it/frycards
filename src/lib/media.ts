@@ -12,13 +12,17 @@
  * error, and falling back to the full-resolution original. The rewrite cost a
  * wasted round trip per image and saved nothing.
  *
- * So the resizing happens ahead of time instead. `scripts/migrate-art-to-r2.ts`
+ * So the resizing happens ahead of time instead. `scripts/migrate-art.ts`
  * generates a webp at each ladder width and uploads it alongside the original,
  * and `mediaUrl()` points at those static objects. Same saving as an on-demand
- * transformation, no add-on, no per-transformation cost — storage (cheap) is
- * traded for egress (expensive). Because the derivatives are ordinary objects,
- * this works on any host; the art is moving to Cloudflare R2, where egress is
- * free, and `VITE_ART_BASE_URL` is what points the app at it.
+ * transformation, no add-on, no per-transformation cost.
+ *
+ * Because the derivatives are ordinary objects, the host stops mattering — this
+ * works anywhere that serves files over https, and `VITE_ART_BASE_URL` is what
+ * points the app at it. The art stays on Supabase; that variable names the same
+ * bucket the catalog already uses, and the saving comes from serving small
+ * copies out of it rather than from moving anywhere. See docs/ART_MIGRATION.md,
+ * which also covers moving hosts for anyone who later wants to.
  *
  * Two deliberate properties, both carried over from the transformation design:
  *
@@ -41,10 +45,14 @@
  */
 
 /**
- * Base URL the card art is served from — the R2 public bucket or the custom
- * domain in front of it, with no trailing slash. Unset until the migration in
- * `scripts/migrate-art-to-r2.ts` has run, in which case every URL in the
- * catalog still points at Supabase and is served at full size.
+ * Base URL the card art is served from, with no trailing slash — the storage
+ * bucket's public base, or a CDN in front of it. Set for real deploys in
+ * .github/workflows/deploy-pages.yml, since Vite inlines VITE_* at build time
+ * and a Pages deploy has no server to read env from later.
+ *
+ * Unset — in dev, in CI, and before `scripts/migrate-art.ts` has run — every
+ * URL resolves to the stored master instead. That is correct, just larger than
+ * anything on screen needs.
  */
 function artBase(): string {
   // Read per call rather than once at module load: this module is imported by

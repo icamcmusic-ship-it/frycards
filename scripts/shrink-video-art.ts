@@ -30,11 +30,14 @@
  * deleted from the dashboard to reclaim the storage line (they are ~43 MB;
  * this does not affect egress, which is already off them at that point).
  *
- * Requires ffmpeg on PATH and the service-role key — uploading to the bucket
- * is not something the publishable key may do.
+ * Requires ffmpeg on PATH and a Supabase S3 access key pair (see
+ * scripts/lib/storage.ts — storage-scoped, NOT the service-role key).
  *
- *   SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/shrink-video-art.ts --dry-run
- *   SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/shrink-video-art.ts
+ *   npx tsx scripts/shrink-video-art.ts --dry-run
+ *   npx tsx scripts/shrink-video-art.ts
+ *
+ * In CI this runs from .github/workflows/art-pipeline.yml, where ffmpeg is
+ * already on the runner.
  *
  * `--dry-run` downloads and encodes into a temp dir and reports the byte
  * savings without uploading or touching any source file.
@@ -49,11 +52,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createClient } from '@supabase/supabase-js';
+import { getObject, listAll, publicUrl, putObject, ORIGINAL_CACHE_CONTROL } from './lib/storage';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const BUCKET = 'Card Images';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 /** Encode height in pixels. Card art plays into a box at most 240 CSS px
@@ -75,37 +75,15 @@ function requireFfmpeg(): void {
   }
 }
 
-/** The public URL for `key`, matching the form the catalog already stores —
- * `encodeURI`, not `encodeURIComponent`, so the path separators survive. */
-function publicUrl(key: string): string {
-  return `${SUPABASE_URL}/storage/v1/object/public/${encodeURI(BUCKET)}/${encodeURI(key)}`;
-}
-
 function shrunkKey(key: string): string {
   return key.replace(/\.(mp4|webm|mov)$/i, '.min.mp4');
 }
 
 requireFfmpeg();
-if (!SERVICE_KEY && !DRY_RUN) {
-  console.error('SUPABASE_SERVICE_ROLE_KEY is required to upload. Pass --dry-run to encode only.');
-  process.exit(1);
-}
 
-const supabase = createClient(SUPABASE_URL, SERVICE_KEY ?? '');
-
-/** Every video object in the bucket, recursively — the art lives in
- * per-volume folders, and `list` does not descend on its own. */
-async function listVideos(prefix = ''): Promise<string[]> {
-  const { data, error } = await supabase.storage.from(BUCKET).list(prefix, { limit: 1000 });
-  if (error) throw new Error(`list(${prefix || '/'}): ${error.message}`);
-  const found: string[] = [];
-  for (const entry of data ?? []) {
-    const key = prefix ? `${prefix}/${entry.name}` : entry.name;
-    // A folder comes back with no `id`; a file always has one.
-    if (!entry.id) found.push(...(await listVideos(key)));
-    else if (/\.(mp4|webm|mov)$/i.test(entry.name)) found.push(key);
-  }
-  return found;
+/** Every video object in the bucket. */
+async function listVideos(): Promise<string[]> {
+  return (await listAll()).map((o) => o.key).filter((k) => /\.(mp4|webm|mov)$/i.test(k));
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'frycards-video-'));
@@ -122,14 +100,14 @@ const rewrites = new Map<string, string>();
 
 for (const key of videos) {
   if (/\.min\.mp4$/i.test(key)) continue; // already shrunk by an earlier run
-  const { data, error } = await supabase.storage.from(BUCKET).download(key);
-  if (error || !data) {
-    console.error(`  SKIP ${key}: download failed (${error?.message ?? 'no body'})`);
-    continue;
-  }
   const source = path.join(tmp, 'in.mp4');
   const target = path.join(tmp, 'out.mp4');
-  fs.writeFileSync(source, Buffer.from(await data.arrayBuffer()));
+  try {
+    fs.writeFileSync(source, await getObject(key));
+  } catch (err) {
+    console.error(`  SKIP ${key}: download failed (${(err as Error).message})`);
+    continue;
+  }
   fs.rmSync(target, { force: true });
 
   execFileSync(
@@ -177,21 +155,14 @@ for (const key of videos) {
   console.log(`  ${mb(sizeIn)} → ${mb(sizeOut)} MB  ${dest}`);
 
   if (!DRY_RUN) {
-    const { error: upErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(dest, fs.readFileSync(target), {
-        contentType: 'video/mp4',
-        // Match the 30 days the 20260907000000 migration set on every other
-        // object; a fresh upload otherwise lands on the 1-hour default and
-        // quietly reintroduces the repeat-download problem that migration
-        // fixed.
-        cacheControl: '2592000',
-        upsert: true,
-      });
-    if (upErr) {
-      console.error(
-        `  UPLOAD FAILED ${dest}: ${upErr.message} — catalog left pointing at original`,
-      );
+    try {
+      // Match the 30 days the 20260907000000 migration set on every other
+      // object; a fresh upload otherwise lands on the 1-hour default and
+      // quietly reintroduces the repeat-download problem that migration fixed.
+      await putObject(dest, fs.readFileSync(target), 'video/mp4', ORIGINAL_CACHE_CONTROL);
+    } catch (err) {
+      const msg = (err as Error).message;
+      console.error(`  UPLOAD FAILED ${dest}: ${msg} — catalog left pointing at original`);
       continue;
     }
   }

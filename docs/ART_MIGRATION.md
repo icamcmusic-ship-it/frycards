@@ -37,28 +37,54 @@ sit alongside the originals). `shrink-originals` is what fixes the second, and
 option that takes the art off Supabase's quota entirely — not required for
 either fix.
 
-## What you need first
+## Run it on GitHub instead (recommended)
 
-- The Supabase service-role key (listing and deleting objects is not something
-  the publishable key may do).
+`.github/workflows/art-pipeline.yml` runs all of this on a runner, so none of
+what follows needs a laptop, a Node install, or ffmpeg.
+
+**Setup, once.** In the Supabase dashboard, Storage > S3 access keys, create a
+pair. In GitHub, Settings > Secrets and variables > Actions, add them as
+`ART_S3_ACCESS_KEY_ID` and `ART_S3_SECRET_ACCESS_KEY`.
+
+**Then**, from the Actions tab, run *Art pipeline* and pick a phase:
+
+- **sync** — derive and upload anything new or changed. Safe and additive. Also
+  runs itself weekly, which is what makes new art automatic: drop a file in the
+  Supabase dashboard and its resized copies appear without anyone doing
+  anything.
+- **full-migration** — the one-time cleanup. Requires typing `SHRINK` into the
+  confirm box, because it replaces stored files and cannot be undone from the
+  bucket.
+- **shrink-video** — re-encodes the mp4 full-arts. ffmpeg is already on the
+  runner. If it changes the catalog it uploads a patch artifact to commit.
+
+## Credentials
+
+One pair of Supabase **S3 access keys**, which are scoped to storage.
+
+Deliberately *not* the service-role key. That one bypasses RLS across every
+table and every one of the ~100 Postgres functions in the project; this
+pipeline only ever lists, reads, writes and deletes files in one bucket. The
+repository is public and the pipeline runs in Actions, so the difference is
+what a stored secret is worth if it ever leaks.
+
+## What you need for a local run
+
+Only if you would rather not use the workflow above:
+
+- The S3 access key pair, same as above.
 - ~2 GB of free disk for the archive and the generated derivatives.
 - Somewhere off-platform for the full-resolution masters. They are not needed
   to run the game and should not be paid for on the storage line; they matter
   only if you may ever reprint, re-crop, or re-derive at a larger size.
-- Only if you are moving hosts: an S3-compatible bucket with public read, and
-  an API key for it. `upload` talks plain S3, so the endpoint is what picks the
-  host — Backblaze B2, Wasabi, R2, or Supabase's own S3 endpoint all work.
-- ffmpeg, if you also want to run `npm run media:shrink-video` — separate from
-  this pipeline and safe to do either before or after.
+- ffmpeg, only for `npm run media:shrink-video`.
 
 ```
-export SUPABASE_SERVICE_ROLE_KEY=...
-export VITE_ART_BASE_URL=https://art.frycards.example   # no trailing slash
-
-# only when moving hosts
-export ART_S3_ENDPOINT=https://s3.us-west-000.backblazeb2.com
 export ART_S3_ACCESS_KEY_ID=...
 export ART_S3_SECRET_ACCESS_KEY=...
+
+# only when moving off Supabase; defaults to this project's own S3 endpoint
+export ART_S3_ENDPOINT=https://s3.us-west-000.backblazeb2.com
 export ART_S3_BUCKET=frycards-art
 ```
 
@@ -124,11 +150,6 @@ path.** The archived original is the full-size master, so a plain `upload`
 against a bucket that has already been shrunk restores every multi-megabyte
 file — undoing step 4 entirely. Either pass `--derivatives-only`, or upload
 before shrinking, or both. The sequence above does both.
-
-Staying on Supabase? Point `ART_S3_ENDPOINT` at Supabase's own S3 API
-(`https://<project>.supabase.co/storage/v1/s3`, with an S3 access key pair from
-the storage settings page) and `ART_S3_BUCKET` at `Card Images`. The
-derivatives then land in the same bucket the catalog already uses.
 
 Pushes the originals and every derivative to the configured bucket. Originals get 30-day
 cache-control (matching what the `20260907000000` migration set); derivatives
