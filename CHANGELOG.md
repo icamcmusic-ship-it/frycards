@@ -183,6 +183,56 @@ Supabase's own S3 endpoint, whichever the endpoint points at. `upload` and
 `purge` are skippable: run archive, derive and rewrite alone and the art stays
 where it is, just small. `docs/ART_MIGRATION.md` covers both routes.
 
+#### Storage was the other half, and the ceiling is already here
+
+Everything so far attacked egress — bytes served per view. Storage is a
+different number: bytes held, billed whether or not anyone looks at them. The
+free tier caps it at 1 GB and the `Card Images` bucket is at **~1.02 GB**
+today, before the derivative ladder adds its ~150 MB on top. Deriving a ladder
+makes the egress problem go away and makes the storage problem slightly worse.
+
+The waste is easy to state: `WIDTH_LADDER` tops out at 960 px, so **no pixel
+beyond 960 has ever been served to a player**. The bucket has been paying every
+month to store 4K generator output — averaging 5.9 MB, up to 11 MB — of which
+roughly 98% of the pixels are unreachable by any code path in the app.
+
+`npm run media:shrink-originals` replaces each stored original with a display
+master: at most 1200 px wide, webp, under the **same key**. Same key is the
+whole trick — the catalog keeps pointing where it points, so there is no
+rewrite, no `sync-cards-db`, no redeploy, and the `SafeImage`/`CardArt`
+fallback keeps resolving, just cheaply. A key ending `.png` now holds webp
+bytes, which is cosmetic: the `Content-Type` header is what browsers honour and
+it is set correctly. The phase refuses to touch an object without a
+byte-identical archive copy on disk, and refuses to run without `--yes`.
+
+1200 rather than 960 buys one rung of headroom, so a future 1200 entry in the
+ladder would not need every card re-ingested.
+
+#### New art now arrives resized, instead of being resized afterwards
+
+`shrink-originals` is a one-time cleanup; without changing how art gets in, the
+bucket walks straight back to the cap. `npm run media:add -- "Volume 2"
+file.png …` resizes to the display master, uploads it, derives its ladder,
+uploads that, and prints the catalog URL to paste. Each new card costs the low
+hundreds of kilobytes instead of 6-11 MB — a ~95% cut in the growth rate.
+
+`sync` remains as the safety net for art that went in through the dashboard
+anyway; `add` is the front door. The rejection message on pasted metered links
+now points at `media:add`, which is the thing that actually fixes it.
+
+#### The encoding rules are tested against pixels, not source text
+
+The rest of this pipeline is verified by reading its own source, which catches
+drift but not arithmetic — and the entire storage argument rests on a claim
+about how small a resized copy is. `scripts/lib/derive.ts` now holds the sharp
+calls, imported by both the script and `derive.test.ts`, which runs them
+against generated 4K images and measures the output: the master is capped at
+MASTER_WIDTH and at least 10x smaller than its source, every ladder rung exists
+and none exceeds its requested width, a source narrower than a rung is not
+upscaled but still produces that rung, and a card-tier rung lands in tens of
+kilobytes. Extracted rather than tested in place because the script is a
+top-level-await CLI: importing it to test anything would run it.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them

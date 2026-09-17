@@ -143,7 +143,7 @@ const SUPABASE_OBJECT_PATH = '/storage/v1/object/public/';
 export const METERED_ART_MESSAGE =
   'That image is on the project’s own storage, which is billed per view at ' +
   'full resolution. Link the original source instead, or add it through the ' +
-  'art pipeline (npm run media:sync) so a resized copy exists.';
+  'art pipeline (npm run media:add) so a resized copy exists.';
 
 export function isMeteredStorageUrl(url: string | null | undefined): boolean {
   if (!url) return false;

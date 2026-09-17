@@ -54,6 +54,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 import { WIDTH_LADDER, derivedKey } from '../src/lib/media';
+import { DERIVED_QUALITY, masterBytes } from './lib/derive';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -65,10 +66,6 @@ const ARCHIVE = process.env.ART_ARCHIVE_DIR || path.join(ROOT, 'art-archive');
 const DERIVED = path.join(ARCHIVE, '.derived');
 const MANIFEST = path.join(ARCHIVE, 'manifest.json');
 const CATALOG = path.join(ROOT, 'src', 'game', 'generated-cards.ts');
-
-/** WebP quality. 62 is visually indistinguishable at card scale and roughly
- * half the bytes of the 80 most encoders default to. */
-const QUALITY = 62;
 
 /** Long cache lifetime for the derivatives. A derived key is a pure function
  * of its source key and a width, and the source keys carry generation UUIDs,
@@ -104,6 +101,12 @@ function requireEnv(...names: string[]): void {
 function supabaseClient() {
   if (!SERVICE_KEY) die('SUPABASE_SERVICE_ROLE_KEY is required for this phase.');
   return createClient(SUPABASE_URL, SERVICE_KEY);
+}
+
+/** The public URL for `key`, in the form the catalog stores — `encodeURI`,
+ * not `encodeURIComponent`, so the path separators survive. */
+function publicUrl(key: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/${encodeURI(BUCKET)}/${encodeURI(key)}`;
 }
 
 /** Local path for an object key. Keys contain spaces, colons and slashes; the
@@ -196,7 +199,7 @@ async function deriveOne(key: string): Promise<{ made: number; bytes: number }> 
     // and a missing one 404s into the full-size fallback.
     await sharp(source)
       .resize({ width: Math.min(width, sourceWidth), withoutEnlargement: true })
-      .webp({ quality: QUALITY })
+      .webp({ quality: DERIVED_QUALITY })
       .toFile(dest);
     bytes += fs.statSync(dest).size;
     made++;
@@ -418,6 +421,196 @@ async function phaseSync(): Promise<void> {
   console.log('If any of these are new card art, remember to point the catalog at them.');
 }
 
+// -------------------------------------------------------- shrink-originals
+
+/**
+ * Replace each stored original with its display master, in place, under the
+ * same key.
+ *
+ * This is the phase that reduces STORAGE rather than egress. Deriving a ladder
+ * leaves the multi-megabyte original sitting next to it, so the bucket grows;
+ * the free tier caps storage at 1 GB and this bucket is already at ~1.02 GB of
+ * raw generator output. Nothing the app renders is ever wider than the ladder's
+ * top rung, so those pixels have never been served to anyone — they are being
+ * paid for every month to be ignored.
+ *
+ * Same key, deliberately. The catalog keeps pointing where it points, so this
+ * needs no rewrite, no `sync-cards-db`, no redeploy — and the fallback path in
+ * SafeImage/CardArt keeps resolving, just cheaply now. The key's extension
+ * stops matching its bytes (`art.png` holding webp), which is cosmetic: the
+ * Content-Type header is what browsers honour, and it is set correctly.
+ *
+ * Safety: an object is only replaced when a byte-identical archive copy exists
+ * on disk, exactly as `purge` requires, because the replacement is lossy and
+ * the archive is the only way back.
+ */
+async function phaseShrinkOriginals(): Promise<void> {
+  const { keys } = readManifest();
+  const supabase = supabaseClient();
+  if (!process.argv.includes('--yes')) {
+    die(
+      'shrink-originals overwrites objects in the bucket with smaller copies.\n' +
+        'Every one is verified against ./art-archive first, but the replacement\n' +
+        'is lossy and cannot be undone from the bucket. Re-run with --yes.',
+    );
+  }
+
+  const live = await listAll(supabase);
+  const bySize = new Map(live.map((o) => [o.key, o.size]));
+
+  let replaced = 0;
+  let before = 0;
+  let after = 0;
+  let skipped = 0;
+  for (const key of keys) {
+    // Video is re-encoded by scripts/shrink-video-art.ts, which understands
+    // codecs; sharp would simply fail on it.
+    if (!isImage(key)) continue;
+    const source = archivePath(key);
+    const size = bySize.get(key);
+    if (size === undefined) {
+      console.error(`  SKIP ${key}: no longer in the bucket`);
+      skipped++;
+      continue;
+    }
+    if (!fs.existsSync(source)) {
+      console.error(`  SKIP ${key}: no archive copy — nothing to restore from`);
+      skipped++;
+      continue;
+    }
+    if (size > 0 && fs.statSync(source).size !== size) {
+      console.error(`  SKIP ${key}: archive copy is a different size`);
+      skipped++;
+      continue;
+    }
+
+    const body = await masterBytes(source);
+    // A master that is not actually smaller means the stored object was
+    // already at or below the cap. Replacing it would spend a generation of
+    // quality to save nothing.
+    if (body.length >= size && size > 0) {
+      skipped++;
+      continue;
+    }
+
+    const { error } = await supabase.storage.from(BUCKET).upload(key, body, {
+      contentType: 'image/webp',
+      cacheControl: '2592000',
+      upsert: true,
+    });
+    if (error) {
+      console.error(`  FAILED ${key}: ${error.message}`);
+      skipped++;
+      continue;
+    }
+    before += size;
+    after += body.length;
+    replaced++;
+    if (replaced % 25 === 0) console.log(`  ${replaced} replaced…`);
+  }
+
+  console.log(
+    `Replaced ${replaced} originals: ${mb(before)} MB -> ${mb(after)} MB ` +
+      `(${mb(before - after)} MB reclaimed, ${skipped} skipped)`,
+  );
+  console.log('The archive still holds the full-resolution masters. Keep it.');
+}
+
+// -------------------------------------------------------------------- add
+
+/**
+ * Ingest new local art: resize to the display master, upload it, derive its
+ * ladder, upload that, and record it in the manifest.
+ *
+ * This is the pipeline new art should arrive through, instead of a raw file
+ * dropped into the dashboard. Doing it here rather than after the fact is the
+ * whole point: a 6 MB generator PNG uploaded by hand is 6 MB on the storage
+ * line permanently, and every card added that way walks the bucket back toward
+ * the cap that `shrink-originals` just pulled it away from.
+ *
+ *   npm run media:add "Volume 2" ~/art/new-card.png ~/art/another.png
+ *
+ * The first argument is the bucket folder; the rest are local files. Prints
+ * the catalog URL for each, which is what goes in generated-cards.ts.
+ *
+ * Note the archive gets the RESIZED master, not the file you passed: the
+ * archive's contract is "a byte-identical copy of what is in the bucket",
+ * which is what lets shrink-originals and purge verify against it. Your
+ * full-resolution original stays wherever you keep it.
+ */
+async function phaseAdd(): Promise<void> {
+  const args = process.argv.slice(3).filter((a) => !a.startsWith('--'));
+  const [prefix, ...files] = args;
+  if (!prefix || files.length === 0) {
+    die('Usage: migrate-art.ts add "<bucket folder>" <file> [file...]');
+  }
+  for (const file of files) {
+    if (!fs.existsSync(file)) die(`No such file: ${file}`);
+  }
+
+  const supabase = supabaseClient();
+  const { keys } = readManifest();
+  const added: string[] = [];
+
+  for (const file of files) {
+    // One canonical extension, because the stored master is always webp.
+    const base = path.basename(file).replace(/\.[^.]+$/, '');
+    const key = `${prefix.replace(/\/+$/, '')}/${base}.webp`;
+    const body = await masterBytes(file);
+
+    const { error } = await supabase.storage.from(BUCKET).upload(key, body, {
+      contentType: 'image/webp',
+      cacheControl: '2592000',
+      upsert: true,
+    });
+    if (error) {
+      console.error(`  FAILED ${key}: ${error.message}`);
+      continue;
+    }
+
+    // Archive the master as uploaded, then derive from it, so the ladder and
+    // the archive both describe exactly what the bucket holds.
+    const dest = archivePath(key);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, body);
+    for (const width of WIDTH_LADDER) {
+      fs.rmSync(path.join(DERIVED, derivedKey(key, width)), { force: true });
+    }
+    const { made } = await deriveOne(key);
+
+    // Derivatives go wherever the art is served from. With no bucket
+    // configured that is this same Supabase bucket, which is the supported
+    // "stay put, just get small" path.
+    if (process.env.ART_S3_ENDPOINT) {
+      const upload = uploaderFor(bucketClient(), process.env.ART_S3_BUCKET || 'frycards-art');
+      await upload(key);
+    } else {
+      for (const width of WIDTH_LADDER) {
+        const dKey = derivedKey(key, width);
+        const dBody = fs.readFileSync(path.join(DERIVED, dKey));
+        const { error: dErr } = await supabase.storage.from(BUCKET).upload(dKey, dBody, {
+          contentType: 'image/webp',
+          cacheControl: '31536000',
+          upsert: true,
+        });
+        if (dErr) console.error(`  WARN ${dKey}: ${dErr.message}`);
+      }
+    }
+
+    added.push(key);
+    console.log(
+      `  ${path.basename(file)} -> ${mb(fs.statSync(file).size)} MB in, ` +
+        `${mb(body.length)} MB stored, ${made} derivatives`,
+    );
+    console.log(`    ${publicUrl(key)}`);
+  }
+
+  const merged = [...new Set([...keys, ...added])].sort();
+  fs.writeFileSync(MANIFEST, JSON.stringify({ keys: merged }, null, 2) + '\n');
+  console.log(`Added ${added.length} object(s). Paste the URLs above into generated-cards.ts.`);
+  if (added.length < files.length) die('Some files failed — nothing else was changed.');
+}
+
 // ------------------------------------------------------------------- main
 
 const phase = process.argv[2];
@@ -440,6 +633,12 @@ switch (phase) {
   case 'sync':
     await phaseSync();
     break;
+  case 'shrink-originals':
+    await phaseShrinkOriginals();
+    break;
+  case 'add':
+    await phaseAdd();
+    break;
   default:
-    die('Usage: migrate-art.ts <archive|derive|upload|rewrite|purge|sync>');
+    die('Usage: migrate-art.ts <archive|derive|upload|rewrite|purge|sync|shrink-originals|add>');
 }

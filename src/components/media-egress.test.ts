@@ -225,3 +225,25 @@ test('new art added to the bucket has a route to derivatives', () => {
   // Sync is additive — purge is the only phase allowed to delete.
   expect(source).not.toMatch(/phaseSync[\s\S]*?storage\.from\(BUCKET\)\.remove/);
 });
+
+test('shrinking an original never runs without a verified archive copy', () => {
+  // The replacement is lossy and the bucket cannot undo it, so the archive is
+  // the only way back — the same three refusals purge makes.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('async function phaseShrinkOriginals');
+  expect(source).toContain('no archive copy');
+  expect(source).toContain('archive copy is a different size');
+  // And it will not run unattended.
+  expect(source).toContain('--yes');
+});
+
+test('new art is resized before it is stored, not after', () => {
+  // A raw generator PNG uploaded by hand is multi-megabyte on the storage line
+  // permanently; the add phase is what stops that being the default path.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('async function phaseAdd');
+  expect(source).toMatch(/masterBytes\(file\)/);
+  // Both new-art paths encode through the shared rules rather than restating
+  // a width or a quality of their own.
+  expect(source).toMatch(/import \{[^}]*masterBytes[^}]*\} from '\.\/lib\/derive'/);
+});
