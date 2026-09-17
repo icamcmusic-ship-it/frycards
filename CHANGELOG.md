@@ -139,6 +139,100 @@ the generator imports the ladder rather than restating it (a rung the app asks
 for that was never generated is a 404 into the full-size fallback), and that
 purge's three refusals are all still there.
 
+#### New art can no longer slip back onto the metered host
+
+Two gaps the migration left, both of which would have quietly undone it.
+
+**The bucket keeps growing.** The migration derived the 302 objects that
+existed when it ran. Anything added afterwards had no derivatives, so the app
+fell back to serving it full size, from the metered host, forever.
+`npm run media:sync` closes that: it archives, derives and (if a bucket is
+configured) uploads whatever is new or changed, then updates the manifest. An
+original replaced in place has its stale derivatives dropped and regenerated.
+It is additive by construction — it never deletes and never rewrites the
+catalog, because the archive is the backup and `purge` stays the only
+destructive phase.
+
+**Pasted links.** Worth being precise about, because the earlier note here was
+not: the app has **no binary upload path at all**. Every image in the product —
+card submissions, bulk imports, shop banners — is a URL somebody typed into a
+form. So the way art reappears on the metered host is not an upload, it is a
+paste: a link to the project's own storage looks like any other https link, and
+nothing downstream resizes it. `isMeteredStorageUrl()` catches it at all four
+entry points, and the rejection names the fix rather than just refusing, since
+"not allowed" with no alternative just gets pasted somewhere else. This is
+stricter than `submit_card`, which accepts any https URL — a cost control, not
+a security boundary.
+
+Off-site links (`cdn.midjourney.com`, an avatar service) stay allowed: they
+cost this project no egress. They are also outside every guarantee here,
+including against the host expiring them.
+
+#### The art host is now a config value, not a vendor
+
+Cloudflare turned out not to be an option, which exposed an assumption worth
+removing: the resizing and the hosting were never the same decision. Serving
+pre-generated derivatives is a ~50-100x cut on its own, and Supabase can serve
+them perfectly well — a card face costs ~30-70 kB instead of ~6 MB whoever
+hosts it. Moving hosts is a separate, later choice that takes the art off the
+egress quota entirely.
+
+So `scripts/migrate-art-to-r2.ts` is now `scripts/migrate-art.ts`, and `upload`
+talks plain S3 against `ART_S3_ENDPOINT` — Backblaze B2, Wasabi, R2, or
+Supabase's own S3 endpoint, whichever the endpoint points at. `upload` and
+`purge` are skippable: run archive, derive and rewrite alone and the art stays
+where it is, just small. `docs/ART_MIGRATION.md` covers both routes.
+
+#### Storage was the other half, and the ceiling is already here
+
+Everything so far attacked egress — bytes served per view. Storage is a
+different number: bytes held, billed whether or not anyone looks at them. The
+free tier caps it at 1 GB and the `Card Images` bucket is at **~1.02 GB**
+today, before the derivative ladder adds its ~150 MB on top. Deriving a ladder
+makes the egress problem go away and makes the storage problem slightly worse.
+
+The waste is easy to state: `WIDTH_LADDER` tops out at 960 px, so **no pixel
+beyond 960 has ever been served to a player**. The bucket has been paying every
+month to store 4K generator output — averaging 5.9 MB, up to 11 MB — of which
+roughly 98% of the pixels are unreachable by any code path in the app.
+
+`npm run media:shrink-originals` replaces each stored original with a display
+master: at most 1200 px wide, webp, under the **same key**. Same key is the
+whole trick — the catalog keeps pointing where it points, so there is no
+rewrite, no `sync-cards-db`, no redeploy, and the `SafeImage`/`CardArt`
+fallback keeps resolving, just cheaply. A key ending `.png` now holds webp
+bytes, which is cosmetic: the `Content-Type` header is what browsers honour and
+it is set correctly. The phase refuses to touch an object without a
+byte-identical archive copy on disk, and refuses to run without `--yes`.
+
+1200 rather than 960 buys one rung of headroom, so a future 1200 entry in the
+ladder would not need every card re-ingested.
+
+#### New art now arrives resized, instead of being resized afterwards
+
+`shrink-originals` is a one-time cleanup; without changing how art gets in, the
+bucket walks straight back to the cap. `npm run media:add -- "Volume 2"
+file.png …` resizes to the display master, uploads it, derives its ladder,
+uploads that, and prints the catalog URL to paste. Each new card costs the low
+hundreds of kilobytes instead of 6-11 MB — a ~95% cut in the growth rate.
+
+`sync` remains as the safety net for art that went in through the dashboard
+anyway; `add` is the front door. The rejection message on pasted metered links
+now points at `media:add`, which is the thing that actually fixes it.
+
+#### The encoding rules are tested against pixels, not source text
+
+The rest of this pipeline is verified by reading its own source, which catches
+drift but not arithmetic — and the entire storage argument rests on a claim
+about how small a resized copy is. `scripts/lib/derive.ts` now holds the sharp
+calls, imported by both the script and `derive.test.ts`, which runs them
+against generated 4K images and measures the output: the master is capped at
+MASTER_WIDTH and at least 10x smaller than its source, every ladder rung exists
+and none exceeds its requested width, a source narrower than a rung is not
+upscaled but still produces that rung, and a card-tier rung lands in tens of
+kilobytes. Extracted rather than tested in place because the script is a
+top-level-await CLI: importing it to test anything would run it.
+
 ### v33.0 — The experiment was the variable
 
 #### Leader stability: the design of a draw matters as much as the number of them

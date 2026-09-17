@@ -1,5 +1,6 @@
 import { createClient, Session } from '@supabase/supabase-js';
 import { CardTemplate } from '../types';
+import { isMeteredStorageUrl, METERED_ART_MESSAGE } from './media';
 import { SHOWCASE_SET } from '../meta/submissions';
 
 // Public (publishable) credentials for the backend. Safe to ship in the
@@ -1681,12 +1682,24 @@ export async function fetchListableInventory(): Promise<ListableCard[]> {
 }
 
 // -- shop lifecycle -------------------------------------------------------
+
+/** A shop banner is a URL the player types, and it renders full-bleed across
+ * the storefront header. One pointing at the project's own storage is a
+ * multi-megabyte original billed on every view of that shop, with no
+ * derivative behind it — so it is refused here, before the round trip, in the
+ * same shape as any other rejection these functions return. */
+function meteredBannerRejection(bannerUrl?: string | null): string | null {
+  return isMeteredStorageUrl(bannerUrl) ? METERED_ART_MESSAGE : null;
+}
+
 export async function openShop(
   name: string,
   bannerUrl?: string | null,
   tagline?: string | null,
   accent?: ShopAccent | null,
 ): Promise<string | null> {
+  const rejected = meteredBannerRejection(bannerUrl);
+  if (rejected) return rejected;
   const { error } = await supabase.rpc('open_shop', {
     p_name: name,
     p_banner_url: bannerUrl ?? null,
@@ -1702,6 +1715,8 @@ export async function updateShop(
   tagline?: string | null,
   accent?: ShopAccent | null,
 ): Promise<string | null> {
+  const rejected = meteredBannerRejection(bannerUrl);
+  if (rejected) return rejected;
   const { error } = await supabase.rpc('update_shop', {
     p_name: name,
     p_banner_url: bannerUrl ?? null,

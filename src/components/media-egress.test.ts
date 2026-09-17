@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { derivedKey, isDerivedUrl, mediaUrl, originalMediaUrl } from '../lib/media';
+import {
+  derivedKey,
+  isDerivedUrl,
+  isMeteredStorageUrl,
+  mediaUrl,
+  originalMediaUrl,
+} from '../lib/media';
 
 const ART = 'https://art.frycards.example';
 const SUPABASE = 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images';
@@ -161,13 +167,13 @@ test('the generator derives exactly the rungs the app asks for', () => {
   // A rung the app requests that the generator never produced is a 404 and a
   // fallback to the multi-megabyte original — so the script must import the
   // ladder and the key builder rather than restating either.
-  const source = readFileSync('scripts/migrate-art-to-r2.ts', 'utf8');
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
   expect(source).toMatch(/import \{ WIDTH_LADDER, derivedKey \} from '\.\.\/src\/lib\/media'/);
   expect(source).not.toMatch(/\[\s*160\s*,\s*240\s*,/);
 });
 
 test('the migration will not delete an original it has not verified', () => {
-  const source = readFileSync('scripts/migrate-art-to-r2.ts', 'utf8');
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
   // Purge refuses on a catalog still pointing at Supabase, on a missing
   // archive copy, and on a size mismatch — the archive is the only remaining
   // copy of the masters once this runs.
@@ -184,4 +190,69 @@ test('shrunk video art keeps the bucket-wide cache-control', () => {
   expect(source).toContain("cacheControl: '2592000'");
   expect(source).toContain('+faststart');
   expect(source).toContain("'-an'");
+});
+
+test('art on the project\u2019s own storage is recognised as metered', () => {
+  expect(isMeteredStorageUrl(`${SUPABASE}/art.png`)).toBe(true);
+  // Off-site links cost this project nothing.
+  expect(isMeteredStorageUrl('https://cdn.midjourney.com/a/0_0.png')).toBe(false);
+  expect(isMeteredStorageUrl(null)).toBe(false);
+  // Once the art host is configured, a URL on it is the cheap path, not the
+  // metered one.
+  expect(isMeteredStorageUrl(`${ART}/art.png`)).toBe(false);
+});
+
+test('a pasted URL cannot put new art back on the metered host', () => {
+  // The app has no binary upload path — every image is a URL somebody typed —
+  // so the forms are the only place this can be caught.
+  const submissions = readFileSync('src/meta/submissions.ts', 'utf8');
+  expect(submissions).toContain('isMeteredStorageUrl');
+  // Both the single-card form and the bulk-import row check.
+  expect(submissions.match(/isMeteredStorageUrl\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  // Shop banners render full-bleed and are refused before the round trip.
+  const api = readFileSync('src/lib/supabase.ts', 'utf8');
+  // Both shop entry points, not just one.
+  expect(api).toContain('meteredBannerRejection');
+  expect(api.match(/meteredBannerRejection\(bannerUrl\)/g)?.length ?? 0).toBe(2);
+});
+
+test('new art added to the bucket has a route to derivatives', () => {
+  // Without a sync phase the migration is a one-off: anything dropped into the
+  // bucket afterwards has no derivatives and is served full size forever.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('async function phaseSync');
+  expect(source).toContain("case 'sync'");
+  // Sync is additive — purge is the only phase allowed to delete.
+  expect(source).not.toMatch(/phaseSync[\s\S]*?storage\.from\(BUCKET\)\.remove/);
+});
+
+test('shrinking an original never runs without a verified archive copy', () => {
+  // The replacement is lossy and the bucket cannot undo it, so the archive is
+  // the only way back — the same three refusals purge makes.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('async function phaseShrinkOriginals');
+  expect(source).toContain('no archive copy');
+  expect(source).toContain('archive copy is a different size');
+  // And it will not run unattended.
+  expect(source).toContain('--yes');
+});
+
+test('new art is resized before it is stored, not after', () => {
+  // A raw generator PNG uploaded by hand is multi-megabyte on the storage line
+  // permanently; the add phase is what stops that being the default path.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('async function phaseAdd');
+  expect(source).toMatch(/masterBytes\(file\)/);
+  // Both new-art paths encode through the shared rules rather than restating
+  // a width or a quality of their own.
+  expect(source).toMatch(/import \{[^}]*masterBytes[^}]*\} from '\.\/lib\/derive'/);
+});
+
+test('uploading cannot silently restore the originals shrink-originals replaced', () => {
+  // The archived original is the full-size master. Pushing it back to its key
+  // is correct when populating a fresh host and exactly wrong against a bucket
+  // that has already been shrunk — it would undo the whole storage win.
+  const source = readFileSync('scripts/migrate-art.ts', 'utf8');
+  expect(source).toContain('--derivatives-only');
+  expect(source).toMatch(/derivativesOnly \? 0 : await put\(key, archivePath\(key\)/);
 });

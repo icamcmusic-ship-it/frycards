@@ -8,6 +8,7 @@
  * that keeps a player from round-tripping just to be told the URL was wrong.
  */
 import { CardOverrides, CardType, Rarity, RARITIES, CardTemplate } from '../types';
+import { isMeteredStorageUrl, METERED_ART_MESSAGE } from '../lib/media';
 import { EssenceCost } from '../game/v3/cards';
 import { KEYWORDS } from '../game/v3/keywords';
 import { COLORS as ESSENCE_TYPES } from '../game/v3/colors';
@@ -145,6 +146,11 @@ export function validateSubmission(d: SubmissionDraft): string | null {
     return `Flavor text must be ${flavorMin}–${flavorMax} characters.`;
   }
   if (!HTTPS_RE.test(url)) return 'Art link must be an https:// URL.';
+  // Stricter than `submit_card`, deliberately: the server accepts any https
+  // link, but art served from the project's own storage is billed egress on
+  // every view, at full generator resolution, with no derivative behind it.
+  // See isMeteredStorageUrl.
+  if (isMeteredStorageUrl(url)) return METERED_ART_MESSAGE;
   if (d.treatment === 'video_mythic' && !isVideoUrl(url)) {
     return 'A video Mythic needs an .mp4, .webm or .mov link.';
   }
@@ -402,6 +408,7 @@ function validateRow(
 
   const image = (raw.image ?? '').trim();
   if (!HTTPS_RE.test(image)) return { error: 'image url must be an https:// link' };
+  if (isMeteredStorageUrl(image)) return { error: METERED_ART_MESSAGE };
 
   const flavor = (raw.flavor ?? '').trim();
   if (flavor.length > 500) return { error: 'flavor text must be 500 characters or fewer' };
