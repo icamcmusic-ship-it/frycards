@@ -138,6 +138,7 @@ export function ProfileScreen({
         <div className="ink-border-md shadow-hard-black overflow-hidden bg-[var(--c-steel)] relative">
           <div className="h-40 relative">
             <SafeImage
+              boxWidth={896}
               src={banner?.image_url}
               alt={banner ? `${banner.name} banner` : undefined}
               className="w-full h-full object-cover"
@@ -148,6 +149,7 @@ export function ProfileScreen({
             <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
               {avatar?.image_url ? (
                 <SafeImage
+                  boxWidth={80}
                   src={avatar.image_url}
                   alt="Profile avatar"
                   className="w-full h-full object-cover"
@@ -326,6 +328,7 @@ export function ProfileScreen({
                         )}
                       >
                         <SafeImage
+                          boxWidth={240}
                           src={item.image_url}
                           alt={item.name}
                           className="w-full h-full object-cover"

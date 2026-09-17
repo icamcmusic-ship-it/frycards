@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { isTransformedUrl, mediaUrl, originalMediaUrl } from '../lib/media';
 
@@ -78,4 +79,57 @@ test('card art is requested at its tier width, not full resolution', () => {
   for (const match of source.matchAll(/<CardArt\b[^>]*>/g)) {
     expect(match[0]).toContain('boxWidth=');
   }
+});
+
+test('every SafeImage call site declares the width it renders into', () => {
+  // SafeImage defaults to a 480px box, which is a ceiling rather than a fit:
+  // an avatar rendered at 64px fetches 8x the pixels it shows. This is the
+  // guarantee that decays silently as screens are added, so it is locked the
+  // same way <CardArt>'s is.
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.tsx$/.test(entry.name)) files.push(full);
+    }
+  };
+  walk('src');
+  let sites = 0;
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    for (const match of source.matchAll(/<SafeImage\b[\s\S]*?\/>/g)) {
+      // The component's own definition isn't a call site.
+      if (file.endsWith('SafeImage.tsx')) continue;
+      sites++;
+      expect(match[0], `${file} renders a SafeImage with no boxWidth`).toMatch(/boxWidth=/);
+    }
+  }
+  expect(sites).toBeGreaterThan(20);
+});
+
+test('the ladder does not round the card tiers up past what they render', () => {
+  // The rungs exist to be shared, but a rung set that is too sparse is a
+  // silent overcharge: before the 240/320 rungs, a 140px card face at 2x
+  // fetched a 480px derivative for the 280 pixels it shows.
+  const at = (w: number) =>
+    Number(new URL(mediaUrl(`${OBJECT}/a.png`, w)!).searchParams.get('width'));
+  for (const tier of [78, 110, 140, 240]) {
+    // devicePixelRatio is 1 under the test environment, so the device-pixel
+    // count a 2x screen would ask for is passed as the box width directly.
+    const needed = tier * 2; // MAX_DPR
+    expect(at(needed)).toBeGreaterThanOrEqual(needed);
+    // No tier may overshoot by more than 25% — the slack that makes a rung
+    // shared, not a rung that is simply the wrong size.
+    expect(at(needed)).toBeLessThanOrEqual(needed * 1.25);
+  }
+});
+
+test('shrunk video art keeps the bucket-wide cache-control', () => {
+  // A fresh upload lands on the 1-hour default and would quietly undo the
+  // 20260907000000 migration for exactly the largest files in the bucket.
+  const source = readFileSync('scripts/shrink-video-art.ts', 'utf8');
+  expect(source).toContain("cacheControl: '2592000'");
+  expect(source).toContain('+faststart');
+  expect(source).toContain("'-an'");
 });

@@ -357,6 +357,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
                   >
                     <div className="w-8 h-11 shrink-0 overflow-hidden ink-border-sm">
                       <SafeImage
+                        boxWidth={48}
                         src={c.image_url}
                         alt=""
                         className="w-full h-full object-cover"
@@ -1011,7 +1012,12 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
               >
                 {s.banner_url && (
                   <div className="absolute inset-0 opacity-45">
-                    <SafeImage src={s.banner_url} alt="" className="w-full h-full object-cover" />
+                    <SafeImage
+                      boxWidth={320}
+                      src={s.banner_url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 )}
                 <div className="relative flex items-end gap-2 p-2 w-full">
@@ -1617,7 +1623,12 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           >
             {shop.banner_url && (
               <div className="absolute inset-0 opacity-40">
-                <SafeImage src={shop.banner_url} alt="" className="w-full h-full object-cover" />
+                <SafeImage
+                  boxWidth={640}
+                  src={shop.banner_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
               </div>
             )}
             <div className="relative p-4 flex items-start gap-3 flex-wrap">
@@ -1975,7 +1986,12 @@ function MyShopTab() {
       >
         {shop.banner_url && (
           <div className="absolute inset-0 opacity-35">
-            <SafeImage src={shop.banner_url} alt="" className="w-full h-full object-cover" />
+            <SafeImage
+              boxWidth={640}
+              src={shop.banner_url}
+              alt=""
+              className="w-full h-full object-cover"
+            />
           </div>
         )}
         <div className="relative">
@@ -2307,7 +2323,7 @@ function ShopHeaderPreview({
     >
       {banner && (
         <div className="absolute inset-0 opacity-40">
-          <SafeImage src={banner} alt="" className="w-full h-full object-cover" />
+          <SafeImage boxWidth={480} src={banner} alt="" className="w-full h-full object-cover" />
         </div>
       )}
       <div className="relative p-2.5 flex items-center gap-2">

@@ -33,8 +33,17 @@ const OBJECT_PATH = '/storage/v1/object/public/';
 const RENDER_PATH = '/storage/v1/render/image/public/';
 
 /** Shared widths, in device pixels. Keeping the set small is what makes the
- * derivatives cache-friendly; every card face lands on one of these. */
-const WIDTH_LADDER = [160, 320, 480, 640, 960] as const;
+ * derivatives cache-friendly; every card face lands on one of these.
+ *
+ * The 240 and 320 rungs exist because the original five left the two most
+ * common card tiers paying for pixels nobody sees: `compact` (110 CSS px)
+ * needs 220 device pixels and was rounded up to 320, and `standard`
+ * (140 px) needs 280 and was rounded up to 480 — 2.9x the pixel area it
+ * renders. Snapping them to 240 and 320 is a pure reduction with no visible
+ * change, which is why it is done here rather than by lowering MAX_DPR: a
+ * softer thumbnail is a real cost, and this costs nothing.
+ */
+const WIDTH_LADDER = [160, 240, 320, 480, 640, 960] as const;
 
 /** WebP quality. 62 is visually indistinguishable at card scale and roughly
  * half the bytes of the endpoint's default 80. */

@@ -48,11 +48,56 @@ immutable, but a file that *is* replaced in place should self-heal within a
 month rather than being pinned in caches until 2027. Append `?v=` to a catalog
 URL to force an earlier refresh.
 
-Nine tests in `media-egress.test.ts` lock the sizing behaviour, the ladder's
+Nine tests in `media-egress.test.ts` (twelve after the second pass below) lock
+the sizing behaviour, the ladder's
 monotonicity, the pass-throughs, the reversibility of a transformed URL, and
 the two structural guarantees that decay silently: every `<CardArt>` call site
 passes a `boxWidth`, and both image callers keep their fallback to the
 original.
+
+#### Cached egress, second pass: the three places the first pass left money on the table
+
+The first pass got the card faces onto the transformation endpoint. Measuring
+what was left found three things it did not cover.
+
+**The ladder was overcharging the two most common card tiers.** Its rungs were
+160/320/480/640/960, and a `standard` card face (140 CSS px) at 2x needs 280
+device pixels — so it was served a 480px derivative, 2.9x the pixel area it
+renders. `compact` (110 px, needs 220) was rounded up to 320 the same way.
+Adding 240 and 320 rungs snaps both to what they actually need: a 55% cut in
+pixel area on `standard`, 44% on `compact`, across the highest-volume screen in
+the app. This is done by adding rungs rather than by lowering `MAX_DPR`,
+because a softer thumbnail is a real cost and a correctly-sized rung is free.
+
+**Eighteen of the twenty-four `SafeImage` call sites never declared a width**,
+so they took the component's 480px ceiling. An avatar renders at 64 px and a
+news-feed thumbnail at 36; both were fetching roughly 8x the pixels they show.
+Every call site now passes the width of the box it renders into, and a new test
+walks every `.tsx` file in `src` and fails on one that doesn't — the same way
+`<CardArt>`'s coverage is locked, because this is the guarantee that decays
+silently as screens are added. The two `PackOpening` images deliberately share
+one width: they are the same artwork at two sizes, and matching them means one
+cached derivative instead of two.
+
+**Video was untouched, and it is now the single largest line item.** The
+transformation endpoint handles stills only, so the eight mp4 full-arts ship
+byte-for-byte — ~43 MB, more than all 289 card thumbnails combined, with
+`Curse of the Ruby Tide` (10.7 MB) and the moths full-art (8.9 MB) half of that
+between them. `scripts/shrink-video-art.ts` (`npm run media:shrink-video`)
+re-encodes them to 480p H.264 at CRF 30 with the audio dropped — every call
+site mounts them `muted` — which should land each around 300-600 kB. It is
+non-destructive: shrunk clips go to a new `.min.mp4` key and the catalog is
+rewritten to match, so a half-applied run or a client on a stale bundle still
+resolves. Run it with `--dry-run` first; it reports the byte savings without
+uploading. It requires ffmpeg and the service-role key, so it has not been run
+from CI — the originals are still live until someone runs it.
+
+One thing this pass could not verify: whether the Image Transformation add-on
+is actually enabled on the project. If it is off, every card face requests a
+derivative, fails, and falls back to the full-resolution original — worse than
+before any of this work. It is the one switch that dominates every number
+above, and it is worth confirming before reading anything into the bill.
+
 
 ### v33.0 — The experiment was the variable
 

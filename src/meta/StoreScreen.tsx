@@ -410,6 +410,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-16 h-12 ink-border-sm overflow-hidden shrink-0 bg-[var(--c-ink)]">
                 <SafeImage
+                  boxWidth={64}
                   src={dailyPack.image_url}
                   alt={dailyPack.name}
                   className="w-full h-full object-contain"
@@ -497,6 +498,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                   </div>
                   <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
                     <SafeImage
+                      boxWidth={320}
                       src={pack.image_url}
                       alt={pack.name}
                       className="w-full h-full object-contain"
@@ -590,6 +592,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     )}
                   >
                     <SafeImage
+                      boxWidth={240}
                       src={item.image_url}
                       alt={item.name}
                       className="w-full h-full object-cover"
@@ -892,6 +895,7 @@ function PackTile({
       </div>
       <div className="aspect-[77/58] overflow-hidden ink-border-sm m-2 relative bg-[var(--c-ink)]">
         <SafeImage
+          boxWidth={320}
           src={pack.image_url}
           alt={pack.name}
           className="w-full h-full object-contain"
