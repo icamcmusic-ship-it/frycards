@@ -375,6 +375,7 @@ function TearStage({
             }}
           >
             <SafeImage
+              boxWidth={480}
               src={packImageUrl}
               alt={packName}
               className="w-full h-full object-cover"
@@ -430,6 +431,7 @@ function TearStage({
             style={{ height: `${100 / TEAR_FRAC}%` }}
           >
             <SafeImage
+              boxWidth={480}
               src={packImageUrl}
               alt=""
               className="w-full h-full object-cover"

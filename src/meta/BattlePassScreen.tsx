@@ -123,6 +123,7 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
         <div className="w-full h-full">
           {item?.image_url ? (
             <SafeImage
+              boxWidth={160}
               src={item.image_url}
               alt={item.name}
               className="w-full h-full object-cover"

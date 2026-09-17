@@ -132,6 +132,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
             <div className="ink-border-md shadow-hard-black-xs overflow-hidden bg-[var(--c-steel)] relative">
               <div className="h-28 relative">
                 <SafeImage
+                  boxWidth={512}
                   src={banner?.image_url}
                   alt={`${card.username}'s banner`}
                   className="w-full h-full object-cover"
@@ -142,6 +143,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 <div className="w-16 h-16 shrink-0 ink-border-md shadow-hard-black-xs bg-[var(--c-ink)] overflow-hidden">
                   {avatar?.image_url ? (
                     <SafeImage
+                      boxWidth={64}
                       src={avatar.image_url}
                       alt={`${card.username}'s avatar`}
                       className="w-full h-full object-cover"

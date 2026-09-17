@@ -317,6 +317,7 @@ export function NewsCenterScreen({
                 {f.image_url && (
                   <div className="w-9 h-9 rounded-[2px] border-2 border-[var(--c-ink)] shrink-0 overflow-hidden">
                     <SafeImage
+                      boxWidth={48}
                       src={f.image_url}
                       alt={f.card_name}
                       className="w-full h-full object-cover"

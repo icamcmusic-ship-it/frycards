@@ -48,11 +48,96 @@ immutable, but a file that *is* replaced in place should self-heal within a
 month rather than being pinned in caches until 2027. Append `?v=` to a catalog
 URL to force an earlier refresh.
 
-Nine tests in `media-egress.test.ts` lock the sizing behaviour, the ladder's
+Nine tests in `media-egress.test.ts` (twelve after the second pass below) lock
+the sizing behaviour, the ladder's
 monotonicity, the pass-throughs, the reversibility of a transformed URL, and
 the two structural guarantees that decay silently: every `<CardArt>` call site
 passes a `boxWidth`, and both image callers keep their fallback to the
 original.
+
+#### Cached egress, second pass: the three places the first pass left money on the table
+
+The first pass got the card faces onto the transformation endpoint. Measuring
+what was left found three things it did not cover.
+
+**The ladder was overcharging the two most common card tiers.** Its rungs were
+160/320/480/640/960, and a `standard` card face (140 CSS px) at 2x needs 280
+device pixels — so it was served a 480px derivative, 2.9x the pixel area it
+renders. `compact` (110 px, needs 220) was rounded up to 320 the same way.
+Adding 240 and 320 rungs snaps both to what they actually need: a 55% cut in
+pixel area on `standard`, 44% on `compact`, across the highest-volume screen in
+the app. This is done by adding rungs rather than by lowering `MAX_DPR`,
+because a softer thumbnail is a real cost and a correctly-sized rung is free.
+
+**Eighteen of the twenty-four `SafeImage` call sites never declared a width**,
+so they took the component's 480px ceiling. An avatar renders at 64 px and a
+news-feed thumbnail at 36; both were fetching roughly 8x the pixels they show.
+Every call site now passes the width of the box it renders into, and a new test
+walks every `.tsx` file in `src` and fails on one that doesn't — the same way
+`<CardArt>`'s coverage is locked, because this is the guarantee that decays
+silently as screens are added. The two `PackOpening` images deliberately share
+one width: they are the same artwork at two sizes, and matching them means one
+cached derivative instead of two.
+
+**Video was untouched, and it is now the single largest line item.** The
+transformation endpoint handles stills only, so the eight mp4 full-arts ship
+byte-for-byte — ~43 MB, more than all 289 card thumbnails combined, with
+`Curse of the Ruby Tide` (10.7 MB) and the moths full-art (8.9 MB) half of that
+between them. `scripts/shrink-video-art.ts` (`npm run media:shrink-video`)
+re-encodes them to 480p H.264 at CRF 30 with the audio dropped — every call
+site mounts them `muted` — which should land each around 300-600 kB. It is
+non-destructive: shrunk clips go to a new `.min.mp4` key and the catalog is
+rewritten to match, so a half-applied run or a client on a stale bundle still
+resolves. Run it with `--dry-run` first; it reports the byte savings without
+uploading. It requires ffmpeg and the service-role key, so it has not been run
+from CI — the originals are still live until someone runs it.
+
+One thing this pass could not verify: whether the Image Transformation add-on
+is actually enabled on the project. If it is off, every card face requests a
+derivative, fails, and falls back to the full-resolution original — worse than
+before any of this work. It is the one switch that dominates every number
+above, and it is worth confirming before reading anything into the bill.
+
+
+#### The transformation add-on is off, so the resizing moves offline — and the art moves to R2
+
+Both passes above assumed Supabase's image transformation endpoint was
+available. It is not enabled on this project. Every card face was requesting a
+derivative, getting an error, and falling back to the full-resolution original:
+a wasted round trip per image, and none of the 50-150x cut the first pass
+described. The 30-day cache-control from that pass was doing real work; the URL
+rewriting was not.
+
+Resizing therefore happens ahead of time instead of on demand.
+`scripts/migrate-art-to-r2.ts` generates a webp at each ladder width and
+uploads it alongside the original, and `mediaUrl()` points at those static
+objects. Same saving, no add-on, no per-transformation cost — storage, which is
+cheap, is traded for egress, which is not. The derived key keeps the source's
+own extension (`art.png` becomes `derived/320/art.png.webp`), which is what
+makes the rewrite reversible and stops two sources that differ only by
+extension from colliding.
+
+Because the derivatives are ordinary objects, the host stops mattering — so the
+art moves to Cloudflare R2, where egress is free. `VITE_ART_BASE_URL` points
+the app at it. Until that variable is set, every URL still resolves to the
+Supabase original and `mediaUrl()` returns it untouched: no saving, but no
+wasted request pretending at one either, which is the honest behaviour for a
+project without the add-on.
+
+The migration is five phases — archive, derive, upload, rewrite, purge — each
+resumable and separately verifiable, with the runbook in
+`docs/ART_MIGRATION.md`. `purge` is the only destructive one, and it refuses to
+delete anything unless the catalog has stopped pointing at Supabase, every
+object has an archive copy on disk, and every copy matches byte-for-byte; one
+failure and nothing is deleted. The archive it verifies against is the only
+lossless copy of the PNG masters that survives, so it is a backup to keep, not
+a temp directory.
+
+Six new tests cover the scheme: that nothing is rewritten while no art host is
+configured, that no code path can ask for a Supabase transformation again, that
+the generator imports the ladder rather than restating it (a rung the app asks
+for that was never generated is a 404 into the full-size fallback), and that
+purge's three refusals are all still there.
 
 ### v33.0 — The experiment was the variable
 

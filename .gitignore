@@ -16,3 +16,8 @@ scripts/live-cards.json
 # the latest run or two are ever needed, and they stay on disk locally after
 # a run rather than living in git.
 docs/sim-runs/
+
+# Local archive of the Supabase card-art masters, written by
+# `npm run media:migrate archive`. ~1 GB, and the only lossless copies that
+# exist once the purge phase has run — keep it somewhere durable, not in git.
+art-archive/
