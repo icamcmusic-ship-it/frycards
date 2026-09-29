@@ -44,11 +44,12 @@ on:
         default: ''
         type: string
 
-  schedule:
-    # Weekly, Monday 04:00 UTC. New art gets its derivatives within the week
-    # without anyone doing anything; a daily run would re-verify ~300 objects
-    # for nothing most days.
-    - cron: '0 4 * * 1'
+  # The weekly schedule (Mondays 04:00 UTC, cron '0 4 * * 1') is disabled: the
+  # sync used to treat every shrunk bucket object as "replaced" and overwrite
+  # the lossless masters in art-archive. The fix is in migrate-art.ts, but back
+  # up art-archive off-platform before turning this back on.
+  # schedule:
+  #   - cron: '0 4 * * 1'
 
 concurrency:
   # Two runs mutating the same bucket is the one way this corrupts something.

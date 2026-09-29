@@ -293,14 +293,15 @@ export function SettingsScreen({
             </div>
             <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4 border-[var(--c-red)]">
               <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-                Wipes your entire collection, decks, inventory and stats back to a brand-new account
-                — credits and vouchers reset to the starting amount, and you get a fresh Deck Box to
-                open and pick a Leader again. This cannot be undone.
+                Wipes your collection, decks and stats back to a brand-new account — credits and
+                vouchers reset to the starting amount. Your first reset also gives you a fresh Deck
+                Box to open and pick a Leader again. This cannot be undone.
                 {!isExempt && ' Limited to once every 7 days.'}
               </p>
               <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-                Not touched: your username, any moderation history, and rewards you've already
-                claimed (daily login, Battle Pass, missions).
+                Not touched: your username, any moderation history, your level, achievements,
+                cosmetics, unopened packs, and rewards you've already claimed (daily login, Battle
+                Pass, missions).
               </p>
 
               {resetDone ? (
@@ -332,7 +333,7 @@ export function SettingsScreen({
                     onClick={() => {
                       if (
                         confirm(
-                          'This permanently deletes your collection, decks and inventory and resets your credits/vouchers/stats. There is no undo. Continue?',
+                          'This permanently deletes your collection and decks and resets your credits/vouchers/stats. There is no undo. Continue?',
                         )
                       ) {
                         doResetAccount();

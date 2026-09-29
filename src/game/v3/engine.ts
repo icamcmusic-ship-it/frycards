@@ -816,6 +816,12 @@ function resolveTop(state: GameState): void {
 
 /** An item with an explicit target fizzles if that target is no longer legal —
  * the response window is what makes this reachable at all. */
+/** An invoked non-Event card whose targeted rider had no legal target when it
+ * was cast: the body still resolves, the rider does not. */
+function riderUntargeted(item: StackItem, eff?: Effect): boolean {
+  return !!eff && SINGLE_TARGETS.includes(eff.target) && item.targetIid === undefined;
+}
+
 function fizzles(state: GameState, item: StackItem, eff?: Effect): boolean {
   if (!eff || item.targetIid === undefined) return false;
   if (!SINGLE_TARGETS.includes(eff.target)) return false;
@@ -1925,6 +1931,12 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
   if (!timingLegal(state, pid, def)) return false;
   if (!canPayCost(p.essence, effectiveCost(state, pid, def))) return false;
   if (def.type === 'Item' && p.field.length === 0 && itemSurvives(def.subtype)) return false;
+  // A targeted Event with no legal target is refused by invokeCard, so say so
+  // here too. Other card types keep their body and only lose the rider.
+  if (def.type === 'Event' && def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
+    const t = autoTarget(state, pid, def.onInvoke);
+    if (t === undefined || !canTarget(state, pid, def.onInvoke, t)) return false;
+  }
   return true;
 }
 
@@ -1967,7 +1979,14 @@ export function invokeCard(
   let targetIid = opts.targetIid;
   if (def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
     targetIid = opts.targetIid ?? autoTarget(state, pid, def.onInvoke);
-    if (targetIid === undefined || !canTarget(state, pid, def.onInvoke, targetIid)) return false;
+    const legal = targetIid !== undefined && canTarget(state, pid, def.onInvoke, targetIid);
+    // An Event is nothing but its effect, so with no legal target casting it
+    // would waste the card. Every other card keeps its body (or bond, or
+    // Location) and only loses the rider, which fizzles at resolution.
+    if (!legal) {
+      if (def.type === 'Event' || opts.targetIid !== undefined) return false;
+      targetIid = undefined;
+    }
   }
 
   let toolTargetIid: string | undefined;
@@ -2050,7 +2069,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       p.field.push(u);
       // The body still enters when the rider's target is gone — only the
       // onInvoke effect fizzles.
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       runTriggers(state, pid, 'enters', u);
@@ -2219,7 +2242,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         p.vitality += gained;
         state.telemetry?.onKeywordProc?.('Blessed', gained);
       }
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       break;
@@ -2231,7 +2258,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         produces: def.produces ?? wellspringChoices(state, pid)[0],
         exhausted: false,
       });
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       break;

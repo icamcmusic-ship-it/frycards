@@ -427,8 +427,9 @@ export async function setShowcaseCards(cardIds: string[]): Promise<string | null
  * paid twice, but a loop rolling fresh UUIDs with `won: true` was free money,
  * and the publishable key ships in the bundle. The server now issues the id,
  * timestamps it, and refuses to redeem one that is too young, too old,
- * already spent, or not the caller's. Reward throughput is bounded by wall
- * clock per account rather than by loop speed. The real close is
+ * already spent, or not the caller's. An account holds one open ticket at a
+ * time, so payouts are at least the minimum match length apart. The win/loss
+ * flag is still client-asserted. The real close is
  * server-authoritative matches (the PvP spike); this is the half of it that
  * does not need an engine on the server.
  */
