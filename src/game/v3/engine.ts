@@ -369,6 +369,24 @@ function onslaughtBonus(p: PlayerState): number {
   return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Onslaught') ? 1 : 0;
 }
 
+/**
+ * Vitality one UNGUARDED attacker takes off its opponent when the clash
+ * resolves: attack Might (with Onslaught), less the defender's Bulwark per
+ * packet, times two for Doublestrike, which hits in both sub-steps. What the
+ * clash buttons print, so the label and `resolveClash` cannot disagree. A
+ * guarded Overrun attacker's spill is not included.
+ */
+export function faceHitDamage(state: GameState, attacker: UnitInst): number {
+  const defender = state.players[opponentOf(attacker.owner)];
+  const packet = Math.max(
+    0,
+    effMight(state, attacker) +
+      onslaughtBonus(state.players[attacker.owner]) -
+      bulwarkReduction(defender),
+  );
+  return unitHasKw(attacker, 'Doublestrike') ? packet * 2 : packet;
+}
+
 /** v7.3: how many real Sanctums (Location CARDS) a player controls. Basic
  * Wellsprings sit in the same `locations` array with no `def`, so a plain
  * `locations.length` counts them too — which would leave Ritual and Archivist

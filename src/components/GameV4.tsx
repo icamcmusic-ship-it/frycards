@@ -59,6 +59,7 @@ import {
   effGrit,
   remainingGrit,
   unitHasKw,
+  faceHitDamage,
   essenceTotal,
   findUnit,
   hasInstantResponse,
@@ -1661,9 +1662,12 @@ export function declareAttackLabel(
   might: number,
   foeVitality: number,
   blockers: number,
+  /** Vitality the attack takes if unguarded; differs from `might` with
+   * Doublestrike, Onslaught or the foe's Bulwark. */
+  faceDamage: number = might,
 ) {
   const head = `⚔ DECLARE ATTACK — ${count} · ${might} MIGHT`;
-  const lethal = foeVitality > 0 && might >= foeVitality;
+  const lethal = foeVitality > 0 && faceDamage >= foeVitality;
   // "UNGUARDABLE" outranks "LETHAL IF UNGUARDED" because it settles the
   // condition the other one is hedging on: if nothing can guard, the hedge is
   // just noise in front of the word the player needs.
@@ -3011,6 +3015,12 @@ export function GameV4({
     const u = findUnit(g, iid);
     return sum + (u ? effMight(g, u) : 0);
   }, 0);
+  /** What those attackers would take off the foe if none were guarded — the
+   * number LETHAL is judged on (Doublestrike, Onslaught and Bulwark included). */
+  const selectedFaceDamage = [...atkSel].reduce((sum, iid) => {
+    const u = findUnit(g, iid);
+    return sum + (u ? faceHitDamage(g, u) : 0);
+  }, 0);
 
   /**
    * How many of the opponent's units could legally guard at least one of the
@@ -3877,7 +3887,7 @@ export function GameV4({
     return g.clash.attackers.reduce((sum, aIid) => {
       if ((guardSel[aIid] ?? []).length > 0) return sum;
       const a = findUnit(g, aIid);
-      return sum + (a ? effMight(g, a) : 0);
+      return sum + (a ? faceHitDamage(g, a) : 0);
     }, 0);
   })();
 
@@ -3904,7 +3914,7 @@ export function GameV4({
     const might = g.clash.attackers.reduce((sum, iid) => {
       if (g.clash!.guardedOnce.includes(iid)) return sum;
       const u = findUnit(g, iid);
-      return sum + (u ? effMight(g, u) : 0);
+      return sum + (u ? faceHitDamage(g, u) : 0);
     }, 0);
     return { might, at: defender };
   })();
@@ -4324,9 +4334,15 @@ export function GameV4({
          nothing said so, because a control that has been clipped away looks
          exactly like a control the board chose not to draw. Same failure at
          390x667 with the browser font doubled, one control at a time. */
-      className="w-full h-screen flex flex-col overflow-x-hidden overflow-y-auto select-none"
+      className="w-full h-screen supports-[height:100dvh]:h-dvh flex flex-col overflow-x-hidden overflow-y-auto select-none"
       style={
         {
+          // viewport-fit=cover lets the page run under the notch and home
+          // indicator; keep the controls out of them.
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingRight: 'env(safe-area-inset-right)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingLeft: 'env(safe-area-inset-left)',
           background: 'radial-gradient(ellipse at center, var(--c-steel) 0%, var(--c-ink) 78%)',
           // Every combat animation's duration is a multiple of this — see
           // GAME_CSS. Clamped at 1 so FAST doesn't make the feedback
@@ -4914,7 +4930,13 @@ export function GameV4({
                   of the board — to the player, which is exactly the arithmetic
                   it exists to do. "IF UNGUARDED" because the opponent still
                   gets its guard step; this is the ceiling, not a promise. */}
-              {declareAttackLabel(atkSel.size, selectedMight, foe.vitality, guardableCount)}
+              {declareAttackLabel(
+                atkSel.size,
+                selectedMight,
+                foe.vitality,
+                guardableCount,
+                selectedFaceDamage,
+              )}
             </button>
           </>
         ) : stage === 'play' && g.clash && g.clash.step !== 'done' ? (

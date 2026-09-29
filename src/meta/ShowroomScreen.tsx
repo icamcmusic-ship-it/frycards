@@ -132,6 +132,7 @@ export function ShowroomScreen({
       .then((rows) => {
         if (!cancelled) setSlabs(rows.filter((r) => r.grade != null));
       })
+      .catch(() => {})
       .finally(() => {
         if (!cancelled) setSlabsLoading(false);
       });

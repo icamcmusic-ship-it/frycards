@@ -143,8 +143,11 @@ export function GradingScreen({
   const userId = profile?.id;
   const reload = React.useCallback(async () => {
     if (!userId) return;
-    const rows = await fetchGradedCards(userId);
-    setGraded(rows);
+    try {
+      setGraded(await fetchGradedCards(userId));
+    } catch {
+      // Keep the vault as it was; a failed refresh is not an empty vault.
+    }
     setGradedLoading(false);
   }, [userId]);
 
@@ -152,11 +155,14 @@ export function GradingScreen({
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    fetchGradedCards(userId).then((rows) => {
-      if (cancelled) return;
-      setGraded(rows);
-      setGradedLoading(false);
-    });
+    fetchGradedCards(userId)
+      .then((rows) => {
+        if (!cancelled) setGraded(rows);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setGradedLoading(false);
+      });
     return () => {
       cancelled = true;
     };

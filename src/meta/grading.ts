@@ -279,7 +279,10 @@ export async function fetchGradedCards(userId: string): Promise<GradedCard[]> {
     .select('*')
     .eq('user_id', userId)
     .order('submitted_at', { ascending: false });
-  if (error) return [];
+  // Thrown, not []: an empty list is a real answer (no slabs), and callers
+  // that reload after a submit/sell/crack would otherwise wipe the vault on
+  // any transient failure. Callers keep what they already show.
+  if (error) throw error;
   // `grade` is a SQL numeric. PostgREST renders those unquoted today, but a
   // driver or gateway that hands them back as strings ("8.0") would put a
   // string through `fmtGrade`, whose `toFixed` then throws and takes the whole

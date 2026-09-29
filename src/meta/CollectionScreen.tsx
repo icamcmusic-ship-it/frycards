@@ -127,9 +127,11 @@ export function CollectionScreen({
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
-    fetchGradedCards(profile.id).then((rows) => {
-      if (!cancelled) setGradedCards(rows);
-    });
+    fetchGradedCards(profile.id)
+      .then((rows) => {
+        if (!cancelled) setGradedCards(rows);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };

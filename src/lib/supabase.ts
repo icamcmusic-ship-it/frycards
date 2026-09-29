@@ -445,12 +445,19 @@ export async function recordMatchResult(
    * ticket is claimed atomically, so a retry after a lost reply returns null
    * data rather than paying twice. Omitting it is now an error server-side. */
   matchId?: string,
-): Promise<{ data: MatchResult | null; error: string | null }> {
+): Promise<{ data: MatchResult | null; error: string | null; status: MatchResultStatus | null }> {
   const { data, error } = await supabase.rpc('record_match_result', {
     p_won: won,
     p_match_id: matchId ?? null,
   });
-  return { data: (data as MatchResult) || null, error: rpcError(error) };
+  // The server answers `{ status }` instead of a reward when the ticket is not
+  // payable; older deployments answer a bare null.
+  const status = (data as { status?: MatchResultStatus } | null)?.status ?? null;
+  return {
+    data: status ? null : (data as MatchResult) || null,
+    error: rpcError(error),
+    status,
+  };
 }
 
 /**
@@ -494,6 +501,10 @@ export interface QuicksellResult {
 // ---------------------------------------------------------------------------
 // Levels, battle pass, achievements, missions, inventory
 // ---------------------------------------------------------------------------
+/** Why the server declined to pay a match: the ticket was redeemed already, is
+ * too young or too old, does not exist, or today's payout limit was reached. */
+export type MatchResultStatus = 'duplicate' | 'too_early' | 'expired' | 'invalid' | 'capped';
+
 export interface MatchResult {
   reward: number;
   credits: number;

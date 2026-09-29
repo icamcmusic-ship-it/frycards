@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { fetchCardTemplates, recordMatchResult, beginMatch, MatchResult } from './lib/supabase';
+import {
+  fetchCardTemplates,
+  recordMatchResult,
+  beginMatch,
+  MatchResult,
+  MatchResultStatus,
+} from './lib/supabase';
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef } from './game/v3/engine';
 import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
@@ -17,6 +23,14 @@ import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import { MotionConfig } from 'motion/react';
 import type { MotionMode } from './meta/matchPrefs';
+
+const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
+  too_early: 'No reward: the match ended too quickly to count.',
+  expired: 'No reward: this match was started too long ago to count.',
+  duplicate: 'This match was already recorded — check your credits.',
+  invalid: 'No reward for this match (it was not recognised by the server).',
+  capped: "No reward: you've reached today's payout limit. It resets within 24 hours.",
+};
 
 /**
  * Route-level code splitting (finding 2.1).
@@ -205,11 +219,21 @@ function PlayScreen({
               <div className="flex flex-wrap gap-4 mb-8">
                 {legalDecks.map((d) => {
                   const leader = POOL_BY_ID[d.leader_id];
+                  // A deck naming a card this session's pool lacks (the catalog
+                  // fetch failed and the bundled pool is older) would throw in
+                  // createGame, so it is not offered until the pool loads.
+                  const missing = [d.leader_id, ...d.card_ids].filter((id) => !POOL_BY_ID[id]);
                   return (
                     <button
                       key={d.id}
                       onClick={() => onStart({ kind: 'custom', deck: d })}
-                      className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left"
+                      disabled={missing.length > 0}
+                      title={
+                        missing.length > 0
+                          ? `${missing.length} card(s) in this deck aren't loaded — reload the card database`
+                          : undefined
+                      }
+                      className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
                     >
                       <div className="px-2 py-1 bg-[var(--c-red)] heading-font text-[10px] text-[var(--c-paper)] truncate">
                         {d.name}
@@ -227,6 +251,11 @@ function PlayScreen({
                         <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
                           {d.card_ids.length} cards
                         </div>
+                        {missing.length > 0 && (
+                          <div className="text-[10px] font-bold text-[var(--c-red)] mt-0.5">
+                            {missing.length} card(s) not loaded — reload the card database
+                          </div>
+                        )}
                       </div>
                     </button>
                   );
@@ -290,16 +319,34 @@ function Game({
   // from a genuinely new match — but it is now the server that decides a match
   // happened at all, rather than the client naming one. See `beginMatch`.
   const matchIdRef = useRef<string | null>(null);
+  // Keyed on the user id, not the session object: supabase-js emits SIGNED_IN
+  // on every tab refocus and TOKEN_REFRESHED hourly, each with a fresh session
+  // object, and re-minting mid-match replaced the ticket (or, on a failed
+  // mint, overwrote it with null).
+  const ticketUserId = session?.user?.id;
   useEffect(() => {
-    if (!session) return; // guests never earn a reward, so never mint a ticket
+    if (!ticketUserId) return; // guests never earn a reward, so never mint a ticket
     let cancelled = false;
-    beginMatch().then(({ matchId }) => {
-      if (!cancelled) matchIdRef.current = matchId;
-    });
+    let timer: number | undefined;
+    const mint = (retriesLeft: number) => {
+      beginMatch().then(({ matchId, error }) => {
+        if (cancelled) return;
+        if (matchId) {
+          matchIdRef.current = matchId;
+        } else if (retriesLeft > 0) {
+          // Never clobber a good ticket with null; just try again shortly.
+          timer = window.setTimeout(() => mint(retriesLeft - 1), 5000);
+        } else if (error) {
+          console.error('beginMatch failed:', error);
+        }
+      });
+    };
+    mint(3);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [session]);
+  }, [ticketUserId]);
 
   // recordMatchResult used to return bare `null` on both "no reward data"
   // and an outright RPC failure, so a transient network/server error meant
@@ -312,7 +359,14 @@ function Game({
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-        const { data, error } = await recordMatchResult(won, matchIdRef.current ?? undefined);
+        const { data, error, status } = await recordMatchResult(
+          won,
+          matchIdRef.current ?? undefined,
+        );
+        if (status) {
+          setRewardError(NO_REWARD_REASON[status]);
+          return;
+        }
         if (data) {
           setReward(data);
           // Fire-and-forget with an explicit catch: a rejected refresh here
@@ -321,7 +375,16 @@ function Game({
           refreshProfile().catch(() => {});
           return;
         }
-        if (!error) return; // already recorded, or legitimately no reward
+        if (!error) {
+          // An older server answers a bare null for every unpayable ticket.
+          // After a retry it usually means the first attempt landed.
+          setRewardError(
+            attempt > 0
+              ? 'This match may already have been recorded — check your credits.'
+              : NO_REWARD_REASON.invalid,
+          );
+          return;
+        }
       }
       setRewardError(
         "Couldn't record this match's result — check your connection and try again from the menu.",
@@ -339,7 +402,7 @@ function Game({
   };
 
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-screen supports-[height:100dvh]:h-dvh">
       <GameV4
         humanDeck={human.deck}
         cpuDeck={cpuDeck}
@@ -598,6 +661,9 @@ export default function App() {
   const { mode: motionMode, changeMode: changeMotionMode } = useMotionMode();
   const [poolReady, setPoolReady] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
+  // True when the catalog fetch failed or timed out and the session is running
+  // on the bundled card set, which lags cards approved since the last sync.
+  const [poolOffline, setPoolOffline] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   // Load the universal card catalog from the Supabase backend once at
@@ -618,6 +684,7 @@ export default function App() {
       .then((templates) => {
         if (cancelled) return;
         if (templates) applyCardPool(templates);
+        setPoolOffline(!templates);
         // Media loads on demand. Fetching the entire catalog here can transfer
         // over a gigabyte before a player sees a single card.
       })
@@ -699,6 +766,20 @@ export default function App() {
           {/* One boundary above the route switch: every screen below is a
               lazy chunk, and a route transition is the only thing that can
               suspend here. */}
+          {poolOffline && (
+            <div
+              role="status"
+              className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5 text-[11px] font-bold max-w-[92vw]"
+            >
+              <span>Card database unavailable — newer cards may be missing.</span>
+              <button
+                onClick={() => setAttempt((n) => n + 1)}
+                className="heading-font underline shrink-0"
+              >
+                RETRY
+              </button>
+            </div>
+          )}
           <React.Suspense fallback={<ScreenFallback />}>
             <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
           </React.Suspense>
