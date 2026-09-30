@@ -1,3 +1,4 @@
+import { cachedFetch } from '../lib/cache';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   supabase,
@@ -45,6 +46,9 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
     );
   });
 }
+
+/** How long cached shop items and pack types are reused before a re-fetch. */
+const STORE_TTL_MS = 30 * 60 * 1000;
 
 export interface MetaState {
   session: Session | null;
@@ -174,7 +178,13 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // reachable.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([withDeadline(fetchShopItems(), 20_000), withDeadline(fetchPackTypes(), 20_000)])
+    // Both are near-static store data; a copy under STORE_TTL_MS old is reused
+    // instead of re-fetched on every load. Retrying a failed boot forces it.
+    const force = bootAttempt > 0;
+    Promise.all([
+      withDeadline(cachedFetch('shopItems', STORE_TTL_MS, fetchShopItems, { force }), 20_000),
+      withDeadline(cachedFetch('packTypes', STORE_TTL_MS, fetchPackTypes, { force }), 20_000),
+    ])
       .then(([items, packs]) => {
         if (cancelled) return;
         setShopItems(items);
@@ -249,14 +259,14 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   }, [userId]);
   const refreshShopItems = useCallback(async () => {
     try {
-      setShopItems(await fetchShopItems());
+      setShopItems(await cachedFetch('shopItems', STORE_TTL_MS, fetchShopItems, { force: true }));
     } catch {
       /* keep prior state */
     }
   }, []);
   const refreshPackTypes = useCallback(async () => {
     try {
-      setPackTypes(await fetchPackTypes());
+      setPackTypes(await cachedFetch('packTypes', STORE_TTL_MS, fetchPackTypes, { force: true }));
     } catch {
       /* keep prior state */
     }

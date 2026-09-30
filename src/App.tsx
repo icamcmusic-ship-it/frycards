@@ -10,6 +10,8 @@ import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef, mulberry32 } from './game/v3/engine';
 import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
 import { newMatchSeed, withTimeout } from './lib/utils';
+import { readCache, writeCache } from './lib/cache';
+import type { CardTemplate } from './types';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
@@ -22,6 +24,11 @@ import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import type { MotionMode } from './meta/matchPrefs';
+
+const CATALOG_CACHE_KEY = 'catalog';
+/** How long a fetched card catalog is reused before the next visit re-fetches
+ * it. Cards approved in between show up within this window. */
+const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 
 const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
   too_early: 'No reward: the match ended too quickly to count.',
@@ -662,7 +669,14 @@ export default function App() {
   // attribute the CSS override keys off; the mode drives the MotionConfig
   // below, which is what makes the motion library honour any of it at all.
   const { mode: motionMode, changeMode: changeMotionMode } = useMotionMode();
-  const [poolReady, setPoolReady] = useState(false);
+  // A catalog younger than CATALOG_TTL_MS is applied straight from the cache,
+  // with no request at all: every visit used to re-download the whole `cards`
+  // table. A RETRY (attempt > 0) is a deliberate refresh and always fetches.
+  const [poolReady, setPoolReady] = useState(() => {
+    const cached = readCache<CardTemplate[]>(CATALOG_CACHE_KEY);
+    return !!(cached && cached.ageMs < CATALOG_TTL_MS && applyCardPool(cached.data));
+  });
+  const readyAtBoot = useRef(poolReady);
   const [poolError, setPoolError] = useState<string | null>(null);
   // True when the catalog fetch failed or timed out and the session is running
   // on the bundled card set, which lags cards approved since the last sync.
@@ -679,6 +693,8 @@ export default function App() {
   // screen forever with no way out, so any failure here surfaces a retry.
   useEffect(() => {
     let cancelled = false;
+    if (attempt === 0 && readyAtBoot.current) return; // fresh cache already applied
+    const cached = readCache<CardTemplate[]>(CATALOG_CACHE_KEY);
     // A stalled request (bad proxy, dropped connection) never rejects — it
     // just never resolves — which would otherwise strand players on this
     // screen forever with no retry button. 20s is generous enough for a
@@ -686,8 +702,17 @@ export default function App() {
     withTimeout(fetchCardTemplates(), 20_000, null)
       .then((templates) => {
         if (cancelled) return;
-        if (templates) applyCardPool(templates);
-        setPoolOffline(!templates);
+        if (templates && applyCardPool(templates)) {
+          // Only a catalog the pool accepted is worth caching.
+          writeCache(CATALOG_CACHE_KEY, templates);
+          setPoolOffline(false);
+        } else if (cached && applyCardPool(cached.data)) {
+          // The fetch failed but an older copy exists: it is closer to the live
+          // catalog than the bundled set, so use it and still flag the failure.
+          setPoolOffline(true);
+        } else {
+          setPoolOffline(true);
+        }
         // Media loads on demand. Fetching the entire catalog here can transfer
         // over a gigabyte before a player sees a single card.
       })

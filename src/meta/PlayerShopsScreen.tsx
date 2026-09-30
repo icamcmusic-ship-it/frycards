@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, Credits } from './ui';
-import { cn } from '../lib/utils';
+import { cn, visibleInterval } from '../lib/utils';
 import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace } from '../components/CardFaceV4';
@@ -1214,13 +1214,14 @@ function MysteryListingCard({
         });
     };
     refetch();
-    // Live stock changes under other buyers' feet — poll every 30s while the
+    // Live stock changes under other buyers' feet — poll every 60s while the
     // listing is active so "N packs left" / live EV don't freeze at whatever
-    // they were when this card mounted.
-    const id = window.setInterval(refetch, 30_000);
+    // they were when this card mounted. Every visible listing card runs its own
+    // poll, so it pauses in a background tab (and refreshes on return).
+    const stop = visibleInterval(refetch, 60_000);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      stop();
     };
     // remaining_packs in the deps: after a purchase the parent reloads the
     // listing row — refetch the live stats then too, or the "N packs left"

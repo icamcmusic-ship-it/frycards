@@ -64,6 +64,11 @@ jobs:
     env:
       ART_S3_ACCESS_KEY_ID: ${{ secrets.ART_S3_ACCESS_KEY_ID }}
       ART_S3_SECRET_ACCESS_KEY: ${{ secrets.ART_S3_SECRET_ACCESS_KEY }}
+      # Optional: point the pipeline at another S3-compatible store (R2) by
+      # setting these Actions variables. Unset, it targets the Supabase bucket.
+      ART_S3_ENDPOINT: ${{ vars.ART_S3_ENDPOINT }}
+      ART_S3_BUCKET: ${{ vars.ART_S3_BUCKET }}
+      ART_S3_REGION: ${{ vars.ART_S3_REGION }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4

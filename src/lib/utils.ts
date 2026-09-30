@@ -25,6 +25,33 @@ export function newMatchSeed(): number {
   }
 }
 
+/**
+ * `setInterval` that skips ticks while the tab is hidden, and catches up with
+ * one immediate call when it becomes visible again. A background tab polling
+ * the API every few seconds burns quota for a screen nobody is looking at.
+ * Returns a function that stops it.
+ */
+export function visibleInterval(fn: () => void, ms: number): () => void {
+  const id = window.setInterval(() => {
+    if (!document.hidden) fn();
+  }, ms);
+  let hiddenAt: number | null = document.hidden ? Date.now() : null;
+  const onVisibility = () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+    } else if (hiddenAt !== null) {
+      const away = Date.now() - hiddenAt;
+      hiddenAt = null;
+      if (away >= ms) fn();
+    }
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  return () => {
+    window.clearInterval(id);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
