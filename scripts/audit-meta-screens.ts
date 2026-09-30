@@ -100,6 +100,7 @@ const ALL_SCREENS = [
   'menu',
   'howtoplay',
   'changelog',
+  'history',
   'submissions',
   // v13: the review queue's mechanics-override editor and the BULK ADD
   // importer only exist for the Creator.

@@ -73,3 +73,51 @@ export function decodeDeckCode(
   }
   return { leaderId, cardIds };
 }
+
+// ---------------------------------------------------------------------------
+// Deck links: `https://…/?deck=FRY1:<leader>:<cards>`
+// ---------------------------------------------------------------------------
+
+/** Query parameter a shared deck link carries its code in. */
+export const DECK_LINK_PARAM = 'deck';
+
+/**
+ * A link that opens `code` in a read-only preview. Built from the current
+ * origin and path, so it is right under the GitHub Pages `/frycards/` base as
+ * well as at the root. Any other query string or hash is dropped.
+ */
+export function deckLink(
+  code: string,
+  loc: { origin: string; pathname: string } = window.location,
+): string {
+  return `${loc.origin}${loc.pathname}?${DECK_LINK_PARAM}=${encodeURIComponent(code)}`;
+}
+
+/** The deck code a URL's query string carries, or null when absent or not a
+ * `FRY1:` code. Only the shape is checked here; `decodeDeckCode` validates it. */
+export function deckCodeFromSearch(search: string): string | null {
+  const raw = new URLSearchParams(search).get(DECK_LINK_PARAM)?.trim();
+  return raw && raw.startsWith(`${PREFIX}:`) ? raw : null;
+}
+
+const PENDING_DECK_KEY = 'frycards:pending-deck';
+
+/** Hand a code to the Deck Builder, which opens it as an unsaved draft. */
+export function stashPendingDeck(code: string): void {
+  try {
+    window.sessionStorage.setItem(PENDING_DECK_KEY, code);
+  } catch {
+    /* storage blocked: the builder opens without the draft */
+  }
+}
+
+/** Take (and clear) the code stashed by `stashPendingDeck`. */
+export function takePendingDeck(): string | null {
+  try {
+    const code = window.sessionStorage.getItem(PENDING_DECK_KEY);
+    if (code) window.sessionStorage.removeItem(PENDING_DECK_KEY);
+    return code;
+  } catch {
+    return null;
+  }
+}

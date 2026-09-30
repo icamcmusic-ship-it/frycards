@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-react';
-import { encodeDeckCode, decodeDeckCode } from './deckcode';
+import { encodeDeckCode, decodeDeckCode, deckLink, takePendingDeck } from './deckcode';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
@@ -145,7 +145,19 @@ export function validateDeckList(
 
 export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   const { decks, refreshDecks, dataLoading } = useMeta();
-  const [editing, setEditing] = useState<DeckRow | 'new' | null>(null);
+  // A deck opened from a shared link is handed over as an unsaved draft, the
+  // same shape IMPORT CODE produces.
+  const [editing, setEditing] = useState<DeckRow | 'new' | null>(() => {
+    const code = takePendingDeck();
+    if (!code) return null;
+    const res = decodeDeckCode(code, poolMap());
+    if ('error' in res) return null;
+    return {
+      name: 'Shared Deck',
+      leader_id: res.leaderId,
+      card_ids: res.cardIds,
+    } as DeckRow;
+  });
   const [listError, setListError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -258,6 +270,23 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
                     EDIT
                   </PopButton>
                   <PopButton
+                    color="yellow"
+                    onClick={() => {
+                      setListError('');
+                      // An unsaved draft with the same cards: saving creates a new
+                      // deck row, exactly like IMPORT CODE.
+                      setEditing({
+                        name: `${d.name} (copy)`.slice(0, 40),
+                        leader_id: d.leader_id,
+                        card_ids: [...d.card_ids],
+                      } as DeckRow);
+                    }}
+                    ariaLabel={`Duplicate deck ${d.name}`}
+                    title={`Duplicate deck ${d.name}`}
+                  >
+                    COPY
+                  </PopButton>
+                  <PopButton
                     color="black"
                     disabled={deletingId !== null}
                     onClick={() => handleDelete(d)}
@@ -363,10 +392,11 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
     [],
   );
 
-  const handleExport = async () => {
+  const handleExport = async (asLink = false) => {
     if (!leaderId) return;
     try {
-      await navigator.clipboard.writeText(encodeDeckCode(leaderId, cardIds));
+      const code = encodeDeckCode(leaderId, cardIds);
+      await navigator.clipboard.writeText(asLink ? deckLink(code) : code);
       setCopied(true);
       if (copiedTimeoutRef.current !== null) window.clearTimeout(copiedTimeoutRef.current);
       copiedTimeoutRef.current = window.setTimeout(() => setCopied(false), 1500);
@@ -744,9 +774,22 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               <Wand2 className="w-4 h-4" /> QUICKBUILD
             </span>
           </PopButton>
-          <PopButton color="yellow" onClick={handleExport} title="Copy deck code to clipboard">
+          <PopButton
+            color="yellow"
+            onClick={() => handleExport()}
+            title="Copy deck code to clipboard"
+          >
             <span className="flex items-center gap-1">
               <Copy className="w-4 h-4" /> {copied ? 'COPIED!' : 'CODE'}
+            </span>
+          </PopButton>
+          <PopButton
+            color="yellow"
+            onClick={() => handleExport(true)}
+            title="Copy a link that opens this deck for anyone"
+          >
+            <span className="flex items-center gap-1">
+              <Copy className="w-4 h-4" /> LINK
             </span>
           </PopButton>
           <PopButton color="red" onClick={handleSave} disabled={saving}>

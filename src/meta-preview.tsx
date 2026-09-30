@@ -61,6 +61,7 @@ import { NewsCenterScreen } from './meta/NewsCenterScreen';
 import { SettingsScreen } from './meta/SettingsScreen';
 import { MainMenu } from './meta/MainMenu';
 import { ChangelogScreen } from './meta/ChangelogScreen';
+import { MatchHistoryScreen } from './meta/MatchHistoryScreen';
 import { CardSubmissionsScreen } from './meta/CardSubmissionsScreen';
 import { GradingScreen } from './meta/GradingScreen';
 import { AuthScreen } from './meta/AuthScreen';
@@ -370,6 +371,8 @@ createRoot(document.getElementById('root')!).render(
       <MainMenu onNavigate={() => undefined} />
     ) : screen === 'howtoplay' ? (
       <HowToPlayScreen onBack={() => undefined} />
+    ) : screen === 'history' ? (
+      <MatchHistoryScreen onBack={() => undefined} />
     ) : screen === 'changelog' ? (
       <ChangelogScreen onBack={() => undefined} />
     ) : screen === 'submissions' ? (

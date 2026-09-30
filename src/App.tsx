@@ -11,6 +11,8 @@ import { DeckDef, mulberry32 } from './game/v3/engine';
 import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
 import { newMatchSeed, withTimeout } from './lib/utils';
 import { readCache, writeCache } from './lib/cache';
+import { DECK_LINK_PARAM, deckCodeFromSearch, stashPendingDeck } from './meta/deckcode';
+import { DeckLinkPreview } from './meta/DeckLinkPreview';
 import type { CardTemplate } from './types';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
@@ -84,6 +86,9 @@ const ShowroomScreen = React.lazy(() =>
 );
 const DeckBuilderScreen = React.lazy(() =>
   import('./meta/DeckBuilderScreen').then((m) => ({ default: m.DeckBuilderScreen })),
+);
+const MatchHistoryScreen = React.lazy(() =>
+  import('./meta/MatchHistoryScreen').then((m) => ({ default: m.MatchHistoryScreen })),
 );
 const ProfileScreen = React.lazy(() =>
   import('./meta/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
@@ -524,144 +529,183 @@ function AppInner({
     setCardBackImage(back?.image_url || null);
   }, [profile?.equipped_card_back, shopItems]);
 
-  if (bootError) {
-    return (
-      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
-          FRY CARDS
+  // A shared `?deck=FRY1:…` link opens a read-only preview on top of whatever
+  // screen the player is on (signed in, guest, or the sign-in screen). Cleared
+  // from the address bar on close so a refresh does not reopen it.
+  const [linkedDeck, setLinkedDeck] = useState<string | null>(() =>
+    deckCodeFromSearch(window.location.search),
+  );
+  const closeLinkedDeck = () => {
+    setLinkedDeck(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete(DECK_LINK_PARAM);
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch {
+      /* the address bar keeps the parameter: harmless */
+    }
+  };
+
+  const content = (() => {
+    if (bootError) {
+      return (
+        <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
+            FRY CARDS
+          </div>
+          <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{bootError}</p>
+          <button
+            onClick={retryBoot}
+            className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+          >
+            RETRY
+          </button>
         </div>
-        <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{bootError}</p>
-        <button
-          onClick={retryBoot}
-          className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
-        >
-          RETRY
-        </button>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (loading || !themeLoaded) return <BootSplash onRetry={retryBoot} />;
+    if (loading || !themeLoaded) return <BootSplash onRetry={retryBoot} />;
 
-  if (!session && !guest) return <AuthScreen />;
+    if (!session && !guest) return <AuthScreen />;
 
-  if (match) {
-    return (
-      <div key={gameKey} className="contents">
-        <Game
-          setup={match}
-          onExit={() => {
-            setMatch(null);
-            setScreen('menu');
-            setGameKey((k) => k + 1);
-          }}
-          // Bumping the key remounts <Game>, which re-runs both deck
-          // initializers: the same SETUP, a fresh roll. That is what a rematch
-          // means for a random-deck quick match, and for a saved deck it is
-          // the same list against a newly rolled CPU — the CPU already rerolls
-          // every match, so this keeps the two consistent.
-          onRematch={() => setGameKey((k) => k + 1)}
-        />
-      </div>
-    );
-  }
+    if (match) {
+      return (
+        <div key={gameKey} className="contents">
+          <Game
+            setup={match}
+            onExit={() => {
+              setMatch(null);
+              setScreen('menu');
+              setGameKey((k) => k + 1);
+            }}
+            // Bumping the key remounts <Game>, which re-runs both deck
+            // initializers: the same SETUP, a fresh roll. That is what a rematch
+            // means for a random-deck quick match, and for a saved deck it is
+            // the same list against a newly rolled CPU — the CPU already rerolls
+            // every match, so this keeps the two consistent.
+            onRematch={() => setGameKey((k) => k + 1)}
+          />
+        </div>
+      );
+    }
 
-  switch (screen) {
-    case 'play':
-      // CPU battles are Creator-only for ACCOUNTS while the mode is finished
-      // (the menu tile shows COMING SOON! for them) — but guests get the
-      // random-deck QUICK MATCH: the Auth screen's PLAY AS GUEST button has
-      // always advertised "play vs the CPU with prebuilt decks", PlayScreen
-      // carries a dedicated guest branch, and gating guests on a Creator
-      // role they can never hold made that whole path dead code (the
-      // long-standing "guest quick match is unreachable" roadmap item).
-      if (!guest && profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
-      return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
-    case 'store':
-      return <StoreScreen onBack={() => setScreen('menu')} />;
-    case 'battlepass':
-      return <BattlePassScreen onBack={() => setScreen('menu')} />;
-    case 'achievements':
-      return <AchievementsScreen onBack={() => setScreen('menu')} />;
-    case 'social':
-      return <SocialScreen onBack={() => setScreen('menu')} />;
-    case 'market':
-      return <MarketplaceScreen onBack={() => setScreen('menu')} />;
-    case 'shops':
-      return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
-    case 'collection':
-      return (
-        <CollectionScreen
-          onBack={() => setScreen('menu')}
-          onGrading={() => setScreen('grading')}
-          onShowroom={(subject) => {
-            setShowroomSubject(subject);
-            setScreen('showroom');
+    switch (screen) {
+      case 'play':
+        // CPU battles are Creator-only for ACCOUNTS while the mode is finished
+        // (the menu tile shows COMING SOON! for them) — but guests get the
+        // random-deck QUICK MATCH: the Auth screen's PLAY AS GUEST button has
+        // always advertised "play vs the CPU with prebuilt decks", PlayScreen
+        // carries a dedicated guest branch, and gating guests on a Creator
+        // role they can never hold made that whole path dead code (the
+        // long-standing "guest quick match is unreachable" roadmap item).
+        if (!guest && profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
+        return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
+      case 'store':
+        return <StoreScreen onBack={() => setScreen('menu')} />;
+      case 'battlepass':
+        return <BattlePassScreen onBack={() => setScreen('menu')} />;
+      case 'achievements':
+        return <AchievementsScreen onBack={() => setScreen('menu')} />;
+      case 'social':
+        return <SocialScreen onBack={() => setScreen('menu')} />;
+      case 'market':
+        return <MarketplaceScreen onBack={() => setScreen('menu')} />;
+      case 'shops':
+        return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
+      case 'collection':
+        return (
+          <CollectionScreen
+            onBack={() => setScreen('menu')}
+            onGrading={() => setScreen('grading')}
+            onShowroom={(subject) => {
+              setShowroomSubject(subject);
+              setScreen('showroom');
+            }}
+          />
+        );
+      case 'grading':
+        return (
+          <GradingScreen
+            onBack={() => setScreen('menu')}
+            onShowroom={(subject) => {
+              setShowroomSubject(subject);
+              setScreen('showroom');
+            }}
+          />
+        );
+      case 'showroom':
+        return (
+          <ShowroomScreen
+            initial={showroomSubject ?? undefined}
+            onBack={() => {
+              setShowroomSubject(null);
+              setScreen('menu');
+            }}
+          />
+        );
+      case 'decks':
+        return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
+      case 'history':
+        return <MatchHistoryScreen onBack={() => setScreen('menu')} />;
+      case 'profile':
+        return (
+          <ProfileScreen
+            onBack={() => setScreen('menu')}
+            onManageShowcase={() => setScreen('collection')}
+          />
+        );
+      case 'settings':
+        return (
+          <SettingsScreen
+            currentTheme={currentTheme}
+            onThemeChange={changeTheme}
+            motionMode={motionMode}
+            onMotionModeChange={changeMotionMode}
+            onBack={() => setScreen('menu')}
+          />
+        );
+      case 'submissions':
+        return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
+      case 'changelog':
+        return <ChangelogScreen onBack={() => setScreen('menu')} />;
+      case 'news':
+        return (
+          <NewsCenterScreen
+            onBack={() => setScreen('menu')}
+            onOpenChangelog={() => setScreen('changelog')}
+          />
+        );
+      case 'howtoplay':
+        return (
+          <HowToPlayScreen
+            onBack={() => {
+              markHelpSeen();
+              setScreen('menu');
+            }}
+          />
+        );
+      default:
+        return <MainMenu onNavigate={setScreen} />;
+    }
+  })();
+
+  return (
+    <>
+      {content}
+      {linkedDeck && !match && (
+        <DeckLinkPreview
+          code={linkedDeck}
+          canOpenBuilder={!!session}
+          onOpenBuilder={() => {
+            stashPendingDeck(linkedDeck);
+            closeLinkedDeck();
+            setScreen('decks');
           }}
+          onClose={closeLinkedDeck}
         />
-      );
-    case 'grading':
-      return (
-        <GradingScreen
-          onBack={() => setScreen('menu')}
-          onShowroom={(subject) => {
-            setShowroomSubject(subject);
-            setScreen('showroom');
-          }}
-        />
-      );
-    case 'showroom':
-      return (
-        <ShowroomScreen
-          initial={showroomSubject ?? undefined}
-          onBack={() => {
-            setShowroomSubject(null);
-            setScreen('menu');
-          }}
-        />
-      );
-    case 'decks':
-      return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
-    case 'profile':
-      return (
-        <ProfileScreen
-          onBack={() => setScreen('menu')}
-          onManageShowcase={() => setScreen('collection')}
-        />
-      );
-    case 'settings':
-      return (
-        <SettingsScreen
-          currentTheme={currentTheme}
-          onThemeChange={changeTheme}
-          motionMode={motionMode}
-          onMotionModeChange={changeMotionMode}
-          onBack={() => setScreen('menu')}
-        />
-      );
-    case 'submissions':
-      return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
-    case 'changelog':
-      return <ChangelogScreen onBack={() => setScreen('menu')} />;
-    case 'news':
-      return (
-        <NewsCenterScreen
-          onBack={() => setScreen('menu')}
-          onOpenChangelog={() => setScreen('changelog')}
-        />
-      );
-    case 'howtoplay':
-      return (
-        <HowToPlayScreen
-          onBack={() => {
-            markHelpSeen();
-            setScreen('menu');
-          }}
-        />
-      );
-    default:
-      return <MainMenu onNavigate={setScreen} />;
-  }
+      )}
+    </>
+  );
 }
 
 export default function App() {

@@ -20,8 +20,10 @@ import {
   Palette,
   Award,
   Box,
+  History,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
+import { CardOfTheDay } from './CardOfTheDay';
 import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
 import { RoleBadge } from './RoleBadge';
 import { claimDailyLogin, DailyLoginResult } from '../lib/supabase';
@@ -42,6 +44,7 @@ export type MetaScreen =
   | 'grading'
   | 'showroom'
   | 'profile'
+  | 'history'
   | 'settings'
   | 'changelog'
   | 'news'
@@ -316,6 +319,13 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
     },
     {
+      key: 'history',
+      label: 'MATCH HISTORY',
+      desc: 'Your recent matches',
+      icon: <History className="w-8 h-8" />,
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+    },
+    {
       key: 'profile',
       label: 'PROFILE',
       desc: guest ? 'Requires an account' : 'Stats & customization',
@@ -438,6 +448,8 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
 
       {/* Daily login reward strip */}
       {!guest && <DailyLoginPanel />}
+
+      <CardOfTheDay />
 
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">

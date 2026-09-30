@@ -12,6 +12,7 @@ import {
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
+import { collectionCsv, downloadText } from './csv';
 import { loadWishlist, saveWishlist, toggleWishlisted } from './wishlist';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
@@ -175,6 +176,7 @@ export function CollectionScreen({
   const [type, setType] = useState('All');
   const [rarity, setRarity] = useState('All');
   const [color, setColor] = useState('All');
+  const [keyword, setKeyword] = useState('All');
   // Set filter. Derived from the live pool rather than a constant so the
   // Player Showcase set (and any later volume) shows up the moment its first
   // card is printed — the browser was single-set until v12 and had no way to
@@ -232,6 +234,13 @@ export function CollectionScreen({
   const [selling, setSelling] = useState(false);
   const [showcaseBusy, setShowcaseBusy] = useState(false);
   const [showcaseError, setShowcaseError] = useState('');
+
+  // Every keyword some card in the pool carries, for the keyword filter.
+  const keywordOptions = useMemo(() => {
+    const kws = new Set<string>();
+    for (const c of POOL_V4) for (const k of c.keywords ?? []) kws.add(k);
+    return ['All', ...[...kws].sort()];
+  }, []);
 
   const setFilters = useMemo(() => {
     const names = new Set<string>();
@@ -424,6 +433,7 @@ export function CollectionScreen({
       const cc = c.type === 'Leader' ? LEADER_COLORS[c.id] || cardColors(c) : cardColors(c);
       if (color === 'Colorless' ? cc.length > 0 : !cc.includes(color as Color)) return false;
     }
+    if (keyword !== 'All' && !c.keywords?.includes(keyword)) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
@@ -731,6 +741,18 @@ export function CollectionScreen({
           </select>
           <select
             className={select}
+            aria-label="Filter by keyword"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          >
+            {keywordOptions.map((k) => (
+              <option key={k} value={k}>
+                {k === 'All' ? 'All keywords' : k}
+              </option>
+            ))}
+          </select>
+          <select
+            className={select}
             aria-label="Sort cards"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
@@ -761,6 +783,32 @@ export function CollectionScreen({
             onClick={() => setWishOnly(!wishOnly)}
           >
             ♥ WISHLIST ({wishlist.size})
+          </PopButton>
+          <PopButton
+            color="yellow"
+            onClick={() => {
+              const rows = POOL_V4.flatMap((c) => {
+                const o = owned.get(c.id);
+                if (!o || o.q + o.f === 0) return [];
+                const serialized = serializedByCard.get(c.id)?.length || 0;
+                return [
+                  {
+                    id: c.id,
+                    name: c.name,
+                    type: c.type,
+                    rarity: c.rarity || 'Common',
+                    set: c.set || '',
+                    quantity: Math.max(0, o.q - serialized),
+                    foil: o.f,
+                    serialized,
+                  },
+                ];
+              });
+              downloadText('frycards-collection.csv', collectionCsv(rows));
+            }}
+            title="Download your collection as a spreadsheet (CSV)"
+          >
+            EXPORT CSV
           </PopButton>
           <div className="ml-auto text-[11px] font-bold text-[var(--c-steel)]">
             {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
@@ -831,6 +879,7 @@ export function CollectionScreen({
                   // empty grid stayed empty after "clearing" filters. Set had
                   // the same hole the moment a second set existed.
                   setColor('All');
+                  setKeyword('All');
                   setSetName('All');
                   setSearch('');
                   setOwnedOnly(true);
