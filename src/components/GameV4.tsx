@@ -60,6 +60,7 @@ import {
   remainingGrit,
   unitHasKw,
   faceHitDamage,
+  firstPlayerForSeed,
   essenceTotal,
   findUnit,
   hasInstantResponse,
@@ -87,13 +88,14 @@ import { COLORS, EssenceType } from '../game/v3/colors';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
-import { cn } from '../lib/utils';
+import { cn, newMatchSeed } from '../lib/utils';
 import { CardFace, CARD_SIZES, describeEffect, renderKeywordText } from './CardFaceV4';
 import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
 import { fmtCredits, fmtVouchers } from '../meta/economy';
 import { recordMatch } from '../meta/matchHistory';
+import { encodeDeckCode } from '../meta/deckcode';
 import {
   CPU_SPEEDS,
   HAND_SORTS,
@@ -1848,7 +1850,7 @@ export function GameV4({
     // Resolved once and passed to createGame as well as used for the rng, so
     // `g.seed` carries it: a player who hits a bug in a real match now has a
     // reproducible seed to attach to the report (finding 1.5).
-    const matchSeed = seed ?? Date.now() % 2147483647;
+    const matchSeed = seed ?? newMatchSeed();
     const rng = mulberry32(matchSeed);
     const game = createGame(humanDeck, cpuDeck, POOL_BY_ID, {
       rng,
@@ -1857,7 +1859,7 @@ export function GameV4({
       // without this the player was permanently on the play every single
       // match — and the second-player compensation (the extra opening
       // Wellspring) would only ever have gone to the CPU.
-      firstPlayer: rng() < 0.5 ? HUMAN : CPU,
+      firstPlayer: firstPlayerForSeed(matchSeed),
     });
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
@@ -2306,6 +2308,9 @@ export function GameV4({
           turns: g.turn,
           humanLabel,
           cpuLabel,
+          firstPlayer: g.firstPlayer,
+          humanDeck: encodeDeckCode(humanDeck.leaderId, humanDeck.cards),
+          cpuDeck: encodeDeckCode(cpuDeck.leaderId, cpuDeck.cards),
           humanVitality: g.players[HUMAN].vitality,
           cpuVitality: g.players[CPU].vitality,
         });

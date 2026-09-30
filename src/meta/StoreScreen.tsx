@@ -25,7 +25,13 @@ import { RARITY_CHIP, ALL_SET_NAMES } from './rarity';
 import { SafeImage } from './SafeImage';
 import { fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
-import { packOdds, expectedRarities, sortedWeights, packFoilChance } from './packodds';
+import {
+  packOdds,
+  expectedRarities,
+  sortedWeights,
+  packFoilChance,
+  SERIALIZED_PULL_CHANCE,
+} from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -764,8 +770,12 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
 
         <div className="p-4">
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-1">
-            Every pack is rolled slot by slot. These are the exact server-side odds for each slot —
-            no hidden weighting.
+            Every pack is rolled slot by slot. These are the configured odds for each slot; the
+            notes below cover the extras the server adds on top.
+          </div>
+          <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+            Every pack also has a {(SERIALIZED_PULL_CHANCE * 100).toFixed(0)}% chance of one extra
+            Serialized card, on top of the {pack.card_count} above.
           </div>
 
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
@@ -832,6 +842,12 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
               {row.cardType && (
                 <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
                   Always a {row.cardType} card.
+                </div>
+              )}
+              {row.minRarity && (
+                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+                  Guaranteed {row.minRarity} or better — the percentages above are the configured
+                  weights before that floor.
                 </div>
               )}
             </div>

@@ -490,6 +490,16 @@ function clearEssence(state: GameState): void {
 // ---------------------------------------------------------------------------
 export const STARTING_HAND = 7;
 
+/**
+ * Which seat goes first for a match seed, from its own stream. Drawing it from
+ * the match RNG itself (as the UI did) consumed a value before `createGame`
+ * built its shuffles, so replaying with `createGame({ seed })` was one draw out
+ * of step and could seat the players the other way round.
+ */
+export function firstPlayerForSeed(seed: number): PlayerId {
+  return mulberry32((seed ^ 0x5bd1e995) >>> 0)() < 0.5 ? 'P1' : 'P2';
+}
+
 export interface GameOptions {
   rng?: Rng;
   /** Default true — tests can disable to keep deck order (top of deck = last
@@ -523,7 +533,7 @@ export function createGame(
   poolById: Record<string, CardDef>,
   opts: GameOptions = {},
 ): GameState {
-  const seed = opts.seed ?? Date.now() & 0xffffffff;
+  const seed = opts.seed ?? Date.now() & 0x7fffffff;
   const rng = opts.rng ?? mulberry32(seed);
   // Instances are minted while the players are being built, before the state
   // object exists; the running total is copied onto the state below.

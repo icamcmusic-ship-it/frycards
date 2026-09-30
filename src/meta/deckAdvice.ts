@@ -6,7 +6,15 @@
  * invented.
  */
 import { CardDef, totalCost } from '../game/v3/cards';
-import { DECK_MIN } from '../game/v3/decks';
+import {
+  CURVE_TARGETS,
+  CURVE_TOLERANCE,
+  DECK_MIN,
+  curveAtOrOver,
+  curveAtOrUnder,
+} from '../game/v3/decks';
+
+export { CURVE_TARGETS, CURVE_TOLERANCE };
 import { cardColors, Color, COLOR_IDENTITY, KEYWORDS_OF_COLOR } from '../game/v3/colors';
 
 /** One entry per distinct card, with its copy count. */
@@ -18,21 +26,6 @@ export interface DeckEntry {
 // ---------------------------------------------------------------------------
 // Cost curve
 // ---------------------------------------------------------------------------
-
-/**
- * The sim's target cost-curve buckets as deck fractions:
- * CURVE_TARGETS = [0.4, 0.4, 0.2] in src/game/v3/decks.ts (buckets are
- * totalCost 1-2 / 3-4 / 5+ per curveBucket() there). decks.ts is the source
- * of truth; it does not export the constant, so it is mirrored here with the
- * same values.
- */
-export const CURVE_TARGETS: readonly [number, number, number] = [0.4, 0.4, 0.2];
-
-/**
- * The sim's over-target tolerance: take() in src/game/v3/decks.ts skips a
- * card once its bucket fraction reaches CURVE_TARGETS[b] + 0.1.
- */
-export const CURVE_TOLERANCE = 0.1;
 
 export const CURVE_BUCKET_LABELS: readonly [string, string, string] = ['1–2', '3–4', '5+'];
 
@@ -172,9 +165,9 @@ export function deriveDeckAdvice(entries: DeckEntry[]): DeckAdvice {
     const status: CurveBucketAdvice['status'] =
       total === 0
         ? 'ok'
-        : fraction >= CURVE_TARGETS[i] + CURVE_TOLERANCE
+        : curveAtOrOver(count, total, i as 0 | 1 | 2)
           ? 'high'
-          : fraction <= CURVE_TARGETS[i] - CURVE_TOLERANCE
+          : curveAtOrUnder(count, total, i as 0 | 1 | 2)
             ? 'low'
             : 'ok';
     return { label: CURVE_BUCKET_LABELS[i], count, target, fraction, status };

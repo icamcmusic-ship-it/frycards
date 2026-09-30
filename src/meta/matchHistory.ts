@@ -32,6 +32,12 @@ export interface MatchRecord {
   turns: number;
   humanLabel: string;
   cpuLabel: string;
+  /** Who took the first turn (`firstPlayerForSeed(seed)` for current matches). */
+  firstPlayer?: 'P1' | 'P2';
+  /** Both decks as deck codes (`FRY1:...`), so the seed can be replayed against
+   * them. Absent on records written before this field existed. */
+  humanDeck?: string;
+  cpuDeck?: string;
   /** Vitality both sides finished on, so a blowout reads as one. */
   humanVitality: number;
   cpuVitality: number;

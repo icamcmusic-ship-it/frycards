@@ -114,7 +114,8 @@ export const THEMES: Record<ThemeName, Theme> = {
     name: 'warm',
     label: 'WARM SUNSET',
     colors: {
-      ink: '#4e615c',
+      // was #4e615c (4.43:1 on this yellow, under the 4.5 AA floor).
+      ink: '#4a5c57',
       paper: '#f7ede2',
       yellow: '#f5cac3',
       red: '#806232',

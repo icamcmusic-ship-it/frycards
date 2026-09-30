@@ -2031,8 +2031,10 @@ const seatSwap = {
   const SEAT_SWAP_PAIRS = Math.min(200, decks.length * (decks.length - 1));
   for (let n = 0; n < SEAT_SWAP_PAIRS; n++) {
     const i = Math.floor(swapRng() * decks.length);
-    let j = Math.floor(swapRng() * decks.length);
-    if (j === i) j = (j + 1) % decks.length;
+    // Draw from the other n-1 decks and skip over i: `j = (j + 1) % n` on a
+    // collision made the pair (i, i+1) twice as likely as any other.
+    let j = Math.floor(swapRng() * (decks.length - 1));
+    if (j >= i) j++;
     const pairSeed = Math.floor(swapRng() * 1e9) + 1;
     // Run A-as-P1 / B-as-P2 and B-as-P1 / A-as-P2 with the identical seed.
     // We don't reuse runGame() (it would pollute the main tournament stats);
@@ -2258,18 +2260,19 @@ const leaderPairByDeck: Record<string, { games: number; wins: number }[]> = {};
           const w1 = seatSwapGame(pinnedDecks[a][k], pinnedDecks[b][k], seed1);
           cell.games++;
           byDeck.games++;
-          if (w1 === 'P1') {
-            cell.wins++;
-            byDeck.wins++;
-          }
+          // A game that hit the turn cap has no winner; it is half a win for
+          // each side, not a loss for both (which made cell win% sum below 100
+          // and penalised Leaders with slower kits).
+          const half1 = w1 === null ? 0.5 : w1 === 'P1' ? 1 : 0;
+          cell.wins += half1;
+          byDeck.wins += half1;
           const seed2 = Math.floor(pairRng() * 1e9) + 1;
           const w2 = seatSwapGame(pinnedDecks[b][k], pinnedDecks[a][k], seed2);
           cell.games++;
           byDeck.games++;
-          if (w2 === 'P2') {
-            cell.wins++;
-            byDeck.wins++;
-          }
+          const half2 = w2 === null ? 0.5 : w2 === 'P2' ? 1 : 0;
+          cell.wins += half2;
+          byDeck.wins += half2;
         }
       }
     }

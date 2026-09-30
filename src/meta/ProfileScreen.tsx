@@ -23,7 +23,7 @@ import {
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
 import { POOL_V4 } from '../game/v3/cardpool';
-import { cn } from '../lib/utils';
+import { cn, winRatePct } from '../lib/utils';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -117,8 +117,7 @@ export function ProfileScreen({
   // resolved, e.g. right after sign-in).
   const banner = shopItems.find((s) => s.id === profile.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile.equipped_avatar);
-  const winRate =
-    profile.games_played > 0 ? Math.round((profile.wins / profile.games_played) * 100) : 0;
+  const winRate = winRatePct(profile.wins, profile.games_played);
   // Clamped: see `levelProgress`. The raw subtraction printed a negative
   // numerator whenever the server's level/xp pair ran ahead of this mirror.
   const levelXp = levelProgress(profile.level, profile.xp);

@@ -9,7 +9,7 @@ import {
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
 import { DeckDef, mulberry32 } from './game/v3/engine';
 import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
-import { withTimeout } from './lib/utils';
+import { newMatchSeed, withTimeout } from './lib/utils';
 import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
@@ -299,7 +299,7 @@ function Game({
   // setupToDeck on every render would silently re-roll the human's deck
   // whenever this component re-renders (e.g. the reward state updating at
   // game end). One roll per mount — the gameKey remount rolls a fresh one.
-  const [matchSeed] = useState(() => Date.now() % 2147483647);
+  const [matchSeed] = useState(newMatchSeed);
   const [human] = useState(() => setupToDeck(setup, matchSeed));
   // CPU plays a freshly randomized deck every match rather than one of the
   // fixed archetype presets — keeps every match legal even when the human's

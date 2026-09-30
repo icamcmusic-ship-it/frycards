@@ -245,8 +245,15 @@ export function gradedQuicksellPrice(
   grade: number,
   service: GradingService,
 ): number {
+  // Integer arithmetic: multipliers are hundredths, so `100 * 1.1 * 1.6`
+  // (176.00000000000003) can no longer round up to 177 when the server's exact
+  // numeric math gives 176.
+  const hundredths = (x: number) => Math.round(x * 100);
   return Math.ceil(
-    quicksellPrice(rarity, foil) * gradeMultiplier(grade) * GRADING_SERVICE_BY_ID[service].premium,
+    (quicksellPrice(rarity, foil) *
+      hundredths(gradeMultiplier(grade)) *
+      hundredths(GRADING_SERVICE_BY_ID[service].premium)) /
+      10000,
   );
 }
 

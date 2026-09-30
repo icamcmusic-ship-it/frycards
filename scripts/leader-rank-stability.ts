@@ -160,25 +160,49 @@ const readDraw = (files: string[], idx: number): Draw => {
 const parsed = draws.map(readDraw);
 
 /**
- * Spearman's rho between two rankings of the same Leaders.
- *
- * The ranks here are dense and distinct by construction (they come from
- * sorting distinct means), so the simple 1 - 6*sum(d^2)/(n^3-n) form is exact
- * and no tie correction is needed. If a future report ever produces a genuine
- * tie the means would have to be equal to the decimal, and the ordering would
- * be arbitrary either way — which is worth knowing rather than smoothing, so
- * the tie is left to fall wherever the sort puts it.
+ * Average ranks (1 = highest mean; tied means share the mean of the ranks they
+ * span). Means are averages of 0.1-rounded winPct, so ties are plausible, and
+ * breaking them by sort order would make rho depend on Map insertion order.
+ */
+function averageRanks(means: Map<string, number>, names: string[]): Map<string, number> {
+  const ordered = [...names].sort((x, y) => (means.get(y) as number) - (means.get(x) as number));
+  const out = new Map<string, number>();
+  let i = 0;
+  while (i < ordered.length) {
+    let j = i;
+    while (j + 1 < ordered.length && means.get(ordered[j + 1]) === means.get(ordered[i])) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) out.set(ordered[k], avg);
+    i = j + 1;
+  }
+  return out;
+}
+
+/**
+ * Spearman's rho between two draws' Leader means: the Pearson correlation of
+ * their average ranks, computed over the Leaders BOTH draws saw (ranks are
+ * recomputed on that intersection, not carried over from each draw's own,
+ * larger set). Pearson-on-ranks is exact with ties, where the 1 - 6*sum(d^2)
+ * shortcut is not.
  */
 function spearman(a: Map<string, number>, b: Map<string, number>): number {
   const names = [...a.keys()].filter((n) => b.has(n));
   const n = names.length;
   if (n < 2) return NaN;
-  let d2 = 0;
+  const ra = averageRanks(a, names);
+  const rb = averageRanks(b, names);
+  const mean = (n + 1) / 2;
+  let num = 0;
+  let da = 0;
+  let db = 0;
   for (const name of names) {
-    const d = (a.get(name) as number) - (b.get(name) as number);
-    d2 += d * d;
+    const x = (ra.get(name) as number) - mean;
+    const y = (rb.get(name) as number) - mean;
+    num += x * y;
+    da += x * x;
+    db += y * y;
   }
-  return 1 - (6 * d2) / (n * (n * n - 1));
+  return da === 0 || db === 0 ? NaN : num / Math.sqrt(da * db);
 }
 
 // Every Leader any draw saw, ordered by the FIRST draw's ranking so the table
@@ -245,7 +269,7 @@ console.log(
 console.log('\nPairwise Spearman rho between draw rankings:');
 for (let i = 0; i < parsed.length; i++) {
   for (let j = i + 1; j < parsed.length; j++) {
-    const rho = spearman(parsed[i].rank, parsed[j].rank);
+    const rho = spearman(parsed[i].mean, parsed[j].mean);
     const tag = anyUnknown || !pairedWith(i, j) ? 'UNPAIRED — conflated' : 'paired';
     console.log(
       `  draw ${i + 1} (${parsed[i].label}) vs draw ${j + 1} (${parsed[j].label}):  rho = ${rho.toFixed(3)}  (${tag})`,

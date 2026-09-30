@@ -6,7 +6,7 @@ import { PopButton, UnavailableShowcaseTile } from './ui';
 import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
-import { cn } from '../lib/utils';
+import { cn, winRatePct } from '../lib/utils';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 /** Renders a username as a click-to-view-profile link — the shared control
@@ -86,8 +86,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
 
   const banner = card ? shopItems.find((s) => s.id === card.equipped_banner) : undefined;
   const avatar = card ? shopItems.find((s) => s.id === card.equipped_avatar) : undefined;
-  const winRate =
-    card && card.games_played > 0 ? Math.round((card.wins / card.games_played) * 100) : 0;
+  const winRate = card ? winRatePct(card.wins, card.games_played) : 0;
 
   return (
     <div

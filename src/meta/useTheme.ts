@@ -14,7 +14,7 @@ export function useTheme() {
     try {
       const saved = localStorage.getItem(THEME_STORAGE_KEY);
       // Validate against known themes so a stale saved name falls back safely.
-      if (saved && saved in THEMES) theme = saved as ThemeName;
+      if (saved && Object.hasOwn(THEMES, saved)) theme = saved as ThemeName;
     } catch {
       // Ignore — use the default theme.
     }

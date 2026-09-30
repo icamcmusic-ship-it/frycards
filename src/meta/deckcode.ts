@@ -15,7 +15,7 @@ export function encodeDeckCode(leaderId: string, cardIds: string[]): string {
   const counts = new Map<string, number>();
   for (const id of cardIds) counts.set(id, (counts.get(id) || 0) + 1);
   const body = [...counts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) // not localeCompare: the code must not vary by locale
     .map(([id, n]) => (n > 1 ? `${id}*${n}` : id))
     .join(',');
   return `${PREFIX}:${leaderId}:${body}`;

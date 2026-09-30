@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { checkProducibleColors, drawTestHand, seededShuffle } from './goldfish';
 import { POOL_BY_ID, POOL_LEADERS } from '../game/v3/cardpool';
 import { buildDeck, randomArchetype } from '../game/v3/decks';
-import { mulberry32 } from '../game/v3/engine';
+import { createGame, firstPlayerForSeed, mulberry32 } from '../game/v3/engine';
 import { LEADER_COLORS } from '../game/v3/colors';
 
 const deck = buildDeck(randomArchetype(mulberry32(1337)));
@@ -24,6 +24,17 @@ describe('seededShuffle', () => {
 });
 
 describe('drawTestHand', () => {
+  test('is the opening hand a real match deals P1 on that seed', () => {
+    for (const seed of [1, 99, 123456]) {
+      const game = createGame(deck, deck, POOL_BY_ID, {
+        seed,
+        firstPlayer: firstPlayerForSeed(seed),
+      });
+      const shown = drawTestHand(deck.cards, POOL_BY_ID, seed).cards.map((c) => c.id);
+      expect(game.players.P1.hand.map((c) => c.def.id)).toEqual(shown);
+    }
+  });
+
   test('deals the opening hand size and is reproducible from its seed', () => {
     const a = drawTestHand(deck.cards, POOL_BY_ID, 99);
     const b = drawTestHand(deck.cards, POOL_BY_ID, 99);
