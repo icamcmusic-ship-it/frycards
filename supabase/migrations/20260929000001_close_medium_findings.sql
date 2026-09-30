@@ -59,6 +59,7 @@ begin
     'No cards available for rarity % within sets % — refusing to draw outside the pinned sets',
     p_rarity, p_sets;
 end;
+$function$;
 
 revoke all on function public.random_card_of_rarity(text, text[]) from public;
 grant execute on function public.random_card_of_rarity(text, text[]) to authenticated, service_role;
@@ -179,6 +180,7 @@ begin
   returning id into v_id;
   return jsonb_build_object('ok', true, 'template_id', v_id);
 end;
+$function$;
 
 revoke all on function public.create_mystery_template(text, integer, text, jsonb) from public;
 grant execute on function public.create_mystery_template(text, integer, text, jsonb) to authenticated;
