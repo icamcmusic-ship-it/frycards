@@ -23,7 +23,7 @@ import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES } from './rarity';
 import { SafeImage } from './SafeImage';
-import { fmtVouchers } from './economy';
+import { fmtCredits, fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
 import {
   packOdds,
@@ -31,6 +31,7 @@ import {
   sortedWeights,
   packFoilChance,
   SERIALIZED_PULL_CHANCE,
+  expectedQuicksellValue,
 } from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
@@ -852,6 +853,22 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
               )}
             </div>
           ))}
+
+          {(() => {
+            const price = pack.price_credits ?? (pack.price_vouchers ?? 0) * 100;
+            const ev = expectedQuicksellValue(pack);
+            if (price <= 0 || ev <= 0) return null;
+            return (
+              <div className="ink-border-sm p-2.5 mb-3 bg-[var(--c-paper)]">
+                <div className="heading-font text-[11px] mb-1">QUICKSELL VALUE</div>
+                <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                  Sold straight back, an average pack returns about {fmtCredits(Math.round(ev))} —{' '}
+                  {Math.round((ev / price) * 100)}% of its {fmtCredits(price)} price. Cards you
+                  keep, grade or trade can be worth more or less.
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="ink-border-sm p-2.5 bg-[var(--c-yellow)]/30">
             <div className="heading-font text-[11px] mb-1.5">EXPECTED CARDS PER PACK</div>

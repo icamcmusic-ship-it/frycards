@@ -14,6 +14,7 @@
  */
 import { PackSlot, PackType } from '../lib/supabase';
 import { rarityTier } from './rarity';
+import { FOIL_QUICKSELL_MULTIPLIER, quicksellPrice } from './economy';
 
 export const LEGACY_SLOT_WEIGHTS: Record<string, Record<string, number>> = {
   foundation: { Common: 1 },
@@ -162,4 +163,25 @@ export function expectedRarities(pack: PackType): [string, number][] {
     }
   }
   return sortedWeights(totals);
+}
+
+/**
+ * What one pack is worth if every card in it is quick-sold: the expected
+ * quicksell value per slot, with foils paying the foil multiplier at the slot's
+ * foil chance. The extra Serialized pull is left out (it cannot be quick-sold).
+ * Shown next to the price so a player can see how much of a pack's cost the
+ * cards give back — the number the odds modal never gave.
+ */
+export function expectedQuicksellValue(pack: PackType): number {
+  let total = 0;
+  for (const row of packOdds(pack)) {
+    let perCard = 0;
+    for (const [rarity, p] of Object.entries(row.weights)) {
+      perCard += p * quicksellPrice(rarity, false);
+    }
+    // A foil pays FOIL_QUICKSELL_MULTIPLIER x, so the slot's average is the
+    // base value lifted by (multiplier - 1) at the foil chance.
+    total += row.count * perCard * (1 + row.foilChance * (FOIL_QUICKSELL_MULTIPLIER - 1));
+  }
+  return total;
 }

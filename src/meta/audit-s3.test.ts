@@ -90,3 +90,20 @@ describe('F10 deck code is locale independent', () => {
     expect(encodeDeckCode('l', ['b', 'B', 'a_b', 'ab'])).toBe('FRY1:l:B,a_b,ab,b');
   });
 });
+
+describe('pack quicksell value', () => {
+  test('matches a hand calculation and lifts foil slots by the foil multiplier', async () => {
+    const { expectedQuicksellValue } = await import('./packodds');
+    const { quicksellPrice } = await import('./economy');
+    const pack = {
+      foil_chance: 0,
+      slot_config: [{ slot_type: 'x', count: 2, rarity_weights: { Common: 1 } }],
+    } as unknown as PackType;
+    expect(expectedQuicksellValue(pack)).toBe(2 * quicksellPrice('Common', false));
+    const foilPack = {
+      foil_chance: 0,
+      slot_config: [{ slot_type: 'foil', count: 1, rarity_weights: { Common: 1 } }],
+    } as unknown as PackType;
+    expect(expectedQuicksellValue(foilPack)).toBeCloseTo(quicksellPrice('Common', false) * 2.5);
+  });
+});

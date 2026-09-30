@@ -12,6 +12,7 @@ import {
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
+import { loadWishlist, saveWishlist, toggleWishlisted } from './wishlist';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
@@ -99,6 +100,7 @@ const CollectionTile = React.memo(function CollectionTile({
   serialNumber,
   serialCap,
   narrow,
+  wished,
   onInspect,
 }: {
   def: CardDef;
@@ -107,6 +109,7 @@ const CollectionTile = React.memo(function CollectionTile({
   serialNumber?: number;
   serialCap?: number;
   narrow: boolean;
+  wished: boolean;
   onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
 }) {
   const size = narrow ? 'standard' : 'full';
@@ -136,6 +139,7 @@ const CollectionTile = React.memo(function CollectionTile({
         foil={kind === 'foil'}
         serial={serial}
         dimmed={kind === 'normal' && count === 0}
+        badge={wished ? '♥ WISH' : undefined}
         onClick={onClick}
       />
     </div>
@@ -177,6 +181,18 @@ export function CollectionScreen({
   // tell community cards from Volume #1 ones.
   const [setName, setSetName] = useState('All');
   const [ownedOnly, setOwnedOnly] = useState(true);
+  // Only cards with a copy nothing else needs: not locked in a deck, not a
+  // serialized reserve. The set to quicksell, list or trade from.
+  const [spareOnly, setSpareOnly] = useState(false);
+  const [wishOnly, setWishOnly] = useState(false);
+  const [wishlist, setWishlist] = useState(loadWishlist);
+  const toggleWish = useCallback((cardId: string) => {
+    setWishlist((w) => {
+      const next = toggleWishlisted(w, cardId);
+      saveWishlist(next);
+      return next;
+    });
+  }, []);
   const [search, setSearch] = useState('');
   // Graded slabs live in their own table (graded_cards) — encased copies are
   // out of player_cards entirely, so the shelf fetches them directly.
@@ -320,6 +336,21 @@ export function CollectionScreen({
     }
     return m;
   }, [owned, lockedByDecks, serializedByCard]);
+  // Spare copies per card, with the same arithmetic as spareByRarity, for the
+  // SPARES filter.
+  const spareByCard = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of POOL_V4) {
+      if (c.type === 'Leader') continue;
+      const o = owned.get(c.id);
+      if (!o) continue;
+      const reserved = serializedByCard.get(c.id)?.length || 0;
+      const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
+      const spare = Math.max(0, normal - reserved) + foil;
+      if (spare > 0) m.set(c.id, spare);
+    }
+    return m;
+  }, [owned, lockedByDecks, serializedByCard]);
   // Which rarity's bulk sell is running (null = idle) — keyed so the OTHER
   // rarity's button doesn't also read "SELLING…" while one runs.
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
@@ -379,7 +410,9 @@ export function CollectionScreen({
   const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
     const total = (o?.q || 0) + (o?.f || 0);
-    if (ownedOnly && total === 0) return false;
+    if (wishOnly && !wishlist.has(c.id)) return false;
+    if (ownedOnly && !wishOnly && total === 0) return false;
+    if (spareOnly && !spareByCard.has(c.id)) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
     if (setName !== 'All' && (c.set || '') !== setName) return false;
@@ -715,6 +748,20 @@ export function CollectionScreen({
           >
             {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
           </PopButton>
+          <PopButton
+            color={spareOnly ? 'black' : 'yellow'}
+            ariaPressed={spareOnly}
+            onClick={() => setSpareOnly(!spareOnly)}
+          >
+            SPARES ({spareByCard.size})
+          </PopButton>
+          <PopButton
+            color={wishOnly ? 'black' : 'yellow'}
+            ariaPressed={wishOnly}
+            onClick={() => setWishOnly(!wishOnly)}
+          >
+            ♥ WISHLIST ({wishlist.size})
+          </PopButton>
           <div className="ml-auto text-[11px] font-bold text-[var(--c-steel)]">
             {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
           </div>
@@ -763,6 +810,7 @@ export function CollectionScreen({
               serialNumber={e.serial?.number}
               serialCap={e.serial?.cap}
               narrow={narrow}
+              wished={wishlist.has(e.def.id)}
               onInspect={openInspector}
             />
           ))}
@@ -786,6 +834,8 @@ export function CollectionScreen({
                   setSetName('All');
                   setSearch('');
                   setOwnedOnly(true);
+                  setSpareOnly(false);
+                  setWishOnly(false);
                 }}
               >
                 CLEAR FILTERS
@@ -845,6 +895,14 @@ export function CollectionScreen({
               )}
               <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
               <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+                <PopButton
+                  color={wishlist.has(inspect.def.id) ? 'red' : 'yellow'}
+                  className="w-full"
+                  ariaPressed={wishlist.has(inspect.def.id)}
+                  onClick={() => toggleWish(inspect.def.id)}
+                >
+                  {wishlist.has(inspect.def.id) ? '♥ ON YOUR WISHLIST' : '♡ ADD TO WISHLIST'}
+                </PopButton>
                 {inspectTotal > 0 && (
                   <>
                     {showcaseError && <Notice text={showcaseError} />}
