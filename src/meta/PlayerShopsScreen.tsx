@@ -97,7 +97,7 @@ import {
   rateShopPurchase,
   reportListing,
 } from '../lib/supabase';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 // Mirror rarity.ts's ladder — a local copy drifted once already (missing
 // 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
@@ -213,13 +213,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
     [listingId, load],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   const visibleCards = (pool?.cards ?? []).filter((c) => showSpent || c.remaining > 0);
 
@@ -1102,13 +1096,7 @@ function ReportModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   // v30 — a dialog that announces itself as modal has to hold the keyboard
   // too; `aria-modal` alone tells sequential focus navigation nothing, and Tab
@@ -1891,7 +1879,11 @@ function MyShopTab() {
     );
   }
 
-  if (loadError) {
+  // Before anything has loaded there is nothing to show but the retry page.
+  // Once a shop is on screen, a failed background reload (a realtime bump)
+  // must not unmount it — that threw away an in-progress listing form even
+  // though the action had succeeded — so it becomes a banner instead.
+  if (loadError && !shop) {
     return (
       <div className="text-center py-16">
         <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
@@ -1901,6 +1893,14 @@ function MyShopTab() {
       </div>
     );
   }
+  const staleBanner = loadError ? (
+    <div className="mb-3 flex items-center gap-3">
+      <Notice text={`${loadError} Showing what was loaded last.`} />
+      <PopButton color="red" onClick={() => reload()}>
+        RETRY
+      </PopButton>
+    </div>
+  ) : null;
 
   if (!shop) {
     if (!profile || profile.level < SHOP_UNLOCK_LEVEL) {
@@ -1931,6 +1931,7 @@ function MyShopTab() {
   if (shop.status === 'dormant') {
     return (
       <div className="max-w-md">
+        {staleBanner}
         {error && (
           <div className="mb-3">
             <Notice text={error} />
@@ -1969,6 +1970,7 @@ function MyShopTab() {
 
   return (
     <div>
+      {staleBanner}
       {error && (
         <div className="mb-3">
           <Notice text={error} />

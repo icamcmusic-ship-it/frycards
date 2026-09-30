@@ -2420,14 +2420,15 @@ export function GameV4({
       if (stage === 'over' || stage === 'mulligan') return;
       if (confirmDialog || inspect || pending || showAsh || shedPick !== null) return;
       const el = e.target as HTMLElement | null;
-      const tag = el?.tagName;
+      // Anything that already acts on Space/Enter itself keeps the key: native
+      // controls, links, disclosure summaries, and the interactive ARIA roles.
       if (
-        tag === 'BUTTON' ||
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
         el?.isContentEditable ||
-        el?.getAttribute('role') === 'button'
+        el?.closest(
+          'button, input, textarea, select, a[href], summary, [role=button], [role=link], ' +
+            '[role=checkbox], [role=switch], [role=radio], [role=tab], [role=menuitem], ' +
+            '[role=option], [role=combobox], [role=slider]',
+        )
       ) {
         return;
       }

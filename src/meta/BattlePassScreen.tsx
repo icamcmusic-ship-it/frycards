@@ -79,6 +79,14 @@ export function BattlePassScreen({ onBack }: { onBack: () => void }) {
       const err = await claimBpTier(season.id, tier.tier);
       if (err) {
         setError(err);
+        // A lost reply after a successful claim makes the retry fail with
+        // "already claimed" while the tier still reads CLAIM; re-read the
+        // server's truth on any claim error.
+        if (userId) {
+          fetchBattlePassProgress(userId, season.id)
+            .then((p) => setProgress(p))
+            .catch(() => {});
+        }
         return;
       }
       setNotice(`Tier ${tier.tier} claimed: ${tier.label}!`);

@@ -7,7 +7,7 @@ import { SafeImage } from './SafeImage';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { cn } from '../lib/utils';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 /** Renders a username as a click-to-view-profile link — the shared control
  * used everywhere a player's name is shown (leaderboards, friends, trades,
@@ -82,13 +82,7 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
     };
   }, [userId, attempt]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   const banner = card ? shopItems.find((s) => s.id === card.equipped_banner) : undefined;
   const avatar = card ? shopItems.find((s) => s.id === card.equipped_avatar) : undefined;

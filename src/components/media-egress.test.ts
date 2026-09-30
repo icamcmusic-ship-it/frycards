@@ -273,3 +273,16 @@ test('uploading cannot silently restore the originals shrink-originals replaced'
   // The guarded branch: the master upload only happens when NOT derivatives-only.
   expect(source).toMatch(/if \(!derivativesOnly\) \{[\s\S]{0,300}archivePath\(key\)/);
 });
+
+test('signed, render and percent-encoded storage paths are metered too', () => {
+  const base = 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1';
+  expect(isMeteredStorageUrl(`${base}/object/sign/Card%20Images/a.png?token=x`)).toBe(true);
+  expect(isMeteredStorageUrl(`${base}/object/authenticated/Card%20Images/a.png`)).toBe(true);
+  expect(isMeteredStorageUrl(`${base}/render/image/public/Card%20Images/a.png?width=200`)).toBe(
+    true,
+  );
+  expect(isMeteredStorageUrl('https://dnngihsbqxccqvvedvjc.supabase.co/storage%2Fv1/x')).toBe(
+    false,
+  );
+  expect(isMeteredStorageUrl('https://cdn.example.com/a.png')).toBe(false);
+});

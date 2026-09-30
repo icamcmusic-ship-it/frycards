@@ -247,11 +247,21 @@ export interface OpenPackResult {
  */
 export async function fetchCardTemplates(): Promise<CardTemplate[] | null> {
   try {
-    const { data, error } = await supabase.from('cards').select('template').order('id');
-    if (error || !data) return null;
-    const templates = (data as { template: CardTemplate | null }[])
-      .map((r) => r.template)
-      .filter((t): t is CardTemplate => !!t && !!t.id);
+    // PostgREST caps a response at 1000 rows; a bigger catalog would arrive
+    // silently truncated, so read it in pages until one comes back short.
+    const PAGE = 1000;
+    const rows: { template: CardTemplate | null }[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('cards')
+        .select('template')
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error || !data) return null;
+      rows.push(...(data as { template: CardTemplate | null }[]));
+      if (data.length < PAGE) break;
+    }
+    const templates = rows.map((r) => r.template).filter((t): t is CardTemplate => !!t && !!t.id);
     return templates.length > 0 ? templates : null;
   } catch {
     return null;
@@ -1032,6 +1042,10 @@ export interface MarketListing {
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
 export const MARKET_FEE = 0.05;
 
+/** Most listings one browse load returns. At the limit the list is cut off, so
+ * the screen says so rather than letting search silently miss the rest. */
+export const MARKET_LIST_LIMIT = 200;
+
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // settle anything past its end time first so browsers see fresh state
   const { error: settleError } = await supabase.rpc('settle_expired_listings');
@@ -1044,7 +1058,7 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
     .select('*')
     .eq('status', 'active')
     .order('ends_at')
-    .limit(200);
+    .limit(MARKET_LIST_LIMIT);
   if (error) {
     console.error('fetchMarketListings failed:', error.message);
     // Throw instead of returning [] — callers (MarketplaceScreen.reload)

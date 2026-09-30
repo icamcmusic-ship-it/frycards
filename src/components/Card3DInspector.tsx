@@ -14,7 +14,7 @@ import { CardFace, CardReadingPanel, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { cn } from '../lib/utils';
-import { useFocusTrap } from './useFocusTrap';
+import { useFocusTrap, useEscapeClose } from './useFocusTrap';
 
 const MAX_TILT_DEG = 14;
 
@@ -78,13 +78,7 @@ export function Card3DInspector({
   const [tilt, setTilt] = useState<{ rx: number; ry: number; px: number; py: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   // v4.24 moved focus into the dialog on open and restored it to the trigger
   // on close, with a comment saying that stopped a keyboard user Tabbing

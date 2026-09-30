@@ -7,7 +7,7 @@ import {
   MatchResultStatus,
 } from './lib/supabase';
 import { buildDeck, deckDefFromCustom, randomArchetype } from './game/v3/decks';
-import { DeckDef } from './game/v3/engine';
+import { DeckDef, mulberry32 } from './game/v3/engine';
 import { POOL_BY_ID, applyCardPool } from './game/v3/cardpool';
 import { withTimeout } from './lib/utils';
 import { LEADER_HP } from './game/v3/cards';
@@ -269,9 +269,11 @@ function PlayScreen({
   );
 }
 
-function setupToDeck(setup: MatchSetup): { deck: DeckDef; label: string } {
+function setupToDeck(setup: MatchSetup, matchSeed: number): { deck: DeckDef; label: string } {
   if (setup.kind === 'random') {
-    const arch = randomArchetype();
+    // Rolled from the match seed, so the seed shown on the game-over screen and
+    // stored in match history reproduces the decks as well as the shuffles.
+    const arch = randomArchetype(mulberry32(matchSeed * 7919 + 1));
     return { deck: buildDeck(arch), label: arch.label };
   }
   return {
@@ -297,11 +299,12 @@ function Game({
   // setupToDeck on every render would silently re-roll the human's deck
   // whenever this component re-renders (e.g. the reward state updating at
   // game end). One roll per mount — the gameKey remount rolls a fresh one.
-  const [human] = useState(() => setupToDeck(setup));
+  const [matchSeed] = useState(() => Date.now() % 2147483647);
+  const [human] = useState(() => setupToDeck(setup, matchSeed));
   // CPU plays a freshly randomized deck every match rather than one of the
   // fixed archetype presets — keeps every match legal even when the human's
   // own custom deck is still a work in progress.
-  const [cpuArch] = useState(() => randomArchetype());
+  const [cpuArch] = useState(() => randomArchetype(mulberry32(matchSeed * 104729 + 2)));
   // Same initializer rule as the human deck above: buildDeck is random, so
   // calling it inline in the JSX re-rolled the CPU's deck on every render.
   const [cpuDeck] = useState(() => buildDeck(cpuArch));
@@ -404,6 +407,7 @@ function Game({
   return (
     <div className="relative w-full h-screen supports-[height:100dvh]:h-dvh">
       <GameV4
+        seed={matchSeed}
         humanDeck={human.deck}
         cpuDeck={cpuDeck}
         humanLabel={human.label}

@@ -30,7 +30,7 @@ import { RARITY_CHIP } from './rarity';
 import { PlayerLink } from './PlayerProfileModal';
 import { RoleBadge } from './RoleBadge';
 import { fmtCredits } from './economy';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 type Tab = 'friends' | 'trades' | 'leaderboard';
 
@@ -850,13 +850,7 @@ function TradeComposerModal({
     };
   }, [partner.id, theirCollectionAttempt]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   const toggle = (
     list: TradeCardItem[],

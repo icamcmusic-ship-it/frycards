@@ -243,6 +243,8 @@ export interface GameState {
    * server-authoritative reducer whose clients address units by iid.
    */
   iidCounter: number;
+  /** Stack-item id counter, per game for the same reason as `iidCounter`. */
+  stackIdCounter: number;
   /**
    * The seed `createGame` actually used, so a bug report or a replay can name
    * the exact game. Undefined only when the caller supplied its own `rng`
@@ -574,6 +576,7 @@ export function createGame(
     dawnLog: [],
     rng,
     iidCounter: ids.iidCounter,
+    stackIdCounter: 0,
     // An explicit `seed` is recorded even alongside a caller-supplied `rng`:
     // the UI builds its own mulberry32 from a match seed and still wants the
     // seed on the state (bug reports, replays).
@@ -691,8 +694,6 @@ function runTriggers(
 // ---------------------------------------------------------------------------
 // Stack & priority (APNAP)
 // ---------------------------------------------------------------------------
-let stackIdCounter = 0;
-
 /** Turn order for a priority round: active player, then non-active player. */
 export function apnapOrder(state: GameState): [PlayerId, PlayerId] {
   return [state.active, opponentOf(state.active)];
@@ -701,7 +702,7 @@ export function apnapOrder(state: GameState): [PlayerId, PlayerId] {
 /** Put an item on the stack. Its controller keeps priority, and any passes
  * already recorded are void — the stack changed, so everyone answers again. */
 function pushStack(state: GameState, item: Omit<StackItem, 'id'>): StackItem {
-  const full: StackItem = { ...item, id: `s${++stackIdCounter}` };
+  const full: StackItem = { ...item, id: `s${++state.stackIdCounter}` };
   state.stack.push(full);
   state.priority = { holder: full.controller, passed: [] };
   return full;
@@ -1668,6 +1669,9 @@ export function concedeGame(state: GameState, pid: PlayerId): boolean {
  * (by throwing) can resume it once the player has picked.
  */
 export function finishDuskShed(state: GameState, picked?: string[]): void {
+  // Only a turn actually paused in Dusk can be finished: a stray or repeated
+  // call would otherwise flip the turn again with no Dusk for the next player.
+  if (state.phase !== 'Dusk') return;
   const p = state.players[state.active];
   if (picked) applyShedOrder(state, picked);
   while (p.hand.length > MAX_HAND) {
