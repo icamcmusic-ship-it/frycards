@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMeta } from './MetaContext';
 import {
   MetaHeader,
@@ -11,7 +11,7 @@ import {
 } from './ui';
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
-import { CardFace } from '../components/CardFaceV4';
+import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
@@ -85,6 +85,63 @@ async function runBulkQuicksell(
   return { credits: totalCredits, cards: totalCards, error: null };
 }
 
+/**
+ * One grid tile. Memoized on primitives (the `entries` list is rebuilt on every
+ * keystroke in the search box, so entry objects are never reference-equal), and
+ * wrapped in `content-visibility: auto` so cards scrolled out of view skip
+ * layout and paint. That implies paint containment, so the wrapper pads and
+ * un-pads by 8px to keep the card's hard shadow and focus ring from clipping.
+ */
+const CollectionTile = React.memo(function CollectionTile({
+  def,
+  kind,
+  count,
+  serialNumber,
+  serialCap,
+  narrow,
+  onInspect,
+}: {
+  def: CardDef;
+  kind: 'normal' | 'foil' | 'serialized';
+  count?: number;
+  serialNumber?: number;
+  serialCap?: number;
+  narrow: boolean;
+  onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
+}) {
+  const size = narrow ? 'standard' : 'full';
+  const { w, h } = CARD_SIZES[size];
+  const serial = React.useMemo(
+    () =>
+      serialNumber !== undefined ? { number: serialNumber, cap: serialCap as number } : undefined,
+    [serialNumber, serialCap],
+  );
+  const onClick = React.useCallback(
+    () => onInspect(def, kind === 'foil', serial),
+    [onInspect, def, kind, serial],
+  );
+  return (
+    <div
+      style={{
+        contentVisibility: 'auto',
+        containIntrinsicSize: `${w + 16}px ${h + 16}px`,
+        padding: 8,
+        margin: -8,
+      }}
+    >
+      <CardFace
+        def={def}
+        size={size}
+        count={kind !== 'serialized' ? count : undefined}
+        foil={kind === 'foil'}
+        serial={serial}
+        dimmed={kind === 'normal' && count === 0}
+        onClick={onClick}
+      />
+    </div>
+  );
+});
+
 export function CollectionScreen({
   onBack,
   onGrading,
@@ -148,6 +205,14 @@ export function CollectionScreen({
     serial?: { number: number; cap: number };
   } | null>(null);
   const [sellError, setSellError] = useState('');
+  // Stable, so the memoized grid tiles are not re-rendered by unrelated state.
+  const openInspector = useCallback(
+    (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => {
+      setInspect({ def, foil, serial });
+      setSellError('');
+    },
+    [],
+  );
   const [selling, setSelling] = useState(false);
   const [showcaseBusy, setShowcaseBusy] = useState(false);
   const [showcaseError, setShowcaseError] = useState('');
@@ -690,18 +755,15 @@ export function CollectionScreen({
 
         <div className="flex flex-wrap gap-3">
           {entries.map((e) => (
-            <CardFace
+            <CollectionTile
               key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
               def={e.def}
-              size={narrow ? 'standard' : 'full'}
-              count={e.kind !== 'serialized' ? e.count : undefined}
-              foil={e.kind === 'foil'}
-              serial={e.serial}
-              dimmed={e.kind === 'normal' && e.count === 0}
-              onClick={() => {
-                setInspect({ def: e.def, foil: e.kind === 'foil', serial: e.serial });
-                setSellError('');
-              }}
+              kind={e.kind}
+              count={e.count}
+              serialNumber={e.serial?.number}
+              serialCap={e.serial?.cap}
+              narrow={narrow}
+              onInspect={openInspector}
             />
           ))}
           {dataLoading && (

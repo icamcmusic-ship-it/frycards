@@ -2041,6 +2041,7 @@ export const POOL_LEADERS: CardDef[] = [];
  * Refuses a pool with no Leaders (a broken fetch shouldn't brick the game).
  */
 let lastTemplates: CardTemplate[] = GENERATED_CARDS;
+let byTypeIndex: Map<string, CardDef[]> | null = null;
 export function applyCardPool(templates: CardTemplate[]): boolean {
   const defs = templates.map(mapCard);
   if (!defs.some((d) => d.type === 'Leader')) return false;
@@ -2051,6 +2052,7 @@ export function applyCardPool(templates: CardTemplate[]): boolean {
   for (const d of defs) POOL_BY_ID[d.id] = d;
   POOL_LEADERS.length = 0;
   POOL_LEADERS.push(...defs.filter((d) => d.type === 'Leader'));
+  byTypeIndex = null;
   return true;
 }
 
@@ -2062,8 +2064,19 @@ export function rebuildPool(): boolean {
 // Bundled fallback pool, active until/unless the live catalog loads.
 applyCardPool(GENERATED_CARDS);
 
+// Per-type index, rebuilt lazily after each applyCardPool. The deck builder and
+// the CPU deck generator call poolByType repeatedly; re-filtering all ~300 cards
+// each time was pure waste. Callers must treat the result as read-only.
 export function poolByType(t: string): CardDef[] {
-  return POOL_V4.filter((c) => c.type === t);
+  if (!byTypeIndex) {
+    byTypeIndex = new Map();
+    for (const c of POOL_V4) {
+      const list = byTypeIndex.get(c.type);
+      if (list) list.push(c);
+      else byTypeIndex.set(c.type, [c]);
+    }
+  }
+  return byTypeIndex.get(t) ?? [];
 }
 export function poolHasKeyword(kw: string): CardDef[] {
   return POOL_V4.filter((c) => c.keywords?.includes(kw));

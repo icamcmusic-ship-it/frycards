@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   supabase,
   Session,
@@ -377,35 +377,58 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     setGuest(false);
   }, []);
 
-  return (
-    <MetaContext.Provider
-      value={{
-        session,
-        guest,
-        loading: sessionLoading || assetsLoading,
-        bootError,
-        retryBoot,
-        dataLoading,
-        profile,
-        shopItems,
-        packTypes,
-        collection,
-        cosmetics,
-        decks,
-        inventory,
-        serializedCards,
-        setGuest,
-        refreshProfile,
-        refreshCollection,
-        refreshCosmetics,
-        refreshDecks,
-        refreshInventory,
-        refreshShopItems,
-        refreshPackTypes,
-        signOut,
-      }}
-    >
-      {children}
-    </MetaContext.Provider>
+  const value = useMemo(
+    () => ({
+      session,
+      guest,
+      loading: sessionLoading || assetsLoading,
+      bootError,
+      retryBoot,
+      dataLoading,
+      profile,
+      shopItems,
+      packTypes,
+      collection,
+      cosmetics,
+      decks,
+      inventory,
+      serializedCards,
+      setGuest,
+      refreshProfile,
+      refreshCollection,
+      refreshCosmetics,
+      refreshDecks,
+      refreshInventory,
+      refreshShopItems,
+      refreshPackTypes,
+      signOut,
+    }),
+    [
+      session,
+      guest,
+      sessionLoading,
+      assetsLoading,
+      bootError,
+      retryBoot,
+      dataLoading,
+      profile,
+      shopItems,
+      packTypes,
+      collection,
+      cosmetics,
+      decks,
+      inventory,
+      serializedCards,
+      refreshProfile,
+      refreshCollection,
+      refreshCosmetics,
+      refreshDecks,
+      refreshInventory,
+      refreshShopItems,
+      refreshPackTypes,
+      signOut,
+    ],
   );
+
+  return <MetaContext.Provider value={value}>{children}</MetaContext.Provider>;
 }

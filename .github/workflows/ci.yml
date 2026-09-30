@@ -6,10 +6,11 @@ on:
   pull_request:
 
 jobs:
-  checks:
+  # The old single `checks` job ran nine steps back to back. These three run in
+  # parallel, and the `checks` job at the end keeps its old name and needs all
+  # of them, so anything requiring the `checks` status keeps working.
+  static:
     runs-on: ubuntu-latest
-    # The browser-driven harnesses live in the `harnesses` job below, which
-    # installs Chromium; this job never needs the binaries.
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
@@ -24,8 +25,32 @@ jobs:
       - run: npm run typecheck:game
       - run: npm run lint
       - run: npm run format:check
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm test
       - run: npm run verify:pool
+
+  sim-build:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       # 4 games/pairing, not 20. The sim now EXITS NON-ZERO on an engine
       # invariant violation, so this step is a real gate — and at ~11,000
       # games it was by far the most expensive step in the pipeline while
@@ -33,6 +58,14 @@ jobs:
       # games/pairing too; balance passes are run by hand at higher counts.
       - run: npm run sim:v4 -- 4
       - run: npm run build
+      # Fails if the eager (first-paint) JS or CSS grows past its budget.
+      - run: npm run size:check
+
+  checks:
+    runs-on: ubuntu-latest
+    needs: [static, test, sim-build]
+    steps:
+      - run: echo "static, test and sim-build all passed"
 
   # The tap-target, reflow, focus-trap and WCAG harnesses. All three exit
   # non-zero on a finding and none of them was invoked by CI, so every

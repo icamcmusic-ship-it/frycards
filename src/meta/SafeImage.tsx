@@ -79,6 +79,7 @@ export function SafeImage({
       className={className}
       draggable={false}
       loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
       onLoad={onLoad}
       onError={() => {
         if (!fullSize && resolved !== originalMediaUrl(src)) setFullSize(true);

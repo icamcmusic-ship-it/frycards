@@ -21,7 +21,6 @@ import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
-import { MotionConfig } from 'motion/react';
 import type { MotionMode } from './meta/matchPrefs';
 
 const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
@@ -703,92 +702,83 @@ export default function App() {
     };
   }, [attempt]);
 
-  if (poolError) {
-    return (
-      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
-          FRY CARDS
-        </div>
-        <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{poolError}</p>
-        <button
-          onClick={() => {
-            setPoolError(null);
-            setAttempt((n) => n + 1);
-          }}
-          className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
-        >
-          RETRY
-        </button>
-      </div>
-    );
-  }
-
-  if (!poolReady) {
-    // The bar used to be DETERMINATE, driven by a `progress` counter that
-    // was fed by the boot-time image preload. That preload was removed when
-    // media went load-on-demand, and nothing has called its setter since —
-    // so `progress.total` was permanently 0, the label was permanently
-    // "FETCHING CARD DATABASE…" and the bar was permanently frozen at 0%
-    // for the entire splash. A progress indicator that never moves reads as
-    // a hung app, which is worse than no indicator at all.
-    //
-    // There is only one request left to wait on (`fetchCardTemplates`) and
-    // it reports no byte progress, so there is no percentage to show. The
-    // bar is indeterminate now: it says "still working" honestly instead of
-    // claiming 0% forever.
-    return (
-      <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
-        <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
-          FRY CARDS
-        </div>
-        <div className="text-[var(--c-paper)] font-mono text-xs">FETCHING CARD DATABASE…</div>
-        <div
-          className="w-64 h-2 ink-border-sm bg-[var(--c-paper)]/10 overflow-hidden"
-          role="progressbar"
-          aria-label="Loading the card database"
-        >
-          <div className="h-full w-1/3 bg-[var(--c-yellow)] splash-indeterminate" />
-        </div>
-      </div>
-    );
-  }
+  // The bar used to be DETERMINATE, driven by a `progress` counter that
+  // was fed by the boot-time image preload. That preload was removed when
+  // media went load-on-demand, and nothing has called its setter since —
+  // so `progress.total` was permanently 0, the label was permanently
+  // "FETCHING CARD DATABASE…" and the bar was permanently frozen at 0%
+  // for the entire splash. A progress indicator that never moves reads as
+  // a hung app, which is worse than no indicator at all.
+  //
+  // There is only one request left to wait on (`fetchCardTemplates`) and
+  // it reports no byte progress, so there is no percentage to show. The
+  // bar is indeterminate now: it says "still working" honestly instead of
+  // claiming 0% forever.
 
   return (
     <ErrorBoundary>
-      {/* 1.8: the CSS half of reduced-motion was thorough; the JS half did not
-          exist. Framer-style motion animates at full tilt unless a MotionConfig
-          opts in, so the match board — 10 motion sites in GameV4, 13 in
-          CardFaceV4 — ignored the accessibility preference entirely while the
-          decorative card bling honoured it. `reducedMotion="user"` is the whole
-          fix; the in-app override on top of it lives in Settings. */}
-      <MotionConfig
-        reducedMotion={
-          motionMode === 'system' ? 'user' : motionMode === 'reduced' ? 'always' : 'never'
-        }
-      >
-        <MetaProvider>
-          {/* One boundary above the route switch: every screen below is a
+      {/* MetaProvider mounts immediately, in parallel with the catalog fetch:
+          it only fetches (session, store data) and touches no card, so its
+          requests no longer queue behind the catalog. AppInner, which does
+          render cards, stays behind the gate until the pool is ready — so
+          the in-place pool swap in applyCardPool is never observed by a
+          mounted screen. */}
+      <MetaProvider>
+        {poolError ? (
+          <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4 px-6 text-center">
+            <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow">
+              FRY CARDS
+            </div>
+            <p className="text-[var(--c-paper)] font-bold text-sm max-w-xs">{poolError}</p>
+            <button
+              onClick={() => {
+                setPoolError(null);
+                setAttempt((n) => n + 1);
+              }}
+              className="btn-pop heading-font text-sm px-5 py-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+            >
+              RETRY
+            </button>
+          </div>
+        ) : !poolReady ? (
+          <div className="w-full h-screen bg-[var(--c-ink)] flex flex-col items-center justify-center gap-4">
+            <div className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-2xl px-6 py-3 ink-border-md shadow-hard-yellow animate-pulse">
+              FRY CARDS
+            </div>
+            <div className="text-[var(--c-paper)] font-mono text-xs">FETCHING CARD DATABASE…</div>
+            <div
+              className="w-64 h-2 ink-border-sm bg-[var(--c-paper)]/10 overflow-hidden"
+              role="progressbar"
+              aria-label="Loading the card database"
+            >
+              <div className="h-full w-1/3 bg-[var(--c-yellow)] splash-indeterminate" />
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* One boundary above the route switch: every screen below is a
               lazy chunk, and a route transition is the only thing that can
               suspend here. */}
-          {poolOffline && (
-            <div
-              role="status"
-              className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5 text-[11px] font-bold max-w-[92vw]"
-            >
-              <span>Card database unavailable — newer cards may be missing.</span>
-              <button
-                onClick={() => setAttempt((n) => n + 1)}
-                className="heading-font underline shrink-0"
+            {poolOffline && (
+              <div
+                role="status"
+                className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5 text-[11px] font-bold max-w-[92vw]"
               >
-                RETRY
-              </button>
-            </div>
-          )}
-          <React.Suspense fallback={<ScreenFallback />}>
-            <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
-          </React.Suspense>
-        </MetaProvider>
-      </MotionConfig>
+                <span>Card database unavailable — newer cards may be missing.</span>
+                <button
+                  onClick={() => setAttempt((n) => n + 1)}
+                  className="heading-font underline shrink-0"
+                >
+                  RETRY
+                </button>
+              </div>
+            )}
+            <React.Suspense fallback={<ScreenFallback />}>
+              <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+            </React.Suspense>
+          </>
+        )}
+      </MetaProvider>
     </ErrorBoundary>
   );
 }

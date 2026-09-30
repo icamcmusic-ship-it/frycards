@@ -22,7 +22,7 @@
  * running off the card. Art ratios are untouched (regular 4:3 box,
  * Full-Art full-bleed).
  */
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { VisibleVideo } from './VisibleVideo';
 import { createPortal } from 'react-dom';
 import { Swords, Shield, Crown, MapPin, Wand2, Zap } from 'lucide-react';
@@ -1409,6 +1409,7 @@ function CardArtBase({
       className={artClass}
       draggable={false}
       loading="lazy"
+      decoding="async"
       onError={() => {
         if (!fullSize && resolved !== originalMediaUrl(def.image!)) setFullSize(true);
         else setBroken(true);
@@ -1685,6 +1686,37 @@ export function faceChips(def: CardDef): FaceChip[] {
   return chips;
 }
 
+/**
+ * The Fitted* boxes measure themselves (`scrollHeight` vs `clientHeight`) and
+ * shed a line or chip until the text fits. They used to do it in a
+ * dependency-less layout effect, i.e. a forced synchronous reflow after EVERY
+ * render of every card. They now re-measure only when their own inputs change,
+ * plus once when web fonts finish loading, because a font swap changes text
+ * metrics without changing any prop.
+ */
+let fontEpoch = 0;
+const fontListeners = new Set<() => void>();
+if (typeof document !== 'undefined' && document.fonts) {
+  const bump = () => {
+    fontEpoch++;
+    fontListeners.forEach((l) => l());
+  };
+  document.fonts.ready.then(bump).catch(() => {});
+  document.fonts.addEventListener?.('loadingdone', bump);
+}
+const subscribeFonts = (cb: () => void) => {
+  fontListeners.add(cb);
+  return () => {
+    fontListeners.delete(cb);
+  };
+};
+const useFontEpoch = () =>
+  useSyncExternalStore(
+    subscribeFonts,
+    () => fontEpoch,
+    () => 0,
+  );
+
 /** v4.26 overflow-proof chip row: renders keyword chips into a
  * height-bounded, clipped container and then MEASURES it — if the rendered
  * rows don't fit the tier's height budget, it drops one chip at a time (each
@@ -1711,13 +1743,14 @@ function FittedChips({
     setPrevResetKey(resetKey);
     setCap(cfg.keywordMax);
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fonts = useFontEpoch();
+  const chipsKey = chips.map((k) => k.kw).join('|');
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && el.scrollHeight > el.clientHeight + 1) {
       setCap((c) => (c > 1 ? c - 1 : c));
     }
-  });
+  }, [cap, resetKey, chipsKey, size, fonts]);
   if (total === 0 || cfg.keywordMax === 0) return null;
   const shown = Math.min(cap, total);
   const hidden = total - shown;
@@ -1800,7 +1833,7 @@ function FittedRules({
     setPrevResetKey(resetKey);
     setLines(maxLines);
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fonts = useFontEpoch();
   useLayoutEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
@@ -1812,7 +1845,7 @@ function FittedRules({
     ) {
       setLines((l) => (l > 1 ? l - 1 : l));
     }
-  });
+  }, [lines, resetKey, className, small, onArt, fonts]);
   return (
     <p
       ref={ref}
@@ -1858,7 +1891,7 @@ function FittedFlavor({
     setPrevResetKey(resetKey);
     setLines(MAX_LINES);
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fonts = useFontEpoch();
   useLayoutEffect(() => {
     const el = ref.current;
     if (
@@ -1868,7 +1901,7 @@ function FittedFlavor({
     ) {
       setLines((l) => (l > 0 ? l - 1 : l));
     }
-  });
+  }, [lines, resetKey, setClassName, onArt, fonts]);
   if (lines === 0) return null;
   return (
     <div
@@ -2203,7 +2236,7 @@ interface CardFaceProps {
   serial?: { number: number; cap: number };
 }
 
-export function CardFace({
+function CardFaceBase({
   def,
   size = 'standard',
   dimmed,
@@ -2946,3 +2979,34 @@ export function CardInspectorModal({
     </div>
   );
 }
+
+/**
+ * Props for CardFace compare by identity except `live` and `serial`, which
+ * callers build inline every render (`live={{ atk, hp, maxHp }}`): those compare
+ * by value, so a board or grid that re-renders does not repaint every card.
+ * `onClick` and `footer` stay identity-compared, so a caller passing a fresh
+ * closure still re-renders exactly as before; a stale handler is never kept.
+ */
+type MemoCardFaceProps = React.ComponentProps<typeof CardFaceBase>;
+function cardFacePropsEqual(a: MemoCardFaceProps, b: MemoCardFaceProps): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof MemoCardFaceProps>;
+  for (const k of keys) {
+    if (a[k] === b[k]) continue;
+    if (k === 'live' || k === 'serial') {
+      const x = a[k] as Record<string, unknown> | undefined;
+      const y = b[k] as Record<string, unknown> | undefined;
+      if (
+        x &&
+        y &&
+        Object.keys(x).length === Object.keys(y).length &&
+        Object.keys(x).every((f) => x[f] === y[f])
+      ) {
+        continue;
+      }
+    }
+    return false;
+  }
+  return true;
+}
+
+export const CardFace = React.memo(CardFaceBase, cardFacePropsEqual);
