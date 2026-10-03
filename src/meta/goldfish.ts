@@ -41,7 +41,7 @@ export interface TestHand {
    * under 2.5 win 52.6% and hands at 3.5+ win 45.9%, so this number has a
    * known meaning rather than being decoration. */
   averageCost: number;
-  /** Cards castable on turn 1 (one Wellspring, so total cost <= 1). */
+  /** Non-Location cards castable on turn 1 (one Wellspring, so total cost <= 1). */
   turnOnePlays: number;
   /** True when the hand holds no Unit at all — the shape `ai.ts`'s own
    * `handIsKeepable` treats as a mulligan. */
@@ -54,16 +54,21 @@ export function drawTestHand(
   seed: number,
   handSize: number = STARTING_HAND,
 ): TestHand {
-  const cards = seededShuffle(cardIds, seed)
+  // The same deal the engine makes for the P1 seat on this seed: leaders drop
+  // out, the deck (in the order given) is Fisher-Yates shuffled by
+  // mulberry32(seed), and cards are drawn off the END. Same seed and same deck
+  // order, so the hand shown here is the opening hand of a real match.
+  const deck = cardIds
     .map((id) => poolById[id])
-    .filter((c): c is CardDef => !!c)
-    .slice(0, handSize);
+    .filter((c): c is CardDef => !!c && c.type !== 'Leader');
+  const cards = seededShuffle(deck, seed).slice(-handSize).reverse();
   const total = cards.reduce((s, c) => s + totalCost(c.cost), 0);
   return {
     seed,
     cards,
     averageCost: cards.length ? +(total / cards.length).toFixed(2) : 0,
-    turnOnePlays: cards.filter((c) => totalCost(c.cost) <= 1).length,
+    // Locations are not plays: a Wellspring drop is the turn's land, not a spell.
+    turnOnePlays: cards.filter((c) => c.type !== 'Location' && totalCost(c.cost) <= 1).length,
     noUnits: !cards.some((c) => c.type === 'Unit'),
   };
 }

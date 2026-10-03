@@ -8,7 +8,7 @@ import { PopButton } from './ui';
 import { RARITY_CHIP } from './rarity';
 import { RARITIES } from '../types';
 import { cn } from '../lib/utils';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 // Deck Box picks are capped at Rare or below — enforced again server-side
 // by claim_deck_box (this filter is UI-only, not the source of truth).
@@ -51,13 +51,9 @@ export function LeaderPicker({
   // closes that window without waiting on the parent.
   const [pickStarted, setPickStarted] = useState(false);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [busy, onClose]);
+  useEscapeClose(() => {
+    if (!busy) onClose();
+  });
 
   // If the claim fails, the parent drops `busy` back to false but this
   // dialog stays open for a retry — release the local latch so the tiles

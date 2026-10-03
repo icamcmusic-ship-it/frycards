@@ -63,3 +63,41 @@ describe('matchHistory', () => {
     expect(loadMatchHistory().map((r) => r.seed)).toEqual([7]);
   });
 });
+
+describe('summarizeMatchHistory', () => {
+  const rec = (over: Partial<ReturnType<typeof record>> & Record<string, unknown>) => ({
+    ...record(1),
+    ...over,
+  });
+  test('counts wins, form, play/draw split and groups by deck', async () => {
+    const { summarizeMatchHistory } = await import('./matchHistory');
+    const s = summarizeMatchHistory([
+      rec({ won: true, firstPlayer: 'P1', humanDeck: 'FRY1:a:x' }),
+      rec({ won: false, firstPlayer: 'P2', humanDeck: 'FRY1:a:x' }),
+      rec({ won: true, firstPlayer: 'P2', humanDeck: 'FRY1:b:y', humanLabel: 'B' }),
+      rec({ won: true }),
+    ]);
+    expect(s.games).toBe(4);
+    expect(s.wins).toBe(3);
+    expect(s.winPct).toBe(75);
+    expect(s.form).toEqual(['W', 'L', 'W', 'W']);
+    expect(s.onPlay).toEqual({ games: 1, wins: 1 });
+    expect(s.onDraw).toEqual({ games: 2, wins: 1 });
+    expect(s.byDeck[0]).toMatchObject({ key: 'FRY1:a:x', games: 2, wins: 1 });
+    expect(s.byDeck).toHaveLength(3);
+  });
+  test('an empty history is all zeros', async () => {
+    const { summarizeMatchHistory } = await import('./matchHistory');
+    expect(summarizeMatchHistory([])).toMatchObject({ games: 0, wins: 0, winPct: 0, form: [] });
+  });
+  test('the report carries the seed and both deck codes', async () => {
+    const { formatMatchReport } = await import('./matchHistory');
+    const text = formatMatchReport(
+      rec({ seed: 42, humanDeck: 'FRY1:a:x', cpuDeck: 'FRY1:b:y', firstPlayer: 'P2' }),
+    );
+    expect(text).toContain('Seed: 42');
+    expect(text).toContain('FRY1:a:x');
+    expect(text).toContain('FRY1:b:y');
+    expect(text).toContain('First player: opponent');
+  });
+});

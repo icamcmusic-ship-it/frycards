@@ -61,3 +61,17 @@ test('tolerates surrounding whitespace', () => {
   const res = decodeDeckCode('  FRY1:lead_1:unit_a \n', db);
   expect(res).toEqual({ leaderId: 'lead_1', cardIds: ['unit_a'] });
 });
+
+test('deck link round-trips through the query string', async () => {
+  const { deckLink, deckCodeFromSearch } = await import('./deckcode');
+  const code = 'FRY1:mer_king:a*2,b';
+  const link = deckLink(code, { origin: 'https://x.github.io', pathname: '/frycards/' });
+  expect(link).toBe('https://x.github.io/frycards/?deck=FRY1%3Amer_king%3Aa*2%2Cb');
+  expect(deckCodeFromSearch(new URL(link).search)).toBe(code);
+});
+test('anything that is not a FRY1 code is ignored', async () => {
+  const { deckCodeFromSearch } = await import('./deckcode');
+  expect(deckCodeFromSearch('')).toBeNull();
+  expect(deckCodeFromSearch('?deck=nope')).toBeNull();
+  expect(deckCodeFromSearch('?other=FRY1:x:y')).toBeNull();
+});

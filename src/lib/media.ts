@@ -129,8 +129,9 @@ function ladderWidth(needed: number): number {
   return WIDTH_LADDER.find((w) => w >= needed) ?? WIDTH_LADDER[WIDTH_LADDER.length - 1];
 }
 
-/** Marks a public object on Supabase storage. */
-const SUPABASE_OBJECT_PATH = '/storage/v1/object/public/';
+/** Any object or render path under storage bills the same bytes: public,
+ * signed, authenticated and transform URLs alike. */
+const METERED_PATH_RE = /\/storage\/v1\/(object|render)\//;
 
 /**
  * True when `url` is a full-size original on Supabase storage — i.e. every
@@ -157,7 +158,15 @@ export function isMeteredStorageUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const base = artBase();
   if (base && url.startsWith(`${base}/`)) return false;
-  return url.includes(SUPABASE_OBJECT_PATH);
+  // Public, signed and render/transform URLs all bill the same bytes, and a
+  // percent-encoded path must not slip past a literal substring match.
+  let path = url;
+  try {
+    path = decodeURI(url);
+  } catch {
+    // Malformed escapes: match on the raw string.
+  }
+  return METERED_PATH_RE.test(path);
 }
 
 /** The derived key for `key` at `width`, as both the app and the generator

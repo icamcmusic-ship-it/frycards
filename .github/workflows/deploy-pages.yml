@@ -57,7 +57,12 @@ jobs:
           #
           # Not a secret — it is the bucket's public base URL, the same one
           # already embedded in every catalog entry in generated-cards.ts.
-          VITE_ART_BASE_URL: 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images'
+          #
+          # Moving the art to another host (Cloudflare R2, a CDN) is one
+          # repository variable: set Actions variable ART_BASE_URL to the new
+          # public base and redeploy. Unset, it stays on the Supabase bucket.
+          # See "Moving to Cloudflare R2" in docs/ART_MIGRATION.md.
+          VITE_ART_BASE_URL: ${{ vars.ART_BASE_URL || 'https://dnngihsbqxccqvvedvjc.supabase.co/storage/v1/object/public/Card%20Images' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -23,14 +23,21 @@ import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES } from './rarity';
 import { SafeImage } from './SafeImage';
-import { fmtVouchers } from './economy';
+import { fmtCredits, fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
-import { packOdds, expectedRarities, sortedWeights, packFoilChance } from './packodds';
+import {
+  packOdds,
+  expectedRarities,
+  sortedWeights,
+  packFoilChance,
+  SERIALIZED_PULL_CHANCE,
+  expectedQuicksellValue,
+} from './packodds';
 import { LeaderPicker } from './LeaderPicker';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 function bountyDefFor(card: BountyCard): CardDef {
   return (
@@ -728,13 +735,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
   const expected = expectedRarities(pack);
   const foilOdds = packFoilChance(pack);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useEscapeClose(onClose);
 
   // v30 — a dialog that announces itself as modal has to hold the keyboard
   // too; `aria-modal` alone tells sequential focus navigation nothing, and Tab
@@ -770,8 +771,12 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
 
         <div className="p-4">
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-1">
-            Every pack is rolled slot by slot. These are the exact server-side odds for each slot —
-            no hidden weighting.
+            Every pack is rolled slot by slot. These are the configured odds for each slot; the
+            notes below cover the extras the server adds on top.
+          </div>
+          <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+            Every pack also has a {(SERIALIZED_PULL_CHANCE * 100).toFixed(0)}% chance of one extra
+            Serialized card, on top of the {pack.card_count} above.
           </div>
 
           <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
@@ -840,8 +845,30 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                   Always a {row.cardType} card.
                 </div>
               )}
+              {row.minRarity && (
+                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+                  Guaranteed {row.minRarity} or better — the percentages above are the configured
+                  weights before that floor.
+                </div>
+              )}
             </div>
           ))}
+
+          {(() => {
+            const price = pack.price_credits ?? (pack.price_vouchers ?? 0) * 100;
+            const ev = expectedQuicksellValue(pack);
+            if (price <= 0 || ev <= 0) return null;
+            return (
+              <div className="ink-border-sm p-2.5 mb-3 bg-[var(--c-paper)]">
+                <div className="heading-font text-[11px] mb-1">QUICKSELL VALUE</div>
+                <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                  Sold straight back, an average pack returns about {fmtCredits(Math.round(ev))} —{' '}
+                  {Math.round((ev / price) * 100)}% of its {fmtCredits(price)} price. Cards you
+                  keep, grade or trade can be worth more or less.
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="ink-border-sm p-2.5 bg-[var(--c-yellow)]/30">
             <div className="heading-font text-[11px] mb-1.5">EXPECTED CARDS PER PACK</div>

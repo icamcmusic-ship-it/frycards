@@ -111,7 +111,10 @@ async function phaseArchive(): Promise<void> {
     }
     try {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, await getObject(key));
+      const body = await getObject(key);
+      // Never destroy an archived master: keep the previous copy alongside.
+      if (fs.existsSync(dest)) fs.renameSync(dest, `${dest}.prev`);
+      fs.writeFileSync(dest, body);
     } catch (err) {
       console.error(`  FAILED ${key}: ${(err as Error).message}`);
       continue;
@@ -305,10 +308,13 @@ async function phaseSync(): Promise<void> {
 
   const fresh = objects.filter(({ key, size }) => {
     if (!known.has(key)) return true;
-    // Known, but replaced in place: the archive copy no longer matches, so its
-    // derivatives are stale too.
+    // Known, but possibly replaced in place. Only a bucket object LARGER than
+    // the archived one counts: after `shrink-originals` every bucket object is
+    // a small webp while the archive holds the lossless master, so "sizes
+    // differ" is the normal state and must not trigger a re-download that
+    // would overwrite the master with its own lossy copy.
     const local = archivePath(key);
-    return !fs.existsSync(local) || (size > 0 && fs.statSync(local).size !== size);
+    return !fs.existsSync(local) || (size > 0 && size > fs.statSync(local).size);
   });
 
   if (fresh.length === 0) {
@@ -328,7 +334,10 @@ async function phaseSync(): Promise<void> {
     const dest = archivePath(key);
     try {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, await getObject(key));
+      const body = await getObject(key);
+      // Never destroy an archived master: keep the previous copy alongside.
+      if (fs.existsSync(dest)) fs.renameSync(dest, `${dest}.prev`);
+      fs.writeFileSync(dest, body);
     } catch (err) {
       console.error(`  FAILED ${key}: ${(err as Error).message}`);
       continue;

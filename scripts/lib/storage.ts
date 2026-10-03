@@ -142,8 +142,10 @@ export async function deleteObjects(keys: string[]): Promise<void> {
   }
 }
 
-/** The public URL for `key`, in the form the catalog stores — `encodeURI`,
- * not `encodeURIComponent`, so the path separators survive. */
+/** The public URL for `key`, in the form the catalog stores — `encodeURI`, so
+ * the path separators (and every URL already stored) survive, plus `#` and `?`,
+ * which `encodeURI` leaves alone and which would otherwise cut the path short. */
 export function publicUrl(key: string): string {
-  return `${SUPABASE_URL}/storage/v1/object/public/${encodeURI(BUCKET)}/${encodeURI(key)}`;
+  const enc = (s: string) => encodeURI(s).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  return `${SUPABASE_URL}/storage/v1/object/public/${enc(BUCKET)}/${enc(key)}`;
 }

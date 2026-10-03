@@ -122,3 +122,36 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(active = tr
   }, [active]);
   return ref;
 }
+
+/**
+ * Escape closes only the TOPMOST dialog.
+ *
+ * Every modal used to bind its own window `keydown` for Escape, so with two
+ * open (a profile over the social screen, the card inspector over a pack
+ * reveal) one press closed all of them. Dialogs register here instead, in the
+ * order they open; one shared listener calls just the last.
+ */
+const escapeStack: { close: () => void }[] = [];
+
+function onEscapeKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  escapeStack[escapeStack.length - 1]?.close();
+}
+
+export function useEscapeClose(onClose: () => void, active = true) {
+  const latest = useRef(onClose);
+  useEffect(() => {
+    latest.current = onClose;
+  });
+  useEffect(() => {
+    if (!active) return;
+    const entry = { close: () => latest.current() };
+    if (escapeStack.length === 0) window.addEventListener('keydown', onEscapeKey);
+    escapeStack.push(entry);
+    return () => {
+      const i = escapeStack.indexOf(entry);
+      if (i >= 0) escapeStack.splice(i, 1);
+      if (escapeStack.length === 0) window.removeEventListener('keydown', onEscapeKey);
+    };
+  }, [active]);
+}

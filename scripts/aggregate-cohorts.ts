@@ -69,8 +69,13 @@ for (const lid of leaderIds) {
   const meds = cohorts.map(
     (c) => c.leaderPairSuiteSummary.find((r) => r.id === lid)?.deckMedian ?? NaN,
   );
-  pinnedMean[lid] = wps.reduce((a, b) => a + b, 0) / wps.length;
-  const medMean = meds.reduce((a, b) => a + b, 0) / meds.length;
+  // Cohorts that never rolled this Leader (NaN) are left out of the mean.
+  const meanOf = (xs: number[]) => {
+    const f = xs.filter(Number.isFinite);
+    return f.length ? f.reduce((a, b) => a + b, 0) / f.length : NaN;
+  };
+  pinnedMean[lid] = meanOf(wps);
+  const medMean = meanOf(meds);
   console.log(
     `  ${nameOf[lid].padEnd(28)} ${wps.map((w) => w.toFixed(1).padStart(5)).join(' ')}  mean ${pinnedMean[lid].toFixed(1).padStart(5)}  med ${medMean.toFixed(1).padStart(5)}`,
   );
@@ -89,7 +94,9 @@ for (const lid of leaderIds) {
   });
   const vals = gaps.filter((g): g is number => g !== null);
   const mean = vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length);
-  const oneSigned = vals.length >= 2 && (vals.every((g) => g > 0) || vals.every((g) => g < 0));
+  // With 2 cohorts "same sign" happens half the time under no effect at all
+  // (2 * 0.5^2), so the flag needs at least 3 (25% by chance).
+  const oneSigned = vals.length >= 3 && (vals.every((g) => g > 0) || vals.every((g) => g < 0));
   console.log(
     `  ${nameOf[lid].padEnd(28)} ${gaps.map((g) => fmt(g)).join(' ')}  mean ${fmt(mean)}` +
       (oneSigned ? '   << ONE-SIGNED across every sampling cohort' : ''),
@@ -104,10 +111,11 @@ for (const lid of leaderIds) {
   const rows = cohorts.map((c) => c.leaderPairSuiteSummary.find((r) => r.id === lid));
   const deckCount = rows[0]?.byDeck.length ?? 0;
   const deckMeans = Array.from({ length: deckCount }, (_, k) => {
-    const vs = rows.map((r) => r?.byDeck[k] ?? NaN);
-    return vs.reduce((a, b) => a + b, 0) / vs.length;
+    // A cohort that never rolled this Leader is skipped, not averaged in as NaN.
+    const vs = rows.map((r) => r?.byDeck[k]).filter((v): v is number => Number.isFinite(v));
+    return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : NaN;
   });
-  const sorted = [...deckMeans].sort((a, b) => a - b);
+  const sorted = deckMeans.filter(Number.isFinite).sort((a, b) => a - b);
   const median =
     sorted.length % 2 === 1
       ? sorted[(sorted.length - 1) / 2]

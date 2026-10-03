@@ -321,6 +321,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                   {list.map((a) => {
                     const p = mine.get(a.id);
                     const progress = p?.progress ?? 0;
+                    const shown = Math.min(progress, a.target);
                     const done = progress >= a.target;
                     const claimed = p?.claimed ?? false;
                     return (
@@ -357,14 +358,14 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                               onClick={() => handleClaimAchievement(a)}
                               className="shrink-0"
                             >
-                              {busyId === a.id ? '…' : done ? 'CLAIM ▸' : `${progress}/${a.target}`}
+                              {busyId === a.id ? '…' : done ? 'CLAIM ▸' : `${shown}/${a.target}`}
                             </PopButton>
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-2">
                           <ProgressBar value={progress} max={a.target} className="flex-1" />
                           <span className="text-[9px] font-mono font-bold">
-                            {progress}/{a.target}
+                            {shown}/{a.target}
                           </span>
                         </div>
                         <div className="mt-2">

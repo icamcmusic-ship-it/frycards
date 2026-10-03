@@ -11,7 +11,7 @@ import { getCardBackImage } from './cardback';
 import { SafeImage } from './SafeImage';
 import { useMeta } from './MetaContext';
 import { fmtCredits, quicksellPrice } from './economy';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 /**
  * Full-screen pack-opening experience:
@@ -210,13 +210,7 @@ export function PackOpening({
   // is just a replayable presentation layer, so it's safe to let Escape
   // dismiss it outright like every other overlay in the app, and to move
   // focus in on open / restore it on close.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDone();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onDone]);
+  useEscapeClose(onDone);
 
   return (
     <div
@@ -850,9 +844,8 @@ function SummaryStage({
     try {
       for (const g of sellGroups.values()) {
         const { data, error } = await quicksellCards(g.cardId, g.qty, g.foil);
-        if (!mountedRef.current) return;
         if (error) {
-          setSellError(error);
+          if (mountedRef.current) setSellError(error);
           break;
         }
         if (data) {
@@ -865,6 +858,10 @@ function SummaryStage({
           if (data.sold < g.qty) shortfall = true;
           g.indices.slice(0, data.sold).forEach((i) => newlySold.add(i));
         }
+        // Count what this call sold first, then stop: if the modal closed
+        // mid-loop, the remaining groups are left unsold but the refresh
+        // below still has to run for the ones that were.
+        if (!mountedRef.current) break;
       }
     } catch {
       if (mountedRef.current)

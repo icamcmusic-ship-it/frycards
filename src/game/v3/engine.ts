@@ -243,6 +243,8 @@ export interface GameState {
    * server-authoritative reducer whose clients address units by iid.
    */
   iidCounter: number;
+  /** Stack-item id counter, per game for the same reason as `iidCounter`. */
+  stackIdCounter: number;
   /**
    * The seed `createGame` actually used, so a bug report or a replay can name
    * the exact game. Undefined only when the caller supplied its own `rng`
@@ -369,6 +371,24 @@ function onslaughtBonus(p: PlayerState): number {
   return p.leader.invoked && !p.leader.shattered && hasKw(p.leader.def, 'Onslaught') ? 1 : 0;
 }
 
+/**
+ * Vitality one UNGUARDED attacker takes off its opponent when the clash
+ * resolves: attack Might (with Onslaught), less the defender's Bulwark per
+ * packet, times two for Doublestrike, which hits in both sub-steps. What the
+ * clash buttons print, so the label and `resolveClash` cannot disagree. A
+ * guarded Overrun attacker's spill is not included.
+ */
+export function faceHitDamage(state: GameState, attacker: UnitInst): number {
+  const defender = state.players[opponentOf(attacker.owner)];
+  const packet = Math.max(
+    0,
+    effMight(state, attacker) +
+      onslaughtBonus(state.players[attacker.owner]) -
+      bulwarkReduction(defender),
+  );
+  return unitHasKw(attacker, 'Doublestrike') ? packet * 2 : packet;
+}
+
 /** v7.3: how many real Sanctums (Location CARDS) a player controls. Basic
  * Wellsprings sit in the same `locations` array with no `def`, so a plain
  * `locations.length` counts them too — which would leave Ritual and Archivist
@@ -470,6 +490,16 @@ function clearEssence(state: GameState): void {
 // ---------------------------------------------------------------------------
 export const STARTING_HAND = 7;
 
+/**
+ * Which seat goes first for a match seed, from its own stream. Drawing it from
+ * the match RNG itself (as the UI did) consumed a value before `createGame`
+ * built its shuffles, so replaying with `createGame({ seed })` was one draw out
+ * of step and could seat the players the other way round.
+ */
+export function firstPlayerForSeed(seed: number): PlayerId {
+  return mulberry32((seed ^ 0x5bd1e995) >>> 0)() < 0.5 ? 'P1' : 'P2';
+}
+
 export interface GameOptions {
   rng?: Rng;
   /** Default true — tests can disable to keep deck order (top of deck = last
@@ -503,7 +533,7 @@ export function createGame(
   poolById: Record<string, CardDef>,
   opts: GameOptions = {},
 ): GameState {
-  const seed = opts.seed ?? Date.now() & 0xffffffff;
+  const seed = opts.seed ?? Date.now() & 0x7fffffff;
   const rng = opts.rng ?? mulberry32(seed);
   // Instances are minted while the players are being built, before the state
   // object exists; the running total is copied onto the state below.
@@ -556,6 +586,7 @@ export function createGame(
     dawnLog: [],
     rng,
     iidCounter: ids.iidCounter,
+    stackIdCounter: 0,
     // An explicit `seed` is recorded even alongside a caller-supplied `rng`:
     // the UI builds its own mulberry32 from a match seed and still wants the
     // seed on the state (bug reports, replays).
@@ -673,8 +704,6 @@ function runTriggers(
 // ---------------------------------------------------------------------------
 // Stack & priority (APNAP)
 // ---------------------------------------------------------------------------
-let stackIdCounter = 0;
-
 /** Turn order for a priority round: active player, then non-active player. */
 export function apnapOrder(state: GameState): [PlayerId, PlayerId] {
   return [state.active, opponentOf(state.active)];
@@ -683,7 +712,7 @@ export function apnapOrder(state: GameState): [PlayerId, PlayerId] {
 /** Put an item on the stack. Its controller keeps priority, and any passes
  * already recorded are void — the stack changed, so everyone answers again. */
 function pushStack(state: GameState, item: Omit<StackItem, 'id'>): StackItem {
-  const full: StackItem = { ...item, id: `s${++stackIdCounter}` };
+  const full: StackItem = { ...item, id: `s${++state.stackIdCounter}` };
   state.stack.push(full);
   state.priority = { holder: full.controller, passed: [] };
   return full;
@@ -816,6 +845,12 @@ function resolveTop(state: GameState): void {
 
 /** An item with an explicit target fizzles if that target is no longer legal —
  * the response window is what makes this reachable at all. */
+/** An invoked non-Event card whose targeted rider had no legal target when it
+ * was cast: the body still resolves, the rider does not. */
+function riderUntargeted(item: StackItem, eff?: Effect): boolean {
+  return !!eff && SINGLE_TARGETS.includes(eff.target) && item.targetIid === undefined;
+}
+
 function fizzles(state: GameState, item: StackItem, eff?: Effect): boolean {
   if (!eff || item.targetIid === undefined) return false;
   if (!SINGLE_TARGETS.includes(eff.target)) return false;
@@ -1644,6 +1679,9 @@ export function concedeGame(state: GameState, pid: PlayerId): boolean {
  * (by throwing) can resume it once the player has picked.
  */
 export function finishDuskShed(state: GameState, picked?: string[]): void {
+  // Only a turn actually paused in Dusk can be finished: a stray or repeated
+  // call would otherwise flip the turn again with no Dusk for the next player.
+  if (state.phase !== 'Dusk') return;
   const p = state.players[state.active];
   if (picked) applyShedOrder(state, picked);
   while (p.hand.length > MAX_HAND) {
@@ -1925,6 +1963,12 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
   if (!timingLegal(state, pid, def)) return false;
   if (!canPayCost(p.essence, effectiveCost(state, pid, def))) return false;
   if (def.type === 'Item' && p.field.length === 0 && itemSurvives(def.subtype)) return false;
+  // A targeted Event with no legal target is refused by invokeCard, so say so
+  // here too. Other card types keep their body and only lose the rider.
+  if (def.type === 'Event' && def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
+    const t = autoTarget(state, pid, def.onInvoke);
+    if (t === undefined || !canTarget(state, pid, def.onInvoke, t)) return false;
+  }
   return true;
 }
 
@@ -1967,7 +2011,14 @@ export function invokeCard(
   let targetIid = opts.targetIid;
   if (def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
     targetIid = opts.targetIid ?? autoTarget(state, pid, def.onInvoke);
-    if (targetIid === undefined || !canTarget(state, pid, def.onInvoke, targetIid)) return false;
+    const legal = targetIid !== undefined && canTarget(state, pid, def.onInvoke, targetIid);
+    // An Event is nothing but its effect, so with no legal target casting it
+    // would waste the card. Every other card keeps its body (or bond, or
+    // Location) and only loses the rider, which fizzles at resolution.
+    if (!legal) {
+      if (def.type === 'Event' || opts.targetIid !== undefined) return false;
+      targetIid = undefined;
+    }
   }
 
   let toolTargetIid: string | undefined;
@@ -2050,7 +2101,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
       p.field.push(u);
       // The body still enters when the rider's target is gone — only the
       // onInvoke effect fizzles.
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       runTriggers(state, pid, 'enters', u);
@@ -2219,7 +2274,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         p.vitality += gained;
         state.telemetry?.onKeywordProc?.('Blessed', gained);
       }
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       break;
@@ -2231,7 +2290,11 @@ function resolveInvokedCard(state: GameState, item: StackItem): void {
         produces: def.produces ?? wellspringChoices(state, pid)[0],
         exhausted: false,
       });
-      if (def.onInvoke && !fizzles(state, item, def.onInvoke)) {
+      if (
+        def.onInvoke &&
+        !riderUntargeted(item, def.onInvoke) &&
+        !fizzles(state, item, def.onInvoke)
+      ) {
         applyEffect(state, pid, def.onInvoke, item.targetIid);
       }
       break;

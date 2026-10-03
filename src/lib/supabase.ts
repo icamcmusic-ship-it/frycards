@@ -247,11 +247,21 @@ export interface OpenPackResult {
  */
 export async function fetchCardTemplates(): Promise<CardTemplate[] | null> {
   try {
-    const { data, error } = await supabase.from('cards').select('template').order('id');
-    if (error || !data) return null;
-    const templates = (data as { template: CardTemplate | null }[])
-      .map((r) => r.template)
-      .filter((t): t is CardTemplate => !!t && !!t.id);
+    // PostgREST caps a response at 1000 rows; a bigger catalog would arrive
+    // silently truncated, so read it in pages until one comes back short.
+    const PAGE = 1000;
+    const rows: { template: CardTemplate | null }[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('cards')
+        .select('template')
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error || !data) return null;
+      rows.push(...(data as { template: CardTemplate | null }[]));
+      if (data.length < PAGE) break;
+    }
+    const templates = rows.map((r) => r.template).filter((t): t is CardTemplate => !!t && !!t.id);
     return templates.length > 0 ? templates : null;
   } catch {
     return null;
@@ -427,8 +437,9 @@ export async function setShowcaseCards(cardIds: string[]): Promise<string | null
  * paid twice, but a loop rolling fresh UUIDs with `won: true` was free money,
  * and the publishable key ships in the bundle. The server now issues the id,
  * timestamps it, and refuses to redeem one that is too young, too old,
- * already spent, or not the caller's. Reward throughput is bounded by wall
- * clock per account rather than by loop speed. The real close is
+ * already spent, or not the caller's. An account holds one open ticket at a
+ * time, so payouts are at least the minimum match length apart. The win/loss
+ * flag is still client-asserted. The real close is
  * server-authoritative matches (the PvP spike); this is the half of it that
  * does not need an engine on the server.
  */
@@ -444,12 +455,19 @@ export async function recordMatchResult(
    * ticket is claimed atomically, so a retry after a lost reply returns null
    * data rather than paying twice. Omitting it is now an error server-side. */
   matchId?: string,
-): Promise<{ data: MatchResult | null; error: string | null }> {
+): Promise<{ data: MatchResult | null; error: string | null; status: MatchResultStatus | null }> {
   const { data, error } = await supabase.rpc('record_match_result', {
     p_won: won,
     p_match_id: matchId ?? null,
   });
-  return { data: (data as MatchResult) || null, error: rpcError(error) };
+  // The server answers `{ status }` instead of a reward when the ticket is not
+  // payable; older deployments answer a bare null.
+  const status = (data as { status?: MatchResultStatus } | null)?.status ?? null;
+  return {
+    data: status ? null : (data as MatchResult) || null,
+    error: rpcError(error),
+    status,
+  };
 }
 
 /**
@@ -493,6 +511,10 @@ export interface QuicksellResult {
 // ---------------------------------------------------------------------------
 // Levels, battle pass, achievements, missions, inventory
 // ---------------------------------------------------------------------------
+/** Why the server declined to pay a match: the ticket was redeemed already, is
+ * too young or too old, does not exist, or today's payout limit was reached. */
+export type MatchResultStatus = 'duplicate' | 'too_early' | 'expired' | 'invalid' | 'capped';
+
 export interface MatchResult {
   reward: number;
   credits: number;
@@ -1020,6 +1042,10 @@ export interface MarketListing {
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
 export const MARKET_FEE = 0.05;
 
+/** Most listings one browse load returns. At the limit the list is cut off, so
+ * the screen says so rather than letting search silently miss the rest. */
+export const MARKET_LIST_LIMIT = 200;
+
 export async function fetchMarketListings(): Promise<MarketListing[]> {
   // settle anything past its end time first so browsers see fresh state
   const { error: settleError } = await supabase.rpc('settle_expired_listings');
@@ -1032,7 +1058,7 @@ export async function fetchMarketListings(): Promise<MarketListing[]> {
     .select('*')
     .eq('status', 'active')
     .order('ends_at')
-    .limit(200);
+    .limit(MARKET_LIST_LIMIT);
   if (error) {
     console.error('fetchMarketListings failed:', error.message);
     // Throw instead of returning [] — callers (MarketplaceScreen.reload)

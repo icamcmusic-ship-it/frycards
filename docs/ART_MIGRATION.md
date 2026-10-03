@@ -261,6 +261,31 @@ Note this is stricter than the server: `submit_card` accepts any https URL.
 The guard is a client-side and API-wrapper rule, so it is a cost control, not a
 security boundary.
 
+## Moving to Cloudflare R2
+
+R2 has no egress fees and a 10 GB free tier, so it removes both the cached-egress
+and the storage lines from Supabase. The pipeline is already host-neutral; nothing
+in the app changes but one variable.
+
+1. In Cloudflare, create an R2 bucket and enable a public URL for it (an
+   `r2.dev` address, or a custom domain). Add a CORS rule allowing `GET` from
+   your site's origin. Create an R2 API token with read/write on that bucket.
+2. In GitHub, Settings > Secrets and variables > Actions. Secrets:
+   `ART_S3_ACCESS_KEY_ID` and `ART_S3_SECRET_ACCESS_KEY` become the R2 token's
+   keys. Variables: `ART_S3_ENDPOINT` = `https://<account>.r2.cloudflarestorage.com`,
+   `ART_S3_BUCKET` = the bucket name, `ART_S3_REGION` = `auto`.
+3. Upload the ladder and masters to R2 (`media:migrate upload`, from an archive
+   made while the pipeline still pointed at Supabase), then run `rewrite` and
+   apply the catalog sync as in phase 5.
+4. Set the Actions variable `ART_BASE_URL` to the bucket's public base and
+   redeploy. Confirm art loads from R2 in production.
+5. Only then `purge` the Supabase copies (phase 6).
+
+Set long cache headers on the derivatives when uploading (`public, max-age=
+31536000, immutable`): their names carry the source key and width, and a
+replaced original is re-derived under the same name, so bump the catalog URL's
+`?v=` to force a refresh.
+
 ## Rolling back
 
 Unset `VITE_ART_BASE_URL` and redeploy: the app goes back to requesting stored

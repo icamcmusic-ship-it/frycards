@@ -29,7 +29,8 @@
  * The slab artwork lives in `GradedSlab.tsx`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { useMotionMode } from './useMotionMode';
 import { Award, Coins, Hammer, Package, Percent, Search, Sparkles, Ticket, X } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar } from './ui';
@@ -99,15 +100,63 @@ function Step({ n, title, hint }: { n: number; title: string; hint?: React.React
   );
 }
 
-export function GradingScreen({
-  onBack,
-  onShowroom,
-}: {
+/** One slab at the graders. Owns its own 1s clock so only this tile re-renders
+ * as the countdown ticks, not the whole screen. */
+const PendingSlab = React.memo(function PendingSlab({ g }: { g: GradedCard }) {
+  const [now, setNow] = useState(() => Date.now());
+  const ready = new Date(g.ready_at).getTime() <= now;
+  useEffect(() => {
+    if (ready) return; // nothing left to count down
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [ready]);
+  const remain = countdown(g.ready_at, now);
+  const pct = turnaroundProgress(g, now);
+  return (
+    <div className="flex flex-col gap-1 w-fit">
+      <GradedSlab g={g} size="standard" progress={pct} />
+      <ProgressBar
+        value={Math.round(pct * 100)}
+        max={100}
+        className="h-1.5"
+        ariaLabel={`Grading progress for ${POOL_BY_ID[g.card_id]?.name ?? 'card'}`}
+      />
+      <span
+        className={cn(
+          'heading-font text-[10px] text-center px-1 py-0.5 ink-border-sm',
+          remain === 'READY' ? 'bg-[var(--c-yellow)]' : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
+        )}
+      >
+        {remain === 'READY' ? 'READY TO REVEAL' : remain}
+      </span>
+    </div>
+  );
+});
+
+type GradingScreenProps = {
   onBack: () => void;
   /** Stand this slab up in the 3D Showroom — the only place the case can be
    * looked at from any angle other than dead-on. */
   onShowroom?: (subject: ShowroomSubject) => void;
-}) {
+};
+
+/**
+ * The motion library's only consumer, so its reduced-motion config lives here
+ * rather than at the App root: the library then loads with this chunk instead
+ * of on every first paint. `useMotionMode` resolves the same setting App does.
+ */
+export function GradingScreen(props: GradingScreenProps) {
+  const { mode } = useMotionMode();
+  return (
+    <MotionConfig
+      reducedMotion={mode === 'system' ? 'user' : mode === 'reduced' ? 'always' : 'never'}
+    >
+      <GradingScreenInner {...props} />
+    </MotionConfig>
+  );
+}
+
+function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const {
     profile,
     collection,
@@ -143,8 +192,11 @@ export function GradingScreen({
   const userId = profile?.id;
   const reload = React.useCallback(async () => {
     if (!userId) return;
-    const rows = await fetchGradedCards(userId);
-    setGraded(rows);
+    try {
+      setGraded(await fetchGradedCards(userId));
+    } catch {
+      // Keep the vault as it was; a failed refresh is not an empty vault.
+    }
     setGradedLoading(false);
   }, [userId]);
 
@@ -152,11 +204,14 @@ export function GradingScreen({
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    fetchGradedCards(userId).then((rows) => {
-      if (cancelled) return;
-      setGraded(rows);
-      setGradedLoading(false);
-    });
+    fetchGradedCards(userId)
+      .then((rows) => {
+        if (!cancelled) setGraded(rows);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setGradedLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -165,13 +220,29 @@ export function GradingScreen({
   // 1s tick drives the limbo countdowns — only while something is pending.
   const pending = useMemo(() => graded.filter((g) => g.grade == null), [graded]);
   const vault = useMemo(() => graded.filter((g) => g.grade != null), [graded]);
-  const [now, setNow] = useState(() => Date.now());
+  // The screen only needs to re-render when a slab BECOMES ready, so one
+  // timeout to the next ready time replaces the old 1s interval that
+  // re-rendered this whole ~1,000-line screen every second. The per-second
+  // countdown text lives in <PendingSlab>, which ticks on its own.
+  const [clock, setClock] = useState(() => Date.now());
+  // Catch the clock up whenever the list changes (a reload can bring slabs that
+  // are already ready)...
   useEffect(() => {
-    if (pending.length === 0) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [pending.length]);
-  const dueCount = pending.filter((g) => new Date(g.ready_at).getTime() <= now).length;
+    const t = setTimeout(() => setClock(Date.now()), 0);
+    return () => clearTimeout(t);
+  }, [pending]);
+  // ...and wake once at the next ready time.
+  useEffect(() => {
+    const now = Date.now();
+    const upcoming = pending
+      .map((g) => new Date(g.ready_at).getTime())
+      .filter((t) => t > now)
+      .sort((a, b) => a - b)[0];
+    if (upcoming === undefined) return;
+    const t = setTimeout(() => setClock(Date.now()), upcoming - now + 50);
+    return () => clearTimeout(t);
+  }, [pending, clock]);
+  const dueCount = pending.filter((g) => new Date(g.ready_at).getTime() <= clock).length;
 
   // Spare copies available to grade — same reservation model as quicksell
   // (deck locks sum across decks; Serialized reserves come out of normals).
@@ -665,31 +736,9 @@ export function GradingScreen({
               </p>
             ) : (
               <div className="flex flex-wrap gap-3">
-                {pending.map((g) => {
-                  const remain = countdown(g.ready_at, now);
-                  const pct = turnaroundProgress(g, now);
-                  return (
-                    <div key={g.id} className="flex flex-col gap-1 w-fit">
-                      <GradedSlab g={g} size="standard" progress={pct} />
-                      <ProgressBar
-                        value={Math.round(pct * 100)}
-                        max={100}
-                        className="h-1.5"
-                        ariaLabel={`Grading progress for ${POOL_BY_ID[g.card_id]?.name ?? 'card'}`}
-                      />
-                      <span
-                        className={cn(
-                          'heading-font text-[10px] text-center px-1 py-0.5 ink-border-sm',
-                          remain === 'READY'
-                            ? 'bg-[var(--c-yellow)]'
-                            : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
-                        )}
-                      >
-                        {remain === 'READY' ? 'READY TO REVEAL' : remain}
-                      </span>
-                    </div>
-                  );
-                })}
+                {pending.map((g) => (
+                  <PendingSlab key={g.id} g={g} />
+                ))}
               </div>
             )}
           </>

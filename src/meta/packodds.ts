@@ -14,6 +14,7 @@
  */
 import { PackSlot, PackType } from '../lib/supabase';
 import { rarityTier } from './rarity';
+import { FOIL_QUICKSELL_MULTIPLIER, quicksellPrice } from './economy';
 
 export const LEGACY_SLOT_WEIGHTS: Record<string, Record<string, number>> = {
   foundation: { Common: 1 },
@@ -50,7 +51,16 @@ export interface SlotOdds {
   foilChance: number; // 0..1, 1 = guaranteed foil
   /** 'Leader' for the Leader Pack's Leader-only slot. */
   cardType: string | null;
+  /** The slot's `guaranteed_min_rarity` floor, if any. The server passes it to
+   * `roll_weighted_rarity`; `weights` are the configured ones, shown as-is,
+   * so the floor is reported next to them rather than folded in. */
+  minRarity: string | null;
 }
+
+/** Chance per pack of the server's extra Serialized pull
+ * (`random() < 0.01` in `grant_pack_contents`): one card ON TOP of the
+ * pack's `card_count`, weighted by remaining print supply. */
+export const SERIALIZED_PULL_CHANCE = 0.01;
 
 /** Sorted low-to-high on the shared ladder in rarity.ts. This file used to
  * keep its own copy of the order; PackOpening.tsx kept a third, and that one
@@ -68,7 +78,6 @@ function prettySlotName(raw: string): string {
 
 export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
   const rawType = slot.type ?? slot.slot_type ?? 'foundation';
-  const isLegacy = slot.type != null;
   // Mirrors grant_pack_contents' own foil test: a `foil_*` prefixed slot, the
   // v7.2 `foil` slot (the booster's guaranteed-foil card) or `prismatic`.
   const guaranteedFoil =
@@ -82,16 +91,20 @@ export function slotOdds(pack: PackType, slot: PackSlot): SlotOdds {
   }
 
   let foilChance: number;
-  if (guaranteedFoil) foilChance = 1;
+  // The server forces foil=false on a Leader-only slot, whatever the pack says.
+  if (slot.card_type === 'Leader') foilChance = 0;
+  else if (guaranteedFoil) foilChance = 1;
   else if (slot.foil_eligible === false) foilChance = 0;
   else foilChance = slot.foil_chance_override ?? (Number(pack.foil_chance) || 0);
 
   return {
     label: prettySlotName(rawType),
-    count: isLegacy ? 1 : (slot.count ?? 1),
+    // The server reads `count` for legacy rows too (`coalesce(count, 1)`).
+    count: slot.count ?? 1,
     weights,
     foilChance,
     cardType: slot.card_type ?? null,
+    minRarity: slot.guaranteed_min_rarity ?? null,
   };
 }
 
@@ -130,6 +143,7 @@ export function packOdds(pack: PackType): SlotOdds[] {
       // typeless neighbour with the same label/weights — the collapsed row
       // would misstate how many slots the lock applies to.
       prev.cardType === odds.cardType &&
+      prev.minRarity === odds.minRarity &&
       JSON.stringify(prev.weights) === JSON.stringify(odds.weights)
     ) {
       prev.count += odds.count;
@@ -149,4 +163,25 @@ export function expectedRarities(pack: PackType): [string, number][] {
     }
   }
   return sortedWeights(totals);
+}
+
+/**
+ * What one pack is worth if every card in it is quick-sold: the expected
+ * quicksell value per slot, with foils paying the foil multiplier at the slot's
+ * foil chance. The extra Serialized pull is left out (it cannot be quick-sold).
+ * Shown next to the price so a player can see how much of a pack's cost the
+ * cards give back — the number the odds modal never gave.
+ */
+export function expectedQuicksellValue(pack: PackType): number {
+  let total = 0;
+  for (const row of packOdds(pack)) {
+    let perCard = 0;
+    for (const [rarity, p] of Object.entries(row.weights)) {
+      perCard += p * quicksellPrice(rarity, false);
+    }
+    // A foil pays FOIL_QUICKSELL_MULTIPLIER x, so the slot's average is the
+    // base value lifted by (multiplier - 1) at the foil chance.
+    total += row.count * perCard * (1 + row.foilChance * (FOIL_QUICKSELL_MULTIPLIER - 1));
+  }
+  return total;
 }

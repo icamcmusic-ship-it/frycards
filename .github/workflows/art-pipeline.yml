@@ -44,11 +44,12 @@ on:
         default: ''
         type: string
 
-  schedule:
-    # Weekly, Monday 04:00 UTC. New art gets its derivatives within the week
-    # without anyone doing anything; a daily run would re-verify ~300 objects
-    # for nothing most days.
-    - cron: '0 4 * * 1'
+  # The weekly schedule (Mondays 04:00 UTC, cron '0 4 * * 1') is disabled: the
+  # sync used to treat every shrunk bucket object as "replaced" and overwrite
+  # the lossless masters in art-archive. The fix is in migrate-art.ts, but back
+  # up art-archive off-platform before turning this back on.
+  # schedule:
+  #   - cron: '0 4 * * 1'
 
 concurrency:
   # Two runs mutating the same bucket is the one way this corrupts something.
@@ -63,6 +64,11 @@ jobs:
     env:
       ART_S3_ACCESS_KEY_ID: ${{ secrets.ART_S3_ACCESS_KEY_ID }}
       ART_S3_SECRET_ACCESS_KEY: ${{ secrets.ART_S3_SECRET_ACCESS_KEY }}
+      # Optional: point the pipeline at another S3-compatible store (R2) by
+      # setting these Actions variables. Unset, it targets the Supabase bucket.
+      ART_S3_ENDPOINT: ${{ vars.ART_S3_ENDPOINT }}
+      ART_S3_BUCKET: ${{ vars.ART_S3_BUCKET }}
+      ART_S3_REGION: ${{ vars.ART_S3_REGION }}
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4

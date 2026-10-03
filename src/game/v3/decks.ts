@@ -99,7 +99,27 @@ function score(c: CardDef, arch: Archetype): number {
 }
 
 /** Target cost-curve buckets (totalCost 1-2 / 3-4 / 5+) as deck fractions. */
-const CURVE_TARGETS: [low: number, mid: number, high: number] = [0.4, 0.4, 0.2];
+export const CURVE_TARGETS: readonly [low: number, mid: number, high: number] = [0.4, 0.4, 0.2];
+
+/** How far a bucket may sit from its target before the builder and the deck
+ * advice treat it as over or under. */
+export const CURVE_TOLERANCE = 0.1;
+
+// The band edges are compared as whole percentages: `0.2 + 0.1` is
+// 0.30000000000000004 in floating point, so `18 / 60 >= 0.2 + 0.1` was false
+// and the 5+ bucket only read "high" from 19 cards while its mirror "low"
+// (`0.2 - 0.1` is exactly 0.1) triggered at 6.
+const pct = (x: number) => Math.round(x * 100);
+
+/** Is `count` of `denom` cards at or above bucket `b`'s target plus tolerance? */
+export function curveAtOrOver(count: number, denom: number, b: 0 | 1 | 2): boolean {
+  return count * 100 >= pct(CURVE_TARGETS[b] + CURVE_TOLERANCE) * denom;
+}
+
+/** Is `count` of `denom` cards at or below bucket `b`'s target minus tolerance? */
+export function curveAtOrUnder(count: number, denom: number, b: 0 | 1 | 2): boolean {
+  return count * 100 <= pct(CURVE_TARGETS[b] - CURVE_TOLERANCE) * denom;
+}
 
 function curveBucket(c: CardDef): 0 | 1 | 2 {
   const tc = totalCost(c.cost);
@@ -130,7 +150,7 @@ function take(
     // nothing else will fill the deck — the final fill pass ignores curve).
     const b = curveBucket(c);
     const total = bucketCounts[0] + bucketCounts[1] + bucketCounts[2];
-    if (total >= 8 && bucketCounts[b] / DECK_SIZE >= CURVE_TARGETS[b] + 0.1) continue;
+    if (total >= 8 && curveAtOrOver(bucketCounts[b], DECK_SIZE, b)) continue;
     const ceiling = arch.copyCeiling ?? MAX_COPIES;
     const copies = Math.min(
       maxCopiesForRarity(c.rarity),

@@ -3,6 +3,7 @@ import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchMarketListings,
+  MARKET_LIST_LIMIT,
   fetchMyMarketActivity,
   fetchPublicProfiles,
   createListing,
@@ -24,7 +25,7 @@ import { RARITY_CHIP, RARITY_ORDER } from './rarity';
 import { quicksellPrice, fmtCredits } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import { spareSplit } from './CollectionScreen';
-import { useFocusTrap } from '../components/useFocusTrap';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 type Tab = 'browse' | 'mine' | 'sell';
 
@@ -140,14 +141,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     };
   }, [reload]);
 
-  useEffect(() => {
-    if (!bidFor) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setBidFor(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [bidFor]);
+  useEscapeClose(() => setBidFor(null), !!bidFor);
 
   // Ticks every 10s so auction countdowns ("Xh Ym left") and "ended"
   // states advance on their own instead of freezing at whatever "now" was
@@ -471,6 +465,12 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 ))}
               </select>
             </div>
+            {listings.length >= MARKET_LIST_LIMIT && (
+              <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
+                Showing the {MARKET_LIST_LIMIT} listings ending soonest — search and filters only
+                cover these.
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {browse.map((l) => listingCard(l, l.seller === userId))}
               {browse.length === 0 && (
