@@ -21,3 +21,6 @@ docs/sim-runs/
 # `npm run media:migrate archive`. ~1 GB, and the only lossless copies that
 # exist once the purge phase has run — keep it somewhere durable, not in git.
 art-archive/
+
+# Cloudflare Pages build of the card art, written by `npm run art:pages`.
+art-pages/
