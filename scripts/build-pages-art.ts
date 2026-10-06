@@ -66,7 +66,10 @@ function normalize(s: string): string {
 /** Letters and digits only, extension dropped: survives a download that
  * dropped or swapped punctuation such as '?' or ':' in the file name. */
 function loose(s: string): string {
-  return stripExt(s).normalize('NFC').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return stripExt(s)
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 }
 
 function stripExt(s: string): string {
@@ -96,7 +99,8 @@ export function safeKey(key: string): string {
 function catalogUrls(): { url: string; key: string }[] {
   const text = fs.readFileSync(CATALOG, 'utf8');
   const seen = new Map<string, string>();
-  const re = /"(https:\/\/dnngihsbqxccqvvedvjc\.supabase\.co\/storage\/v1\/object\/public\/Card%20Images\/[^"]+)"/g;
+  const re =
+    /"(https:\/\/dnngihsbqxccqvvedvjc\.supabase\.co\/storage\/v1\/object\/public\/Card%20Images\/[^"]+)"/g;
   for (const m of text.matchAll(re)) {
     const url = m[1];
     if (seen.has(url)) continue;
@@ -186,7 +190,9 @@ async function build(srcDir: string | undefined): Promise<void> {
   const entries = catalogUrls();
   if (entries.length === 0) die('The catalog has no Supabase art URLs left — nothing to build.');
   const idx = indexLocal(src);
-  console.log(`${entries.length} art URLs in the catalog, ${idx.byPath.size} media files in ${src}`);
+  console.log(
+    `${entries.length} art URLs in the catalog, ${idx.byPath.size} media files in ${src}`,
+  );
 
   fs.mkdirSync(OUT, { recursive: true });
   const mapping: Record<string, string> = {};
