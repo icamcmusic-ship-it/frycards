@@ -63,6 +63,12 @@ function normalize(s: string): string {
     .replace(/_+/g, '_');
 }
 
+/** Letters and digits only, extension dropped: survives a download that
+ * dropped or swapped punctuation such as '?' or ':' in the file name. */
+function loose(s: string): string {
+  return stripExt(s).normalize('NFC').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
 function stripExt(s: string): string {
   return s.replace(/\.[a-z0-9]+$/i, '');
 }
@@ -123,6 +129,7 @@ function indexLocal(dir: string) {
   const byPath = new Map<string, string>();
   const byName = new Map<string, string[]>();
   const byStem = new Map<string, string[]>();
+  const byLoose = new Map<string, string[]>();
   const add = (m: Map<string, string[]>, k: string, v: string) =>
     m.set(k, [...(m.get(k) ?? []), v]);
   for (const file of walk(dir)) {
@@ -131,8 +138,9 @@ function indexLocal(dir: string) {
     const name = normalize(path.basename(file));
     add(byName, name, file);
     add(byStem, stripExt(name), file);
+    add(byLoose, loose(path.basename(file)), file);
   }
-  return { byPath, byName, byStem };
+  return { byPath, byName, byStem, byLoose };
 }
 
 function findLocal(key: string, idx: ReturnType<typeof indexLocal>): string | null {
@@ -147,6 +155,8 @@ function findLocal(key: string, idx: ReturnType<typeof indexLocal>): string | nu
   // suffix, or as the generator's PNG.
   const bare = idx.byStem.get(stripExt(name).replace(/_result$/, ''));
   if (bare?.length === 1) return bare[0];
+  const fuzzy = idx.byLoose.get(loose(key.split('/').pop() || key));
+  if (fuzzy?.length === 1) return fuzzy[0];
   return null;
 }
 
