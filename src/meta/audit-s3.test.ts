@@ -11,8 +11,9 @@ import { encodeDeckCode } from './deckcode';
 import type { PackType } from '../lib/supabase';
 
 describe('F5 slab price uses exact arithmetic', () => {
-  test('Rare, grade 5, TCA is 176, not 177', () => {
-    expect(gradedQuicksellPrice('Rare', false, 5, 'tca')).toBe(176);
+  // Foil Rare: ceil(40 x 2.5) = 100 base since the 2026-10-06 quicksell rescale.
+  test('foil Rare, grade 5, TCA is 176, not 177', () => {
+    expect(gradedQuicksellPrice('Rare', true, 5, 'tca')).toBe(176);
   });
 });
 

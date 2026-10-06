@@ -98,6 +98,13 @@ import {
   reportListing,
 } from '../lib/supabase';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
+import {
+  fetchShopFloor,
+  respondShopCustomer,
+  ShopCustomer,
+  ShopFloorState,
+  SHOP_FLOOR_DAILY_CAP,
+} from '../lib/supabase';
 
 // Mirror rarity.ts's ladder — a local copy drifted once already (missing
 // 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
@@ -2046,6 +2053,12 @@ function MyShopTab() {
         }
       />
 
+      <ShopFloorPanel
+        onSold={async () => {
+          await Promise.all([reload(() => false), refreshProfile(), refreshCollection()]);
+        }}
+      />
+
       <div className="heading-font text-xs mb-2">SLOTS</div>
       <div className="flex flex-wrap gap-2 mb-3">
         {slots.map((s) => (
@@ -3210,6 +3223,239 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shop Floor — CPU customers (2026-10-06).
+//
+// A single-player layer on top of the owner's shop: a customer walks in every
+// ~90 minutes (max 3 waiting, 8 a day), picks one of your individual/bundle
+// listings and either offers credits for it or offers a card in trade. You
+// accept, decline, or haggle once. Offers are priced by the server from the
+// cards' quicksell reference — never from your asking price, which only caps
+// what they will pay — so overpricing a listing cannot farm them.
+// ---------------------------------------------------------------------------
+
+const PERSONA_EMOJI = [
+  '🧙',
+  '🧔',
+  '👩‍🎤',
+  '🕵️',
+  '🧑‍🚀',
+  '👵',
+  '🤠',
+  '🧛',
+  '🦹',
+  '🧑‍🔬',
+  '🧝',
+  '🐙',
+  '🤖',
+  '👑',
+];
+function personaEmoji(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return PERSONA_EMOJI[h % PERSONA_EMOJI.length];
+}
+const MOOD_LINE: Record<string, string> = {
+  stingy: '“I know what this is worth. Don’t push your luck.”',
+  browsing: '“This caught my eye. Fair price?”',
+  smitten: '“Oh, I’ve been hunting for this one!”',
+  curious: '“Would you swap for something from my binder?”',
+  eager: '“Trade you — I think you’ll like this.”',
+  shrewd: '“A straight swap. Take it or leave it.”',
+  chatty: '“Pulled this last week, it’s yours for that one.”',
+};
+
+function untilText(iso: string | null): string {
+  if (!iso) return '';
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'any moment';
+  const m = Math.ceil(ms / 60000);
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+
+function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
+  const [state, setState] = useState<ShopFloorState | null>(null);
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [counter, setCounter] = useState<Record<string, number>>({});
+
+  const load = useCallback(async () => {
+    const { data, error } = await fetchShopFloor();
+    if (error) setErr(error);
+    else {
+      setErr('');
+      setState(data);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    // Re-check every few minutes so a waiting player sees the next arrival.
+    const t = window.setInterval(() => void load(), 3 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, [load]);
+
+  const act = async (c: ShopCustomer, action: 'accept' | 'decline' | 'counter') => {
+    setBusyId(c.id);
+    setErr('');
+    setMsg('');
+    const { data, error } = await respondShopCustomer(
+      c.id,
+      action,
+      action === 'counter' ? counter[c.id] : undefined,
+    );
+    if (error) setErr(error);
+    else if (data) {
+      if (data.result === 'sold') {
+        setMsg(
+          c.kind === 'buy'
+            ? `${c.persona} paid ${fmtCredits(data.credits ?? 0)} credits.`
+            : `Traded with ${c.persona} for ${POOL_BY_ID[data.card_id ?? '']?.name ?? 'a card'}${data.foil ? ' (foil)' : ''}.`,
+        );
+        await onSold();
+      } else if (data.result === 'left') setMsg(`${c.persona} shook their head and walked out.`);
+      else if (data.result === 'final_offer')
+        setMsg(`${c.persona}: “${fmtCredits(data.offer ?? 0)}, final offer.”`);
+      else setMsg(`You turned ${c.persona} away.`);
+    }
+    await load();
+    setBusyId(null);
+  };
+
+  if (!state && !err) return null;
+  return (
+    <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <span className="heading-font text-sm">SHOP FLOOR · CPU CUSTOMERS</span>
+        {state && (
+          <span className="text-[10px] font-bold text-[var(--c-steel)]">
+            {state.served_24h}/{SHOP_FLOOR_DAILY_CAP} visitors today
+            {state.customers.length < 3 && state.served_24h < SHOP_FLOOR_DAILY_CAP && state.next_at
+              ? ` · next in ${untilText(state.next_at)}`
+              : ''}
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2">
+        Customers drop by about every 90 minutes and make offers on your individual and bundle
+        listings — around the cards’ quicksell value, never above your asking price. Haggle once:
+        push too hard and they may walk.
+      </p>
+      {err && <Notice text={err} />}
+      {msg && <Notice text={msg} kind="success" />}
+      {state && state.customers.length === 0 && (
+        <p className="text-[11px] font-bold py-2">
+          The floor is quiet. Keep individual or bundle listings on your shelf to draw customers in.
+        </p>
+      )}
+      <div className="flex flex-col gap-2">
+        {state?.customers.map((c) => {
+          const item = c.listing_cards[0];
+          const def = item ? POOL_BY_ID[item.card_id] : undefined;
+          const offerDef = c.offer_card_id ? POOL_BY_ID[c.offer_card_id] : undefined;
+          const busy = busyId === c.id;
+          const ctr = counter[c.id] ?? Math.round((c.offer_credits ?? 0) * 1.15);
+          return (
+            <div key={c.id} className="ink-border-sm p-2 flex gap-3 items-start flex-wrap">
+              <div className="text-3xl leading-none" aria-hidden>
+                {personaEmoji(c.persona)}
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <div className="heading-font text-xs">
+                  {c.persona}{' '}
+                  <span className="text-[9px] text-[var(--c-steel)]">
+                    · leaves in {untilText(c.expires_at)}
+                  </span>
+                </div>
+                <div className="text-[10px] italic font-bold">{MOOD_LINE[c.mood] ?? ''}</div>
+                <div className="text-[11px] font-bold mt-1">
+                  Wants:{' '}
+                  {c.listing_type === 'bundle'
+                    ? `your bundle (${c.listing_cards.length} lines)`
+                    : (def?.name ?? 'a listing')}{' '}
+                  <span className="text-[var(--c-steel)]">
+                    (listed at {fmtCredits(c.listing_price)})
+                  </span>
+                </div>
+                {c.kind === 'buy' ? (
+                  <div className="text-[12px] font-black mt-0.5">
+                    Offers <Credits amount={c.offer_credits ?? 0} />
+                    {c.haggled && <span className="text-[9px] ml-1">(FINAL)</span>}
+                  </div>
+                ) : (
+                  <div className="text-[12px] font-black mt-0.5">
+                    Offers in trade: {offerDef?.name ?? c.offer_card_id}
+                    {c.offer_foil ? ' ✦ FOIL' : ''}{' '}
+                    <span className="text-[9px] text-[var(--c-steel)]">({offerDef?.rarity})</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 mt-2 items-center">
+                  <PopButton color="yellow" disabled={busy} onClick={() => void act(c, 'accept')}>
+                    {c.kind === 'buy' ? 'SELL' : 'TRADE'}
+                  </PopButton>
+                  {c.kind === 'buy' && !c.haggled && (
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={1}
+                        value={ctr}
+                        aria-label={`Counter-offer to ${c.persona}`}
+                        onChange={(e) =>
+                          setCounter((m) => ({
+                            ...m,
+                            [c.id]: Math.max(1, Math.round(Number(e.target.value) || 0)),
+                          }))
+                        }
+                        className="w-20 px-1 py-0.5 ink-border-sm text-[11px]"
+                      />
+                      <PopButton
+                        color="black"
+                        disabled={busy}
+                        onClick={() => void act(c, 'counter')}
+                      >
+                        HAGGLE
+                      </PopButton>
+                    </span>
+                  )}
+                  <PopButton color="steel" disabled={busy} onClick={() => void act(c, 'decline')}>
+                    NO THANKS
+                  </PopButton>
+                </div>
+              </div>
+              {(c.kind === 'trade' ? offerDef : def) && (
+                <div className="shrink-0">
+                  <CardFace
+                    def={(c.kind === 'trade' ? offerDef : def)!}
+                    size="compact"
+                    foil={c.kind === 'trade' ? c.offer_foil : !!item?.foil}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {state && state.recent.length > 0 && (
+        <details className="mt-2">
+          <summary className="text-[10px] font-bold cursor-pointer">Recent visitors</summary>
+          <ul className="text-[10px] font-bold mt-1">
+            {state.recent.map((r, i) => (
+              <li key={i}>
+                {personaEmoji(r.persona)} {r.persona} —{' '}
+                {r.status === 'accepted'
+                  ? r.kind === 'buy'
+                    ? `bought for ${fmtCredits(r.final_credits ?? 0)}`
+                    : `traded ${POOL_BY_ID[r.offer_card_id ?? '']?.name ?? 'a card'}`
+                  : r.status}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

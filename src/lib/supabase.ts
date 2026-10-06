@@ -100,6 +100,8 @@ export interface Profile {
   equipped_avatar: string | null;
   last_free_pack_at: string | null;
   showcase_cards: string[];
+  /** Up to 3 graded slab ids pinned on the profile (graded_cards.id). */
+  showcase_slabs?: string[];
   /** Opt out of username recognition in the News Center's Serialized-pull
    * feed — the pull itself always still posts, just as "A collector". */
   hide_serialized_announcements: boolean;
@@ -426,6 +428,107 @@ export async function setUsername(name: string): Promise<string | null> {
 export async function setShowcaseCards(cardIds: string[]): Promise<string | null> {
   const { error } = await supabase.rpc('set_showcase_cards', { p_card_ids: cardIds });
   return rpcError(error);
+}
+
+/** Pin up to 3 of your own graded slabs to the profile. */
+export async function setShowcaseSlabs(ids: string[]): Promise<string | null> {
+  const { error } = await supabase.rpc('set_showcase_slabs', { p_ids: ids });
+  return rpcError(error);
+}
+
+/** Anyone's pinned slabs (graded_cards rows), in pin order. */
+export async function fetchShowcaseSlabs(userId: string): Promise<
+  {
+    id: string;
+    user_id: string;
+    card_id: string;
+    foil: boolean;
+    service: 'tca' | 'amg' | 'keeper';
+    speed: 'standard' | 'rush' | 'instant';
+    fee_paid: number;
+    submitted_at: string;
+    ready_at: string;
+    grade: number | null;
+    revealed_at: string | null;
+  }[]
+> {
+  const { data, error } = await supabase.rpc('get_showcase_slabs', { p_user: userId });
+  if (error) return [];
+  return ((data as any[]) || []).map((g) => ({
+    ...g,
+    grade: g.grade == null ? null : Number(g.grade),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Shop Floor — CPU customers who walk into your Player Shop (2026-10-06).
+// Arrivals, prices and limits are all server-side: see
+// supabase/migrations/20261006000001_cpu_bidders_and_shop_customers.sql.
+// ---------------------------------------------------------------------------
+
+export interface ShopCustomer {
+  id: string;
+  kind: 'buy' | 'trade';
+  persona: string;
+  mood: string;
+  offer_credits: number | null;
+  offer_card_id: string | null;
+  offer_foil: boolean;
+  haggled: boolean;
+  expires_at: string;
+  listing_id: string;
+  listing_price: number;
+  listing_type: 'individual' | 'bundle';
+  listing_cards: { card_id: string; quantity?: number; foil?: boolean }[];
+}
+
+export interface ShopFloorState {
+  customers: ShopCustomer[];
+  served_24h: number;
+  next_at: string | null;
+  recent: {
+    persona: string;
+    kind: 'buy' | 'trade';
+    status: 'accepted' | 'declined' | 'left' | 'expired';
+    final_credits: number | null;
+    offer_card_id: string | null;
+    resolved_at: string | null;
+  }[];
+}
+
+/** Daily ceiling on customer arrivals — mirror of spawn_shop_customers. */
+export const SHOP_FLOOR_DAILY_CAP = 8;
+
+export async function fetchShopFloor(): Promise<{
+  data: ShopFloorState | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('get_shop_customers');
+  if (error) return { data: null, error: error.message };
+  return { data: data as ShopFloorState, error: null };
+}
+
+export async function respondShopCustomer(
+  id: string,
+  action: 'accept' | 'decline' | 'counter',
+  counter?: number,
+): Promise<{
+  data: {
+    result: 'sold' | 'declined' | 'left' | 'final_offer';
+    credits?: number;
+    offer?: number;
+    card_id?: string | null;
+    foil?: boolean;
+  } | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.rpc('respond_shop_customer', {
+    p_id: id,
+    p_action: action,
+    p_counter: counter ?? null,
+  });
+  if (error) return { data: null, error: error.message };
+  return { data, error: null };
 }
 
 /**
@@ -1037,6 +1140,10 @@ export interface MarketListing {
   status: 'active' | 'sold' | 'cancelled' | 'expired';
   created_at: string;
   ends_at: string;
+  /** A CPU collector holds the high bid (current_bidder is null then). */
+  cpu_leading?: boolean;
+  /** Persona name of the CPU bidder, once one has bid. */
+  cpu_bidder_name?: string | null;
 }
 
 /** Marketplace fee taken from the seller's proceeds — mirror of finalize_sale. */
