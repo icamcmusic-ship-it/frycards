@@ -28,7 +28,8 @@
     "media:sync": "tsx scripts/migrate-art.ts sync",
     "media:shrink-originals": "tsx scripts/migrate-art.ts shrink-originals",
     "media:add": "tsx scripts/migrate-art.ts add",
-    "size:check": "tsx scripts/check-bundle-size.ts"
+    "size:check": "tsx scripts/check-bundle-size.ts",
+    "art:pages": "tsx scripts/build-pages-art.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",

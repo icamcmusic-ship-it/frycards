@@ -303,3 +303,22 @@ reason that directory has to outlive the migration.
   all, which is why they are allowed, but they are also outside every guarantee
   here: nothing derives them, and nothing stops them rotting when the host
   expires the link.
+
+## Moving to Cloudflare Pages (no card on file)
+
+Pages is free, has no bandwidth cap, and allows 20,000 files of up to 25 MB.
+`scripts/build-pages-art.ts` builds the site from art already on your disk, so
+it needs neither Supabase nor its S3 keys — useful when the project is over
+quota and its storage is not answering.
+
+```
+npm run art:pages -- build ~/path/to/your/art      # writes ./art-pages
+npx wrangler pages deploy art-pages --project-name frycards-art --branch main
+npm run art:pages -- rewrite https://frycards-art.pages.dev
+```
+
+`build` matches each catalog image by bucket path, or by file name if your
+folders differ, and lists any card it cannot find; those keep their Supabase
+URL. Then set the Actions variable `ART_BASE_URL` to the Pages URL, commit
+`src/game/generated-cards.ts`, and push. When Supabase answers again, run
+`sync-cards-db` so the live catalog matches, and only then empty the bucket.
