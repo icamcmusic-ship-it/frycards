@@ -66,6 +66,7 @@
  * `verify:pool` does for the catalog.
  */
 import { chromium } from 'playwright';
+import { blockRemoteMedia } from './lib/block-remote-media';
 import { leftTheApp } from './lib/left-the-app';
 
 const BASE = `${process.env.AUDIT_BASE ?? 'http://localhost:3000'}/meta-preview.html`;
@@ -454,6 +455,7 @@ const loadCount = new Map<string, number>();
 
 async function check(screen: string, width: number, path: number[] = [], expect = 0) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+  await blockRemoteMedia(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -738,6 +740,7 @@ const textScaleTotals = { responded: 0, leaves: 0 };
  */
 async function textScale(screen: string) {
   const ctx = await browser.newContext({ viewport: { width: 375, height: 900 } });
+  await blockRemoteMedia(ctx);
   const page = await ctx.newPage();
   await page.goto(`${BASE}?screen=${screenQuery(screen)}`, {
     waitUntil: 'domcontentloaded',
@@ -849,6 +852,7 @@ const keyboardTotals = { reached: 0, candidates: 0, wrapped: 0, screens: 0 };
  */
 async function keyboard(screen: string) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await blockRemoteMedia(ctx);
   const page = await ctx.newPage();
   await page.goto(`${BASE}?screen=${screenQuery(screen)}`, {
     waitUntil: 'domcontentloaded',
