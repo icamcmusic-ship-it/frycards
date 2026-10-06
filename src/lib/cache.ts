@@ -11,7 +11,7 @@
  * and drops every old entry instead of feeding stale shapes to new code.
  * Storage that is blocked, full, or holding junk simply reads as a miss.
  */
-export const CACHE_VERSION = 1;
+export const CACHE_VERSION = 2;
 const PREFIX = 'frycards:cache:';
 
 interface Entry<T> {
