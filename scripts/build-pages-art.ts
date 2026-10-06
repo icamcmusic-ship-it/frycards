@@ -280,7 +280,50 @@ function rewrite(baseArg: string | undefined): void {
   );
 }
 
+/** The shop-pack images live in a different bucket ("Other files"), not in the
+ * card catalog, so `build` never sees them. Their rows are in pack_types. */
+const PACK_KEYS = [
+  'Shop Packs/Boxes/boosterpackshop icon.png',
+  'Shop Packs/Boxes/boosterpackvertical.png',
+  'Shop Packs/Boxes/booster box shop icon.png',
+  'Shop Packs/Boxes/boosterboxvertical.png',
+];
+
+async function packs(srcDir: string | undefined): Promise<void> {
+  if (!srcDir) die('Usage: npm run art:pages -- packs <folder containing Shop Packs>');
+  const src = path.resolve(srcDir.replace(/^~(?=\/|$)/, process.env.HOME || '~'));
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) die(`Not a folder: ${src}`);
+  const idx = indexLocal(src);
+  fs.mkdirSync(OUT, { recursive: true });
+  let files = 0;
+  const missing: string[] = [];
+  for (const key of PACK_KEYS) {
+    const local = findLocal(key, idx);
+    if (!local) {
+      missing.push(key);
+      continue;
+    }
+    const target = safeKey(key);
+    writeFile(target, await masterBytes(local));
+    files++;
+    for (const width of WIDTH_LADDER) {
+      writeFile(derivedKey(target, width), await derivedBytes(local, width));
+      files++;
+    }
+    console.log(`  ${key} -> ${target}`);
+  }
+  console.log(
+    `\nBuilt ${PACK_KEYS.length - missing.length}/${PACK_KEYS.length} pack images (${files} files).`,
+  );
+  if (missing.length) {
+    console.warn('Not found in your folder:');
+    for (const m of missing) console.warn(`  ${m}`);
+    process.exitCode = 1;
+  }
+}
+
 const [phase, arg] = process.argv.slice(2);
 if (phase === 'build') await build(arg);
 else if (phase === 'rewrite') rewrite(arg);
-else die('Usage: npm run art:pages -- build <folder> | rewrite <https://base>');
+else if (phase === 'packs') await packs(arg);
+else die('Usage: npm run art:pages -- build <folder> | rewrite <https://base> | packs <folder>');
