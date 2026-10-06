@@ -49,6 +49,7 @@
  * Exits non-zero on any finding, so it can gate a release.
  */
 import { chromium, Page } from 'playwright';
+import { blockRemoteMedia } from './lib/block-remote-media';
 
 const BASE = `${process.env.AUDIT_BASE ?? 'http://localhost:3000'}/board-preview.html`;
 const MATCHES = Number(process.env.MATCHES ?? 6);
@@ -1255,6 +1256,7 @@ async function driveMatch(
   const watch = mode !== 'skip';
   censusMatch = match;
   const ctx = await browser.newContext({ viewport: { width, height } });
+  await blockRemoteMedia(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('console', (m) => {
