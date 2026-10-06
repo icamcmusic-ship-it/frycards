@@ -207,7 +207,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     const outbid =
       isAuction &&
       !highBidder &&
-      l.current_bidder != null &&
+      (l.current_bidder != null || !!l.cpu_leading) &&
       l.seller !== userId &&
       l.status === 'active' &&
       !timedOut &&
@@ -266,6 +266,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 <span className="text-[9px] font-bold text-[var(--c-steel)]">
                   {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                   {highBidder ? ' · YOU LEAD' : ''}
+                  {l.cpu_leading && l.cpu_bidder_name ? ` · ${l.cpu_bidder_name} (CPU) leads` : ''}
                 </span>
                 {outbid && (
                   <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-white">
@@ -813,6 +814,14 @@ function SellForm({
             </PopButton>
           </div>
 
+          {type === 'auction' && (
+            <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2 max-w-xl">
+              CPU collectors bid on auctions too. Each one values your card around its quicksell
+              price — usually up to +25%, sometimes far less, now and then far more — so a low
+              starting bid can be lowballed, and a lucky one can sell well above quicksell. Their
+              winning bids count toward the card's market price.
+            </p>
+          )}
           <div className="flex flex-wrap gap-4 mb-4">
             <label className="flex items-center gap-2 text-xs font-bold">
               {type === 'fixed' ? 'Price' : 'Starting bid'}

@@ -10,6 +10,8 @@ import { CardFace, CardSize, CARD_SIZES } from './components/CardFaceV4';
 import { POOL_V4 } from './game/v3/cardpool';
 import { RARITY_ORDER } from './meta/rarity';
 import type { CardDef, CardType } from './game/v3/cards';
+import { GradedSlab, SLAB_CSS } from './meta/GradedSlab';
+import type { GradedCard } from './meta/grading';
 
 const TYPES: CardType[] = ['Unit', 'Location', 'Item', 'Event', 'Leader'];
 
@@ -130,10 +132,43 @@ function Gallery() {
   );
 }
 
+/** ?slabs=1 — one slab per grade band: damage at 5–7.5, premium cases at 9+. */
+function Slabs() {
+  const def = POOL_V4.find((c) => c.rarity === 'Rare' && c.type === 'Unit') ?? POOL_V4[0];
+  const grades = [5, 6, 7, 8, 9, 9.5, 10];
+  return (
+    <div style={{ background: '#222', padding: 16, display: 'flex', flexWrap: 'wrap', gap: 18 }}>
+      <style>{SLAB_CSS}</style>
+      {grades.map((grade, i) => {
+        const g: GradedCard = {
+          id: `gallery-slab-${i}`,
+          user_id: 'u',
+          card_id: def.id,
+          foil: false,
+          service: (['tca', 'amg', 'keeper'] as const)[i % 3],
+          speed: 'standard',
+          fee_paid: 0,
+          submitted_at: '',
+          ready_at: '',
+          grade,
+          revealed_at: '',
+        };
+        return <GradedSlab key={g.id} g={g} size="standard" />;
+      })}
+    </div>
+  );
+}
+
 const params = new URLSearchParams(window.location.search);
 const allRarity = params.get('all');
 const sizeParam = params.get('size');
 const allSize: CardSize = sizeParam && sizeParam in CARD_SIZES ? (sizeParam as CardSize) : 'full';
 createRoot(document.getElementById('root')!).render(
-  allRarity ? <AllOfRarity rarity={allRarity} size={allSize} /> : <Gallery />,
+  params.get('slabs') ? (
+    <Slabs />
+  ) : allRarity ? (
+    <AllOfRarity rarity={allRarity} size={allSize} />
+  ) : (
+    <Gallery />
+  ),
 );

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { ShowcaseSlabsRow } from './SlabDetailModal';
+import { SLAB_CSS } from './GradedSlab';
 import { useMeta } from './MetaContext';
 import { fetchPlayerProfileCard, PlayerProfileCard, PlayerRole } from '../lib/supabase';
 import { RoleBadge } from './RoleBadge';
@@ -191,7 +193,9 @@ export function PlayerProfileModal({ userId, onClose }: { userId: string; onClos
                 ))}
               </div>
 
-              <h2 className="heading-font text-sm mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+              <style>{SLAB_CSS}</style>
+              <ShowcaseSlabsRow userId={userId} />
+              <h2 className="heading-font text-sm mb-2 mt-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
                 SHOWCASE
               </h2>
               {(card.showcase_cards || []).length === 0 ? (

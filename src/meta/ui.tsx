@@ -232,7 +232,7 @@ export function ProgressBar({
 
 /** Cumulative XP required to reach a level — mirror of xp_for_level in SQL. */
 export function xpForLevel(level: number): number {
-  return 50 * (level - 1) * level;
+  return 20 * (level - 1) * level;
 }
 
 /**

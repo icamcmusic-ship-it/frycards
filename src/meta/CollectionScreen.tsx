@@ -21,6 +21,8 @@ import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
 import { GradedCard, fetchGradedCards } from './grading';
 import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { SlabDetailModal } from './SlabDetailModal';
+import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
 import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
@@ -211,6 +213,16 @@ export function CollectionScreen({
       cancelled = true;
     };
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The slab whose detail sheet is open (graded_cards.id).
+  const [slabOpen, setSlabOpen] = useState<string | null>(null);
+  const reloadGraded = useCallback(async () => {
+    if (!profile) return;
+    try {
+      setGradedCards(await fetchGradedCards(profile.id));
+    } catch {
+      /* keep what is shown */
+    }
+  }, [profile]);
   const [sort, setSort] = useState<SortKey>('Name');
   // Which standalone tile in the grid is open in the inspector — normal,
   // foil, and each serialized print are now separate tiles (see `entries`
@@ -652,14 +664,42 @@ export function CollectionScreen({
         {/* Graded shelf — encased slabs, each in its service's case style.
             Slabs are display/sale pieces (not deck-legal); selling and
             case-cracking live in the Grading Lab, so the shelf deep-links. */}
+        <AnimatePresence>
+          {slabOpen &&
+            (() => {
+              const g = gradedCards.find((x) => x.id === slabOpen);
+              if (!g) return null;
+              return (
+                <SlabDetailModal
+                  key={g.id}
+                  g={g}
+                  pinned={profile?.showcase_slabs ?? []}
+                  onClose={() => setSlabOpen(null)}
+                  onChanged={async (gone) => {
+                    await Promise.all([
+                      refreshProfile(),
+                      gone ? refreshCollection() : Promise.resolve(),
+                      reloadGraded(),
+                    ]);
+                  }}
+                  onShowroom={
+                    onShowroom && g.grade != null
+                      ? () => onShowroom({ kind: 'slab', gradedId: g.id })
+                      : undefined
+                  }
+                  onGrading={onGrading}
+                />
+              );
+            })()}
+        </AnimatePresence>
         {gradedCards.length > 0 && (
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
               <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                {onShowroom
-                  ? 'Click a slab for the Grading Lab · ⬛ 3D stands one in the Showroom'
-                  : 'Sell or crack slabs in the Grading Lab'}
+                Click a slab for details, showcasing, selling or cracking
+                {(profile?.showcase_slabs?.length ?? 0) > 0 &&
+                  ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
               </span>
             </div>
             {/* The slab's own keyframes travel with it — a top-grade case
@@ -668,7 +708,14 @@ export function CollectionScreen({
             <div className="flex flex-wrap gap-2">
               {gradedCards.map((g) => (
                 <div key={g.id} className="flex flex-col gap-1 w-fit">
-                  <GradedSlab g={g} onClick={onGrading} />
+                  <div className="relative">
+                    <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
+                    {profile?.showcase_slabs?.includes(g.id) && (
+                      <span className="absolute -top-2 -right-2 heading-font text-[9px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
+                        ★ PINNED
+                      </span>
+                    )}
+                  </div>
                   {/* Only a GRADED slab can be stood up in the room: a pending
                       one has a frosted window and no grade to print, so the
                       3D view would be a blurred card in an empty case. */}
