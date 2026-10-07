@@ -674,7 +674,7 @@ export function CollectionScreen({
                   aria-pressed={progressBy === k}
                   onClick={() => setProgressBy(k)}
                   className={cn(
-                    'heading-font text-[9px] px-2 py-0.5 ink-border-sm',
+                    'heading-font text-[9px] px-2 py-0.5 ink-border-sm min-h-[24px]',
                     progressBy === k
                       ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
                       : 'bg-[var(--c-paper)]',
@@ -812,7 +812,7 @@ export function CollectionScreen({
               <span className="flex items-center gap-2">
                 <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
                 <select
-                  className="ink-border-sm text-[10px] font-bold px-1 py-0.5 bg-[var(--c-paper)]"
+                  className="ink-border-sm text-[10px] font-bold px-1 py-0.5 min-h-[24px] bg-[var(--c-paper)]"
                   aria-label="Sort graded cards"
                   value={slabSort}
                   onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}

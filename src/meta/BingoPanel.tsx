@@ -55,6 +55,9 @@ export function BingoPanel() {
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('get_bingo');
     if (error) setError(error.message);
+    // No card back (offline preview, or an older server): say so instead
+    // of crashing on d.resets_at.
+    else if (!data) setError('Bingo is not available right now — try again shortly.');
     else {
       setError('');
       const d = data as BingoState;
