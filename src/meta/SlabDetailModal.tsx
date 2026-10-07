@@ -301,8 +301,11 @@ export function ShowcaseSlabsRow({
   refreshKey,
   emptyText,
   heading,
+  onEdited,
 }: {
   userId: string;
+  /** Own profile: show reorder / unpin controls, then call this to refresh. */
+  onEdited?: () => Promise<void> | void;
   /** Printed above the row only when there is something to show. */
   heading?: string;
   /** Change to refetch (e.g. the viewer's own showcase_slabs array). */
@@ -311,6 +314,22 @@ export function ShowcaseSlabsRow({
 }) {
   const [slabs, setSlabs] = useState<GradedCard[] | null>(null);
   const [open, setOpen] = useState<GradedCard | null>(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (next: GradedCard[]) => {
+    setBusy(true);
+    const err = await setShowcaseSlabs(next.map((x) => x.id));
+    if (!err) {
+      setSlabs(next);
+      await onEdited?.();
+    }
+    setBusy(false);
+  };
+  const swap = (a: number, b: number) => {
+    if (!slabs) return;
+    const next = [...slabs];
+    [next[a], next[b]] = [next[b], next[a]];
+    return save(next);
+  };
   React.useEffect(() => {
     let cancelled = false;
     void fetchShowcaseSlabs(userId).then((rows) => {
@@ -333,8 +352,33 @@ export function ShowcaseSlabsRow({
         </h2>
       )}
       <div className="flex flex-wrap gap-3">
-        {slabs.map((g) => (
-          <GradedSlab key={g.id} g={g} size="compact" onClick={() => setOpen(g)} />
+        {slabs.map((g, i) => (
+          <div key={g.id} className="flex flex-col items-center gap-1">
+            <GradedSlab g={g} size="compact" onClick={() => setOpen(g)} />
+            {onEdited && (
+              <div className="flex gap-1">
+                {(
+                  [
+                    ['◀', 'Move left', i > 0, () => swap(i, i - 1)],
+                    ['▶', 'Move right', i < slabs.length - 1, () => swap(i, i + 1)],
+                    ['✕', 'Unpin', true, () => save(slabs.filter((x) => x.id !== g.id))],
+                  ] as const
+                ).map(([glyph, label, enabled, fn]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={!enabled || busy}
+                    onClick={() => void fn()}
+                    aria-label={`${label}: ${POOL_BY_ID[g.card_id]?.name ?? 'slab'}`}
+                    title={label}
+                    className="heading-font text-[10px] w-7 h-7 ink-border-sm bg-[var(--c-paper)] disabled:opacity-30"
+                  >
+                    {glyph}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
       {open && (

@@ -315,6 +315,21 @@ export function SettingsScreen({
                 </PopButton>
               ))}
             </div>
+            {/* Live preview: moves under FULL/SYSTEM-without-reduce, holds
+                still when motion is reduced — the same <html data-motion>
+                switch every animation in the game now keys off. */}
+            <style>{`
+              @keyframes settings-motion-demo { 0%,100% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(56px) rotate(4deg); } }
+              .settings-motion-demo { animation: settings-motion-demo 1.6s ease-in-out infinite; }
+              @media (prefers-reduced-motion: reduce) { html:not([data-motion='full']) .settings-motion-demo { animation: none; } }
+              html[data-motion='reduced'] .settings-motion-demo { animation: none; }
+            `}</style>
+            <div className="mt-3 flex items-center gap-3" aria-hidden>
+              <span className="text-[10px] font-bold text-[var(--c-steel)]">PREVIEW</span>
+              <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
+                <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -373,6 +388,10 @@ export function SettingsScreen({
                 vouchers reset to the starting amount. Your first reset also gives you a fresh Deck
                 Box to open and pick a Leader again. This cannot be undone.
                 {!isExempt && ' Limited to once every 7 days.'}
+              </p>
+              <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+                Finish or cancel these first: any open Marketplace auctions or listings, your Player
+                Shop's stock, and cards still at the graders are tied to your collection.
               </p>
               <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
                 Not touched: your username, any moderation history, your level, achievements,

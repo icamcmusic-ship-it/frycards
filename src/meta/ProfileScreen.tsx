@@ -305,6 +305,7 @@ export function ProfileScreen({
             userId={profile.id}
             refreshKey={(profile.showcase_slabs ?? []).join(',')}
             emptyText="Open a graded slab in your Collection and press SHOWCASE to pin up to 3 here."
+            onEdited={refreshProfile}
           />
         </div>
 

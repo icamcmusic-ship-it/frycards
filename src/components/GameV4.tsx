@@ -1980,13 +1980,11 @@ export function GameV4({
       return next.id;
     });
   };
-  const cycleCpuSpeed = () => {
-    setCpuSpeedIdx((i) => {
-      const next = (i + 1) % CPU_SPEEDS.length;
-      cpuSpeedRef.current = next;
-      saveCpuSpeed(next);
-      return next;
-    });
+  /** Jump straight to a narration speed (the ⏱ menu). */
+  const pickCpuSpeed = (i: number) => {
+    cpuSpeedRef.current = i;
+    saveCpuSpeed(i);
+    setCpuSpeedIdx(i);
   };
   /** How long the beat at `i` stays up. A beat that spotlights a card face
    * (or declares an attack) holds longer — there is more to take in than a
@@ -4565,17 +4563,22 @@ export function GameV4({
             ) : (
               <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                cycleCpuSpeed();
-              }}
+            {/* A menu, not a cycling chip: four rungs meant up to three taps
+                to reach CINEMATIC (AUDIT-2026-10-06 §2.21). */}
+            <select
+              value={cpuSpeedIdx}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => pickCpuSpeed(Number(e.target.value))}
               title={SPEED_TOOLTIP}
-              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
-              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
+              aria-label="Narration speed"
+              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 text-[var(--c-paper)] px-1 py-0.5 ink-border-sm align-middle"
             >
-              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-            </button>
+              {CPU_SPEEDS.map((sp, i) => (
+                <option key={sp.label} value={i}>
+                  ⏱ {sp.label}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -4849,14 +4852,19 @@ export function GameV4({
             RESOLVE CLASH live underneath a narration the player is watching. */}
         {stage === 'cpu' || narrating ? (
           <>
-            <button
-              onClick={cycleCpuSpeed}
+            <select
+              value={cpuSpeedIdx}
+              onChange={(e) => pickCpuSpeed(Number(e.target.value))}
               title={SPEED_TOOLTIP}
-              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
+              aria-label="Narration speed"
+              className="heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
             >
-              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-            </button>
+              {CPU_SPEEDS.map((sp, i) => (
+                <option key={sp.label} value={i}>
+                  ⏱ {sp.label}
+                </option>
+              ))}
+            </select>
             <button
               onClick={toggleCpuPause}
               title={
