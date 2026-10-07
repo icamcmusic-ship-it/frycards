@@ -86,6 +86,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   const [bidFor, setBidFor] = useState<MarketListing | null>(null);
   const [bidAmount, setBidAmount] = useState(0);
   const [rarityFilter, setRarityFilter] = useState('All');
+  const [showFilter, setShowFilter] = useState<'all' | 'auctions' | 'fixed' | 'cpu' | 'soon'>(
+    'all',
+  );
   const [search, setSearch] = useState('');
 
   // Generation counter guards against an older in-flight reload() resolving
@@ -147,9 +150,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // states advance on their own instead of freezing at whatever "now" was
   // when the screen mounted — a full minute between ticks left up to 60s
   // where an already-ended auction still showed live BID/BUY buttons.
-  const [, setTick] = useState(0);
+  // The tick carries the clock itself, so render code (the "ending in 15
+  // min" filter) reads time from state instead of calling Date.now().
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 10_000);
+    const id = window.setInterval(() => setNowMs(Date.now()), 10_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -185,6 +190,14 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     const def = defFor(l.card_id);
     if (rarityFilter !== 'All' && (def.rarity || 'Common') !== rarityFilter) return false;
     if (search && !def.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (showFilter === 'auctions' && l.listing_type !== 'auction') return false;
+    if (showFilter === 'fixed' && l.listing_type !== 'fixed') return false;
+    if (showFilter === 'cpu' && !l.cpu_leading) return false;
+    if (
+      showFilter === 'soon' &&
+      (l.listing_type !== 'auction' || new Date(l.ends_at).getTime() - nowMs > 15 * 60_000)
+    )
+      return false;
     return true;
   });
 
@@ -466,6 +479,18 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 {['All', ...RARITY_ORDER].map((r) => (
                   <option key={r}>{r}</option>
                 ))}
+              </select>
+              <select
+                className={select}
+                aria-label="Filter listings"
+                value={showFilter}
+                onChange={(e) => setShowFilter(e.target.value as typeof showFilter)}
+              >
+                <option value="all">All listings</option>
+                <option value="auctions">Auctions</option>
+                <option value="fixed">Fixed price</option>
+                <option value="cpu">CPU collector leading</option>
+                <option value="soon">Ending in 15 min</option>
               </select>
             </div>
             {listings.length >= MARKET_LIST_LIMIT && (

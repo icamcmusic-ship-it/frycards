@@ -476,7 +476,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       {/* Daily login reward strip */}
       {!guest && <DailyLoginPanel />}
 
-      <CardOfTheDay />
+      <CardOfTheDay onBuild={guest ? undefined : () => onNavigate('decks')} />
 
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">

@@ -231,6 +231,20 @@ function Damage({ level, seed }: { level: 1 | 2 | 3; seed: number }) {
   );
 }
 
+/** Hover text: the condition tier, or the premium case, of a revealed slab. */
+export function slabTooltip(grade: number): string {
+  const tier = premiumTier(grade);
+  if (tier === 'gem') return `GEM MINT ${fmtGrade(grade)} — gold case`;
+  if (tier === 'mintplus') return `MINT+ ${fmtGrade(grade)} — prism case`;
+  if (tier === 'mint') return `MINT ${fmtGrade(grade)} — holo case`;
+  return [
+    `Clean (grade ${fmtGrade(grade)})`,
+    `Light wear (grade ${fmtGrade(grade)}) — a soft corner`,
+    `Played (grade ${fmtGrade(grade)}) — whitened edges, scuffs, fading`,
+    `Damaged (grade ${fmtGrade(grade)}) — creased, stained, cracked case`,
+  ][conditionOf(grade)];
+}
+
 export function GradedSlab({
   g,
   size = 'compact',
@@ -278,6 +292,7 @@ export function GradedSlab({
           onClick();
         }
       }}
+      title={graded ? slabTooltip(g.grade!) : undefined}
       aria-label={
         graded
           ? `${def.name}, graded ${fmtGrade(g.grade!)} ${word} by ${svc.name}, certificate ${cert.no}`

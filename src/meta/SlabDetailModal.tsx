@@ -48,8 +48,11 @@ export function SlabDetailModal({
   onChanged,
   onShowroom,
   onGrading,
+  readOnly,
 }: {
   key?: React.Key;
+  /** Someone else's slab (from a profile showcase): details only, no actions. */
+  readOnly?: boolean;
   g: GradedCard;
   /** Current showcase_slabs on the profile. */
   pinned: string[];
@@ -195,7 +198,7 @@ export function SlabDetailModal({
 
           {error && <Notice text={error} />}
 
-          {graded && (
+          {graded && !readOnly && (
             // CANCEL renders in the spot QUICKSELL / CRACK occupied and the
             // CONFIRM button appears after it, so a double-tap cancels.
             <div className="flex flex-wrap gap-2">
@@ -273,7 +276,7 @@ export function SlabDetailModal({
               ) : null}
             </div>
           )}
-          {onGrading && (
+          {onGrading && !readOnly && (
             <button
               type="button"
               onClick={onGrading}
@@ -307,6 +310,7 @@ export function ShowcaseSlabsRow({
   emptyText?: string;
 }) {
   const [slabs, setSlabs] = useState<GradedCard[] | null>(null);
+  const [open, setOpen] = useState<GradedCard | null>(null);
   React.useEffect(() => {
     let cancelled = false;
     void fetchShowcaseSlabs(userId).then((rows) => {
@@ -330,9 +334,18 @@ export function ShowcaseSlabsRow({
       )}
       <div className="flex flex-wrap gap-3">
         {slabs.map((g) => (
-          <GradedSlab key={g.id} g={g} size="compact" />
+          <GradedSlab key={g.id} g={g} size="compact" onClick={() => setOpen(g)} />
         ))}
       </div>
+      {open && (
+        <SlabDetailModal
+          g={open}
+          pinned={[]}
+          readOnly
+          onClose={() => setOpen(null)}
+          onChanged={() => {}}
+        />
+      )}
     </div>
   );
 }

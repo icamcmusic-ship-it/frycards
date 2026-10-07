@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, Plus, Check, AlertTriangle, Copy, Import, Wand2 } from 'lucide-react';
 import { encodeDeckCode, decodeDeckCode, deckLink, takePendingDeck } from './deckcode';
+import { takeBuildWith } from './cardOfTheDay';
 import { useMeta } from './MetaContext';
 import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
@@ -148,6 +149,18 @@ export function DeckBuilderScreen({ onBack }: { onBack: () => void }) {
   // A deck opened from a shared link is handed over as an unsaved draft, the
   // same shape IMPORT CODE produces.
   const [editing, setEditing] = useState<DeckRow | 'new' | null>(() => {
+    // Card of the Day hand-off: a new deck, searching for that card.
+    const buildWith = takeBuildWith();
+    if (buildWith && POOL_BY_ID[buildWith]) {
+      const def = POOL_BY_ID[buildWith];
+      return {
+        name: `${def.name} Deck`,
+        leader_id: def.type === 'Leader' ? def.id : null,
+        card_ids: [],
+        // Read once by the editor's search box below.
+        __search: def.type === 'Leader' ? '' : def.name,
+      } as unknown as DeckRow;
+    }
     const code = takePendingDeck();
     if (!code) return null;
     const res = decodeDeckCode(code, poolMap());
@@ -375,7 +388,9 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
   const [typeFilter, setTypeFilter] = useState('All');
   const [colorFilter, setColorFilter] = useState('All');
   const [costFilter, setCostFilter] = useState('All');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(
+    () => (deck as (DeckRow & { __search?: string }) | null)?.__search ?? '',
+  );
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
