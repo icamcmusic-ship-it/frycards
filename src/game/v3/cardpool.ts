@@ -1501,7 +1501,12 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
   // worst deck >= 54.8%), and the doc named this exact lever. Resolve 5
   // against -3 buys one removal with change; the +1 builder buys a second
   // every three turns instead of every other turn.
-  crimson_vector_commander: -3,
+  //
+  // 2026-10 (AUDIT-2026-10-06 §3.3): -3 -> -2, walking back the v17 bump the
+  // same way v17 walked Avatar back. v17 was measured on the one-recipe
+  // pinned suite; on the nine-recipe suite (v20+) Sentinel sits LAST in both
+  // arms on two deck seeds (pinned 40.3 / 35.0, random 40.3 / 36.4).
+  crimson_vector_commander: -2,
   void_mother: -4,
 };
 

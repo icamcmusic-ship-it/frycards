@@ -26,6 +26,8 @@ export const ENTRIES: ChangelogEntry[] = [
       'NEW: THE SHOP FLOOR. CPU customers now walk into your Player Shop about every 90 minutes and ask to buy one of your listings — or offer a card from their binder in trade. Accept, turn them away, or haggle once: push past what they will pay and they may walk out.',
       'NEW: CPU COLLECTORS BID ON AUCTIONS. Usually up to about +25% over quicksell, sometimes far less, now and then far more. Their winning bids count toward a card’s market price.',
       'GRADED SLABS GOT A LOT MORE INTERESTING. Click a slab in your Collection for its full details — grade, service, condition, value — and to sell, crack, view in 3D, or pin up to three to your profile. Low grades now LOOK low: soft corners, whitened edges, creases, a cracked case. MINT, MINT+ and GEM MINT come back in holo, prism and gold cases.',
+      'NEW: CPU DIFFICULTY. Pick EASY, NORMAL or HARD in Settings. Easy misses attacks and blocks and never holds an answer; Hard plans two turns of combat and always keeps a reaction up. Rewards are the same at every level.',
+      'BALANCE: SENTINEL OF THE NETHER PIT IS BACK IN THE GAME. Its removal ability costs 2 Resolve again instead of 3. The extra point was added when our testing read Sentinel as the strongest Leader; measured properly on nine deck recipes it was the weakest. Nothing else changed: a fresh 16,000-game check found no keyword far enough out of line to touch.',
       'SETTINGS: HAND ORDER can be set from Settings now, and the MOTION setting finally reaches the match board, card effects, the Showroom and pack opening — REDUCED calms them all, and FULL overrides your device’s setting.',
     ],
   },
