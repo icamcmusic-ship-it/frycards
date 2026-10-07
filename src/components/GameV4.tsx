@@ -73,7 +73,9 @@ import {
   reactionPlays,
   respondToStack,
   CpuTurnEvent,
+  setCpuDifficulty,
 } from '../game/v3/ai';
+import { loadCpuDifficulty } from '../meta/matchPrefs';
 import {
   CardDef,
   Effect,
@@ -1879,6 +1881,8 @@ export function GameV4({
       // Wellspring) would only ever have gone to the CPU.
       firstPlayer: firstPlayerForSeed(matchSeed),
     });
+    // The CPU seat plays at the level chosen in Settings (default NORMAL).
+    setCpuDifficulty(game, loadCpuDifficulty(), CPU);
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
     maybeMulliganPlayer(game, CPU, game.rng);

@@ -171,6 +171,50 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
  * cards look unaffordable. The engine mutates a GameState in place, so the
  * state object is a stable key for the whole game. */
 const reservedByGame = new WeakMap<GameState, Set<string>>();
+
+/**
+ * CPU difficulty, per game (AUDIT-2026-10-06 §3.2).
+ *
+ *  - easy:   drops each non-lethal attack and each optional block with a 50%
+ *            chance, forgets its Leader ability half the time, and never
+ *            holds a card back for the reaction window.
+ *            Still chump-guards real lethal, so it is beatable, not suicidal.
+ *  - normal: the AI as it has always played. The default, so sims, goldfish
+ *            and every existing test are unaffected.
+ *  - hard:   adds a two-turn race check to guarding (chump when surviving
+ *            this clash would still leave it dead to the next one) and keeps
+ *            a reaction ready even when the opponent has no attacker on board
+ *            yet — the "hold back, then drop a threat" exploit.
+ *
+ * Rolls are seeded from the game state (turn + a salt), never from the
+ * engine's RNG, so choosing a difficulty cannot shift the shuffle or draws.
+ */
+export type CpuDifficulty = 'easy' | 'normal' | 'hard';
+const difficultyByGame = new WeakMap<GameState, Partial<Record<PlayerId, CpuDifficulty>>>();
+/** Set the CPU level for one seat (or both, when `pid` is omitted). */
+export function setCpuDifficulty(state: GameState, d: CpuDifficulty, pid?: PlayerId): void {
+  const cur = difficultyByGame.get(state) ?? {};
+  if (pid) cur[pid] = d;
+  else cur.P1 = cur.P2 = d;
+  difficultyByGame.set(state, cur);
+}
+export function cpuDifficulty(state: GameState, pid: PlayerId): CpuDifficulty {
+  return difficultyByGame.get(state)?.[pid] ?? 'normal';
+}
+/** Deterministic 0..1 roll for difficulty noise. */
+function aiRoll(state: GameState, salt: string): number {
+  let h = 2166136261 ^ state.turn;
+  const key = `${salt}|${state.log.length}`;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  h ^= h >>> 15;
+  h = Math.imul(h, 2246822507) >>> 0;
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
+const EASY_SKIP = 0.5;
 function reservedLocations(state: GameState): Set<string> {
   let set = reservedByGame.get(state);
   if (!set) {
@@ -470,7 +514,9 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   const oppCanAttack = state.players[opponentOf(pid)].field.some(
     (u) => !unitHasKw(u, 'Immobile') && effMight(state, u) > 0,
   );
-  const holdForReaction = reserveCandidates.length > 0 && oppCanAttack;
+  const level = cpuDifficulty(state, pid);
+  const holdForReaction =
+    level !== 'easy' && reserveCandidates.length > 0 && (oppCanAttack || level === 'hard');
   // Reserve just the single best reaction card from this turn's own main
   // phase — Quick Events/Ambush units are legal in the caster's own main
   // phase too, and would otherwise always get spent there first, leaving
@@ -589,6 +635,8 @@ function runLeaderAbility(state: GameState, pid: PlayerId, observe?: CpuTurnObse
   const p = state.players[pid];
   const L = p.leader;
   if (!L.invoked || L.shattered || L.abilityUsedThisTurn) return;
+  // Easy forgets its Leader ability half the time.
+  if (cpuDifficulty(state, pid) === 'easy' && aiRoll(state, 'leader') < 0.5) return;
   const abilities = L.def.leaderAbilities ?? [];
   const opp = state.players[opponentOf(pid)];
   let bestIdx = -1;
@@ -831,8 +879,13 @@ export function chooseAttackers(state: GameState, pid: PlayerId): string[] {
       kills && notBehind && totalCost(worst.def.cost) > totalCost(u.def.cost) + itemTax;
     if ((kills && survives) || safeVsAll || favorableTrade) picked.push(u.iid);
   }
-  state.telemetry?.onAttackDecision?.(state, pid, picked);
-  return picked;
+  // Easy misses attacks it should make (lethal swings return above, intact).
+  const finalPicked =
+    cpuDifficulty(state, pid) === 'easy'
+      ? picked.filter((iid) => aiRoll(state, `atk:${iid}`) >= EASY_SKIP)
+      : picked;
+  state.telemetry?.onAttackDecision?.(state, pid, finalPicked);
+  return finalPicked;
 }
 
 /**
@@ -935,6 +988,13 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       continue;
     }
     const best = scored[0];
+    // Easy skips optional blocks; a block that keeps it alive still happens.
+    if (
+      !mustSurvive &&
+      cpuDifficulty(state, defender) === 'easy' &&
+      aiRoll(state, `grd:${attacker.iid}`) < EASY_SKIP
+    )
+      continue;
     if (mustSurvive || best.kills || best.survives) {
       assignments[attacker.iid] = [best.g.iid];
       used.add(best.g.iid);
@@ -994,6 +1054,35 @@ export function chooseGuards(state: GameState, defender: PlayerId): GuardAssignm
       break;
     }
     if (!added) break;
+  }
+  // Hard: a two-turn race check. Surviving this clash is not enough if what
+  // is left is within reach of the attacker's whole board next turn (every
+  // unit of theirs that can swing, attackers included — they untap). Chump
+  // the biggest unguarded attackers until the remaining life clears it.
+  if (cpuDifficulty(state, defender) === 'hard') {
+    const opp = state.players[opponentOf(defender)];
+    const nextTurnThreat = opp.field
+      .filter((u) => !unitHasKw(u, 'Immobile'))
+      .reduce(
+        (sum, u) => sum + net(effMight(state, u)) * (unitHasKw(u, 'Doublestrike') ? 2 : 1),
+        0,
+      );
+    for (const attacker of attackers) {
+      if (me.vitality - unguardedDamage() > nextTurnThreat) break;
+      if (assignments[attacker.iid]?.length) continue;
+      if (unitHasKw(attacker, 'Swarmproof')) continue;
+      const legal = legalGuardsFor(state, attacker.iid).filter((g) => !used.has(g.iid));
+      if (legal.length === 0) continue;
+      const chump = legal.sort(
+        (a, b) =>
+          effMight(state, a) +
+          remainingGrit(state, a) -
+          (effMight(state, b) + remainingGrit(state, b)),
+      )[0];
+      assignments[attacker.iid] = [chump.iid];
+      used.add(chump.iid);
+      state.telemetry?.onGuardAssign?.(attacker.iid, chump.iid, true);
+    }
   }
   state.telemetry?.onGuardDecision?.(state, defender, assignments);
   return assignments;

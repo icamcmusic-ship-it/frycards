@@ -191,3 +191,33 @@ export function motionIsReduced(mode: MotionMode): boolean {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// CPU difficulty (AUDIT-2026-10-06 §3.2). Stored by id, like the hand sort.
+// ---------------------------------------------------------------------------
+export const CPU_DIFFICULTIES = [
+  { id: 'easy', label: 'EASY', blurb: 'Misses attacks and blocks, never holds an answer' },
+  { id: 'normal', label: 'NORMAL', blurb: 'The standard opponent' },
+  { id: 'hard', label: 'HARD', blurb: 'Plans two turns of combat, always keeps an answer up' },
+] as const;
+export type CpuDifficultyId = (typeof CPU_DIFFICULTIES)[number]['id'];
+export const CPU_DIFFICULTY_KEY = 'frycards:cpu-difficulty';
+
+export function loadCpuDifficulty(): CpuDifficultyId {
+  if (typeof window === 'undefined') return 'normal';
+  try {
+    const raw = window.localStorage.getItem(CPU_DIFFICULTY_KEY)?.trim();
+    return CPU_DIFFICULTIES.find((d) => d.id === raw)?.id ?? 'normal';
+  } catch {
+    return 'normal';
+  }
+}
+
+export function saveCpuDifficulty(id: CpuDifficultyId): void {
+  if (!CPU_DIFFICULTIES.some((d) => d.id === id)) return;
+  try {
+    window.localStorage.setItem(CPU_DIFFICULTY_KEY, id);
+  } catch {
+    /* private mode — the choice just won't persist */
+  }
+}

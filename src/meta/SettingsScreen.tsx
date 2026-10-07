@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowDownUp, Palette, Sparkles, Timer, Waves } from 'lucide-react';
+import { AlertTriangle, ArrowDownUp, Swords, Palette, Sparkles, Timer, Waves } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
@@ -14,6 +14,10 @@ import {
   HandSort,
   loadHandSort,
   saveHandSort,
+  CPU_DIFFICULTIES,
+  CpuDifficultyId,
+  loadCpuDifficulty,
+  saveCpuDifficulty,
 } from './matchPrefs';
 
 /** Once every 7 days for everyone except `creator` (Fry) — mirrors the
@@ -58,6 +62,7 @@ export function SettingsScreen({
   // field.
   const [cpuSpeed, setCpuSpeed] = useState(loadCpuSpeed);
   const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
+  const [difficulty, setDifficulty] = useState<CpuDifficultyId>(loadCpuDifficulty);
   // Two-step reset: the first press arms it, the second (within 6s) fires.
   const [resetArmed, setResetArmed] = useState(false);
   const pickSpeed = (idx: number) => {
@@ -222,6 +227,35 @@ export function SettingsScreen({
                   onClick={() => pickSpeed(i)}
                 >
                   <OptionLabel label={s.label} blurb={s.blurb} />
+                </PopButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CPU difficulty (AUDIT-2026-10-06 §3.2). */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Swords className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">CPU DIFFICULTY</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How hard the CPU plays. Takes effect from your next match; rewards are the same at
+              every level. Saved locally.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CPU_DIFFICULTIES.map((d) => (
+                <PopButton
+                  key={d.id}
+                  color={difficulty === d.id ? 'black' : 'yellow'}
+                  ariaPressed={difficulty === d.id}
+                  onClick={() => {
+                    setDifficulty(d.id);
+                    saveCpuDifficulty(d.id);
+                  }}
+                >
+                  <OptionLabel label={d.label} blurb={d.blurb} />
                 </PopButton>
               ))}
             </div>
