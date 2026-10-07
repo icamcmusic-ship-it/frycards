@@ -31,9 +31,12 @@ export function useMotionMode() {
 
   useEffect(() => {
     const root = document.documentElement;
+    // 'full' is written too, so CSS can let FULL override the OS setting
+    // (the OS media blocks are scoped to html:not([data-motion='full'])).
     if (reduced) root.setAttribute('data-motion', 'reduced');
+    else if (mode === 'full') root.setAttribute('data-motion', 'full');
     else root.removeAttribute('data-motion');
-  }, [reduced]);
+  }, [reduced, mode]);
 
   const changeMode = useCallback((next: MotionMode) => {
     setMode(next);
@@ -41,4 +44,37 @@ export function useMotionMode() {
   }, []);
 
   return { mode, changeMode, reduced };
+}
+
+/**
+ * Whether motion is suppressed right now, for components that switch JS
+ * behaviour (not just CSS) on it. Follows the effective in-app setting by
+ * watching the `<html data-motion>` attribute `useMotionMode` writes, so a
+ * change in Settings reaches every mounted reader — the per-component
+ * matchMedia hooks this replaces only ever saw the OS setting.
+ */
+export function useReducedMotion(): boolean {
+  const read = () =>
+    typeof document !== 'undefined' && document.documentElement.dataset.motion
+      ? document.documentElement.dataset.motion === 'reduced'
+      : motionIsReduced(loadMotionMode());
+  const [reduced, setReduced] = useState(read);
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return;
+    const mo = new MutationObserver(() => setReduced(read()));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
+    let mq: MediaQueryList | undefined;
+    try {
+      mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    } catch {
+      mq = undefined;
+    }
+    const onChange = () => setReduced(read());
+    mq?.addEventListener('change', onChange);
+    return () => {
+      mo.disconnect();
+      mq?.removeEventListener('change', onChange);
+    };
+  }, []);
+  return reduced;
 }

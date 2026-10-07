@@ -162,8 +162,23 @@ function chooseWellspring(state: GameState, pid: PlayerId): EssenceType | null {
  * reaction play must come from locations deliberately left untapped through
  * the caster's whole turn — reserving just the card (v5.2) was not enough.
  * Fully cleared at the start of every playTurn (reservations only matter
- * within the reserving player's own turn), so nothing leaks across games. */
-const reservedLocations = new Set<string>();
+ * within the reserving player's own turn).
+ *
+ * Keyed per game: this used to be ONE module-wide Set, shared by every
+ * GameState in the process (sims, goldfish, a live match, tests). Location
+ * iids are per-game strings, so a turn that threw before clearing, or two
+ * games in one process, leaked reservations into the other game and made its
+ * cards look unaffordable. The engine mutates a GameState in place, so the
+ * state object is a stable key for the whole game. */
+const reservedByGame = new WeakMap<GameState, Set<string>>();
+function reservedLocations(state: GameState): Set<string> {
+  let set = reservedByGame.get(state);
+  if (!set) {
+    set = new Set<string>();
+    reservedByGame.set(state, set);
+  }
+  return set;
+}
 
 /**
  * Resolve what `pid` just put on the stack. If that leaves the opponent
@@ -180,7 +195,8 @@ function settleAfterPlay(state: GameState, pid: PlayerId): void {
 
 function tapAllLocations(state: GameState, pid: PlayerId): void {
   for (const l of [...state.players[pid].locations]) {
-    if (!l.exhausted && !reservedLocations.has(l.iid)) tapLocationForEssence(state, pid, l.iid);
+    if (!l.exhausted && !reservedLocations(state).has(l.iid))
+      tapLocationForEssence(state, pid, l.iid);
   }
 }
 
@@ -192,7 +208,7 @@ function tapAllLocations(state: GameState, pid: PlayerId): void {
 function reserveLocationsForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolean {
   if (!cost) return true;
   const p = state.players[pid];
-  const free = p.locations.filter((l) => !l.exhausted && !reservedLocations.has(l.iid));
+  const free = p.locations.filter((l) => !l.exhausted && !reservedLocations(state).has(l.iid));
   const picked = new Set<string>();
   const surplus: Partial<Record<EssenceType, number>> = {};
   for (const [t, needRaw] of Object.entries(cost.pips) as [EssenceType, number][]) {
@@ -226,7 +242,7 @@ function reserveLocationsForCost(state: GameState, pid: PlayerId, cost?: Essence
     picked.add(loc.iid);
     generic -= locationYield(loc);
   }
-  for (const iid of picked) reservedLocations.add(iid);
+  for (const iid of picked) reservedLocations(state).add(iid);
   return true;
 }
 
@@ -237,7 +253,7 @@ function canAffordPotential(state: GameState, pid: PlayerId, cost?: EssenceCost)
   const p = state.players[pid];
   const pool: Partial<Record<EssenceType, number>> = { ...p.essence };
   for (const l of p.locations) {
-    if (!l.exhausted && !reservedLocations.has(l.iid))
+    if (!l.exhausted && !reservedLocations(state).has(l.iid))
       pool[l.produces] = (pool[l.produces] ?? 0) + locationYield(l);
   }
   return canPayCost(pool, cost);
@@ -256,7 +272,7 @@ function tapForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolea
   for (const [t, need] of Object.entries(cost.pips) as [EssenceType, number][]) {
     while ((p.essence[t] ?? 0) < (need ?? 0)) {
       const loc = p.locations.find(
-        (l) => !l.exhausted && !reservedLocations.has(l.iid) && l.produces === t,
+        (l) => !l.exhausted && !reservedLocations(state).has(l.iid) && l.produces === t,
       );
       if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
     }
@@ -264,7 +280,7 @@ function tapForCost(state: GameState, pid: PlayerId, cost?: EssenceCost): boolea
   // Cover the rest with any untapped location.
   let safety = p.locations.length + 1;
   while (!canPayCost(p.essence, cost) && safety-- > 0) {
-    const loc = p.locations.find((l) => !l.exhausted && !reservedLocations.has(l.iid));
+    const loc = p.locations.find((l) => !l.exhausted && !reservedLocations(state).has(l.iid));
     if (!loc || !tapLocationForEssence(state, pid, loc.iid)) break;
   }
   return canPayCost(p.essence, cost);
@@ -471,7 +487,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   // no essence when the opponent-turn reaction window opens (the root cause
   // of the near-zero reaction plays measured through v5.2). If the cost
   // can't be covered, drop the reservation and play the card normally.
-  for (const l of p.locations) reservedLocations.delete(l.iid); // re-plan each main
+  for (const l of p.locations) reservedLocations(state).delete(l.iid); // re-plan each main
   if (reservedIid) {
     const rc = p.hand.find((c) => c.iid === reservedIid);
     if (!rc || !reserveLocationsForCost(state, pid, rc.def.cost)) reservedIid = undefined;
@@ -540,7 +556,7 @@ function mainPhasePlays(state: GameState, pid: PlayerId, observe?: CpuTurnObserv
   // window that may never open.
   if (reservedIid && !state.winner && p.hand.length === 1) {
     const reserved = p.hand.find((c) => c.iid === reservedIid);
-    if (reserved) for (const l of p.locations) reservedLocations.delete(l.iid);
+    if (reserved) for (const l of p.locations) reservedLocations(state).delete(l.iid);
     if (reserved && canAffordPotential(state, pid, effectiveCost(state, pid, reserved.def))) {
       tapForCost(state, pid, effectiveCost(state, pid, reserved.def));
       if (canInvoke(state, pid, reserved.iid)) {
@@ -1012,7 +1028,7 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
     // player's window (the human responding to a CPU spell) is still the
     // response the hold was for, and keeping it made the CPU silently pass
     // on an answer its affordability check said it could pay for.
-    for (const l of state.players[pid].locations) reservedLocations.delete(l.iid);
+    for (const l of state.players[pid].locations) reservedLocations(state).delete(l.iid);
     tapAllLocations(state, pid);
     const targetIid = answer.def.onInvoke ? autoTarget(state, pid, answer.def.onInvoke) : undefined;
     if (!invokeCard(state, pid, answer.iid, { targetIid })) {
@@ -1098,7 +1114,7 @@ function reactionPlaysBody(
   // only the non-active player's hold ends here; the active player's own
   // reservations are for the OPPONENT's next clash.
   if (state.active !== defender) {
-    for (const l of p.locations) reservedLocations.delete(l.iid);
+    for (const l of p.locations) reservedLocations(state).delete(l.iid);
   }
   tapAllLocations(state, defender);
   let progress = true;
@@ -1214,7 +1230,7 @@ function playTurnBody(
 ): void {
   // Stale reservations (previous turns, previous games — iids never repeat)
   // must not constrain this turn's tapping.
-  reservedLocations.clear();
+  reservedLocations(state).clear();
 
   // Main I
   if (state.phase === 'Main1') {

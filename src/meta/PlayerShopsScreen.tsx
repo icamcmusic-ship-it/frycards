@@ -3334,7 +3334,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
         <span className="heading-font text-sm">SHOP FLOOR · CPU CUSTOMERS</span>
         {state && (
           <span className="text-[10px] font-bold text-[var(--c-steel)]">
-            {state.served_24h}/{SHOP_FLOOR_DAILY_CAP} visitors today
+            {state.served_24h}/{SHOP_FLOOR_DAILY_CAP} visitors in the last 24h
             {state.customers.length < 3 && state.served_24h < SHOP_FLOOR_DAILY_CAP && state.next_at
               ? ` · next in ${untilText(state.next_at)}`
               : ''}

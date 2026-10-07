@@ -270,7 +270,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 </span>
                 {outbid && (
                   <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-white">
-                    OUTBID
+                    {l.cpu_leading
+                      ? `OUTBID BY ${(l.cpu_bidder_name ?? 'A CPU').toUpperCase()}`
+                      : 'OUTBID'}
                   </span>
                 )}
               </>

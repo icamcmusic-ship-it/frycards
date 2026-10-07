@@ -8,8 +8,8 @@
  * geometry sweeps cannot see.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { useMotionMode } from './useMotionMode';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { useReducedMotion, useMotionMode } from './useMotionMode';
 import { MOTION_KEY } from './matchPrefs';
 
 /** Drives `matchMedia('(prefers-reduced-motion: reduce)')`. */
@@ -60,7 +60,18 @@ describe('useMotionMode', () => {
     expect(hook.current.reduced).toBe(true);
     act(() => hook.current.changeMode('full'));
     expect(hook.current.reduced).toBe(false);
-    expect(document.documentElement.hasAttribute('data-motion')).toBe(false);
+    // 'full' is written so the CSS OS-media blocks (scoped to
+    // html:not([data-motion='full'])) stand down.
+    expect(document.documentElement.getAttribute('data-motion')).toBe('full');
+  });
+
+  test('useReducedMotion follows the in-app setting, not just the OS', () => {
+    stubMatchMedia(false);
+    const { result: hook } = renderHook(() => useMotionMode());
+    const { result: reader } = renderHook(() => useReducedMotion());
+    expect(reader.current).toBe(false);
+    act(() => hook.current.changeMode('reduced'));
+    return waitFor(() => expect(reader.current).toBe(true));
   });
 
   test('a stored choice is restored on the next visit', () => {

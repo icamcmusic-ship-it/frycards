@@ -106,14 +106,16 @@ export const SLAB_CSS = `
 .slab-holo { background-size: 200% 100%; animation: slab-holo 5s linear infinite; }
 .slab-twinkle { animation: slab-twinkle 2.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .slab-shine { animation: none; opacity: 0.25; }
-  .slab-ring, .slab-holo, .slab-twinkle { animation: none; }
+  html:not([data-motion='full']) .slab-shine { animation: none; opacity: 0.25; }
+  html:not([data-motion='full']) .slab-ring,
+  html:not([data-motion='full']) .slab-holo,
+  html:not([data-motion='full']) .slab-twinkle { animation: none; }
 }
 /* The in-app Motion setting (useMotionMode sets <html data-motion="reduced">). */
-[data-motion='reduced'] .slab-shine { animation: none; opacity: 0.25; }
-[data-motion='reduced'] .slab-ring,
-[data-motion='reduced'] .slab-holo,
-[data-motion='reduced'] .slab-twinkle { animation: none; }
+html[data-motion='reduced'] .slab-shine { animation: none; opacity: 0.25; }
+html[data-motion='reduced'] .slab-ring,
+html[data-motion='reduced'] .slab-holo,
+html[data-motion='reduced'] .slab-twinkle { animation: none; }
 `;
 
 /**

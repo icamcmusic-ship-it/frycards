@@ -350,16 +350,34 @@ const GAME_CSS = `
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
-  .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
+  html:not([data-motion='full']) .gv4-cpu-actor,
+  html:not([data-motion='full']) .gv4-cpu-target,
+  html:not([data-motion='full']) .gv4-lunge-down,
+  html:not([data-motion='full']) .gv4-unit-enter,
+  html:not([data-motion='full']) .gv4-cpu-play,
+  html:not([data-motion='full']) .gv4-attack-flash,
+  html:not([data-motion='full']) .gv4-banner-shake { animation: none; }
   /* Not gv4-fade: that one ends at opacity 0, which is right for a banner
    * meant to leave and wrong for a card meant to be LOOKED at for the length
    * of its beat. The information the motion carries — this card is off the
    * board — is carried by the desaturation instead, statically. */
-  .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
-  .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
-  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
+  html:not([data-motion='full']) .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
+  html:not([data-motion='full']) .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
+  html:not([data-motion='full']) .gv4-dmg-float,
+  html:not([data-motion='full']) .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .gv4-cpu-actor,
+html[data-motion='reduced'] .gv4-cpu-target,
+html[data-motion='reduced'] .gv4-lunge-down,
+html[data-motion='reduced'] .gv4-unit-enter,
+html[data-motion='reduced'] .gv4-cpu-play,
+html[data-motion='reduced'] .gv4-attack-flash,
+html[data-motion='reduced'] .gv4-banner-shake { animation: none; }
+html[data-motion='reduced'] .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
+html[data-motion='reduced'] .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
+html[data-motion='reduced'] .gv4-dmg-float,
+html[data-motion='reduced'] .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous

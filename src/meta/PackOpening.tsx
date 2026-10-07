@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, Zap } from 'lucide-react';
 import { PackPull, quicksellCards } from '../lib/supabase';
 import { CardDef } from '../game/v3/cards';
@@ -42,19 +43,7 @@ function pullToDef(pull: PackPull): CardDef {
   );
 }
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
-}
+const usePrefersReducedMotion = useReducedMotion;
 
 /** Face-down card showing the player's equipped card back. */
 function CardBackFace() {
@@ -177,8 +166,10 @@ const PACK_OPENING_CSS = `
   100% { transform: rotateY(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .po-anim { animation: none !important; }
+  html:not([data-motion='full']) .po-anim { animation: none !important; }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .po-anim { animation: none !important; }
 `;
 
 type Stage = 'pack' | 'reveal' | 'summary';
