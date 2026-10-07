@@ -104,6 +104,7 @@ const CollectionTile = React.memo(function CollectionTile({
   serialCap,
   narrow,
   wished,
+  isNew,
   onInspect,
 }: {
   def: CardDef;
@@ -113,6 +114,8 @@ const CollectionTile = React.memo(function CollectionTile({
   serialCap?: number;
   narrow: boolean;
   wished: boolean;
+  /** Owned now but not at the last visit to the Collection. */
+  isNew?: boolean;
   onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
 }) {
   const size = narrow ? 'standard' : 'full';
@@ -142,7 +145,7 @@ const CollectionTile = React.memo(function CollectionTile({
         foil={kind === 'foil'}
         serial={serial}
         dimmed={kind === 'normal' && count === 0}
-        badge={wished ? '♥ WISH' : undefined}
+        badge={isNew ? '● NEW' : wished ? '♥ WISH' : undefined}
         onClick={onClick}
       />
     </div>
@@ -513,7 +516,52 @@ export function CollectionScreen({
       ...(totals.get(r) || { total: 0, owned: 0 }),
     })).filter((e) => e.total > 0);
   }, [owned]);
+  // Per-set and per-colour completion, same rule as rarityProgress (any copy
+  // counts). Multi-colour cards count toward each of their colours.
+  const [progressBy, setProgressBy] = useState<'rarity' | 'set' | 'colour'>('rarity');
+  const groupProgress = useMemo(() => {
+    const totals = new Map<string, { total: number; owned: number }>();
+    const bump = (k: string, has: boolean) => {
+      const e = totals.get(k) || { total: 0, owned: 0 };
+      e.total += 1;
+      if (has) e.owned += 1;
+      totals.set(k, e);
+    };
+    for (const c of POOL_V4) {
+      const o = owned.get(c.id);
+      const has = (o?.q || 0) + (o?.f || 0) > 0;
+      if (progressBy === 'set') bump(c.set ?? 'FryCards', has);
+      else if (progressBy === 'colour') {
+        const cols = c.type === 'Leader' ? [] : cardColors(c);
+        for (const col of cols.length ? cols : ['Colourless']) bump(String(col), has);
+      }
+    }
+    return [...totals.entries()]
+      .map(([label, e]) => ({ label, ...e }))
+      .sort((a, b) => b.total - a.total);
+  }, [owned, progressBy]);
   const [showProgress, setShowProgress] = useState(true);
+
+  // "New since your last visit": the owned-id set is snapshotted to
+  // localStorage, and anything owned now but missing from the snapshot is
+  // NEW for this visit. The snapshot is refreshed after the comparison, so
+  // the dots clear on the next visit, not while you are looking at them.
+  // Read once, at mount — before the effect below overwrites it.
+  const [seenAtMount] = useState(readSeenSnapshot);
+  const newIds = useMemo(() => {
+    if (!seenAtMount) return new Set<string>();
+    return new Set(
+      collection
+        .filter((c) => c.quantity + c.foil_quantity > 0 && !seenAtMount.has(c.card_id))
+        .map((c) => c.card_id),
+    );
+  }, [collection, seenAtMount]);
+  useEffect(() => {
+    if (dataLoading || collection.length === 0) return;
+    writeSeenSnapshot(
+      collection.filter((c) => c.quantity + c.foil_quantity > 0).map((c) => c.card_id),
+    );
+  }, [collection, dataLoading]);
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
@@ -595,6 +643,46 @@ export function CollectionScreen({
             ariaLabel="Collection progress"
           />
           {showProgress && (
+            <div className="flex gap-1 mt-3" role="group" aria-label="Completion by">
+              {(['rarity', 'set', 'colour'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={progressBy === k}
+                  onClick={() => setProgressBy(k)}
+                  className={cn(
+                    'heading-font text-[9px] px-2 py-0.5 ink-border-sm',
+                    progressBy === k
+                      ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
+                      : 'bg-[var(--c-paper)]',
+                  )}
+                >
+                  BY {k.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
+          {showProgress && progressBy !== 'rarity' && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
+              {groupProgress.map((e) => (
+                <div key={e.label}>
+                  <div className="flex justify-between text-[9px] font-black mb-0.5">
+                    <span className="truncate pr-1">{e.label.toUpperCase()}</span>
+                    <span className="font-mono">
+                      {e.owned}/{e.total}
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={e.owned}
+                    max={e.total}
+                    className="h-1.5"
+                    ariaLabel={`${e.label} cards collected`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {showProgress && progressBy === 'rarity' && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
               {rarityProgress.map((e) => (
                 <div key={e.rarity}>
@@ -922,6 +1010,7 @@ export function CollectionScreen({
               serialCap={e.serial?.cap}
               narrow={narrow}
               wished={wishlist.has(e.def.id)}
+              isNew={e.kind !== 'serialized' && newIds.has(e.def.id)}
               onInspect={openInspector}
             />
           ))}
@@ -1171,4 +1260,21 @@ function sortSlabs(
     }
   });
   return out;
+}
+
+const SEEN_KEY = 'frycards:collection-seen';
+function readSeenSnapshot(): Set<string> | null {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+function writeSeenSnapshot(ids: string[]): void {
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(ids));
+  } catch {
+    /* private mode — no NEW dots, nothing else lost */
+  }
 }

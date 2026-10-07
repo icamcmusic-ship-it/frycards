@@ -1262,7 +1262,10 @@ function BountiesTab({
       <div className="text-[10px] font-bold text-[var(--c-steel)] mb-4">
         5 cards, rotating once a day — same list for everyone. Sell an owned copy for 5× its
         quicksell value (max 1 sell per card, 3 sells/day), or buy a copy for 3×. You can't sell
-        back a card you bought here today.
+        back a card you bought here today.{' '}
+        <span className="text-[var(--c-ink)]">
+          Sold today: {bounties.filter((b) => b.already_sold).length}/3.
+        </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {bounties.map((card) => {
