@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { loadWishlist } from './wishlist';
 import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, Zap } from 'lucide-react';
 import { PackPull, quicksellCards } from '../lib/supabase';
@@ -606,6 +607,7 @@ function RevealStage({
                     : undefined
                 }
               />
+              {currentShown && isWishlisted(current.card_id) && <WishlistHit />}
               {/* foil sheen sweep */}
               {currentShown && current.foil && !reducedMotion && (
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -990,6 +992,7 @@ function SummaryStage({
                       : undefined
                   }
                 />
+                {isWishlisted(grp.pull.card_id) && <WishlistHit small />}
                 {spent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
@@ -1075,5 +1078,24 @@ function StatTile({
         {value}
       </div>
     </div>
+  );
+}
+
+/** A card the player hearted in the Collection's wishlist. Read per call:
+ * localStorage is cheap and the list can change between packs. */
+function isWishlisted(cardId: string | undefined): boolean {
+  return !!cardId && loadWishlist().has(cardId);
+}
+
+function WishlistHit({ small }: { small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute z-10 left-1/2 -translate-x-1/2 heading-font bg-[var(--c-red)] text-white ink-border-sm shadow-hard-black-xs whitespace-nowrap pointer-events-none',
+        small ? '-top-2 text-[8px] px-1' : '-top-3 text-[11px] px-2 py-0.5',
+      )}
+    >
+      ♥ WISHLIST HIT!
+    </span>
   );
 }

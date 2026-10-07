@@ -133,6 +133,41 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
+  // Claim every finished, unclaimed mission in one go. Sequential, not
+  // parallel: each claim credits the profile and the server locks it.
+  const claimable = missions.filter((m) => m.progress >= m.target && !m.claimed);
+  const handleClaimAll = async () => {
+    if (busyId || claimable.length === 0) return;
+    setError('');
+    setNotice('');
+    setBusyId('__all__');
+    let ok = 0;
+    let credits = 0;
+    let vouchers = 0;
+    try {
+      for (const m of claimable) {
+        const err = await claimMission(m.id);
+        if (err) {
+          setError(`Stopped at "${m.name}": ${err}`);
+          break;
+        }
+        ok++;
+        credits += m.reward_credits;
+        vouchers += m.reward_vouchers;
+      }
+      if (ok > 0)
+        setNotice(
+          `Claimed ${ok} mission${ok === 1 ? '' : 's'} — +${credits.toLocaleString('en-US')} credits${vouchers ? `, +${vouchers} vouchers` : ''}.`,
+        );
+      await refreshProfile();
+      await reload(undefined, { background: true });
+    } catch {
+      setError('Something went wrong — check your connection and try again.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const grouped = useMemo(() => {
     const g = new Map<string, Achievement[]>();
     for (const a of achievements) {
@@ -243,6 +278,13 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                 No missions available right now — check back after the next reset.
               </div>
             )}
+            {claimable.length > 1 && (
+              <div className="mb-4">
+                <PopButton color="red" disabled={!!busyId} onClick={() => void handleClaimAll()}>
+                  {busyId === '__all__' ? 'CLAIMING…' : `CLAIM ALL (${claimable.length})`}
+                </PopButton>
+              </div>
+            )}
             {(['daily', 'weekly'] as const).map((cadence) => {
               const list = missions.filter((m) => m.cadence === cadence);
               if (list.length === 0) return null;
@@ -256,8 +298,9 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                         bare "midnight" here promised local-time resets the
                         server doesn't deliver. */}
                     {cadence === 'daily'
-                      ? 'Reset every day at midnight UTC.'
-                      : 'Reset every Monday (UTC).'}
+                      ? 'Reset every day at midnight UTC'
+                      : 'Reset every Monday (UTC)'}
+                    {` — next in ${untilReset(cadence)}.`}
                   </div>
                   <div className="flex flex-col gap-3">
                     {list.map((m) => {
@@ -382,4 +425,19 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
       </div>
     </div>
   );
+}
+
+/** Time until the next UTC mission reset (daily: midnight; weekly: Monday). */
+export function untilReset(cadence: 'daily' | 'weekly', now = new Date()): string {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  if (cadence === 'weekly') {
+    // getUTCDay: 0 = Sunday … 1 = Monday. Days until the next Monday 00:00.
+    const add = (8 - now.getUTCDay()) % 7 || 7;
+    next.setUTCDate(now.getUTCDate() + add);
+  }
+  const mins = Math.max(0, Math.ceil((next.getTime() - now.getTime()) / 60000));
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
