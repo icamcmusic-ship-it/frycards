@@ -30,6 +30,7 @@
  * turntable that refuses to turn.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from '../meta/useMotionMode';
 import { CardDef } from '../game/v3/cards';
 import { CardFace, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
@@ -177,25 +178,24 @@ export const SHOWROOM_CSS = `
 .showroom-aurora { animation: showroom-aurora 11s ease-in-out infinite; }
 .showroom-pulse { animation: showroom-pulse 3.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .showroom-sweep, .showroom-drift, .showroom-aurora, .showroom-pulse {
+  html:not([data-motion='full']) .showroom-sweep,
+  html:not([data-motion='full']) .showroom-drift,
+  html:not([data-motion='full']) .showroom-aurora,
+  html:not([data-motion='full']) .showroom-pulse {
     animation: none;
   }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .showroom-sweep,
+html[data-motion='reduced'] .showroom-drift,
+html[data-motion='reduced'] .showroom-aurora,
+html[data-motion='reduced'] .showroom-pulse {
+    animation: none;
+  }
 `;
 
-export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
-}
+/** Kept as a named export for existing importers. */
+export const usePrefersReducedMotion = useReducedMotion;
 
 /** Live camera state. Yaw is unbounded (wrapped only for DISPLAY). */
 export type Pose = { yaw: number; pitch: number; zoom: number };

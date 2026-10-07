@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { askConfirm } from './confirm';
 import { ShowcaseSlabsRow } from './SlabDetailModal';
-import { SLAB_CSS } from './GradedSlab';
 import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -298,7 +298,6 @@ export function ProfileScreen({
 
         {/* Graded showcase — pinned slabs (pin them from a slab's detail sheet). */}
         <div className="mt-7">
-          <style>{SLAB_CSS}</style>
           <h2 className="heading-font text-base bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5 mb-2">
             GRADED SHOWCASE
           </h2>
@@ -306,6 +305,7 @@ export function ProfileScreen({
             userId={profile.id}
             refreshKey={(profile.showcase_slabs ?? []).join(',')}
             emptyText="Open a graded slab in your Collection and press SHOWCASE to pin up to 3 here."
+            onEdited={refreshProfile}
           />
         </div>
 
@@ -586,11 +586,11 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || (credits === 0 && vouchers === 0)}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    !confirm(
+                    !(await askConfirm(
                       `Grant ${fmtCredits(credits)} credits / ${vouchers} vouchers to ${target.username}? This applies instantly.`,
-                    )
+                    ))
                   )
                     return;
                   run(
@@ -648,11 +648,11 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || !cardId.trim()}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    !confirm(
+                    !(await askConfirm(
                       `Grant ${cardQty}× ${cardId.trim()}${cardFoil ? ' (foil)' : ''} to ${target.username}? This applies instantly.`,
-                    )
+                    ))
                   )
                     return;
                   run(
@@ -690,8 +690,8 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy}
-                onClick={() => {
-                  if (!confirm(`Set ${target.username}'s role to "${role}"?`)) return;
+                onClick={async () => {
+                  if (!(await askConfirm(`Set ${target.username}'s role to "${role}"?`))) return;
                   // The TARGET banner's RoleBadge reads `target.role`, a
                   // one-shot snapshot from when this player was selected —
                   // refreshProfile()/refreshCollection() above only update

@@ -53,14 +53,19 @@ $$;
 create or replace trigger market_listings_cpu_lead_guard before update on public.market_listings
   for each row execute function public.market_listing_cpu_lead_guard();
 
-create or replace function public.cpu_ceiling_factor()
-returns numeric language plpgsql volatile set search_path to 'public' as $$
-declare r numeric := random();
+-- Seeded per (seller, card, foil, UTC day): relisting the same card the same
+-- day draws the SAME ceiling, so a seller cannot reroll for a 2.5x collector.
+create or replace function public.cpu_ceiling_factor(p_seed text)
+returns numeric language plpgsql immutable set search_path to 'public' as $$
+declare
+  h bytea := decode(md5(p_seed), 'hex');
+  r numeric := ((get_byte(h, 0) * 256 + get_byte(h, 1))::numeric) / 65536;
+  r2 numeric := ((get_byte(h, 2) * 256 + get_byte(h, 3))::numeric) / 65536;
 begin
-  if r < 0.25 then return 0.50 + random() * 0.35; end if;
-  if r < 0.80 then return 0.85 + random() * 0.40; end if;
-  if r < 0.95 then return 1.25 + random() * 0.35; end if;
-  return 1.60 + random() * 0.90;
+  if r < 0.25 then return 0.50 + r2 * 0.35; end if;
+  if r < 0.80 then return 0.85 + r2 * 0.40; end if;
+  if r < 0.95 then return 1.25 + r2 * 0.35; end if;
+  return 1.60 + r2 * 0.90;
 end;
 $$;
 
@@ -92,7 +97,16 @@ begin
       select rarity into v_rarity from cards where id = v_l.card_id;
       v_unit := card_sell_price(v_rarity);
       if v_l.foil then v_unit := ceil(v_unit * 2.5)::int; end if;
-      v_l.cpu_ceiling := greatest(1, round(v_unit * v_l.quantity * cpu_ceiling_factor())::int);
+      -- The CPU ignores auctions that open above quicksell value: a high
+      -- starting bid would otherwise let the seller filter out every
+      -- lowball collector and keep only the generous ones.
+      if v_l.price > v_unit * v_l.quantity then
+        v_l.cpu_ceiling := 0;
+      else
+        v_l.cpu_ceiling := greatest(1, round(v_unit * v_l.quantity * cpu_ceiling_factor(
+          v_l.seller::text || '|' || v_l.card_id || '|' || v_l.foil::text || '|' ||
+          (now() at time zone 'utc')::date::text))::int);
+      end if;
       update market_listings set cpu_ceiling = v_l.cpu_ceiling where id = v_l.id;
     end if;
 
@@ -149,7 +163,10 @@ begin
     if v_l.listing_type = 'auction' and v_l.current_bidder is not null then
       perform finalize_sale(v_l, v_l.current_bidder, v_l.current_bid);
       update market_listings set status = 'sold' where id = v_l.id;
-    elsif v_l.listing_type = 'auction' and v_l.cpu_leading and v_l.current_bid is not null then
+    elsif v_l.listing_type = 'auction' and v_l.cpu_leading and v_l.current_bid is not null
+          and (select count(*) from market_listings m
+                where m.seller = v_l.seller and m.status = 'sold' and m.cpu_bidder_name is not null
+                  and m.current_bidder is null and m.ends_at > now() - interval '24 hours') < 8 then
       -- CPU won: seller paid less the 5% fee; the cards leave the game.
       update profiles
          set credits = credits + (v_l.current_bid - ceil(v_l.current_bid * 0.05))::int,
@@ -175,7 +192,7 @@ end;
 $$;
 
 revoke all on function public.run_cpu_bidders() from public, anon, authenticated;
-revoke all on function public.cpu_ceiling_factor() from public, anon, authenticated;
+revoke all on function public.cpu_ceiling_factor(text) from public, anon, authenticated;
 revoke all on function public.cpu_persona_name() from public, anon, authenticated;
 
 -- SHOP FLOOR ------------------------------------------------------------------
@@ -278,9 +295,13 @@ begin
       v_target_price := round(v_ref * (0.7 + random() * 0.6))::int;
       select rarity into v_rarity from (
         select distinct rarity from cards where card_type <> 'Leader' and rarity is not null
+          and set_name in (select unnest(allowed_sets) from pack_types
+                            where is_active and acquisition = 'purchase')
       ) r order by abs(card_sell_price(rarity) - v_target_price), random() limit 1;
       select id into v_card from cards
        where rarity = v_rarity and card_type <> 'Leader'
+         and set_name in (select unnest(allowed_sets) from pack_types
+                           where is_active and acquisition = 'purchase')
          and id <> (v_l.cards->0->>'card_id')
        order by random() limit 1;
       if v_card is not null then
@@ -356,6 +377,9 @@ declare
   v_price int;
 begin
   if v_uid is null then raise exception 'Not authenticated'; end if;
+  if not exists (select 1 from player_shops where owner = v_uid and status = 'active') then
+    raise exception 'Your shop is closed';
+  end if;
   select * into v_c from shop_customers where id = p_id and owner = v_uid for update;
   if not found then raise exception 'Customer not found'; end if;
   if v_c.status <> 'waiting' then raise exception 'That customer has already left'; end if;
@@ -377,7 +401,9 @@ begin
   if p_action = 'counter' then
     if v_c.kind <> 'buy' then raise exception 'Trade offers cannot be haggled'; end if;
     if v_c.haggled then raise exception 'This customer will not haggle again'; end if;
-    if p_counter is null or p_counter < 1 then raise exception 'Invalid counter-offer'; end if;
+    if p_counter is null or p_counter <= v_c.offer_credits then
+      raise exception 'A counter-offer has to be more than their % credit offer', v_c.offer_credits;
+    end if;
     if p_counter <= v_c.walkaway_credits then
       v_price := p_counter;
     elsif random() < 0.6 then

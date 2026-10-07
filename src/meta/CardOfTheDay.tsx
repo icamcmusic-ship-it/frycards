@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { POOL_V4 } from '../game/v3/cardpool';
 import { CardFace } from '../components/CardFaceV4';
 import { Card3DInspector } from '../components/Card3DInspector';
-import { cardOfTheDay } from './cardOfTheDay';
+import { cardOfTheDay, setBuildWith } from './cardOfTheDay';
 
 /**
  * A spotlight on one catalog card per day, on the main menu. Tap it to look
@@ -10,7 +10,7 @@ import { cardOfTheDay } from './cardOfTheDay';
  * every card whether or not the player owns it, so it doubles as a way to
  * learn the card pool.
  */
-export function CardOfTheDay() {
+export function CardOfTheDay({ onBuild }: { onBuild?: () => void } = {}) {
   const card = useMemo(() => cardOfTheDay(POOL_V4), []);
   const [open, setOpen] = useState(false);
   if (!card) return null;
@@ -31,6 +31,18 @@ export function CardOfTheDay() {
             <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
               Tap the card to inspect it. A new one every day.
             </div>
+            {onBuild && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBuildWith(card.id);
+                  onBuild();
+                }}
+                className="btn-pop heading-font text-[10px] mt-2 bg-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs"
+              >
+                BUILD A DECK WITH IT ▸
+              </button>
+            )}
           </div>
         </div>
       </div>

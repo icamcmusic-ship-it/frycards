@@ -25,6 +25,9 @@ import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
+import { SLAB_CSS } from './meta/slabCss';
+import { ConfirmHost } from './meta/confirm';
+const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
 import type { MotionMode } from './meta/matchPrefs';
 
 const CATALOG_CACHE_KEY = 'catalog';
@@ -842,8 +845,15 @@ export default function App() {
                 </button>
               </div>
             )}
+            {/* The root MotionConfig the comments above describe: without it,
+                motion/react animations ignored the in-app Motion setting. */}
+            {/* Slab keyframes (incl. @property --slab-angle), defined once. */}
+            <style>{SLAB_CSS}</style>
+            <ConfirmHost />
             <React.Suspense fallback={<ScreenFallback />}>
-              <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+              <MotionRoot mode={motionMode}>
+                <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+              </MotionRoot>
             </React.Suspense>
           </>
         )}

@@ -73,7 +73,9 @@ import {
   reactionPlays,
   respondToStack,
   CpuTurnEvent,
+  setCpuDifficulty,
 } from '../game/v3/ai';
+import { loadCpuDifficulty } from '../meta/matchPrefs';
 import {
   CardDef,
   Effect,
@@ -350,16 +352,34 @@ const GAME_CSS = `
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gv4-cpu-actor, .gv4-cpu-target, .gv4-lunge-down, .gv4-unit-enter,
-  .gv4-cpu-play, .gv4-attack-flash, .gv4-banner-shake { animation: none; }
+  html:not([data-motion='full']) .gv4-cpu-actor,
+  html:not([data-motion='full']) .gv4-cpu-target,
+  html:not([data-motion='full']) .gv4-lunge-down,
+  html:not([data-motion='full']) .gv4-unit-enter,
+  html:not([data-motion='full']) .gv4-cpu-play,
+  html:not([data-motion='full']) .gv4-attack-flash,
+  html:not([data-motion='full']) .gv4-banner-shake { animation: none; }
   /* Not gv4-fade: that one ends at opacity 0, which is right for a banner
    * meant to leave and wrong for a card meant to be LOOKED at for the length
    * of its beat. The information the motion carries — this card is off the
    * board — is carried by the desaturation instead, statically. */
-  .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
-  .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
-  .gv4-dmg-float, .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
+  html:not([data-motion='full']) .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
+  html:not([data-motion='full']) .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
+  html:not([data-motion='full']) .gv4-dmg-float,
+  html:not([data-motion='full']) .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .gv4-cpu-actor,
+html[data-motion='reduced'] .gv4-cpu-target,
+html[data-motion='reduced'] .gv4-lunge-down,
+html[data-motion='reduced'] .gv4-unit-enter,
+html[data-motion='reduced'] .gv4-cpu-play,
+html[data-motion='reduced'] .gv4-attack-flash,
+html[data-motion='reduced'] .gv4-banner-shake { animation: none; }
+html[data-motion='reduced'] .gv4-cpu-lost { animation: none; filter: grayscale(0.85); }
+html[data-motion='reduced'] .gv4-phase-banner { animation: gv4-fade calc(${FX_MS.banner}ms * var(--gv4-pace, 1)) ease-out forwards; }
+html[data-motion='reduced'] .gv4-dmg-float,
+html[data-motion='reduced'] .gv4-heal-float { animation: gv4-fade-float calc(${FX_MS.float}ms * var(--gv4-pace, 1)) ease-out forwards; }
 `;
 
 /** One floating "-N" damage (or "+N" heal) number, keyed so simultaneous
@@ -1861,6 +1881,8 @@ export function GameV4({
       // Wellspring) would only ever have gone to the CPU.
       firstPlayer: firstPlayerForSeed(matchSeed),
     });
+    // The CPU seat plays at the level chosen in Settings (default NORMAL).
+    setCpuDifficulty(game, loadCpuDifficulty(), CPU);
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
     maybeMulliganPlayer(game, CPU, game.rng);
@@ -1958,13 +1980,11 @@ export function GameV4({
       return next.id;
     });
   };
-  const cycleCpuSpeed = () => {
-    setCpuSpeedIdx((i) => {
-      const next = (i + 1) % CPU_SPEEDS.length;
-      cpuSpeedRef.current = next;
-      saveCpuSpeed(next);
-      return next;
-    });
+  /** Jump straight to a narration speed (the ⏱ menu). */
+  const pickCpuSpeed = (i: number) => {
+    cpuSpeedRef.current = i;
+    saveCpuSpeed(i);
+    setCpuSpeedIdx(i);
   };
   /** How long the beat at `i` stays up. A beat that spotlights a card face
    * (or declares an attack) holds longer — there is more to take in than a
@@ -4543,17 +4563,22 @@ export function GameV4({
             ) : (
               <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                cycleCpuSpeed();
-              }}
+            {/* A menu, not a cycling chip: four rungs meant up to three taps
+                to reach CINEMATIC (AUDIT-2026-10-06 §2.21). */}
+            <select
+              value={cpuSpeedIdx}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => pickCpuSpeed(Number(e.target.value))}
               title={SPEED_TOOLTIP}
-              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
-              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm align-middle"
+              aria-label="Narration speed"
+              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 text-[var(--c-paper)] px-1 py-0.5 ink-border-sm align-middle"
             >
-              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-            </button>
+              {CPU_SPEEDS.map((sp, i) => (
+                <option key={sp.label} value={i}>
+                  ⏱ {sp.label}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -4827,14 +4852,19 @@ export function GameV4({
             RESOLVE CLASH live underneath a narration the player is watching. */}
         {stage === 'cpu' || narrating ? (
           <>
-            <button
-              onClick={cycleCpuSpeed}
+            <select
+              value={cpuSpeedIdx}
+              onChange={(e) => pickCpuSpeed(Number(e.target.value))}
               title={SPEED_TOOLTIP}
-              aria-label={`Narration speed: ${CPU_SPEEDS[cpuSpeedIdx].label}. Click to change`}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
+              aria-label="Narration speed"
+              className="heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
             >
-              ⏱ {CPU_SPEEDS[cpuSpeedIdx].label}
-            </button>
+              {CPU_SPEEDS.map((sp, i) => (
+                <option key={sp.label} value={i}>
+                  ⏱ {sp.label}
+                </option>
+              ))}
+            </select>
             <button
               onClick={toggleCpuPause}
               title={

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { askConfirm } from './confirm';
 import { Sparkles, ScrollText, Newspaper } from 'lucide-react';
 import { MetaHeader } from './ui';
 import { useMeta } from './MetaContext';
@@ -263,7 +264,7 @@ export function NewsCenterScreen({
                       <button
                         onClick={async () => {
                           if (deletingId) return;
-                          if (!confirm(`Delete the post "${p.title}"?`)) return;
+                          if (!(await askConfirm(`Delete the post "${p.title}"?`))) return;
                           setPostErr(null);
                           setDeletingId(p.id);
                           try {

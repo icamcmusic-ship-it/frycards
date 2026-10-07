@@ -90,26 +90,9 @@ function certOf(id: string): { no: string; bars: number[] } {
   return { no, bars };
 }
 
-export const SLAB_CSS = `
-@keyframes slab-shine {
-  0% { transform: translateX(-120%) rotate(8deg); opacity: 0; }
-  12% { opacity: 0.85; }
-  55% { opacity: 0.5; }
-  100% { transform: translateX(240%) rotate(8deg); opacity: 0; }
-}
-.slab-shine { animation: slab-shine 4.5s ease-in-out infinite; }
-@property --slab-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
-@keyframes slab-spin { to { --slab-angle: 360deg; } }
-@keyframes slab-holo { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
-@keyframes slab-twinkle { 0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
-.slab-ring { animation: slab-spin 6s linear infinite; }
-.slab-holo { background-size: 200% 100%; animation: slab-holo 5s linear infinite; }
-.slab-twinkle { animation: slab-twinkle 2.4s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .slab-shine { animation: none; opacity: 0.25; }
-  .slab-ring, .slab-holo, .slab-twinkle { animation: none; }
-}
-`;
+// The slab keyframes live in slabCss.ts so the App root can inject them once
+// without pulling the card renderer into the main bundle.
+export { SLAB_CSS } from './slabCss';
 
 /**
  * Premium case for the top three grades. A 9 (MINT) gets a cool holo-steel
@@ -248,6 +231,20 @@ function Damage({ level, seed }: { level: 1 | 2 | 3; seed: number }) {
   );
 }
 
+/** Hover text: the condition tier, or the premium case, of a revealed slab. */
+export function slabTooltip(grade: number): string {
+  const tier = premiumTier(grade);
+  if (tier === 'gem') return `GEM MINT ${fmtGrade(grade)} — gold case`;
+  if (tier === 'mintplus') return `MINT+ ${fmtGrade(grade)} — prism case`;
+  if (tier === 'mint') return `MINT ${fmtGrade(grade)} — holo case`;
+  return [
+    `Clean (grade ${fmtGrade(grade)})`,
+    `Light wear (grade ${fmtGrade(grade)}) — a soft corner`,
+    `Played (grade ${fmtGrade(grade)}) — whitened edges, scuffs, fading`,
+    `Damaged (grade ${fmtGrade(grade)}) — creased, stained, cracked case`,
+  ][conditionOf(grade)];
+}
+
 export function GradedSlab({
   g,
   size = 'compact',
@@ -295,6 +292,7 @@ export function GradedSlab({
           onClick();
         }
       }}
+      title={graded ? slabTooltip(g.grade!) : undefined}
       aria-label={
         graded
           ? `${def.name}, graded ${fmtGrade(g.grade!)} ${word} by ${svc.name}, certificate ${cert.no}`

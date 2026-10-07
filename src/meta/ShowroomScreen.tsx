@@ -47,7 +47,7 @@ import { PopButton } from './ui';
 import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
-import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { GradedSlab } from './GradedSlab';
 import { GradedCard, GRADING_SERVICE_BY_ID, fetchGradedCards, fmtGrade } from './grading';
 import {
   DEFAULT_POSE,
@@ -274,7 +274,7 @@ export function ShowroomScreen({
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-ink)] text-[var(--c-paper)] flex flex-col">
-      <style>{SHOWROOM_CSS + SLAB_CSS}</style>
+      <style>{SHOWROOM_CSS}</style>
 
       <div className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5 border-b-4 border-[var(--c-yellow)]">
         <PopButton onClick={onBack} color="yellow">

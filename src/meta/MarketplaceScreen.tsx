@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askConfirm } from './confirm';
 import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -86,6 +87,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   const [bidFor, setBidFor] = useState<MarketListing | null>(null);
   const [bidAmount, setBidAmount] = useState(0);
   const [rarityFilter, setRarityFilter] = useState('All');
+  const [showFilter, setShowFilter] = useState<'all' | 'auctions' | 'fixed' | 'cpu' | 'soon'>(
+    'all',
+  );
   const [search, setSearch] = useState('');
 
   // Generation counter guards against an older in-flight reload() resolving
@@ -147,9 +151,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
   // states advance on their own instead of freezing at whatever "now" was
   // when the screen mounted — a full minute between ticks left up to 60s
   // where an already-ended auction still showed live BID/BUY buttons.
-  const [, setTick] = useState(0);
+  // The tick carries the clock itself, so render code (the "ending in 15
+  // min" filter) reads time from state instead of calling Date.now().
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 10_000);
+    const id = window.setInterval(() => setNowMs(Date.now()), 10_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -185,6 +191,14 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     const def = defFor(l.card_id);
     if (rarityFilter !== 'All' && (def.rarity || 'Common') !== rarityFilter) return false;
     if (search && !def.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (showFilter === 'auctions' && l.listing_type !== 'auction') return false;
+    if (showFilter === 'fixed' && l.listing_type !== 'fixed') return false;
+    if (showFilter === 'cpu' && !l.cpu_leading) return false;
+    if (
+      showFilter === 'soon' &&
+      (l.listing_type !== 'auction' || new Date(l.ends_at).getTime() - nowMs > 15 * 60_000)
+    )
+      return false;
     return true;
   });
 
@@ -270,7 +284,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 </span>
                 {outbid && (
                   <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-white">
-                    OUTBID
+                    {l.cpu_leading
+                      ? `OUTBID BY ${(l.cpu_bidder_name ?? 'A CPU').toUpperCase()}`
+                      : 'OUTBID'}
                   </span>
                 )}
               </>
@@ -297,8 +313,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <PopButton
                 color="steel"
                 disabled={busy || l.bid_count > 0}
-                onClick={() => {
-                  if (!confirm('Cancel this listing? Your cards will be returned.')) return;
+                onClick={async () => {
+                  if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
+                    return;
                   run(() => cancelListing(l.id), 'Listing cancelled — cards returned.');
                 }}
                 title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
@@ -332,9 +349,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                       timedOut ||
                       profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
                     }
-                    onClick={() => {
+                    onClick={async () => {
                       const price = isAuction ? (l.buyout ?? 0) : l.price;
-                      if (!confirm(`Buy this listing for ${fmtCredits(price)}?`)) return;
+                      if (!(await askConfirm(`Buy this listing for ${fmtCredits(price)}?`))) return;
                       run(() => buyListing(l.id), 'Purchase complete!');
                     }}
                   >
@@ -464,6 +481,18 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 {['All', ...RARITY_ORDER].map((r) => (
                   <option key={r}>{r}</option>
                 ))}
+              </select>
+              <select
+                className={select}
+                aria-label="Filter listings"
+                value={showFilter}
+                onChange={(e) => setShowFilter(e.target.value as typeof showFilter)}
+              >
+                <option value="all">All listings</option>
+                <option value="auctions">Auctions</option>
+                <option value="fixed">Fixed price</option>
+                <option value="cpu">CPU collector leading</option>
+                <option value="soon">Ending in 15 min</option>
               </select>
             </div>
             {listings.length >= MARKET_LIST_LIMIT && (
@@ -816,6 +845,16 @@ function SellForm({
 
           {type === 'auction' && (
             <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2 max-w-xl">
+              {selected && (
+                <span className="block text-[var(--c-ink)] mb-1">
+                  CPU range for this lot: usually{' '}
+                  {fmtCredits(Math.round(suggested * quantity * 0.85))}–
+                  {fmtCredits(Math.round(suggested * quantity * 1.25))} cr
+                  {price > suggested * quantity
+                    ? ' — your starting bid is above quicksell, so CPU collectors will skip it.'
+                    : '.'}
+                </span>
+              )}
               CPU collectors bid on auctions too. Each one values your card around its quicksell
               price — usually up to +25%, sometimes far less, now and then far more — so a low
               starting bid can be lowballed, and a lucky one can sell well above quicksell. Their

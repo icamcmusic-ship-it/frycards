@@ -39,7 +39,7 @@ import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { spareSplit } from './CollectionScreen';
 import { fmtCredits, fmtVouchers } from './economy';
-import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { GradedSlab } from './GradedSlab';
 import type { ShowroomSubject } from './ShowroomScreen';
 import {
   GradedCard,
@@ -174,19 +174,23 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const [service, setService] = useState<GradingService>('keeper');
   const [speed, setSpeed] = useState<GradingSpeed>('standard');
   const [currency, setCurrency] = useState<GradingCurrency>('credits');
-  const payBarRef = useRef<HTMLDivElement | null>(null);
+  // Callback ref: the bar mounts and unmounts with the basket, and the
+  // observer follows it rather than being rebuilt on every render.
+  const [payBarEl, payBarRef] = useState<HTMLDivElement | null>(null);
   const [payBarH, setPayBarH] = useState(0);
   useEffect(() => {
-    const el = payBarRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      setPayBarH(el ? el.offsetHeight : 0);
+    if (!payBarEl) {
+      setPayBarH(0);
       return;
     }
-    const ro = new ResizeObserver(() => setPayBarH(el.offsetHeight));
-    ro.observe(el);
-    setPayBarH(el.offsetHeight);
+    if (typeof ResizeObserver === 'undefined') {
+      setPayBarH(payBarEl.offsetHeight);
+      return;
+    }
+    const ro = new ResizeObserver(() => setPayBarH(payBarEl.offsetHeight));
+    ro.observe(payBarEl);
     return () => ro.disconnect();
-  });
+  }, [payBarEl]);
   const [basket, setBasket] = useState<Map<string, number>>(new Map()); // `${cardId}|${foil}` -> qty
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -478,7 +482,6 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <style>{SLAB_CSS}</style>
       <MetaHeader title="GRADING LAB" onBack={onBack} />
       <div
         className="max-w-5xl mx-auto p-4 sm:p-6"
@@ -892,6 +895,18 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   type="button"
                   onClick={() => setCurrency(id)}
                   aria-pressed={currency === id}
+                  title={
+                    id === 'vouchers'
+                      ? `You have ${profile.vouchers.toLocaleString('en-US')} vouchers`
+                      : `You have ${profile.credits.toLocaleString('en-US')} credits`
+                  }
+                  // A currency you cannot cover is greyed (still selectable,
+                  // so the submit button can say exactly what is short).
+                  style={
+                    (id === 'vouchers' ? profile.vouchers < voucherFee : profile.credits < totalFee)
+                      ? { opacity: 0.45 }
+                      : undefined
+                  }
                   className={cn(
                     'heading-font text-[10px] px-2 py-1 ink-border-sm flex items-center gap-1',
                     currency === id
@@ -1085,7 +1100,6 @@ function RevealCeremony({
       role="dialog"
       aria-label="Grade reveal"
     >
-      <style>{SLAB_CSS}</style>
       <div className="heading-font text-[var(--c-yellow)] text-sm flex items-center gap-2 text-center">
         <Award className="w-4 h-4 shrink-0" aria-hidden /> {svc.name.toUpperCase()} — RESULT{' '}
         {idx + 1}/{results.length}

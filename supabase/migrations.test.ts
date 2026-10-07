@@ -6,7 +6,7 @@
  * with an unterminated dollar-quote that only a real parse found.
  *
  * It checks that each migration applies, and pins the behaviour of the fixes
- * the 2026-09-29 audit made (see AUDIT-2026-09-29.md). The stubs are the
+ * the 2026-09-29 audit made (see AUDIT-2026-09-29.md in git history; superseded by AUDIT-2026-10-06.md). The stubs are the
  * minimum the functions touch; they are not a model of the live schema.
  */
 import { PGlite } from '@electric-sql/pglite';
