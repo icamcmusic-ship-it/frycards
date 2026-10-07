@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy, Target, Coins, Ticket, Package, Zap, Check } from 'lucide-react';
+import { BingoPanel } from './BingoPanel';
+import { Trophy, Grid3x3, Target, Coins, Ticket, Package, Zap, Check } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
   fetchAchievements,
@@ -14,7 +15,7 @@ import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
 import { cn } from '../lib/utils';
 import { fmtCredits, fmtVouchers } from './economy';
 
-type Tab = 'missions' | 'achievements';
+type Tab = 'missions' | 'achievements' | 'bingo';
 
 const CATEGORY_LABELS: Record<string, string> = {
   battle: 'BATTLE',
@@ -241,6 +242,11 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
               {achievements.length})
             </span>
           </PopButton>
+          <PopButton color={tab === 'bingo' ? 'black' : 'yellow'} onClick={() => setTab('bingo')}>
+            <span className="flex items-center gap-1">
+              <Grid3x3 className="w-3.5 h-3.5" /> WEEKLY BINGO
+            </span>
+          </PopButton>
         </div>
 
         {error && (
@@ -271,6 +277,8 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
               RETRY
             </PopButton>
           </div>
+        ) : tab === 'bingo' ? (
+          <BingoPanel />
         ) : tab === 'missions' ? (
           <>
             {missions.length === 0 && (
