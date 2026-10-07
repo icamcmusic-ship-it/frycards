@@ -33,6 +33,7 @@ import {
   SHOP_MAX_SLOTS,
   shopSlotCost,
   shopMinPoolSize,
+  quicksellPrice,
 } from './economy';
 import { PlayerLink } from './PlayerProfileModal';
 import { spareSplit } from './CollectionScreen';
@@ -96,15 +97,13 @@ import {
   buyMysteryPack,
   rateShopPurchase,
   reportListing,
-} from '../lib/supabase';
-import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
-import {
   fetchShopFloor,
   respondShopCustomer,
   ShopCustomer,
   ShopFloorState,
   SHOP_FLOOR_DAILY_CAP,
 } from '../lib/supabase';
+import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 // Mirror rarity.ts's ladder — a local copy drifted once already (missing
 // 'Alt-Art'), which made Alt-Art weights/guarantees impossible to express in
@@ -3193,6 +3192,19 @@ function MysteryBuilderPanel({
 // ---------------------------------------------------------------------------
 export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = useState<'directory' | 'myshop'>('directory');
+  // Customers waiting on the Shop Floor — badged on the MY SHOP tab, since
+  // arrivals otherwise only show once that tab is open. Non-owners get an
+  // empty list back.
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchShopFloor().then(({ data }) => {
+      if (!cancelled) setWaiting(data?.customers.length ?? 0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
   const [viewingOwner, setViewingOwner] = useState<string | null>(null);
 
   return (
@@ -3216,7 +3228,17 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
                 color={tab === 'myshop' ? 'black' : 'yellow'}
                 onClick={() => setTab('myshop')}
               >
-                MY SHOP
+                <span className="flex items-center gap-1">
+                  MY SHOP
+                  {waiting > 0 && tab !== 'myshop' && (
+                    <span
+                      className="text-[9px] px-1 bg-[var(--c-red)] text-white"
+                      aria-label={`${waiting} customer${waiting === 1 ? '' : 's'} waiting`}
+                    >
+                      {waiting} WAITING
+                    </span>
+                  )}
+                </span>
               </PopButton>
             </div>
             {tab === 'directory' ? <DirectoryTab onView={setViewingOwner} /> : <MyShopTab />}
@@ -3275,6 +3297,14 @@ function untilText(iso: string | null): string {
   if (ms <= 0) return 'any moment';
   const m = Math.ceil(ms / 60000);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+
+function agoText(iso: string): string {
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
 }
 
 function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
@@ -3363,6 +3393,25 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
           const ctrNum = Math.round(Number(ctr));
           // The server only takes a counter above their offer.
           const ctrValid = Number.isFinite(ctrNum) && ctrNum > (c.offer_credits ?? 0);
+          // Quicksell value of what they want — the yardstick both offer
+          // kinds are priced against.
+          const wantValue = c.listing_cards.reduce(
+            (sum, it) =>
+              sum + quicksellPrice(POOL_BY_ID[it.card_id]?.rarity, !!it.foil) * (it.quantity ?? 1),
+            0,
+          );
+          const offerValue = offerDef ? quicksellPrice(offerDef.rarity, c.offer_foil) : 0;
+          const pctOfAsk = c.listing_price
+            ? Math.round(((c.offer_credits ?? 0) / c.listing_price) * 100)
+            : 0;
+          const chips: [string, number][] = (
+            [
+              ['+5%', Math.ceil((c.offer_credits ?? 0) * 1.05)],
+              ['+10%', Math.ceil((c.offer_credits ?? 0) * 1.1)],
+              ['+20%', Math.ceil((c.offer_credits ?? 0) * 1.2)],
+              ['ASK', c.listing_price],
+            ] as [string, number][]
+          ).filter(([, v]) => v > (c.offer_credits ?? 0) && v <= c.listing_price);
           return (
             <div key={c.id} className="ink-border-sm p-2 flex gap-3 items-start flex-wrap">
               <div className="text-3xl leading-none" aria-hidden>
@@ -3379,22 +3428,38 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                 <div className="text-[11px] font-bold mt-1">
                   Wants:{' '}
                   {c.listing_type === 'bundle'
-                    ? `your bundle (${c.listing_cards.length} lines)`
+                    ? `your bundle — ${c.listing_cards
+                        .slice(0, 3)
+                        .map(
+                          (it) =>
+                            `${(it.quantity ?? 1) > 1 ? `${it.quantity}× ` : ''}${POOL_BY_ID[it.card_id]?.name ?? 'card'}`,
+                        )
+                        .join(
+                          ', ',
+                        )}${c.listing_cards.length > 3 ? ` +${c.listing_cards.length - 3} more` : ''}`
                     : (def?.name ?? 'a listing')}{' '}
                   <span className="text-[var(--c-steel)]">
-                    (listed at {fmtCredits(c.listing_price)})
+                    (listed at {fmtCredits(c.listing_price)} · quicksell {fmtCredits(wantValue)})
                   </span>
                 </div>
                 {c.kind === 'buy' ? (
                   <div className="text-[12px] font-black mt-0.5">
-                    Offers <Credits amount={c.offer_credits ?? 0} />
+                    Offers <Credits amount={c.offer_credits ?? 0} />{' '}
+                    <span className="text-[9px] text-[var(--c-steel)]">
+                      ({pctOfAsk}% of asking ·{' '}
+                      {wantValue ? (((c.offer_credits ?? 0) / wantValue) * 100).toFixed(0) : '—'}%
+                      of quicksell)
+                    </span>
                     {c.haggled && <span className="text-[9px] ml-1">(FINAL)</span>}
                   </div>
                 ) : (
                   <div className="text-[12px] font-black mt-0.5">
                     Offers in trade: {offerDef?.name ?? c.offer_card_id}
                     {c.offer_foil ? ' ✦ FOIL' : ''}{' '}
-                    <span className="text-[9px] text-[var(--c-steel)]">({offerDef?.rarity})</span>
+                    <span className="text-[9px] text-[var(--c-steel)]">
+                      ({offerDef?.rarity} · quicksell {fmtCredits(offerValue)} vs your{' '}
+                      {fmtCredits(wantValue)})
+                    </span>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2 mt-2 items-center">
@@ -3418,6 +3483,17 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                       >
                         HAGGLE
                       </PopButton>
+                      {chips.map(([label, v]) => (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => setCounter((m) => ({ ...m, [c.id]: String(v) }))}
+                          className="heading-font text-[9px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-paper)]"
+                          title={`Counter at ${fmtCredits(v)}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </span>
                   )}
                   <PopButton color="steel" disabled={busy} onClick={() => void act(c, 'decline')}>
@@ -3425,21 +3501,24 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                   </PopButton>
                 </div>
               </div>
-              {(c.kind === 'trade' ? offerDef : def) && (
-                <div className="shrink-0">
-                  <CardFace
-                    def={(c.kind === 'trade' ? offerDef : def)!}
-                    size="compact"
-                    foil={c.kind === 'trade' ? c.offer_foil : !!item?.foil}
-                  />
-                </div>
-              )}
+              {/* Trades show both sides: your card ⇄ theirs. */}
+              <div className="shrink-0 flex items-center gap-1">
+                {def && <CardFace def={def} size="compact" foil={!!item?.foil} />}
+                {c.kind === 'trade' && offerDef && (
+                  <>
+                    <span className="heading-font text-lg" aria-hidden>
+                      ⇄
+                    </span>
+                    <CardFace def={offerDef} size="compact" foil={c.offer_foil} />
+                  </>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
       {state && state.recent.length > 0 && (
-        <details className="mt-2">
+        <details className="mt-2" open>
           <summary className="text-[10px] font-bold cursor-pointer">Recent visitors</summary>
           <ul className="text-[10px] font-bold mt-1">
             {state.recent.map((r, i) => (
@@ -3449,7 +3528,14 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                   ? r.kind === 'buy'
                     ? `bought for ${fmtCredits(r.final_credits ?? 0)}`
                     : `traded ${POOL_BY_ID[r.offer_card_id ?? '']?.name ?? 'a card'}`
-                  : r.status}
+                  : r.status === 'left'
+                    ? 'walked out'
+                    : r.status === 'expired'
+                      ? 'gave up waiting'
+                      : 'turned away'}
+                {r.resolved_at && (
+                  <span className="text-[var(--c-steel)]"> · {agoText(r.resolved_at)}</span>
+                )}
               </li>
             ))}
           </ul>

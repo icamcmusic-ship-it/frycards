@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { ShowcaseSlabsRow } from './SlabDetailModal';
-import { SLAB_CSS } from './GradedSlab';
 import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -298,7 +297,6 @@ export function ProfileScreen({
 
         {/* Graded showcase — pinned slabs (pin them from a slab's detail sheet). */}
         <div className="mt-7">
-          <style>{SLAB_CSS}</style>
           <h2 className="heading-font text-base bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5 mb-2">
             GRADED SHOWCASE
           </h2>

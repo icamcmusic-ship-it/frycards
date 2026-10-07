@@ -39,7 +39,7 @@ import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { spareSplit } from './CollectionScreen';
 import { fmtCredits, fmtVouchers } from './economy';
-import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { GradedSlab } from './GradedSlab';
 import type { ShowroomSubject } from './ShowroomScreen';
 import {
   GradedCard,
@@ -482,7 +482,6 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <style>{SLAB_CSS}</style>
       <MetaHeader title="GRADING LAB" onBack={onBack} />
       <div
         className="max-w-5xl mx-auto p-4 sm:p-6"
@@ -896,6 +895,18 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   type="button"
                   onClick={() => setCurrency(id)}
                   aria-pressed={currency === id}
+                  title={
+                    id === 'vouchers'
+                      ? `You have ${profile.vouchers.toLocaleString('en-US')} vouchers`
+                      : `You have ${profile.credits.toLocaleString('en-US')} credits`
+                  }
+                  // A currency you cannot cover is greyed (still selectable,
+                  // so the submit button can say exactly what is short).
+                  style={
+                    (id === 'vouchers' ? profile.vouchers < voucherFee : profile.credits < totalFee)
+                      ? { opacity: 0.45 }
+                      : undefined
+                  }
                   className={cn(
                     'heading-font text-[10px] px-2 py-1 ink-border-sm flex items-center gap-1',
                     currency === id
@@ -1089,7 +1100,6 @@ function RevealCeremony({
       role="dialog"
       aria-label="Grade reveal"
     >
-      <style>{SLAB_CSS}</style>
       <div className="heading-font text-[var(--c-yellow)] text-sm flex items-center gap-2 text-center">
         <Award className="w-4 h-4 shrink-0" aria-hidden /> {svc.name.toUpperCase()} — RESULT{' '}
         {idx + 1}/{results.length}

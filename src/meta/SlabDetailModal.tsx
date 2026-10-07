@@ -196,6 +196,8 @@ export function SlabDetailModal({
           {error && <Notice text={error} />}
 
           {graded && (
+            // CANCEL renders in the spot QUICKSELL / CRACK occupied and the
+            // CONFIRM button appears after it, so a double-tap cancels.
             <div className="flex flex-wrap gap-2">
               <PopButton
                 color={isPinned ? 'steel' : 'yellow'}
@@ -228,6 +230,17 @@ export function SlabDetailModal({
                 </PopButton>
               )}
               {confirm === 'sell' ? (
+                <PopButton color="steel" disabled={busy} onClick={() => setConfirm(null)}>
+                  CANCEL
+                </PopButton>
+              ) : (
+                <PopButton color="yellow" disabled={busy} onClick={() => setConfirm('sell')}>
+                  <span className="flex items-center gap-1">
+                    <Coins className="w-3 h-3" aria-hidden /> QUICKSELL
+                  </span>
+                </PopButton>
+              )}
+              {confirm === 'sell' ? (
                 <PopButton
                   color="red"
                   disabled={busy}
@@ -237,10 +250,15 @@ export function SlabDetailModal({
                 >
                   CONFIRM SELL FOR {price.toLocaleString('en-US')}
                 </PopButton>
+              ) : null}
+              {confirm === 'crack' ? (
+                <PopButton color="steel" disabled={busy} onClick={() => setConfirm(null)}>
+                  CANCEL
+                </PopButton>
               ) : (
-                <PopButton color="yellow" disabled={busy} onClick={() => setConfirm('sell')}>
+                <PopButton color="steel" disabled={busy} onClick={() => setConfirm('crack')}>
                   <span className="flex items-center gap-1">
-                    <Coins className="w-3 h-3" aria-hidden /> QUICKSELL
+                    <Hammer className="w-3 h-3" aria-hidden /> CRACK SLAB
                   </span>
                 </PopButton>
               )}
@@ -250,15 +268,9 @@ export function SlabDetailModal({
                   disabled={busy}
                   onClick={() => void run(() => crackGradedSlab(g.id), true)}
                 >
-                  CONFIRM — GRADE IS LOST
+                  CONFIRM — GRADE IS LOST, RAW {g.foil ? 'FOIL ' : ''}COPY RETURNS
                 </PopButton>
-              ) : (
-                <PopButton color="steel" disabled={busy} onClick={() => setConfirm('crack')}>
-                  <span className="flex items-center gap-1">
-                    <Hammer className="w-3 h-3" aria-hidden /> CRACK SLAB
-                  </span>
-                </PopButton>
-              )}
+              ) : null}
             </div>
           )}
           {onGrading && (

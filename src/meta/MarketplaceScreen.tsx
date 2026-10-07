@@ -818,6 +818,16 @@ function SellForm({
 
           {type === 'auction' && (
             <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2 max-w-xl">
+              {selected && (
+                <span className="block text-[var(--c-ink)] mb-1">
+                  CPU range for this lot: usually{' '}
+                  {fmtCredits(Math.round(suggested * quantity * 0.85))}–
+                  {fmtCredits(Math.round(suggested * quantity * 1.25))} cr
+                  {price > suggested * quantity
+                    ? ' — your starting bid is above quicksell, so CPU collectors will skip it.'
+                    : '.'}
+                </span>
+              )}
               CPU collectors bid on auctions too. Each one values your card around its quicksell
               price — usually up to +25%, sometimes far less, now and then far more — so a low
               starting bid can be lowballed, and a lucky one can sell well above quicksell. Their

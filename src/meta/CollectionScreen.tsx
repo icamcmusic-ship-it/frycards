@@ -19,8 +19,8 @@ import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { GradedCard, fetchGradedCards } from './grading';
-import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
+import { GradedSlab } from './GradedSlab';
 import { SlabDetailModal } from './SlabDetailModal';
 import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
@@ -215,6 +215,9 @@ export function CollectionScreen({
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The slab whose detail sheet is open (graded_cards.id).
   const [slabOpen, setSlabOpen] = useState<string | null>(null);
+  const [slabSort, setSlabSort] = useState<'pinned' | 'grade' | 'value' | 'service' | 'newest'>(
+    'pinned',
+  );
   const reloadGraded = useCallback(async () => {
     if (!profile) return;
     try {
@@ -695,7 +698,21 @@ export function CollectionScreen({
         {gradedCards.length > 0 && (
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
+              <span className="flex items-center gap-2">
+                <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
+                <select
+                  className="ink-border-sm text-[10px] font-bold px-1 py-0.5 bg-[var(--c-paper)]"
+                  aria-label="Sort graded cards"
+                  value={slabSort}
+                  onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
+                >
+                  <option value="pinned">Pinned first</option>
+                  <option value="grade">Grade</option>
+                  <option value="value">Value</option>
+                  <option value="service">Service</option>
+                  <option value="newest">Newest</option>
+                </select>
+              </span>
               <span className="text-[9px] font-bold text-[var(--c-steel)]">
                 Click a slab for details, showcasing, selling or cracking
                 {(profile?.showcase_slabs?.length ?? 0) > 0 &&
@@ -704,9 +721,8 @@ export function CollectionScreen({
             </div>
             {/* The slab's own keyframes travel with it — a top-grade case
                 shines on this shelf as well as in the Lab. */}
-            <style>{SLAB_CSS}</style>
             <div className="flex flex-wrap gap-2">
-              {gradedCards.map((g) => (
+              {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
                 <div key={g.id} className="flex flex-col gap-1 w-fit">
                   <div className="relative">
                     <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
@@ -1122,4 +1138,37 @@ export function CollectionScreen({
       )}
     </div>
   );
+}
+
+/** Graded-shelf ordering. Pending slabs (no grade yet) always sort last. */
+function sortSlabs(
+  rows: GradedCard[],
+  by: 'pinned' | 'grade' | 'value' | 'service' | 'newest',
+  pinned: string[],
+): GradedCard[] {
+  const value = (g: GradedCard) =>
+    g.grade == null
+      ? -1
+      : gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade, g.service);
+  const out = [...rows];
+  out.sort((a, b) => {
+    if ((a.grade == null) !== (b.grade == null)) return a.grade == null ? 1 : -1;
+    switch (by) {
+      case 'pinned': {
+        const pa = pinned.indexOf(a.id);
+        const pb = pinned.indexOf(b.id);
+        if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+        return (b.grade ?? 0) - (a.grade ?? 0);
+      }
+      case 'grade':
+        return (b.grade ?? 0) - (a.grade ?? 0) || value(b) - value(a);
+      case 'value':
+        return value(b) - value(a);
+      case 'service':
+        return a.service.localeCompare(b.service) || (b.grade ?? 0) - (a.grade ?? 0);
+      default:
+        return (b.revealed_at ?? b.submitted_at).localeCompare(a.revealed_at ?? a.submitted_at);
+    }
+  });
+  return out;
 }

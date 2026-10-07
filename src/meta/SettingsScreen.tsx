@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Palette, Sparkles, Timer, Waves } from 'lucide-react';
+import { AlertTriangle, ArrowDownUp, Palette, Sparkles, Timer, Waves } from 'lucide-react';
 import { THEMES, ThemeName } from './themes';
 import { PopButton, Notice } from './ui';
 import { useMeta } from './MetaContext';
 import { resetAccount, setHideSerializedAnnouncements } from '../lib/supabase';
-import { CPU_SPEEDS, loadCpuSpeed, saveCpuSpeed, MOTION_MODES, MotionMode } from './matchPrefs';
+import {
+  CPU_SPEEDS,
+  loadCpuSpeed,
+  saveCpuSpeed,
+  MOTION_MODES,
+  MotionMode,
+  HAND_SORTS,
+  HandSort,
+  loadHandSort,
+  saveHandSort,
+} from './matchPrefs';
 
 /** Once every 7 days for everyone except `creator` (Fry) — mirrors the
  * server-side cooldown in `reset_account()` so the button can grey itself out
@@ -47,6 +57,9 @@ export function SettingsScreen({
   // existed. Guests get it too: it's a localStorage preference, not a profile
   // field.
   const [cpuSpeed, setCpuSpeed] = useState(loadCpuSpeed);
+  const [handSort, setHandSort] = useState<HandSort>(loadHandSort);
+  // Two-step reset: the first press arms it, the second (within 6s) fires.
+  const [resetArmed, setResetArmed] = useState(false);
   const pickSpeed = (idx: number) => {
     setCpuSpeed(idx);
     saveCpuSpeed(idx);
@@ -208,7 +221,36 @@ export function SettingsScreen({
                   ariaPressed={cpuSpeed === i}
                   onClick={() => pickSpeed(i)}
                 >
-                  {s.label} — {s.blurb}
+                  <OptionLabel label={s.label} blurb={s.blurb} />
+                </PopButton>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Hand order — until 2026-10 only reachable from a chip mid-match. */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <ArrowDownUp className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">HAND ORDER</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How the cards in your hand are arranged during a match. You can still flip it
+              mid-match from the ↕ chip by your hand. Saved locally.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {HAND_SORTS.map((h) => (
+                <PopButton
+                  key={h.id}
+                  color={handSort === h.id ? 'black' : 'yellow'}
+                  ariaPressed={handSort === h.id}
+                  onClick={() => {
+                    setHandSort(h.id);
+                    saveHandSort(h.id);
+                  }}
+                >
+                  <OptionLabel label={h.label} blurb={h.blurb} />
                 </PopButton>
               ))}
             </div>
@@ -235,7 +277,7 @@ export function SettingsScreen({
                   ariaPressed={motionMode === m.id}
                   onClick={() => onMotionModeChange(m.id)}
                 >
-                  {m.label} — {m.blurb}
+                  <OptionLabel label={m.label} blurb={m.blurb} />
                 </PopButton>
               ))}
             </div>
@@ -331,17 +373,26 @@ export function SettingsScreen({
                     color="red"
                     disabled={!canConfirm}
                     onClick={() => {
-                      if (
-                        confirm(
-                          'This permanently deletes your collection and decks and resets your credits/vouchers/stats. There is no undo. Continue?',
-                        )
-                      ) {
-                        doResetAccount();
+                      if (!resetArmed) {
+                        setResetArmed(true);
+                        window.setTimeout(() => setResetArmed(false), 6000);
+                        return;
                       }
+                      setResetArmed(false);
+                      doResetAccount();
                     }}
                   >
-                    {resetBusy ? 'RESETTING…' : 'RESET MY ACCOUNT'}
+                    {resetBusy
+                      ? 'RESETTING…'
+                      : resetArmed
+                        ? 'PRESS AGAIN — THIS CANNOT BE UNDONE'
+                        : 'RESET MY ACCOUNT'}
                   </PopButton>
+                  {!canConfirm && !resetBusy && (
+                    <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                      Type RESET to enable the button.
+                    </span>
+                  )}
                 </div>
               )}
               {resetError && (
@@ -361,5 +412,16 @@ export function SettingsScreen({
         </div>
       </div>
     </div>
+  );
+}
+
+/** A setting option: the name on one line, its blurb small beneath it, so a
+ * row of choices stays even on a phone instead of wrapping "LABEL — blurb". */
+function OptionLabel({ label, blurb }: { label: string; blurb: string }) {
+  return (
+    <span className="flex flex-col items-start text-left leading-tight">
+      <span>{label}</span>
+      <span className="text-[9px] font-bold normal-case opacity-75">{blurb}</span>
+    </span>
   );
 }
