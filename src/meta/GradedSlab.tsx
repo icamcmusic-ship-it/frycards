@@ -109,6 +109,11 @@ export const SLAB_CSS = `
   .slab-shine { animation: none; opacity: 0.25; }
   .slab-ring, .slab-holo, .slab-twinkle { animation: none; }
 }
+/* The in-app Motion setting (useMotionMode sets <html data-motion="reduced">). */
+[data-motion='reduced'] .slab-shine { animation: none; opacity: 0.25; }
+[data-motion='reduced'] .slab-ring,
+[data-motion='reduced'] .slab-holo,
+[data-motion='reduced'] .slab-twinkle { animation: none; }
 `;
 
 /**

@@ -26,7 +26,9 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('test.uid', true), '')::uuid $$;
     create table profiles (id uuid primary key, credits int default 0 check (credits >= 0), vouchers int default 0,
       xp int default 0, level int default 1, updated_at timestamptz, showcase_cards text[]);
-    create table cards (id text primary key, rarity text, card_type text);
+    create table cards (id text primary key, rarity text, card_type text, set_name text default 'V1');
+    create table pack_types (allowed_sets text[], is_active boolean, acquisition text);
+    insert into pack_types values (array['V1'], true, 'purchase');
     create table player_cards (user_id uuid, card_id text, quantity int default 0, foil_quantity int default 0,
       primary key (user_id, card_id));
     create table graded_cards (id uuid primary key default gen_random_uuid(), user_id uuid, card_id text,
@@ -124,6 +126,35 @@ describe('CPU bidders', () => {
     const seller = (await q(`select credits from profiles where id = '${B}'`))[0].credits;
     expect(seller - sellerBefore).toBe(l.current_bid - Math.ceil(l.current_bid * 0.05));
   });
+  test('the ceiling is seeded per seller/card/day, so relisting cannot reroll it', async () => {
+    const [r] = await q(
+      `select cpu_ceiling_factor('a|m1|false|2026-10-06') x, cpu_ceiling_factor('a|m1|false|2026-10-06') y`,
+    );
+    expect(r.x).toBe(r.y);
+  });
+  test('ignores auctions opening above quicksell', async () => {
+    const [{ id }] =
+      await q(`insert into market_listings (seller, card_id, listing_type, price, ends_at)
+      values ('${B}','r1','auction',41, now() + interval '1 hour') returning id`);
+    await q(`select run_cpu_bidders()`);
+    const [l] = await q(`select cpu_ceiling, current_bid from market_listings where id = '${id}'`);
+    expect(l).toEqual({ cpu_ceiling: 0, current_bid: null });
+  });
+  test('the 8-a-day cap also holds at payout', async () => {
+    const S = '33333333-3333-3333-3333-333333333333';
+    await q(`insert into profiles (id) values ('${S}')`);
+    for (let i = 0; i < 8; i++)
+      await q(`insert into market_listings (seller, card_id, listing_type, price, status, current_bid, cpu_bidder_name, ends_at)
+        values ('${S}','c1','auction',1,'sold',1,'Bot', now())`);
+    await q(`insert into market_listings (seller, card_id, listing_type, price, current_bid, cpu_leading, cpu_bidder_name, ends_at)
+      values ('${S}','m1','auction',1,500,true,'Bot', now() - interval '1 second')`);
+    await q(`select settle_expired_listings()`);
+    expect((await q(`select credits from profiles where id = '${S}'`))[0].credits).toBe(0);
+    expect(
+      (await q(`select quantity from player_cards where user_id = '${S}' and card_id = 'm1'`))[0]
+        .quantity,
+    ).toBe(1);
+  });
   test('never bids past its ceiling', async () => {
     const [{ id }] =
       await q(`insert into market_listings (seller, card_id, listing_type, price, ends_at, cpu_ceiling)
@@ -166,6 +197,9 @@ describe('Shop Floor customers', () => {
     const [{ id: cid }] =
       await q(`insert into shop_customers (owner, listing_id, kind, persona, mood, offer_credits, walkaway_credits)
       values ('${A}', '${lid}', 'buy', 'Test', 'browsing', 1000, 1100) returning id`);
+    await expect(q(`select respond_shop_customer('${cid}', 'counter', 900)`)).rejects.toThrow(
+      /more than their/,
+    );
     const r = (await q(`select respond_shop_customer('${cid}', 'counter', 1100) r`))[0].r;
     expect(r).toMatchObject({ result: 'sold', credits: 1100 });
     await expect(q(`select respond_shop_customer('${cid}', 'counter', 1100)`)).rejects.toThrow(

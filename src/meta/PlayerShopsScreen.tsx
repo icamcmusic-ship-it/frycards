@@ -3282,7 +3282,8 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [counter, setCounter] = useState<Record<string, number>>({});
+  // Raw text per customer, so the field can be cleared and retyped freely.
+  const [counter, setCounter] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const { data, error } = await fetchShopFloor();
@@ -3306,7 +3307,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
     const { data, error } = await respondShopCustomer(
       c.id,
       action,
-      action === 'counter' ? counter[c.id] : undefined,
+      action === 'counter' ? Math.round(Number(counter[c.id] ?? '')) : undefined,
     );
     if (error) setErr(error);
     else if (data) {
@@ -3358,7 +3359,10 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
           const def = item ? POOL_BY_ID[item.card_id] : undefined;
           const offerDef = c.offer_card_id ? POOL_BY_ID[c.offer_card_id] : undefined;
           const busy = busyId === c.id;
-          const ctr = counter[c.id] ?? Math.round((c.offer_credits ?? 0) * 1.15);
+          const ctr = counter[c.id] ?? String(Math.round((c.offer_credits ?? 0) * 1.15));
+          const ctrNum = Math.round(Number(ctr));
+          // The server only takes a counter above their offer.
+          const ctrValid = Number.isFinite(ctrNum) && ctrNum > (c.offer_credits ?? 0);
           return (
             <div key={c.id} className="ink-border-sm p-2 flex gap-3 items-start flex-wrap">
               <div className="text-3xl leading-none" aria-hidden>
@@ -3401,20 +3405,15 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                     <span className="flex items-center gap-1">
                       <input
                         type="number"
-                        min={1}
+                        min={(c.offer_credits ?? 0) + 1}
                         value={ctr}
                         aria-label={`Counter-offer to ${c.persona}`}
-                        onChange={(e) =>
-                          setCounter((m) => ({
-                            ...m,
-                            [c.id]: Math.max(1, Math.round(Number(e.target.value) || 0)),
-                          }))
-                        }
+                        onChange={(e) => setCounter((m) => ({ ...m, [c.id]: e.target.value }))}
                         className="w-20 px-1 py-0.5 ink-border-sm text-[11px]"
                       />
                       <PopButton
                         color="black"
-                        disabled={busy}
+                        disabled={busy || !ctrValid}
                         onClick={() => void act(c, 'counter')}
                       >
                         HAGGLE

@@ -164,7 +164,7 @@ export function SlabDetailModal({
             </dd>
             <dt className="text-[var(--c-steel)]">Turnaround</dt>
             <dd className="uppercase">{g.speed}</dd>
-            <dt className="text-[var(--c-steel)]">Fee paid</dt>
+            <dt className="text-[var(--c-steel)]">Fee (credit value)</dt>
             <dd>
               <Credits amount={g.fee_paid} />
             </dd>
@@ -215,7 +215,9 @@ export function SlabDetailModal({
                   )}
                   {isPinned
                     ? 'UNPIN FROM PROFILE'
-                    : `SHOWCASE (${pinned.length}/${MAX_SHOWCASE_SLABS})`}
+                    : pinned.length >= MAX_SHOWCASE_SLABS
+                      ? 'SHOWCASE (REPLACES OLDEST)'
+                      : `SHOWCASE (${pinned.length}/${MAX_SHOWCASE_SLABS})`}
                 </span>
               </PopButton>
               {onShowroom && (
@@ -283,8 +285,11 @@ export function ShowcaseSlabsRow({
   userId,
   refreshKey,
   emptyText,
+  heading,
 }: {
   userId: string;
+  /** Printed above the row only when there is something to show. */
+  heading?: string;
   /** Change to refetch (e.g. the viewer's own showcase_slabs array). */
   refreshKey?: string;
   emptyText?: string;
@@ -305,10 +310,17 @@ export function ShowcaseSlabsRow({
       <p className="text-[11px] font-bold text-[var(--c-steel)]">{emptyText}</p>
     ) : null;
   return (
-    <div className="flex flex-wrap gap-3">
-      {slabs.map((g) => (
-        <GradedSlab key={g.id} g={g} size="compact" />
-      ))}
+    <div>
+      {heading && (
+        <h2 className="heading-font text-sm mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+          {heading}
+        </h2>
+      )}
+      <div className="flex flex-wrap gap-3">
+        {slabs.map((g) => (
+          <GradedSlab key={g.id} g={g} size="compact" />
+        ))}
+      </div>
     </div>
   );
 }

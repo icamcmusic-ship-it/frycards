@@ -25,6 +25,7 @@ import { SafeImage } from './meta/SafeImage';
 import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
+import { MotionConfig } from 'motion/react';
 import type { MotionMode } from './meta/matchPrefs';
 
 const CATALOG_CACHE_KEY = 'catalog';
@@ -842,9 +843,17 @@ export default function App() {
                 </button>
               </div>
             )}
-            <React.Suspense fallback={<ScreenFallback />}>
-              <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
-            </React.Suspense>
+            {/* The root MotionConfig the comments above describe: without it,
+                motion/react animations ignored the in-app Motion setting. */}
+            <MotionConfig
+              reducedMotion={
+                motionMode === 'reduced' ? 'always' : motionMode === 'full' ? 'never' : 'user'
+              }
+            >
+              <React.Suspense fallback={<ScreenFallback />}>
+                <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
+              </React.Suspense>
+            </MotionConfig>
           </>
         )}
       </MetaProvider>

@@ -1402,10 +1402,10 @@ export async function adminGrantCard(
 
 // ---------------------------------------------------------------------------
 // Player Shops — player-run storefronts (individual/bundle/mystery-pack
-// listings), unlocked at level 50. See open_shop / create_shop_listing /
+// listings), unlocked at level 20 (shop_unlock_level()). See open_shop / create_shop_listing /
 // submit_mystery_pool etc (SECURITY DEFINER RPCs) for the server logic.
 // ---------------------------------------------------------------------------
-export const SHOP_UNLOCK_LEVEL = 50;
+export const SHOP_UNLOCK_LEVEL = 20;
 
 export interface CardMarketValue {
   sales: number;

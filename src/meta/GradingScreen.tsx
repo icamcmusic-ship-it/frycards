@@ -174,19 +174,23 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   const [service, setService] = useState<GradingService>('keeper');
   const [speed, setSpeed] = useState<GradingSpeed>('standard');
   const [currency, setCurrency] = useState<GradingCurrency>('credits');
-  const payBarRef = useRef<HTMLDivElement | null>(null);
+  // Callback ref: the bar mounts and unmounts with the basket, and the
+  // observer follows it rather than being rebuilt on every render.
+  const [payBarEl, payBarRef] = useState<HTMLDivElement | null>(null);
   const [payBarH, setPayBarH] = useState(0);
   useEffect(() => {
-    const el = payBarRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      setPayBarH(el ? el.offsetHeight : 0);
+    if (!payBarEl) {
+      setPayBarH(0);
       return;
     }
-    const ro = new ResizeObserver(() => setPayBarH(el.offsetHeight));
-    ro.observe(el);
-    setPayBarH(el.offsetHeight);
+    if (typeof ResizeObserver === 'undefined') {
+      setPayBarH(payBarEl.offsetHeight);
+      return;
+    }
+    const ro = new ResizeObserver(() => setPayBarH(payBarEl.offsetHeight));
+    ro.observe(payBarEl);
     return () => ro.disconnect();
-  });
+  }, [payBarEl]);
   const [basket, setBasket] = useState<Map<string, number>>(new Map()); // `${cardId}|${foil}` -> qty
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
