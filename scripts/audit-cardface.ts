@@ -21,6 +21,7 @@
  * `verify:pool` does for the catalog.
  */
 import { chromium } from 'playwright';
+import { blockSupabase } from './lib/block-remote-media';
 
 const BASE = process.env.AUDIT_BASE ?? 'http://localhost:3000';
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Super-Rare', 'Ultra-Rare', 'Full-Art', 'Mythic'];
@@ -39,7 +40,10 @@ interface Overlap {
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium',
 });
-const page = await browser.newPage({ viewport: { width: 1600, height: 1200 } });
+const ctx = await browser.newContext({ viewport: { width: 1600, height: 1200 } });
+// Never touch the live project from a harness (see blockSupabase).
+await blockSupabase(ctx);
+const page = await ctx.newPage();
 const overlaps: Overlap[] = [];
 let cardsChecked = 0;
 
