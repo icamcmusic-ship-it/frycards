@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askConfirm } from './confirm';
 import { Users, UserPlus, ArrowLeftRight, Search, Coins, X, Trophy } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -501,8 +502,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() => {
-                              if (!confirm('Decline this friend request?')) return;
+                            onClick={async () => {
+                              if (!(await askConfirm('Decline this friend request?'))) return;
                               run(() => respondFriendRequest(f.id, false), 'Request declined.');
                             }}
                           >
@@ -551,9 +552,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         color="steel"
                         disabled={busy}
                         ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
-                        onClick={() => {
+                        onClick={async () => {
                           if (
-                            confirm(`Remove ${other?.username || 'this player'} from your friends?`)
+                            await askConfirm(
+                              `Remove ${other?.username || 'this player'} from your friends?`,
+                            )
                           )
                             run(() => removeFriend(friendship.id), 'Friend removed.');
                         }}
@@ -598,8 +601,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                         <PopButton
                           color="steel"
                           disabled={busy}
-                          onClick={() => {
-                            if (!confirm('Cancel this friend request?')) return;
+                          onClick={async () => {
+                            if (!(await askConfirm('Cancel this friend request?'))) return;
                             run(() => removeFriend(f.id), 'Friend request cancelled.');
                           }}
                         >
@@ -664,9 +667,11 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             <PopButton
                               color="red"
                               disabled={busy}
-                              onClick={() => {
+                              onClick={async () => {
                                 if (
-                                  !confirm('Accept this trade? Cards and credits move immediately.')
+                                  !(await askConfirm(
+                                    'Accept this trade? Cards and credits move immediately.',
+                                  ))
                                 )
                                   return;
                                 run(async () => {
@@ -684,8 +689,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                             <PopButton
                               color="steel"
                               disabled={busy}
-                              onClick={() => {
-                                if (!confirm('Decline this trade offer?')) return;
+                              onClick={async () => {
+                                if (!(await askConfirm('Decline this trade offer?'))) return;
                                 run(() => respondTrade(t.id, false), 'Trade declined.');
                               }}
                             >
@@ -696,8 +701,8 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                           <PopButton
                             color="steel"
                             disabled={busy}
-                            onClick={() => {
-                              if (!confirm('Cancel this trade offer?')) return;
+                            onClick={async () => {
+                              if (!(await askConfirm('Cancel this trade offer?'))) return;
                               run(() => cancelTrade(t.id), 'Trade offer cancelled.');
                             }}
                           >

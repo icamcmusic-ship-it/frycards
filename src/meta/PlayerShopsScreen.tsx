@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askConfirm } from './confirm';
 import {
   Store,
   Star,
@@ -1443,8 +1444,12 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           shopActive={shop?.status === 'active'}
           busy={busy}
           credits={profile?.credits || 0}
-          onBuy={() => {
-            if (!confirm(`Buy this mystery pack for ${fmtCredits(l.price)}? Contents are random.`))
+          onBuy={async () => {
+            if (
+              !(await askConfirm(
+                `Buy this mystery pack for ${fmtCredits(l.price)}? Contents are random.`,
+              ))
+            )
               return;
             // The RPC returns the actual draw — surface it instead of the
             // old generic "check your Collection" (the pulled cards were
@@ -1567,8 +1572,9 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
               <PopButton
                 color="red"
                 disabled={busy || (profile?.credits || 0) < l.price}
-                onClick={() => {
-                  if (!confirm(`Buy this listing for ${fmtCredits(l.price)} credits?`)) return;
+                onClick={async () => {
+                  if (!(await askConfirm(`Buy this listing for ${fmtCredits(l.price)} credits?`)))
+                    return;
                   run(async () => {
                     const e = await buyShopListing(l.id);
                     return e;
@@ -2019,9 +2025,9 @@ function MyShopTab() {
           color="steel"
           className="relative"
           disabled={busy}
-          onClick={() => {
+          onClick={async () => {
             if (
-              confirm(
+              await askConfirm(
                 'Close your shop? Half of each slot’s remaining collateral is refunded and the rest is burned — closing again later returns nothing.',
               )
             )
@@ -2157,11 +2163,11 @@ function MyShopTab() {
               onSuccess,
             )
           }
-          onSubmitPool={(templateId, slotId, pool, price) => {
+          onSubmitPool={async (templateId, slotId, pool, price) => {
             if (
-              !confirm(
+              !(await askConfirm(
                 'Submit this pool and list it for sale? The cards are escrowed immediately and this listing has no cancel button once live.',
-              )
+              ))
             )
               return;
             run(
@@ -2201,8 +2207,9 @@ function MyShopTab() {
                 <PopButton
                   color="steel"
                   disabled={busy}
-                  onClick={() => {
-                    if (!confirm('Cancel this listing? Your cards will be returned.')) return;
+                  onClick={async () => {
+                    if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
+                      return;
                     run(() => cancelShopListing(l.id), undefined, true);
                   }}
                 >

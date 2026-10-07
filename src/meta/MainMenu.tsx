@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { askConfirm } from './confirm';
 import {
   Swords,
   Library,
@@ -445,11 +446,11 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             <Settings className="w-3.5 h-3.5" /> SETTINGS
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               // Signing out a real account was a single unconfirmed click —
               // guest mode has no persisted data, so it's left as an
               // instant exit, but a real account deserves a confirm step.
-              if (!guest && !confirm('Sign out of your account?')) return;
+              if (!guest && !(await askConfirm('Sign out of your account?'))) return;
               signOut();
             }}
             className="btn-pop heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"

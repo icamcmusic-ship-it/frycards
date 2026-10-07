@@ -26,6 +26,7 @@ import { setCardBackImage } from './meta/cardback';
 import { useTheme } from './meta/useTheme';
 import { useMotionMode } from './meta/useMotionMode';
 import { SLAB_CSS } from './meta/slabCss';
+import { ConfirmHost } from './meta/confirm';
 const MotionRoot = React.lazy(() => import('./meta/MotionRoot'));
 import type { MotionMode } from './meta/matchPrefs';
 
@@ -848,6 +849,7 @@ export default function App() {
                 motion/react animations ignored the in-app Motion setting. */}
             {/* Slab keyframes (incl. @property --slab-angle), defined once. */}
             <style>{SLAB_CSS}</style>
+            <ConfirmHost />
             <React.Suspense fallback={<ScreenFallback />}>
               <MotionRoot mode={motionMode}>
                 <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />

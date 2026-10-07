@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { loadPackHistory, PackHistoryEntry } from './packHistory';
 import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -21,7 +22,7 @@ import {
 } from '../lib/supabase';
 import { MetaHeader, PopButton, Notice, Credits } from './ui';
 import { cn } from '../lib/utils';
-import { RARITY_CHIP, ALL_SET_NAMES } from './rarity';
+import { RARITY_CHIP, ALL_SET_NAMES, RARITY_ORDER } from './rarity';
 import { SafeImage } from './SafeImage';
 import { fmtCredits, fmtVouchers } from './economy';
 import { PackOpening } from './PackOpening';
@@ -51,7 +52,8 @@ function bountyDefFor(card: BountyCard): CardDef {
   );
 }
 
-type Tab = 'packs' | 'my_packs' | 'bounties' | 'card_back' | 'profile_banner' | 'profile_avatar';
+type Tab =
+  'packs' | 'my_packs' | 'bounties' | 'history' | 'card_back' | 'profile_banner' | 'profile_avatar';
 
 /** "Includes: …" line shown on every pack tile / odds modal — derived from
  * the row's actual `allowed_sets`, falling back to the full live catalog
@@ -373,6 +375,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     { key: 'packs', label: 'CARD PACKS' },
     { key: 'my_packs', label: `MY PACKS${inventoryCount > 0 ? ` (${inventoryCount})` : ''}` },
     { key: 'bounties', label: 'BOUNTIES' },
+    { key: 'history', label: 'PACK HISTORY' },
     { key: 'card_back', label: 'CARD BACKS' },
     { key: 'profile_banner', label: 'BANNERS' },
     { key: 'profile_avatar', label: 'AVATARS' },
@@ -569,6 +572,8 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               </div>
             )}
           </div>
+        ) : tab === 'history' ? (
+          <PackHistoryTab />
         ) : tab === 'bounties' ? (
           <BountiesTab
             profile={profile}
@@ -1365,6 +1370,66 @@ function BountiesTab({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** PACK HISTORY tab — the last packs opened in this browser (packHistory.ts). */
+function PackHistoryTab() {
+  const [history] = useState(loadPackHistory);
+  if (history.length === 0)
+    return (
+      <p className="text-[12px] font-bold text-[var(--c-steel)] py-8 text-center">
+        No packs opened in this browser yet. Every pack you open shows up here.
+      </p>
+    );
+  const best = (pulls: PackHistoryEntry['pulls']) =>
+    [...pulls].sort(
+      (a, b) => RARITY_ORDER.indexOf(b.rarity as never) - RARITY_ORDER.indexOf(a.rarity as never),
+    )[0];
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] font-bold text-[var(--c-steel)]">
+        Your last {history.length} pack{history.length === 1 ? '' : 's'} (kept in this browser,
+        newest first).
+      </p>
+      {history.map((h, i) => {
+        const top = best(h.pulls);
+        return (
+          <details key={i} className="bg-[var(--c-paper)] ink-border-sm p-2">
+            <summary className="cursor-pointer text-[11px] font-bold flex flex-wrap gap-2 items-center">
+              <span className="heading-font">{h.packName}</span>
+              <span className="text-[var(--c-steel)]">{new Date(h.at).toLocaleString()}</span>
+              {top && (
+                <span
+                  className={cn(
+                    'text-[9px] font-black px-1',
+                    RARITY_CHIP[top.rarity] || RARITY_CHIP.Common,
+                  )}
+                >
+                  BEST: {top.name}
+                  {top.foil ? ' ✦' : ''}
+                  {top.serialized ? ' #' : ''}
+                </span>
+              )}
+            </summary>
+            <ul className="mt-1 flex flex-wrap gap-1">
+              {h.pulls.map((p, j) => (
+                <li
+                  key={j}
+                  className={cn(
+                    'text-[9px] font-black px-1',
+                    RARITY_CHIP[p.rarity] || RARITY_CHIP.Common,
+                  )}
+                >
+                  {p.name}
+                  {p.foil ? ' ✦' : ''}
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })}
     </div>
   );
 }

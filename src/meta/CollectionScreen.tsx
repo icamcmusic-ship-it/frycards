@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { askConfirm } from './confirm';
 import { useMeta } from './MetaContext';
 import {
   MetaHeader,
@@ -13,7 +14,13 @@ import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
 import { collectionCsv, downloadText } from './csv';
-import { loadWishlist, saveWishlist, toggleWishlisted } from './wishlist';
+import {
+  loadWishlist,
+  pushWishlistToggle,
+  saveWishlist,
+  syncWishlist,
+  toggleWishlisted,
+} from './wishlist';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
@@ -193,13 +200,29 @@ export function CollectionScreen({
   const [spareOnly, setSpareOnly] = useState(false);
   const [wishOnly, setWishOnly] = useState(false);
   const [wishlist, setWishlist] = useState(loadWishlist);
-  const toggleWish = useCallback((cardId: string) => {
-    setWishlist((w) => {
-      const next = toggleWishlisted(w, cardId);
-      saveWishlist(next);
-      return next;
+  // Pull the account's server-side wishlist (merging this browser's in).
+  const wishUserId = profile?.id;
+  useEffect(() => {
+    if (!wishUserId) return;
+    let cancelled = false;
+    void syncWishlist(wishUserId).then((merged) => {
+      if (!cancelled) setWishlist(merged);
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [wishUserId]);
+  const toggleWish = useCallback(
+    (cardId: string) => {
+      setWishlist((w) => {
+        const next = toggleWishlisted(w, cardId);
+        saveWishlist(next);
+        if (wishUserId) pushWishlistToggle(wishUserId, cardId, next.has(cardId));
+        return next;
+      });
+    },
+    [wishUserId],
+  );
   const [search, setSearch] = useState('');
   // Graded slabs live in their own table (graded_cards) — encased copies are
   // out of player_cards entirely, so the shelf fetches them directly.
@@ -983,9 +1006,10 @@ export function CollectionScreen({
                     key={r}
                     color="yellow"
                     disabled={!!bulkBusy}
-                    onClick={() => {
+                    onClick={async () => {
                       const n = spareByRarity.get(r) || 0;
-                      if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
+                      if (await askConfirm(`Quicksell all ${n} spare ${r} cards?`))
+                        bulkQuicksell(r);
                     }}
                   >
                     {bulkBusy === r
@@ -1173,9 +1197,13 @@ export function CollectionScreen({
                         className="w-full"
                         disabled={selling || normalSellable <= 0}
                         ariaLabel={`Quicksell all normal spare copies of ${inspect.def.name}`}
-                        onClick={() => {
+                        onClick={async () => {
                           const n = normalSellable;
-                          if (confirm(`Quicksell all ${n} spare copies of ${inspect.def.name}?`))
+                          if (
+                            await askConfirm(
+                              `Quicksell all ${n} spare copies of ${inspect.def.name}?`,
+                            )
+                          )
                             handleSell(false, n);
                         }}
                       >
@@ -1203,10 +1231,10 @@ export function CollectionScreen({
                             className="w-full"
                             disabled={selling || foilSellable <= 0}
                             ariaLabel={`Quicksell all foil spare copies of ${inspect.def.name}`}
-                            onClick={() => {
+                            onClick={async () => {
                               const n = Math.min(inspectOwned?.f || 0, foilSellable);
                               if (
-                                confirm(
+                                await askConfirm(
                                   `Quicksell all ${n} spare foil copies of ${inspect.def.name}?`,
                                 )
                               )

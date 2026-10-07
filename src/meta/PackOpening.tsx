@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { recordPack } from './packHistory';
+import { askConfirm } from './confirm';
 import { loadWishlist } from './wishlist';
 import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, Zap } from 'lucide-react';
@@ -187,6 +189,11 @@ export function PackOpening({
   onDone: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  // Log this pack once, at mount (pack history, quick win 13).
+  useEffect(() => {
+    recordPack(packName, pulls);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // An empty pull list (bad server response) would strand the player on a
   // reveal stage that renders nothing — go straight to the summary instead.
   const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
@@ -811,7 +818,9 @@ function SummaryStage({
   const quicksellClutter = async () => {
     if (sellBusy || clutterIndices.length === 0) return;
     if (
-      !confirm(`Quicksell ${clutterIndices.length} common/uncommon card(s)? This can't be undone.`)
+      !(await askConfirm(
+        `Quicksell ${clutterIndices.length} common/uncommon card(s)? This can't be undone.`,
+      ))
     )
       return;
     setSellBusy(true);

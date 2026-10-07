@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { askConfirm } from './confirm';
 import { ShowcaseSlabsRow } from './SlabDetailModal';
 import { Pencil, Check, Search, ShieldAlert } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -584,11 +585,11 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || (credits === 0 && vouchers === 0)}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    !confirm(
+                    !(await askConfirm(
                       `Grant ${fmtCredits(credits)} credits / ${vouchers} vouchers to ${target.username}? This applies instantly.`,
-                    )
+                    ))
                   )
                     return;
                   run(
@@ -646,11 +647,11 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy || !cardId.trim()}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    !confirm(
+                    !(await askConfirm(
                       `Grant ${cardQty}× ${cardId.trim()}${cardFoil ? ' (foil)' : ''} to ${target.username}? This applies instantly.`,
-                    )
+                    ))
                   )
                     return;
                   run(
@@ -688,8 +689,8 @@ function CreatorTools() {
               <PopButton
                 color="red"
                 disabled={busy}
-                onClick={() => {
-                  if (!confirm(`Set ${target.username}'s role to "${role}"?`)) return;
+                onClick={async () => {
+                  if (!(await askConfirm(`Set ${target.username}'s role to "${role}"?`))) return;
                   // The TARGET banner's RoleBadge reads `target.role`, a
                   // one-shot snapshot from when this player was selected —
                   // refreshProfile()/refreshCollection() above only update

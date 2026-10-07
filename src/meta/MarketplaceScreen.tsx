@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { askConfirm } from './confirm';
 import { Store, Gavel, Tag, Coins, Clock } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import {
@@ -312,8 +313,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <PopButton
                 color="steel"
                 disabled={busy || l.bid_count > 0}
-                onClick={() => {
-                  if (!confirm('Cancel this listing? Your cards will be returned.')) return;
+                onClick={async () => {
+                  if (!(await askConfirm('Cancel this listing? Your cards will be returned.')))
+                    return;
                   run(() => cancelListing(l.id), 'Listing cancelled — cards returned.');
                 }}
                 title={l.bid_count > 0 ? 'Auctions with bids cannot be cancelled' : undefined}
@@ -347,9 +349,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                       timedOut ||
                       profile.credits < (isAuction ? (l.buyout ?? 0) : l.price)
                     }
-                    onClick={() => {
+                    onClick={async () => {
                       const price = isAuction ? (l.buyout ?? 0) : l.price;
-                      if (!confirm(`Buy this listing for ${fmtCredits(price)}?`)) return;
+                      if (!(await askConfirm(`Buy this listing for ${fmtCredits(price)}?`))) return;
                       run(() => buyListing(l.id), 'Purchase complete!');
                     }}
                   >
