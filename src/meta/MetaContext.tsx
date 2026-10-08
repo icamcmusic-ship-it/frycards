@@ -1,5 +1,13 @@
 import { cachedFetch } from '../lib/cache';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   supabase,
   Session,
@@ -21,6 +29,7 @@ import {
   subscribeTable,
   OwnedSerializedCard,
 } from '../lib/supabase';
+import { createStaleGuard, StaleGuard } from './staleGuard';
 
 /** Unlike `withTimeout` (which resolves to a fallback value so callers can
  * treat "timed out" and "succeeded with this value" identically), a timeout
@@ -49,6 +58,25 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /** How long cached shop items and pack types are reused before a re-fetch. */
 const STORE_TTL_MS = 30 * 60 * 1000;
+
+/** Runs a per-user refresh and applies it only if it is still the newest
+ * response for its slice AND the active account has not changed meanwhile. A
+ * failed fetch keeps whatever is already on screen. */
+async function refreshIfFresh<T>(
+  guard: StaleGuard,
+  userId: string,
+  activeUserId: { current: string | undefined },
+  fetcher: (uid: string) => Promise<T>,
+  apply: (value: T) => void,
+): Promise<void> {
+  const ticket = guard.begin();
+  try {
+    const value = await fetcher(userId);
+    if (activeUserId.current === userId && guard.accept(ticket)) apply(value);
+  } catch {
+    /* keep what is already on screen */
+  }
+}
 
 export interface MetaState {
   session: Session | null;
@@ -205,6 +233,34 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
 
   const userId = session?.user?.id;
 
+  // Every slice has its own stale guard (see staleGuard.ts) and every refresh
+  // also checks that the account it was issued for is still the current one.
+  // Without both, a slow response from an earlier request could land after a
+  // newer one (briefly showing an old balance), and after an account switch the
+  // PREVIOUS user's in-flight data could overwrite the new user's state.
+  const [guards] = useState(() => ({
+    profile: createStaleGuard(),
+    collection: createStaleGuard(),
+    cosmetics: createStaleGuard(),
+    decks: createStaleGuard(),
+    inventory: createStaleGuard(),
+    shopItems: createStaleGuard(),
+    packTypes: createStaleGuard(),
+  }));
+  const userIdRef = useRef(userId);
+  /** Called whenever the active account changes: abandon everything in flight. */
+  const dropInFlight = useCallback(
+    (nextUserId: string | undefined) => {
+      userIdRef.current = nextUserId;
+      guards.profile.invalidate();
+      guards.collection.invalidate();
+      guards.cosmetics.invalidate();
+      guards.decks.invalidate();
+      guards.inventory.invalidate();
+    },
+    [guards],
+  );
+
   // The refreshX callbacks are fired from dozens of "refresh after a
   // purchase/claim/trade" call sites and from the realtime subscription below.
   // The underlying fetchers throw on a query failure (so the boot effect can
@@ -212,65 +268,68 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // failing must keep whatever is already on screen, not blank the wallet or
   // wipe the collection, and must not surface as an unhandled rejection at a
   // call site that never expected one. So each catches and keeps prior state.
-  const refreshProfile = useCallback(async () => {
-    if (!userId) return;
-    try {
-      setProfile(await fetchProfile(userId));
-    } catch {
-      /* keep the profile already on screen */
-    }
-  }, [userId]);
-  const refreshCollection = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const [coll, serial] = await Promise.all([
-        fetchCollection(userId),
-        fetchMySerializedCards(userId),
-      ]);
-      setCollection(coll);
-      setSerializedCards(serial);
-    } catch {
-      /* keep the collection already on screen */
-    }
-  }, [userId]);
-  const refreshCosmetics = useCallback(async () => {
-    if (!userId) return;
-    try {
-      setCosmetics(await fetchCosmetics(userId));
-    } catch {
-      /* keep prior state */
-    }
-  }, [userId]);
-  const refreshDecks = useCallback(async () => {
-    if (!userId) return;
-    try {
-      setDecks(await fetchDecks(userId));
-    } catch {
-      /* keep prior state */
-    }
-  }, [userId]);
-  const refreshInventory = useCallback(async () => {
-    if (!userId) return;
-    try {
-      setInventory(await fetchInventory(userId));
-    } catch {
-      /* keep prior state */
-    }
-  }, [userId]);
+  const refreshProfile = useCallback(
+    () =>
+      userId
+        ? refreshIfFresh(guards.profile, userId, userIdRef, fetchProfile, setProfile)
+        : Promise.resolve(),
+    [userId, guards],
+  );
+  const refreshCollection = useCallback(
+    () =>
+      userId
+        ? refreshIfFresh(
+            guards.collection,
+            userId,
+            userIdRef,
+            (uid) => Promise.all([fetchCollection(uid), fetchMySerializedCards(uid)]),
+            ([coll, serial]) => {
+              setCollection(coll);
+              setSerializedCards(serial);
+            },
+          )
+        : Promise.resolve(),
+    [userId, guards],
+  );
+  const refreshCosmetics = useCallback(
+    () =>
+      userId
+        ? refreshIfFresh(guards.cosmetics, userId, userIdRef, fetchCosmetics, setCosmetics)
+        : Promise.resolve(),
+    [userId, guards],
+  );
+  const refreshDecks = useCallback(
+    () =>
+      userId
+        ? refreshIfFresh(guards.decks, userId, userIdRef, fetchDecks, setDecks)
+        : Promise.resolve(),
+    [userId, guards],
+  );
+  const refreshInventory = useCallback(
+    () =>
+      userId
+        ? refreshIfFresh(guards.inventory, userId, userIdRef, fetchInventory, setInventory)
+        : Promise.resolve(),
+    [userId, guards],
+  );
   const refreshShopItems = useCallback(async () => {
+    const ticket = guards.shopItems.begin();
     try {
-      setShopItems(await cachedFetch('shopItems', STORE_TTL_MS, fetchShopItems, { force: true }));
+      const items = await cachedFetch('shopItems', STORE_TTL_MS, fetchShopItems, { force: true });
+      if (guards.shopItems.accept(ticket)) setShopItems(items);
     } catch {
       /* keep prior state */
     }
-  }, []);
+  }, [guards]);
   const refreshPackTypes = useCallback(async () => {
+    const ticket = guards.packTypes.begin();
     try {
-      setPackTypes(await cachedFetch('packTypes', STORE_TTL_MS, fetchPackTypes, { force: true }));
+      const packs = await cachedFetch('packTypes', STORE_TTL_MS, fetchPackTypes, { force: true });
+      if (guards.packTypes.accept(ticket)) setPackTypes(packs);
     } catch {
       /* keep prior state */
     }
-  }, []);
+  }, [guards]);
 
   // Load per-user data when a session appears. Guarded against a fast
   // sign-out/sign-in-as-different-user (or duplicate auth events) firing this
@@ -283,6 +342,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // purchase") where that guard doesn't apply and shouldn't be added.
   useEffect(() => {
     let cancelled = false;
+    dropInFlight(userId);
     (async () => {
       if (!userId) {
         await Promise.resolve();
@@ -297,6 +357,15 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setDataLoading(true);
+      // Tickets are taken before the requests start, so a refresh that begins
+      // (and lands) while this load is still in flight wins over it.
+      const tickets = {
+        profile: guards.profile.begin(),
+        collection: guards.collection.begin(),
+        cosmetics: guards.cosmetics.begin(),
+        decks: guards.decks.begin(),
+        inventory: guards.inventory.begin(),
+      };
       try {
         const [prof, coll, serial, cosm, dks, inv] = await Promise.all([
           fetchProfile(userId),
@@ -307,12 +376,14 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
           fetchInventory(userId),
         ]);
         if (cancelled) return;
-        setProfile(prof);
-        setCollection(coll);
-        setSerializedCards(serial);
-        setCosmetics(cosm);
-        setDecks(dks);
-        setInventory(inv);
+        if (guards.profile.accept(tickets.profile)) setProfile(prof);
+        if (guards.collection.accept(tickets.collection)) {
+          setCollection(coll);
+          setSerializedCards(serial);
+        }
+        if (guards.cosmetics.accept(tickets.cosmetics)) setCosmetics(cosm);
+        if (guards.decks.accept(tickets.decks)) setDecks(dks);
+        if (guards.inventory.accept(tickets.inventory)) setInventory(inv);
       } catch {
         // A thrown rejection here (offline/timeout) previously skipped
         // setDataLoading(false) entirely, leaving every screen that gates on
@@ -329,7 +400,7 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [userId, bootAttempt]);
+  }, [userId, bootAttempt, guards, dropInFlight]);
 
   // Currency, collection and unopened packs all move server-side without a
   // local action: a shop sale credits the seller, a trade lands cards, an
@@ -382,10 +453,11 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
     // Clear local state immediately rather than waiting on onAuthStateChange —
     // if that callback never fires (e.g. the server sign-out failed), the UI
     // would otherwise stay "signed in" against a dead session.
+    dropInFlight(undefined);
     setSession(null);
     setProfile(null);
     setGuest(false);
-  }, []);
+  }, [dropInFlight]);
 
   const value = useMemo(
     () => ({

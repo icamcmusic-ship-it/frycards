@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   fetchCardTemplates,
   recordMatchResult,
@@ -18,7 +19,13 @@ import { LEADER_HP } from './game/v3/cards';
 import { DeckRow } from './lib/supabase';
 import { MetaProvider, useMeta } from './meta/MetaContext';
 import { AuthScreen } from './meta/AuthScreen';
-import { MainMenu, MetaScreen } from './meta/MainMenu';
+import { MainMenu } from './meta/MainMenu';
+import { MetaScreen, Route, resolveRoute } from './meta/routes';
+import { RouterProvider, useHashRouter } from './meta/useHashRouter';
+import { isCpuLocked } from './meta/cpuAccess';
+import { ToastProvider, useToast } from './meta/toast';
+import { CurrencyBar, CurrencyToasts } from './meta/CurrencyBar';
+import { PoolOfflineBanner } from './meta/PoolOfflineBanner';
 import type { ShowroomSubject } from './meta/ShowroomScreen';
 import { PopButton } from './meta/ui';
 import { SafeImage } from './meta/SafeImage';
@@ -34,6 +41,9 @@ const CATALOG_CACHE_KEY = 'catalog';
 /** How long a fetched card catalog is reused before the next visit re-fetches
  * it. Cards approved in between show up within this window. */
 const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
+
+/** One reward round-trip gets this long before it counts as a failed attempt. */
+const RECORD_ATTEMPT_MS = 20_000;
 
 const NO_REWARD_REASON: Record<MatchResultStatus, string> = {
   too_early: 'No reward: the match ended too quickly to count.',
@@ -167,16 +177,20 @@ type MatchSetup = { kind: 'custom'; deck: DeckRow } | { kind: 'random' };
 function PlayScreen({
   onStart,
   onBack,
+  practice = false,
 }: {
   onStart: (setup: MatchSetup) => void;
   onBack: () => void;
+  /** Arrived from a How to Play "Try it": point at the quick match, which opens
+   * with the first-match coach. */
+  practice?: boolean;
 }) {
   const { decks, guest, dataLoading } = useMeta();
   const legalDecks = decks.filter((d) => d.is_valid);
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
-      <div className="sticky top-0 z-30 flex items-center gap-3 bg-[var(--c-ink)] px-4 py-2.5">
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-1 bg-[var(--c-ink)] px-4 py-2.5">
         <PopButton onClick={onBack} color="yellow">
           &lt; MENU
         </PopButton>
@@ -185,11 +199,18 @@ function PlayScreen({
         <h1 className="heading-font text-xl text-[var(--c-yellow)]">
           {guest ? 'QUICK MATCH' : 'CHOOSE YOUR DECK'}
         </h1>
-        <span className="text-[10px] font-bold text-[var(--c-paper)]/60">
+        <span className="fs-xs font-bold text-[var(--c-paper)]/60 hidden md:inline">
           Fry Cards rules v6.0 · 60-card decks · start at {LEADER_HP} Vitality
         </span>
+        <CurrencyBar className="ml-auto" />
       </div>
       <div className="p-6 max-w-6xl mx-auto">
+        {practice && (
+          <p className="ink-border-sm bg-[var(--c-yellow)] text-[var(--c-ink)] fs-sm font-bold px-3 py-2 mb-4 max-w-xl">
+            Practice mode: start a match and the coach walks you through your first turn, step by
+            step. Skip it any time.
+          </p>
+        )}
         {/* Random-deck quick match — the only way to play as a guest, and a
             no-setup fallback for account holders without a legal deck yet.
             This path existed per the changelog ("playing without a saved deck
@@ -207,26 +228,26 @@ function PlayScreen({
           >
             RANDOM DECK ▸
           </button>
-          <p className="text-[10px] font-bold text-[var(--c-steel)] mt-2">
+          <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
             Rolls a freshly randomized legal deck — no collection needed. The CPU does the same.
           </p>
         </div>
         {guest ? (
-          <p className="text-[11px] font-bold text-[var(--c-steel)]">
+          <p className="fs-xs font-bold text-[var(--c-steel)]">
             Create an account to build and save your own decks in the Deck Builder (60+ cards, max 4
             copies each).
           </p>
         ) : (
           <>
-            <h2 className="heading-font text-base mb-3 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+            <h2 className="heading-font text-base mb-3 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
               YOUR DECKS
             </h2>
             {dataLoading ? (
-              <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8 animate-pulse">
+              <p className="fs-xs font-bold text-[var(--c-steel)] mb-8 animate-pulse">
                 Loading your decks…
               </p>
             ) : legalDecks.length === 0 ? (
-              <p className="text-[11px] font-bold text-[var(--c-steel)] mb-8">
+              <p className="fs-xs font-bold text-[var(--c-steel)] mb-8">
                 No legal decks yet — build one in the Deck Builder (60+ cards, max 4 copies each).
               </p>
             ) : (
@@ -249,7 +270,7 @@ function PlayScreen({
                       }
                       className="btn-pop w-56 overflow-hidden bg-[var(--c-paper)] ink-border-md shadow-hard-black hover:-translate-y-1 transition-all text-left disabled:opacity-50 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
                     >
-                      <div className="px-2 py-1 bg-[var(--c-red)] heading-font text-[10px] text-[var(--c-paper)] truncate">
+                      <div className="px-2 py-1 bg-[var(--c-steel)] heading-font fs-xs text-[var(--c-paper)] truncate">
                         {d.name}
                       </div>
                       <div className="ink-border-sm m-1.5 overflow-hidden aspect-[16/8]">
@@ -262,11 +283,11 @@ function PlayScreen({
                       </div>
                       <div className="p-3 pt-1">
                         <div className="heading-font text-sm leading-tight">{leader?.name}</div>
-                        <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
+                        <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
                           {d.card_ids.length} cards
                         </div>
                         {missing.length > 0 && (
-                          <div className="text-[10px] font-bold text-[var(--c-red)] mt-0.5">
+                          <div className="fs-xs font-bold text-[var(--c-red)] mt-0.5">
                             {missing.length} card(s) not loaded — reload the card database
                           </div>
                         )}
@@ -299,7 +320,8 @@ function setupToDeck(setup: MatchSetup, matchSeed: number): { deck: DeckDef; lab
 // ---------------------------------------------------------------------------
 // Game (mounted per match)
 // ---------------------------------------------------------------------------
-function Game({
+// Exported for the regression test only.
+export function Game({
   setup,
   onExit,
   onRematch,
@@ -309,6 +331,7 @@ function Game({
   onRematch: () => void;
 }) {
   const { session, profile, refreshProfile } = useMeta();
+  const { toast } = useToast();
   // useState initializer, not a plain call: for a random setup, calling
   // setupToDeck on every render would silently re-roll the human's deck
   // whenever this component re-renders (e.g. the reward state updating at
@@ -376,9 +399,12 @@ function Game({
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-        const { data, error, status } = await recordMatchResult(
-          won,
-          matchIdRef.current ?? undefined,
+        // Bounded: a request that stalls instead of failing would otherwise
+        // hold rewardPending (and with it REMATCH / BACK TO MENU) forever.
+        const { data, error, status } = await withTimeout(
+          recordMatchResult(won, matchIdRef.current ?? undefined),
+          RECORD_ATTEMPT_MS,
+          { data: null, error: 'timed out', status: null },
         );
         if (status) {
           setRewardError(NO_REWARD_REASON[status]);
@@ -418,8 +444,28 @@ function Game({
     }
   };
 
+  // M8: leaving while the result is still being recorded is not allowed. A
+  // REMATCH mints a new ticket, and begin_match deletes the player's unredeemed
+  // one — which is exactly the ticket this retry loop is still trying to cash.
+  // Leaving to the menu and starting a match from there would do the same.
+  const whenSaved = (action: () => void) => () => {
+    if (rewardPending) {
+      toast('Saving your reward… one moment.');
+      return;
+    }
+    action();
+  };
+
   return (
     <div className="relative w-full h-screen supports-[height:100dvh]:h-dvh">
+      {rewardPending && (
+        <div
+          role="status"
+          className="absolute top-2 left-1/2 -translate-x-1/2 z-[80] bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1 heading-font fs-sm animate-pulse"
+        >
+          Saving your reward…
+        </div>
+      )}
       <GameV4
         seed={matchSeed}
         humanDeck={human.deck}
@@ -427,8 +473,8 @@ function Game({
         humanLabel={human.label}
         cpuLabel={cpuArch.label}
         playerName={profile?.username || 'Player 1'}
-        onExit={onExit}
-        onRematch={onRematch}
+        onExit={whenSaved(onExit)}
+        onRematch={whenSaved(onRematch)}
         onResult={onResult}
         reward={reward}
         rewardError={rewardError}
@@ -491,32 +537,79 @@ function BootSplash({ onRetry }: { onRetry: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
+const MENU_ROUTE: Route = { screen: 'menu', sub: [] };
+const HOWTO_ROUTE: Route = { screen: 'howtoplay', sub: [] };
+
+function hasSeenHelp(): boolean {
+  try {
+    return localStorage.getItem('frycards_seen_howtoplay') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function AppInner({
   motionMode,
   changeMotionMode,
+  onMatchChange,
 }: {
   motionMode: MotionMode;
   changeMotionMode: (m: MotionMode) => void;
+  /** Reports whether a match is mounted, so the shell can hold back anything
+   * that must not happen under a live game (the card-pool RETRY). */
+  onMatchChange: (mounted: boolean) => void;
 }) {
-  const { session, guest, loading, bootError, retryBoot, profile, shopItems } = useMeta();
+  const { session, guest, loading, bootError, retryBoot, profile, shopItems, dataLoading } =
+    useMeta();
   const { currentTheme, changeTheme, loaded: themeLoaded } = useTheme();
-  // First-ever visit auto-opens the How to Play page — previously this was
-  // 100% opt-in (only reachable via the Main Menu button), so a new player
-  // could start a real match having never seen the turn structure or any
-  // keyword explained.
-  const [screen, setScreen] = useState<MetaScreen>(() => {
-    try {
-      return localStorage.getItem('frycards_seen_howtoplay') === '1' ? 'menu' : 'howtoplay';
-    } catch {
-      return 'menu';
-    }
+  const { toast } = useToast();
+  const [match, setMatchState] = useState<MatchSetup | null>(null);
+  const setMatch = (m: MatchSetup | null) => {
+    setMatchState(m);
+    onMatchChange(m !== null);
+  };
+
+  // Screens are real history entries (#/store/packs): browser / Android back
+  // walks them, a refresh restores the screen and screens can be linked. The
+  // access rules the menu applies to its tiles are enforced on the route as
+  // well, so a pasted or stale link cannot skip them. A match is never a
+  // route — it lives in `match` below and a hash cannot re-enter one.
+  const cpuLocked = isCpuLocked(profile, guest);
+  // Rules can only be judged once we know who is looking: before sign-in, and
+  // until a signed-in player's profile (role) has arrived, a link is kept as is
+  // instead of being bounced to the menu and losing the deep link.
+  const rulesKnown =
+    !loading && !bootError && (!!guest || (!!session && !dataLoading && !!profile));
+  const router = useHashRouter({
+    resolve: (r) => (rulesKnown ? resolveRoute(r, { guest, cpuLocked }) : r),
+    // First-ever visit auto-opens the How to Play page — previously this was
+    // 100% opt-in (only reachable via the Main Menu button), so a new player
+    // could start a real match having never seen the turn structure.
+    initial: hasSeenHelp() ? MENU_ROUTE : HOWTO_ROUTE,
+    lock: match !== null,
+    onBlockedBack: () => toast('A match is running — use CONCEDE to leave it.'),
   });
-  const [match, setMatch] = useState<MatchSetup | null>(null);
+  const { route } = router;
+  const screen: MetaScreen = route.screen;
+  const go = router.navigate;
+  const back = () => router.back('menu');
+
   // What the 3D Showroom opens on when it is reached from a deep link (the
   // Collection inspector's VIEW IN 3D, a slab in the Grading Lab vault)
-  // rather than from the menu tile. Cleared by the tile itself, so a later
-  // visit from the menu does not silently reopen the last deep-linked card.
+  // rather than from the menu tile. Dropped as soon as the player is anywhere
+  // else — including via the browser back button, which no onBack sees — so a
+  // later visit from the menu does not silently reopen the last deep-linked card.
   const [showroomSubject, setShowroomSubject] = useState<ShowroomSubject | null>(null);
+  const [lastScreen, setLastScreen] = useState(screen);
+  if (lastScreen !== screen) {
+    setLastScreen(screen);
+    if (screen !== 'showroom' && showroomSubject) setShowroomSubject(null);
+  }
+  const openShowroom = (subject: ShowroomSubject) => {
+    setShowroomSubject(subject);
+    go('showroom');
+  };
+
   const [gameKey, setGameKey] = useState(0);
   const markHelpSeen = () => {
     try {
@@ -528,8 +621,8 @@ function AppInner({
 
   // Keep the equipped card back applied to in-game face-down cards.
   useEffect(() => {
-    const back = shopItems.find((s) => s.id === profile?.equipped_card_back);
-    setCardBackImage(back?.image_url || null);
+    const cardBack = shopItems.find((s) => s.id === profile?.equipped_card_back);
+    setCardBackImage(cardBack?.image_url || null);
   }, [profile?.equipped_card_back, shopItems]);
 
   // A shared `?deck=FRY1:…` link opens a read-only preview on top of whatever
@@ -543,7 +636,7 @@ function AppInner({
     try {
       const url = new URL(window.location.href);
       url.searchParams.delete(DECK_LINK_PARAM);
-      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
     } catch {
       /* the address bar keeps the parameter: harmless */
     }
@@ -578,8 +671,9 @@ function AppInner({
             setup={match}
             onExit={() => {
               setMatch(null);
-              setScreen('menu');
               setGameKey((k) => k + 1);
+              // Back to wherever the player started the match from.
+              router.back('menu');
             }}
             // Bumping the key remounts <Game>, which re-runs both deck
             // initializers: the same SETUP, a fresh roll. That is what a rematch
@@ -601,62 +695,42 @@ function AppInner({
         // carries a dedicated guest branch, and gating guests on a Creator
         // role they can never hold made that whole path dead code (the
         // long-standing "guest quick match is unreachable" roadmap item).
-        if (!guest && profile?.role !== 'creator') return <MainMenu onNavigate={setScreen} />;
-        return <PlayScreen onStart={setMatch} onBack={() => setScreen('menu')} />;
+        // The route resolver already sends a locked account to the menu; this
+        // only covers the moment before the profile (role) has loaded.
+        if (!rulesKnown) return <ScreenFallback />;
+        return (
+          <PlayScreen onStart={setMatch} onBack={back} practice={route.sub[0] === 'practice'} />
+        );
       case 'store':
-        return <StoreScreen onBack={() => setScreen('menu')} />;
+        return <StoreScreen onBack={back} />;
       case 'battlepass':
-        return <BattlePassScreen onBack={() => setScreen('menu')} />;
+        return <BattlePassScreen onBack={back} />;
       case 'achievements':
-        return <AchievementsScreen onBack={() => setScreen('menu')} />;
+        return <AchievementsScreen onBack={back} />;
       case 'social':
-        return <SocialScreen onBack={() => setScreen('menu')} />;
+        return <SocialScreen onBack={back} />;
       case 'market':
-        return <MarketplaceScreen onBack={() => setScreen('menu')} />;
+        return <MarketplaceScreen onBack={back} />;
       case 'shops':
-        return <PlayerShopsScreen onBack={() => setScreen('menu')} />;
+        return <PlayerShopsScreen onBack={back} />;
       case 'collection':
         return (
           <CollectionScreen
-            onBack={() => setScreen('menu')}
-            onGrading={() => setScreen('grading')}
-            onShowroom={(subject) => {
-              setShowroomSubject(subject);
-              setScreen('showroom');
-            }}
+            onBack={back}
+            onGrading={() => go('grading')}
+            onShowroom={openShowroom}
           />
         );
       case 'grading':
-        return (
-          <GradingScreen
-            onBack={() => setScreen('menu')}
-            onShowroom={(subject) => {
-              setShowroomSubject(subject);
-              setScreen('showroom');
-            }}
-          />
-        );
+        return <GradingScreen onBack={back} onShowroom={openShowroom} />;
       case 'showroom':
-        return (
-          <ShowroomScreen
-            initial={showroomSubject ?? undefined}
-            onBack={() => {
-              setShowroomSubject(null);
-              setScreen('menu');
-            }}
-          />
-        );
+        return <ShowroomScreen initial={showroomSubject ?? undefined} onBack={back} />;
       case 'decks':
-        return <DeckBuilderScreen onBack={() => setScreen('menu')} />;
+        return <DeckBuilderScreen onBack={back} />;
       case 'history':
-        return <MatchHistoryScreen onBack={() => setScreen('menu')} />;
+        return <MatchHistoryScreen onBack={back} />;
       case 'profile':
-        return (
-          <ProfileScreen
-            onBack={() => setScreen('menu')}
-            onManageShowcase={() => setScreen('collection')}
-          />
-        );
+        return <ProfileScreen onBack={back} onManageShowcase={() => go('collection')} />;
       case 'settings':
         return (
           <SettingsScreen
@@ -664,36 +738,33 @@ function AppInner({
             onThemeChange={changeTheme}
             motionMode={motionMode}
             onMotionModeChange={changeMotionMode}
-            onBack={() => setScreen('menu')}
+            onBack={back}
           />
         );
       case 'submissions':
-        return <CardSubmissionsScreen onBack={() => setScreen('menu')} />;
+        return <CardSubmissionsScreen onBack={back} />;
       case 'changelog':
-        return <ChangelogScreen onBack={() => setScreen('menu')} />;
+        return <ChangelogScreen onBack={back} />;
       case 'news':
-        return (
-          <NewsCenterScreen
-            onBack={() => setScreen('menu')}
-            onOpenChangelog={() => setScreen('changelog')}
-          />
-        );
+        return <NewsCenterScreen onBack={back} onOpenChangelog={() => go('changelog')} />;
       case 'howtoplay':
         return (
           <HowToPlayScreen
             onBack={() => {
               markHelpSeen();
-              setScreen('menu');
+              back();
             }}
+            onNavigate={go}
           />
         );
       default:
-        return <MainMenu onNavigate={setScreen} />;
+        return <MainMenu onNavigate={go} />;
     }
   })();
 
   return (
-    <>
+    <RouterProvider value={router}>
+      <CurrencyToasts />
       {content}
       {linkedDeck && !match && (
         <DeckLinkPreview
@@ -702,12 +773,12 @@ function AppInner({
           onOpenBuilder={() => {
             stashPendingDeck(linkedDeck);
             closeLinkedDeck();
-            setScreen('decks');
+            go('decks');
           }}
           onClose={closeLinkedDeck}
         />
       )}
-    </>
+    </RouterProvider>
   );
 }
 
@@ -729,6 +800,18 @@ export default function App() {
   // on the bundled card set, which lags cards approved since the last sync.
   const [poolOffline, setPoolOffline] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Whether a match is mounted (reported by AppInner). The catalog RETRY swaps
+  // the shared card pool in place, so it must never run under a live game.
+  const [matchMounted, setMatchMounted] = useState(false);
+  // Mirrors the state above for the fetch callback, which outlives a render.
+  const matchMountedRef = useRef(false);
+  const onMatchChange = useCallback((mounted: boolean) => {
+    matchMountedRef.current = mounted;
+    setMatchMounted(mounted);
+  }, []);
+  const retryCatalog = useCallback(() => {
+    if (!matchMountedRef.current) setAttempt((n) => n + 1);
+  }, []);
 
   // Load the universal card catalog from the Supabase backend once at
   // startup, build the v4.2 card pool from it (mechanics are assigned
@@ -749,6 +832,18 @@ export default function App() {
     withTimeout(fetchCardTemplates(), 20_000, null)
       .then((templates) => {
         if (cancelled) return;
+        if (attempt > 0) {
+          // A RETRY from the offline banner: screens are mounted and may hold
+          // cards from the pool being replaced. Nothing is swapped unless the
+          // fetch worked and no match is running by now; the swap itself happens
+          // with the screen tree unmounted (flushSync drops `poolReady`), so it
+          // comes back as a clean mount that only ever sees the new pool.
+          if (!templates || matchMountedRef.current) {
+            setPoolOffline(true);
+            return;
+          }
+          flushSync(() => setPoolReady(false));
+        }
         if (templates && applyCardPool(templates)) {
           // Only a catalog the pool accepted is worth caching.
           writeCache(CATALOG_CACHE_KEY, templates);
@@ -832,29 +927,24 @@ export default function App() {
               lazy chunk, and a route transition is the only thing that can
               suspend here. */}
             {poolOffline && (
-              <div
-                role="status"
-                className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs px-3 py-1.5 text-[11px] font-bold max-w-[92vw]"
-              >
-                <span>Card database unavailable — newer cards may be missing.</span>
-                <button
-                  onClick={() => setAttempt((n) => n + 1)}
-                  className="heading-font underline shrink-0"
-                >
-                  RETRY
-                </button>
-              </div>
+              <PoolOfflineBanner matchMounted={matchMounted} onRetry={retryCatalog} />
             )}
             {/* The root MotionConfig the comments above describe: without it,
                 motion/react animations ignored the in-app Motion setting. */}
             {/* Slab keyframes (incl. @property --slab-angle), defined once. */}
             <style>{SLAB_CSS}</style>
             <ConfirmHost />
-            <React.Suspense fallback={<ScreenFallback />}>
-              <MotionRoot mode={motionMode}>
-                <AppInner motionMode={motionMode} changeMotionMode={changeMotionMode} />
-              </MotionRoot>
-            </React.Suspense>
+            <ToastProvider>
+              <React.Suspense fallback={<ScreenFallback />}>
+                <MotionRoot mode={motionMode}>
+                  <AppInner
+                    motionMode={motionMode}
+                    changeMotionMode={changeMotionMode}
+                    onMatchChange={onMatchChange}
+                  />
+                </MotionRoot>
+              </React.Suspense>
+            </ToastProvider>
           </>
         )}
       </MetaProvider>

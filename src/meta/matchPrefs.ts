@@ -198,7 +198,7 @@ export function motionIsReduced(mode: MotionMode): boolean {
 export const CPU_DIFFICULTIES = [
   { id: 'easy', label: 'EASY', blurb: 'Misses attacks and blocks, never holds an answer' },
   { id: 'normal', label: 'NORMAL', blurb: 'The standard opponent' },
-  { id: 'hard', label: 'HARD', blurb: 'Plans two turns of combat, always keeps an answer up' },
+  { id: 'hard', label: 'HARD', blurb: 'Chumps to stay alive, always holds an answer' },
 ] as const;
 export type CpuDifficultyId = (typeof CPU_DIFFICULTIES)[number]['id'];
 export const CPU_DIFFICULTY_KEY = 'frycards:cpu-difficulty';

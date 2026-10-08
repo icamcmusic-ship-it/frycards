@@ -25,8 +25,12 @@ import {
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { CardOfTheDay } from './CardOfTheDay';
-import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
+import { LevelBadge, PopButton, Notice } from './ui';
+import { CurrencyBar } from './CurrencyBar';
 import { RoleBadge } from './RoleBadge';
+import { ACCOUNT_ONLY_SCREENS, MetaScreen } from './routes';
+import { isCpuLocked } from './cpuAccess';
+import { usePersistedState } from './usePersistedState';
 import {
   claimDailyLogin,
   DailyLoginResult,
@@ -36,26 +40,8 @@ import {
 import { fmtCredits } from './economy';
 import { SafeImage } from './SafeImage';
 
-export type MetaScreen =
-  | 'menu'
-  | 'play'
-  | 'collection'
-  | 'decks'
-  | 'store'
-  | 'battlepass'
-  | 'achievements'
-  | 'social'
-  | 'market'
-  | 'shops'
-  | 'grading'
-  | 'showroom'
-  | 'profile'
-  | 'history'
-  | 'settings'
-  | 'changelog'
-  | 'news'
-  | 'submissions'
-  | 'howtoplay';
+// The screen list lives with the router; re-exported so existing imports keep working.
+export type { MetaScreen } from './routes';
 
 /** The 7-day login reward cycle — mirrors claim_daily_login's CASE table.
  * Day 5's pack is whichever active credits pack is cheapest at claim time.
@@ -91,6 +77,9 @@ function DailyLoginPanel() {
     const id = window.setInterval(() => setNowTs(Date.now()), 60_000);
     return () => window.clearInterval(id);
   }, []);
+  // The 7-day guide is the bulky part of this panel; on a phone it is folded
+  // away until asked for (and remembered), so the tiles stay above the fold.
+  const [guideOpen, setGuideOpen] = usePersistedState('menu:daily-guide', false);
 
   if (!profile) return null;
   const lastClaim = profile.last_login_claim_at
@@ -146,19 +135,32 @@ function DailyLoginPanel() {
   };
 
   return (
-    <div className="relative z-10 max-w-5xl mx-auto px-6 mb-8">
+    <div className="relative z-10 max-w-5xl mx-auto px-3 sm:px-6 mb-5 sm:mb-8">
       <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <CalendarCheck className="w-5 h-5 shrink-0" />
-          <div>
+          <div className="min-w-0">
             <div className="heading-font text-sm leading-none">DAILY LOGIN REWARD</div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] flex items-center gap-1 mt-0.5">
-              <Flame className="w-3 h-3 text-[var(--c-red)]" /> {streak}-day streak — day {cycleDay}{' '}
-              of 7. Bigger prizes the longer you keep it alive.
+            <div className="fs-xs font-bold text-[var(--c-steel)] flex items-center gap-1 mt-0.5">
+              <Flame className="w-3 h-3 shrink-0 text-[var(--c-steel)]" /> {streak}-day streak — day{' '}
+              {cycleDay} of 7
+              <span className="hidden sm:inline">
+                . Bigger prizes the longer you keep it alive.
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1 flex-1 justify-center">
+        <button
+          type="button"
+          onClick={() => setGuideOpen(!guideOpen)}
+          aria-expanded={guideOpen}
+          className="sm:hidden fs-xs font-black underline min-h-6 px-1 text-[var(--c-steel)]"
+        >
+          {guideOpen ? 'HIDE DAYS' : 'SEE DAYS'}
+        </button>
+        <div
+          className={`flex-wrap gap-1 flex-1 justify-center ${guideOpen ? 'flex basis-full sm:basis-auto' : 'hidden sm:flex'}`}
+        >
           {LOGIN_CYCLE.map((d, i) => {
             const dayNum = i + 1;
             const isNext = claimable && dayNum === cycleDay;
@@ -168,7 +170,7 @@ function DailyLoginPanel() {
             return (
               <span
                 key={i}
-                className={`text-[8px] font-black px-1.5 py-1 ink-border-sm text-center leading-tight ${
+                className={`fs-xs font-black px-1.5 py-1 ink-border-sm text-center leading-tight ${
                   isNext
                     ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs'
                     : done
@@ -187,14 +189,14 @@ function DailyLoginPanel() {
         </div>
         {error && <Notice text={error} />}
         {claimedToday ? (
-          <div className="text-[10px] font-black text-[var(--c-steel)]">
+          <div className="fs-xs font-black text-[var(--c-steel)]">
             CLAIMED: {fmtCredits(claimed.credits_awarded)} credits
             {claimed.vouchers_awarded > 0 && ` · ${claimed.vouchers_awarded} vouchers`}
             {claimed.pack_awarded && ` · 1× ${claimed.pack_awarded}`}
           </div>
         ) : (
           <PopButton
-            color={claimable ? 'red' : 'steel'}
+            color={claimable ? 'yellow' : 'steel'}
             disabled={!claimable || busy}
             onClick={claim}
           >
@@ -203,6 +205,50 @@ function DailyLoginPanel() {
         )}
       </div>
     </div>
+  );
+}
+
+type Tile = {
+  key: MetaScreen;
+  label: string;
+  desc: string;
+  icon: React.ReactNode;
+  color: string;
+  disabled?: boolean;
+  badge?: string;
+  /** Muted look for a tile that is not playable yet but still leads somewhere. */
+  muted?: boolean;
+};
+
+const ICON = 'w-6 h-6 sm:w-8 sm:h-8';
+
+/** Round, icon-only utility button: one tidy row instead of five labelled
+ * pills that wrapped to two rows on a phone and pushed the tiles off-screen. */
+function UtilityButton({
+  label,
+  onClick,
+  icon,
+  tone = 'steel',
+}: {
+  label: string;
+  onClick: () => void;
+  icon: React.ReactNode;
+  tone?: 'steel' | 'ink';
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`btn-pop w-9 h-9 flex items-center justify-center ink-border-sm shadow-hard-black-xs ${
+        tone === 'ink'
+          ? 'bg-[var(--c-ink)] text-[var(--c-paper)]'
+          : 'bg-[var(--c-steel)] text-[var(--c-paper)]'
+      }`}
+    >
+      {icon}
+    </button>
   );
 }
 
@@ -229,6 +275,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       cancelled = true;
     };
   }, [guest, profile?.id]);
+
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
 
@@ -237,90 +284,89 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
   // Guests get the random-deck QUICK MATCH (it's what the PLAY AS GUEST
   // button on the Auth screen promises); gating them on a role they can
   // never hold made the guest branch of PlayScreen unreachable dead code.
-  const cpuLocked = !guest && profile?.role !== 'creator';
+  const cpuLocked = isCpuLocked(profile, guest);
+  const needsAccount = (key: MetaScreen) => guest && ACCOUNT_ONLY_SCREENS.has(key);
+  const lockedDesc = 'Requires an account';
 
-  const tiles: {
-    key: MetaScreen;
-    label: string;
-    desc: string;
-    icon: React.ReactNode;
-    color: string;
-    disabled?: boolean;
-    badge?: string;
-  }[] = [
-    {
-      key: 'play',
-      label: 'PLAY',
-      desc: cpuLocked ? 'CPU battles are almost ready' : 'Battle the CPU',
-      icon: <Swords className="w-8 h-8" />,
-      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
-      disabled: cpuLocked,
-      badge: cpuLocked ? 'COMING SOON!' : undefined,
-    },
+  const playTile: Tile = cpuLocked
+    ? {
+        // Not playable yet: last in the grid, drained of colour, and useful —
+        // it opens How to Play instead of dead-ending on a disabled tile.
+        key: 'play',
+        label: 'PLAY',
+        desc: 'CPU battles are almost ready — learn the rules meanwhile',
+        icon: <Swords className={ICON} />,
+        color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+        badge: 'COMING SOON!',
+        muted: true,
+      }
+    : {
+        key: 'play',
+        label: 'PLAY',
+        desc: 'Battle the CPU',
+        icon: <Swords className={ICON} />,
+        color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+      };
+
+  // Colour here is navigation, not meaning: yellow is reserved for the one
+  // primary action (PLAY), red for danger, and steel/paper/ink alternate.
+  const liveTileDefs: Tile[] = [
     {
       key: 'collection',
       label: 'COLLECTION',
-      desc: guest ? 'Requires an account' : 'Browse your cards',
-      icon: <Library className="w-8 h-8" />,
+      desc: guest ? lockedDesc : 'Browse your cards',
+      icon: <Library className={ICON} />,
       color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
-      disabled: guest,
     },
     {
       key: 'decks',
       label: 'DECK BUILDER',
-      desc: guest ? 'Requires an account' : 'Forge 60-card decks',
-      icon: <Layers className="w-8 h-8" />,
-      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-      disabled: guest,
+      desc: guest ? lockedDesc : 'Forge 60-card decks',
+      icon: <Layers className={ICON} />,
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
     {
       key: 'store',
       label: 'STORE',
-      desc: guest ? 'Requires an account' : 'Packs & cosmetics',
-      icon: <Store className="w-8 h-8" />,
-      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
-      disabled: guest,
+      desc: guest ? lockedDesc : 'Packs & cosmetics',
+      icon: <Store className={ICON} />,
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
     },
     {
       key: 'battlepass',
       label: 'BATTLE PASS',
-      desc: guest ? 'Requires an account' : 'Free seasonal reward track',
-      icon: <Crown className="w-8 h-8" />,
-      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
-      disabled: guest,
+      desc: guest ? lockedDesc : 'Free seasonal reward track',
+      icon: <Crown className={ICON} />,
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
     {
       key: 'achievements',
       label: 'MISSIONS',
-      desc: guest ? 'Requires an account' : 'Missions & achievements',
-      icon: <Trophy className="w-8 h-8" />,
-      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-      disabled: guest,
+      desc: guest ? lockedDesc : 'Missions & achievements',
+      icon: <Trophy className={ICON} />,
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
       badge: !guest && claimable > 0 ? `${claimable} TO CLAIM!` : undefined,
     },
     {
       key: 'market',
       label: 'MARKETPLACE',
-      desc: guest ? 'Requires an account' : 'Buy, sell & auction cards',
-      icon: <Gavel className="w-8 h-8" />,
+      desc: guest ? lockedDesc : 'Buy, sell & auction cards',
+      icon: <Gavel className={ICON} />,
       color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-      disabled: guest,
     },
     {
       key: 'shops',
       label: 'PLAYER SHOPS',
-      desc: guest ? 'Requires an account' : 'Player-run storefronts',
-      icon: <Building2 className="w-8 h-8" />,
-      color: 'bg-[var(--c-red)] text-[var(--c-paper)]',
-      disabled: guest,
+      desc: guest ? lockedDesc : 'Player-run storefronts',
+      icon: <Building2 className={ICON} />,
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
     {
       key: 'grading',
       label: 'GRADING LAB',
-      desc: guest ? 'Requires an account' : 'Get your cards graded & slabbed',
-      icon: <Award className="w-8 h-8" />,
+      desc: guest ? lockedDesc : 'Get your cards graded & slabbed',
+      icon: <Award className={ICON} />,
       color: 'bg-[var(--c-ink)] text-[var(--c-yellow)]',
-      disabled: guest,
     },
     {
       key: 'showroom',
@@ -329,38 +375,48 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       // guest out of a room with nothing private in it.
       label: '3D SHOWROOM',
       desc: 'Spin any card in 3D',
-      icon: <Box className="w-8 h-8" />,
-      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+      icon: <Box className={ICON} />,
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
     },
     {
       key: 'social',
       label: 'FRIENDS',
       desc: guest ? 'View the leaderboard' : 'Friends & card trading',
-      icon: <Users className="w-8 h-8" />,
+      icon: <Users className={ICON} />,
       color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
     {
       key: 'submissions',
       label: 'CARD SUBMISSIONS',
       desc: guest ? 'Design a card — sign in to submit' : 'Design a Player Showcase card',
-      icon: <Palette className="w-8 h-8" />,
-      color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+      icon: <Palette className={ICON} />,
+      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
     },
     {
       key: 'history',
       label: 'MATCH HISTORY',
       desc: 'Your recent matches',
-      icon: <History className="w-8 h-8" />,
-      color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
+      icon: <History className={ICON} />,
+      color: 'bg-[var(--c-steel)] text-[var(--c-paper)]',
     },
     {
       key: 'profile',
       label: 'PROFILE',
-      desc: guest ? 'Requires an account' : 'Stats & customization',
-      icon: <User className="w-8 h-8" />,
+      desc: guest ? lockedDesc : 'Stats & customization',
+      icon: <User className={ICON} />,
       color: 'bg-[var(--c-paper)] text-[var(--c-ink)]',
-      disabled: guest,
     },
+  ];
+  const liveTiles: Tile[] = liveTileDefs.map((t) => ({ ...t, disabled: needsAccount(t.key) }));
+
+  // Playable tiles first, then whatever this account can't open yet; a locked
+  // PLAY goes after all the live ones (it used to be the biggest tile on the
+  // screen and a dead end for every non-creator account).
+  const tiles: Tile[] = [
+    ...(cpuLocked ? [] : [playTile]),
+    ...liveTiles.filter((t) => !t.disabled),
+    ...(cpuLocked ? [playTile] : []),
+    ...liveTiles.filter((t) => t.disabled),
   ];
 
   return (
@@ -371,13 +427,11 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       />
       <div className="absolute inset-0 halftone-pattern pointer-events-none opacity-30" />
 
-      {/* Header / identity strip */}
-      {/* flex-wrap keeps the nav buttons on-screen on phones — without it,
-          SETTINGS / SIGN OUT ran off the right edge and were unreachable. */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-y-2 px-4 sm:px-6 py-4">
-        <div className="flex items-center gap-3">
+      {/* Identity strip + one row of utility icons */}
+      <div className="relative z-10 flex items-center justify-between gap-2 px-3 sm:px-6 pt-3 sm:pt-4 pb-1">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <div
-            className="w-14 h-14 ink-border-md shadow-hard-black-xs bg-[var(--c-steel)] overflow-hidden shrink-0"
+            className="w-10 h-10 sm:w-14 sm:h-14 ink-border-md shadow-hard-black-xs bg-[var(--c-steel)] overflow-hidden shrink-0"
             style={
               banner && !avatar
                 ? { backgroundImage: `url(${banner.image_url})`, backgroundSize: 'cover' }
@@ -398,54 +452,47 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
               </div>
             )}
           </div>
-          <div>
-            <div className="heading-font text-lg leading-none">
+          <div className="min-w-0">
+            <div className="heading-font text-base sm:text-lg leading-none truncate">
               {guest ? 'GUEST OPERATIVE' : profile?.username || '…'}
               {!guest && <RoleBadge role={profile?.role} />}
             </div>
             {profile && (
-              <div className="flex gap-2 mt-1.5 items-center flex-wrap">
+              <div className="mt-1 hidden sm:block">
                 <LevelBadge level={profile.level} xp={profile.xp} />
-                <CreditChip amount={profile.credits} />
-                <VoucherChip amount={profile.vouchers} />
-                <span className="text-[10px] font-bold text-[var(--c-steel)] self-center">
-                  {profile.wins}W · {profile.losses}L
-                </span>
               </div>
             )}
             {guest && (
-              <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
+              <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
                 Progress is not saved in guest mode.
               </div>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
+        <div className="flex gap-1.5 shrink-0" role="toolbar" aria-label="Menu shortcuts">
+          <UtilityButton
+            label="How to play"
             onClick={() => onNavigate('howtoplay')}
-            className="btn-pop heading-font text-[11px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
-          >
-            <BookOpen className="w-3.5 h-3.5" /> HOW TO PLAY
-          </button>
-          <button
+            icon={<BookOpen className="w-4 h-4" aria-hidden />}
+          />
+          <UtilityButton
+            label="News"
             onClick={() => onNavigate('news')}
-            className="btn-pop heading-font text-[11px] bg-[var(--c-red)] text-white px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
-          >
-            <Newspaper className="w-3.5 h-3.5" /> NEWS
-          </button>
-          <button
+            icon={<Newspaper className="w-4 h-4" aria-hidden />}
+          />
+          <UtilityButton
+            label="Changelog"
             onClick={() => onNavigate('changelog')}
-            className="btn-pop heading-font text-[11px] bg-[var(--c-paper)] text-[var(--c-ink)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
-          >
-            <ScrollText className="w-3.5 h-3.5" /> CHANGELOG
-          </button>
-          <button
+            icon={<ScrollText className="w-4 h-4" aria-hidden />}
+          />
+          <UtilityButton
+            label="Settings"
             onClick={() => onNavigate('settings')}
-            className="btn-pop heading-font text-[11px] bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
-          >
-            <Settings className="w-3.5 h-3.5" /> SETTINGS
-          </button>
-          <button
+            icon={<Settings className="w-4 h-4" aria-hidden />}
+          />
+          <UtilityButton
+            label={guest ? 'Exit guest mode' : 'Sign out'}
+            tone="ink"
             onClick={async () => {
               // Signing out a real account was a single unconfirmed click —
               // guest mode has no persisted data, so it's left as an
@@ -453,22 +500,32 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
               if (!guest && !(await askConfirm('Sign out of your account?'))) return;
               signOut();
             }}
-            className="btn-pop heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
-          >
-            <LogOut className="w-3.5 h-3.5" /> {guest ? 'EXIT GUEST' : 'SIGN OUT'}
-          </button>
+            icon={<LogOut className="w-4 h-4" aria-hidden />}
+          />
         </div>
       </div>
 
-      {/* Title */}
-      <div className="relative z-10 text-center mt-6 mb-10">
-        <div className="bg-[var(--c-red)] text-[var(--c-paper)] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs inline-block mb-3">
+      {/* Wallet + record */}
+      {profile && (
+        <div className="relative z-10 flex flex-wrap items-center gap-2 px-3 sm:px-6 pb-2">
+          <span className="sm:hidden">
+            <LevelBadge level={profile.level} xp={profile.xp} compact />
+          </span>
+          <CurrencyBar />
+          <span className="fs-xs font-bold text-[var(--c-steel)]">
+            {profile.wins}W · {profile.losses}L
+          </span>
+        </div>
+      )}
+
+      {/* Title: a single compact line on phones (it was ~170px tall) */}
+      <div className="relative z-10 text-center mt-2 mb-4 sm:mt-6 sm:mb-10">
+        <div className="hidden sm:inline-block bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-1 heading-font text-xs ink-border-sm shadow-hard-black-xs mb-3">
           STARK COMIC STANDARD · VOLUME #1
         </div>
-        <h1 className="text-5xl sm:text-7xl heading-font leading-none">
-          FRY
-          <br />
-          <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] px-4 py-1 inline-block mt-2">
+        <h1 className="heading-font leading-none text-3xl sm:text-7xl flex items-center justify-center gap-2 sm:block">
+          <span>FRY</span>
+          <span className="bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 sm:px-4 py-1 inline-block sm:mt-2 sm:block sm:w-fit sm:mx-auto">
             CARDS
           </span>
         </h1>
@@ -477,34 +534,48 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       {/* Daily login reward strip */}
       {!guest && <DailyLoginPanel />}
 
-      <CardOfTheDay onBuild={guest ? undefined : () => onNavigate('decks')} />
-
-      {/* Nav tiles */}
-      <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">
+      {/* Nav tiles: two per row on phones so the first rows sit above the fold */}
+      <div className="relative z-10 grid grid-cols-2 sm:flex sm:flex-wrap justify-center gap-3 sm:gap-5 px-3 sm:px-6 pb-8 sm:pb-10 max-w-5xl mx-auto">
         {tiles.map((t) => (
           <button
             key={t.key}
-            onClick={() => !t.disabled && onNavigate(t.key)}
+            onClick={() => !t.disabled && onNavigate(t.muted ? 'howtoplay' : t.key)}
             // aria-disabled instead of disabled: a disabled button drops out
             // of the tab order, so keyboard/switch users could never reach
             // the tile to hear WHY it's off. The onClick guard above keeps it
             // inert either way, and aria-label carries the reason.
             aria-disabled={t.disabled || undefined}
             aria-label={t.disabled ? `${t.label} — ${t.desc}` : undefined}
-            title={t.disabled ? (t.badge ? t.desc : 'Create an account to unlock') : undefined}
-            className={`btn-pop relative w-56 p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${t.disabled ? (t.badge ? 'opacity-70 cursor-not-allowed' : 'opacity-40 cursor-not-allowed') : 'hover:-translate-y-1'}`}
+            title={
+              t.disabled
+                ? 'Create an account to unlock'
+                : t.muted
+                  ? 'Not open yet — opens How to Play'
+                  : undefined
+            }
+            className={`btn-pop relative w-full sm:w-56 p-3 sm:p-5 text-left ink-border-md shadow-hard-black transition-all ${t.color} ${
+              t.disabled
+                ? 'opacity-40 cursor-not-allowed'
+                : t.muted
+                  ? 'grayscale opacity-80'
+                  : 'hover:-translate-y-1'
+            }`}
           >
             {t.badge && (
-              <span className="absolute -top-2 -right-2 rotate-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-2 py-0.5 ink-border-sm shadow-hard-black-xs">
+              <span className="absolute -top-2 -right-1 sm:-right-2 rotate-3 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-2 py-0.5 ink-border-sm shadow-hard-black-xs">
                 {t.badge}
               </span>
             )}
             {t.icon}
-            <div className="heading-font text-xl mt-3">{t.label}</div>
-            <div className="text-[11px] font-bold opacity-80 mt-1">{t.desc}</div>
+            <div className="heading-font text-base sm:text-xl mt-2 sm:mt-3 leading-tight">
+              {t.label}
+            </div>
+            <div className="fs-xs font-bold opacity-80 mt-1">{t.desc}</div>
           </button>
         ))}
       </div>
+
+      <CardOfTheDay onBuild={guest ? undefined : () => onNavigate('decks')} />
     </div>
   );
 }

@@ -1,5 +1,24 @@
-import React, { useState } from 'react';
-import { MetaHeader } from '../meta/ui';
+import React from 'react';
+import {
+  Flag,
+  Gavel,
+  Hand,
+  Layers,
+  Library,
+  Package,
+  Sparkles,
+  Shield,
+  Swords,
+  Trophy,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+import { MetaHeader, PopButton, ProgressBar } from '../meta/ui';
+import { MetaScreen, canEnterScreen } from '../meta/routes';
+import { isCpuLocked } from '../meta/cpuAccess';
+import { restartCoach } from '../meta/coachPractice';
+import { useMeta } from '../meta/MetaContext';
+import { usePersistedState } from '../meta/usePersistedState';
 import { RARITY_CHIP, RARITY_ORDER } from '../meta/rarity';
 import { KEYWORDS, KEYWORD_TEXT, KEYWORD_TYPES, UNPRINTED_KEYWORDS } from '../game/v3/keywords';
 import { COLORS, COLOR_IDENTITY } from '../game/v3/colors';
@@ -343,46 +362,252 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
   },
 ];
 
-export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
-  const [open, setOpen] = useState(0);
+type Action =
+  /** Restart the first-match coach and open the practice (quick match) screen. */
+  { kind: 'practice' } | { kind: 'screen'; screen: MetaScreen; label: string };
+
+interface StepCard {
+  title: string;
+  body: string;
+  icon: LucideIcon;
+  /** A small picture of the idea, built from existing components. */
+  art?: React.ReactNode;
+  action: Action;
+}
+
+/** The seven Essence Types as the pips they print on cards. */
+function EssenceRow() {
+  return (
+    <div className="flex flex-wrap gap-1" aria-label="The seven Essence Types">
+      {COLORS.map((c) => (
+        <span
+          key={c}
+          title={c}
+          className="inline-flex items-center justify-center rounded-full w-6 h-6"
+          style={{ backgroundColor: COLOR_PIP[c]?.bg, color: COLOR_PIP[c]?.fg }}
+        >
+          <EssenceIcon type={c} color={COLOR_PIP[c]?.fg} size={14} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Three mini cards fanned out: "your hand". */
+function HandFan() {
+  return (
+    <div className="flex items-end h-12 pl-2" aria-hidden>
+      {[-8, 0, 8].map((deg, i) => (
+        <span
+          key={deg}
+          className="w-8 h-11 -ml-2 first:ml-0 ink-border-sm bg-[var(--c-paper)] flex items-start justify-center pt-1"
+          style={{ transform: `rotate(${deg}deg)`, zIndex: i }}
+        >
+          <span className="w-4 h-4 rounded-full bg-[var(--c-yellow)] ink-border-sm" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const STEPS: StepCard[] = [
+  {
+    title: 'Pick a Leader and a deck',
+    body: 'Your Leader fixes your two colours. A deck is 60+ cards with at most 4 copies of any card, all inside those colours.',
+    icon: Layers,
+    action: { kind: 'screen', screen: 'decks', label: 'OPEN DECK BUILDER' },
+  },
+  {
+    title: 'Keep your hand',
+    body: 'You draw 7 cards. Not happy? Mulligan: shuffle back and draw one fewer, as often as you like.',
+    icon: Hand,
+    art: <HandFan />,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Play a Wellspring',
+    body: 'Once a turn, play a free Wellspring. Locations make Essence, your mana. Going second? You may play two on your first turn.',
+    icon: Sparkles,
+    art: <EssenceRow />,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Invoke cards',
+    body: 'Select a card and press INVOKE. Ready Locations pay its cost for you. Pick a highlighted target if it asks for one.',
+    icon: Zap,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Clash',
+    body: 'TO CLASH opens combat. Select ready units, then DECLARE ATTACK. Brand-new units cannot attack unless they have Reckless.',
+    icon: Swords,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'Guard and respond',
+    body: 'Under attack, assign your ready units to guard. Quick Events and Ambush units can answer first. PASS lets a card resolve; it does not end your turn.',
+    icon: Shield,
+    action: { kind: 'practice' },
+  },
+  {
+    title: 'End your turn and win',
+    body: 'END TURN runs Dusk and sheds you down to 7 cards. Reduce your opponent from 20 Vitality to 0 to win. Drawing from an empty deck loses.',
+    icon: Flag,
+    art: (
+      <div className="flex items-center gap-2" aria-hidden>
+        <span className="fs-xs font-black">20</span>
+        <ProgressBar value={20} max={20} className="flex-1" />
+        <span className="fs-xs font-black">0</span>
+      </div>
+    ),
+    action: { kind: 'practice' },
+  },
+];
+
+const BEYOND: { title: string; body: string; icon: LucideIcon; screen: MetaScreen }[] = [
+  {
+    title: 'Open packs',
+    body: 'Spend credits or vouchers in the Store. Every pack shows its exact odds first.',
+    icon: Package,
+    screen: 'store',
+  },
+  {
+    title: 'Build your collection',
+    body: 'Browse, inspect and quicksell spare cards.',
+    icon: Library,
+    screen: 'collection',
+  },
+  {
+    title: 'Earn rewards',
+    body: 'Missions and achievements pay credits, vouchers and packs.',
+    icon: Trophy,
+    screen: 'achievements',
+  },
+  {
+    title: 'Trade with players',
+    body: 'List cards on the Marketplace or run an auction.',
+    icon: Gavel,
+    screen: 'market',
+  },
+];
+
+export function HowToPlayScreen({
+  onBack,
+  onNavigate,
+}: {
+  onBack: () => void;
+  /** Lets a "Try it" button deep-link into another screen. Without it the
+   * buttons are inert (the dev preview harness mounts this standalone). */
+  onNavigate?: (screen: MetaScreen, sub?: string[]) => void;
+}) {
+  const { guest, profile } = useMeta();
+  const [open, setOpen] = usePersistedState<number>('howtoplay:open', 0);
+  const cpuLocked = isCpuLocked(profile, guest);
+  const access = { guest, cpuLocked };
+
+  const run = (action: Action) => {
+    if (action.kind === 'practice') {
+      // The coach shows once ever; clearing its flag makes the next match
+      // open with the walkthrough, on the quick-match screen.
+      restartCoach();
+      onNavigate?.('play', ['practice']);
+    } else {
+      onNavigate?.(action.screen);
+    }
+  };
+
+  /** The button (or the reason there isn't one) for a step's action. */
+  const renderAction = (action: Action) => {
+    if (action.kind === 'practice') {
+      // Locked accounts get one explanation under the intro instead of the
+      // same "coming soon" line on every card.
+      return cpuLocked ? null : (
+        <PopButton color="yellow" onClick={() => run(action)}>
+          TRY IT: PRACTICE MATCH ▸
+        </PopButton>
+      );
+    }
+    return canEnterScreen(action.screen, access) ? (
+      <PopButton color="yellow" onClick={() => run(action)}>
+        TRY IT: {action.label} ▸
+      </PopButton>
+    ) : (
+      <span className="fs-xs font-bold text-[var(--c-steel)]">Create an account to unlock.</span>
+    );
+  };
 
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="HOW TO PLAY" onBack={onBack} />
-      <div className="p-6 max-w-3xl mx-auto flex flex-col gap-2">
-        <section
-          aria-label="Your first turn"
-          className="ink-border-sm p-4 mb-3 text-sm leading-relaxed"
-        >
-          <h2 className="heading-font text-lg mb-2">YOUR FIRST TURN</h2>
-          <ol className="list-decimal pl-5 space-y-2">
-            <li>Keep your opening hand, or mulligan for one fewer card.</li>
-            <li>
-              Play a free Wellspring in a color your hand needs. Going second? You may play a second
-              on your first turn; that one enters exhausted.
-            </li>
-            <li>
-              Select a card and INVOKE. Ready Locations pay its cost automatically. If asked, choose
-              a highlighted target.
-            </li>
-            <li>
-              TO CLASH opens combat. Select ready units, then DECLARE ATTACK, or SKIP TO MAIN II.
-              New units cannot attack without Reckless, but can guard while ready.
-            </li>
-            <li>
-              After guards, play a Quick Event or Ambush unit if useful, then RESOLVE CLASH. During
-              a response to a pending card, PASS lets it resolve; it does not end your turn.
-            </li>
-            <li>
-              Main II lets you play more cards. END TURN runs Dusk, asks you to discard down to 7 if
-              needed, then gives the opponent their turn.
-            </li>
-          </ol>
-          <p className="mt-3 font-bold">
-            Essence clears every phase. Locations recover at Dawn. Reduce the opponent to 0 Vitality
-            to win; drawing from an empty deck also loses.
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto flex flex-col gap-2">
+        <section aria-label="Your first turn" className="mb-3">
+          <h2 className="heading-font text-lg mb-1">YOUR FIRST TURN IN 7 STEPS</h2>
+          <p className="text-sm font-bold text-[var(--c-steel)] mb-3">
+            Essence clears every phase and Locations recover at Dawn. The practice match opens with
+            a coach that explains each step as it happens.
           </p>
+          {cpuLocked && (
+            <p className="ink-border-sm bg-[var(--c-paper)] fs-sm font-bold px-3 py-2 mb-3">
+              Practice matches are coming soon. Until then, read the steps and explore the screens
+              below.
+            </p>
+          )}
+          <ol className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {STEPS.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <li
+                  key={step.title}
+                  className="ink-border-md shadow-hard-black-sm bg-[var(--c-paper)] p-3 flex flex-col gap-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="heading-font text-sm w-7 h-7 shrink-0 flex items-center justify-center bg-[var(--c-ink)] text-[var(--c-yellow)]">
+                      {i + 1}
+                    </span>
+                    <Icon className="w-5 h-5 shrink-0 text-[var(--c-steel)]" aria-hidden />
+                    <h3 className="heading-font text-base leading-tight min-w-0">{step.title}</h3>
+                  </div>
+                  <p className="text-sm font-medium leading-snug">{step.body}</p>
+                  {step.art}
+                  <div className="mt-auto pt-1">{renderAction(step.action)}</div>
+                </li>
+              );
+            })}
+          </ol>
         </section>
+
+        <section aria-label="Beyond the match" className="mb-4">
+          <h2 className="heading-font text-lg mb-2">BEYOND THE MATCH</h2>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {BEYOND.map((b) => {
+              const Icon = b.icon;
+              const allowed = canEnterScreen(b.screen, access);
+              return (
+                <li
+                  key={b.title}
+                  className="ink-border-sm bg-[var(--c-paper)] p-3 flex items-start gap-3"
+                >
+                  <Icon className="w-5 h-5 mt-0.5 shrink-0 text-[var(--c-steel)]" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="heading-font text-sm">{b.title}</h3>
+                    <p className="text-sm font-medium leading-snug mb-2">{b.body}</p>
+                    {allowed ? (
+                      <PopButton color="steel" onClick={() => onNavigate?.(b.screen)}>
+                        TRY IT ▸
+                      </PopButton>
+                    ) : (
+                      <span className="fs-xs font-bold text-[var(--c-steel)]">
+                        Create an account to unlock.
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <h2 className="heading-font text-lg mb-1">FULL RULES</h2>
         {SECTIONS.map((sec, i) => (
           <div key={sec.title} className="ink-border-sm shadow-hard-black-xs bg-[var(--c-paper)]">
             <button
@@ -402,7 +627,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                   desc === '' ? (
                     <div
                       key={term}
-                      className="text-[10px] font-mono font-black tracking-widest text-[var(--c-steel)] uppercase pt-2 first:pt-0"
+                      className="fs-xs font-mono font-black tracking-widest text-[var(--c-steel)] uppercase pt-2 first:pt-0"
                     >
                       {term}
                     </div>
@@ -418,7 +643,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                       key={term}
                       className="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-2 items-baseline"
                     >
-                      <dt className="font-black text-[11px] bg-[var(--c-yellow)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
+                      <dt className="font-black text-[11px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 justify-self-start flex items-center gap-1">
                         {sec.title.includes('Essence Identity') && (
                           <span
                             className="inline-flex items-center justify-center rounded-full font-mono font-black shrink-0"
@@ -450,7 +675,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
                     {RARITY_ORDER.map((r) => (
                       <span
                         key={r}
-                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[r] || ''}`}
+                        className={`fs-xs font-black px-1.5 py-0.5 rounded-full ${RARITY_CHIP[r] || ''}`}
                       >
                         {r}
                       </span>
@@ -461,7 +686,7 @@ export function HowToPlayScreen({ onBack }: { onBack: () => void }) {
             )}
           </div>
         ))}
-        <div className="text-center text-[10px] font-mono font-bold text-[var(--c-steel)]/70 mt-2 mb-6">
+        <div className="text-center fs-xs font-mono font-bold text-[var(--c-steel)] mt-2 mb-6">
           {/* Kept equal to the version `docs/RULEBOOK.md` actually prints
               (and to PlayScreen's "Fry Cards rules v6.0" strip) — this had
               drifted to a V9.0 that no rulebook has ever carried, so the one

@@ -5,6 +5,7 @@ import { useMeta } from './MetaContext';
 import { fmtCredits, fmtVouchers } from './economy';
 import { fetchCardMarketValue } from '../lib/supabase';
 import { CARD_SIZES } from '../components/CardFaceV4';
+import { StorePlus } from './StorePlus';
 
 /** Comic-pop button used across all meta screens. */
 export function PopButton({
@@ -257,6 +258,7 @@ export function MetaHeader({ title, onBack }: { title: string; onBack: () => voi
         <div className="flex items-center gap-2">
           <CreditChip amount={profile.credits} />
           <VoucherChip amount={profile.vouchers} />
+          <StorePlus />
         </div>
       )}
     </div>
