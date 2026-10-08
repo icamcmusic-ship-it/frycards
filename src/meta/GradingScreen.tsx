@@ -582,7 +582,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
               // pushed steps 2-4 out of reach, which is what the sticky bar
               // below now answers. From `sm` up the list is still bounded so a
               // three-hundred-line collection doesn't bury the service picker.
-              <div className="grid grid-cols-3 justify-items-center gap-2 sm:flex sm:flex-wrap sm:max-h-[46vh] sm:overflow-y-auto ink-border-sm p-2 bg-[var(--c-ink)]/5">
+              <div className="isolate grid grid-cols-3 justify-items-center gap-2 sm:flex sm:flex-wrap sm:max-h-[46vh] sm:overflow-y-auto ink-border-sm p-2 bg-[var(--c-ink)]/5">
                 {filteredSpares.slice(0, 240).map((s) => {
                   const key = `${s.cardId}|${s.foil}`;
                   const inBasket = basket.get(key) || 0;
