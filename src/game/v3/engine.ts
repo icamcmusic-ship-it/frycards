@@ -16,6 +16,7 @@ import {
   charmSelfHeal,
   hasKw,
   itemSurvives,
+  totalCost,
 } from './cards';
 import { COLORS, EssenceType, LEADER_COLORS } from './colors';
 
@@ -192,6 +193,9 @@ export interface ClashState {
   guardedOnce: string[];
 }
 
+/** Outcome of a finished game: a seat, or a draw (simultaneous zero Vitality). */
+export type GameWinner = PlayerId | 'draw';
+
 export interface GameState {
   players: Record<PlayerId, PlayerState>;
   active: PlayerId;
@@ -205,7 +209,10 @@ export interface GameState {
    * Deal skip, the turn counter rollover, the Wellspring allowance — keys
    * off this instead. */
   firstPlayer: PlayerId;
-  winner: PlayerId | null;
+  /** `null` while the game is live. `'draw'` = both Vitality totals hit 0 at
+   * once. Truthy once decided, so `if (state.winner)` still means "over";
+   * use `winnerSeat` when you need a seat. */
+  winner: GameWinner | null;
   clash: ClashState | null;
   /** Waiting-to-resolve cards and triggers, resolved last-in-first-out. */
   stack: StackItem[];
@@ -898,6 +905,20 @@ function drainStack(state: GameState): void {
 
 const SINGLE_TARGETS = ['enemyUnit', 'friendlyUnit', 'anyTarget', 'friendlyAny'];
 
+/** Every legal explicit target (unit iids and player ids) for `eff` invoked by
+ * `pid`. The single source of truth for "is there anything to aim this at":
+ * canInvoke, invokeCard's fallback and the UI's target highlighting all agree
+ * with `canTarget` through it. */
+export function legalTargets(state: GameState, pid: PlayerId, eff: Effect): string[] {
+  const cands = [
+    ...state.players.P1.field.map((u) => u.iid),
+    ...state.players.P2.field.map((u) => u.iid),
+    'P1',
+    'P2',
+  ];
+  return cands.filter((iid) => canTarget(state, pid, eff, iid));
+}
+
 /** Is `iid` a legal explicit target for `eff` invoked by `pid`? Warded blocks
  * enemy targeting. `iid` may be a unit iid or a player id ('P1'/'P2'). */
 export function canTarget(state: GameState, pid: PlayerId, eff: Effect, iid: string): boolean {
@@ -930,6 +951,36 @@ export function canTarget(state: GameState, pid: PlayerId, eff: Effect, iid: str
   }
 }
 
+/**
+ * Default target for a damage effect that can hit a unit (and, for
+ * 'anyTarget', the opposing player). Returns undefined to defer to the
+ * general "biggest enemy" pick.
+ *
+ * Damage wasted on a body it cannot kill is the weakest use of a ping, and
+ * the old rule (always the highest-Might unit) did exactly that — a 2-damage
+ * ping into a 6-Grit wall — while never going face for lethal. So: lethal to
+ * the face first; otherwise the most valuable unit the damage actually
+ * KILLS; otherwise face if it is a legal target; otherwise defer.
+ */
+function pickDamageTarget(state: GameState, pid: PlayerId, eff: Effect): string | undefined {
+  const v = eff.value ?? 0;
+  if (v <= 0) return undefined;
+  const foe = opponentOf(pid);
+  const opp = state.players[foe];
+  const canFace = eff.target === 'anyTarget';
+  if (canFace && opp.vitality <= Math.max(0, v - bulwarkReduction(opp))) return foe;
+  const kills = opp.field.filter((u) => {
+    if (unitHasKw(u, 'Warded') || unbreakableUp(u)) return false;
+    // Hardened shaves 1 off every packet; a fully absorbed one kills nothing.
+    const landed = unitHasKw(u, 'Hardened') ? v - 1 : v;
+    return landed >= remainingGrit(state, u);
+  });
+  const value = (u: UnitInst) => effMight(state, u) + effGrit(state, u);
+  kills.sort((a, b) => value(b) - value(a) || totalCost(b.def.cost) - totalCost(a.def.cost));
+  if (kills.length > 0) return kills[0].iid;
+  return canFace ? foe : undefined;
+}
+
 /** Pick a sensible default target for an effect (used by triggers and the AI). */
 export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string | undefined {
   const me = state.players[pid];
@@ -954,6 +1005,10 @@ export function autoTarget(state: GameState, pid: PlayerId, eff: Effect): string
     (eff.target === 'enemyUnit' || eff.target === 'anyTarget')
   ) {
     state.telemetry?.onKeywordProc?.('Warded', 1);
+  }
+  if (eff.action === 'damage' && (eff.target === 'enemyUnit' || eff.target === 'anyTarget')) {
+    const t = pickDamageTarget(state, pid, eff);
+    if (t !== undefined) return t;
   }
   switch (eff.target) {
     case 'enemyUnit': {
@@ -1352,8 +1407,23 @@ export function stateBasedChecks(state: GameState): void {
   if (!state.winner) {
     const dead = (['P1', 'P2'] as PlayerId[]).filter((pid) => state.players[pid].vitality <= 0);
     if (dead.length === 1) state.winner = opponentOf(dead[0]);
-    else if (dead.length === 2) state.winner = opponentOf(state.active);
+    else if (dead.length === 2) {
+      // Both players at or below 0 in the same check: nobody outlasted the
+      // other, so it is a draw rather than a loss for whoever's turn it was.
+      state.winner = 'draw';
+      state.log.push('Both players fall to 0 Vitality at once — the game is a draw.');
+    }
   }
+}
+
+/** The winning seat, or null while the game is live or when it ended in a draw. */
+export function winnerSeat(state: GameState): PlayerId | null {
+  return state.winner === 'P1' || state.winner === 'P2' ? state.winner : null;
+}
+
+/** Did the game end with both players at 0 Vitality? */
+export function isDraw(state: GameState): boolean {
+  return state.winner === 'draw';
 }
 
 // ---------------------------------------------------------------------------
@@ -1701,13 +1771,29 @@ export function finishDuskShed(state: GameState, picked?: string[]): void {
 }
 
 /**
+ * Ending a phase or resolving a clash drains whatever is still on the stack.
+ * That is only a concession the CALLER may make: while an item is pending and
+ * the opponent holds priority they have not yet passed, so draining would skip
+ * the response they are entitled to. (Unreachable from today's single-player
+ * UI, where the CPU answers synchronously, but a server reducer or PvP client
+ * must not be able to bypass the window.)
+ */
+function mayConcedePriority(state: GameState, caller: PlayerId): boolean {
+  // Only the active player drives phases and the clash.
+  if (caller !== state.active) return false;
+  if (state.stack.length === 0 || !state.priority) return true;
+  return state.priority.holder === caller;
+}
+
+/**
  * Advance to the next phase. Main1 -> Clash -> Main2 -> (Dusk, pass turn,
  * next player's Dawn — landing in their Main1). The essence pool empties at
  * every phase boundary. Illegal mid-clash (resolve the clash first).
  */
-export function endPhase(state: GameState): boolean {
+export function endPhase(state: GameState, caller: PlayerId = state.active): boolean {
   if (state.winner) return false;
   if (state.clash && state.clash.step !== 'done') return false;
+  if (!mayConcedePriority(state, caller)) return false;
   // Ending a phase is a concession of priority: anything still pending
   // resolves before the phase actually changes.
   drainStack(state);
@@ -1954,7 +2040,12 @@ export const BOND_TARGET_SELF = 'self';
 /** Can this hand card be invoked right now (timing + current essence pool +
  * a bond target existing for Items)? A Charm needs no unit — it can be cast
  * on its controller — so only Weapons and Tools are gated on the field. */
-export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boolean {
+export function canInvoke(
+  state: GameState,
+  pid: PlayerId,
+  cardIid: string,
+  opts: { targetIid?: string } = {},
+): boolean {
   const p = state.players[pid];
   const card = p.hand.find((c) => c.iid === cardIid);
   if (!card || state.winner) return false;
@@ -1964,10 +2055,17 @@ export function canInvoke(state: GameState, pid: PlayerId, cardIid: string): boo
   if (!canPayCost(p.essence, effectiveCost(state, pid, def))) return false;
   if (def.type === 'Item' && p.field.length === 0 && itemSurvives(def.subtype)) return false;
   // A targeted Event with no legal target is refused by invokeCard, so say so
-  // here too. Other card types keep their body and only lose the rider.
+  // here too. Other card types keep their body and only lose the rider. The
+  // check is against `canTarget` (what invokeCard enforces), never against
+  // autoTarget's preference: autoTarget skips an Unbreakable unit for a
+  // shatter and a non-exhausted unit for a recover, but both are legal
+  // targets the player may choose — the effect just whiffs.
   if (def.type === 'Event' && def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
-    const t = autoTarget(state, pid, def.onInvoke);
-    if (t === undefined || !canTarget(state, pid, def.onInvoke, t)) return false;
+    if (opts.targetIid !== undefined) {
+      if (!canTarget(state, pid, def.onInvoke, opts.targetIid)) return false;
+    } else if (legalTargets(state, pid, def.onInvoke).length === 0) {
+      return false;
+    }
   }
   return true;
 }
@@ -1989,7 +2087,7 @@ export function invokeCard(
 ): boolean {
   const p = state.players[pid];
   const card = p.hand.find((c) => c.iid === cardIid);
-  if (!card || !canInvoke(state, pid, cardIid)) return false;
+  if (!card || !canInvoke(state, pid, cardIid, { targetIid: opts.targetIid })) return false;
   const def = card.def;
 
   let bondTargetIid: string | undefined;
@@ -2011,6 +2109,16 @@ export function invokeCard(
   let targetIid = opts.targetIid;
   if (def.onInvoke && SINGLE_TARGETS.includes(def.onInvoke.target)) {
     targetIid = opts.targetIid ?? autoTarget(state, pid, def.onInvoke);
+    // autoTarget declines targets that would whiff (Unbreakable shatter,
+    // recover with nothing exhausted); an Event with only those left must still
+    // be castable, consistently with canInvoke.
+    if (
+      def.type === 'Event' &&
+      opts.targetIid === undefined &&
+      (targetIid === undefined || !canTarget(state, pid, def.onInvoke, targetIid))
+    ) {
+      targetIid = legalTargets(state, pid, def.onInvoke)[0];
+    }
     const legal = targetIid !== undefined && canTarget(state, pid, def.onInvoke, targetIid);
     // An Event is nothing but its effect, so with no legal target casting it
     // would waste the card. Every other card keeps its body (or bond, or
@@ -2538,9 +2646,10 @@ function participates(u: UnitInst, step: 'first' | 'normal'): boolean {
  * Venomous is lethal, Siphon gains vitality, Overrun spills past dead guards,
  * unguarded attackers hit the defender's vitality.
  */
-export function resolveClash(state: GameState): boolean {
+export function resolveClash(state: GameState, caller: PlayerId = state.active): boolean {
   if (state.winner || !state.clash) return false;
   if (state.clash.step !== 'reaction' && state.clash.step !== 'guards') return false;
+  if (!mayConcedePriority(state, caller)) return false;
   // Resolving is what closes the reaction window: anything still held there
   // resolves first, and combat damage itself gets no response window.
   drainStack(state);
@@ -2556,12 +2665,16 @@ export function resolveClash(state: GameState): boolean {
           .filter(([, gs]) => gs.length > 0)
           .map(([a]) => a),
   );
-  // Keyed by iid, holding the INSTANCE: "whenever this unit deals clash
-  // damage" has no survives-clause, so a unit that died dealing its damage
-  // (the mutual 2/2 trade — the most common clash outcome) still triggers.
-  // Looking the iid up on the field afterwards silently dropped exactly
-  // those procs.
-  const dealtBy = new Map<string, UnitInst>();
+  // One entry per (source, damage sub-step) in which the unit landed damage,
+  // holding the INSTANCE: "whenever this unit deals clash damage" has no
+  // survives-clause, so a unit that died dealing its damage (the mutual 2/2
+  // trade — the most common clash outcome) still triggers. Looking the iid up
+  // on the field afterwards silently dropped exactly those procs. "Whenever"
+  // is repeatable (rulebook §10), so a Doublestrike unit that connects in both
+  // the first-strike and the normal sub-step fires twice; several packets from
+  // one source inside a single sub-step (an Overrun spill after its guard hit)
+  // are still one damage event. Withering/Siphon stay per packet.
+  const dealtHits: UnitInst[] = [];
   for (const step of ['first', 'normal'] as const) {
     if (state.winner || !state.clash) break;
     // Guard absorption is per SUB-STEP, not per clash. It exists for one case:
@@ -2579,6 +2692,7 @@ export function resolveClash(state: GameState): boolean {
     const packets = collectStepWithHistory(state, step, everGuarded, absorbed);
     const preFieldCount =
       step === 'first' ? state.players.P1.field.length + state.players.P2.field.length : 0;
+    const dealtThisStep = new Set<string>();
     for (const pkt of packets) {
       // Record the source as having dealt clash damage only when a point
       // actually lands — a hit fully absorbed by Hardened/Bulwark deals none,
@@ -2598,7 +2712,10 @@ export function resolveClash(state: GameState): boolean {
       } else if (pkt.targetPlayer && net > 0) {
         state.log.push(`${pkt.source.def.name} hits ${pkt.targetPlayer} for ${net} Vitality.`);
       }
-      if (net > 0) dealtBy.set(pkt.source.iid, pkt.source);
+      if (net > 0 && !dealtThisStep.has(pkt.source.iid)) {
+        dealtThisStep.add(pkt.source.iid);
+        dealtHits.push(pkt.source);
+      }
     }
     stateBasedChecks(state);
     drainStack(state); // death triggers land before the normal-damage sub-step
@@ -2607,7 +2724,7 @@ export function resolveClash(state: GameState): boolean {
       if (died > 0) state.telemetry?.onKeywordProc?.('Quickstrike', died);
     }
   }
-  for (const u of dealtBy.values()) {
+  for (const u of dealtHits) {
     if (state.winner) break;
     // v6.9 Tidecaller: connecting in a clash refills the hand.
     if (unitHasKw(u, 'Tidecaller')) {

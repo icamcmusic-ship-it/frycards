@@ -216,6 +216,7 @@ import {
   createGame,
   mulberry32,
   opponentOf,
+  winnerSeat,
   effMight,
   legalAttackers,
   remainingGrit,
@@ -1133,7 +1134,7 @@ function seatSwapGame(deckA: DeckDef, deckB: DeckDef, seed: number): PlayerId | 
     turns++;
     playTurn(state, state.active);
   }
-  return state.winner;
+  return winnerSeat(state);
 }
 
 function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): void {
@@ -1698,13 +1699,14 @@ function runGame(deckA: DeckDef, deckB: DeckDef, seed: number, game: number): vo
     }
   }
 
-  if (!state.winner) {
+  // A simultaneous-zero draw counts with the turn-limit draws: no seat won.
+  if (!winnerSeat(state)) {
     mech.turnLimitDraws++;
   }
   mech.games++;
   mech.turnsTotal += turns;
   mech.gameLengths.push(turns);
-  const winner = state.winner;
+  const winner = winnerSeat(state);
 
   // v6.6: reaction-window reservations that never cashed in. Each reserved
   // card counts once per game regardless of how many turns it was held.
