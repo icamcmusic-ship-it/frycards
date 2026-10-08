@@ -31,9 +31,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { useMotionMode } from './useMotionMode';
-import { Award, Coins, Hammer, Package, Percent, Search, Sparkles, Ticket, X } from 'lucide-react';
+import {
+  Award,
+  Check,
+  Coins,
+  Hammer,
+  Package,
+  Percent,
+  Search,
+  Sparkles,
+  Ticket,
+  X,
+} from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Vouchers, ProgressBar, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { CardFace } from '../components/CardFaceV4';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -68,6 +80,9 @@ import {
 
 type Tab = 'submit' | 'limbo' | 'vault';
 type VaultSort = 'grade' | 'value' | 'newest';
+const isTab = (v: unknown): v is Tab => v === 'submit' || v === 'limbo' || v === 'vault';
+const isVaultSort = (v: unknown): v is VaultSort =>
+  v === 'grade' || v === 'value' || v === 'newest';
 
 function countdown(readyAt: string, now: number): string {
   const ms = new Date(readyAt).getTime() - now;
@@ -95,7 +110,7 @@ function Step({ n, title, hint }: { n: number; title: string; hint?: React.React
         {n}
       </span>
       <h2 className="heading-font text-sm">{title}</h2>
-      {hint && <span className="text-[10px] font-bold text-[var(--c-steel)]">{hint}</span>}
+      {hint && <span className="fs-xs font-bold text-[var(--c-steel)]">{hint}</span>}
     </div>
   );
 }
@@ -123,7 +138,7 @@ const PendingSlab = React.memo(function PendingSlab({ g }: { g: GradedCard }) {
       />
       <span
         className={cn(
-          'heading-font text-[10px] text-center px-1 py-0.5 ink-border-sm',
+          'heading-font fs-xs text-center px-1 py-0.5 ink-border-sm',
           remain === 'READY' ? 'bg-[var(--c-yellow)]' : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
         )}
       >
@@ -166,7 +181,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     refreshCollection,
     dataLoading,
   } = useMeta();
-  const [tab, setTab] = useState<Tab>('submit');
+  const [tab, setTab] = usePersistedState<Tab>('grading:tab', 'submit', isTab);
   const [graded, setGraded] = useState<GradedCard[]>([]);
   const [gradedLoading, setGradedLoading] = useState(true);
 
@@ -204,7 +219,14 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
   >(null);
   const [slabBusy, setSlabBusy] = useState<string | null>(null);
   const [crackConfirm, setCrackConfirm] = useState<string | null>(null);
-  const [vaultSort, setVaultSort] = useState<VaultSort>('grade');
+  const [vaultSort, setVaultSort] = usePersistedState<VaultSort>(
+    'grading:vault-sort',
+    'grade',
+    isVaultSort,
+  );
+  // The pay bar's secondary rows (pay-with toggle, expected return, bulk hint)
+  // fold away so the bar stays one line on a phone.
+  const [payDetailsOpen, setPayDetailsOpen] = usePersistedState('grading:pay-details', false);
 
   const userId = profile?.id;
   const reload = React.useCallback(async () => {
@@ -470,16 +492,6 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
     );
   }
 
-  const tabBtn = (t: Tab, label: React.ReactNode) => (
-    <PopButton
-      color={tab === t ? 'black' : 'yellow'}
-      onClick={() => setTab(t)}
-      ariaPressed={tab === t}
-    >
-      {label}
-    </PopButton>
-  );
-
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="GRADING LAB" onBack={onBack} />
@@ -491,14 +503,19 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
         style={{ paddingBottom: (payBarH || 0) + 48 }}
       >
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          {tabBtn('submit', 'SUBMIT CARDS')}
-          {tabBtn(
-            'limbo',
-            <>
-              AT THE GRADERS ({pending.length}){dueCount > 0 ? ' · READY!' : ''}
-            </>,
-          )}
-          {tabBtn('vault', `MY SLABS (${vault.length})`)}
+          <Tabs
+            ariaLabel="Grading sections"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: 'submit', label: 'SUBMIT CARDS' },
+              {
+                id: 'limbo',
+                label: `AT THE GRADERS (${pending.length})${dueCount > 0 ? ' · READY!' : ''}`,
+              },
+              { id: 'vault', label: `MY SLABS (${vault.length})` },
+            ]}
+          />
           <PopButton
             color="steel"
             onClick={() => setOddsOpen(true)}
@@ -541,13 +558,13 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
               {basketCount > 0 && (
                 <PopButton
                   color="steel"
-                  className="!px-2 !py-1 !text-[10px]"
+                  className="!px-2 !py-1 !text-[11px]"
                   onClick={() => setBasket(new Map())}
                 >
                   ✕ EMPTY THE TRAY ({basketCount})
                 </PopButton>
               )}
-              <span className="text-[10px] font-bold text-[var(--c-steel)]">
+              <span className="fs-xs font-bold text-[var(--c-steel)]">
                 Sorted by what the slab is worth at {GRADING_SERVICE_BY_ID[service].short}.
               </span>
             </div>
@@ -560,31 +577,42 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   : 'No spare cards match that search.'}
               </p>
             ) : (
-              // Bounded, and scrolling on its own: a collection with three
-              // hundred spare lines otherwise pushed steps 2-4 — the service,
-              // the turnaround, the payment method — below a screen and a half
-              // of cards, so the first thing the flow asks you to choose was
-              // the last thing you could reach.
-              <div className="flex flex-wrap gap-2 max-h-[46vh] overflow-y-auto ink-border-sm p-2 bg-[var(--c-ink)]/5">
+              // One page scroll on a phone: a nested scroll box inside the page
+              // trapped the thumb (a swipe scrolled the box, not the page) and
+              // pushed steps 2-4 out of reach, which is what the sticky bar
+              // below now answers. From `sm` up the list is still bounded so a
+              // three-hundred-line collection doesn't bury the service picker.
+              <div className="grid grid-cols-3 justify-items-center gap-2 sm:flex sm:flex-wrap sm:max-h-[46vh] sm:overflow-y-auto ink-border-sm p-2 bg-[var(--c-ink)]/5">
                 {filteredSpares.slice(0, 240).map((s) => {
                   const key = `${s.cardId}|${s.foil}`;
                   const inBasket = basket.get(key) || 0;
                   const def = POOL_BY_ID[s.cardId];
                   return (
-                    <div key={key} className="flex flex-col gap-1 w-fit">
-                      <CardFace
-                        def={def}
-                        size="compact"
-                        foil={s.foil}
-                        onClick={() => bump(s.cardId, s.foil, +1, s.spare)}
-                        highlight={inBasket > 0}
-                        badge={
-                          inBasket > 0
-                            ? `IN TRAY ×${inBasket}`
-                            : `${s.spare} SPARE${s.foil ? ' FOIL' : ''}`
-                        }
-                      />
-                      <span className="text-[9px] font-bold text-[var(--c-steel)] text-center leading-none">
+                    <div key={key} className="flex flex-col gap-1 w-[110px]">
+                      <div className="relative">
+                        <CardFace
+                          def={def}
+                          size="compact"
+                          foil={s.foil}
+                          onClick={() => bump(s.cardId, s.foil, +1, s.spare)}
+                          highlight={inBasket > 0}
+                        />
+                        {/* Selected state the card face itself can't carry at
+                            this size: a tick and the count, centred over the art
+                            so it never covers the name or cost. */}
+                        {inBasket > 0 && (
+                          <span
+                            aria-hidden
+                            className="absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none heading-font fs-md flex items-center gap-1 px-2 py-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+                          >
+                            <Check className="w-4 h-4" strokeWidth={4} /> {inBasket}
+                          </span>
+                        )}
+                      </div>
+                      <span className="fs-xs font-bold text-[var(--c-steel)] text-center leading-tight">
+                        {inBasket > 0 ? `${inBasket} of ${s.spare}` : `${s.spare} spare`}
+                        {s.foil ? ' foil' : ''}
+                        <br />
                         slab ≈ {fmtCredits(expectedSlabValue(def.rarity, s.foil, service))}
                       </span>
                       {inBasket > 0 && (
@@ -594,18 +622,15 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                               controls a player presses most on this screen. */}
                           <PopButton
                             color="steel"
-                            className="!px-2 !py-1 !text-[10px] !min-w-6 !min-h-6"
+                            className="!px-2 !py-1 !min-w-6 !min-h-6"
                             onClick={() => bump(s.cardId, s.foil, -1, s.spare)}
                             ariaLabel={`Remove one ${def.name}`}
                           >
                             −
                           </PopButton>
-                          <span className="heading-font text-[10px] w-6 text-center">
-                            {inBasket}/{s.spare}
-                          </span>
                           <PopButton
                             color="steel"
-                            className="!px-2 !py-1 !text-[10px] !min-w-6 !min-h-6"
+                            className="!px-2 !py-1 !min-w-6 !min-h-6"
                             onClick={() => bump(s.cardId, s.foil, s.spare, s.spare)}
                             ariaLabel={`Add every spare ${def.name}`}
                             disabled={inBasket >= s.spare}
@@ -618,7 +643,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                   );
                 })}
                 {filteredSpares.length > 240 && (
-                  <p className="w-full text-[10px] font-bold text-[var(--c-steel)]">
+                  <p className="col-span-3 w-full fs-xs font-bold text-[var(--c-steel)]">
                     Showing the 240 most valuable of {filteredSpares.length} spare lines — search to
                     narrow.
                   </p>
@@ -646,16 +671,14 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                     )}
                   >
                     <div
-                      className="heading-font text-[10px] px-1.5 py-0.5 mb-1.5 inline-block ink-border-sm"
+                      className="heading-font fs-xs px-1.5 py-0.5 mb-1.5 inline-block ink-border-sm"
                       style={{ background: s.slab.label, color: s.slab.labelText }}
                     >
                       {s.short}
                     </div>
                     <div className="heading-font text-sm leading-tight">{s.name}</div>
-                    <div className="text-[10px] font-bold text-[var(--c-steel)] mt-1">
-                      {s.blurb}
-                    </div>
-                    <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] font-bold">
+                    <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">{s.blurb}</div>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 fs-xs font-bold">
                       <dt className="text-[var(--c-steel)]">Fee / card</dt>
                       <dd className="text-right">
                         <Credits amount={s.baseFee} />
@@ -720,7 +743,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                     <Ticket className="w-3.5 h-3.5" aria-hidden />
                   )}
                   {label}
-                  <span className="text-[9px] font-bold opacity-70">
+                  <span className="fs-xs font-bold opacity-70">
                     {basketCount > 0 ? `${cost.toLocaleString('en-US')} of ` : ''}
                     {have.toLocaleString('en-US')}
                   </span>
@@ -734,7 +757,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
           <>
             {pending.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                <PopButton color="red" onClick={() => void reveal()} disabled={busy}>
+                <PopButton color="yellow" onClick={() => void reveal()} disabled={busy}>
                   <span className="flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" aria-hidden />
                     {busy
@@ -744,7 +767,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         : 'CHECK FOR RESULTS'}
                   </span>
                 </PopButton>
-                <span className="text-[10px] font-bold text-[var(--c-steel)]">
+                <span className="fs-xs font-bold text-[var(--c-steel)]">
                   Grades are rolled by the graders at reveal time — nothing is decided until you
                   open the case.
                 </span>
@@ -794,7 +817,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                       onClick={() => setVaultSort(id)}
                       aria-pressed={vaultSort === id}
                       className={cn(
-                        'btn-pop heading-font text-[10px] px-2 py-1 ink-border-sm bg-[var(--c-paper)]',
+                        'btn-pop heading-font fs-xs px-2 py-1 ink-border-sm bg-[var(--c-paper)]',
                         vaultSort === id && 'bg-[var(--c-yellow)]',
                       )}
                     >
@@ -813,7 +836,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         {onShowroom && (
                           <PopButton
                             color="black"
-                            className="!px-2 !py-1 !text-[10px]"
+                            className="!px-2 !py-1 !text-[11px]"
                             ariaLabel={`View ${def.name}'s slab in the 3D Showroom`}
                             onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
                           >
@@ -822,7 +845,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         )}
                         <PopButton
                           color="yellow"
-                          className="!px-2 !py-1 !text-[10px]"
+                          className="!px-2 !py-1 !text-[11px]"
                           onClick={() => void sellSlab(g)}
                           disabled={slabBusy === g.id}
                         >
@@ -838,7 +861,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                           <div className="flex gap-1">
                             <PopButton
                               color="red"
-                              className="!px-2 !py-1 !text-[10px]"
+                              className="!px-2 !py-1 !text-[11px]"
                               onClick={() => void crackSlab(g)}
                               disabled={slabBusy === g.id}
                             >
@@ -846,7 +869,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                             </PopButton>
                             <PopButton
                               color="steel"
-                              className="!px-2 !py-1 !text-[10px]"
+                              className="!px-2 !py-1 !text-[11px]"
                               onClick={() => setCrackConfirm(null)}
                             >
                               KEEP
@@ -855,7 +878,7 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
                         ) : (
                           <PopButton
                             color="steel"
-                            className="!px-2 !py-1 !text-[10px]"
+                            className="!px-2 !py-1 !text-[11px]"
                             onClick={() => setCrackConfirm(g.id)}
                             title="Destroy the case and return the raw card to your collection"
                           >
@@ -874,98 +897,120 @@ function GradingScreenInner({ onBack, onShowroom }: GradingScreenProps) {
         )}
       </div>
 
-      {/* Sticky pay bar — the submit control is no longer buried inside a panel
-          that only exists once the tray has something in it. */}
+      {/* Sticky summary bar — "3 CARDS · KEEPER · 210 cr · SUBMIT" stays on
+          screen while the player scrolls through all four steps. The extras
+          (pay-with toggle, expected return, bulk hint) fold into DETAILS so the
+          bar is one line on a phone. */}
       {tab === 'submit' && basketCount > 0 && (
         <div
           ref={payBarRef}
           className="fixed inset-x-0 bottom-0 z-40 bg-[var(--c-ink)] text-[var(--c-paper)] border-t-4 border-[var(--c-yellow)] px-3 py-2"
         >
-          <div className="max-w-5xl mx-auto flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="heading-font text-xs flex items-center gap-1.5">
-              <Package className="w-3.5 h-3.5" aria-hidden /> {basketCount} CARD
-              {basketCount === 1 ? '' : 'S'} · {GRADING_SERVICE_BY_ID[service].short}
-            </span>
-            {/* Pay-with toggle mirrored into the bar, so the choice can never be
+          <div className="max-w-5xl mx-auto flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="heading-font fs-sm flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5" aria-hidden /> {basketCount} CARD
+                {basketCount === 1 ? '' : 'S'} · {GRADING_SERVICE_BY_ID[service].short} ·{' '}
+                {currency === 'vouchers' ? (
+                  <Vouchers amount={voucherFee} />
+                ) : (
+                  <Credits amount={totalFee} />
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPayDetailsOpen(!payDetailsOpen)}
+                aria-expanded={payDetailsOpen}
+                aria-controls="grading-pay-details"
+                className="heading-font fs-xs underline underline-offset-2 text-[var(--c-paper)]/80 hover:text-[var(--c-paper)] min-h-6 px-1"
+              >
+                DETAILS {payDetailsOpen ? '▴' : '▾'}
+              </button>
+              <PopButton
+                color="yellow"
+                className="ml-auto"
+                onClick={() => void submit()}
+                disabled={busy || charged > balance}
+              >
+                {busy
+                  ? 'SUBMITTING…'
+                  : charged > balance
+                    ? `NOT ENOUGH ${currency === 'vouchers' ? 'VOUCHERS' : 'CREDITS'}`
+                    : 'SUBMIT ▸'}
+              </PopButton>
+            </div>
+            {payDetailsOpen && (
+              <div id="grading-pay-details" className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                {/* Pay-with toggle mirrored into the bar, so the choice can never be
                 hidden underneath it. */}
-            <span className="flex items-center gap-1" role="group" aria-label="Pay with">
-              {(['credits', 'vouchers'] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setCurrency(id)}
-                  aria-pressed={currency === id}
-                  title={
-                    id === 'vouchers'
-                      ? `You have ${profile.vouchers.toLocaleString('en-US')} vouchers`
-                      : `You have ${profile.credits.toLocaleString('en-US')} credits`
-                  }
-                  // A currency you cannot cover is greyed (still selectable,
-                  // so the submit button can say exactly what is short).
-                  style={
-                    (id === 'vouchers' ? profile.vouchers < voucherFee : profile.credits < totalFee)
-                      ? { opacity: 0.45 }
-                      : undefined
-                  }
-                  className={cn(
-                    'heading-font text-[10px] px-2 py-1 ink-border-sm flex items-center gap-1',
-                    currency === id
-                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                      : 'bg-transparent text-[var(--c-paper)] border-[var(--c-paper)]/50',
-                  )}
-                >
-                  {id === 'credits' ? (
-                    <Coins className="w-3 h-3" aria-hidden />
+                <span className="flex items-center gap-1" role="group" aria-label="Pay with">
+                  {(['credits', 'vouchers'] as const).map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setCurrency(id)}
+                      aria-pressed={currency === id}
+                      title={
+                        id === 'vouchers'
+                          ? `You have ${profile.vouchers.toLocaleString('en-US')} vouchers`
+                          : `You have ${profile.credits.toLocaleString('en-US')} credits`
+                      }
+                      // A currency you cannot cover is greyed (still selectable,
+                      // so the submit button can say exactly what is short).
+                      style={
+                        (
+                          id === 'vouchers'
+                            ? profile.vouchers < voucherFee
+                            : profile.credits < totalFee
+                        )
+                          ? { opacity: 0.6 }
+                          : undefined
+                      }
+                      className={cn(
+                        'heading-font fs-xs px-2 py-1 min-h-6 ink-border-sm flex items-center gap-1',
+                        currency === id
+                          ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                          : 'bg-transparent text-[var(--c-paper)] border-[var(--c-paper)]/50',
+                      )}
+                    >
+                      {id === 'credits' ? (
+                        <Coins className="w-3 h-3" aria-hidden />
+                      ) : (
+                        <Ticket className="w-3 h-3" aria-hidden />
+                      )}
+                      {id.toUpperCase()}
+                    </button>
+                  ))}
+                </span>
+                <span className="fs-sm font-bold">
+                  FEE{' '}
+                  {currency === 'vouchers' ? (
+                    <Vouchers amount={voucherFee} />
                   ) : (
-                    <Ticket className="w-3 h-3" aria-hidden />
+                    <Credits amount={totalFee} />
                   )}
-                  {id.toUpperCase()}
-                </button>
-              ))}
-            </span>
-            <span className="text-[11px] font-bold">
-              FEE{' '}
-              {currency === 'vouchers' ? (
-                <Vouchers amount={voucherFee} />
-              ) : (
-                <Credits amount={totalFee} />
-              )}
-              <span className="text-[var(--c-paper)]/60">
-                {' '}
-                ({fmtCredits(unitFee)}/card{bulkOff > 0 ? ` · −${bulkOff}%` : ''})
-              </span>
-            </span>
-            <span className="text-[11px] font-bold text-[var(--c-yellow)]">
-              EXPECTED BACK {fmtCredits(basketExpected)}
-              <span className="text-[var(--c-paper)]/60">
-                {' '}
-                ({basketExpected >= totalFee ? '+' : ''}
-                {fmtCredits(basketExpected - totalFee)} vs fee)
-              </span>
-            </span>
-            {service === 'amg' && basketCount < 10 && (
-              <span className="text-[10px] font-bold text-[var(--c-paper)]/70">
-                {basketCount < 5
-                  ? `Add ${5 - basketCount} more for AMG's 20% bulk rate`
-                  : `Add ${10 - basketCount} more for AMG's 35% bulk rate`}
-              </span>
+                  <span className="text-[var(--c-paper)]/70">
+                    {' '}
+                    ({fmtCredits(unitFee)}/card{bulkOff > 0 ? ` · −${bulkOff}%` : ''})
+                  </span>
+                </span>
+                <span className="fs-sm font-bold text-[var(--c-yellow)]">
+                  EXPECTED BACK {fmtCredits(basketExpected)}
+                  <span className="text-[var(--c-paper)]/70">
+                    {' '}
+                    ({basketExpected >= totalFee ? '+' : ''}
+                    {fmtCredits(basketExpected - totalFee)} vs fee)
+                  </span>
+                </span>
+                {service === 'amg' && basketCount < 10 && (
+                  <span className="fs-xs font-bold text-[var(--c-paper)]/80">
+                    {basketCount < 5
+                      ? `Add ${5 - basketCount} more for AMG's 20% bulk rate`
+                      : `Add ${10 - basketCount} more for AMG's 35% bulk rate`}
+                  </span>
+                )}
+              </div>
             )}
-            <PopButton
-              color="yellow"
-              className="ml-auto"
-              onClick={() => void submit()}
-              disabled={busy || charged > balance}
-            >
-              {busy
-                ? 'SUBMITTING…'
-                : charged > balance
-                  ? `NOT ENOUGH ${currency === 'vouchers' ? 'VOUCHERS' : 'CREDITS'}`
-                  : `SUBMIT FOR ${
-                      currency === 'vouchers'
-                        ? `${fmtVouchers(voucherFee)} VOUCHER${voucherFee === 1 ? '' : 'S'}`
-                        : fmtCredits(totalFee)
-                    }`}
-            </PopButton>
           </div>
         </div>
       )}
@@ -1016,7 +1061,7 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
             <X className="w-3.5 h-3.5" aria-hidden />
           </button>
         </div>
-        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-3">
           Every service rolls the same table. Keeper alone bumps 55% of rolls by a half point — that
           is what &quot;grades a little higher&quot; means, and it is why its slabs carry no resale
           premium.
@@ -1029,7 +1074,7 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
               onClick={() => setShown(s.id)}
               aria-pressed={shown === s.id}
               className={cn(
-                'btn-pop heading-font text-[10px] px-2 py-1 ink-border-sm bg-[var(--c-paper)]',
+                'btn-pop heading-font fs-xs px-2 py-1 ink-border-sm bg-[var(--c-paper)]',
                 shown === s.id && 'bg-[var(--c-yellow)]',
               )}
             >
@@ -1041,7 +1086,7 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
           {[...odds].reverse().map(([g, p]) => (
             <li key={g} className="flex items-center gap-2">
               <span className="heading-font text-xs w-8 text-right">{fmtGrade(g)}</span>
-              <span className="text-[9px] font-bold text-[var(--c-steel)] w-20 truncate">
+              <span className="fs-xs font-bold text-[var(--c-steel)] w-20 truncate">
                 {GRADE_WORDS[String(g)]}
               </span>
               <span className="flex-1 h-3 ink-border-sm bg-[var(--c-ink)]/10 overflow-hidden">
@@ -1050,11 +1095,11 @@ function OddsModal({ service, onClose }: { service: GradingService; onClose: () 
                   style={{ width: `${Math.round((p / peak) * 100)}%` }}
                 />
               </span>
-              <span className="font-mono text-[10px] w-12 text-right">{(p * 100).toFixed(1)}%</span>
+              <span className="font-mono fs-xs w-12 text-right">{(p * 100).toFixed(1)}%</span>
             </li>
           ))}
         </ul>
-        <p className="text-[10px] font-bold text-[var(--c-steel)] mt-3">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mt-3">
           Average return at {GRADING_SERVICE_BY_ID[shown].short}: ×
           {(expectedGradeMultiplier(shown) * GRADING_SERVICE_BY_ID[shown].premium).toFixed(2)} the
           raw quicksell price, before the fee.

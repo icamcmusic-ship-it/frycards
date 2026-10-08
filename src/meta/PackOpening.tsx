@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { recordPack } from './packHistory';
+import { pullScore, recordPack, summarizeSession } from './packHistory';
 import { askConfirm } from './confirm';
 import { loadWishlist } from './wishlist';
 import { useReducedMotion } from './useMotionMode';
-import { Coins, Sparkles, Zap } from 'lucide-react';
+import { Coins, Sparkles, SkipForward, Zap } from 'lucide-react';
 import { PackPull, quicksellCards } from '../lib/supabase';
 import { CardDef } from '../game/v3/cards';
 import { POOL_BY_ID } from '../game/v3/cardpool';
@@ -48,13 +48,45 @@ function pullToDef(pull: PackPull): CardDef {
 
 const usePrefersReducedMotion = useReducedMotion;
 
+/** True on touch-first devices, so the copy says TAP there and CLICK on a
+ * mouse. Live: a convertible switching input modes updates the wording. */
+export function usePointerIsCoarse(): boolean {
+  const query = '(pointer: coarse)';
+  const [coarse, setCoarse] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && !!window.matchMedia?.(query).matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    let mq: MediaQueryList | undefined;
+    try {
+      mq = window.matchMedia?.(query);
+    } catch {
+      mq = undefined;
+    }
+    if (!mq) return;
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return coarse;
+}
+
 /** Face-down card showing the player's equipped card back. */
 function CardBackFace() {
   const back = getCardBackImage();
   return (
     <div className="w-full h-full bg-[var(--c-ink)] ink-border-md shadow-hard-black overflow-hidden flex items-center justify-center">
       {back ? (
-        <img src={back} alt="Card back" className="w-full h-full object-cover" draggable={false} />
+        <SafeImage
+          boxWidth={480}
+          src={back}
+          alt="Card back"
+          className="w-full h-full object-cover"
+          eager
+        />
       ) : (
         <div className="heading-font text-[var(--c-yellow)] text-xl rotate-[-8deg]">FRY CARDS</div>
       )}
@@ -177,18 +209,43 @@ html[data-motion='reduced'] .po-anim { animation: none !important; }
 
 type Stage = 'pack' | 'reveal' | 'summary';
 
+/** Past this many cards a reveal is long enough to deserve a skip-all up
+ * front (a booster is 8, a box 49). */
+const MULTI_REVEAL_CARDS = 12;
+
 export function PackOpening({
   packName,
   packImageUrl,
   pulls,
+  packsOpened = 1,
+  priorPulls = [],
+  onOpenNext,
+  nextLabel,
+  nextBusy = false,
+  nextError,
   onDone,
 }: {
+  key?: React.Key;
   packName: string;
   packImageUrl: string | null;
   pulls: PackPull[];
+  /** How many packs `pulls` came from — a bulk open is one reveal of many. */
+  packsOpened?: number;
+  /** Pulls of the packs already opened earlier in this "Open next" run,
+   * oldest first, so the summary can recap the whole run. */
+  priorPulls?: PackPull[][];
+  /** Present when more unopened packs of this type are owned. The caller
+   * fetches the next pack and remounts this component with its pulls. */
+  onOpenNext?: () => void;
+  nextLabel?: string;
+  nextBusy?: boolean;
+  nextError?: string;
   onDone: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  const coarse = usePointerIsCoarse();
+  // A bulk open or a box is dozens of flips; offer the way out up front.
+  const multi = packsOpened > 1 || pulls.length > MULTI_REVEAL_CARDS;
   // Log this pack once, at mount (pack history, quick win 13).
   useEffect(() => {
     recordPack(packName, pulls);
@@ -227,10 +284,12 @@ export function PackOpening({
           packName={packName}
           packImageUrl={packImageUrl}
           reducedMotion={reducedMotion}
+          coarse={coarse}
           // Every haul — including boxes and bulk opens — goes through the
-          // interactive click-to-flip reveal; the REVEAL ALL button in that
-          // stage is the deliberate skip for players who don't want 36 flips.
+          // interactive tap-to-flip reveal; the skip controls are the
+          // deliberate way out for players who don't want 36 flips.
           onTorn={() => setStage('reveal')}
+          onSkipAll={multi ? () => setStage('summary') : undefined}
         />
       )}
       {stage === 'reveal' && (
@@ -238,6 +297,8 @@ export function PackOpening({
           packName={packName}
           pulls={pulls}
           reducedMotion={reducedMotion}
+          coarse={coarse}
+          multi={multi}
           onDone={() => setStage('summary')}
         />
       )}
@@ -245,7 +306,12 @@ export function PackOpening({
         <SummaryStage
           packName={packName}
           pulls={pulls}
+          priorPulls={priorPulls}
           reducedMotion={reducedMotion}
+          onOpenNext={onOpenNext}
+          nextLabel={nextLabel}
+          nextBusy={nextBusy}
+          nextError={nextError}
           onDone={onDone}
         />
       )}
@@ -256,20 +322,32 @@ export function PackOpening({
 // ---------------------------------------------------------------------------
 // Stage 1 — rip the foil
 // ---------------------------------------------------------------------------
+/** Pointer travel (px) below which a press-and-release on the pack is a tap
+ * rather than the start of a drag. */
+const TAP_SLOP = 8;
+
 function TearStage({
   packName,
   packImageUrl,
   reducedMotion,
+  coarse,
   onTorn,
+  onSkipAll,
 }: {
   packName: string;
   packImageUrl: string | null;
   reducedMotion: boolean;
+  coarse: boolean;
   onTorn: () => void;
+  /** Multi-open only: jump straight to the summary. */
+  onSkipAll?: () => void;
 }) {
   const [progress, setProgress] = useState(0); // 0..1 tear progress
   const [torn, setTorn] = useState(false);
   const dragging = useRef<{ startX: number; startProgress: number } | null>(null);
+  // Set once a press travels past TAP_SLOP, so the click that follows a drag
+  // that was let go early doesn't also count as a tap-to-open.
+  const movedRef = useRef(false);
   const stripRef = useRef<HTMLDivElement>(null);
   const tornRef = useRef(false);
   // The vertical pack/box renders aren't all the same shape (a booster pack is
@@ -302,11 +380,13 @@ function TearStage({
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (tornRef.current) return;
+    movedRef.current = false;
     dragging.current = { startX: e.clientX, startProgress: progress };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragging.current || tornRef.current) return;
+    if (Math.abs(e.clientX - dragging.current.startX) > TAP_SLOP) movedRef.current = true;
     const width = stripRef.current?.offsetWidth || 300;
     const p = Math.min(
       1,
@@ -323,19 +403,36 @@ function TearStage({
     if (!tornRef.current && progress >= 0.92) finishTear();
   };
 
+  /** Tap/click anywhere on the pack. The drag stays as the bonus gesture. */
+  const onPackClick = () => {
+    if (!movedRef.current) finishTear();
+  };
+
   const shaking = !reducedMotion && !torn && progress > 0.03 && progress < 1;
+  const tapWord = coarse ? 'TAP' : 'CLICK';
 
   return (
     <div className="relative flex flex-col items-center">
       <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 relative text-center">
         {packName.toUpperCase()}
       </h2>
-      <p className="text-[var(--c-paper)]/70 text-xs font-bold mb-6 relative">
-        Grab the foil strip and drag right to rip it open ▸
+      <p className="text-[var(--c-paper)]/80 fs-sm font-bold mb-6 relative text-center">
+        <span className="text-[var(--c-yellow)]">{tapWord} THE PACK</span> to open it — or drag the
+        foil strip right for the full rip ▸
       </p>
 
       <div
-        className={cn('relative select-none touch-none po-anim')}
+        role="button"
+        tabIndex={0}
+        aria-label={`${tapWord === 'TAP' ? 'Tap' : 'Click'} to open ${packName}`}
+        onClick={onPackClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            finishTear();
+          }
+        }}
+        className={cn('relative select-none touch-none po-anim cursor-pointer')}
         style={{
           // Height-driven so a tall box render can't run off the bottom of the
           // viewport; width follows the art's own ratio (clamped on narrow
@@ -441,7 +538,7 @@ function TearStage({
             }}
           />
           <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-            <span className="heading-font text-[11px] text-[var(--c-ink)] tracking-widest bg-[var(--c-yellow)]/90 px-2 py-0.5 ink-border-sm">
+            <span className="heading-font fs-xs text-[var(--c-ink)] tracking-widest bg-[var(--c-yellow)]/90 px-2 py-0.5 ink-border-sm">
               {progress > 0.03 ? 'KEEP RIPPING ▸▸' : '◂ TEAR HERE ▸'}
             </span>
           </div>
@@ -466,16 +563,18 @@ function TearStage({
       >
         <div className="h-full bg-[var(--c-yellow)]" style={{ width: `${progress * 100}%` }} />
       </div>
-      <button
-        onClick={finishTear}
-        // v28 tap targets: a bare 10px underline is a 140x15 target — the
-        // smallest primary control in the pack flow, and the one a player
-        // reaches for when they have already seen the ceremony. The padding
-        // takes it to 40px tall without moving the text.
-        className="mt-3 px-3 py-3 -mb-1 text-[10px] font-black text-[var(--c-paper)]/60 underline decoration-2 underline-offset-2 hover:text-[var(--c-paper)] relative"
-      >
-        JUST TEAR IT OPEN FOR ME
-      </button>
+      <div className="mt-5 flex flex-wrap justify-center gap-3 relative">
+        <PopButton color="yellow" onClick={finishTear} disabled={torn}>
+          JUST TEAR IT OPEN FOR ME
+        </PopButton>
+        {onSkipAll && (
+          <PopButton color="steel" onClick={onSkipAll} disabled={torn}>
+            <span className="flex items-center gap-1">
+              <SkipForward className="w-3.5 h-3.5" aria-hidden /> SKIP TO SUMMARY
+            </span>
+          </PopButton>
+        )}
+      </div>
     </div>
   );
 }
@@ -494,11 +593,15 @@ function RevealStage({
   packName,
   pulls,
   reducedMotion,
+  coarse,
+  multi,
   onDone,
 }: {
   packName: string;
   pulls: PackPull[];
   reducedMotion: boolean;
+  coarse: boolean;
+  multi: boolean;
   onDone: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -531,8 +634,11 @@ function RevealStage({
       <h2 className="heading-font text-2xl text-[var(--c-yellow)] mb-1 text-center">
         {packName.toUpperCase()}
       </h2>
-      <div className="text-[10px] font-mono font-bold text-[var(--c-paper)]/50 mb-5">
-        CARD {index + 1} / {pulls.length} — {currentShown ? 'CLICK TO CONTINUE ▸' : 'CLICK TO FLIP'}
+      <div className="fs-xs font-mono font-bold text-[var(--c-paper)]/70 mb-5">
+        CARD {index + 1} / {pulls.length} —{' '}
+        {currentShown
+          ? `${coarse ? 'TAP' : 'CLICK'} TO CONTINUE ▸`
+          : `${coarse ? 'TAP' : 'CLICK'} TO FLIP`}
       </div>
 
       {/* 3D flip container */}
@@ -687,16 +793,23 @@ function RevealStage({
         ))}
       </div>
 
-      <div className="flex gap-3 mt-6">
-        <PopButton color="yellow" onClick={onDone}>
+      <div className="flex flex-wrap justify-center gap-3 mt-6">
+        <PopButton color="steel" onClick={onDone}>
           <span className="flex items-center gap-1">
             <Zap className="w-3.5 h-3.5" /> REVEAL ALL
           </span>
         </PopButton>
-        <PopButton color="black" onClick={next} disabled={!currentShown}>
-          {index < pulls.length - 1 ? 'NEXT ▸' : 'SEE YOUR HAUL ▸'}
+        {/* One primary button that is always live: it flips the card, then
+            moves on. A disabled NEXT sat at 40% opacity and read as broken. */}
+        <PopButton color="yellow" onClick={onCardClick}>
+          {!currentShown ? 'FLIP CARD' : index < pulls.length - 1 ? 'NEXT ▸' : 'SEE YOUR HAUL ▸'}
         </PopButton>
       </div>
+      {multi && index < pulls.length - 1 && (
+        <p className="fs-xs font-bold text-[var(--c-paper)]/60 mt-3 text-center">
+          REVEAL ALL skips the rest of this open and shows the whole haul.
+        </p>
+      )}
     </div>
   );
 }
@@ -707,12 +820,22 @@ function RevealStage({
 function SummaryStage({
   packName,
   pulls,
+  priorPulls,
   reducedMotion,
+  onOpenNext,
+  nextLabel,
+  nextBusy,
+  nextError,
   onDone,
 }: {
   packName: string;
   pulls: PackPull[];
+  priorPulls: PackPull[][];
   reducedMotion: boolean;
+  onOpenNext?: () => void;
+  nextLabel?: string;
+  nextBusy: boolean;
+  nextError?: string;
   onDone: () => void;
 }) {
   const rarityCounts = useMemo(() => {
@@ -731,13 +854,8 @@ function SummaryStage({
   // Best pull: highest rarity (kept copies beat credit conversions, foils win ties).
   const bestIndex = useMemo(() => {
     let best = 0;
-    const score = (p: PackPull) =>
-      rarityRank(p.rarity) * 100 +
-      (p.converted_to_credits ? 0 : 10) +
-      (p.foil ? 1 : 0) +
-      (p.serialized ? 1000 : 0);
     pulls.forEach((p, i) => {
-      if (score(p) > score(pulls[best])) best = i;
+      if (pullScore(p) > pullScore(pulls[best])) best = i;
     });
     return best;
   }, [pulls]);
@@ -892,6 +1010,10 @@ function SummaryStage({
     }
   };
 
+  // Run recap across every pack opened via "Open next" — this pack included.
+  // Only worth showing once there is more than one pack to roll up.
+  const recap = useMemo(() => summarizeSession([...priorPulls, pulls]), [priorPulls, pulls]);
+
   // Defensive: a purchase response with zero cards should never reach this
   // stage, but pulls[bestIndex]/pullToDef below aren't optional-chained and
   // would throw on an empty array — fail soft instead of white-screening
@@ -935,7 +1057,7 @@ function SummaryStage({
       {/* Spotlight */}
       <div className="relative mb-4 shrink-0">
         <div className="absolute -inset-10 pointer-events-none starburst-ray opacity-60 -z-10" />
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-0.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1 whitespace-nowrap">
           <Sparkles className="w-3 h-3" /> {best.serialized ? 'SERIALIZED!' : 'BEST PULL'}
         </div>
         <div
@@ -958,7 +1080,7 @@ function SummaryStage({
               stamp it SOLD like the grid, not keep rendering it as kept. */}
           {sold.has(bestIndex) && !best.converted_to_credits && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+              <span className="heading-font fs-xs bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
                 SOLD
               </span>
             </div>
@@ -972,7 +1094,7 @@ function SummaryStage({
           <span
             key={r}
             className={cn(
-              'text-[10px] font-black px-2 py-0.5 ink-border-sm',
+              'fs-xs font-black px-2 py-0.5 ink-border-sm',
               RARITY_CHIP[r] || RARITY_CHIP.Common,
             )}
           >
@@ -1004,7 +1126,7 @@ function SummaryStage({
                 {isWishlisted(grp.pull.card_id) && <WishlistHit small />}
                 {spent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
+                    <span className="heading-font fs-xs bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
                       {allSold && !grp.pull.converted_to_credits
                         ? 'SOLD'
                         : `+${fmtCredits(grp.pull.credit_value * grp.count)}`}
@@ -1018,7 +1140,7 @@ function SummaryStage({
       )}
 
       {convertedCount > 0 && (
-        <p className="text-[10px] font-bold text-[#67E8F9] mb-3 text-center max-w-md">
+        <p className="fs-xs font-bold text-[#67E8F9] mb-3 text-center max-w-md">
           {convertedCount} pull{convertedCount === 1 ? '' : 's'}{' '}
           {convertedCount === 1 ? 'was' : 'were'} past your copy cap, so{' '}
           {convertedCount === 1 ? 'it was' : 'they were'} paid out as ✦ {fmtCredits(creditsGained)}{' '}
@@ -1026,9 +1148,34 @@ function SummaryStage({
         </p>
       )}
 
+      {recap.packs > 1 && recap.best && (
+        <div
+          className="ink-border-sm bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 mb-3 text-center max-w-md"
+          aria-label="Session recap"
+        >
+          <div className="heading-font fs-xs text-[var(--c-yellow)] mb-0.5">
+            SESSION RECAP · {recap.packs} PACKS · {recap.cards} CARDS
+          </div>
+          <div className="fs-sm font-bold">
+            Best pull{' '}
+            <span style={{ color: RARITY_HEX[recap.best.rarity] || RARITY_HEX.Common }}>
+              {recap.best.name || (recap.best.rarity || 'Common').toUpperCase()}
+              {recap.best.foil ? ' ✦' : ''}
+            </span>
+            {' · '}
+            {fmtCredits(recap.keptValue)} quicksell value kept
+          </div>
+        </div>
+      )}
+
       {sellError && (
         <div className="mb-3">
           <Notice text={sellError} />
+        </div>
+      )}
+      {nextError && (
+        <div className="mb-3">
+          <Notice text={nextError} />
         </div>
       )}
       {sellNotice && (
@@ -1048,9 +1195,20 @@ function SummaryStage({
             </span>
           </PopButton>
         )}
-        <PopButton color="red" disabled={sellBusy} onClick={onDone}>
-          DONE ✓
-        </PopButton>
+        {onOpenNext ? (
+          <>
+            <PopButton color="yellow" disabled={sellBusy || nextBusy} onClick={onOpenNext}>
+              {nextBusy ? 'OPENING…' : (nextLabel ?? 'OPEN NEXT PACK ▸')}
+            </PopButton>
+            <PopButton color="steel" disabled={sellBusy || nextBusy} onClick={onDone}>
+              DONE ✓
+            </PopButton>
+          </>
+        ) : (
+          <PopButton color="yellow" disabled={sellBusy} onClick={onDone}>
+            DONE ✓
+          </PopButton>
+        )}
       </div>
       <div className="h-4 shrink-0" />
     </div>
@@ -1071,7 +1229,7 @@ function StatTile({
 }) {
   return (
     <div className="ink-border-sm bg-[var(--c-ink)] px-3 py-1.5 text-center min-w-[84px]">
-      <div className="text-[8px] font-black tracking-widest text-[var(--c-paper)]/50">{label}</div>
+      <div className="fs-xs font-black tracking-widest text-[var(--c-paper)]/70">{label}</div>
       <div
         className="heading-font text-sm leading-tight"
         style={{
@@ -1100,11 +1258,11 @@ function WishlistHit({ small }: { small?: boolean }) {
   return (
     <span
       className={cn(
-        'absolute z-10 left-1/2 -translate-x-1/2 heading-font bg-[var(--c-red)] text-white ink-border-sm shadow-hard-black-xs whitespace-nowrap pointer-events-none',
-        small ? '-top-2 text-[8px] px-1' : '-top-3 text-[11px] px-2 py-0.5',
+        'absolute z-10 left-1/2 -translate-x-1/2 heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs whitespace-nowrap pointer-events-none',
+        small ? '-top-3 px-1' : '-top-3 px-2 py-0.5',
       )}
     >
-      ♥ WISHLIST HIT!
+      {small ? '♥ WISHLIST' : '♥ WISHLIST HIT!'}
     </span>
   );
 }
