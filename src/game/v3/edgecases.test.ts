@@ -728,13 +728,13 @@ describe('win conditions', () => {
     expect(s.winner).toBe('P2');
   });
 
-  test('simultaneous death awards the win to the non-active player', () => {
+  test('simultaneous death is a draw (rulebook §8), whoever is active', () => {
     const s = game();
     s.active = 'P1';
     s.players.P1.vitality = 0;
     s.players.P2.vitality = 0;
     applyEffect(s, 'P1', { action: 'draw', value: 0, target: 'none' });
-    expect(s.winner).toBe('P2');
+    expect(s.winner).toBe('draw');
   });
 
   test('no action is legal once a winner exists', () => {

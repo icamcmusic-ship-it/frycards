@@ -244,6 +244,26 @@ function tapAllLocations(state: GameState, pid: PlayerId): void {
   }
 }
 
+/**
+ * Could `pid` invoke `cardIid` if they tapped untapped locations for it?
+ * canInvoke only sees the floating pool, but the response windows must not tap
+ * a thing until a card is actually chosen (E3: tapping every Location on
+ * window-open left the CPU with nothing for its own Main II). Evaluates
+ * canInvoke against the pool the CPU could reach, without touching a Location.
+ */
+function invokableWithTap(state: GameState, pid: PlayerId, cardIid: string): boolean {
+  const p = state.players[pid];
+  const card = p.hand.find((c) => c.iid === cardIid);
+  if (!card || !canAffordPotential(state, pid, effectiveCost(state, pid, card.def))) return false;
+  const floating = p.essence;
+  p.essence = potentialEssence(p);
+  try {
+    return canInvoke(state, pid, cardIid);
+  } finally {
+    p.essence = floating;
+  }
+}
+
 /** Reserve untapped locations able to pay `cost` (pips first, then any for
  * generic), counting Bountiful Sanctums as 2 essence so they neither break
  * the reservation nor get over-reserved. Excess yield from a picked
@@ -1118,8 +1138,9 @@ export function respondToStack(state: GameState, pid: PlayerId, observe?: CpuTur
     // response the hold was for, and keeping it made the CPU silently pass
     // on an answer its affordability check said it could pay for.
     for (const l of state.players[pid].locations) reservedLocations(state).delete(l.iid);
-    tapAllLocations(state, pid);
     const targetIid = answer.def.onInvoke ? autoTarget(state, pid, answer.def.onInvoke) : undefined;
+    // Pay for the answer only (E3) — the rest of the Locations stay untapped.
+    tapForCost(state, pid, effectiveCost(state, pid, answer.def));
     if (!invokeCard(state, pid, answer.iid, { targetIid })) {
       passPriority(state, pid);
       continue;
@@ -1205,12 +1226,11 @@ function reactionPlaysBody(
   if (state.active !== defender) {
     for (const l of p.locations) reservedLocations(state).delete(l.iid);
   }
-  tapAllLocations(state, defender);
   let progress = true;
   while (progress && !state.winner) {
     progress = false;
     const options = p.hand
-      .filter((c) => canInvoke(state, defender, c.iid))
+      .filter((c) => invokableWithTap(state, defender, c.iid))
       .sort(
         (a, b) => invokePriority(state, defender, b.def) - invokePriority(state, defender, a.def),
       );
@@ -1233,6 +1253,8 @@ function reactionPlaysBody(
         targetIid = attackers[0]?.iid;
       }
       targetIid ??= c.def.onInvoke ? autoTarget(state, defender, c.def.onInvoke) : undefined;
+      // Tap only this card's cost, immediately before paying it (E3).
+      tapForCost(state, defender, effectiveCost(state, defender, c.def));
       if (invokeCard(state, defender, c.iid, { targetIid })) {
         // Before settleAfterPlay — see the note at the main invoke loop.
         observe?.({
