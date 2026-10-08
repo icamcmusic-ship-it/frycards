@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { loadPackHistory, PackHistoryEntry } from './packHistory';
 import { Package, Percent, Backpack, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMeta } from './MetaContext';
@@ -20,7 +20,8 @@ import {
   BountyCard,
   Profile,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { RARITY_CHIP, ALL_SET_NAMES, RARITY_ORDER } from './rarity';
 import { SafeImage } from './SafeImage';
@@ -52,8 +53,31 @@ function bountyDefFor(card: BountyCard): CardDef {
   );
 }
 
-type Tab =
-  'packs' | 'my_packs' | 'bounties' | 'history' | 'card_back' | 'profile_banner' | 'profile_avatar';
+const TAB_IDS = [
+  'packs',
+  'my_packs',
+  'bounties',
+  'history',
+  'card_back',
+  'profile_banner',
+  'profile_avatar',
+] as const;
+type Tab = (typeof TAB_IDS)[number];
+const isTab = (v: unknown): v is Tab => TAB_IDS.includes(v as Tab);
+
+/** What PackOpening is showing. `session` is the pulls of earlier packs in a
+ * run of "Open next", and `left` how many unopened packs of `pack` remain
+ * after this one (tracked here because the inventory refresh lands later). */
+interface OpeningState {
+  packName: string;
+  packImageUrl: string | null;
+  pulls: PackPull[];
+  packsOpened?: number;
+  /** Bumped per pack so the overlay remounts at its tear stage. */
+  seq: number;
+  session: PackPull[][];
+  next?: { pack: PackType; left: number };
+}
 
 /** "Includes: …" line shown on every pack tile / odds modal — derived from
  * the row's actual `allowed_sets`, falling back to the full live catalog
@@ -103,15 +127,14 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     refreshInventory,
     refreshDecks,
   } = useMeta();
-  const [tab, setTab] = useState<Tab>('packs');
+  const [tab, setTab] = usePersistedState<Tab>('store:tab', 'packs', isTab);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [opening, setOpening] = useState<{
-    packName: string;
-    packImageUrl: string | null;
-    pulls: PackPull[];
-  } | null>(null);
+  const [opening, setOpening] = useState<OpeningState | null>(null);
+  const openingSeq = useRef(0);
+  const showOpening = (o: Omit<OpeningState, 'seq' | 'session'> & { session?: PackPull[][] }) =>
+    setOpening({ ...o, session: o.session ?? [], seq: ++openingSeq.current });
   const [oddsPack, setOddsPack] = useState<PackType | null>(null);
   // Deck Box flow: pick the Leader, then claim_deck_box builds that Leader's
   // deck around them. (v7.3 dropped the old two-way "own Leader vs. prebuilt
@@ -187,7 +210,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
+      showOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
     } catch {
@@ -213,10 +236,11 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({
+      showOpening({
         packName: `${pack.name} ×${data.packs_opened}`,
         packImageUrl: packOpenArt(pack),
         pulls: data.cards,
+        packsOpened: data.packs_opened,
       });
       refreshProfile();
       refreshCollection();
@@ -239,10 +263,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({
+      const left = count - data.packs_opened;
+      showOpening({
         packName: `${pack.name} ×${data.packs_opened}`,
         packImageUrl: packOpenArt(pack),
         pulls: data.cards,
+        packsOpened: data.packs_opened,
+        next: left > 0 ? { pack, left } : undefined,
       });
       refreshProfile();
       refreshCollection();
@@ -277,8 +304,15 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const handleOpenFromInventory = async (pack: PackType) => {
+  /** Opens one owned pack. `run` carries an "Open next" chain: how many
+   * packs remain after this one and the pulls of the packs already opened. */
+  const handleOpenFromInventory = async (
+    pack: PackType,
+    run?: { left: number; session: PackPull[][] },
+  ) => {
     if (!profile || busyId) return;
+    const left =
+      run?.left ?? (inventory.find((e) => e.pack_type_id === pack.id)?.quantity ?? 1) - 1;
     setError('');
     setNotice('');
     setBusyId('open:' + pack.id);
@@ -288,7 +322,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Pack opening failed.');
         return;
       }
-      setOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
+      showOpening({
+        packName: pack.name,
+        packImageUrl: packOpenArt(pack),
+        pulls: data.cards,
+        session: run?.session,
+        next: left > 0 ? { pack, left } : undefined,
+      });
       refreshProfile();
       refreshCollection();
       refreshInventory();
@@ -297,6 +337,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  /** The summary's OPEN NEXT PACK: same pack type, run recap carried along. */
+  const handleOpenNext = () => {
+    if (!opening?.next) return;
+    const { pack, left } = opening.next;
+    void handleOpenFromInventory(pack, {
+      left: left - 1,
+      session: [...opening.session, opening.pulls],
+    });
   };
 
   const handlePickDeckBoxLeader = async (leaderId: string) => {
@@ -312,7 +362,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         return;
       }
       setPickingLeaderFor(null);
-      setOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
+      showOpening({ packName: pack.name, packImageUrl: packOpenArt(pack), pulls: data.cards });
       refreshProfile();
       refreshCollection();
       refreshInventory();
@@ -335,7 +385,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
         setError(error || 'Daily pack claim failed.');
         return;
       }
-      setOpening({
+      showOpening({
         packName: dailyPack.name,
         packImageUrl: packOpenArt(dailyPack),
         pulls: data.cards,
@@ -371,14 +421,14 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
   };
 
   const inventoryCount = inventory.reduce((s, e) => s + (e.quantity ?? 0), 0);
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'packs', label: 'CARD PACKS' },
-    { key: 'my_packs', label: `MY PACKS${inventoryCount > 0 ? ` (${inventoryCount})` : ''}` },
-    { key: 'bounties', label: 'BOUNTIES' },
-    { key: 'history', label: 'PACK HISTORY' },
-    { key: 'card_back', label: 'CARD BACKS' },
-    { key: 'profile_banner', label: 'BANNERS' },
-    { key: 'profile_avatar', label: 'AVATARS' },
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'packs', label: 'CARD PACKS' },
+    { id: 'my_packs', label: `MY PACKS${inventoryCount > 0 ? ` (${inventoryCount})` : ''}` },
+    { id: 'bounties', label: 'BOUNTIES' },
+    { id: 'history', label: 'PACK HISTORY' },
+    { id: 'card_back', label: 'CARD BACKS' },
+    { id: 'profile_banner', label: 'BANNERS' },
+    { id: 'profile_avatar', label: 'AVATARS' },
   ];
 
   const cosmeticItems = shopItems.filter((s) => s.item_type === tab && !s.is_season_pass_exclusive);
@@ -388,21 +438,17 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       <MetaHeader title="FRY CARDS STORE" onBack={onBack} />
 
       <div className="p-5 max-w-6xl mx-auto">
-        <div className="flex gap-2 flex-wrap mb-4">
-          {tabs.map((t) => (
-            <PopButton
-              key={t.key}
-              color={tab === t.key ? 'black' : 'yellow'}
-              onClick={() => {
-                setTab(t.key);
-                setError('');
-                setNotice('');
-              }}
-            >
-              {t.label}
-            </PopButton>
-          ))}
-        </div>
+        <Tabs
+          className="mb-4"
+          ariaLabel="Store sections"
+          tabs={tabs}
+          value={tab}
+          onChange={(id) => {
+            setTab(id);
+            setError('');
+            setNotice('');
+          }}
+        />
         {error && (
           <div className="mb-4">
             <Notice text={error} />
@@ -429,15 +475,15 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
               </div>
               <div className="min-w-0">
                 <div className="heading-font text-sm flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-[var(--c-red)]" /> DAILY FREE PACK
+                  <Sparkles className="w-4 h-4 text-[var(--c-ink)]" /> DAILY FREE PACK
                 </div>
-                <div className="text-[10px] font-bold text-[var(--c-steel)] truncate">
+                <div className="fs-xs font-bold text-[var(--c-steel)] truncate">
                   {dailyPack.card_count} cards, free every 20 hours.
                 </div>
               </div>
             </div>
             <PopButton
-              color={dailyReady ? 'red' : 'steel'}
+              color={dailyReady ? 'yellow' : 'steel'}
               disabled={!dailyReady || busyId === 'daily'}
               onClick={handleClaimDaily}
             >
@@ -502,7 +548,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     <span className="heading-font text-[11px] text-[var(--c-yellow)] truncate">
                       {pack.name}
                     </span>
-                    <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
+                    <span className="fs-xs font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
                       ×{entry.quantity}
                     </span>
                   </div>
@@ -514,13 +560,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       className="w-full h-full object-contain"
                       fallbackText={pack.name}
                     />
-                    <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
+                    <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-1.5 ink-border-sm flex items-center gap-1">
                       <Package className="w-3 h-3" /> {pack.card_count} CARDS
                     </span>
                   </div>
                   <div className="flex gap-2 p-3">
                     <PopButton
-                      color="red"
+                      color="yellow"
                       className="flex-1"
                       disabled={!!busyId}
                       onClick={() => {
@@ -538,7 +584,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     </PopButton>
                     {pack.acquisition !== 'deck_box_grant' && entry.quantity > 1 && (
                       <PopButton
-                        color="black"
+                        color="steel"
                         disabled={!!busyId}
                         title={
                           entry.quantity > bulkCapFor(pack)
@@ -555,7 +601,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                     {pack.acquisition !== 'deck_box_grant' && (
                       <button
                         onClick={() => setOddsPack(pack)}
-                        className="px-2 min-w-10 min-h-10 flex items-center justify-center ink-border-sm bg-[var(--c-paper)] text-[10px] font-black hover:bg-[var(--c-yellow)]/40"
+                        className="px-2 min-w-10 min-h-10 flex items-center justify-center ink-border-sm bg-[var(--c-paper)] fs-xs font-black hover:bg-[var(--c-yellow)]/40"
                         title="View drop odds"
                         aria-label="View drop odds"
                       >
@@ -616,13 +662,13 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                       <div className="heading-font text-xs truncate">{item.name}</div>
                       <span className="flex items-center gap-1 shrink-0">
                         {item.is_limited && (
-                          <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-[var(--c-paper)]">
+                          <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
                             LIMITED
                           </span>
                         )}
                         <span
                           className={cn(
-                            'text-[8px] font-black px-1',
+                            'fs-xs font-black px-1',
                             RARITY_CHIP[item.rarity] || RARITY_CHIP.Common,
                           )}
                         >
@@ -630,7 +676,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         </span>
                       </span>
                     </div>
-                    <p className="text-[10px] font-bold text-[var(--c-steel)] mt-1 line-clamp-2">
+                    <p className="fs-xs font-bold text-[var(--c-steel)] mt-1 line-clamp-2">
                       {item.description}
                     </p>
                   </div>
@@ -658,7 +704,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                               )}
                             </PopButton>
                             {profile && profile.credits < item.cost_credits && (
-                              <div className="mt-1 flex items-center justify-center gap-0.5 text-[9px] font-black text-[var(--c-red)]">
+                              <div className="mt-1 flex items-center justify-center gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                                 <Credits amount={item.cost_credits - profile.credits} /> SHORT
                               </div>
                             )}
@@ -679,7 +725,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                                 : `${fmtVouchers(item.cost_vouchers)} VOUCHERS`}
                             </PopButton>
                             {profile && profile.vouchers < item.cost_vouchers && (
-                              <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+                              <div className="mt-1 text-center fs-xs font-black text-[var(--c-steel)]">
                                 {fmtVouchers(item.cost_vouchers - profile.vouchers)} SHORT
                               </div>
                             )}
@@ -687,7 +733,7 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
                         )}
                         {item.cost_credits == null &&
                           (item.cost_vouchers == null || item.cost_vouchers === 0) && (
-                            <div className="flex-1 text-center heading-font text-[10px] py-2 bg-[var(--c-ink)] text-[var(--c-paper)]/60 ink-border-sm">
+                            <div className="flex-1 text-center heading-font fs-xs py-2 bg-[var(--c-ink)] text-[var(--c-paper)]/60 ink-border-sm">
                               SEASON EXCLUSIVE
                             </div>
                           )}
@@ -724,9 +770,16 @@ export function StoreScreen({ onBack }: { onBack: () => void }) {
       {/* Pack opening — full-screen rip / reveal / summary experience */}
       {opening && (
         <PackOpening
+          key={opening.seq}
           packName={opening.packName}
           packImageUrl={opening.packImageUrl}
           pulls={opening.pulls}
+          packsOpened={opening.packsOpened}
+          priorPulls={opening.session}
+          onOpenNext={opening.next ? handleOpenNext : undefined}
+          nextLabel={opening.next ? `OPEN NEXT PACK (${opening.next.left} LEFT) ▸` : undefined}
+          nextBusy={!!busyId}
+          nextError={error}
           onDone={() => setOpening(null)}
         />
       )}
@@ -764,7 +817,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
         <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--c-ink)] sticky top-0">
           <div>
             <div className="heading-font text-sm text-[var(--c-yellow)]">{pack.name}</div>
-            <div className="text-[9px] font-bold text-[var(--c-paper)]/70">
+            <div className="fs-xs font-bold text-[var(--c-paper)]/70">
               DROP ODDS · {pack.card_count} CARDS PER{' '}
               {pack.pack_tier === 'booster_box' ? 'BOX' : 'PACK'}
             </div>
@@ -775,16 +828,16 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
         </div>
 
         <div className="p-4">
-          <div className="text-[10px] font-bold text-[var(--c-steel)] mb-1">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mb-1">
             Every pack is rolled slot by slot. These are the configured odds for each slot; the
             notes below cover the extras the server adds on top.
           </div>
-          <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mb-3">
             Every pack also has a {(SERIALIZED_PULL_CHANCE * 100).toFixed(0)}% chance of one extra
             Serialized card, on top of the {pack.card_count} above.
           </div>
 
-          <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mb-3">
             Includes: {packSetsLine(pack)}
           </div>
 
@@ -795,13 +848,13 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             <div className="ink-border-sm p-2.5 mb-3 bg-[var(--c-ink)] text-[var(--c-paper)]">
               <div className="heading-font text-[11px] text-[var(--c-yellow)] mb-1">FOILS ✦</div>
               {foilOdds.guaranteed > 0 && (
-                <div className="text-[10px] font-bold">
+                <div className="fs-xs font-bold">
                   {foilOdds.guaranteed} guaranteed foil{foilOdds.guaranteed === 1 ? '' : 's'} in
                   every {pack.pack_tier === 'booster_box' ? 'box' : 'pack'}.
                 </div>
               )}
               {foilOdds.bonus > 0 && (
-                <div className="text-[10px] font-bold text-[var(--c-paper)]/75">
+                <div className="fs-xs font-bold text-[var(--c-paper)]/75">
                   Plus a {(foilOdds.bonus * 100).toFixed(1).replace(/\.0$/, '')}% chance of an extra
                   foil turning up in any other slot.
                 </div>
@@ -816,7 +869,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                   {row.count > 1 ? `${row.count}× ` : ''}
                   {row.label} SLOT
                 </span>
-                <span className="text-[9px] font-black text-[var(--c-steel)]">
+                <span className="fs-xs font-black text-[var(--c-steel)]">
                   {row.foilChance >= 1
                     ? 'ALWAYS FOIL ✦'
                     : row.foilChance > 0
@@ -828,7 +881,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                 <div key={rarity} className="flex items-center gap-2 mb-1">
                   <span
                     className={cn(
-                      'text-[8px] font-black px-1 w-20 text-center shrink-0',
+                      'fs-xs font-black px-1 w-20 text-center shrink-0',
                       RARITY_CHIP[rarity] || RARITY_CHIP.Common,
                     )}
                   >
@@ -840,18 +893,18 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
                       style={{ width: `${Math.max(1, p * 100)}%` }}
                     />
                   </div>
-                  <span className="text-[9px] font-mono font-bold w-12 text-right">
+                  <span className="fs-xs font-mono font-bold w-12 text-right">
                     {(p * 100).toFixed(p * 100 < 1 ? 2 : 1)}%
                   </span>
                 </div>
               ))}
               {row.cardType && (
-                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+                <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
                   Always a {row.cardType} card.
                 </div>
               )}
               {row.minRarity && (
-                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1">
+                <div className="fs-xs font-bold text-[var(--c-steel)] mt-1">
                   Guaranteed {row.minRarity} or better — the percentages above are the configured
                   weights before that floor.
                 </div>
@@ -866,7 +919,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
             return (
               <div className="ink-border-sm p-2.5 mb-3 bg-[var(--c-paper)]">
                 <div className="heading-font text-[11px] mb-1">QUICKSELL VALUE</div>
-                <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                <div className="fs-xs font-bold text-[var(--c-steel)]">
                   Sold straight back, an average pack returns about {fmtCredits(Math.round(ev))} —{' '}
                   {Math.round((ev / price) * 100)}% of its {fmtCredits(price)} price. Cards you
                   keep, grade or trade can be worth more or less.
@@ -878,7 +931,7 @@ function PackOddsModal({ pack, onClose }: { pack: PackType; onClose: () => void 
           <div className="ink-border-sm p-2.5 bg-[var(--c-yellow)]/30">
             <div className="heading-font text-[11px] mb-1.5">EXPECTED CARDS PER PACK</div>
             {expected.map(([rarity, n]) => (
-              <div key={rarity} className="flex justify-between text-[10px] font-bold">
+              <div key={rarity} className="flex justify-between fs-xs font-bold">
                 <span>{rarity}</span>
                 <span className="font-mono">~{n.toFixed(2)}</span>
               </div>
@@ -921,7 +974,7 @@ function PackTile({
         <span className="heading-font text-[11px] text-[var(--c-yellow)] truncate">
           {pack.name}
         </span>
-        <span className="text-[9px] font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
+        <span className="fs-xs font-mono font-bold text-[var(--c-paper)] uppercase shrink-0">
           {(pack.pack_tier || 'standard').replace(/_/g, ' ')}
         </span>
       </div>
@@ -933,13 +986,13 @@ function PackTile({
           className="w-full h-full object-contain"
           fallbackText={pack.name}
         />
-        <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-1.5 ink-border-sm flex items-center gap-1">
+        <span className="absolute bottom-1 left-1 bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-1.5 ink-border-sm flex items-center gap-1">
           <Package className="w-3 h-3" /> {pack.card_count} CARDS
         </span>
         {pack.guaranteed_rarity && (
           <span
             className={cn(
-              'absolute bottom-1 right-1 heading-font text-[9px] px-1.5 ink-border-sm',
+              'absolute bottom-1 right-1 heading-font fs-xs px-1.5 ink-border-sm',
               RARITY_CHIP[pack.guaranteed_rarity] || RARITY_CHIP.Common,
             )}
           >
@@ -979,12 +1032,12 @@ function PackTile({
         )}
       </div>
       <p className="text-[11px] font-bold text-[var(--c-steel)] px-3 flex-1">{pack.description}</p>
-      <p className="text-[9px] font-bold text-[var(--c-steel)]/80 px-3 mt-1">
+      <p className="fs-xs font-bold text-[var(--c-steel)]/80 px-3 mt-1">
         Includes: {packSetsLine(pack)}
       </p>
       <button
         onClick={() => onViewOdds(pack)}
-        className="mx-3 mt-1 py-2 self-start flex items-center gap-1 text-[10px] font-black text-[var(--c-steel)] underline decoration-2 underline-offset-2 hover:text-[var(--c-ink)]"
+        className="mx-3 mt-1 py-2 self-start flex items-center gap-1 fs-xs font-black text-[var(--c-steel)] underline decoration-2 underline-offset-2 hover:text-[var(--c-ink)]"
       >
         <Percent className="w-3 h-3" /> VIEW DROP ODDS
       </button>
@@ -1009,7 +1062,7 @@ function PackTile({
               )}
             </PopButton>
             {profile && profile.credits < pack.price_credits && (
-              <div className="mt-1 flex items-center justify-center gap-0.5 text-[9px] font-black text-[var(--c-red)]">
+              <div className="mt-1 flex items-center justify-center gap-0.5 fs-xs font-black text-[var(--c-steel)]">
                 <Credits amount={pack.price_credits - profile.credits} /> SHORT
               </div>
             )}
@@ -1034,7 +1087,7 @@ function PackTile({
               {busyId === pack.id ? 'OPENING…' : `${fmtVouchers(pack.price_vouchers)} VOUCHERS`}
             </PopButton>
             {profile && profile.vouchers < pack.price_vouchers && (
-              <div className="mt-1 text-center text-[9px] font-black text-[var(--c-red)]">
+              <div className="mt-1 text-center fs-xs font-black text-[var(--c-steel)]">
                 {fmtVouchers(pack.price_vouchers - profile.vouchers)} SHORT
               </div>
             )}
@@ -1053,7 +1106,7 @@ function PackTile({
                 key={n}
                 disabled={!profile || !!busyId || profile.credits < pack.price_credits! * n}
                 onClick={() => onBuyBulk(pack, n, 'credits')}
-                className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-yellow)]/60 hover:bg-[var(--c-yellow)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busyId === 'bulk:' + pack.id + ':' + n ? (
                   'OPENING…'
@@ -1071,7 +1124,7 @@ function PackTile({
           <button
             disabled={!profile || !!busyId || profile.credits < pack.price_credits}
             onClick={() => onSaveForLater(pack, 'credits')}
-            className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
             {busyId === 'inv:' + pack.id + ':credits' ? (
@@ -1089,7 +1142,7 @@ function PackTile({
           <button
             disabled={!profile || !!busyId || profile.vouchers < pack.price_vouchers}
             onClick={() => onSaveForLater(pack, 'vouchers')}
-            className="flex-1 min-h-10 flex items-center justify-center gap-1 text-[10px] font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 min-h-10 flex items-center justify-center gap-1 fs-xs font-black py-1 ink-border-sm bg-[var(--c-paper)] hover:bg-[var(--c-yellow)]/40 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Backpack className="w-3 h-3" />
             {busyId === 'inv:' + pack.id + ':vouchers' ? 'BUYING…' : 'SAVE FOR LATER (VOUCHERS)'}
@@ -1254,7 +1307,7 @@ function BountiesTab({
         <span className="text-[12px] font-bold text-[var(--c-red)]">{loadErr}</span>
         <button
           onClick={() => setAttempt((n) => n + 1)}
-          className="btn-pop heading-font text-[10px] min-h-10 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
+          className="btn-pop heading-font fs-xs min-h-10 bg-[var(--c-yellow)] text-[var(--c-ink)] px-2.5 py-1 ink-border-sm shadow-hard-black-xs shrink-0"
         >
           RETRY
         </button>
@@ -1264,7 +1317,7 @@ function BountiesTab({
 
   return (
     <div>
-      <div className="text-[10px] font-bold text-[var(--c-steel)] mb-4">
+      <div className="fs-xs font-bold text-[var(--c-steel)] mb-4">
         5 cards, rotating once a day — same list for everyone. Sell an owned copy for 5× its
         quicksell value (max 1 sell per card, 3 sells/day), or buy a copy for 3×. You can't sell
         back a card you bought here today.{' '}
@@ -1295,31 +1348,29 @@ function BountiesTab({
               </div>
               <div className="px-3">
                 <div className="heading-font text-xs truncate">{card.name}</div>
-                <div className="text-[9px] font-bold text-[var(--c-steel)]">
-                  Owned: {card.owned}
-                </div>
+                <div className="fs-xs font-bold text-[var(--c-steel)]">Owned: {card.owned}</div>
                 {card.already_sold && (
-                  <div className="mt-1 text-[9px] font-black text-[var(--c-steel)]">SOLD TODAY</div>
+                  <div className="mt-1 fs-xs font-black text-[var(--c-steel)]">SOLD TODAY</div>
                 )}
                 {card.already_bought && (
-                  <div className="mt-1 text-[9px] font-black text-[var(--c-steel)]">
+                  <div className="mt-1 fs-xs font-black text-[var(--c-steel)]">
                     OWNED — CAN'T SELL BACK
                   </div>
                 )}
                 {card.owned < 1 && !card.already_bought && (
-                  <div className="mt-1 text-[9px] font-black text-[var(--c-red)]">
+                  <div className="mt-1 fs-xs font-black text-[var(--c-steel)]">
                     YOU DON'T OWN THIS
                   </div>
                 )}
                 {blockedWhy && !card.already_sold && (
-                  <div className="mt-1 text-[9px] font-black text-[var(--c-red)] leading-snug">
+                  <div className="mt-1 fs-xs font-black text-[var(--c-steel)] leading-snug">
                     {blockedWhy.toUpperCase()}
                   </div>
                 )}
               </div>
               <div className="flex gap-1.5 p-3">
                 <PopButton
-                  color="red"
+                  color="steel"
                   className="flex-1"
                   disabled={sellDisabled}
                   title={
@@ -1389,7 +1440,7 @@ function PackHistoryTab() {
     )[0];
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] font-bold text-[var(--c-steel)]">
+      <p className="fs-xs font-bold text-[var(--c-steel)]">
         Your last {history.length} pack{history.length === 1 ? '' : 's'} (kept in this browser,
         newest first).
       </p>
@@ -1403,7 +1454,7 @@ function PackHistoryTab() {
               {top && (
                 <span
                   className={cn(
-                    'text-[9px] font-black px-1',
+                    'fs-xs font-black px-1',
                     RARITY_CHIP[top.rarity] || RARITY_CHIP.Common,
                   )}
                 >
@@ -1418,7 +1469,7 @@ function PackHistoryTab() {
                 <li
                   key={j}
                   className={cn(
-                    'text-[9px] font-black px-1',
+                    'fs-xs font-black px-1',
                     RARITY_CHIP[p.rarity] || RARITY_CHIP.Common,
                   )}
                 >
