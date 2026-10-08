@@ -2005,7 +2005,16 @@ function mulliganRedraw(g: GameState): void {
 export function handLayoutFor(
   vw: number,
   vh: number,
-): { strip: boolean; scale: number; dockH: number; cardW: number; cardH: number } {
+): {
+  strip: boolean;
+  scale: number;
+  dockH: number;
+  cardW: number;
+  cardH: number;
+  /** Fan only: how far the cards sit above the dock's bottom edge, so the
+   * outer cards of the arc (which swing below the middle ones) stay whole. */
+  fanLift: number;
+} {
   const base = CARD_SIZES.compact;
   const strip = vw < 640;
   const short = vh < 520;
@@ -2020,8 +2029,9 @@ export function handLayoutFor(
   const cardH = Math.ceil(base.h * scale);
   const dockH = short
     ? cardH + 8
-    : Math.max(160, Math.min(Math.round(vh * 0.22), cardH + (strip ? 8 : 22)));
-  return { strip, scale, dockH, cardW: Math.round(base.w * scale), cardH };
+    : Math.max(160, Math.min(Math.round(vh * 0.22), cardH + (strip ? 8 : 44)));
+  const fanLift = strip || short ? 0 : Math.max(0, Math.min(26, dockH - cardH - 16));
+  return { strip, scale, dockH, cardW: Math.round(base.w * scale), cardH, fanLift };
 }
 
 /** What the sticky action bar calls the play for a card. */
@@ -4949,7 +4959,7 @@ export function GameV4({
                 <div
                   role="menu"
                   aria-label="Match menu"
-                  className="absolute right-0 top-full mt-1 z-50 bg-[var(--c-ink)] ink-border-md ring-1 ring-[var(--c-paper)]/40 shadow-hard-black-xs p-1 min-w-[170px]"
+                  className="absolute right-0 top-full mt-1 z-50 bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-1 min-w-[170px]"
                 >
                   <button
                     role="menuitem"
@@ -4963,7 +4973,7 @@ export function GameV4({
                           danger: true,
                         });
                     }}
-                    className="w-full text-left heading-font fs-xs text-[var(--c-red)] px-2 py-2 min-h-[36px] hover:bg-[var(--c-paper)]/10"
+                    className="w-full text-left heading-font fs-xs text-[var(--c-red)] px-2 py-2 min-h-[36px] hover:bg-[var(--c-ink)]/10"
                   >
                     {stage === 'over' ? '← LEAVE MATCH' : '✕ CONCEDE MATCH'}
                   </button>
@@ -6098,8 +6108,9 @@ export function GameV4({
                 ? // A scrolling row: whole cards, snapped, with enough
                   // trailing room that the last card can reach the left edge.
                   'gap-1.5 px-2 pt-1 w-max snap-x snap-mandatory'
-                : 'absolute left-1/2 bottom-0 -translate-x-1/2',
+                : 'absolute left-1/2 -translate-x-1/2',
             )}
+            style={handStrip ? undefined : { bottom: handLayout.fanLift }}
           >
             {handView.map((c, i) => {
               const why = invokeWhy(c);
@@ -6459,7 +6470,7 @@ export function GameV4({
           >
             {/* This overlay covers the top bar (and its CONCEDE) — without an
                 exit here a mis-queued match had to be kept and played out. */}
-            <div className="flex justify-end -mb-6 sm:-mb-8">
+            <div className="flex justify-end mb-1">
               <button
                 onClick={() =>
                   setConfirmDialog({

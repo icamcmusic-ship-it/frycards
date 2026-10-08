@@ -379,6 +379,10 @@ describe('hand layout', () => {
     expect(l.scale).toBe(1);
     expect(l.dockH).toBeGreaterThanOrEqual(160);
     expect(l.dockH).toBeLessThanOrEqual(Math.round(900 * 0.22));
+    // The arc's outer cards swing below the middle ones, so the fan sits a
+    // little above the dock's floor and every card stays whole.
+    expect(l.fanLift).toBeGreaterThan(0);
+    expect(l.fanLift + l.cardH).toBeLessThanOrEqual(l.dockH);
   });
 
   test('a phone in landscape shrinks the hand to keep the board on one screen', () => {
