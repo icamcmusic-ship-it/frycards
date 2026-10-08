@@ -17,7 +17,8 @@ import {
   MARKET_FEE,
   subscribeTable,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
@@ -29,17 +30,53 @@ import { spareSplit } from './CollectionScreen';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 type Tab = 'browse' | 'mine' | 'sell';
+const isTab = (v: unknown): v is Tab => v === 'browse' || v === 'mine' || v === 'sell';
 
-function timeLeft(endsAt: string | null | undefined): string {
+export type MarketSort = 'ending' | 'price-asc' | 'price-desc';
+const isSort = (v: unknown): v is MarketSort =>
+  v === 'ending' || v === 'price-asc' || v === 'price-desc';
+
+/**
+ * Compact "time left" label. Minutes/hours under two days, then days, weeks
+ * and months; a listing more than a year out (or with a sentinel far-future
+ * expiry) reads "No expiry" instead of something like "26382d left" (audit
+ * M5). Anything past its end reads exactly "ended" — callers compare to it.
+ */
+export function timeLeft(endsAt: string | null | undefined, now = Date.now()): string {
   if (!endsAt) return 'ended';
-  const ms = new Date(endsAt).getTime() - Date.now();
+  const ms = new Date(endsAt).getTime() - now;
   if (Number.isNaN(ms)) return 'ended';
   if (ms <= 0) return 'ended';
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
-  if (h >= 48) return `${Math.floor(h / 24)}d left`;
+  if (h >= 48) {
+    const d = Math.floor(h / 24);
+    if (d >= 365) return 'No expiry';
+    if (d >= 60) return `${Math.floor(d / 30)}mo left`;
+    if (d >= 14) return `${Math.floor(d / 7)}w left`;
+    return `${d}d left`;
+  }
   if (h > 0) return `${h}h ${m}m left`;
   return `${m}m left`;
+}
+
+/** The price a buyer compares on: the standing bid of an auction (or its
+ * starting price while nobody has bid), the asking price of a fixed listing. */
+export function listingPrice(l: Pick<MarketListing, 'listing_type' | 'current_bid' | 'price'>) {
+  return l.listing_type === 'auction' ? (l.current_bid ?? l.price) : l.price;
+}
+
+/** Sorted copy: ending soonest first, or by price (ties: ending soonest). */
+export function sortListings<
+  T extends Pick<MarketListing, 'listing_type' | 'current_bid' | 'price' | 'ends_at'>,
+>(list: T[], sort: MarketSort): T[] {
+  const end = (l: T) => new Date(l.ends_at).getTime() || 0;
+  const cmp: Record<MarketSort, (x: T, y: T) => number> = {
+    ending: (x, y) => end(x) - end(y),
+    'price-asc': (x, y) => listingPrice(x) - listingPrice(y) || end(x) - end(y),
+    'price-desc': (x, y) => listingPrice(y) - listingPrice(x) || end(x) - end(y),
+  };
+  return [...list].sort(cmp[sort]);
 }
 
 /** Minimum next bid for an auction: starting price if no bids yet, otherwise
@@ -76,7 +113,9 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     refreshCollection,
   } = useMeta();
   const userId = session?.user?.id;
-  const [tab, setTab] = useState<Tab>('browse');
+  const [tab, setTab] = usePersistedState<Tab>('market.tab', 'browse', isTab);
+  const [sort, setSort] = usePersistedState<MarketSort>('market.sort', 'ending', isSort);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [myActivity, setMyActivity] = useState<MarketListing[]>([]);
   const [sellers, setSellers] = useState<Map<string, PublicProfile>>(new Map());
@@ -187,7 +226,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const browse = listings.filter((l) => {
+  const browse = sortListings<MarketListing>(listings, sort).filter((l) => {
     const def = defFor(l.card_id);
     if (rarityFilter !== 'All' && (def.rarity || 'Common') !== rarityFilter) return false;
     if (search && !def.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -204,7 +243,11 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
-  const listingCard = (l: MarketListing, mine: boolean) => {
+  const listingCard = (
+    l: MarketListing,
+    mine: boolean,
+    size: 'compact' | 'standard' = 'compact',
+  ) => {
     const def = defFor(l.card_id);
     const isAuction = l.listing_type === 'auction';
     const sellerName = l.seller === userId ? 'You' : sellers.get(l.seller)?.username || '…';
@@ -226,33 +269,49 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
       l.status === 'active' &&
       !timedOut &&
       myActivity.some((a) => a.id === l.id);
+    // Your own listings and the auctions you hold a bid on stand out from
+    // everyone else's: yellow wash + a tag, so they are findable in a long list.
+    const hasMyBid = !mine && myActivity.some((a) => a.id === l.id);
     return (
       <div
         key={l.id}
-        className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex gap-3"
+        className={cn(
+          'ink-border-md shadow-hard-black-sm p-3 flex gap-3',
+          mine || hasMyBid ? 'bg-[var(--c-yellow)]/25' : 'bg-[var(--c-paper)]',
+        )}
       >
         <div className="shrink-0">
-          <CardFace def={def} size="compact" foil={l.foil} />
+          <CardFace def={def} size={size} foil={l.foil} />
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="heading-font text-xs truncate">{def.name}</span>
             <span
               className={cn(
-                'text-[8px] font-black px-1',
+                'fs-xs font-black px-1',
                 RARITY_CHIP[def.rarity || 'Common'] || RARITY_CHIP.Common,
               )}
             >
               {(def.rarity || 'Common').toUpperCase()}
             </span>
             {l.foil && (
-              <span className="text-[8px] font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
+              <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
                 FOIL ✦
               </span>
             )}
-            {l.quantity > 1 && <span className="text-[9px] font-black">×{l.quantity}</span>}
+            {l.quantity > 1 && <span className="fs-xs font-black">×{l.quantity}</span>}
+            {mine && (
+              <span className="fs-xs font-black px-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
+                YOUR LISTING
+              </span>
+            )}
+            {hasMyBid && !outbid && (
+              <span className="fs-xs font-black px-1 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
+                {highBidder ? 'YOUR BID · LEADING' : 'YOUR BID'}
+              </span>
+            )}
           </div>
-          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
             {isAuction ? 'AUCTION' : 'FIXED PRICE'} · Seller:{' '}
             {l.seller === userId ? (
               sellerName
@@ -265,7 +324,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               />
             )}
           </div>
-          <div className="flex items-center gap-2 mt-1 text-[10px] font-bold">
+          <div className="flex items-center gap-2 mt-1 fs-xs font-bold">
             <Clock className="w-3 h-3" /> {timeLeft(l.ends_at)}
           </div>
           <div className="mt-auto pt-2 flex flex-wrap items-center gap-2">
@@ -277,13 +336,13 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                     ? fmtCredits(l.current_bid)
                     : `Start ${fmtCredits(l.price)}`}
                 </span>
-                <span className="text-[9px] font-bold text-[var(--c-steel)]">
+                <span className="fs-xs font-bold text-[var(--c-steel)]">
                   {l.bid_count ?? 0} bid{(l.bid_count ?? 0) === 1 ? '' : 's'}
                   {highBidder ? ' · YOU LEAD' : ''}
                   {l.cpu_leading && l.cpu_bidder_name ? ` · ${l.cpu_bidder_name} (CPU) leads` : ''}
                 </span>
                 {outbid && (
-                  <span className="text-[8px] font-black px-1 bg-[var(--c-red)] text-white">
+                  <span className="fs-xs font-black px-1 bg-[var(--c-ink)] text-[var(--c-yellow)]">
                     {l.cpu_leading
                       ? `OUTBID BY ${(l.cpu_bidder_name ?? 'A CPU').toUpperCase()}`
                       : 'OUTBID'}
@@ -296,7 +355,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               </span>
             )}
             {isAuction && l.buyout != null && (
-              <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+              <span className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
                 Buyout <Credits amount={l.buyout} />
               </span>
             )}
@@ -306,7 +365,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 the owner too — the CANCEL button previously stayed live here
                 and could only error once server-side settlement ran. */}
             {l.status === 'active' && timedOut ? (
-              <span className="text-[9px] font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
+              <span className="fs-xs font-black px-1.5 py-1 ink-border-sm self-start bg-[var(--c-steel)] text-[var(--c-paper)]">
                 ENDED — SETTLING…
               </span>
             ) : mine && l.status === 'active' ? (
@@ -326,7 +385,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
               <>
                 {isAuction && (
                   <PopButton
-                    color="red"
+                    color="black"
                     // Already the top bidder: bidding again would only refund
                     // your own hold and re-hold a larger amount against
                     // yourself for no competitive gain. Disable and say so.
@@ -362,7 +421,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             ) : (
               <span
                 className={cn(
-                  'text-[9px] font-black px-1.5 py-1 ink-border-sm self-start',
+                  'fs-xs font-black px-1.5 py-1 ink-border-sm self-start',
                   l.status === 'sold'
                     ? 'bg-[#22C55E] text-[#052E12]'
                     : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
@@ -374,6 +433,80 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
           </div>
         </div>
       </div>
+    );
+  };
+
+  // Narrow screens: a grid of full listing cards. Wide screens (lg+): a
+  // compact, selectable list on the left and the chosen listing in full on the
+  // right, so a long list no longer needs a scroll per decision.
+  const listPane = (list: MarketListing[], empty: React.ReactNode) => {
+    if (list.length === 0)
+      return <div className="text-center font-bold text-[var(--c-steel)] py-10">{empty}</div>;
+    const active = list.find((l) => l.id === selectedId) ?? list[0];
+    return (
+      <div className="lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-5 lg:items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:hidden">
+          {list.map((l) => listingCard(l, l.seller === userId))}
+        </div>
+        <div
+          className="hidden lg:flex flex-col gap-2 lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
+          role="listbox"
+          aria-label="Listings"
+        >
+          {list.map((l) => listingRow(l, l.id === active.id))}
+        </div>
+        <aside aria-label="Listing details" className="hidden lg:block lg:sticky lg:top-4">
+          {listingCard(active, active.seller === userId, 'standard')}
+        </aside>
+      </div>
+    );
+  };
+
+  const listingRow = (l: MarketListing, selected: boolean) => {
+    const def = defFor(l.card_id);
+    const isAuction = l.listing_type === 'auction';
+    const mine = l.seller === userId;
+    const highBidder = l.current_bidder === userId;
+    const hasMyBid = !mine && myActivity.some((a) => a.id === l.id);
+    const left = timeLeft(l.ends_at, nowMs);
+    return (
+      <button
+        key={l.id}
+        type="button"
+        role="option"
+        aria-selected={selected}
+        onClick={() => setSelectedId(l.id)}
+        className={cn(
+          'flex items-center gap-3 text-left ink-border-md px-3 py-2',
+          selected
+            ? 'bg-[var(--c-yellow)] shadow-hard-black-sm'
+            : mine || hasMyBid
+              ? 'bg-[var(--c-yellow)]/25 shadow-hard-black-xs hover:bg-[var(--c-yellow)]/50'
+              : 'bg-[var(--c-paper)] shadow-hard-black-xs hover:bg-[var(--c-yellow)]/30',
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="heading-font fs-sm block truncate">
+            {def.name}
+            {l.foil ? ' ✦' : ''}
+            {l.quantity > 1 ? ` ×${l.quantity}` : ''}
+          </span>
+          <span className="fs-xs font-bold text-[var(--c-steel)] block truncate">
+            {(def.rarity || 'Common').toUpperCase()} · {isAuction ? 'AUCTION' : 'FIXED'} · {left}
+            {mine
+              ? ' · YOUR LISTING'
+              : hasMyBid
+                ? highBidder
+                  ? ' · YOU LEAD'
+                  : ' · YOUR BID'
+                : ''}
+          </span>
+        </span>
+        <span className="heading-font fs-sm shrink-0 inline-flex items-center gap-1">
+          {isAuction ? <Gavel className="w-3 h-3" /> : <Coins className="w-3 h-3" />}
+          {fmtCredits(listingPrice(l))}
+        </span>
+      </button>
     );
   };
 
@@ -414,21 +547,31 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="CARD MARKETPLACE" onBack={onBack} />
       <div className="p-5 max-w-6xl mx-auto">
-        <div className="flex gap-2 flex-wrap mb-4">
-          <PopButton color={tab === 'browse' ? 'black' : 'yellow'} onClick={() => setTab('browse')}>
-            <span className="flex items-center gap-1">
-              <Store className="w-3.5 h-3.5" /> BROWSE
-            </span>
-          </PopButton>
-          <PopButton color={tab === 'mine' ? 'black' : 'yellow'} onClick={() => setTab('mine')}>
-            MY LISTINGS & BIDS
-          </PopButton>
-          <PopButton color={tab === 'sell' ? 'black' : 'yellow'} onClick={() => setTab('sell')}>
-            <span className="flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5" /> SELL A CARD
-            </span>
-          </PopButton>
-        </div>
+        <Tabs<Tab>
+          ariaLabel="Marketplace"
+          className="mb-4"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            {
+              id: 'browse',
+              label: (
+                <span className="flex items-center gap-1">
+                  <Store className="w-3.5 h-3.5" /> BROWSE
+                </span>
+              ),
+            },
+            { id: 'mine', label: 'MY LISTINGS & BIDS' },
+            {
+              id: 'sell',
+              label: (
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3.5 h-3.5" /> SELL A CARD
+                </span>
+              ),
+            },
+          ]}
+        />
 
         {error && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -453,7 +596,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             <Notice text={notice} kind="success" />
           </div>
         )}
-        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-4">
+        <p className="fs-xs font-bold text-[var(--c-steel)] mb-4">
           Player-to-player market. Sellers pay a {Math.round(MARKET_FEE * 100)}% credits fee on
           completed sales. Bids in the final 5 minutes extend an auction.
         </p>
@@ -494,6 +637,16 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 <option value="cpu">CPU collector leading</option>
                 <option value="soon">Ending in 15 min</option>
               </select>
+              <select
+                className={select}
+                aria-label="Sort listings"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as MarketSort)}
+              >
+                <option value="ending">Ending soonest</option>
+                <option value="price-asc">Price: low to high</option>
+                <option value="price-desc">Price: high to low</option>
+              </select>
             </div>
             {listings.length >= MARKET_LIST_LIMIT && (
               <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3">
@@ -501,24 +654,28 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 cover these.
               </p>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {browse.map((l) => listingCard(l, l.seller === userId))}
-              {browse.length === 0 && (
-                <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
-                  No active listings match. Be the first — list a card under SELL A CARD.
-                </div>
-              )}
-            </div>
+            {listPane(
+              browse,
+              <>
+                <p className="mb-3">
+                  No active listings match. Clear the filters, or be the first — list a card.
+                </p>
+                <PopButton color="yellow" onClick={() => setTab('sell')}>
+                  SELL A CARD ▸
+                </PopButton>
+              </>,
+            )}
           </>
         ) : tab === 'mine' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {myActivity.map((l) => listingCard(l, l.seller === userId))}
-            {myActivity.length === 0 && (
-              <div className="col-span-full text-center font-bold text-[var(--c-steel)] py-10">
-                You have no listings or bids yet.
-              </div>
-            )}
-          </div>
+          listPane(
+            myActivity,
+            <>
+              <p className="mb-3">You have no listings or bids yet.</p>
+              <PopButton color="yellow" onClick={() => setTab('browse')}>
+                BROWSE LISTINGS ▸
+              </PopButton>
+            </>,
+          )
         ) : (
           <SellForm
             collection={collection}
@@ -552,7 +709,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
             <div className="heading-font text-sm mb-2">
               BID ON {defFor(bidForLive.card_id).name.toUpperCase()}
             </div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] mb-2">
+            <div className="fs-xs font-bold text-[var(--c-steel)] mb-2">
               {bidForEnded ? (
                 'This listing has ended — it was bought out, cancelled or expired while this dialog was open.'
               ) : (
@@ -578,7 +735,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setBidAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
                 className="flex-1 min-w-0 px-2 py-1 ink-border-sm font-bold text-sm"
               />
-              <span className="text-[10px] font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
+              <span className="fs-xs font-bold text-[var(--c-steel)] shrink-0 inline-flex items-center gap-0.5">
                 = <Credits amount={bidAmount} />
               </span>
             </div>
@@ -587,7 +744,7 @@ export function MarketplaceScreen({ onBack }: { onBack: () => void }) {
                 CANCEL
               </PopButton>
               <PopButton
-                color="red"
+                color="yellow"
                 disabled={
                   busy ||
                   !profile ||
@@ -773,9 +930,9 @@ function SellForm({
             }}
             className={cn(
               // min-h keeps these dense chips tappable on a phone.
-              'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
+              'fs-xs font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
               RARITY_CHIP[c.def.rarity || 'Common'] || RARITY_CHIP.Common,
-              cardId === c.card_id && 'outline outline-2 outline-[var(--c-red)]',
+              cardId === c.card_id && 'outline outline-2 outline-[var(--c-ink)]',
             )}
           >
             {c.def.name} ×{c.quantity}
@@ -783,7 +940,7 @@ function SellForm({
           </button>
         ))}
         {sellable.length === 0 && (
-          <span className="text-[10px] font-bold text-[var(--c-steel)]">
+          <span className="fs-xs font-bold text-[var(--c-steel)]">
             No spare cards to sell (deck-locked copies can't be listed).
           </span>
         )}
@@ -819,32 +976,28 @@ function SellForm({
                   }
                   className="w-16 px-2 py-1 ink-border-sm"
                 />
-                <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
+                <span className="fs-xs text-[var(--c-steel)]">of {maxQty} spare</span>
               </label>
-              <div className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+              <div className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
                 Quicksell value: <Credits amount={suggested} /> each — price above that to profit.
               </div>
             </div>
           </div>
 
           <div className="heading-font text-xs mb-1">2 · CHOOSE HOW TO SELL</div>
-          <div className="flex gap-2 mb-3">
-            <PopButton
-              color={type === 'fixed' ? 'black' : 'yellow'}
-              onClick={() => setType('fixed')}
-            >
-              FIXED PRICE
-            </PopButton>
-            <PopButton
-              color={type === 'auction' ? 'black' : 'yellow'}
-              onClick={() => setType('auction')}
-            >
-              AUCTION
-            </PopButton>
-          </div>
+          <Tabs<'fixed' | 'auction'>
+            ariaLabel="Sale type"
+            className="mb-3"
+            value={type}
+            onChange={setType}
+            tabs={[
+              { id: 'fixed', label: 'FIXED PRICE' },
+              { id: 'auction', label: 'AUCTION' },
+            ]}
+          />
 
           {type === 'auction' && (
-            <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2 max-w-xl">
+            <p className="fs-xs font-bold text-[var(--c-steel)] mb-2 max-w-xl">
               {selected && (
                 <span className="block text-[var(--c-ink)] mb-1">
                   CPU range for this lot: usually{' '}
@@ -878,7 +1031,7 @@ function SellForm({
                 }
                 className="w-24 px-2 py-1 ink-border-sm"
               />
-              <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+              <span className="fs-xs text-[var(--c-steel)] inline-flex items-center gap-0.5">
                 = <Credits amount={price} />
               </span>
             </label>
@@ -899,7 +1052,7 @@ function SellForm({
                   className="w-24 px-2 py-1 ink-border-sm"
                 />
                 {buyout !== '' && (
-                  <span className="text-[9px] text-[var(--c-steel)] inline-flex items-center gap-0.5">
+                  <span className="fs-xs text-[var(--c-steel)] inline-flex items-center gap-0.5">
                     = <Credits amount={buyout} />
                   </span>
                 )}
@@ -925,14 +1078,14 @@ function SellForm({
                 </select>
               </label>
             ) : (
-              <span className="flex items-center gap-1 text-[9px] font-bold text-[var(--c-steel)]">
+              <span className="flex items-center gap-1 fs-xs font-bold text-[var(--c-steel)]">
                 Fixed listings run 14 days.
               </span>
             )}
           </div>
 
           <PopButton
-            color="red"
+            color="yellow"
             disabled={!valid || busy}
             onClick={() =>
               onSubmit({
@@ -948,7 +1101,7 @@ function SellForm({
           >
             {busy ? 'LISTING…' : type === 'fixed' ? 'LIST FOR SALE ▸' : 'START AUCTION ▸'}
           </PopButton>
-          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-2">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mt-2">
             Listed cards leave your collection until sold, cancelled, or expired.
           </div>
         </>

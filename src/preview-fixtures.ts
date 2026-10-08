@@ -339,7 +339,7 @@ const BROWSE_SHOPS = Array.from({ length: 6 }, (_, i) => ({
   cheapest_price: 250 + i * 90,
   top_rarity_tier: 5 - (i % 5),
   trending_score: 90 - i * 7,
-  composite_score: 88 - i * 6,
+  composite_score: 4.8 - i * 0.3, // the server scale is 0-5 stars
   rating_unlocked: i < 3,
 }));
 
@@ -505,7 +505,32 @@ const TABLES: Record<string, unknown[]> = {
   ],
 };
 
+// Bingo: row 1 and the main diagonal are complete (claimable), column 5 is one
+// square short, so the claim buttons and the near-miss hint both render.
+const BINGO_DONE = Array.from({ length: 25 }, (_, i) =>
+  [0, 1, 2, 3, 4, 6, 12, 18, 24, 9, 14, 5, 10].includes(i),
+);
+const BINGO = {
+  // Relative to load time so the countdown reads like a live week (3.5 days).
+  week_start: '2026-01-05',
+  resets_at: new Date(Date.now() + 3.5 * 86_400_000).toISOString(),
+  cells: Array.from({ length: 25 }, (_, i) =>
+    i === 12
+      ? { kind: 'free', label: 'FREE' }
+      : { kind: 'rar_ess', label: `Own a Rare ${['Ember', 'Tide', 'Gale', 'Root'][i % 4]} card` },
+  ),
+  done: BINGO_DONE,
+  lines: [0, 10],
+  claimed: [],
+  blackout: false,
+  blackout_claimed: false,
+  line_reward: 400,
+  blackout_reward: 3000,
+  blackout_vouchers: 3,
+};
+
 const RPCS: Record<string, unknown> = {
+  get_bingo: BINGO,
   get_missions: MISSIONS,
   get_serialized_feed: SERIALIZED_FEED,
   get_public_profiles: PUBLIC_PROFILES,
@@ -544,7 +569,7 @@ const RPCS: Record<string, unknown> = {
     stock: { single: 3, bundle: 2, mystery: 1 },
     unique_buyers: 18,
     rating_unlocked: true,
-    composite_score: 82,
+    composite_score: 4.6,
   },
   get_mystery_live_stats: { remaining_packs: 13, live_ev_per_pack: 690 },
   // The FULL row shape. A partial one is not a shortcut here: the pool viewer

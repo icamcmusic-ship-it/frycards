@@ -23,7 +23,8 @@ import {
   CardsLeaderboardEntry,
   subscribeTable,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, Credits } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { cn } from '../lib/utils';
 import { POOL_BY_ID } from '../game/v3/cardpool';
 import { spareSplit } from './CollectionScreen';
@@ -34,6 +35,19 @@ import { fmtCredits } from './economy';
 import { useFocusTrap, useEscapeClose } from '../components/useFocusTrap';
 
 type Tab = 'friends' | 'trades' | 'leaderboard';
+const isTab = (v: unknown): v is Tab => v === 'friends' || v === 'trades' || v === 'leaderboard';
+
+/** One side of a trade as a short human string: "3 cards + 500 credits". */
+export function tradeSideSummary(
+  cards: { quantity?: number }[] | null | undefined,
+  credits = 0,
+): string {
+  const n = (cards ?? []).reduce((sum, c) => sum + (c.quantity ?? 1), 0);
+  const parts: string[] = [];
+  if (n > 0) parts.push(`${n} card${n === 1 ? '' : 's'}`);
+  if (credits > 0) parts.push(`${credits.toLocaleString('en-US')} credits`);
+  return parts.length ? parts.join(' + ') : 'nothing';
+}
 
 function cardName(id: string): string {
   return POOL_BY_ID[id]?.name || id;
@@ -44,7 +58,7 @@ function CardChip({ item }: { key?: React.Key; item: TradeCardItem }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 ink-border-sm',
+        'inline-flex items-center gap-1 fs-xs font-black px-1.5 py-0.5 ink-border-sm',
         RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
       )}
     >
@@ -66,18 +80,18 @@ function TradeSide({
 }) {
   return (
     <div className="flex-1 min-w-[140px] sm:min-w-[180px]">
-      <div className="text-[9px] font-black text-[var(--c-steel)] mb-1">{label}</div>
+      <div className="fs-xs font-black text-[var(--c-steel)] mb-1">{label}</div>
       <div className="flex flex-wrap gap-1">
         {cards.map((c) => (
           <CardChip key={`${c.card_id}-${c.foil ? 'foil' : 'normal'}`} item={c} />
         ))}
         {credits > 0 && (
-          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-yellow)] ink-border-sm">
+          <span className="inline-flex items-center gap-0.5 fs-xs font-black px-1.5 py-0.5 bg-[var(--c-yellow)] ink-border-sm">
             <Coins className="w-2.5 h-2.5" /> {fmtCredits(credits)}
           </span>
         )}
         {cards.length === 0 && credits === 0 && (
-          <span className="text-[9px] font-bold text-[var(--c-steel)]">nothing</span>
+          <span className="fs-xs font-bold text-[var(--c-steel)]">nothing</span>
         )}
       </div>
     </div>
@@ -87,7 +101,13 @@ function TradeSide({
 export function SocialScreen({ onBack }: { onBack: () => void }) {
   const { session, guest, setGuest, profile, refreshProfile, refreshCollection } = useMeta();
   const userId = session?.user?.id;
-  const [tab, setTab] = useState<Tab>(guest ? 'leaderboard' : 'friends');
+  // The remembered tab is a per-viewer convenience; a guest can only ever see
+  // the leaderboard, whatever was stored.
+  const [storedTab, setTab] = usePersistedState<Tab>('social.tab', 'friends', isTab);
+  const tab: Tab = guest ? 'leaderboard' : storedTab;
+  const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const [friendships, setFriendships] = useState<Friendship[]>([]);
   const [profiles, setProfiles] = useState<Map<string, PublicProfile>>(new Map());
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -278,41 +298,180 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
+  // Wide screens show a list + detail pair; the selection falls back to the
+  // first entry so the detail pane is never empty while there is something to
+  // show.
+  const activeFriend =
+    friendProfiles.find((f) => f.otherId === selectedFriendId) ?? friendProfiles[0] ?? null;
+  const activeFriendId = activeFriend?.otherId ?? null;
+  const tradesWithActive = activeFriend
+    ? pendingTrades.filter(
+        (t) => t.proposer === activeFriend.otherId || t.recipient === activeFriend.otherId,
+      )
+    : [];
+  const activeTrade = pendingTrades.find((t) => t.id === selectedTradeId) ?? pendingTrades[0];
+
+  // TRADE opens the composer; REMOVE is the destructive one, so it is red.
+  const friendActions = (
+    friendshipId: string,
+    other: PublicProfile | undefined,
+    labelled = false,
+  ) => (
+    <>
+      <PopButton
+        color="yellow"
+        disabled={busy || !other}
+        onClick={() => other && setTradePartner(other)}
+      >
+        <span className="flex items-center gap-1">
+          <ArrowLeftRight className="w-3 h-3" /> TRADE
+        </span>
+      </PopButton>
+      <PopButton
+        color="red"
+        disabled={busy}
+        ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
+        onClick={async () => {
+          if (await askConfirm(`Remove ${other?.username || 'this player'} from your friends?`))
+            run(() => removeFriend(friendshipId), 'Friend removed.');
+        }}
+      >
+        <span className="flex items-center gap-1">
+          <X className="w-3.5 h-3.5" />
+          {labelled && 'REMOVE FRIEND'}
+        </span>
+      </PopButton>
+    </>
+  );
+
+  const tradeCard = (t: Trade) => {
+    const isIncoming = t.recipient === userId;
+    return (
+      <div key={t.id} className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]">
+        <div className="heading-font text-[11px] mb-2">
+          {isIncoming ? (
+            <>
+              <PlayerLink
+                id={t.proposer}
+                name={nameOf(t.proposer)}
+                role={profiles.get(t.proposer)?.role}
+              />{' '}
+              OFFERS YOU A TRADE
+            </>
+          ) : (
+            <>
+              YOUR OFFER TO{' '}
+              <PlayerLink
+                id={t.recipient}
+                name={nameOf(t.recipient).toUpperCase()}
+                role={profiles.get(t.recipient)?.role}
+              />
+            </>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-4 mb-3">
+          <TradeSide
+            label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
+            cards={t.proposer_cards ?? []}
+            credits={t.proposer_credits ?? 0}
+          />
+          <TradeSide
+            label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
+            cards={t.recipient_cards ?? []}
+            credits={t.recipient_credits ?? 0}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {isIncoming ? (
+            <>
+              <PopButton
+                color="yellow"
+                disabled={busy}
+                onClick={async () => {
+                  if (!(await askConfirm('Accept this trade? Cards and credits move immediately.')))
+                    return;
+                  run(async () => {
+                    const err = await respondTrade(t.id, true);
+                    if (!err) {
+                      refreshCollection();
+                      refreshProfile();
+                    }
+                    return err;
+                  }, 'Trade complete!');
+                }}
+              >
+                ACCEPT TRADE ▸
+              </PopButton>
+              <PopButton
+                color="steel"
+                disabled={busy}
+                onClick={async () => {
+                  if (!(await askConfirm('Decline this trade offer?'))) return;
+                  run(() => respondTrade(t.id, false), 'Trade declined.');
+                }}
+              >
+                DECLINE
+              </PopButton>
+            </>
+          ) : (
+            <PopButton
+              color="steel"
+              disabled={busy}
+              onClick={async () => {
+                if (!(await askConfirm('Cancel this trade offer?'))) return;
+                run(() => cancelTrade(t.id), 'Trade offer cancelled.');
+              }}
+            >
+              CANCEL OFFER
+            </PopButton>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="FRIENDS & TRADING" onBack={onBack} />
       <div className="p-3 sm:p-5 max-w-5xl mx-auto">
-        <div className="flex flex-wrap gap-2 mb-4">
-          {!guest && (
-            <>
-              <PopButton
-                color={tab === 'friends' ? 'black' : 'yellow'}
-                onClick={() => setTab('friends')}
-              >
+        <Tabs<Tab>
+          ariaLabel="Friends and trading"
+          className="mb-4"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            ...(guest
+              ? []
+              : [
+                  {
+                    id: 'friends' as const,
+                    label: (
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" /> FRIENDS ({friendProfiles.length})
+                      </span>
+                    ),
+                    badge: incoming.length,
+                  },
+                  {
+                    id: 'trades' as const,
+                    label: (
+                      <span className="flex items-center gap-1">
+                        <ArrowLeftRight className="w-3.5 h-3.5" /> TRADES
+                      </span>
+                    ),
+                    badge: pendingTrades.length,
+                  },
+                ]),
+            {
+              id: 'leaderboard' as const,
+              label: (
                 <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" /> FRIENDS ({friendProfiles.length})
+                  <Trophy className="w-3.5 h-3.5" /> LEADERBOARD
                 </span>
-              </PopButton>
-              <PopButton
-                color={tab === 'trades' ? 'black' : 'yellow'}
-                onClick={() => setTab('trades')}
-              >
-                <span className="flex items-center gap-1">
-                  <ArrowLeftRight className="w-3.5 h-3.5" /> TRADES
-                  {pendingTrades.length > 0 ? ` (${pendingTrades.length})` : ''}
-                </span>
-              </PopButton>
-            </>
-          )}
-          <PopButton
-            color={tab === 'leaderboard' ? 'black' : 'yellow'}
-            onClick={() => setTab('leaderboard')}
-          >
-            <span className="flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5" /> LEADERBOARD
-            </span>
-          </PopButton>
-        </div>
+              ),
+            },
+          ]}
+        />
 
         {guest && (
           <div className="mb-4 bg-[var(--c-yellow)] ink-border-md shadow-hard-black-sm p-3 flex items-center justify-between gap-3 flex-wrap">
@@ -328,7 +487,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
             <span className="text-[11px] font-bold text-[var(--c-steel)]">
               Couldn't load your friends & trades. Check your connection and try again.
             </span>
-            <PopButton color="red" onClick={() => setLoadAttempt((n) => n + 1)}>
+            <PopButton color="yellow" onClick={() => setLoadAttempt((n) => n + 1)}>
               RETRY
             </PopButton>
           </div>
@@ -355,7 +514,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                   <p className="text-[11px] font-bold text-[var(--c-steel)] mb-2">
                     Couldn't load the leaderboard. Check your connection and try again.
                   </p>
-                  <PopButton color="red" onClick={() => setLeaderboardAttempt((n) => n + 1)}>
+                  <PopButton color="yellow" onClick={() => setLeaderboardAttempt((n) => n + 1)}>
                     RETRY
                   </PopButton>
                 </div>
@@ -383,7 +542,7 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
                       />
                       {row.id === userId ? ' (you)' : ''}
                     </span>
-                    <span className="text-[9px] font-bold text-[var(--c-steel)] shrink-0">
+                    <span className="fs-xs font-bold text-[var(--c-steel)] shrink-0">
                       Lv {row.level ?? 1}
                     </span>
                     <span className="font-mono font-black text-sm shrink-0">
@@ -397,372 +556,386 @@ export function SocialScreen({ onBack }: { onBack: () => void }) {
         )}
         {tab !== 'leaderboard' &&
           (tab === 'friends' ? (
-            <>
-              {/* Find players */}
-              <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-6">
-                <div className="heading-font text-xs mb-2 flex items-center gap-1.5">
-                  <UserPlus className="w-4 h-4" /> FIND PLAYERS
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    placeholder="Search by username…"
-                    className="flex-1 min-w-0 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
-                  />
-                  <PopButton
-                    color="black"
-                    onClick={handleSearch}
-                    disabled={searching}
-                    ariaLabel="Search players"
-                  >
-                    <Search className="w-4 h-4" />
-                  </PopButton>
-                </div>
-                {searching && (
-                  <div className="mt-3 text-[10px] font-bold text-[var(--c-steel)] animate-pulse">
-                    Searching…
+            <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+              <div className="min-w-0">
+                {/* Find players */}
+                <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-6">
+                  <div className="heading-font text-xs mb-2 flex items-center gap-1.5">
+                    <UserPlus className="w-4 h-4" /> FIND PLAYERS
                   </div>
-                )}
-                {!searching && results && (
-                  <div className="mt-3 flex flex-col gap-2">
-                    {results.map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
-                      >
-                        <div className="text-xs font-bold min-w-0 truncate">
-                          <PlayerLink id={r.id} name={r.username} role={r.role} />
-                          <span className="text-[9px] text-[var(--c-steel)] ml-2">
-                            LV {r.level} · {r.wins}W {r.losses}L
-                          </span>
-                        </div>
-                        <PopButton
-                          color="red"
-                          className="shrink-0"
-                          disabled={busy}
-                          onClick={() =>
-                            run(
-                              () => sendFriendRequest(r.username),
-                              `Friend request sent to ${r.username}!`,
-                              // Drop this entry from the results so a second
-                              // click can't re-send a duplicate request.
-                              () => setResults((prev) => prev && prev.filter((p) => p.id !== r.id)),
-                            )
-                          }
+                  <div className="flex gap-2">
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      ref={searchRef}
+                      placeholder="Search by username…"
+                      className="flex-1 min-w-0 px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/50"
+                    />
+                    <PopButton
+                      color="black"
+                      onClick={handleSearch}
+                      disabled={searching}
+                      ariaLabel="Search players"
+                    >
+                      <Search className="w-4 h-4" />
+                    </PopButton>
+                  </div>
+                  {searching && (
+                    <div className="mt-3 fs-xs font-bold text-[var(--c-steel)] animate-pulse">
+                      Searching…
+                    </div>
+                  )}
+                  {!searching && results && (
+                    <div className="mt-3 flex flex-col gap-2">
+                      {results.map((r) => (
+                        <div
+                          key={r.id}
+                          className="flex items-center justify-between gap-2 ink-border-sm px-2 py-1.5"
                         >
-                          ADD ▸
-                        </PopButton>
-                      </div>
-                    ))}
-                    {results.length === 0 && (
-                      <div className="text-[10px] font-bold text-[var(--c-steel)]">
-                        No players found.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Incoming requests */}
-              {incoming.length > 0 && (
-                <div className="mb-6">
-                  <h2 className="heading-font text-base mb-2 bg-[var(--c-red)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                    FRIEND REQUESTS
-                  </h2>
-                  <div className="flex flex-col gap-2">
-                    {incoming.map((f) => (
-                      <div
-                        key={f.id}
-                        // flex-wrap: the name column already shrinks and
-                        // truncates, but ACCEPT + DECLINE are `shrink-0` and
-                        // together they are wider than a phone at a doubled
-                        // browser font size — so the row needs to be allowed
-                        // to put them on their own line (v29 text resize).
-                        className="flex flex-wrap items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
-                      >
-                        <span className="text-xs font-bold min-w-0 truncate">
-                          <PlayerLink
-                            id={f.requester}
-                            name={nameOf(f.requester)}
-                            role={profiles.get(f.requester)?.role}
-                          />
-                        </span>
-                        <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0">
+                          <div className="text-xs font-bold min-w-0 truncate">
+                            <PlayerLink id={r.id} name={r.username} role={r.role} />
+                            <span className="fs-xs text-[var(--c-steel)] ml-2">
+                              LV {r.level} · {r.wins}W {r.losses}L
+                            </span>
+                          </div>
                           <PopButton
-                            color="red"
+                            color="yellow"
+                            className="shrink-0"
                             disabled={busy}
                             onClick={() =>
-                              run(() => respondFriendRequest(f.id, true), 'Friend added!')
+                              run(
+                                () => sendFriendRequest(r.username),
+                                `Friend request sent to ${r.username}!`,
+                                // Drop this entry from the results so a second
+                                // click can't re-send a duplicate request.
+                                () =>
+                                  setResults((prev) => prev && prev.filter((p) => p.id !== r.id)),
+                              )
                             }
                           >
-                            ACCEPT
-                          </PopButton>
-                          <PopButton
-                            color="steel"
-                            disabled={busy}
-                            onClick={async () => {
-                              if (!(await askConfirm('Decline this friend request?'))) return;
-                              run(() => respondFriendRequest(f.id, false), 'Request declined.');
-                            }}
-                          >
-                            DECLINE
+                            ADD ▸
                           </PopButton>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                      {results.length === 0 && (
+                        <div className="fs-xs font-bold text-[var(--c-steel)]">
+                          No players found.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Friends list */}
-              <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-                YOUR FRIENDS
-              </h2>
-              <div className="flex flex-col gap-2 mb-6">
-                {friendProfiles.map(({ friendship, other, otherId }) => (
-                  <div
-                    key={friendship.id}
-                    className="flex items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
-                  >
-                    <div className="text-xs font-bold min-w-0 truncate">
-                      {other ? (
-                        <PlayerLink id={otherId} name={other.username} role={other.role} />
-                      ) : (
-                        'Unknown player'
-                      )}
-                      {other && (
-                        <span className="text-[9px] text-[var(--c-steel)] ml-2">
-                          LV {other.level} · {other.wins}W {other.losses}L
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0">
-                      <PopButton
-                        color="yellow"
-                        disabled={busy || !other}
-                        onClick={() => other && setTradePartner(other)}
-                      >
-                        <span className="flex items-center gap-1">
-                          <ArrowLeftRight className="w-3 h-3" /> TRADE
-                        </span>
-                      </PopButton>
-                      <PopButton
-                        color="steel"
-                        disabled={busy}
-                        ariaLabel={`Remove ${other?.username || 'this player'} from friends`}
-                        onClick={async () => {
-                          if (
-                            await askConfirm(
-                              `Remove ${other?.username || 'this player'} from your friends?`,
-                            )
-                          )
-                            run(() => removeFriend(friendship.id), 'Friend removed.');
-                        }}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </PopButton>
-                    </div>
-                  </div>
-                ))}
-                {loading && (
-                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
-                    Loading…
-                  </div>
-                )}
-                {!loading && friendProfiles.length === 0 && (
-                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                    No friends yet — search for players above and send a request.
-                  </div>
-                )}
-              </div>
-
-              {/* Outgoing requests */}
-              {outgoing.length > 0 && (
-                <div className="mb-6">
-                  <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                    SENT REQUESTS
-                  </h2>
-                  <div className="flex flex-col gap-2">
-                    {outgoing.map((f) => (
-                      <div
-                        key={f.id}
-                        className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
-                      >
-                        <span className="text-xs font-bold min-w-0 truncate">
-                          <PlayerLink
-                            id={f.addressee}
-                            name={nameOf(f.addressee)}
-                            role={profiles.get(f.addressee)?.role}
-                          />{' '}
-                          · pending…
-                        </span>
-                        <PopButton
-                          color="steel"
-                          disabled={busy}
-                          onClick={async () => {
-                            if (!(await askConfirm('Cancel this friend request?'))) return;
-                            run(() => removeFriend(f.id), 'Friend request cancelled.');
-                          }}
+                {/* Incoming requests */}
+                {incoming.length > 0 && (
+                  <div className="mb-6">
+                    <h2 className="heading-font text-base mb-2 bg-[var(--c-yellow)] text-[var(--c-ink)] inline-block px-2 py-0.5">
+                      FRIEND REQUESTS
+                    </h2>
+                    <div className="flex flex-col gap-2">
+                      {incoming.map((f) => (
+                        <div
+                          key={f.id}
+                          // flex-wrap: the name column already shrinks and
+                          // truncates, but ACCEPT + DECLINE are `shrink-0` and
+                          // together they are wider than a phone at a doubled
+                          // browser font size — so the row needs to be allowed
+                          // to put them on their own line (v29 text resize).
+                          className="flex flex-wrap items-center justify-between gap-2 ink-border-md shadow-hard-black-xs px-3 py-2 bg-[var(--c-paper)]"
                         >
-                          CANCEL
-                        </PopButton>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Pending trades */}
-              <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
-                OPEN TRADES
-              </h2>
-              <div className="flex flex-col gap-3 mb-7">
-                {pendingTrades.map((t) => {
-                  const isIncoming = t.recipient === userId;
-                  return (
-                    <div
-                      key={t.id}
-                      className="ink-border-md shadow-hard-black-sm p-3 bg-[var(--c-paper)]"
-                    >
-                      <div className="heading-font text-[11px] mb-2">
-                        {isIncoming ? (
-                          <>
+                          <span className="text-xs font-bold min-w-0 truncate">
                             <PlayerLink
-                              id={t.proposer}
-                              name={nameOf(t.proposer)}
-                              role={profiles.get(t.proposer)?.role}
-                            />{' '}
-                            OFFERS YOU A TRADE
-                          </>
-                        ) : (
-                          <>
-                            YOUR OFFER TO{' '}
-                            <PlayerLink
-                              id={t.recipient}
-                              name={nameOf(t.recipient).toUpperCase()}
-                              role={profiles.get(t.recipient)?.role}
+                              id={f.requester}
+                              name={nameOf(f.requester)}
+                              role={profiles.get(f.requester)?.role}
                             />
-                          </>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-4 mb-3">
-                        <TradeSide
-                          label={isIncoming ? 'YOU RECEIVE' : 'YOU GIVE'}
-                          cards={t.proposer_cards ?? []}
-                          credits={t.proposer_credits ?? 0}
-                        />
-                        <TradeSide
-                          label={isIncoming ? 'YOU GIVE' : 'YOU RECEIVE'}
-                          cards={t.recipient_cards ?? []}
-                          credits={t.recipient_credits ?? 0}
-                        />
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {isIncoming ? (
-                          <>
+                          </span>
+                          <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0">
                             <PopButton
-                              color="red"
+                              color="yellow"
                               disabled={busy}
-                              onClick={async () => {
-                                if (
-                                  !(await askConfirm(
-                                    'Accept this trade? Cards and credits move immediately.',
-                                  ))
-                                )
-                                  return;
-                                run(async () => {
-                                  const err = await respondTrade(t.id, true);
-                                  if (!err) {
-                                    refreshCollection();
-                                    refreshProfile();
-                                  }
-                                  return err;
-                                }, 'Trade complete!');
-                              }}
+                              onClick={() =>
+                                run(() => respondFriendRequest(f.id, true), 'Friend added!')
+                              }
                             >
-                              ACCEPT TRADE ▸
+                              ACCEPT
                             </PopButton>
                             <PopButton
                               color="steel"
                               disabled={busy}
                               onClick={async () => {
-                                if (!(await askConfirm('Decline this trade offer?'))) return;
-                                run(() => respondTrade(t.id, false), 'Trade declined.');
+                                if (!(await askConfirm('Decline this friend request?'))) return;
+                                run(() => respondFriendRequest(f.id, false), 'Request declined.');
                               }}
                             >
                               DECLINE
                             </PopButton>
-                          </>
-                        ) : (
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Friends list */}
+                <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+                  YOUR FRIENDS
+                </h2>
+                <div className="flex flex-col gap-2 mb-6">
+                  {friendProfiles.map(({ friendship, other, otherId }) => {
+                    const selected = otherId === activeFriendId;
+                    return (
+                      <div
+                        key={friendship.id}
+                        // On wide screens the row only SELECTS; the actions live
+                        // in the detail pane beside the list.
+                        onClick={() => setSelectedFriendId(otherId)}
+                        className={cn(
+                          'flex items-center justify-between gap-2 ink-border-md px-3 py-2',
+                          selected
+                            ? 'lg:bg-[var(--c-yellow)] lg:shadow-hard-black-sm bg-[var(--c-paper)] shadow-hard-black-xs'
+                            : 'bg-[var(--c-paper)] shadow-hard-black-xs lg:cursor-pointer',
+                        )}
+                      >
+                        <div className="text-xs font-bold min-w-0 truncate">
+                          {other ? (
+                            <PlayerLink id={otherId} name={other.username} role={other.role} />
+                          ) : (
+                            'Unknown player'
+                          )}
+                          {other && (
+                            <span className="fs-xs text-[var(--c-steel)] ml-2">
+                              LV {other.level} · {other.wins}W {other.losses}L
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex max-w-full flex-wrap justify-end gap-2 shrink-0 lg:hidden">
+                          {friendActions(friendship.id, other)}
+                        </div>
+                        <PopButton
+                          color={selected ? 'black' : 'steel'}
+                          className="hidden lg:inline-flex shrink-0"
+                          ariaPressed={selected}
+                          ariaLabel={`Show details for ${other?.username || 'this player'}`}
+                          onClick={() => setSelectedFriendId(otherId)}
+                        >
+                          DETAILS ▸
+                        </PopButton>
+                      </div>
+                    );
+                  })}
+                  {loading && (
+                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
+                      Loading…
+                    </div>
+                  )}
+                  {!loading && friendProfiles.length === 0 && (
+                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
+                      <p className="mb-2">No friends yet — find a player and send a request.</p>
+                      <PopButton color="yellow" onClick={() => searchRef.current?.focus()}>
+                        FIND PLAYERS ▸
+                      </PopButton>
+                    </div>
+                  )}
+                </div>
+
+                {/* Outgoing requests */}
+                {outgoing.length > 0 && (
+                  <div className="mb-6">
+                    <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+                      SENT REQUESTS
+                    </h2>
+                    <div className="flex flex-col gap-2">
+                      {outgoing.map((f) => (
+                        <div
+                          key={f.id}
+                          className="flex items-center justify-between gap-2 ink-border-sm px-3 py-2 bg-[var(--c-paper)]"
+                        >
+                          <span className="text-xs font-bold min-w-0 truncate">
+                            <PlayerLink
+                              id={f.addressee}
+                              name={nameOf(f.addressee)}
+                              role={profiles.get(f.addressee)?.role}
+                            />{' '}
+                            · pending…
+                          </span>
                           <PopButton
                             color="steel"
                             disabled={busy}
                             onClick={async () => {
-                              if (!(await askConfirm('Cancel this trade offer?'))) return;
-                              run(() => cancelTrade(t.id), 'Trade offer cancelled.');
+                              if (!(await askConfirm('Cancel this friend request?'))) return;
+                              run(() => removeFriend(f.id), 'Friend request cancelled.');
                             }}
                           >
-                            CANCEL OFFER
+                            CANCEL
                           </PopButton>
-                        )}
-                      </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-                {loading && (
-                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
-                    Loading…
-                  </div>
-                )}
-                {!loading && pendingTrades.length === 0 && (
-                  <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
-                    No open trades. Start one from the TRADE button next to a friend.
                   </div>
                 )}
               </div>
-
-              {/* History */}
-              {doneTrades.length > 0 && (
-                <>
-                  <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
-                    RECENT HISTORY
-                  </h2>
-                  <div className="flex flex-col gap-2">
-                    {doneTrades.map((t) => (
-                      <div
-                        key={t.id}
-                        className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2"
-                      >
-                        <span
-                          className={cn(
-                            'text-[8px] font-black px-1 ink-border-sm',
-                            t.status === 'accepted'
-                              ? 'bg-[#22C55E] text-[#052E12]'
-                              : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
-                          )}
-                        >
-                          {(t.status || 'UNKNOWN').toUpperCase()}
-                        </span>
-                        <span className="text-[10px] font-bold">
-                          <PlayerLink
-                            id={t.proposer === userId ? t.recipient : t.proposer}
-                            name={nameOf(t.proposer === userId ? t.recipient : t.proposer)}
-                            role={
-                              profiles.get(t.proposer === userId ? t.recipient : t.proposer)?.role
-                            }
-                          />{' '}
-                          {t.created_at ? ` · ${new Date(t.created_at).toLocaleDateString()}` : ''}
-                        </span>
+              {/* Wide screens: the selected friend's detail, beside the list. */}
+              <aside
+                aria-label="Friend details"
+                className="hidden lg:block lg:sticky lg:top-4 bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-4"
+              >
+                {activeFriend ? (
+                  <>
+                    <div className="heading-font text-sm mb-1 flex flex-wrap items-center gap-2">
+                      {activeFriend.other ? (
+                        <PlayerLink
+                          id={activeFriend.otherId}
+                          name={activeFriend.other.username}
+                          role={activeFriend.other.role}
+                        />
+                      ) : (
+                        'Unknown player'
+                      )}
+                    </div>
+                    {activeFriend.other && (
+                      <div className="fs-sm font-bold text-[var(--c-steel)] mb-3">
+                        LV {activeFriend.other.level} · {activeFriend.other.wins}W{' '}
+                        {activeFriend.other.losses}L
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
+                    )}
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {friendActions(activeFriend.friendship.id, activeFriend.other, true)}
+                    </div>
+                    <div className="heading-font fs-sm mb-2">OPEN TRADES WITH THEM</div>
+                    {tradesWithActive.length === 0 ? (
+                      <p className="fs-xs font-bold text-[var(--c-steel)]">
+                        None. Use TRADE to propose a swap.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {tradesWithActive.map((t) => tradeCard(t))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="fs-sm font-bold text-[var(--c-steel)]">
+                    {loading
+                      ? 'Loading…'
+                      : 'Select a friend to see their details, start a trade or remove them.'}
+                  </p>
+                )}
+              </aside>
+            </div>
+          ) : (
+            <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+              <div className="min-w-0">
+                {/* Pending trades */}
+                <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
+                  OPEN TRADES
+                </h2>
+                <div className="flex flex-col gap-3 mb-7">
+                  {/* Narrow screens: every open trade in full, stacked. */}
+                  {pendingTrades.map((t) => (
+                    <div key={t.id} className="lg:hidden">
+                      {tradeCard(t)}
+                    </div>
+                  ))}
+                  {loading && (
+                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
+                      Loading…
+                    </div>
+                  )}
+                  {/* Wide screens: one compact, selectable row per trade. */}
+                  {pendingTrades.map((t) => {
+                    const isIncoming = t.recipient === userId;
+                    const selected = t.id === activeTrade?.id;
+                    const other = isIncoming ? t.proposer : t.recipient;
+                    const give = isIncoming ? t.recipient_cards : t.proposer_cards;
+                    const giveCr = isIncoming ? t.recipient_credits : t.proposer_credits;
+                    const get = isIncoming ? t.proposer_cards : t.recipient_cards;
+                    const getCr = isIncoming ? t.proposer_credits : t.recipient_credits;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setSelectedTradeId(t.id)}
+                        className={cn(
+                          'hidden lg:block text-left ink-border-md px-3 py-2',
+                          selected
+                            ? 'bg-[var(--c-yellow)] shadow-hard-black-sm'
+                            : 'bg-[var(--c-paper)] shadow-hard-black-xs hover:bg-[var(--c-yellow)]/30',
+                        )}
+                      >
+                        <span className="heading-font fs-sm block">
+                          {isIncoming ? 'FROM' : 'TO'} {nameOf(other).toUpperCase()}
+                        </span>
+                        <span className="fs-xs font-bold block text-[var(--c-steel)]">
+                          You give {tradeSideSummary(give, giveCr ?? 0)} · you get{' '}
+                          {tradeSideSummary(get, getCr ?? 0)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {!loading && pendingTrades.length === 0 && (
+                    <div className="text-[11px] font-bold text-[var(--c-steel)] py-4">
+                      <p className="mb-2">
+                        No open trades. Start one from the TRADE button next to a friend.
+                      </p>
+                      <PopButton color="yellow" onClick={() => setTab('friends')}>
+                        GO TO FRIENDS ▸
+                      </PopButton>
+                    </div>
+                  )}
+                </div>
+
+                {/* History */}
+                {doneTrades.length > 0 && (
+                  <>
+                    <h2 className="heading-font text-base mb-2 bg-[var(--c-steel)] text-[var(--c-paper)] inline-block px-2 py-0.5">
+                      RECENT HISTORY
+                    </h2>
+                    <div className="flex flex-col gap-2">
+                      {doneTrades.map((t) => (
+                        <div
+                          key={t.id}
+                          className="ink-border-sm px-3 py-2 bg-[var(--c-paper)] flex flex-wrap items-center gap-2"
+                        >
+                          <span
+                            className={cn(
+                              'fs-xs font-black px-1 ink-border-sm',
+                              t.status === 'accepted'
+                                ? 'bg-[#22C55E] text-[#052E12]'
+                                : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+                            )}
+                          >
+                            {(t.status || 'UNKNOWN').toUpperCase()}
+                          </span>
+                          <span className="fs-xs font-bold">
+                            <PlayerLink
+                              id={t.proposer === userId ? t.recipient : t.proposer}
+                              name={nameOf(t.proposer === userId ? t.recipient : t.proposer)}
+                              role={
+                                profiles.get(t.proposer === userId ? t.recipient : t.proposer)?.role
+                              }
+                            />{' '}
+                            {t.created_at
+                              ? ` · ${new Date(t.created_at).toLocaleDateString()}`
+                              : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <aside aria-label="Trade details" className="hidden lg:block lg:sticky lg:top-4">
+                {activeTrade ? (
+                  tradeCard(activeTrade)
+                ) : (
+                  <p className="fs-sm font-bold text-[var(--c-steel)] ink-border-md p-4">
+                    {loading ? 'Loading…' : 'Select a trade to see exactly what moves.'}
+                  </p>
+                )}
+              </aside>
+            </div>
           ))}
       </div>
 
@@ -922,10 +1095,10 @@ function TradeComposerModal({
                 <button
                   onClick={() => toggle(list, setList, c.card_id, false, normalMax)}
                   className={cn(
-                    'text-[9px] font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
+                    'fs-xs font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
                     pickedQty(list, c.card_id, false) > 0 &&
-                      'outline outline-2 outline-[var(--c-red)]',
+                      'outline outline-2 outline-[var(--c-ink)]',
                   )}
                 >
                   {cardName(c.card_id)} ×{normalMax}
@@ -937,10 +1110,10 @@ function TradeComposerModal({
                 <button
                   onClick={() => toggle(list, setList, c.card_id, true, foilMax)}
                   className={cn(
-                    'text-[9px] font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
+                    'fs-xs font-black px-1.5 py-0.5 min-h-10 sm:min-h-0 ink-border-sm',
                     RARITY_CHIP[def?.rarity || 'Common'] || RARITY_CHIP.Common,
                     pickedQty(list, c.card_id, true) > 0 &&
-                      'outline outline-2 outline-[var(--c-red)]',
+                      'outline outline-2 outline-[var(--c-ink)]',
                   )}
                 >
                   {cardName(c.card_id)} ✦×{foilMax}
@@ -951,7 +1124,7 @@ function TradeComposerModal({
           );
         })}
       {source.length === 0 && (
-        <span className="text-[10px] font-bold text-[var(--c-steel)]">No tradable cards.</span>
+        <span className="fs-xs font-bold text-[var(--c-steel)]">No tradable cards.</span>
       )}
     </div>
   );
@@ -991,7 +1164,7 @@ function TradeComposerModal({
               <Notice text={error} />
             </div>
           )}
-          <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+          <p className="fs-xs font-bold text-[var(--c-steel)] mb-3">
             Tap cards to add copies to the trade (tap past the max to clear). Cards locked into
             decks can't be traded. {partner.username} must accept before anything moves.
           </p>
@@ -1015,14 +1188,14 @@ function TradeComposerModal({
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
-            <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+            <span className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
               credits (you have <Credits amount={profile?.credits} />)
             </span>
           </div>
 
           <div className="heading-font text-xs mb-1">YOU RECEIVE (from {partner.username})</div>
           {theirCollectionError ? (
-            <div className="text-[10px] font-bold text-[var(--c-steel)] py-4">
+            <div className="fs-xs font-bold text-[var(--c-steel)] py-4">
               Couldn't load their collection.{' '}
               <button
                 type="button"
@@ -1033,7 +1206,7 @@ function TradeComposerModal({
               </button>
             </div>
           ) : theirCollection === null ? (
-            <div className="text-[10px] font-bold text-[var(--c-steel)] py-4 animate-pulse">
+            <div className="fs-xs font-bold text-[var(--c-steel)] py-4 animate-pulse">
               Loading their collection…
             </div>
           ) : (
@@ -1050,7 +1223,7 @@ function TradeComposerModal({
               }
               className="w-28 px-2 py-1 ink-border-sm font-bold text-xs"
             />
-            <span className="text-[9px] font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
+            <span className="fs-xs font-bold text-[var(--c-steel)] inline-flex items-center gap-0.5">
               credits requested (<Credits amount={requestCredits} />)
             </span>
           </div>
@@ -1060,7 +1233,7 @@ function TradeComposerModal({
               CANCEL
             </PopButton>
             <PopButton
-              color="red"
+              color="yellow"
               disabled={
                 busy ||
                 (offer.length === 0 &&

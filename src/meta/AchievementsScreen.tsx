@@ -11,11 +11,36 @@ import {
   PlayerAchievement,
   Mission,
 } from '../lib/supabase';
-import { MetaHeader, PopButton, Notice, ProgressBar } from './ui';
+import { MetaHeader, PopButton, Notice, ProgressBar, Tabs } from './ui';
 import { cn } from '../lib/utils';
 import { fmtCredits, fmtVouchers } from './economy';
+import { isCpuLocked } from './cpuAccess';
+import { usePersistedState } from './usePersistedState';
 
 type Tab = 'missions' | 'achievements' | 'bingo';
+const isTab = (v: unknown): v is Tab => v === 'missions' || v === 'achievements' || v === 'bingo';
+
+/**
+ * Missions that can only be progressed by playing a match. While CPU play is
+ * locked for the account (see `isCpuLocked`) they are impossible, so the
+ * screen greys them out and keeps them out of the claimable counts.
+ */
+export const MATCH_MISSION_IDS: ReadonlySet<string> = new Set([
+  'd_play_3',
+  'd_win_1',
+  'd_win_2',
+  'w_games_10',
+  'w_play_15',
+  'w_win_8',
+]);
+/** Stat keys that only move when a match is played. */
+export const MATCH_STAT_KEYS: ReadonlySet<string> = new Set(['games_played', 'wins']);
+
+/** True when finishing the objective needs a match (mission list, stat keys or
+ * the battle achievement category). */
+export function isMatchObjective(o: { id: string; stat_key: string; category?: string }): boolean {
+  return MATCH_MISSION_IDS.has(o.id) || MATCH_STAT_KEYS.has(o.stat_key) || o.category === 'battle';
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   battle: 'BATTLE',
@@ -27,8 +52,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function AchievementsScreen({ onBack }: { onBack: () => void }) {
-  const { session, packTypes, refreshProfile, refreshInventory } = useMeta();
-  const [tab, setTab] = useState<Tab>('missions');
+  const { session, profile, guest, packTypes, refreshProfile, refreshInventory } = useMeta();
+  const [tab, setTab] = usePersistedState<Tab>('achievements.tab', 'missions', isTab);
+  const cpuLocked = isCpuLocked(profile, guest);
+  const lockedObjective = (o: { id: string; stat_key: string; category?: string }) =>
+    cpuLocked && isMatchObjective(o);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [mine, setMine] = useState<Map<string, PlayerAchievement>>(new Map());
   const [missions, setMissions] = useState<Mission[]>([]);
@@ -134,33 +162,63 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Claim every finished, unclaimed mission in one go. Sequential, not
-  // parallel: each claim credits the profile and the server locks it.
-  const claimable = missions.filter((m) => m.progress >= m.target && !m.claimed);
-  const handleClaimAll = async () => {
-    if (busyId || claimable.length === 0) return;
+  // Claim All. Sequential, not parallel: each claim credits the profile and the
+  // server locks it. Uses only the existing single-claim calls; stops at the
+  // first error and reports what landed before it. Objectives that need a match
+  // while CPU play is locked are never counted.
+  const claimable = missions.filter(
+    (m) => m.progress >= m.target && !m.claimed && !lockedObjective(m),
+  );
+  const claimableAch = achievements.filter((a) => {
+    const p = mine.get(a.id);
+    return !!p && p.progress >= a.target && !p.claimed && !lockedObjective(a);
+  });
+
+  const handleClaimAll = async (kind: 'missions' | 'achievements') => {
+    const list: { id: string; name: string; credits: number; vouchers: number; pack: boolean }[] =
+      kind === 'missions'
+        ? claimable.map((m) => ({
+            id: m.id,
+            name: m.name,
+            credits: m.reward_credits,
+            vouchers: m.reward_vouchers,
+            pack: false,
+          }))
+        : claimableAch.map((a) => ({
+            id: a.id,
+            name: a.name,
+            credits: a.reward_credits,
+            vouchers: a.reward_vouchers,
+            pack: !!a.reward_pack_id,
+          }));
+    if (busyId || list.length === 0) return;
     setError('');
     setNotice('');
     setBusyId('__all__');
     let ok = 0;
     let credits = 0;
     let vouchers = 0;
+    let packs = 0;
     try {
-      for (const m of claimable) {
-        const err = await claimMission(m.id);
+      for (const it of list) {
+        const err = kind === 'missions' ? await claimMission(it.id) : await claimAchievement(it.id);
         if (err) {
-          setError(`Stopped at "${m.name}": ${err}`);
+          setError(`Stopped at "${it.name}": ${err}`);
           break;
         }
         ok++;
-        credits += m.reward_credits;
-        vouchers += m.reward_vouchers;
+        credits += it.credits;
+        vouchers += it.vouchers;
+        if (it.pack) packs++;
       }
       if (ok > 0)
         setNotice(
-          `Claimed ${ok} mission${ok === 1 ? '' : 's'} — +${credits.toLocaleString('en-US')} credits${vouchers ? `, +${vouchers} vouchers` : ''}.`,
+          `Claimed ${ok} ${kind === 'missions' ? 'mission' : 'achievement'}${ok === 1 ? '' : 's'}` +
+            ` — +${credits.toLocaleString('en-US')} credits` +
+            `${vouchers ? `, +${vouchers} vouchers` : ''}${packs ? `, +${packs} pack${packs === 1 ? '' : 's'}` : ''}.`,
         );
       await refreshProfile();
+      if (packs > 0) await refreshInventory();
       await reload(undefined, { background: true });
     } catch {
       setError('Something went wrong — check your connection and try again.');
@@ -180,7 +238,10 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
     return g;
   }, [achievements]);
 
-  const completedCount = achievements.filter((a) => {
+  // While CPU play is locked the battle achievements cannot be earned, so they
+  // stay out of the "x/y done" tally rather than making it look unfinishable.
+  const countable = achievements.filter((a) => !lockedObjective(a));
+  const completedCount = countable.filter((a) => {
     const p = mine.get(a.id);
     return p && p.progress >= a.target;
   }).length;
@@ -193,61 +254,85 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
   ) => (
     <div className="flex flex-wrap items-center gap-1.5">
       {credits > 0 && (
-        <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-yellow)] px-1 ink-border-sm">
-          <Coins className="w-2.5 h-2.5" /> {fmtCredits(credits)}
+        <span className="flex items-center gap-0.5 fs-xs font-black bg-[var(--c-yellow)] px-1 ink-border-sm">
+          <Coins className="w-3 h-3" /> {fmtCredits(credits)}
         </span>
       )}
       {vouchers > 0 && (
-        <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-steel)] text-[var(--c-paper)] px-1 ink-border-sm">
-          <Ticket className="w-2.5 h-2.5" /> {fmtVouchers(vouchers)}
+        <span className="flex items-center gap-0.5 fs-xs font-black bg-[var(--c-steel)] text-[var(--c-paper)] px-1 ink-border-sm">
+          <Ticket className="w-3 h-3" /> {fmtVouchers(vouchers)}
         </span>
       )}
       {packId && (
-        <span className="flex items-center gap-0.5 text-[9px] font-black bg-[var(--c-red)] text-[var(--c-paper)] px-1 ink-border-sm">
-          <Package className="w-2.5 h-2.5" /> {packById.get(packId)?.name || 'Bonus pack'}
+        <span className="flex items-center gap-0.5 fs-xs font-black bg-[var(--c-ink)] text-[var(--c-yellow)] px-1 ink-border-sm">
+          <Package className="w-3 h-3" /> {packById.get(packId)?.name || 'Bonus pack'}
         </span>
       )}
       {(bpXp ?? 0) > 0 && (
-        <span className="flex items-center gap-0.5 text-[9px] font-black bg-[#A855F7] text-white px-1 ink-border-sm">
-          <Zap className="w-2.5 h-2.5" /> {bpXp} PASS XP
+        <span className="flex items-center gap-0.5 fs-xs font-black bg-[#A855F7] text-white px-1 ink-border-sm">
+          <Zap className="w-3 h-3" /> {bpXp} PASS XP
         </span>
       )}
     </div>
   );
 
+  const lockedChip = (
+    <span
+      className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm"
+      title="Needs CPU battles, which are not open to your account yet"
+    >
+      NEEDS CPU BATTLES
+    </span>
+  );
+
+  const claimAllButton = (kind: 'missions' | 'achievements', count: number) =>
+    count > 1 ? (
+      <div className="mb-4">
+        <PopButton color="yellow" disabled={!!busyId} onClick={() => void handleClaimAll(kind)}>
+          {busyId === '__all__' ? 'CLAIMING…' : `CLAIM ALL (${count})`}
+        </PopButton>
+      </div>
+    ) : null;
+
   return (
     <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="MISSIONS & ACHIEVEMENTS" onBack={onBack} />
       <div className="p-5 max-w-5xl mx-auto">
-        {/* flex-wrap: the second tab's label carries a live count, and at a
-            large browser font size the two of them are wider than a phone —
-            v29's text-resize sweep measured this row at 548px against a 375px
-            viewport. A tab row is the last thing that should push a screen
-            sideways. */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <PopButton
-            color={tab === 'missions' ? 'black' : 'yellow'}
-            onClick={() => setTab('missions')}
-          >
-            <span className="flex items-center gap-1">
-              <Target className="w-3.5 h-3.5" /> MISSIONS
-            </span>
-          </PopButton>
-          <PopButton
-            color={tab === 'achievements' ? 'black' : 'yellow'}
-            onClick={() => setTab('achievements')}
-          >
-            <span className="flex items-center gap-1">
-              <Trophy className="w-3.5 h-3.5" /> ACHIEVEMENTS ({completedCount}/
-              {achievements.length})
-            </span>
-          </PopButton>
-          <PopButton color={tab === 'bingo' ? 'black' : 'yellow'} onClick={() => setTab('bingo')}>
-            <span className="flex items-center gap-1">
-              <Grid3x3 className="w-3.5 h-3.5" /> WEEKLY BINGO
-            </span>
-          </PopButton>
-        </div>
+        <Tabs<Tab>
+          ariaLabel="Missions and achievements"
+          className="mb-4"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            {
+              id: 'missions',
+              label: (
+                <span className="flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5" /> MISSIONS
+                </span>
+              ),
+              badge: claimable.length,
+            },
+            {
+              id: 'achievements',
+              label: (
+                <span className="flex items-center gap-1">
+                  <Trophy className="w-3.5 h-3.5" /> ACHIEVEMENTS ({completedCount}/
+                  {countable.length})
+                </span>
+              ),
+              badge: claimableAch.length,
+            },
+            {
+              id: 'bingo',
+              label: (
+                <span className="flex items-center gap-1">
+                  <Grid3x3 className="w-3.5 h-3.5" /> WEEKLY BINGO
+                </span>
+              ),
+            },
+          ]}
+        />
 
         {error && (
           <div className="mb-4">
@@ -259,6 +344,12 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
             <Notice text={notice} kind="success" />
           </div>
         )}
+        {cpuLocked && tab !== 'bingo' && !loading && !loadError && (
+          <p className="fs-xs font-bold text-[var(--c-steel)] mb-4 max-w-2xl">
+            Objectives that need a CPU battle are greyed out — CPU battles are not open to your
+            account yet, so they cannot be completed and are left out of CLAIM ALL.
+          </p>
+        )}
 
         {loading ? (
           <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
@@ -268,7 +359,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
           <div className="text-center py-16">
             <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
             <PopButton
-              color="red"
+              color="yellow"
               onClick={() => {
                 setLoading(true);
                 setAttempt((n) => n + 1);
@@ -283,16 +374,15 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
           <>
             {missions.length === 0 && (
               <div className="text-center font-bold text-[var(--c-steel)] py-16">
-                No missions available right now — check back after the next reset.
-              </div>
-            )}
-            {claimable.length > 1 && (
-              <div className="mb-4">
-                <PopButton color="red" disabled={!!busyId} onClick={() => void handleClaimAll()}>
-                  {busyId === '__all__' ? 'CLAIMING…' : `CLAIM ALL (${claimable.length})`}
+                <p className="mb-3">
+                  No missions available right now — check back after the next reset.
+                </p>
+                <PopButton color="yellow" onClick={onBack}>
+                  BACK TO MENU
                 </PopButton>
               </div>
             )}
+            {claimAllButton('missions', claimable.length)}
             {(['daily', 'weekly'] as const).map((cadence) => {
               const list = missions.filter((m) => m.cadence === cadence);
               if (list.length === 0) return null;
@@ -301,7 +391,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                   <h2 className="heading-font text-base mb-2 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
                     {cadence === 'daily' ? 'DAILY MISSIONS' : 'WEEKLY MISSIONS'}
                   </h2>
-                  <div className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
+                  <div className="fs-xs font-bold text-[var(--c-steel)] mb-3">
                     {/* The server tracks mission periods in UTC — saying a
                         bare "midnight" here promised local-time resets the
                         server doesn't deliver. */}
@@ -313,14 +403,23 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                   <div className="flex flex-col gap-3">
                     {list.map((m) => {
                       const done = m.progress >= m.target;
+                      const locked = lockedObjective(m);
                       return (
                         <div
                           key={m.id}
-                          className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 flex flex-wrap items-center gap-3"
+                          className={cn(
+                            'bg-[var(--c-paper)] ink-border-md p-3 flex flex-wrap items-center gap-3',
+                            locked && !done
+                              ? 'opacity-60 shadow-hard-black-xs'
+                              : 'shadow-hard-black-sm',
+                          )}
                         >
                           <div className="flex-1 min-w-[200px]">
-                            <div className="heading-font text-xs">{m.name}</div>
-                            <div className="text-[10px] font-bold text-[var(--c-steel)]">
+                            <div className="heading-font text-xs flex flex-wrap items-center gap-1.5">
+                              {m.name}
+                              {locked && lockedChip}
+                            </div>
+                            <div className="fs-xs font-bold text-[var(--c-steel)]">
                               {m.description}
                             </div>
                             <div className="flex items-center gap-2 mt-1.5">
@@ -329,23 +428,29 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                                 max={m.target}
                                 className="flex-1 max-w-[200px]"
                               />
-                              <span className="text-[9px] font-mono font-bold">
+                              <span className="fs-xs font-mono font-bold">
                                 {m.progress}/{m.target}
                               </span>
                             </div>
                           </div>
                           {rewardChips(m.reward_credits, m.reward_vouchers, null, m.reward_bp_xp)}
                           {m.claimed ? (
-                            <div className="flex items-center gap-1 heading-font text-[10px] px-3 py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
+                            <div className="flex items-center gap-1 heading-font fs-xs px-3 py-1.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                               <Check className="w-3 h-3" /> CLAIMED
                             </div>
                           ) : (
                             <PopButton
-                              color={done ? 'red' : 'steel'}
+                              color={done ? 'yellow' : 'steel'}
                               disabled={!done || !!busyId}
                               onClick={() => handleClaimMission(m)}
                             >
-                              {busyId === m.id ? 'CLAIMING…' : done ? 'CLAIM ▸' : 'IN PROGRESS'}
+                              {busyId === m.id
+                                ? 'CLAIMING…'
+                                : done
+                                  ? 'CLAIM ▸'
+                                  : locked
+                                    ? 'LOCKED'
+                                    : 'IN PROGRESS'}
                             </PopButton>
                           )}
                         </div>
@@ -360,9 +465,15 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
           <>
             {achievements.length === 0 && (
               <div className="text-center font-bold text-[var(--c-steel)] py-16">
-                No achievements to show yet.
+                <p className="mb-3">
+                  No achievements to show yet — play, collect and trade to earn them.
+                </p>
+                <PopButton color="yellow" onClick={onBack}>
+                  BACK TO MENU
+                </PopButton>
               </div>
             )}
+            {claimAllButton('achievements', claimableAch.length)}
             {[...grouped.entries()].map(([category, list]) => (
               <div key={category} className="mb-7">
                 <h2 className="heading-font text-base mb-3 bg-[var(--c-ink)] text-[var(--c-yellow)] inline-block px-2 py-0.5">
@@ -375,17 +486,20 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                     const shown = Math.min(progress, a.target);
                     const done = progress >= a.target;
                     const claimed = p?.claimed ?? false;
+                    const locked = lockedObjective(a);
                     return (
                       <div
                         key={a.id}
                         className={cn(
                           'ink-border-md p-3 bg-[var(--c-paper)]',
-                          claimed ? 'opacity-60 shadow-hard-black-xs' : 'shadow-hard-black-sm',
+                          claimed || (locked && !done)
+                            ? 'opacity-60 shadow-hard-black-xs'
+                            : 'shadow-hard-black-sm',
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="heading-font text-xs flex items-center gap-1.5">
+                            <div className="heading-font text-xs flex flex-wrap items-center gap-1.5">
                               <Trophy
                                 className={cn(
                                   'w-3.5 h-3.5',
@@ -393,18 +507,19 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                                 )}
                               />
                               {a.name}
+                              {locked && lockedChip}
                             </div>
-                            <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
+                            <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
                               {a.description}
                             </div>
                           </div>
                           {claimed ? (
-                            <span className="flex items-center gap-1 heading-font text-[9px] px-2 py-1 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm shrink-0">
+                            <span className="flex items-center gap-1 heading-font fs-xs px-2 py-1 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm shrink-0">
                               <Check className="w-3 h-3" /> DONE
                             </span>
                           ) : (
                             <PopButton
-                              color={done ? 'red' : 'steel'}
+                              color={done ? 'yellow' : 'steel'}
                               disabled={!done || !!busyId}
                               onClick={() => handleClaimAchievement(a)}
                               className="shrink-0"
@@ -415,7 +530,7 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
                         </div>
                         <div className="flex items-center gap-2 mt-2">
                           <ProgressBar value={progress} max={a.target} className="flex-1" />
-                          <span className="text-[9px] font-mono font-bold">
+                          <span className="fs-xs font-mono font-bold">
                             {shown}/{a.target}
                           </span>
                         </div>
@@ -437,12 +552,12 @@ export function AchievementsScreen({ onBack }: { onBack: () => void }) {
 
 /** Time until the next UTC mission reset (daily: midnight; weekly: Monday). */
 export function untilReset(cadence: 'daily' | 'weekly', now = new Date()): string {
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-  if (cadence === 'weekly') {
-    // getUTCDay: 0 = Sunday … 1 = Monday. Days until the next Monday 00:00.
-    const add = (8 - now.getUTCDay()) % 7 || 7;
-    next.setUTCDate(now.getUTCDate() + add);
-  }
+  // Build the target from calendar parts in ONE Date.UTC call. Month overflow
+  // (day 32 -> the 1st of next month) is handled by Date.UTC itself; applying
+  // setUTCDate to an already-advanced date double-counted the month end.
+  // getUTCDay: 0 = Sunday … 1 = Monday. Days until the next Monday 00:00.
+  const add = cadence === 'weekly' ? (8 - now.getUTCDay()) % 7 || 7 : 1;
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + add));
   const mins = Math.max(0, Math.ceil((next.getTime() - now.getTime()) / 60000));
   const d = Math.floor(mins / 1440);
   const h = Math.floor((mins % 1440) / 60);
