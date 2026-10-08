@@ -362,7 +362,7 @@ Everything here has a started implementation and a visible seam.
   in one of nine recipes does not make a gap one-signed in eight of eight.
   This is a DECK-RECIPE question before it is a card question: re-roll
   Ruin-Walker's deck #1 recipe and re-measure before anyone touches a card.
-  Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v26 re-measurement.
+  Full numbers: `docs/BALANCE_SIM_FINDINGS_v24.md` § v26 re-measurement (removed 2026-10; in git history).
   v26 also narrowed the `Sacred` item — one-signed positive across all eight
   cohorts, so the SIGN is stable and only the magnitude (+0.1 … +10.3) is
   cohort composition; a pass quoting a double-digit Sacred delta off a single
@@ -761,7 +761,7 @@ Ordered by how much they change what it feels like to own and play the game.
   any type carried — engine-tested (`keywords-v24-events.test.ts`) and listed
   in `UNPRINTED_KEYWORDS`. Printing them has a known shape too: the Event
   keyword roll's 76-100 band currently prints nothing, so a 76-92 band (used
-  by the reverted v24 experiment, see `docs/BALANCE_SIM_FINDINGS_v24.md`)
+  by the reverted v24 experiment, see `docs/BALANCE_SIM_FINDINGS_v24.md` in git history)
   prints them upward-only without re-rolling any carrier. `freshKeywordFor`
   excludes `UNPRINTED_KEYWORDS` — deleting a keyword from that list without
   giving it its own band re-rolls every colour-fallback Event.

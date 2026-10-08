@@ -1,4 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { recordPack } from './packHistory';
+import { askConfirm } from './confirm';
+import { loadWishlist } from './wishlist';
+import { useReducedMotion } from './useMotionMode';
 import { Coins, Sparkles, Zap } from 'lucide-react';
 import { PackPull, quicksellCards } from '../lib/supabase';
 import { CardDef } from '../game/v3/cards';
@@ -42,19 +46,7 @@ function pullToDef(pull: PackPull): CardDef {
   );
 }
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
-}
+const usePrefersReducedMotion = useReducedMotion;
 
 /** Face-down card showing the player's equipped card back. */
 function CardBackFace() {
@@ -177,8 +169,10 @@ const PACK_OPENING_CSS = `
   100% { transform: rotateY(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .po-anim { animation: none !important; }
+  html:not([data-motion='full']) .po-anim { animation: none !important; }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .po-anim { animation: none !important; }
 `;
 
 type Stage = 'pack' | 'reveal' | 'summary';
@@ -195,6 +189,11 @@ export function PackOpening({
   onDone: () => void;
 }) {
   const reducedMotion = usePrefersReducedMotion();
+  // Log this pack once, at mount (pack history, quick win 13).
+  useEffect(() => {
+    recordPack(packName, pulls);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // An empty pull list (bad server response) would strand the player on a
   // reveal stage that renders nothing — go straight to the summary instead.
   const [stage, setStage] = useState<Stage>(pulls.length === 0 ? 'summary' : 'pack');
@@ -615,6 +614,7 @@ function RevealStage({
                     : undefined
                 }
               />
+              {currentShown && isWishlisted(current.card_id) && <WishlistHit />}
               {/* foil sheen sweep */}
               {currentShown && current.foil && !reducedMotion && (
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -818,7 +818,9 @@ function SummaryStage({
   const quicksellClutter = async () => {
     if (sellBusy || clutterIndices.length === 0) return;
     if (
-      !confirm(`Quicksell ${clutterIndices.length} common/uncommon card(s)? This can't be undone.`)
+      !(await askConfirm(
+        `Quicksell ${clutterIndices.length} common/uncommon card(s)? This can't be undone.`,
+      ))
     )
       return;
     setSellBusy(true);
@@ -999,6 +1001,7 @@ function SummaryStage({
                       : undefined
                   }
                 />
+                {isWishlisted(grp.pull.card_id) && <WishlistHit small />}
                 {spent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
@@ -1084,5 +1087,24 @@ function StatTile({
         {value}
       </div>
     </div>
+  );
+}
+
+/** A card the player hearted in the Collection's wishlist. Read per call:
+ * localStorage is cheap and the list can change between packs. */
+function isWishlisted(cardId: string | undefined): boolean {
+  return !!cardId && loadWishlist().has(cardId);
+}
+
+function WishlistHit({ small }: { small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'absolute z-10 left-1/2 -translate-x-1/2 heading-font bg-[var(--c-red)] text-white ink-border-sm shadow-hard-black-xs whitespace-nowrap pointer-events-none',
+        small ? '-top-2 text-[8px] px-1' : '-top-3 text-[11px] px-2 py-0.5',
+      )}
+    >
+      ♥ WISHLIST HIT!
+    </span>
   );
 }

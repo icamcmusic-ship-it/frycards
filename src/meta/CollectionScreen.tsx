@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { askConfirm } from './confirm';
 import { useMeta } from './MetaContext';
 import {
   MetaHeader,
@@ -13,14 +14,22 @@ import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
 import { collectionCsv, downloadText } from './csv';
-import { loadWishlist, saveWishlist, toggleWishlisted } from './wishlist';
+import {
+  loadWishlist,
+  pushWishlistToggle,
+  saveWishlist,
+  syncWishlist,
+  toggleWishlisted,
+} from './wishlist';
 import { Card3DInspector } from '../components/Card3DInspector';
 import { POOL_V4, POOL_BY_ID } from '../game/v3/cardpool';
 import { CardDef, totalCost } from '../game/v3/cards';
 import { RARITIES } from '../types';
 import { quicksellCards, setShowcaseCards } from '../lib/supabase';
-import { GradedCard, fetchGradedCards } from './grading';
-import { GradedSlab, SLAB_CSS } from './GradedSlab';
+import { GradedCard, fetchGradedCards, gradedQuicksellPrice } from './grading';
+import { GradedSlab } from './GradedSlab';
+import { SlabDetailModal } from './SlabDetailModal';
+import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
 import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
@@ -102,6 +111,7 @@ const CollectionTile = React.memo(function CollectionTile({
   serialCap,
   narrow,
   wished,
+  isNew,
   onInspect,
 }: {
   def: CardDef;
@@ -111,6 +121,8 @@ const CollectionTile = React.memo(function CollectionTile({
   serialCap?: number;
   narrow: boolean;
   wished: boolean;
+  /** Owned now but not at the last visit to the Collection. */
+  isNew?: boolean;
   onInspect: (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => void;
 }) {
   const size = narrow ? 'standard' : 'full';
@@ -140,7 +152,7 @@ const CollectionTile = React.memo(function CollectionTile({
         foil={kind === 'foil'}
         serial={serial}
         dimmed={kind === 'normal' && count === 0}
-        badge={wished ? '♥ WISH' : undefined}
+        badge={isNew ? '● NEW' : wished ? '♥ WISH' : undefined}
         onClick={onClick}
       />
     </div>
@@ -188,13 +200,29 @@ export function CollectionScreen({
   const [spareOnly, setSpareOnly] = useState(false);
   const [wishOnly, setWishOnly] = useState(false);
   const [wishlist, setWishlist] = useState(loadWishlist);
-  const toggleWish = useCallback((cardId: string) => {
-    setWishlist((w) => {
-      const next = toggleWishlisted(w, cardId);
-      saveWishlist(next);
-      return next;
+  // Pull the account's server-side wishlist (merging this browser's in).
+  const wishUserId = profile?.id;
+  useEffect(() => {
+    if (!wishUserId) return;
+    let cancelled = false;
+    void syncWishlist(wishUserId).then((merged) => {
+      if (!cancelled) setWishlist(merged);
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [wishUserId]);
+  const toggleWish = useCallback(
+    (cardId: string) => {
+      setWishlist((w) => {
+        const next = toggleWishlisted(w, cardId);
+        saveWishlist(next);
+        if (wishUserId) pushWishlistToggle(wishUserId, cardId, next.has(cardId));
+        return next;
+      });
+    },
+    [wishUserId],
+  );
   const [search, setSearch] = useState('');
   // Graded slabs live in their own table (graded_cards) — encased copies are
   // out of player_cards entirely, so the shelf fetches them directly.
@@ -211,6 +239,19 @@ export function CollectionScreen({
       cancelled = true;
     };
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The slab whose detail sheet is open (graded_cards.id).
+  const [slabOpen, setSlabOpen] = useState<string | null>(null);
+  const [slabSort, setSlabSort] = useState<'pinned' | 'grade' | 'value' | 'service' | 'newest'>(
+    'pinned',
+  );
+  const reloadGraded = useCallback(async () => {
+    if (!profile) return;
+    try {
+      setGradedCards(await fetchGradedCards(profile.id));
+    } catch {
+      /* keep what is shown */
+    }
+  }, [profile]);
   const [sort, setSort] = useState<SortKey>('Name');
   // Which standalone tile in the grid is open in the inspector — normal,
   // foil, and each serialized print are now separate tiles (see `entries`
@@ -498,7 +539,52 @@ export function CollectionScreen({
       ...(totals.get(r) || { total: 0, owned: 0 }),
     })).filter((e) => e.total > 0);
   }, [owned]);
+  // Per-set and per-colour completion, same rule as rarityProgress (any copy
+  // counts). Multi-colour cards count toward each of their colours.
+  const [progressBy, setProgressBy] = useState<'rarity' | 'set' | 'colour'>('rarity');
+  const groupProgress = useMemo(() => {
+    const totals = new Map<string, { total: number; owned: number }>();
+    const bump = (k: string, has: boolean) => {
+      const e = totals.get(k) || { total: 0, owned: 0 };
+      e.total += 1;
+      if (has) e.owned += 1;
+      totals.set(k, e);
+    };
+    for (const c of POOL_V4) {
+      const o = owned.get(c.id);
+      const has = (o?.q || 0) + (o?.f || 0) > 0;
+      if (progressBy === 'set') bump(c.set ?? 'FryCards', has);
+      else if (progressBy === 'colour') {
+        const cols = c.type === 'Leader' ? [] : cardColors(c);
+        for (const col of cols.length ? cols : ['Colourless']) bump(String(col), has);
+      }
+    }
+    return [...totals.entries()]
+      .map(([label, e]) => ({ label, ...e }))
+      .sort((a, b) => b.total - a.total);
+  }, [owned, progressBy]);
   const [showProgress, setShowProgress] = useState(true);
+
+  // "New since your last visit": the owned-id set is snapshotted to
+  // localStorage, and anything owned now but missing from the snapshot is
+  // NEW for this visit. The snapshot is refreshed after the comparison, so
+  // the dots clear on the next visit, not while you are looking at them.
+  // Read once, at mount — before the effect below overwrites it.
+  const [seenAtMount] = useState(readSeenSnapshot);
+  const newIds = useMemo(() => {
+    if (!seenAtMount) return new Set<string>();
+    return new Set(
+      collection
+        .filter((c) => c.quantity + c.foil_quantity > 0 && !seenAtMount.has(c.card_id))
+        .map((c) => c.card_id),
+    );
+  }, [collection, seenAtMount]);
+  useEffect(() => {
+    if (dataLoading || collection.length === 0) return;
+    writeSeenSnapshot(
+      collection.filter((c) => c.quantity + c.foil_quantity > 0).map((c) => c.card_id),
+    );
+  }, [collection, dataLoading]);
 
   const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
 
@@ -580,6 +666,46 @@ export function CollectionScreen({
             ariaLabel="Collection progress"
           />
           {showProgress && (
+            <div className="flex gap-1 mt-3" role="group" aria-label="Completion by">
+              {(['rarity', 'set', 'colour'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={progressBy === k}
+                  onClick={() => setProgressBy(k)}
+                  className={cn(
+                    'heading-font text-[9px] px-2 py-0.5 ink-border-sm min-h-[24px]',
+                    progressBy === k
+                      ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
+                      : 'bg-[var(--c-paper)]',
+                  )}
+                >
+                  BY {k.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
+          {showProgress && progressBy !== 'rarity' && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
+              {groupProgress.map((e) => (
+                <div key={e.label}>
+                  <div className="flex justify-between text-[9px] font-black mb-0.5">
+                    <span className="truncate pr-1">{e.label.toUpperCase()}</span>
+                    <span className="font-mono">
+                      {e.owned}/{e.total}
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={e.owned}
+                    max={e.total}
+                    className="h-1.5"
+                    ariaLabel={`${e.label} cards collected`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {showProgress && progressBy === 'rarity' && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
               {rarityProgress.map((e) => (
                 <div key={e.rarity}>
@@ -652,23 +778,71 @@ export function CollectionScreen({
         {/* Graded shelf — encased slabs, each in its service's case style.
             Slabs are display/sale pieces (not deck-legal); selling and
             case-cracking live in the Grading Lab, so the shelf deep-links. */}
+        <AnimatePresence>
+          {slabOpen &&
+            (() => {
+              const g = gradedCards.find((x) => x.id === slabOpen);
+              if (!g) return null;
+              return (
+                <SlabDetailModal
+                  key={g.id}
+                  g={g}
+                  pinned={profile?.showcase_slabs ?? []}
+                  onClose={() => setSlabOpen(null)}
+                  onChanged={async (gone) => {
+                    await Promise.all([
+                      refreshProfile(),
+                      gone ? refreshCollection() : Promise.resolve(),
+                      reloadGraded(),
+                    ]);
+                  }}
+                  onShowroom={
+                    onShowroom && g.grade != null
+                      ? () => onShowroom({ kind: 'slab', gradedId: g.id })
+                      : undefined
+                  }
+                  onGrading={onGrading}
+                />
+              );
+            })()}
+        </AnimatePresence>
         {gradedCards.length > 0 && (
           <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
+              <span className="flex items-center gap-2">
+                <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
+                <select
+                  className="ink-border-sm text-[10px] font-bold px-1 py-0.5 min-h-[24px] bg-[var(--c-paper)]"
+                  aria-label="Sort graded cards"
+                  value={slabSort}
+                  onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
+                >
+                  <option value="pinned">Pinned first</option>
+                  <option value="grade">Grade</option>
+                  <option value="value">Value</option>
+                  <option value="service">Service</option>
+                  <option value="newest">Newest</option>
+                </select>
+              </span>
               <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                {onShowroom
-                  ? 'Click a slab for the Grading Lab · ⬛ 3D stands one in the Showroom'
-                  : 'Sell or crack slabs in the Grading Lab'}
+                Click a slab for details, showcasing, selling or cracking
+                {(profile?.showcase_slabs?.length ?? 0) > 0 &&
+                  ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
               </span>
             </div>
             {/* The slab's own keyframes travel with it — a top-grade case
                 shines on this shelf as well as in the Lab. */}
-            <style>{SLAB_CSS}</style>
             <div className="flex flex-wrap gap-2">
-              {gradedCards.map((g) => (
+              {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
                 <div key={g.id} className="flex flex-col gap-1 w-fit">
-                  <GradedSlab g={g} onClick={onGrading} />
+                  <div className="relative">
+                    <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
+                    {profile?.showcase_slabs?.includes(g.id) && (
+                      <span className="absolute -top-2 -right-2 heading-font text-[9px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
+                        ★ PINNED
+                      </span>
+                    )}
+                  </div>
                   {/* Only a GRADED slab can be stood up in the room: a pending
                       one has a frosted window and no grade to print, so the
                       3D view would be a blurred card in an empty case. */}
@@ -832,9 +1006,10 @@ export function CollectionScreen({
                     key={r}
                     color="yellow"
                     disabled={!!bulkBusy}
-                    onClick={() => {
+                    onClick={async () => {
                       const n = spareByRarity.get(r) || 0;
-                      if (confirm(`Quicksell all ${n} spare ${r} cards?`)) bulkQuicksell(r);
+                      if (await askConfirm(`Quicksell all ${n} spare ${r} cards?`))
+                        bulkQuicksell(r);
                     }}
                   >
                     {bulkBusy === r
@@ -859,6 +1034,7 @@ export function CollectionScreen({
               serialCap={e.serial?.cap}
               narrow={narrow}
               wished={wishlist.has(e.def.id)}
+              isNew={e.kind !== 'serialized' && newIds.has(e.def.id)}
               onInspect={openInspector}
             />
           ))}
@@ -1021,9 +1197,13 @@ export function CollectionScreen({
                         className="w-full"
                         disabled={selling || normalSellable <= 0}
                         ariaLabel={`Quicksell all normal spare copies of ${inspect.def.name}`}
-                        onClick={() => {
+                        onClick={async () => {
                           const n = normalSellable;
-                          if (confirm(`Quicksell all ${n} spare copies of ${inspect.def.name}?`))
+                          if (
+                            await askConfirm(
+                              `Quicksell all ${n} spare copies of ${inspect.def.name}?`,
+                            )
+                          )
                             handleSell(false, n);
                         }}
                       >
@@ -1051,10 +1231,10 @@ export function CollectionScreen({
                             className="w-full"
                             disabled={selling || foilSellable <= 0}
                             ariaLabel={`Quicksell all foil spare copies of ${inspect.def.name}`}
-                            onClick={() => {
+                            onClick={async () => {
                               const n = Math.min(inspectOwned?.f || 0, foilSellable);
                               if (
-                                confirm(
+                                await askConfirm(
                                   `Quicksell all ${n} spare foil copies of ${inspect.def.name}?`,
                                 )
                               )
@@ -1075,4 +1255,54 @@ export function CollectionScreen({
       )}
     </div>
   );
+}
+
+/** Graded-shelf ordering. Pending slabs (no grade yet) always sort last. */
+function sortSlabs(
+  rows: GradedCard[],
+  by: 'pinned' | 'grade' | 'value' | 'service' | 'newest',
+  pinned: string[],
+): GradedCard[] {
+  const value = (g: GradedCard) =>
+    g.grade == null
+      ? -1
+      : gradedQuicksellPrice(POOL_BY_ID[g.card_id]?.rarity, g.foil, g.grade, g.service);
+  const out = [...rows];
+  out.sort((a, b) => {
+    if ((a.grade == null) !== (b.grade == null)) return a.grade == null ? 1 : -1;
+    switch (by) {
+      case 'pinned': {
+        const pa = pinned.indexOf(a.id);
+        const pb = pinned.indexOf(b.id);
+        if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+        return (b.grade ?? 0) - (a.grade ?? 0);
+      }
+      case 'grade':
+        return (b.grade ?? 0) - (a.grade ?? 0) || value(b) - value(a);
+      case 'value':
+        return value(b) - value(a);
+      case 'service':
+        return a.service.localeCompare(b.service) || (b.grade ?? 0) - (a.grade ?? 0);
+      default:
+        return (b.revealed_at ?? b.submitted_at).localeCompare(a.revealed_at ?? a.submitted_at);
+    }
+  });
+  return out;
+}
+
+const SEEN_KEY = 'frycards:collection-seen';
+function readSeenSnapshot(): Set<string> | null {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+function writeSeenSnapshot(ids: string[]): void {
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(ids));
+  } catch {
+    /* private mode — no NEW dots, nothing else lost */
+  }
 }

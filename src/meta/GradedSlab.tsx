@@ -90,18 +90,160 @@ function certOf(id: string): { no: string; bars: number[] } {
   return { no, bars };
 }
 
-export const SLAB_CSS = `
-@keyframes slab-shine {
-  0% { transform: translateX(-120%) rotate(8deg); opacity: 0; }
-  12% { opacity: 0.85; }
-  55% { opacity: 0.5; }
-  100% { transform: translateX(240%) rotate(8deg); opacity: 0; }
+// The slab keyframes live in slabCss.ts so the App root can inject them once
+// without pulling the card renderer into the main bundle.
+export { SLAB_CSS } from './slabCss';
+
+/**
+ * Premium case for the top three grades. A 9 (MINT) gets a cool holo-steel
+ * case, a 9.5 (MINT+) a prismatic one, and a 10 (GEM MINT) a gold case with a
+ * turning ring and sparkles — the three should be told apart across a shelf.
+ */
+export type PremiumTier = 'mint' | 'mintplus' | 'gem' | null;
+export function premiumTier(grade: number | null): PremiumTier {
+  if (grade == null) return null;
+  if (grade >= 10) return 'gem';
+  if (grade >= 9.5) return 'mintplus';
+  if (grade >= 9) return 'mint';
+  return null;
 }
-.slab-shine { animation: slab-shine 4.5s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .slab-shine { animation: none; opacity: 0.25; }
+const PREMIUM: Record<
+  Exclude<PremiumTier, null>,
+  { ring: string; shell: string; badge: string }
+> = {
+  mint: {
+    ring: 'conic-gradient(from var(--slab-angle), #9fd8ff, #e9f6ff, #5aa9e6, #e9f6ff, #9fd8ff)',
+    shell: 'linear-gradient(135deg, #3c5a73 0%, #a9cbe3 45%, #3c5a73 100%)',
+    badge: 'MINT',
+  },
+  mintplus: {
+    ring: 'conic-gradient(from var(--slab-angle), #ff7ad9, #ffd36e, #7dffb0, #6ec8ff, #b98bff, #ff7ad9)',
+    shell:
+      'linear-gradient(110deg, #2b2440 0%, #6d5ba8 20%, #3f8fb0 40%, #5fb07a 60%, #b0904a 80%, #2b2440 100%)',
+    badge: 'MINT+',
+  },
+  gem: {
+    ring: 'conic-gradient(from var(--slab-angle), #fff3b0, #f0c419, #8a5a00, #ffe083, #fffbe6, #f0c419, #fff3b0)',
+    shell:
+      'linear-gradient(135deg, #5a3b00 0%, #f0c419 35%, #fff3b0 50%, #c48a00 70%, #5a3b00 100%)',
+    badge: '◆ GEM MINT',
+  },
+};
+
+/**
+ * Condition damage, drawn on the card under the glass. Graders grade the
+ * card's condition, so a low number must LOOK like the copy that earned it:
+ * 7.x is a single soft corner, 6.x adds edge whitening and a scuff, 5.x is
+ * creased, yellowed and in a cracked case. Deterministic per slab (seeded by
+ * the cert hash), so the same slab is always damaged the same way.
+ */
+export function conditionOf(grade: number | null): 0 | 1 | 2 | 3 {
+  if (grade == null || grade >= 8) return 0;
+  if (grade >= 7) return 1;
+  if (grade >= 6) return 2;
+  return 3;
 }
-`;
+/** A small LCG stream — pure per seed, so the same slab always wears the same way. */
+function seededRandom(seed: number): () => number {
+  const state = { x: seed >>> 0 };
+  return () => {
+    state.x = (Math.imul(state.x, 1664525) + 1013904223) >>> 0;
+    return state.x / 4294967296;
+  };
+}
+
+function Damage({ level, seed }: { level: 1 | 2 | 3; seed: number }) {
+  const rnd = seededRandom(seed || 7);
+  const corners: [number, number][] = [
+    [0, 0],
+    [100, 0],
+    [0, 140],
+    [100, 140],
+  ];
+  const worn = corners.filter((_, i) => i === Math.floor(rnd() * 4) || rnd() < (level - 1) * 0.35);
+  const scratches = level >= 2 ? 2 + Math.floor(rnd() * 3) : 0;
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 100 140"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      {level >= 2 && (
+        // edge whitening — a ragged pale frame
+        <rect
+          x="0.8"
+          y="0.8"
+          width="98.4"
+          height="138.4"
+          fill="none"
+          stroke="rgba(255,255,255,0.75)"
+          strokeWidth={level === 3 ? 2.4 : 1.4}
+          strokeDasharray={level === 3 ? '3 1.5 6 2' : '5 3 2 4'}
+        />
+      )}
+      {worn.map(([cx, cy], i) => (
+        <circle key={i} cx={cx} cy={cy} r={3 + level * 2.2} fill="rgba(255,255,255,0.82)" />
+      ))}
+      {Array.from({ length: scratches }, (_, i) => {
+        const x1 = rnd() * 90 + 5;
+        const y1 = rnd() * 120 + 10;
+        return (
+          <line
+            key={`s${i}`}
+            x1={x1}
+            y1={y1}
+            x2={x1 + (rnd() - 0.5) * 40}
+            y2={y1 + (rnd() - 0.2) * 30}
+            stroke="rgba(255,255,255,0.55)"
+            strokeWidth="0.5"
+          />
+        );
+      })}
+      {level === 3 && (
+        <>
+          {/* the crease: a dark fold line with a light ridge beside it */}
+          <path
+            d={`M -2 ${40 + rnd() * 50} L 102 ${30 + rnd() * 70}`}
+            stroke="rgba(0,0,0,0.45)"
+            strokeWidth="1.1"
+            fill="none"
+          />
+          <path
+            d={`M -2 ${41 + rnd() * 50} L 102 ${31 + rnd() * 70}`}
+            stroke="rgba(255,255,255,0.5)"
+            strokeWidth="0.6"
+            fill="none"
+          />
+          {/* water stain */}
+          <ellipse
+            cx={20 + rnd() * 60}
+            cy={30 + rnd() * 80}
+            rx={10 + rnd() * 8}
+            ry={7 + rnd() * 6}
+            fill="rgba(140,100,30,0.16)"
+            stroke="rgba(120,80,20,0.25)"
+            strokeWidth="0.6"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** Hover text: the condition tier, or the premium case, of a revealed slab. */
+export function slabTooltip(grade: number): string {
+  const tier = premiumTier(grade);
+  if (tier === 'gem') return `GEM MINT ${fmtGrade(grade)} — gold case`;
+  if (tier === 'mintplus') return `MINT+ ${fmtGrade(grade)} — prism case`;
+  if (tier === 'mint') return `MINT ${fmtGrade(grade)} — holo case`;
+  return [
+    `Clean (grade ${fmtGrade(grade)})`,
+    `Light wear (grade ${fmtGrade(grade)}) — a soft corner`,
+    `Played (grade ${fmtGrade(grade)}) — whitened edges, scuffs, fading`,
+    `Damaged (grade ${fmtGrade(grade)}) — creased, stained, cracked case`,
+  ][conditionOf(grade)];
+}
 
 export function GradedSlab({
   g,
@@ -129,6 +271,10 @@ export function GradedSlab({
   const tone = caseTone(g.grade);
   const cert = certOf(g.id);
   const word = graded ? (GRADE_WORDS[String(g.grade)] ?? 'GRADED') : 'AT THE GRADERS';
+  const premium = premiumTier(g.grade);
+  const prem = premium ? PREMIUM[premium] : null;
+  const condition = conditionOf(g.grade);
+  const certSeed = parseInt(cert.no, 10);
 
   const interactive = !!onClick;
   return (
@@ -146,6 +292,7 @@ export function GradedSlab({
           onClick();
         }
       }}
+      title={graded ? slabTooltip(g.grade!) : undefined}
       aria-label={
         graded
           ? `${def.name}, graded ${fmtGrade(g.grade!)} ${word} by ${svc.name}, certificate ${cert.no}`
@@ -166,11 +313,50 @@ export function GradedSlab({
         borderRadius: Math.round(tier.pad * 1.4),
         border: '3px solid var(--c-ink)',
         // The acrylic itself: the service's colour under a vertical sheen.
-        backgroundImage: `linear-gradient(150deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.06) 26%, rgba(0,0,0,0.16) 60%, rgba(255,255,255,0.18) 100%), ${svc.slab.frame}`,
-        boxShadow:
-          'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6)',
+        backgroundImage: `linear-gradient(150deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.06) 26%, rgba(0,0,0,0.16) 60%, rgba(255,255,255,0.18) 100%), ${prem ? prem.shell : svc.slab.frame}`,
+        boxShadow: prem
+          ? `inset 0 2px 0 rgba(255,255,255,0.7), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6), 0 0 ${premium === 'gem' ? 18 : 10}px ${premium === 'gem' ? 'rgba(240,196,25,0.75)' : premium === 'mintplus' ? 'rgba(185,139,255,0.6)' : 'rgba(110,200,255,0.55)'}`
+          : 'inset 0 2px 0 rgba(255,255,255,0.55), inset 0 -3px 6px rgba(0,0,0,0.45), 4px 4px 0 rgba(0,0,0,0.6)',
       }}
     >
+      {/* Premium ring: a turning conic border on MINT and up. */}
+      {prem && (
+        <div
+          className="slab-ring absolute pointer-events-none"
+          style={{
+            inset: -3,
+            borderRadius: Math.round(tier.pad * 1.4) + 2,
+            padding: 3,
+            background: prem.ring,
+            WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+            WebkitMaskComposite: 'xor',
+            maskComposite: 'exclude',
+          }}
+          aria-hidden
+        />
+      )}
+      {premium === 'gem' &&
+        [
+          [8, 18],
+          [88, 40],
+          [14, 78],
+          [80, 92],
+        ].map(([lx, ty], i) => (
+          <span
+            key={i}
+            className="slab-twinkle absolute pointer-events-none z-10"
+            style={{
+              left: `${lx}%`,
+              top: `${ty}%`,
+              width: 10,
+              height: 10,
+              animationDelay: `${i * 0.6}s`,
+              background:
+                'radial-gradient(circle, #fff 0 20%, transparent 21%), conic-gradient(from 45deg, transparent 0 20%, #fff8c4 20% 30%, transparent 30% 45%, #fff8c4 45% 55%, transparent 55% 70%, #fff8c4 70% 80%, transparent 80%)',
+            }}
+            aria-hidden
+          />
+        ))}
       {/* Label — the part a collector reads first. */}
       <div
         className="relative flex items-stretch gap-1 mb-1.5 overflow-hidden"
@@ -181,6 +367,20 @@ export function GradedSlab({
           borderRadius: 3,
         }}
       >
+        {prem && (
+          <div
+            className="slab-holo absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage:
+                premium === 'gem'
+                  ? 'linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.65) 25%, rgba(255,240,180,0) 50%, rgba(255,255,255,0.5) 75%, rgba(255,255,255,0) 100%)'
+                  : 'linear-gradient(100deg, rgba(255,122,217,0.25), rgba(255,211,110,0.25), rgba(125,255,176,0.25), rgba(110,200,255,0.25), rgba(185,139,255,0.25), rgba(255,122,217,0.25))',
+              mixBlendMode: 'multiply',
+              opacity: premium === 'mint' ? 0.55 : 0.9,
+            }}
+            aria-hidden
+          />
+        )}
         {/* Pending fill: the label doubles as the turnaround progress bar. */}
         {!graded && progress !== undefined && (
           <div
@@ -229,7 +429,7 @@ export function GradedSlab({
                 className="heading-font leading-none whitespace-nowrap"
                 style={{ fontSize: tier.cert }}
               >
-                {word}
+                {prem ? prem.badge : word}
               </span>
             </>
           ) : (
@@ -253,10 +453,20 @@ export function GradedSlab({
       >
         <div
           className={cn(!graded && 'blur-[2px] saturate-50 opacity-80')}
-          style={{ display: 'block' }}
+          style={{
+            display: 'block',
+            // Age shows: low grades are faded and yellowed under the glass.
+            filter:
+              condition === 3
+                ? 'sepia(0.45) saturate(0.7) brightness(0.95)'
+                : condition === 2
+                  ? 'sepia(0.18) saturate(0.85)'
+                  : undefined,
+          }}
         >
           <CardFace def={def} size={tier.face} foil={g.foil} />
         </div>
+        {condition > 0 && <Damage level={condition as 1 | 2 | 3} seed={certSeed} />}
         {/* Static glare across the top-left of the glass. */}
         <div
           className="absolute inset-0 pointer-events-none"
@@ -278,6 +488,28 @@ export function GradedSlab({
               }}
             />
           </div>
+        )}
+        {condition === 3 && (
+          // A cracked case: grade-5 copies come back in a chipped shell.
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 100 140"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            <path
+              d={`M ${70 + (certSeed % 20)} -1 L ${62 + (certSeed % 9)} 14 L 74 22 L 66 38`}
+              stroke="rgba(255,255,255,0.9)"
+              strokeWidth="0.8"
+              fill="none"
+            />
+            <path
+              d="M 66 38 L 58 44 M 74 22 L 84 26"
+              stroke="rgba(255,255,255,0.7)"
+              strokeWidth="0.5"
+              fill="none"
+            />
+          </svg>
         )}
         {!graded && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

@@ -18,6 +18,21 @@ interface ChangelogEntry {
 // the newest entry must stay first.
 export const ENTRIES: ChangelogEntry[] = [
   {
+    version: 'The Shop Floor (v31)',
+    date: 'October 2026',
+    items: [
+      'ECONOMY REBALANCED — QUICKSELL PRICES ARE LOWER, ON PURPOSE. Opening a Booster Pack and quickselling everything paid back about 141% of the pack’s price, and a Booster Box about 177% — the packs were printing credits. Quicksell is now Common 4, Uncommon 10, Rare 40, Super-Rare 120, Ultra-Rare 300, Full-Art 500, Alt-Art 900, Mythic 1,500 (foils still ×2.5). Nothing you own was taken away; selling it back to the game pays less.',
+      'LEVELS COME MUCH FASTER. Each level needs 2.5× less XP than before, and every account was moved up to its new level and paid the rewards for the levels it skipped. A level-up now pays 75 credits (plus 10 vouchers every 5th level). Player Shops unlock at level 20 instead of 50.',
+      'NEW: THE SHOP FLOOR. CPU customers now walk into your Player Shop about every 90 minutes and ask to buy one of your listings — or offer a card from their binder in trade. Accept, turn them away, or haggle once: push past what they will pay and they may walk out.',
+      'NEW: CPU COLLECTORS BID ON AUCTIONS. Usually up to about +25% over quicksell, sometimes far less, now and then far more. Their winning bids count toward a card’s market price.',
+      'GRADED SLABS GOT A LOT MORE INTERESTING. Click a slab in your Collection for its full details — grade, service, condition, value — and to sell, crack, view in 3D, or pin up to three to your profile. Low grades now LOOK low: soft corners, whitened edges, creases, a cracked case. MINT, MINT+ and GEM MINT come back in holo, prism and gold cases.',
+      'NEW: WEEKLY BINGO. A fresh 5×5 card of collection goals every Monday, under Missions. Squares fill themselves as you collect \u2014 open packs, trade, grade \u2014 and every row, column or diagonal pays 120 credits. Fill the whole card for 750 credits and 5 vouchers.',
+      'NEW: CPU DIFFICULTY. Pick EASY, NORMAL or HARD in Settings. Easy misses attacks and blocks and never holds an answer; Hard plans two turns of combat and always keeps a reaction up. Rewards are the same at every level.',
+      'BALANCE: SENTINEL OF THE NETHER PIT IS BACK IN THE GAME. Its removal ability costs 2 Resolve again instead of 3. The extra point was added when our testing read Sentinel as the strongest Leader; measured properly on nine deck recipes it was the weakest. Nothing else changed: a fresh 16,000-game check found no keyword far enough out of line to touch.',
+      'SETTINGS: HAND ORDER can be set from Settings now, and the MOTION setting finally reaches the match board, card effects, the Showroom and pack opening — REDUCED calms them all, and FULL overrides your device’s setting.',
+    ],
+  },
+  {
     version: 'The Keyboard Pass (v30)',
     date: 'August 2026',
     items: [
@@ -28,19 +43,6 @@ export const ENTRIES: ChangelogEntry[] = [
       'THE OPPONENT\u2019S MOVES ARE READ OUT. If you use a screen reader, the summary of the opponent\u2019s turn was announced and not one of the moves in it \u2014 the whole turn played in silence. Each move is announced as it happens now.',
       'FIX \u2014 TWO OF OUR OWN TEST TOOLS WERE PRESSING THE WRONG BUTTON. The automated match driver has \u201cbeen exercising\u201d the narration speed dial since one patch and the Leader ability pills since another; both clicks were landing somewhere else entirely, so neither control had ever actually been tested. Found by counting which controls the driver offers against which it presses \u2014 948 offers and zero presses for one of them.',
       'BALANCE: no card changed, eleventh pass running. 190,464 fresh AI games \u2014 the usual eight cohorts, run four times over four completely different sets of test decks \u2014 plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, control cohorts identical to last patch to the decimal. The question left open last patch is answered: Mer-King and Avatar of the Abyss really are the top two Leaders \u2014 first and second in all four draws \u2014 but by how much is still pure deck roll, so nothing is being changed on it.',
-    ],
-  },
-  {
-    version: 'The Every-Button Pass (v29)',
-    date: 'August 2026',
-    items: [
-      'FIX \u2014 THE BOARD WAS UNPLAYABLE SIDEWAYS. Turn a phone to landscape and twenty things you need were simply not there: your own Leader, the INVOKE LEADER button, your ash-pile, and every card in your hand. The board is built to be exactly one screen, and when it did not fit it did not shrink or scroll \u2014 it cut the rest off, silently, which looks exactly like the game choosing not to show you those things. It scrolls now, and only when it has to, so nothing changes on a screen it already fits.',
-      'FIX \u2014 CONCEDING SHOWS YOU THE RESULT. Giving up used to drop you straight back to the menu: no result screen, no rewards, and if the game could not save the loss there was no way for it to tell you. A resignation now ends the match like any other one \u2014 the result screen, the credits and XP, and REMATCH.',
-      'THE ATTACK BUTTON TELLS YOU WHAT CAN BLOCK IT. DECLARE ATTACK already showed your total Might and warned you when it was lethal. It now also counts how many of their units can legally guard what you have picked \u2014 flying, Nimble and exhaustion all taken into account \u2014 and when the answer is none, it says UNGUARDABLE.',
-      'END TURN WARNS YOU ABOUT AN UNPLAYED WELLSPRING. You get one a turn and it does not carry over, so ending a turn without playing one leaves you a Location behind for the rest of the match. The button says so, next to the count of cards you could still cast.',
-      'YOU CAN TELL WHEN THE OPPONENT DID NOTHING. A turn where they play nothing and attack with nothing used to produce no narration at all \u2014 a second of \u201cthinking\u201d and then your turn back, which is indistinguishable from something breaking. It says so now, and the turn summary says it too if you skipped past it. When they hold priority over a card you cast and decline to answer, the board mentions that as well.',
-      'FIX \u2014 BIG TEXT AND SMALL SCREENS, ACROSS NINE SCREENS. If you run a larger font in your browser, ten places pushed content off the side of a phone: search boxes, tab rows, the How to Play glossary, the Showroom. All fixed, and the check runs on every release now. The sign-in screen \u2014 the first screen in the game \u2014 turned out never to have been measured at phone width at all; its show-password button was a third of the minimum tap size.',
-      'BALANCE: no card changed, tenth pass running. 142,848 fresh AI games \u2014 the usual eight cohorts, run three times over three completely different sets of test decks \u2014 plus 1,200 fuzzed and 600 chaos matches: ZERO rule violations, and the control cohorts identical to last patch to the decimal. The three-draw comparison finished what last patch started: only three of the nine Leaders keep their place in the league table when the test decks are re-rolled, and the single statistic that has driven Leader balance arguments for four patches names a different Leader every time it is asked. It is retired.',
     ],
   },
 ];

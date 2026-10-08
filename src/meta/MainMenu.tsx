@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { askConfirm } from './confirm';
 import {
   Swords,
   Library,
@@ -26,7 +27,12 @@ import { useMeta } from './MetaContext';
 import { CardOfTheDay } from './CardOfTheDay';
 import { CreditChip, VoucherChip, LevelBadge, PopButton, Notice } from './ui';
 import { RoleBadge } from './RoleBadge';
-import { claimDailyLogin, DailyLoginResult } from '../lib/supabase';
+import {
+  claimDailyLogin,
+  DailyLoginResult,
+  fetchAchievements,
+  fetchMissions,
+} from '../lib/supabase';
 import { fmtCredits } from './economy';
 import { SafeImage } from './SafeImage';
 
@@ -202,6 +208,27 @@ function DailyLoginPanel() {
 
 export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }) {
   const { profile, guest, signOut, shopItems } = useMeta();
+  // Rewards waiting to be claimed — badged on the MISSIONS tile, which until
+  // now gave no hint that anything had finished.
+  const [claimable, setClaimable] = useState(0);
+  useEffect(() => {
+    if (guest || !profile?.id) return;
+    let cancelled = false;
+    Promise.all([fetchMissions(), fetchAchievements(profile.id)])
+      .then(([ms, { all, mine }]) => {
+        if (cancelled) return;
+        const done = new Map(mine.map((m) => [m.achievement_id, m]));
+        const a = all.filter((x) => {
+          const p = done.get(x.id);
+          return p && !p.claimed && p.progress >= x.target;
+        }).length;
+        setClaimable(ms.filter((m) => m.progress >= m.target && !m.claimed).length + a);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [guest, profile?.id]);
   const banner = shopItems.find((s) => s.id === profile?.equipped_banner);
   const avatar = shopItems.find((s) => s.id === profile?.equipped_avatar);
 
@@ -269,6 +296,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       icon: <Trophy className="w-8 h-8" />,
       color: 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
       disabled: guest,
+      badge: !guest && claimable > 0 ? `${claimable} TO CLAIM!` : undefined,
     },
     {
       key: 'market',
@@ -418,11 +446,11 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
             <Settings className="w-3.5 h-3.5" /> SETTINGS
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               // Signing out a real account was a single unconfirmed click —
               // guest mode has no persisted data, so it's left as an
               // instant exit, but a real account deserves a confirm step.
-              if (!guest && !confirm('Sign out of your account?')) return;
+              if (!guest && !(await askConfirm('Sign out of your account?'))) return;
               signOut();
             }}
             className="btn-pop heading-font text-[11px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-1.5 ink-border-sm shadow-hard-black-xs flex items-center gap-1"
@@ -449,7 +477,7 @@ export function MainMenu({ onNavigate }: { onNavigate: (s: MetaScreen) => void }
       {/* Daily login reward strip */}
       {!guest && <DailyLoginPanel />}
 
-      <CardOfTheDay />
+      <CardOfTheDay onBuild={guest ? undefined : () => onNavigate('decks')} />
 
       {/* Nav tiles */}
       <div className="relative z-10 flex flex-wrap justify-center gap-5 px-6 pb-16 max-w-5xl mx-auto">

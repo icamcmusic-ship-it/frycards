@@ -9,6 +9,7 @@
  * prefers-reduced-motion by rendering a static enlarged card instead.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from '../meta/useMotionMode';
 import { CardDef } from '../game/v3/cards';
 import { CardFace, CardReadingPanel, CARD_SIZES } from './CardFaceV4';
 import { getCardBackImage } from '../meta/cardback';
@@ -26,19 +27,7 @@ const MAX_TILT_DEG = 14;
  * still fits small screens. */
 export const INSPECT_SCALE = 1.55;
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
-}
+const usePrefersReducedMotion = useReducedMotion;
 
 export function Card3DInspector({
   def,

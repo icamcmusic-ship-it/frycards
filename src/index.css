@@ -19,6 +19,27 @@
   --c-yellow: #ffd54f;
   --c-red: #d43531;
   --c-steel: #2c3e50;
+
+  /* Type scale. Nothing the player has to read goes below --fs-xs (11px);
+     use these (text-[length:var(--fs-sm)] or the .fs-* helpers) rather than
+     text-[7px]/[8px]/[9px] arbitrary sizes. */
+  --fs-xs: 0.6875rem;
+  --fs-sm: 0.75rem;
+  --fs-md: 0.875rem;
+  --fs-lg: 1rem;
+}
+
+.fs-xs {
+  font-size: var(--fs-xs);
+}
+.fs-sm {
+  font-size: var(--fs-sm);
+}
+.fs-md {
+  font-size: var(--fs-md);
+}
+.fs-lg {
+  font-size: var(--fs-lg);
 }
 
 body {
@@ -285,7 +306,7 @@ input[type='radio'] {
     0 0 26px 8px rgba(232, 121, 249, 0.28);
 }
 @media (prefers-reduced-motion: reduce) {
-  .foil-shimmer::after {
+  html:not([data-motion='full']) .foil-shimmer::after {
     animation: none;
     opacity: 0;
   }
@@ -607,20 +628,20 @@ html[data-motion='reduced'] .foil-shimmer::after {
  * `[data-motion]` attribute is set on <html> by the App root, which drives the
  * JS-side MotionConfig from the same preference. */
 @media (prefers-reduced-motion: reduce) {
-  .foil-shimmer::after,
-  .rarity-sheen,
-  .rarity-pulse,
-  .mythic-frame,
-  .mythic-bg,
-  .mythic-embers,
-  .ultra-frame,
-  .ultra-banner,
-  .ultra-sparkle,
-  .aa-frame,
-  .aa-holo,
-  .serialized-frame,
-  .serialized-frame::before,
-  .serialized-sheen {
+  html:not([data-motion='full']) .foil-shimmer::after,
+  html:not([data-motion='full']) .rarity-sheen,
+  html:not([data-motion='full']) .rarity-pulse,
+  html:not([data-motion='full']) .mythic-frame,
+  html:not([data-motion='full']) .mythic-bg,
+  html:not([data-motion='full']) .mythic-embers,
+  html:not([data-motion='full']) .ultra-frame,
+  html:not([data-motion='full']) .ultra-banner,
+  html:not([data-motion='full']) .ultra-sparkle,
+  html:not([data-motion='full']) .aa-frame,
+  html:not([data-motion='full']) .aa-holo,
+  html:not([data-motion='full']) .serialized-frame,
+  html:not([data-motion='full']) .serialized-frame::before,
+  html:not([data-motion='full']) .serialized-sheen {
     animation: none;
   }
 }
@@ -705,7 +726,7 @@ html[data-motion='reduced'] .serialized-sheen {
 /* Reduced motion gets a static filled bar rather than nothing at all — the
  * point of the element is to show the app is alive. */
 @media (prefers-reduced-motion: reduce) {
-  .splash-indeterminate {
+  html:not([data-motion='full']) .splash-indeterminate {
     animation: none;
     width: 100%;
     opacity: 0.5;

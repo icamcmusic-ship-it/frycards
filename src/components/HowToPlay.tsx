@@ -317,7 +317,7 @@ const SECTIONS: { title: string; body: [string, string][] }[] = [
       ],
       [
         'Marketplace & Shops',
-        'List spare cards for a fixed price or run a timed auction with bids and a buyout (5% seller fee). Player Shops unlock at level 50.',
+        'List spare cards for a fixed price or run a timed auction with bids and a buyout (5% seller fee). Player Shops unlock at level 20.',
       ],
       [
         'Friends & Trading',
