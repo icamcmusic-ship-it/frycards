@@ -519,11 +519,9 @@ export function HowToPlayScreen({
   /** The button (or the reason there isn't one) for a step's action. */
   const renderAction = (action: Action) => {
     if (action.kind === 'practice') {
-      return cpuLocked ? (
-        <span className="fs-xs font-bold text-[var(--c-steel)]">
-          Practice matches are coming soon.
-        </span>
-      ) : (
+      // Locked accounts get one explanation under the intro instead of the
+      // same "coming soon" line on every card.
+      return cpuLocked ? null : (
         <PopButton color="yellow" onClick={() => run(action)}>
           TRY IT: PRACTICE MATCH ▸
         </PopButton>
@@ -548,6 +546,12 @@ export function HowToPlayScreen({
             Essence clears every phase and Locations recover at Dawn. The practice match opens with
             a coach that explains each step as it happens.
           </p>
+          {cpuLocked && (
+            <p className="ink-border-sm bg-[var(--c-paper)] fs-sm font-bold px-3 py-2 mb-3">
+              Practice matches are coming soon. Until then, read the steps and explore the screens
+              below.
+            </p>
+          )}
           <ol className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {STEPS.map((step, i) => {
               const Icon = step.icon;

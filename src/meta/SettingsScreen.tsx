@@ -219,6 +219,49 @@ export function SettingsScreen({
           </div>
         </div>
 
+        {/* Motion (findings 1.8 / 2.4). Second on the page, right under the theme
+            row: it is an accessibility setting and should not sit below the match prefs. */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
+            <h2 className="heading-font text-lg">MOTION</h2>
+          </div>
+          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
+            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
+              How much the board and the card effects move. SYSTEM follows your device's
+              accessibility setting; the other two override it here, so you don't have to change an
+              OS-level preference to calm one game down. Saved locally, so guests keep it too.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MOTION_MODES.map((m) => (
+                <PopButton
+                  key={m.id}
+                  color={motionMode === m.id ? 'yellow' : 'steel'}
+                  ariaPressed={motionMode === m.id}
+                  onClick={() => onMotionModeChange(m.id)}
+                >
+                  <OptionLabel label={m.label} blurb={m.blurb} />
+                </PopButton>
+              ))}
+            </div>
+            {/* Live preview: moves under FULL/SYSTEM-without-reduce, holds
+                still when motion is reduced — the same <html data-motion>
+                switch every animation in the game now keys off. */}
+            <style>{`
+              @keyframes settings-motion-demo { 0%,100% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(56px) rotate(4deg); } }
+              .settings-motion-demo { animation: settings-motion-demo 1.6s ease-in-out infinite; }
+              @media (prefers-reduced-motion: reduce) { html:not([data-motion='full']) .settings-motion-demo { animation: none; } }
+              html[data-motion='reduced'] .settings-motion-demo { animation: none; }
+            `}</style>
+            <div className="mt-3 flex items-center gap-3" aria-hidden>
+              <span className="fs-xs font-bold text-[var(--c-steel)]">PREVIEW</span>
+              <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
+                <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Match pacing */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
@@ -302,48 +345,6 @@ export function SettingsScreen({
                   <OptionLabel label={h.label} blurb={h.blurb} />
                 </PopButton>
               ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Motion (findings 1.8 / 2.4) */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Waves className="w-6 h-6 text-[var(--c-ink)]" />
-            <h2 className="heading-font text-lg">MOTION</h2>
-          </div>
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-4">
-            <p className="text-[11px] font-bold text-[var(--c-steel)] mb-3 max-w-xl">
-              How much the board and the card effects move. SYSTEM follows your device's
-              accessibility setting; the other two override it here, so you don't have to change an
-              OS-level preference to calm one game down. Saved locally, so guests keep it too.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {MOTION_MODES.map((m) => (
-                <PopButton
-                  key={m.id}
-                  color={motionMode === m.id ? 'yellow' : 'steel'}
-                  ariaPressed={motionMode === m.id}
-                  onClick={() => onMotionModeChange(m.id)}
-                >
-                  <OptionLabel label={m.label} blurb={m.blurb} />
-                </PopButton>
-              ))}
-            </div>
-            {/* Live preview: moves under FULL/SYSTEM-without-reduce, holds
-                still when motion is reduced — the same <html data-motion>
-                switch every animation in the game now keys off. */}
-            <style>{`
-              @keyframes settings-motion-demo { 0%,100% { transform: translateX(0) rotate(-4deg); } 50% { transform: translateX(56px) rotate(4deg); } }
-              .settings-motion-demo { animation: settings-motion-demo 1.6s ease-in-out infinite; }
-              @media (prefers-reduced-motion: reduce) { html:not([data-motion='full']) .settings-motion-demo { animation: none; } }
-              html[data-motion='reduced'] .settings-motion-demo { animation: none; }
-            `}</style>
-            <div className="mt-3 flex items-center gap-3" aria-hidden>
-              <span className="fs-xs font-bold text-[var(--c-steel)]">PREVIEW</span>
-              <div className="relative w-28 h-7 ink-border-sm bg-[var(--c-paper)] overflow-hidden">
-                <span className="settings-motion-demo absolute top-1 left-1 w-5 h-5 bg-[var(--c-yellow)] ink-border-sm" />
-              </div>
             </div>
           </div>
         </div>

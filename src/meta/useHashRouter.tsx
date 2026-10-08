@@ -101,6 +101,7 @@ export function useHashRouter({
 
   useEffect(() => {
     let ignoreNext: number | undefined;
+    let lastBlockedHref = '';
     const onChange = () => {
       if (ignoreNext !== undefined) {
         window.clearTimeout(ignoreNext);
@@ -109,12 +110,14 @@ export function useHashRouter({
       }
       const lk = lockRef.current;
       if (lk) {
+        // One back press fires popstate AND hashchange, and the undo below
+        // fires them again: only react (and report) when there is something
+        // to undo.
         const mark = markOf(window.history.state);
         if (mark && mark.idx !== lk.idx) {
-          // Undo the traversal: step straight back to the entry the match
-          // started on. Pushing instead would grow the stack on every press.
-          // The flag is cleared by the resulting popstate, or by a timer if
-          // the browser had nowhere to go.
+          // Step straight back to the entry the match started on. Pushing
+          // instead would grow the stack on every press. The flag is cleared by
+          // the resulting popstate, or by a timer if the browser had nowhere to go.
           ignoreNext = window.setTimeout(() => (ignoreNext = undefined), 500);
           window.history.go(lk.idx - mark.idx);
         } else if (window.location.hash !== lk.hash) {
@@ -123,10 +126,14 @@ export function useHashRouter({
             '',
             lk.hash,
           );
+        } else {
+          return;
         }
-        onBlockedRef.current?.();
+        if (window.location.href !== lastBlockedHref) onBlockedRef.current?.();
+        lastBlockedHref = window.location.href;
         return;
       }
+      lastBlockedHref = '';
       commit(parseHash(window.location.hash) ?? MENU);
     };
     window.addEventListener('popstate', onChange);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   fetchCardTemplates,
   recordMatchResult,
@@ -802,14 +803,15 @@ export default function App() {
   // Whether a match is mounted (reported by AppInner). The catalog RETRY swaps
   // the shared card pool in place, so it must never run under a live game.
   const [matchMounted, setMatchMounted] = useState(false);
+  // Mirrors the state above for the fetch callback, which outlives a render.
+  const matchMountedRef = useRef(false);
+  const onMatchChange = useCallback((mounted: boolean) => {
+    matchMountedRef.current = mounted;
+    setMatchMounted(mounted);
+  }, []);
   const retryCatalog = useCallback(() => {
-    if (matchMounted) return;
-    // Dropping `poolReady` unmounts the whole screen tree (it comes back, at the
-    // same hash, once the fetch settles), so the swapped pool is only ever seen
-    // by a clean mount — never by a screen that was holding the old one.
-    setPoolReady(false);
-    setAttempt((n) => n + 1);
-  }, [matchMounted]);
+    if (!matchMountedRef.current) setAttempt((n) => n + 1);
+  }, []);
 
   // Load the universal card catalog from the Supabase backend once at
   // startup, build the v4.2 card pool from it (mechanics are assigned
@@ -830,6 +832,18 @@ export default function App() {
     withTimeout(fetchCardTemplates(), 20_000, null)
       .then((templates) => {
         if (cancelled) return;
+        if (attempt > 0) {
+          // A RETRY from the offline banner: screens are mounted and may hold
+          // cards from the pool being replaced. Nothing is swapped unless the
+          // fetch worked and no match is running by now; the swap itself happens
+          // with the screen tree unmounted (flushSync drops `poolReady`), so it
+          // comes back as a clean mount that only ever sees the new pool.
+          if (!templates || matchMountedRef.current) {
+            setPoolOffline(true);
+            return;
+          }
+          flushSync(() => setPoolReady(false));
+        }
         if (templates && applyCardPool(templates)) {
           // Only a catalog the pool accepted is worth caching.
           writeCache(CATALOG_CACHE_KEY, templates);
@@ -926,7 +940,7 @@ export default function App() {
                   <AppInner
                     motionMode={motionMode}
                     changeMotionMode={changeMotionMode}
-                    onMatchChange={setMatchMounted}
+                    onMatchChange={onMatchChange}
                   />
                 </MotionRoot>
               </React.Suspense>
