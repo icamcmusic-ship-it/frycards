@@ -7,7 +7,7 @@
  */
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { MetaContext, type MetaState } from './MetaContext';
 import { CostCurve, DeckBuilderScreen } from './DeckBuilderScreen';
 import { curveBarHeight, legalitySummary, pushUndo, UNDO_LIMIT } from './deckEdits';
