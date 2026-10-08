@@ -19,6 +19,27 @@
   --c-yellow: #ffd54f;
   --c-red: #d43531;
   --c-steel: #2c3e50;
+
+  /* Type scale. Nothing the player has to read goes below --fs-xs (11px);
+     use these (text-[length:var(--fs-sm)] or the .fs-* helpers) rather than
+     text-[7px]/[8px]/[9px] arbitrary sizes. */
+  --fs-xs: 0.6875rem;
+  --fs-sm: 0.75rem;
+  --fs-md: 0.875rem;
+  --fs-lg: 1rem;
+}
+
+.fs-xs {
+  font-size: var(--fs-xs);
+}
+.fs-sm {
+  font-size: var(--fs-sm);
+}
+.fs-md {
+  font-size: var(--fs-md);
+}
+.fs-lg {
+  font-size: var(--fs-lg);
 }
 
 body {
