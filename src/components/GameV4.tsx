@@ -13,7 +13,7 @@
  * manually. The defender's guard step + reaction window are the interactive
  * moments of the opponent's Clash.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useFocusTrap } from './useFocusTrap';
 import { createPortal } from 'react-dom';
 import {
@@ -75,7 +75,6 @@ import {
   CpuTurnEvent,
   setCpuDifficulty,
 } from '../game/v3/ai';
-import { loadCpuDifficulty } from '../meta/matchPrefs';
 import {
   CardDef,
   Effect,
@@ -91,7 +90,13 @@ import { POOL_BY_ID } from '../game/v3/cardpool';
 import { COLOR_PIP } from '../meta/colors';
 import { EssenceIcon } from './EssenceIcon';
 import { cn, newMatchSeed } from '../lib/utils';
-import { CardFace, CARD_SIZES, describeEffect, renderKeywordText } from './CardFaceV4';
+import {
+  CardFace,
+  CARD_SIZES,
+  describeEffect,
+  holdKeywordIntros,
+  renderKeywordText,
+} from './CardFaceV4';
 import { Card3DInspector, INSPECT_SCALE } from './Card3DInspector';
 import { CoachOverlay } from './CoachOverlay';
 import { MatchResult } from '../lib/supabase';
@@ -99,14 +104,19 @@ import { fmtCredits, fmtVouchers } from '../meta/economy';
 import { recordMatch } from '../meta/matchHistory';
 import { encodeDeckCode } from '../meta/deckcode';
 import {
+  CPU_DIFFICULTIES,
   CPU_SPEEDS,
+  CpuDifficultyId,
   HAND_SORTS,
   HandSort,
+  loadCpuDifficulty,
   loadCpuSpeed,
   loadHandSort,
   saveCpuSpeed,
   saveHandSort,
 } from '../meta/matchPrefs';
+import { Tabs } from '../meta/ui';
+import { usePersistedState } from '../meta/usePersistedState';
 
 /** Describe locked choices without guessing a replacement when a target leaves. */
 export function pendingChoices(g: GameState, item: StackItem): string[] {
@@ -312,6 +322,14 @@ const GAME_CSS = `
  * (index.css, CardFaceV4, Card3DInspector) already does. Information-carrying
  * feedback stays — rings render as static outlines, floats and the phase
  * banner become plain fades — only the movement goes. */
+/* The gentle "this is the thing to press" pulse on the primary button and the
+ * thinking / calculating labels. Tailwind's gv4-pulse ignored the in-app
+ * Motion setting; this one is switched off with the rest below. */
+@keyframes gv4-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+.gv4-pulse { animation: gv4-pulse 1.6s ease-in-out infinite; }
 @keyframes gv4-fade {
   0% { opacity: 0; }
   12% { opacity: 1; }
@@ -355,6 +373,7 @@ const GAME_CSS = `
   html:not([data-motion='full']) .gv4-cpu-actor,
   html:not([data-motion='full']) .gv4-cpu-target,
   html:not([data-motion='full']) .gv4-lunge-down,
+  html:not([data-motion='full']) .gv4-pulse,
   html:not([data-motion='full']) .gv4-unit-enter,
   html:not([data-motion='full']) .gv4-cpu-play,
   html:not([data-motion='full']) .gv4-attack-flash,
@@ -372,6 +391,7 @@ const GAME_CSS = `
 html[data-motion='reduced'] .gv4-cpu-actor,
 html[data-motion='reduced'] .gv4-cpu-target,
 html[data-motion='reduced'] .gv4-lunge-down,
+html[data-motion='reduced'] .gv4-pulse,
 html[data-motion='reduced'] .gv4-unit-enter,
 html[data-motion='reduced'] .gv4-cpu-play,
 html[data-motion='reduced'] .gv4-attack-flash,
@@ -530,6 +550,25 @@ function useHoverPreview<T extends HTMLElement>() {
   return { ref, pos, show, hide };
 }
 
+/** True on touch-first devices (`pointer: coarse`) — picks the wording of
+ * hints that name an input method ("tap" vs "click"). Width says nothing about
+ * it: a tablet is wide and coarse, a small desktop window is narrow and fine. */
+function useCoarsePointer(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window === 'undefined' || !window.matchMedia) return () => {};
+      const mq = window.matchMedia('(pointer: coarse)');
+      mq.addEventListener?.('change', notify);
+      return () => mq.removeEventListener?.('change', notify);
+    },
+    () =>
+      typeof window !== 'undefined' && !!window.matchMedia
+        ? window.matchMedia('(pointer: coarse)').matches
+        : false,
+    () => false,
+  );
+}
+
 /** Long-press (touch) equivalent of hover, so board-unit inspection works on
  * mobile: a long press shows the preview and suppresses the click that would
  * otherwise fire on touch-end; a short tap behaves as a normal click. */
@@ -681,7 +720,7 @@ function Tip({
       {open &&
         createPortal(
           <span
-            className="fixed z-[9995] text-[10px] leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
+            className="fixed z-[9995] fs-xs leading-tight normal-case font-normal bg-black text-white ink-border-sm px-1.5 py-1 pointer-events-none"
             style={{ top: pos!.top, left: pos!.left, width: pos!.width }}
           >
             {text}
@@ -732,9 +771,7 @@ function EssencePips({
     for (let i = 0; i < n; i++) pips.push({ key: `${c}${i}`, c });
   }
   if (pips.length === 0) {
-    return (
-      <span className="text-[8px] font-bold text-[var(--c-paper)]/40">no essence floating</span>
-    );
+    return <span className="fs-xs font-bold text-[var(--c-paper)]/60">no essence floating</span>;
   }
   return (
     <span className="flex items-center gap-[3px] flex-wrap">
@@ -846,8 +883,8 @@ function LocationTile({
       >
         <EssenceIcon type={loc.produces} color={COLOR_PIP[loc.produces].fg} size={9} />
       </span>
-      <span className="text-[7.5px] font-black leading-tight text-[var(--c-ink)] max-w-[70px] truncate">
-        {sanctum ? loc.def!.name : 'WELLSPRING'}
+      <span className="fs-xs font-black leading-tight text-[var(--c-ink)] max-w-[88px] truncate">
+        {sanctum ? loc.def!.name : loc.produces.toUpperCase()}
       </span>
     </button>
   );
@@ -939,7 +976,7 @@ function BoardUnit({
         {warded && (
           <Tip
             text="Warded — can't be targeted by the opponent's effects"
-            className="text-[10px] bg-[#29B6F6] ink-border-sm px-0.5"
+            className="fs-xs bg-[#29B6F6] ink-border-sm px-0.5"
           >
             🛡
           </Tip>
@@ -947,7 +984,7 @@ function BoardUnit({
         {u.items.length > 0 && (
           <Tip
             text={`Bonded Items: ${u.items.map((c) => c.def.name).join(', ')}`}
-            className="text-[10px] bg-[#8E44AD] text-white ink-border-sm px-0.5"
+            className="fs-xs bg-[#8E44AD] text-white ink-border-sm px-0.5"
           >
             💠{u.items.length}
           </Tip>
@@ -955,7 +992,7 @@ function BoardUnit({
         {sick && (
           <Tip
             text="Just invoked — can't attack until its controller's next turn (no Reckless)"
-            className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
+            className="fs-xs bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             z
           </Tip>
@@ -963,14 +1000,14 @@ function BoardUnit({
         {u.exhausted && !sick && (
           <Tip
             text="Exhausted — attacked or was spent this turn; recovers at Dawn"
-            className="text-[10px] bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
+            className="fs-xs bg-[var(--c-steel)] text-white ink-border-sm px-0.5"
           >
             ✓
           </Tip>
         )}
       </div>
       {guardNote && (
-        <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 z-20 text-[7px] font-black bg-[#29B6F6] text-[var(--c-ink)] px-1 ink-border-sm whitespace-nowrap">
+        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 z-20 fs-xs font-black bg-[#29B6F6] text-[var(--c-ink)] px-1 ink-border-sm whitespace-nowrap">
           {guardNote}
         </div>
       )}
@@ -1026,7 +1063,7 @@ function AbilityPill({
       }}
       title={why}
       className={cn(
-        'w-full text-[8.5px] font-bold px-1.5 py-1 ink-border-sm text-left leading-tight',
+        'w-full fs-xs font-bold px-1.5 py-1 ink-border-sm text-left leading-tight',
         usable
           ? 'btn-pop cursor-pointer bg-[var(--c-yellow)] text-[var(--c-ink)]'
           : 'bg-[var(--c-steel)]/70 text-[var(--c-paper)]/70',
@@ -1048,7 +1085,14 @@ function AbilityPill({
 // thumbnails all still render through CardFace.
 // ---------------------------------------------------------------------------
 
-/** Always-visible Dawn → Main I → Clash → Main II → Dusk progress bar. */
+/**
+ * Always-visible Dawn → Main I → Clash → Main II → Dusk progress bar.
+ *
+ * One segmented bar rather than five loose pills: the step the turn is on is
+ * filled solid (yellow on the player's turn, red on the opponent's), the steps
+ * already behind it keep a faint fill so the bar reads as progress, and the
+ * ones still to come are dim.
+ */
 function PhaseStepper({
   phase,
   yours,
@@ -1057,26 +1101,38 @@ function PhaseStepper({
   /** Highlight in the player's yellow vs the opponent's red. */
   yours: boolean;
 }) {
+  const at = PHASE_ORDER.indexOf(phase);
   return (
-    <div className="flex items-center justify-center gap-1 py-1 bg-[var(--c-paper)]/8 border-b border-[var(--c-paper)]/10 shrink-0">
-      {PHASE_ORDER.map((ph, i) => (
-        <React.Fragment key={ph}>
-          {i > 0 && <span className="text-[8px] text-[var(--c-paper)]/25">›</span>}
-          <span
+    <ol
+      aria-label={`Turn phases — ${yours ? 'your' : "opponent's"} turn`}
+      className="flex items-stretch shrink-0 mx-2 sm:mx-auto sm:w-full sm:max-w-[720px] my-0.5 ink-border-sm overflow-hidden bg-[var(--c-ink)]"
+    >
+      {PHASE_ORDER.map((ph, i) => {
+        const current = i === at;
+        return (
+          <li
+            key={ph}
+            aria-current={current ? 'step' : undefined}
             className={cn(
-              'heading-font text-[9px] px-2 py-0.5 rounded-[2px] tracking-wide',
-              phase === ph
-                ? yours
-                  ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                  : 'bg-[var(--c-red)] text-white'
-                : 'bg-[var(--c-paper)]/12 text-[var(--c-paper)]/45',
+              'flex-1 min-w-0 text-center heading-font fs-xs py-1 tracking-wide truncate',
+              i > 0 && 'border-l border-[var(--c-paper)]/15',
+              current
+                ? cn(
+                    'font-black shadow-[inset_0_0_0_2px_var(--c-ink)]',
+                    yours
+                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                      : 'bg-[var(--c-red)] text-white',
+                  )
+                : i < at
+                  ? 'bg-[var(--c-paper)]/12 text-[var(--c-paper)]/60'
+                  : 'text-[var(--c-paper)]/50',
             )}
           >
             {PHASE_LABEL[ph]}
-          </span>
-        </React.Fragment>
-      ))}
-    </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -1170,24 +1226,34 @@ function LeaderLane({
         flash && 'gv4-attack-flash',
       )}
     >
+      {/* The Leader thumbnail is the same micro card the board uses, scaled
+          down on phones: at full micro size (78x109) it alone made each lane
+          ~117px tall, and two of them starved the hand and the field. */}
       <div
         className={cn(
-          'shrink-0 relative',
+          'shrink-0 relative w-[44px] h-[61px] sm:w-[62px] sm:h-[87px]',
           L.shattered && 'grayscale opacity-60',
           cpuActing && 'gv4-cpu-actor',
         )}
       >
-        <CardFace
-          def={L.def}
-          size="micro"
-          badge={L.shattered ? 'SHATTERED' : L.invoked ? 'INVOKED' : 'LEADER ZONE'}
-          introduceKeywords
-          onClick={onInspect}
-        />
+        <div className="origin-top-left scale-[0.56] sm:scale-[0.8]">
+          <CardFace def={L.def} size="micro" introduceKeywords onClick={onInspect} />
+        </div>
       </div>
-      <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="heading-font text-[11px] text-[var(--c-paper)] truncate max-w-[260px]">
-          {label}
+      <div className="flex flex-col gap-0.5 min-w-0 shrink-0 max-w-[110px] sm:max-w-[260px]">
+        <span className="heading-font fs-xs text-[var(--c-paper)] truncate">{label}</span>
+        {/* The status the thumbnail's own 5px corner badge used to carry. */}
+        <span
+          className={cn(
+            'self-start heading-font fs-xs px-1 ink-border-sm',
+            L.shattered
+              ? 'bg-[var(--c-ink)] text-[var(--c-red)]'
+              : L.invoked
+                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                : 'bg-[var(--c-steel)] text-[var(--c-paper)]',
+          )}
+        >
+          {L.shattered ? 'SHATTERED' : L.invoked ? 'INVOKED' : 'LEADER ZONE'}
         </span>
         <ResolveDots resolve={L.resolve} max={maxResolve} mine={isHuman} />
       </div>
@@ -1224,7 +1290,7 @@ function LeaderLane({
 
       {isHuman && (
         <span className="flex items-center gap-1 shrink-0">
-          <span className="heading-font text-[7px] text-[var(--c-paper)]/55">ESSENCE</span>
+          <span className="heading-font fs-xs text-[var(--c-paper)]/70">ESSENCE</span>
           <EssencePips pool={p.essence} size={15} />
         </span>
       )}
@@ -1235,19 +1301,22 @@ function LeaderLane({
           disabled={!!invokeWhy}
           title={invokeWhy}
           className={cn(
-            'tap-44 heading-font text-[9px] px-2 py-1 ink-border-sm shrink-0',
+            'tap-44 heading-font fs-xs px-2 py-1 ink-border-sm shrink-0',
             invokeWhy
               ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60 cursor-not-allowed'
-              : 'btn-pop bg-[var(--c-red)] text-white',
+              : 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]',
           )}
         >
           ⚜ INVOKE LEADER
         </button>
       )}
       {L.invoked && !L.shattered && (
-        <span className="flex items-center gap-1 flex-wrap min-w-0">
+        // Side by side in the lane's own sideways scroll on a phone: wrapping
+        // them stacked a 3-ability Leader into a 200px-tall lane that took the
+        // hand's room.
+        <span className="flex items-center gap-1 flex-nowrap shrink-0 sm:flex-wrap sm:shrink sm:min-w-0">
           {(L.def.leaderAbilities ?? []).map((ab, i) => (
-            <span key={i} className="max-w-[260px]">
+            <span key={i} className="w-[210px] shrink-0 sm:w-auto sm:max-w-[260px]">
               <AbilityPill
                 label={`${ab.resolveDelta > 0 ? '+' : ''}${ab.resolveDelta}:`}
                 desc={ab.text ?? describeEffect(ab.effect)}
@@ -1273,6 +1342,7 @@ function LocationsLane({
   onTap,
   onInspect,
   mine,
+  coach,
   children,
 }: {
   locations: LocationInst[];
@@ -1280,17 +1350,20 @@ function LocationsLane({
   onTap?: (l: LocationInst) => void;
   onInspect?: (l: LocationInst) => void;
   mine: boolean;
+  /** `data-coach` hook the first-match coach can anchor to. */
+  coach?: string;
   /** Trailing controls (the "+ WELLSPRING" picker on the human's lane). */
   children?: React.ReactNode;
 }) {
   return (
     <div
+      data-coach={coach}
       className={cn(
         'flex items-center gap-1.5 px-2 py-1 shrink-0 overflow-x-auto',
         mine ? 'bg-[var(--c-ink)]/45' : 'bg-[var(--c-ink)]/45',
       )}
     >
-      <span className="heading-font text-[7px] text-[var(--c-paper)]/40 tracking-[1px] shrink-0">
+      <span className="heading-font fs-xs text-[var(--c-paper)]/60 tracking-[1px] shrink-0">
         LOCATIONS
       </span>
       {locations.map((l) => (
@@ -1303,7 +1376,7 @@ function LocationsLane({
         />
       ))}
       {locations.length === 0 && (
-        <span className="text-[8px] font-bold text-[var(--c-paper)]/30 shrink-0">none in play</span>
+        <span className="fs-xs font-bold text-[var(--c-paper)]/50 shrink-0">none in play</span>
       )}
       {children}
     </div>
@@ -1744,6 +1817,57 @@ export function phaseAdvanceLabel(
   return 'NEXT ▸';
 }
 
+/**
+ * Which Wellspring colour the "PLAY WELLSPRING" primary should place (#4).
+ *
+ * The same advice the hint bar and the ringed dot already give, made into a
+ * decision: the colour that unlocks the most cards in hand, else the colour
+ * the hand's printed pips ask for most, else the first colour the Leader may
+ * play. Pure so the tie-breaks are pinned by a test.
+ */
+export function recommendWellspring(
+  choices: EssenceType[],
+  unlocks: Partial<Record<EssenceType, number>>,
+  handCosts: (EssenceCost | undefined)[],
+): EssenceType | null {
+  if (choices.length === 0) return null;
+  const pipDemand = (t: EssenceType) => handCosts.reduce((sum, c) => sum + (c?.pips[t] ?? 0), 0);
+  let best = choices[0];
+  for (const t of choices.slice(1)) {
+    const byUnlock = (unlocks[t] ?? 0) - (unlocks[best] ?? 0);
+    if (byUnlock > 0 || (byUnlock === 0 && pipDemand(t) > pipDemand(best))) best = t;
+  }
+  return best;
+}
+
+/**
+ * Should END TURN stop and ask first? (QOL, §2.2.)
+ *
+ * Only when ending the turn throws something real away: a card the player
+ * could still cast right now, with the essence to cast it (untapped Locations
+ * or floating essence are what make a card castable — `playable` is counted
+ * from the same predicate the INVOKE button reads). A turn with nothing left
+ * to do ends in one press, like it always did.
+ */
+export function shouldConfirmEndTurn(opts: {
+  playable: number;
+  /** Essence the player could still produce this turn: floating + untapped. */
+  spendableEssence: number;
+  /** "Don't ask again this match" ticked. */
+  suppressed: boolean;
+}): boolean {
+  return !opts.suppressed && opts.playable > 0 && opts.spendableEssence > 0;
+}
+
+/** How the match ended, from the seat's point of view. `'draw'` is the engine's
+ * simultaneous-zero-Vitality result; typed loosely because the winner field
+ * only learns that value from the engine's own side of the change. */
+export function matchOutcome(winner: string | null | undefined): 'win' | 'loss' | 'draw' | null {
+  if (!winner) return null;
+  if (winner === 'draw') return 'draw';
+  return winner === HUMAN ? 'win' : 'loss';
+}
+
 /** The opponent's last turn in numbers — see `turnRecap`. */
 interface TurnRecap {
   vitalityLost: number;
@@ -1766,6 +1890,86 @@ interface TurnRecap {
   noAction?: boolean;
 }
 
+/** Board state as the opponent's turn began — the other half of a recap. */
+interface TurnSnapshot {
+  vitality: number;
+  fieldIids: string[];
+  hand: number;
+  logAt: number;
+}
+
+/**
+ * What the player's OWN Dawn gave them, read off the Dawn's log lines.
+ *
+ * The player's Dawn runs inside the `endPhase` that ends the opponent's turn,
+ * so by the time the recap is built its Deal and heals are already in the
+ * state it measures — and were being credited to the opponent's turn ("+1 card
+ * to you" every single time, damage under-reported by every Radiant tick).
+ * The engine cannot be asked for a snapshot mid-`endPhase`, so the Dawn's
+ * contribution is subtracted instead: the standard Deal (`dealt`), Archivist
+ * extras, and the exact-amount Vitality lines. Trigger heals are not
+ * subtracted — their logged amount is nominal and may have been capped.
+ */
+export function ownDawnGains(
+  dawnLines: string[],
+  opts: { dealt: boolean },
+): { cards: number; vitality: number } {
+  let cards = opts.dealt ? 1 : 0;
+  let vitality = 0;
+  for (const line of dawnLines) {
+    const archivist = /Archivist deals (\d+) extra card/.exec(line);
+    if (archivist) cards += Number(archivist[1]);
+    const trigger = /trigger deals (\d+) cards? to P1\b/.exec(line);
+    if (trigger) cards += Number(trigger[1]);
+    const recovers = / recovers (\d+) Vitality at Dawn/.exec(line);
+    if (recovers) vitality += Number(recovers[1]);
+    if (/Leader restores 1 Vitality \(Beacon\)/.test(line)) vitality += 1;
+  }
+  return { cards, vitality };
+}
+
+/**
+ * Digest the opponent's whole turn into the numbers the recap strip prints.
+ *
+ * Read off the engine log slice since the handoff plus the snapshot taken when
+ * the turn started, NOT off the narration beats: a skipped turn has no beats
+ * the player ever saw, and the skipped turn is precisely the one this exists
+ * for. `dawnLines` is the player's own Dawn that closed the turn (empty when it
+ * did not run — a crash recovery that never reached the player's seat) and is
+ * taken back out of every figure; see `ownDawnGains`.
+ */
+export function summarizeCpuTurn(
+  snap: TurnSnapshot,
+  now: { vitality: number; fieldIids: string[]; hand: number; log: string[] },
+  dawn: { lines: string[]; ran: boolean },
+): TurnRecap {
+  const gains = dawn.ran ? ownDawnGains(dawn.lines, { dealt: true }) : { cards: 0, vitality: 0 };
+  const lines = now.log.slice(snap.logAt);
+  const theirs = lines.filter((l) => l.startsWith('P2 '));
+  const recap: TurnRecap = {
+    vitalityLost: Math.max(0, snap.vitality - (now.vitality - gains.vitality)),
+    unitsLost: snap.fieldIids.filter((iid) => !now.fieldIids.includes(iid)).length,
+    cardsPlayed: theirs.filter((l) => /\b(invokes|casts|plays)\b/.test(l)).length,
+    attacked: theirs.some((l) => /\battacks\b/.test(l)),
+    cardsDrawnByMe: Math.max(0, now.hand - gains.cards - snap.hand),
+    lines: Math.max(0, lines.length - (dawn.ran ? dawn.lines.length : 0)),
+  };
+  // v29 — this used to `return null`, on the reasoning that a turn with no
+  // damage, no losses, no plays and no attack has nothing worth a strip. It
+  // has exactly one thing worth a strip, and it is the thing the player
+  // cannot otherwise find out: that the opponent's turn HAPPENED and did
+  // nothing. Silence here is indistinguishable from a narration that broke.
+  if (
+    recap.vitalityLost === 0 &&
+    recap.unitsLost === 0 &&
+    recap.cardsPlayed === 0 &&
+    !recap.attacked
+  ) {
+    recap.noAction = true;
+  }
+  return recap;
+}
+
 /** A targeting/bonding choice in progress — resolved by clicking a
  * highlighted card (or Vitality plate). */
 type Pending =
@@ -1780,6 +1984,198 @@ type Pending =
  * in-place engine-state mutation the whole match UI is built on. */
 function mulliganRedraw(g: GameState): void {
   mulliganHand(g, HUMAN);
+}
+
+/**
+ * How the hand dock lays out for a viewport.
+ *
+ * The dock used to be a fixed 92px strip (118px on desktop) over a 154px-tall
+ * card, so about 60% of every card was clipped, and on a 390px phone the
+ * scrolling row showed three and a half cards with the fourth cut off at the
+ * edge. Now the cards are drawn at a scale chosen so a WHOLE number of them fits
+ * the row, and the dock is tall enough to show them in full: at least 160px,
+ * about 22vh on a tall screen.
+ *
+ *  - `strip` (below `sm`): a horizontal scroll strip. `scale` stretches 3+
+ *    cards edge to edge, e.g. 1.1 for three at 390px.
+ *  - fan (`sm` and up): scale 1 and an arc, with headroom for the lifted card.
+ *  - a phone in landscape (under 520px tall) keeps the board on one screen by
+ *    shrinking the cards to 0.8 and the dock to match, under the 160px floor.
+ */
+export function handLayoutFor(
+  vw: number,
+  vh: number,
+): {
+  strip: boolean;
+  scale: number;
+  dockH: number;
+  cardW: number;
+  cardH: number;
+  /** Fan only: how far the cards sit above the dock's bottom edge, so the
+   * outer cards of the arc (which swing below the middle ones) stay whole. */
+  fanLift: number;
+} {
+  const base = CARD_SIZES.compact;
+  const strip = vw < 640;
+  const short = vh < 520;
+  const GAP = 6;
+  const PAD = 16;
+  let scale = 1;
+  if (strip) {
+    const n = Math.max(3, Math.floor((vw - PAD + GAP) / (base.w + GAP)));
+    scale = (vw - PAD - (n - 1) * GAP) / (n * base.w);
+  }
+  if (short) scale = Math.min(scale, 0.8);
+  const cardH = Math.ceil(base.h * scale);
+  const dockH = short
+    ? cardH + 8
+    : Math.max(160, Math.min(Math.round(vh * 0.22), cardH + (strip ? 8 : 44)));
+  const fanLift = strip || short ? 0 : Math.max(0, Math.min(26, dockH - cardH - 16));
+  return { strip, scale, dockH, cardW: Math.round(base.w * scale), cardH, fanLift };
+}
+
+/** What the sticky action bar calls the play for a card. */
+function invokeLabelFor(def: CardDef): string {
+  return def.type === 'Item'
+    ? 'INVOKE — BOND'
+    : needsTarget(def.onInvoke)
+      ? 'INVOKE — PICK TARGET'
+      : 'INVOKE';
+}
+
+/**
+ * One card in the hand dock.
+ *
+ * A component of its own so each slot can hold its own long-press handler (a
+ * hook, and the dock maps over the hand). Tap / click selects — the sticky
+ * action bar then plays it; a long press (touch) zooms; hover previews (mouse
+ * only: a touch tap synthesises a mouseenter, which used to pop the big
+ * preview on every selection); double-click plays outright on a desktop.
+ */
+function HandSlot({
+  card,
+  index,
+  count,
+  layout,
+  overlap,
+  selected,
+  focused,
+  dimmed,
+  highlight,
+  doubleClickPlays,
+  onSelect,
+  onHoverIntent,
+  onFocusCard,
+  onLongPress,
+  onPlay,
+}: {
+  key?: React.Key;
+  card: { iid: string; def: CardDef };
+  index: number;
+  count: number;
+  layout: ReturnType<typeof handLayoutFor>;
+  overlap: number;
+  selected: boolean;
+  focused: boolean;
+  dimmed: boolean;
+  highlight: boolean;
+  doubleClickPlays: boolean;
+  onSelect: () => void;
+  onHoverIntent: () => void;
+  onFocusCard: () => void;
+  onLongPress: () => void;
+  onPlay: () => void;
+}) {
+  const longPress = useLongPress(onLongPress, () => {});
+  const base = CARD_SIZES.compact;
+  const mid = (count - 1) / 2;
+  const off = index - mid;
+  const angle = Math.max(-22, Math.min(22, off * (count > 8 ? 5 : 7)));
+  const arcDrop = Math.abs(off) * 3;
+  const lifted = selected || focused;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${card.def.name} — select`}
+      aria-pressed={selected}
+      data-hand-card="1"
+      className={cn(
+        'relative shrink-0 outline-none',
+        layout.strip && 'snap-start',
+        selected && layout.strip && 'rounded-[4px] ring-2 ring-[var(--c-yellow)]',
+      )}
+      style={{
+        width: layout.cardW,
+        height: layout.cardH,
+        marginLeft: layout.strip || index === 0 ? 0 : -overlap,
+        zIndex: lifted ? 50 : index,
+      }}
+      {...longPress}
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') onHoverIntent();
+      }}
+      onFocus={onFocusCard}
+      onClick={onSelect}
+      // v26 — double-click plays it. Every card in the game costs three
+      // interactions to cast on a desktop, and the preview is a reference the
+      // player rarely needs for the fifth copy of a Wellspring or a card they
+      // picked out of their own deck. Refusals still go through `tryInvoke`, so
+      // a double-click on an unaffordable card explains itself in the banner
+      // exactly as the button does. Desktop only: on touch the sticky INVOKE
+      // button is the way, and an accidental double-tap must not cast a card.
+      onDoubleClick={(e) => {
+        if (!doubleClickPlays || e.target !== e.currentTarget) return;
+        e.preventDefault();
+        onPlay();
+      }}
+      onKeyDown={(e) => {
+        // Nested cost/keyword chips inside the card handle their own
+        // Enter/Space — don't select on their behalf.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+    >
+      <div
+        className="pointer-events-none transition-transform duration-150 ease-out"
+        style={{
+          width: layout.cardW,
+          height: layout.cardH,
+          transformOrigin: 'bottom center',
+          // Strip: no fan geometry — the card sits flat so its masthead is
+          // legible, and selection is the ring above. Fan: lift the chosen
+          // card straight up out of the arc.
+          transform: layout.strip
+            ? 'none'
+            : lifted
+              ? 'translateY(-14px) rotate(0deg) scale(1.06)'
+              : `translateY(${arcDrop}px) rotate(${angle}deg)`,
+        }}
+      >
+        <div
+          style={{
+            width: base.w,
+            height: base.h,
+            transform: `scale(${layout.scale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          <CardFace
+            def={card.def}
+            size="compact"
+            dimmed={dimmed}
+            // During the clash reaction window, playable Quick / Ambush cards
+            // light up so the window is discoverable.
+            highlight={highlight}
+            introduceKeywords
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /** The clash-pause sentinel: thrown out of playTurn's guard callback so the
@@ -1859,6 +2255,9 @@ export function GameV4({
   // engine's chooseShed hook; consumed on use. Declared before `g` so the
   // hook installed in its initializer can close over them.
   const prepickRef = useRef<string[] | null>(null);
+  /** CPU level for this match, read once: the header badge and the engine seat
+   * must name the same level even if Settings changes underneath a long match. */
+  const [cpuDifficulty] = useState<CpuDifficultyId>(loadCpuDifficulty);
   /** Seed for a re-opened (forced) picker when a Dusk draw invalidated the
    * pre-pick — keeps the player's earlier choices selected. */
   const duskSeedRef = useRef<string[]>([]);
@@ -1882,7 +2281,7 @@ export function GameV4({
       firstPlayer: firstPlayerForSeed(matchSeed),
     });
     // The CPU seat plays at the level chosen in Settings (default NORMAL).
-    setCpuDifficulty(game, loadCpuDifficulty(), CPU);
+    setCpuDifficulty(game, cpuDifficulty, CPU);
     // Give the CPU the same opening-hand judgment the playtest harness gives
     // it — the human's own mulligan stays a manual UI decision below.
     maybeMulliganPlayer(game, CPU, game.rng);
@@ -2022,14 +2421,35 @@ export function GameV4({
   const [shedForced, setShedForced] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     text: string;
-    onConfirm: () => void;
+    /** Receives the "don't ask again" checkbox when the dialog offers one. */
+    onConfirm: (remember: boolean) => void;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    /** Red CONFIRM for destructive actions (concede); yellow otherwise. */
+    danger?: boolean;
+    /** Label of an optional "don't ask again" checkbox. */
+    remember?: string;
   } | null>(null);
+  const [confirmRemember, setConfirmRemember] = useState(false);
+  /** "Don't ask again this match" for the end-turn confirm. Deliberately not
+   * persisted: it is a per-match nuisance switch, not a setting. */
+  const [skipEndTurnAsk, setSkipEndTurnAsk] = useState(false);
+  /** The ⋯ overflow menu on the right of the header (CONCEDE lives in it). */
+  const [menuOpen, setMenuOpen] = useState(false);
+  /** The hand card the sticky INVOKE bar is acting on. */
+  const [selectedIid, setSelectedIid] = useState<string | null>(null);
   const [inspect, setInspect] = useState<CardDef | null>(null);
   /** The transient `say()` banner. `tone` separates a status line ("Guards
    * set…", yellow) from a refusal ("Not enough essence…", red + shake) so an
    * invalid action is legible as one at a glance, not only after reading. */
   const [banner, setBanner] = useState<{ text: string; tone: 'info' | 'warn' } | null>(null);
-  const [logExpanded, setLogExpanded] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  /** RECENT = since your last turn; FULL = the last 160 lines. Remembered. */
+  const [logMode, setLogMode] = usePersistedState<'recent' | 'full'>(
+    'match-log-mode',
+    'recent',
+    (v): v is 'recent' | 'full' => v === 'recent' || v === 'full',
+  );
   const logScrollRef = useRef<HTMLDivElement>(null);
   /**
    * Absolute log index where the opponent's most recent turn begins — stamped
@@ -2051,12 +2471,7 @@ export function GameV4({
    */
   const [turnRecap, setTurnRecap] = useState<TurnRecap | null>(null);
   /** Board state as the opponent's turn began — the other half of the recap. */
-  const cpuTurnSnapshotRef = useRef<{
-    vitality: number;
-    fieldIids: string[];
-    hand: number;
-    logAt: number;
-  } | null>(null);
+  const cpuTurnSnapshotRef = useRef<TurnSnapshot | null>(null);
   // Hand preview: the hand card currently enlarged above the bottom dock.
   const [preview, setPreview] = useState<string | null>(null);
   const [previewPinned, setPreviewPinned] = useState(false);
@@ -2066,6 +2481,10 @@ export function GameV4({
   const [viewportW, setViewportW] = useState(() =>
     typeof window === 'undefined' ? 1280 : window.innerWidth,
   );
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  );
+  const coarsePointer = useCoarsePointer();
   const [floats, setFloats] = useState<DmgFloat[]>([]);
   const [phaseFx, setPhaseFx] = useState<string | null>(null);
   const [flashIids, setFlashIids] = useState<Set<string>>(new Set());
@@ -2313,6 +2732,14 @@ export function GameV4({
     flashPhase('MAIN I');
   };
 
+  // The teaching channel (#1): while the mulligan dialog or the turn recap is
+  // up, first-sight keyword popovers wait their turn instead of stacking on top
+  // of them (the coach callout takes the same hold itself). Held only on states
+  // that are on screen, so the queue drains the moment they close.
+  const recapShowing = !!turnRecap && stage === 'play' && !narrating;
+  const teachingBusy = stage === 'mulligan' || recapShowing;
+  useEffect(() => (teachingBusy ? holdKeywordIntros() : undefined), [teachingBusy]);
+
   // Report the result once.
   useEffect(() => {
     if (stage === 'over' && g.winner && !resultSent.current) {
@@ -2382,11 +2809,13 @@ export function GameV4({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (confirmDialog) setConfirmDialog(null);
+      else if (menuOpen) setMenuOpen(false);
       else if (inspect) setInspect(null);
       else if (preview) {
         setPreview(null);
         setPreviewPinned(false);
-      } else if (pending) setPending(null);
+      } else if (selectedIid) setSelectedIid(null);
+      else if (pending) setPending(null);
       else if (showAsh) setShowAsh(false);
       else if (shedPick !== null) {
         // Same as the picker's ✕ BACK: clear a partial selection first, then
@@ -2394,7 +2823,7 @@ export function GameV4({
         // a mid-Dusk resume (shedForced), which has no way back.
         if (shedPick.length > 0) setShedPick([]);
         else if (!shedForced) setShedPick(null);
-      } else if (logExpanded) setLogExpanded(false);
+      } else if (logOpen) setLogOpen(false);
       else if (atkSel.size > 0) setAtkSel(new Set());
       // Symmetric with attacker selection: Escape clears an in-progress
       // guard assignment too (previously the only way to undo a guard was
@@ -2405,14 +2834,16 @@ export function GameV4({
     return () => window.removeEventListener('keydown', onKey);
   }, [
     confirmDialog,
+    menuOpen,
     inspect,
     preview,
+    selectedIid,
     pending,
     showAsh,
     atkSel,
     shedPick,
     shedForced,
-    logExpanded,
+    logOpen,
     guardSel,
   ]);
 
@@ -2443,7 +2874,7 @@ export function GameV4({
       if (e.key !== ' ' && e.key !== 'Enter') return;
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       if (stage === 'over' || stage === 'mulligan') return;
-      if (confirmDialog || inspect || pending || showAsh || shedPick !== null) return;
+      if (confirmDialog || menuOpen || inspect || pending || showAsh || shedPick !== null) return;
       const el = e.target as HTMLElement | null;
       // Anything that already acts on Space/Enter itself keeps the key: native
       // controls, links, disclosure summaries, and the interactive ARIA roles.
@@ -2464,7 +2895,7 @@ export function GameV4({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [stage, confirmDialog, inspect, pending, showAsh, shedPick]);
+  }, [stage, confirmDialog, menuOpen, inspect, pending, showAsh, shedPick]);
 
   // The Battle Log renders oldest-first and is only ~5 lines tall, so it used
   // to open scrolled to the TOP of the last 160 lines — i.e. on the oldest
@@ -2472,13 +2903,16 @@ export function GameV4({
   // the one they just missed; pin it to the bottom on open and on every line
   // that arrives while it is open.
   useEffect(() => {
-    if (!logExpanded) return;
+    if (!logOpen) return;
     const el = logScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [logExpanded, g.log.length]);
+  }, [logOpen, logMode, g.log.length]);
 
   useEffect(() => {
-    const onResize = () => setViewportW(window.innerWidth);
+    const onResize = () => {
+      setViewportW(window.innerWidth);
+      setViewportH(window.innerHeight);
+    };
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
     return () => {
@@ -2716,6 +3150,7 @@ export function GameV4({
       return;
     }
     closePreview();
+    setSelectedIid(null);
     if (card.def.type === 'Item') {
       // v13: a Charm can also be cast on YOU, for Vitality. With no unit on
       // the field that is the only line, so take it without a pick; with one,
@@ -3032,6 +3467,39 @@ export function GameV4({
       flashPhase(PHASE_LABEL[g.phase]);
     }
     checkWinner();
+  };
+
+  /**
+   * The phase button's handler. Pressing END TURN with a card still castable
+   * and the essence to cast it throws a card's worth of tempo away, so that
+   * (and only that) asks first; a turn with nothing left in it ends in one
+   * press. "Don't ask again" lasts for this match.
+   */
+  const requestAdvance = () => {
+    if (g.phase === 'Main2') {
+      const playable = me.hand.filter((c) => !invokeWhy(c)).length;
+      if (
+        shouldConfirmEndTurn({
+          playable,
+          spendableEssence: essenceTotal(potentialEssence(me)),
+          suppressed: skipEndTurnAsk,
+        })
+      ) {
+        setConfirmRemember(false);
+        setConfirmDialog({
+          text: `You can still play ${playable} card${playable === 1 ? '' : 's'} with your remaining essence. End your turn anyway?`,
+          confirmLabel: 'END TURN',
+          cancelLabel: 'KEEP PLAYING',
+          remember: "Don't ask again this match",
+          onConfirm: (remember) => {
+            if (remember) setSkipEndTurnAsk(true);
+            advanceMyPhase();
+          },
+        });
+        return;
+      }
+    }
+    advanceMyPhase();
   };
 
   // ---- clash: human attacking ---------------------------------------------
@@ -3446,46 +3914,37 @@ export function GameV4({
     tickCpuBeat();
   };
 
-  /**
-   * Digest the opponent's whole turn into a few numbers, for the strip that
-   * greets the player when control comes back (see `turnRecap`).
-   *
-   * Read off the engine log slice since the handoff plus the snapshot taken
-   * when the turn started, NOT off the narration beats: a skipped turn has no
-   * beats the player ever saw, and the skipped turn is precisely the one this
-   * exists for.
-   */
+  /** The recap strip's numbers for the opponent's turn that just ended — see
+   * `summarizeCpuTurn`. The player's own Dawn closes that turn (the engine runs
+   * it inside the same `endPhase`), so it is subtracted out rather than being
+   * credited to the opponent. */
   const buildTurnRecap = (): TurnRecap | null => {
     const snap = cpuTurnSnapshotRef.current;
     cpuTurnSnapshotRef.current = null;
     if (!snap) return null;
-    const lines = g.log.slice(snap.logAt);
-    const theirs = lines.filter((l) => l.startsWith('P2 '));
-    const recap: TurnRecap = {
-      vitalityLost: Math.max(0, snap.vitality - me.vitality),
-      unitsLost: snap.fieldIids.filter((iid) => !me.field.some((u) => u.iid === iid)).length,
-      cardsPlayed: theirs.filter((l) => /\b(invokes|casts|plays)\b/.test(l)).length,
-      attacked: theirs.some((l) => /\battacks\b/.test(l)),
-      cardsDrawnByMe: Math.max(0, me.hand.length - snap.hand),
-      lines: lines.length,
-    };
-    // v29 — this used to `return null`, on the reasoning that a turn with no
-    // damage, no losses, no plays and no attack has nothing worth a strip. It
-    // has exactly one thing worth a strip, and it is the thing the player
-    // cannot otherwise find out: that the opponent's turn HAPPENED and did
-    // nothing. Silence here is indistinguishable from a narration that broke.
-    if (
-      recap.vitalityLost === 0 &&
-      recap.unitsLost === 0 &&
-      recap.cardsPlayed === 0 &&
-      !recap.attacked
-    ) {
-      recap.noAction = true;
-    }
-    return recap;
+    return summarizeCpuTurn(
+      snap,
+      {
+        vitality: me.vitality,
+        fieldIids: me.field.map((u) => u.iid),
+        hand: me.hand.length,
+        log: g.log,
+      },
+      // The Dawn ran iff the seat has already come back round to the player. A
+      // recovery that failed to crank the engine that far leaves the CPU active
+      // and nothing of the player's was dealt.
+      { ran: g.active === HUMAN, lines: humanDawnTailLen() > 0 ? g.dawnLog : [] },
+    );
   };
 
   const beginHumanTurn = () => {
+    // A SKIP pressed during the "thinking" delay arms this for the narration
+    // that delay was about to start. If that turn crashed instead,
+    // `recoverToHumanTurn` lands here with the flag still set, and the NEXT
+    // opponent turn's narration — for which nobody pressed SKIP — would be
+    // silently fast-forwarded. Both the normal and the recovery landing
+    // funnel through here, so this is the one place to put the reset.
+    skipNextNarrationRef.current = false;
     // Safety flush: a recovery path can land here without the narration
     // ticker's own end-of-run flush having fired.
     releaseFloatsFor();
@@ -3502,6 +3961,7 @@ export function GameV4({
     setGuardSel({});
     setGuardFocus(null);
     closePreview();
+    setSelectedIid(null);
     setStage('play');
     flashPhase('YOUR TURN');
   };
@@ -4034,7 +4494,8 @@ export function GameV4({
    * its neighbour. Above `sm` the fan is untouched.
    */
   const isNarrow = viewportW < 640;
-  const handStrip = isNarrow;
+  const handLayout = handLayoutFor(viewportW, viewportH);
+  const handStrip = handLayout.strip;
 
   /**
    * How far each hand card slides over the one before it. Fixed at 46px, the
@@ -4047,11 +4508,15 @@ export function GameV4({
    */
   const fanOverlap = (() => {
     const n = me.hand.length;
-    const w = CARD_SIZES.compact.w;
-    if (n <= 1) return 46;
+    // The fan is laid out in the SCALED card width (see `handLayoutFor`): a
+    // short landscape viewport draws the hand at 0.8 and must overlap by 0.8
+    // of what full size would.
+    const w = handLayout.cardW;
+    const k = handLayout.scale;
+    if (n <= 1) return Math.round(46 * k);
     const avail = Math.max(220, viewportW - 12);
     const needed = w - (avail - w) / (n - 1);
-    return Math.round(Math.min(w - 20, Math.max(46, needed)));
+    return Math.round(Math.min(w - 20 * k, Math.max(46 * k, needed)));
   })();
 
   // Coach stage: coarse key for the first-match walkthrough. The CPU's attack
@@ -4171,7 +4636,7 @@ export function GameV4({
             wellspringsLeft > 0 && topWellspringNeed
               ? `A ${topWellspringNeed} Wellspring would unlock ${wellspringNeed[topWellspringNeed]} card(s) in your hand — its dot is ringed. `
               : ''
-          }${wellspringsLeft > 0 ? `${wellspringsLeft} Wellspring${wellspringsLeft > 1 ? 's' : ''} left this turn${wellspringsLeft > 1 ? '; the second enters exhausted' : ''}. ` : 'Wellspring allowance used. '}INVOKE auto-pays from Locations. Unspent essence clears when you change phase. ${
+          }${wellspringsLeft > 0 ? `${wellspringsLeft} Wellspring${wellspringsLeft > 1 ? 's' : ''} left${wellspringsLeft > 1 ? ' (the second enters exhausted)' : ''}. ` : 'Wellspring allowance used. '}Essence clears each phase. ${
             g.phase === 'Main1'
               ? // Named as the button is LABELLED (v22). The hint bar said
                 // "NEXT" in three places and the phase button never reads NEXT
@@ -4198,6 +4663,8 @@ export function GameV4({
     return null;
   })();
 
+  const difficultyEntry =
+    CPU_DIFFICULTIES.find((d) => d.id === cpuDifficulty) ?? CPU_DIFFICULTIES[1];
   const confirmDialogRef = useDialogFocus(!!confirmDialog);
   const mulliganDialogRef = useDialogFocus(stage === 'mulligan');
   const gameOverDialogRef = useDialogFocus(stage === 'over' && !!g.winner);
@@ -4217,6 +4684,9 @@ export function GameV4({
     .slice(0, 2);
 
   const previewCard = preview ? (me.hand.find((c) => c.iid === preview) ?? null) : null;
+  /** The card the sticky action bar is about — null once it has left the hand. */
+  const selectedCard = selectedIid ? (me.hand.find((c) => c.iid === selectedIid) ?? null) : null;
+  const selectedWhy = selectedCard ? invokeWhy(selectedCard) : undefined;
   const previewWhy = previewCard ? invokeWhy(previewCard) : undefined;
   // The pinned hand-card preview lays a full card (240px at HOVER_PREVIEW_SCALE)
   // beside a 160px control column that carries CLOSE and the primary mobile
@@ -4269,10 +4739,31 @@ export function GameV4({
     wellspringsLeft > 0 &&
     wellspringChoices(g, HUMAN).length > 0;
 
+  /**
+   * The Wellspring the turn-1 call to action places (#4). While one is
+   * playable and unplayed it is the PRIMARY move — the dominant button used to
+   * read "TO CLASH ▸ · WELLSPRING UNPLAYED" with the actual play a 16px dot
+   * off to the side — and moving on is demoted to a secondary button below it.
+   */
+  const recommendedWellspring = recommendWellspring(
+    wellspringChoices(g, HUMAN) as EssenceType[],
+    wellspringNeed,
+    me.hand.map((c) => effectiveCost(g, HUMAN, c.def)),
+  );
+  const wellspringPrimary =
+    stage === 'play' &&
+    inMyMain &&
+    !wellspringWhy &&
+    wellspringsLeft > 0 &&
+    recommendedWellspring !== null;
+
   const phaseButtonLabel = phaseAdvanceLabel(g.phase, {
-    playable: playableInHand,
+    // While the Wellspring is the primary the player's next move is already
+    // named; the secondary stays one short line so both fit a phone's row.
+    playable: wellspringPrimary ? 0 : playableInHand,
     shed: Math.max(0, me.hand.length - MAX_HAND),
-    wellspringWasted,
+    // The warning is the primary button's own text while it is up.
+    wellspringWasted: wellspringWasted && !wellspringPrimary,
     // The same list the ⚔ ALL ×N control and the attacker rings are drawn
     // from, so the count on the button and the units it refers to cannot
     // disagree. Empty once they have swung (or are exhausted), which is why
@@ -4329,6 +4820,9 @@ export function GameV4({
    * against the mutated GameState. It stays quiet during the CPU's turn, where
    * the narration bubble already speaks.
    */
+  const outcome = matchOutcome(g.winner);
+  const foeEmpty = foe.field.length === 0;
+  const meEmpty = me.field.length === 0;
   const myEssence = essenceTotal(me.essence);
   const boardReport =
     g.active === HUMAN && !g.winner
@@ -4380,68 +4874,462 @@ export function GameV4({
     >
       <style>{GAME_CSS}</style>
 
-      {/* Top bar: concede, turn/phase tracker, actions */}
-      <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs z-30">
-        {/* The board report for screen readers (finding 2.7). Visually
-            hidden; `atomic` so each update reads as one sentence rather than
-            as the words that changed. */}
-        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {boardReport}
+      {/* Header: top bar, phase bar, hint. Everything transient (narration,
+          recap, target bar, toasts, the clash and stack panels) docks beneath
+          it — see the column below. */}
+      <div className="relative shrink-0 z-30" data-coach-avoid>
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-[var(--c-ink)] shadow-hard-black-xs">
+          {/* The board report for screen readers (finding 2.7). Visually
+              hidden; `atomic` so each update reads as one sentence rather than
+              as the words that changed. */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {boardReport}
+          </div>
+          <span data-turn-label className="heading-font fs-xs text-[var(--c-yellow)] shrink-0">
+            TURN {g.turn} · {g.active === HUMAN ? 'YOU' : 'CPU'}
+          </span>
+          {/* Who won the opening coin-flip. It is randomised per match now, and
+              it changes real things (the turn-1 Deal skip, the second player's
+              bonus Wellspring), so it can't be left implicit. */}
+          {/* Shown on phones too (it's tiny): on a small screen the only other
+              evidence of going second was the extra Wellspring itself. Tip
+              makes the explanation tappable where `title` never shows. */}
+          <Tip
+            text={
+              g.firstPlayer === HUMAN
+                ? 'You went first — you skipped the Deal on turn 1.'
+                : 'You went second — you got a second (exhausted) Wellspring on your opening turn.'
+            }
+            className="heading-font fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-steel)] text-[var(--c-paper)] shrink-0"
+          >
+            {g.firstPlayer === HUMAN ? 'ON THE PLAY' : 'ON THE DRAW'}
+          </Tip>
+          {/* The CPU level this match runs at (chosen in Settings). */}
+          <span
+            data-difficulty={cpuDifficulty}
+            title={`CPU difficulty: ${difficultyEntry.label} — ${difficultyEntry.blurb}`}
+            className="heading-font fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-ink)] text-[var(--c-paper)] shrink-0"
+          >
+            {difficultyEntry.label}
+          </span>
+          {/* The phase tracker moved out of this bar into its own full-width
+              stepper below — see PhaseStepper. */}
+          <span className="fs-xs font-mono text-[var(--c-paper)]/70 truncate hidden md:inline">
+            {humanLabel} vs {cpuLabel}
+          </span>
+          {/* Every turn action (declare attack, resolve clash, confirm
+              guards, advance phase, skip the CPU) now lives on the clash
+              divider in the middle of the board, where the player is already
+              looking — see the CLASH DIVIDER block below. */}
+          {/* ⋯ overflow menu. CONCEDE used to be the top-left button, where
+              every other screen puts "< MENU" — a destructive control in the
+              most-pressed corner. It now lives behind this, on the right. */}
+          {/* One button, one drawer: the Battle Log used to have two (this, and a
+            ▴ FULL LOG on the turn recap) that opened the same panel. It lives in
+            the header — the divider is full of the primary action, and on a
+            phone a third control there wrapped onto its own row. */}
+          <button
+            onClick={() => setLogOpen((o) => !o)}
+            aria-expanded={logOpen}
+            className="tap-44 btn-pop heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-1 ink-border-sm shrink-0 ml-auto"
+            title={logOpen ? 'Hide the Battle Log' : 'Show the Battle Log'}
+          >
+            {logOpen ? '▾ LOG' : '▴ LOG'}
+          </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Match menu"
+              title="Match menu"
+              data-match-menu="1"
+              className="tap-44 btn-pop heading-font fs-md leading-none bg-[var(--c-steel)] text-[var(--c-paper)] px-2.5 py-1 ink-border-sm"
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <>
+                {/* Click-away layer; Escape is handled with the other overlays. */}
+                <div
+                  className="fixed inset-0 z-40"
+                  aria-hidden="true"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div
+                  role="menu"
+                  aria-label="Match menu"
+                  className="absolute right-0 top-full mt-1 z-50 bg-[var(--c-paper)] ink-border-md shadow-hard-black-xs p-1 min-w-[170px]"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      if (stage === 'over') concede();
+                      else
+                        setConfirmDialog({
+                          text: 'Concede this match? This will count as a loss.',
+                          onConfirm: concede,
+                          danger: true,
+                        });
+                    }}
+                    className="w-full text-left heading-font fs-xs text-[var(--c-red)] px-2 py-2 min-h-[36px] hover:bg-[var(--c-ink)]/10"
+                  >
+                    {stage === 'over' ? '← LEAVE MATCH' : '✕ CONCEDE MATCH'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <button
-          onClick={() => {
-            if (stage === 'over') concede();
-            else
-              setConfirmDialog({
-                text: 'Concede this match? This will count as a loss.',
-                onConfirm: concede,
-              });
-          }}
-          className="tap-44 btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-0.5 ink-border-sm"
-          aria-label="Concede match"
-        >
-          ✕ CONCEDE
-        </button>
-        <span className="heading-font text-[11px] text-[var(--c-yellow)] shrink-0">
-          TURN {g.turn} · {g.active === HUMAN ? 'YOU' : 'CPU'}
-        </span>
-        {/* Who won the opening coin-flip. It is randomised per match now, and
-            it changes real things (the turn-1 Deal skip, the second player's
-            bonus Wellspring), so it can't be left implicit. */}
-        {/* Shown on phones too (it's tiny): on a small screen the only other
-            evidence of going second was the extra Wellspring itself. Tip
-            makes the explanation tappable where `title` never shows. */}
-        <Tip
-          text={
-            g.firstPlayer === HUMAN
-              ? 'You went first — you skipped the Deal on turn 1.'
-              : 'You went second — you got a second (exhausted) Wellspring on your opening turn.'
-          }
-          className="heading-font text-[8px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-steel)]/60 text-[var(--c-paper)] shrink-0"
-        >
-          {g.firstPlayer === HUMAN ? 'ON THE PLAY' : 'ON THE DRAW'}
-        </Tip>
-        {/* The phase tracker moved out of this bar into its own full-width
-            stepper below — see PhaseStepper. */}
-        <span className="text-[9px] font-mono text-[var(--c-paper)]/70 truncate hidden sm:inline">
-          {humanLabel} vs {cpuLabel}
-        </span>
-        {/* Every turn action (declare attack, resolve clash, confirm
-            guards, advance phase, skip the CPU) now lives on the clash
-            divider in the middle of the board, where the player is already
-            looking — see the CLASH DIVIDER block below. */}
+
+        {/* Phase stepper — always-visible turn progress (board redesign #1) */}
+        <PhaseStepper phase={g.phase} yours={g.active === HUMAN} />
+
+        {/* Contextual hint bar */}
+        {/* Instructions must wrap: touch users cannot recover clipped text by hovering. */}
+        {hint && stage !== 'over' && stage !== 'mulligan' && (
+          <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 fs-xs font-bold text-[var(--c-yellow)] leading-snug">
+            💡 {hint}
+          </div>
+        )}
+
+        {logOpen && (
+          // A drawer hung off the header, over the board: opening it no longer
+          // resizes the lanes underneath.
+          <div
+            role="region"
+            aria-label="Battle Log"
+            className="absolute left-0 right-0 top-full z-40 bg-[var(--c-ink)] border-y-2 border-[var(--c-yellow)]/40 shadow-hard-black-xs text-left"
+          >
+            <div className="flex items-center gap-2 px-2 py-1">
+              <Tabs
+                ariaLabel="Battle Log range"
+                value={logMode}
+                onChange={setLogMode}
+                tabs={[
+                  { id: 'recent' as const, label: 'RECENT' },
+                  { id: 'full' as const, label: 'FULL' },
+                ]}
+              />
+              <span className="fs-xs font-bold text-[var(--c-paper)]/60 hidden sm:inline">
+                {logMode === 'recent' ? 'since your last turn' : 'the last 160 lines'}
+              </span>
+              <button
+                onClick={() => setLogOpen(false)}
+                aria-label="Close the Battle Log"
+                className="ml-auto tap-44 btn-pop heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-1 ink-border-sm"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+            <div
+              ref={logScrollRef}
+              className="max-h-[min(34vh,240px)] overflow-y-auto px-2 pb-1 fs-xs font-mono text-[var(--c-paper)]/85 leading-snug"
+            >
+              {(() => {
+                // RECENT starts at the handoff the divider below already marks
+                // (or the last 24 lines before the opponent has ever moved).
+                const start =
+                  logMode === 'full'
+                    ? Math.max(0, g.log.length - 160)
+                    : Math.max(
+                        0,
+                        g.log.length - 160,
+                        handoffAt >= 0 ? handoffAt : g.log.length - 24,
+                      );
+                return g.log.slice(start).map((l, i) => {
+                  const abs = start + i;
+                  return (
+                    <React.Fragment key={abs}>
+                      {/* Where the opponent's most recent turn starts. The log
+                          is the only place a player who skipped the narration
+                          can find out what happened, and an undivided wall of
+                          lines makes "what did it just do" a counting
+                          exercise. */}
+                      {abs === handoffAt && logMode === 'full' && (
+                        <div className="my-0.5 flex items-center gap-1 fs-xs font-black text-[var(--c-yellow)] uppercase tracking-wide">
+                          <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
+                          since your last turn
+                          <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
+                        </div>
+                      )}
+                      <div>· {renderKeywordText(humanize(l), true)}</div>
+                    </React.Fragment>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Message column, docked BENEATH the header (`top-full`) so a toast never
+          covers the phase bar or the hint it is about. The CPU narration
+          bubble, the turn recap, the pending target bar, the `say()` banner and
+          the clash / stack panels all used to sit at fixed offsets as separate
+          absolute siblings — so DOM order decided which one painted (every
+          `say()` fired during a target pick rendered UNDERNEATH the very bar it
+          was explaining) and the clash bar landed on the narration bubble. One
+          stacked column: all visible at once, and the column (not each bar)
+          carries the phone-width cap. */}
+        <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2 z-50 flex flex-col items-center gap-1 w-max max-w-[92vw] pointer-events-none">
+          {(stage === 'cpu' || narrating) && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={skipCpuBeats}
+              onKeyDown={(e) => {
+                // The narration renders nested keyword-link buttons; let their own
+                // Enter/Space open the glossary instead of skipping the CPU beats.
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  skipCpuBeats();
+                }
+              }}
+              title="Click to fast-forward the opponent's turn"
+              className={cn(
+                'pointer-events-auto heading-font fs-xs px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none',
+                // The player's own Dawn runs inside the endPhase that ends the
+                // opponent's turn, so its beats ride the same narration — but
+                // they are the PLAYER's, and presenting "You draw a card at
+                // Dawn." in the opponent's red was a mislabel.
+                cpuFocus?.mine
+                  ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
+                  : 'bg-[var(--c-red)] text-white',
+              )}
+            >
+              {cpuBeat ? (
+                <>
+                  {/* The bubble itself says HELD: the RESUME/STEP buttons live on
+                  the divider, and a fresh segment parking on its beat 0 under
+                  a hold read as a stuck board to anyone not looking there. */}
+                  {cpuPaused && (
+                    <span className="mr-1 fs-xs font-black bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm">
+                      ❚❚ HELD
+                    </span>
+                  )}
+                  {cpuFocus?.mine && <span className="mr-1 fs-xs font-black">☀ YOUR DAWN —</span>}
+                  {/* v30 — the opponent's move, announced.
+                    Every CPU-visibility pass since v18 has been about what the
+                    board SHOWS: rings, spotlights, dwell times, a recap strip.
+                    None of it reaches a player who is not looking at the
+                    screen. The turn recap has carried `role="status"` since
+                    v26 — so the summary of the turn was announced and not one
+                    of the moves in it — while the bubble that replaces its own
+                    text every beat announced nothing at all, which for a
+                    screen-reader user is the opponent playing its whole turn
+                    in silence. `polite`, so it queues behind whatever the
+                    player is doing rather than interrupting it, and `atomic`
+                    so a beat is read as one sentence instead of as the words
+                    that changed. */}
+                  <span role="status" aria-live="polite" aria-atomic="true">
+                    {renderKeywordText(cpuBeat.text)}
+                  </span>
+                  <span className="ml-2 fs-xs font-mono opacity-90">
+                    {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
+                  </span>
+                </>
+              ) : (
+                <span className="gv4-pulse">🤔 {cpuLabel} is thinking…</span>
+              )}
+              {/* A menu, not a cycling chip: four rungs meant up to three taps
+                to reach CINEMATIC (AUDIT-2026-10-06 §2.21). */}
+              <select
+                value={cpuSpeedIdx}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => pickCpuSpeed(Number(e.target.value))}
+                title={SPEED_TOOLTIP}
+                aria-label="Narration speed"
+                className="ml-2 fs-xs font-mono bg-[var(--c-ink)]/60 text-[var(--c-paper)] px-1 py-0.5 ink-border-sm align-middle"
+              >
+                {CPU_SPEEDS.map((sp, i) => (
+                  <option key={sp.label} value={i}>
+                    ⏱ {sp.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* What the opponent just did, kept on screen after the narration —
+            or after a SKIP — has taken itself away. */}
+          {turnRecap && stage === 'play' && !narrating && (
+            <div
+              className="pointer-events-auto bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 max-w-[92vw]"
+              role="status"
+            >
+              <span className="heading-font fs-xs text-[var(--c-red)]">
+                ⟲ {cpuLabel.toUpperCase()}&apos;S TURN
+              </span>
+              {turnRecap.noAction && (
+                <span className="fs-xs font-bold text-[var(--c-paper)]/80">
+                  no cards played · did not attack
+                </span>
+              )}
+              {turnRecap.cardsPlayed > 0 && (
+                <span className="fs-xs font-bold">
+                  {turnRecap.cardsPlayed} card{turnRecap.cardsPlayed === 1 ? '' : 's'} played
+                </span>
+              )}
+              {turnRecap.attacked && <span className="fs-xs font-bold">attacked</span>}
+              {turnRecap.vitalityLost > 0 && (
+                <span className="fs-xs font-black text-[var(--c-red)]">
+                  −{turnRecap.vitalityLost} Vitality (you: {me.vitality})
+                </span>
+              )}
+              {turnRecap.unitsLost > 0 && (
+                <span className="fs-xs font-black text-[var(--c-red)]">
+                  {turnRecap.unitsLost} of your units lost
+                </span>
+              )}
+              {turnRecap.cardsDrawnByMe > 0 && (
+                <span className="fs-xs font-bold text-[var(--c-yellow)]">
+                  +{turnRecap.cardsDrawnByMe} card{turnRecap.cardsDrawnByMe === 1 ? '' : 's'} to you
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  // The one log drawer, on RECENT: the lines since the handoff
+                  // are exactly this turn's.
+                  setLogMode('recent');
+                  setLogOpen(true);
+                  setTurnRecap(null);
+                }}
+                className="tap-44 heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+                title={`Open the Battle Log on ${cpuLabel}'s ${turnRecap.lines} line(s)`}
+              >
+                ▴ LOG
+              </button>
+              <button
+                onClick={() => setTurnRecap(null)}
+                aria-label="Dismiss the turn recap"
+                className="tap-44 heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Pending target bar */}
+          {pending && (
+            <div className="pointer-events-auto bg-[var(--c-red)] text-white heading-font fs-xs px-3 py-1 ink-border-sm flex flex-wrap justify-center gap-2 items-center max-w-[92vw]">
+              {pending.kind === 'bond'
+                ? isPendingTarget(HUMAN)
+                  ? 'BOND — pick a friendly unit, or your Vitality'
+                  : 'BOND — pick a friendly unit'
+                : pending.kind === 'rebond'
+                  ? 'RE-BOND — pick a friendly unit'
+                  : `PICK A TARGET — ${describeEffect(pending.effect)}`}
+              <button
+                onClick={() => setPending(null)}
+                aria-label="Cancel targeting"
+                className="tap-44 bg-[var(--c-ink)] px-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {banner && (
+            <div
+              // Keyed so a second refusal in a row re-runs the shake — the same
+              // message repeated with no motion read as "nothing happened".
+              key={`${banner.tone}:${banner.text}`}
+              role={banner.tone === 'warn' ? 'alert' : 'status'}
+              className={cn(
+                'pointer-events-auto heading-font fs-xs px-3 py-1 ink-border-sm shadow-hard-black-xs text-center',
+                banner.tone === 'warn'
+                  ? 'gv4-banner-shake bg-[var(--c-red)] text-white'
+                  : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+              )}
+            >
+              {banner.text}
+            </div>
+          )}
+
+          {/* Clash bar — attacker → guard lines (both directions). Drops at step
+          'done': the clash has resolved and only lingers until endPhase. */}
+          {/* 'respond' kept in: a reaction-window invoke opens a response window
+          mid-clash, and hiding the guard lines exactly while the player is
+          deciding whether to counter made the decision blind. */}
+          {g.clash &&
+            g.clash.step !== 'done' &&
+            (stage === 'play' || stage === 'cpuGuard' || stage === 'respond') && (
+              <div className="pointer-events-auto bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
+                <span className="heading-font fs-xs text-[var(--c-red)]">
+                  {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
+                </span>
+                {clashLines.map((line) => (
+                  <button
+                    key={line.iid}
+                    // v30 — a harness hook. The line's whole label is the matchup
+                    // it describes ("#1 Galaxy Jellyfish ⚔4 → you"), so the census
+                    // counted every attacker/target pairing the board happened to
+                    // roll as its own never-pressed control.
+                    data-clash-line="1"
+                    onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
+                    className={cn(
+                      'fs-xs font-bold px-1 py-0.5 leading-tight text-left',
+                      guardStep
+                        ? guardFocus === line.iid
+                          ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm'
+                          : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)] ink-border-sm btn-pop'
+                        : 'text-[var(--c-paper)]/85',
+                    )}
+                  >
+                    #{line.n} {line.name} ⚔{line.might} →{' '}
+                    {line.guards.length > 0
+                      ? line.guards.join(' + ')
+                      : guardStep
+                        ? 'unguarded'
+                        : 'YOU'}
+                  </button>
+                ))}
+                {reactionStep && (
+                  <span className="fs-xs font-bold text-[#29B6F6]">
+                    REACTION WINDOW — Quick / Ambush cards playable
+                  </span>
+                )}
+              </div>
+            )}
+
+          {/* The stack — top of the list resolves first. Only worth showing while
+          something is actually waiting on it, which outside a response window
+          is never more than an instant. */}
+          {g.stack.length > 0 && (
+            <div
+              data-coach="stack"
+              className="pointer-events-auto bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-col gap-0.5"
+            >
+              <span className="heading-font fs-xs text-[#29B6F6]">
+                ▤ PENDING CARDS — top resolves first
+              </span>
+              {[...g.stack].reverse().map((item, i) => (
+                <span
+                  key={item.id}
+                  className={cn(
+                    'fs-sm font-bold leading-snug',
+                    i === 0 ? 'text-[var(--c-yellow)]' : 'text-[var(--c-paper)]/70',
+                  )}
+                >
+                  {item.controller === HUMAN ? 'YOU' : cpuLabel} · {item.sourceName}
+                  {item.kind === 'trigger' ? ' (trigger)' : ''}
+                  {pendingChoices(g, item).map((choice, j) => (
+                    <span className="block font-normal" key={j}>
+                      {choice}
+                    </span>
+                  ))}
+                </span>
+              ))}
+              {inMyResponse && (
+                <span className="fs-xs font-bold text-[#29B6F6]">
+                  YOUR RESPONSE — Quick / Ambush cards playable, or pass
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Phase stepper — always-visible turn progress (board redesign #1) */}
-      <PhaseStepper phase={g.phase} yours={g.active === HUMAN} />
-
-      {/* Contextual hint bar */}
-      {/* Instructions must wrap: touch users cannot recover clipped text by hovering. */}
-      {hint && stage !== 'over' && stage !== 'mulligan' && (
-        <div className="shrink-0 px-2 py-0.5 bg-[var(--c-ink)]/70 border-b border-[var(--c-yellow)]/25 text-[11px] font-bold text-[var(--c-yellow)]/90 leading-snug z-20">
-          💡 {hint}
-        </div>
-      )}
 
       <CoachOverlay stage={coachStage} />
 
@@ -4461,7 +5349,7 @@ export function GameV4({
       {cpuSpotlight && (
         <div className="absolute inset-0 z-[55] pointer-events-none flex items-center justify-center">
           <div className="gv4-cpu-play flex flex-col items-center gap-1">
-            <span className="heading-font text-[10px] bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm">
+            <span className="heading-font fs-xs bg-[var(--c-red)] text-white px-2 py-0.5 ink-border-sm">
               {cpuLabel} PLAYS
             </span>
             <div className="drop-shadow-[0_10px_28px_rgba(0,0,0,0.7)]">
@@ -4478,7 +5366,7 @@ export function GameV4({
       {!cpuSpotlight && cpuLostCards.length > 0 && (
         <div className="absolute inset-0 z-[55] pointer-events-none flex items-center justify-center">
           <div className="flex flex-col items-center gap-1">
-            <span className="heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-red)] px-2 py-0.5 ink-border-sm">
+            <span className="heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-red)] px-2 py-0.5 ink-border-sm">
               ☠ {cpuLostCards.length > 1 ? 'UNITS LOST' : 'UNIT LOST'}
             </span>
             <div className="flex items-center gap-2">
@@ -4489,264 +5377,6 @@ export function GameV4({
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Top-of-board message column. The CPU narration bubble, the pending
-          target bar and the `say()` banner all used to live at the same
-          `top-10 z-50` spot as three absolute siblings, so DOM order decided
-          which one painted: every `say()` fired while a narration or a target
-          pick was up — "Bond set — now pick a target for its effect." above
-          all — rendered UNDERNEATH the very bar it was explaining. One
-          column, stacked, so they are all visible at once, and the column
-          (not each bar) carries the phone-width cap. */}
-      <div className="absolute left-1/2 top-10 -translate-x-1/2 z-50 flex flex-col items-center gap-1 max-w-[92vw] pointer-events-none">
-        {(stage === 'cpu' || narrating) && (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={skipCpuBeats}
-            onKeyDown={(e) => {
-              // The narration renders nested keyword-link buttons; let their own
-              // Enter/Space open the glossary instead of skipping the CPU beats.
-              if (e.target !== e.currentTarget) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                skipCpuBeats();
-              }
-            }}
-            title="Click to fast-forward the opponent's turn"
-            className={cn(
-              'pointer-events-auto heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs max-w-[86vw] text-center cursor-pointer select-none',
-              // The player's own Dawn runs inside the endPhase that ends the
-              // opponent's turn, so its beats ride the same narration — but
-              // they are the PLAYER's, and presenting "You draw a card at
-              // Dawn." in the opponent's red was a mislabel.
-              cpuFocus?.mine
-                ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
-                : 'bg-[var(--c-red)] text-white',
-            )}
-          >
-            {cpuBeat ? (
-              <>
-                {/* The bubble itself says HELD: the RESUME/STEP buttons live on
-                  the divider, and a fresh segment parking on its beat 0 under
-                  a hold read as a stuck board to anyone not looking there. */}
-                {cpuPaused && (
-                  <span className="mr-1 text-[8px] font-black bg-[var(--c-ink)]/60 px-1 py-0.5 ink-border-sm">
-                    ❚❚ HELD
-                  </span>
-                )}
-                {cpuFocus?.mine && (
-                  <span className="mr-1 text-[8px] font-black">☀ YOUR DAWN —</span>
-                )}
-                {/* v30 — the opponent's move, announced.
-                    Every CPU-visibility pass since v18 has been about what the
-                    board SHOWS: rings, spotlights, dwell times, a recap strip.
-                    None of it reaches a player who is not looking at the
-                    screen. The turn recap has carried `role="status"` since
-                    v26 — so the summary of the turn was announced and not one
-                    of the moves in it — while the bubble that replaces its own
-                    text every beat announced nothing at all, which for a
-                    screen-reader user is the opponent playing its whole turn
-                    in silence. `polite`, so it queues behind whatever the
-                    player is doing rather than interrupting it, and `atomic`
-                    so a beat is read as one sentence instead of as the words
-                    that changed. */}
-                <span role="status" aria-live="polite" aria-atomic="true">
-                  {renderKeywordText(cpuBeat.text)}
-                </span>
-                <span className="ml-2 text-[8px] font-mono opacity-80">
-                  {cpuBeat.idx + 1}/{cpuBeat.total} · click ▸▸
-                </span>
-              </>
-            ) : (
-              <span className="animate-pulse">🤔 {cpuLabel} is thinking…</span>
-            )}
-            {/* A menu, not a cycling chip: four rungs meant up to three taps
-                to reach CINEMATIC (AUDIT-2026-10-06 §2.21). */}
-            <select
-              value={cpuSpeedIdx}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => pickCpuSpeed(Number(e.target.value))}
-              title={SPEED_TOOLTIP}
-              aria-label="Narration speed"
-              className="ml-2 text-[8px] font-mono bg-[var(--c-ink)]/60 text-[var(--c-paper)] px-1 py-0.5 ink-border-sm align-middle"
-            >
-              {CPU_SPEEDS.map((sp, i) => (
-                <option key={sp.label} value={i}>
-                  ⏱ {sp.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* What the opponent just did, kept on screen after the narration —
-            or after a SKIP — has taken itself away. */}
-        {turnRecap && stage === 'play' && !narrating && (
-          <div
-            className="pointer-events-auto bg-[var(--c-ink)] text-[var(--c-paper)] ink-border-sm shadow-hard-black-xs px-3 py-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 max-w-[92vw]"
-            role="status"
-          >
-            <span className="heading-font text-[10px] text-[var(--c-red)]">
-              ⟲ {cpuLabel.toUpperCase()}&apos;S TURN
-            </span>
-            {turnRecap.noAction && (
-              <span className="text-[10px] font-bold text-[var(--c-paper)]/70">
-                no cards played · did not attack
-              </span>
-            )}
-            {turnRecap.cardsPlayed > 0 && (
-              <span className="text-[10px] font-bold">
-                {turnRecap.cardsPlayed} card{turnRecap.cardsPlayed === 1 ? '' : 's'} played
-              </span>
-            )}
-            {turnRecap.attacked && <span className="text-[10px] font-bold">attacked</span>}
-            {turnRecap.vitalityLost > 0 && (
-              <span className="text-[10px] font-black text-[var(--c-red)]">
-                −{turnRecap.vitalityLost} Vitality (you: {me.vitality})
-              </span>
-            )}
-            {turnRecap.unitsLost > 0 && (
-              <span className="text-[10px] font-black text-[var(--c-red)]">
-                {turnRecap.unitsLost} of your units lost
-              </span>
-            )}
-            {turnRecap.cardsDrawnByMe > 0 && (
-              <span className="text-[10px] font-bold text-[var(--c-yellow)]">
-                +{turnRecap.cardsDrawnByMe} card{turnRecap.cardsDrawnByMe === 1 ? '' : 's'} to you
-              </span>
-            )}
-            <button
-              onClick={() => {
-                setLogExpanded(true);
-                setTurnRecap(null);
-              }}
-              className="heading-font text-[8px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
-              title={`Open the Battle Log on ${cpuLabel}'s ${turnRecap.lines} line(s)`}
-            >
-              ▴ FULL LOG
-            </button>
-            <button
-              onClick={() => setTurnRecap(null)}
-              aria-label="Dismiss the turn recap"
-              className="heading-font text-[8px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Pending target bar */}
-        {pending && (
-          <div className="pointer-events-auto bg-[var(--c-red)] text-white heading-font text-[11px] px-3 py-1 ink-border-sm flex flex-wrap justify-center gap-2 items-center max-w-[92vw]">
-            {pending.kind === 'bond'
-              ? isPendingTarget(HUMAN)
-                ? 'BOND — pick a friendly unit, or your Vitality'
-                : 'BOND — pick a friendly unit'
-              : pending.kind === 'rebond'
-                ? 'RE-BOND — pick a friendly unit'
-                : `PICK A TARGET — ${describeEffect(pending.effect)}`}
-            <button
-              onClick={() => setPending(null)}
-              aria-label="Cancel targeting"
-              className="bg-[var(--c-ink)] px-1"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        {banner && (
-          <div
-            // Keyed so a second refusal in a row re-runs the shake — the same
-            // message repeated with no motion read as "nothing happened".
-            key={`${banner.tone}:${banner.text}`}
-            role={banner.tone === 'warn' ? 'alert' : 'status'}
-            className={cn(
-              'pointer-events-auto heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs text-center',
-              banner.tone === 'warn'
-                ? 'gv4-banner-shake bg-[var(--c-red)] text-white'
-                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
-            )}
-          >
-            {banner.text}
-          </div>
-        )}
-      </div>
-
-      {/* Clash bar — attacker → guard lines (both directions). Drops at step
-          'done': the clash has resolved and only lingers until endPhase. */}
-      {/* 'respond' kept in: a reaction-window invoke opens a response window
-          mid-clash, and hiding the guard lines exactly while the player is
-          deciding whether to counter made the decision blind. */}
-      {g.clash &&
-        g.clash.step !== 'done' &&
-        (stage === 'play' || stage === 'cpuGuard' || stage === 'respond') && (
-          <div className="absolute left-1/2 top-[4.6rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-wrap gap-x-3 gap-y-0.5 items-center">
-            <span className="heading-font text-[9px] text-[var(--c-red)]">
-              {g.active === HUMAN ? '⚔ YOUR ATTACK' : `⚔ ${cpuLabel} ATTACKS`}
-            </span>
-            {clashLines.map((line) => (
-              <button
-                key={line.iid}
-                // v30 — a harness hook. The line's whole label is the matchup
-                // it describes ("#1 Galaxy Jellyfish ⚔4 → you"), so the census
-                // counted every attacker/target pairing the board happened to
-                // roll as its own never-pressed control.
-                data-clash-line="1"
-                onClick={guardStep ? () => setGuardFocus(line.iid) : undefined}
-                className={cn(
-                  'text-[8.5px] font-bold px-1 py-0.5 leading-tight text-left',
-                  guardStep
-                    ? guardFocus === line.iid
-                      ? 'bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm'
-                      : 'bg-[var(--c-steel)]/60 text-[var(--c-paper)] ink-border-sm btn-pop'
-                    : 'text-[var(--c-paper)]/85',
-                )}
-              >
-                #{line.n} {line.name} ⚔{line.might} →{' '}
-                {line.guards.length > 0 ? line.guards.join(' + ') : guardStep ? 'unguarded' : 'YOU'}
-              </button>
-            ))}
-            {reactionStep && (
-              <span className="text-[8px] font-bold text-[#29B6F6]">
-                REACTION WINDOW — Quick / Ambush cards playable
-              </span>
-            )}
-          </div>
-        )}
-
-      {/* The stack — top of the list resolves first. Only worth showing while
-          something is actually waiting on it, which outside a response window
-          is never more than an instant. */}
-      {g.stack.length > 0 && (
-        <div className="absolute left-1/2 top-[7.4rem] -translate-x-1/2 z-40 bg-[var(--c-ink)]/95 ink-border-sm px-2 py-1 max-w-[92vw] flex flex-col gap-0.5">
-          <span className="heading-font text-[9px] text-[#29B6F6]">
-            ▤ PENDING CARDS — top resolves first
-          </span>
-          {[...g.stack].reverse().map((item, i) => (
-            <span
-              key={item.id}
-              className={cn(
-                'text-xs font-bold leading-snug',
-                i === 0 ? 'text-[var(--c-yellow)]' : 'text-[var(--c-paper)]/70',
-              )}
-            >
-              {item.controller === HUMAN ? 'YOU' : cpuLabel} · {item.sourceName}
-              {item.kind === 'trigger' ? ' (trigger)' : ''}
-              {pendingChoices(g, item).map((choice, j) => (
-                <span className="block font-normal" key={j}>
-                  {choice}
-                </span>
-              ))}
-            </span>
-          ))}
-          {inMyResponse && (
-            <span className="text-[8px] font-bold text-[#29B6F6]">
-              YOUR RESPONSE — Quick / Ambush cards playable, or pass
-            </span>
-          )}
         </div>
       )}
 
@@ -4766,12 +5396,12 @@ export function GameV4({
         right={
           <>
             {essenceTotal(foe.essence) > 0 && <EssencePips pool={foe.essence} size={13} />}
-            <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
+            <span className="fs-xs font-bold text-[var(--c-paper)]/75">
               hand {foe.hand.length} · deck {foe.deck.length}
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'foe' ? false : 'foe'))}
-              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop fs-xs font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
               title="Inspect the opponent's ash-pile and void"
             >
               ASH {foe.ashPile.length}
@@ -4786,11 +5416,21 @@ export function GameV4({
         mine={false}
         onInspect={(l) => setInspect(l.def!)}
       />
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
-        {foe.field.length === 0 && (
-          <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
-            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-              Empty Field
+      {/* An empty lane is a slim strip, not 60% of the screen: the space goes to
+          the hand and to whichever lane actually holds units. When BOTH lanes
+          are empty the spare height is split around the divider instead. */}
+      <div
+        className={cn(
+          'flex gap-2 justify-center px-2 overflow-x-auto',
+          foeEmpty
+            ? 'shrink-0 items-center py-1'
+            : 'items-start py-1 min-h-[84px] sm:min-h-[122px] overflow-y-auto flex-1 basis-0',
+        )}
+      >
+        {foeEmpty && (
+          <div className="w-full max-w-[560px] h-8 border border-dashed border-[var(--c-paper)]/25 rounded-md flex items-center justify-center">
+            <span className="fs-xs text-[var(--c-paper)]/55 font-bold tracking-wide">
+              No enemy units
             </span>
           </div>
         )}
@@ -4827,24 +5467,20 @@ export function GameV4({
         })}
       </div>
 
+      {foeEmpty && meEmpty && <div className="flex-1 min-h-0" />}
+
       {/* ================= CLASH DIVIDER =================
           The one loud action on the whole board. Everything else stays
           ink-on-paper so whatever sits here always reads as the primary move. */}
       {/* flex-wrap: the narration branch can carry four controls (speed, hold,
           step, skip) and a 375px phone has no room for them on one line. The
-          extra right padding is scoped to that branch only — the LOG button is
-          absolutely positioned at the right edge, and reserving room for it
-          unconditionally would shift every other branch's centred primary
-          action (DECLARE ATTACK, RESOLVE CLASH) off centre. */}
+          Battle Log button moved up to the header, so nothing is pinned to
+          this row's right edge any more and the primary stays centred. */}
       <div
         data-space-armed={spaceArmed ? '1' : undefined}
-        className={cn(
-          'relative shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35',
-          // guardStep too: SUGGEST + CLEAR + CONFIRM GUARDS wrap on a phone,
-          // and without the reserved padding the absolutely-positioned LOG
-          // button painted over CONFIRM's right edge and ate its taps.
-          (stage === 'cpu' || narrating || guardStep) && 'pr-14',
-        )}
+        data-coach="divider"
+        data-coach-avoid
+        className="relative shrink-0 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[var(--c-ink)]/55 border-y-2 border-dashed border-[var(--c-yellow)]/35"
       >
         {/* Narration owns the divider whenever the opponent is acting — during
             its whole turn AND during the reaction beats that play out inside
@@ -4857,7 +5493,7 @@ export function GameV4({
               onChange={(e) => pickCpuSpeed(Number(e.target.value))}
               title={SPEED_TOOLTIP}
               aria-label="Narration speed"
-              className="heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
+              className="heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-md tracking-wide"
             >
               {CPU_SPEEDS.map((sp, i) => (
                 <option key={sp.label} value={i}>
@@ -4874,7 +5510,7 @@ export function GameV4({
               }
               aria-pressed={cpuPaused}
               className={cn(
-                'btn-pop heading-font text-[10px] px-2 py-2 ink-border-md tracking-wide',
+                'btn-pop heading-font fs-xs px-2 py-2 ink-border-md tracking-wide',
                 cpuPaused
                   ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
                   : 'bg-[var(--c-ink)] text-[var(--c-paper)]',
@@ -4886,7 +5522,7 @@ export function GameV4({
               <button
                 onClick={stepCpuBeat}
                 title="Advance one action"
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-2 ink-border-md tracking-wide"
+                className="btn-pop heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-2 ink-border-md tracking-wide"
               >
                 ▸ STEP
               </button>
@@ -4925,7 +5561,7 @@ export function GameV4({
                     }}
                   />
                 </span>
-                <span className="font-mono text-[8px] text-[var(--c-paper)]/70 shrink-0">
+                <span className="font-mono fs-xs text-[var(--c-paper)]/80 shrink-0">
                   {cpuBeat.idx + 1}/{cpuBeat.total}
                 </span>
               </div>
@@ -4937,7 +5573,7 @@ export function GameV4({
               <button
                 onClick={() => setAtkSel(new Set(myAttackers.map((u) => u.iid)))}
                 title="Send every ready unit"
-                className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+                className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
               >
                 ALL ×{myAttackers.length}
               </button>
@@ -4949,14 +5585,14 @@ export function GameV4({
             <button
               onClick={() => setAtkSel(new Set())}
               title="Clear the attack selection (Esc)"
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+              className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
             >
               ✕ CLEAR
             </button>
             <button
               onClick={declareMyAttack}
               data-primary="1"
-              className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+              className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide gv4-pulse"
             >
               {/* The Might going in, not just the head count: "3 units" says
                   nothing about whether this is lethal, and the player was
@@ -4979,7 +5615,7 @@ export function GameV4({
           <button
             onClick={resolveMyClash}
             data-primary="1"
-            className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+            className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide gv4-pulse"
           >
             {resolveClashLabel}
           </button>
@@ -4989,7 +5625,7 @@ export function GameV4({
               <button
                 onClick={suggestGuards}
                 title="Fill the guard lines with the CPU's own blocking heuristic — then edit or confirm"
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-2 ink-border-md tracking-wide"
+                className="btn-pop heading-font fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-2 ink-border-md tracking-wide"
               >
                 ✦ SUGGEST
               </button>
@@ -5001,7 +5637,7 @@ export function GameV4({
               <button
                 onClick={() => setGuardSel({})}
                 title="Clear every guard assignment (Esc)"
-                className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
+                className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-3 py-2 ink-border-md tracking-wide"
               >
                 ✕ CLEAR
               </button>
@@ -5015,7 +5651,7 @@ export function GameV4({
                 'heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
                 guardProblem
                   ? 'bg-[var(--c-steel)]/60 text-[var(--c-paper)]/60'
-                  : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] animate-pulse',
+                  : 'btn-pop bg-[#29B6F6] text-[var(--c-ink)] gv4-pulse',
               )}
             >
               {/* v28 — the attacker's side of this divider has printed the
@@ -5036,7 +5672,7 @@ export function GameV4({
           <button
             onClick={resolveCpuClash}
             data-primary="1"
-            className="btn-pop heading-font text-sm bg-[var(--c-red)] text-white px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+            className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide gv4-pulse"
           >
             {resolveClashLabel}
           </button>
@@ -5044,25 +5680,42 @@ export function GameV4({
           <button
             onClick={passMyPriority}
             data-primary="1"
-            className="btn-pop heading-font text-sm bg-[#29B6F6] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide animate-pulse"
+            className="btn-pop heading-font text-sm bg-[#29B6F6] text-[var(--c-ink)] px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide gv4-pulse"
           >
             ⏭ PASS — LET IT RESOLVE
           </button>
         ) : showPhaseButton ? (
-          <button
-            onClick={advanceMyPhase}
-            data-primary="1"
-            className={cn(
-              'btn-pop heading-font text-sm px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide',
-              g.phase === 'Main2'
-                ? 'bg-[var(--c-red)] text-white'
-                : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+          <>
+            {wellspringPrimary && recommendedWellspring && (
+              <button
+                onClick={() => tryWellspring(recommendedWellspring)}
+                data-primary="1"
+                data-wellspring-primary="1"
+                title={`Place a ${recommendedWellspring} Wellspring — ${
+                  (wellspringNeed[recommendedWellspring] ?? 0) > 0
+                    ? `it unlocks ${wellspringNeed[recommendedWellspring]} card(s) in your hand`
+                    : 'the colour your hand asks for most'
+                }. The other colours are the dots in your Locations row.`}
+                className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-4 sm:px-6 py-2 ink-border-md shadow-hard-black-xs tracking-wide gv4-pulse"
+              >
+                PLAY {recommendedWellspring.toUpperCase()} WELLSPRING
+              </button>
             )}
-          >
-            {phaseButtonLabel}
-          </button>
+            <button
+              onClick={requestAdvance}
+              data-primary={wellspringPrimary ? undefined : '1'}
+              className={cn(
+                'btn-pop heading-font ink-border-md tracking-wide',
+                wellspringPrimary
+                  ? 'fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-2'
+                  : 'text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 shadow-hard-black-xs',
+              )}
+            >
+              {phaseButtonLabel}
+            </button>
+          </>
         ) : (
-          <span className="heading-font text-[9px] text-[var(--c-paper)]/35 tracking-[2px] py-2">
+          <span className="heading-font fs-xs text-[var(--c-paper)]/50 tracking-[2px] py-2">
             — CLASH LINE —
           </span>
         )}
@@ -5077,53 +5730,26 @@ export function GameV4({
             picker). v30 moves it onto the button, as a `::after` in GAME_CSS
             keyed off `data-space-armed` — see `spaceArmed`, which is the key
             handler's own predicate rather than a second copy of it. */}
-        {/* Battle log lives on the divider so it never competes with either
-            player's lane for vertical space. */}
-        <button
-          onClick={() => setLogExpanded((e) => !e)}
-          className="tap-44 absolute right-2 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
-          title={logExpanded ? 'Hide the Battle Log' : 'Show the Battle Log'}
-        >
-          {logExpanded ? '▾ LOG' : '▴ LOG'}
-        </button>
       </div>
 
-      {logExpanded && (
-        <div
-          ref={logScrollRef}
-          className="shrink-0 max-h-[132px] overflow-y-auto bg-[var(--c-ink)] border-b-2 border-[var(--c-yellow)]/30 px-2 py-1 text-[8px] font-mono text-[var(--c-paper)]/70 leading-tight"
-        >
-          <div className="text-[7px] font-black text-[var(--c-paper)]/40 uppercase tracking-wide sticky top-0 bg-[var(--c-ink)]">
-            Battle Log
-          </div>
-          {g.log.slice(-160).map((l, i, arr) => {
-            const abs = g.log.length - arr.length + i;
-            return (
-              <React.Fragment key={abs}>
-                {/* Where the opponent's most recent turn starts. The log is
-                    the only place a player who skipped the narration can find
-                    out what happened, and an undivided wall of lines makes
-                    "what did it just do" a counting exercise. */}
-                {abs === handoffAt && (
-                  <div className="my-0.5 flex items-center gap-1 text-[7px] font-black text-[var(--c-yellow)] uppercase tracking-wide">
-                    <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
-                    since your last turn
-                    <span className="flex-1 border-t border-[var(--c-yellow)]/40" />
-                  </div>
-                )}
-                <div>· {renderKeywordText(humanize(l), true)}</div>
-              </React.Fragment>
-            );
-          })}
-        </div>
-      )}
+      {foeEmpty && meEmpty && <div className="flex-1 min-h-0" />}
 
       {/* ================= PLAYER LANE ================= */}
-      <div className="flex gap-2 justify-center items-start px-2 py-2 min-h-[84px] sm:min-h-[122px] overflow-x-auto overflow-y-auto flex-1 basis-0">
-        {me.field.length === 0 && (
-          <div className="w-full max-w-[560px] h-[70px] self-center border-2 border-dashed border-[var(--c-paper)]/15 rounded-md flex items-center justify-center">
-            <span className="text-[9px] text-[var(--c-paper)]/30 font-bold uppercase tracking-wide">
-              Empty Field
+      <div
+        data-coach="my-field"
+        className={cn(
+          'flex gap-2 justify-center px-2 overflow-x-auto',
+          meEmpty
+            ? 'shrink-0 items-center py-1'
+            : 'items-start py-1 min-h-[84px] sm:min-h-[122px] overflow-y-auto flex-1 basis-0',
+        )}
+      >
+        {meEmpty && (
+          // A ghost, not a placeholder to read: it says where the thing you are
+          // about to do ends up, and gets out of the way the moment it does.
+          <div className="w-full max-w-[560px] h-8 border border-dashed border-[var(--c-yellow)]/35 rounded-md flex items-center justify-center">
+            <span className="fs-xs text-[var(--c-paper)]/60 font-bold tracking-wide">
+              Deploy units here
             </span>
           </div>
         )}
@@ -5177,6 +5803,7 @@ export function GameV4({
 
       <LocationsLane
         locations={me.locations}
+        coach="locations"
         tappable={canTapNow}
         mine
         onTap={(l) => tryTapLocation(l)}
@@ -5184,7 +5811,7 @@ export function GameV4({
       >
         {inMyMain && !me.wellspringPlayedThisTurn && (
           <span className="flex items-center gap-0.5 bg-[var(--c-ink)] ink-border-sm px-1 py-0.5 shrink-0">
-            <span className="text-[7px] font-black text-[var(--c-yellow)]">
+            <span className="fs-xs font-black text-[var(--c-yellow)]">
               {/* On the draw, the opening turn carries two — say so, or a
                   player has no way to know the second one is available. */}
               {wellspringsLeft > 1 ? `+ WELLSPRING ×${wellspringsLeft}` : '+ WELLSPRING'}
@@ -5254,7 +5881,7 @@ export function GameV4({
                   : `Re-bond ${c.def.name} for ${c.def.rebondCost ?? 0} essence`
               }
               className={cn(
-                'text-[7.5px] font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm shrink-0',
+                'fs-xs font-black bg-[#8E44AD] text-white px-1 py-0.5 ink-border-sm shrink-0',
                 why ? 'opacity-40 cursor-not-allowed' : 'btn-pop',
               )}
             >
@@ -5264,7 +5891,7 @@ export function GameV4({
         })}
         <Tip
           text="Locations produce your Essence — exhaust one to add a pip. Invoking auto-taps whatever the cost needs. The pool empties at the end of every phase."
-          className="tap-44 text-[9px] bg-[var(--c-steel)] text-white ink-border-sm px-1 shrink-0"
+          className="tap-44 fs-xs bg-[var(--c-steel)] text-white ink-border-sm px-1.5 shrink-0"
         >
           ?
         </Tip>
@@ -5286,13 +5913,13 @@ export function GameV4({
         cpuVitTarget={!!cpuFocus?.targets.includes(HUMAN)}
         right={
           <>
-            <span className="text-[8px] font-bold text-[var(--c-paper)]/60">
+            <span className="fs-xs font-bold text-[var(--c-paper)]/75">
               deck {me.deck.length}
               {me.voidPile.length > 0 ? ` · void ${me.voidPile.length}` : ''}
             </span>
             <button
               onClick={() => setShowAsh((s) => (s === 'me' ? false : 'me'))}
-              className="tap-44 btn-pop text-[8px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+              className="tap-44 btn-pop fs-xs font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
             >
               ASH-PILE {me.ashPile.length}
             </button>
@@ -5300,9 +5927,12 @@ export function GameV4({
         }
       />
 
-      {/* Hand dock — fan of cards along the very bottom; hover/click a card
-          to open the enlarged preview above it and INVOKE from the preview. */}
+      {/* Hand dock. Tap / click a card to SELECT it: the sticky bar on top of the
+          dock then names it, prices it and carries INVOKE (and READ, which opens
+          the full-size preview). Hover (mouse) and long-press (touch) zoom
+          without selecting; a desktop double-click plays outright. */}
       <div
+        data-coach-avoid
         className="relative shrink-0 z-30 bg-[var(--c-ink)]/85 border-t-2 border-[var(--c-yellow)]/50"
         onMouseLeave={() => {
           clearHoverIntent();
@@ -5334,7 +5964,7 @@ export function GameV4({
               <button
                 onClick={closePreview}
                 aria-label="Close preview"
-                className="btn-pop self-end text-[9px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
+                className="tap-44 btn-pop self-end fs-xs font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm"
               >
                 ✕ CLOSE
               </button>
@@ -5348,18 +5978,14 @@ export function GameV4({
                     : 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)]',
                 )}
               >
-                {previewCard.def.type === 'Item'
-                  ? 'INVOKE — BOND'
-                  : needsTarget(previewCard.def.onInvoke)
-                    ? 'INVOKE — PICK TARGET'
-                    : 'INVOKE'}
+                {invokeLabelFor(previewCard.def)}
               </button>
               {previewWhy ? (
-                <span className="text-[9px] font-bold text-[var(--c-red)] leading-tight">
+                <span className="fs-xs font-bold text-[var(--c-red)] leading-tight">
                   {previewWhy}
                 </span>
               ) : (
-                <span className="text-[9px] font-bold text-[var(--c-yellow)]/90 leading-tight">
+                <span className="fs-xs font-bold text-[var(--c-yellow)] leading-tight">
                   Cost {totalCost(effectiveCost(g, HUMAN, previewCard.def))}
                   {totalCost(effectiveCost(g, HUMAN, previewCard.def)) !==
                   totalCost(previewCard.def.cost)
@@ -5371,43 +5997,107 @@ export function GameV4({
             </div>
           </div>
         )}
-        <div className="flex items-center gap-2 px-2 pt-1">
-          <span className="text-[8px] font-bold text-[var(--c-paper)]/70">
-            HAND {me.hand.length}/{MAX_HAND} · tap or hover to preview · double-click to play
-            {inMyReaction || reactionStep
-              ? ' · REACTION: Quick & Ambush only'
-              : inMyResponse
-                ? ' · RESPONDING: Quick & Ambush only'
-                : ''}
-          </span>
-          {/* Hand order. The dock has always laid cards out in DRAW order,
-              which is no order at all to look at: the one card you can afford
-              sits wherever it happened to be drawn, and finding it in a
-              ten-card fan is a scan of every face — every phase, every turn.
-              PLAYABLE floats exactly the cards `invokeWhy` says are castable
-              right now, so the answer to "what can I do" is the left-hand end
-              of the dock. */}
-          {me.hand.length > 1 && (
-            <button
-              onClick={cycleHandSort}
-              title={`Hand order: ${handSortEntry.blurb}. Click to change.`}
-              aria-label={`Hand order: ${handSortEntry.blurb}. Click to change`}
-              className="ml-auto btn-pop heading-font text-[8px] bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm shrink-0"
-            >
-              {handSortEntry.label}
-            </button>
+        {/* The sticky bar: always one row tall, so selecting a card never
+            moves the board. */}
+        <div className="flex items-center gap-2 px-2 min-h-[40px] mx-auto w-full max-w-[720px]">
+          {selectedCard ? (
+            <>
+              <div className="min-w-0 flex-1" data-selected-card={selectedCard.def.id}>
+                <div className="heading-font fs-xs text-[var(--c-yellow)] truncate">
+                  {selectedCard.def.name}
+                </div>
+                <div
+                  className={cn(
+                    'fs-xs font-bold leading-tight',
+                    selectedWhy ? 'text-[var(--c-red)]' : 'text-[var(--c-paper)]/80',
+                  )}
+                >
+                  {selectedWhy ??
+                    `Cost ${totalCost(effectiveCost(g, HUMAN, selectedCard.def))} — Locations auto-tap to pay.`}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (previewPinned && preview === selectedCard.iid) {
+                    closePreview();
+                  } else {
+                    clearHoverIntent();
+                    setPreview(selectedCard.iid);
+                    setPreviewPinned(true);
+                  }
+                }}
+                className="tap-44 btn-pop heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-2.5 py-2 ink-border-sm shrink-0"
+                title="Open the full-size card"
+              >
+                READ
+              </button>
+              <button
+                onClick={() => tryInvoke(selectedCard.iid)}
+                disabled={!!selectedWhy}
+                data-invoke-selected="1"
+                className={cn(
+                  'heading-font fs-xs px-3 py-2 min-h-[40px] ink-border-md shrink-0',
+                  selectedWhy
+                    ? 'bg-[var(--c-steel)]/50 text-[var(--c-paper)]/50 cursor-not-allowed'
+                    : 'btn-pop bg-[var(--c-yellow)] text-[var(--c-ink)] shadow-hard-black-xs',
+                )}
+              >
+                {invokeLabelFor(selectedCard.def)}
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedIid(null);
+                  closePreview();
+                }}
+                aria-label="Deselect card"
+                className="tap-44 btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-2 ink-border-sm shrink-0"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="fs-xs font-bold text-[var(--c-paper)]/80">
+                HAND {me.hand.length}/{MAX_HAND} ·{' '}
+                {coarsePointer
+                  ? 'tap a card, then INVOKE · hold to zoom'
+                  : 'click a card to select it · double-click plays it · hover to zoom'}
+                {inMyReaction || reactionStep
+                  ? ' · REACTION: Quick & Ambush only'
+                  : inMyResponse
+                    ? ' · RESPONDING: Quick & Ambush only'
+                    : ''}
+              </span>
+              {/* Hand order. The dock has always laid cards out in DRAW order,
+                  which is no order at all to look at: the one card you can
+                  afford sits wherever it happened to be drawn, and finding it
+                  in a ten-card fan is a scan of every face — every phase, every
+                  turn. PLAYABLE floats exactly the cards `invokeWhy` says are
+                  castable right now, so the answer to "what can I do" is the
+                  left-hand end of the dock. */}
+              {me.hand.length > 1 && (
+                <button
+                  onClick={cycleHandSort}
+                  title={`Hand order: ${handSortEntry.blurb}. Click to change.`}
+                  aria-label={`Hand order: ${handSortEntry.blurb}. Click to change`}
+                  className="ml-auto tap-44 btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-1 ink-border-sm shrink-0"
+                >
+                  {handSortEntry.label}
+                </button>
+              )}
+            </>
           )}
         </div>
         <div
           className={cn(
-            'relative h-[92px] sm:h-[118px]',
+            'relative',
             // The strip scrolls sideways; the fan is clipped as before.
             handStrip ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden',
           )}
-          style={handStrip ? undefined : { perspective: 800 }}
+          style={{ height: handLayout.dockH, ...(handStrip ? {} : { perspective: 800 }) }}
         >
           {me.hand.length === 0 && (
-            <span className="absolute inset-x-0 top-6 text-center text-[9px] text-[var(--c-paper)]/30 font-bold">
+            <span className="absolute inset-x-0 top-6 text-center fs-xs text-[var(--c-paper)]/50 font-bold">
               — empty hand —
             </span>
           )}
@@ -5415,106 +6105,65 @@ export function GameV4({
             className={cn(
               'flex',
               handStrip
-                ? // A scrolling row: full-width cards, snapped, with enough
+                ? // A scrolling row: whole cards, snapped, with enough
                   // trailing room that the last card can reach the left edge.
                   'gap-1.5 px-2 pt-1 w-max snap-x snap-mandatory'
-                : 'absolute left-1/2 bottom-0 -translate-x-1/2',
+                : 'absolute left-1/2 -translate-x-1/2',
             )}
+            style={handStrip ? undefined : { bottom: handLayout.fanLift }}
           >
             {handView.map((c, i) => {
               const why = invokeWhy(c);
-              const n = handView.length;
-              const mid = (n - 1) / 2;
-              const off = i - mid;
-              const angle = Math.max(-22, Math.min(22, off * (n > 8 ? 5 : 7)));
-              const arcDrop = Math.abs(off) * 3;
+              const isSelected = selectedIid === c.iid;
               const isFocused = preview === c.iid;
-              // Tapping the card that is already pinned closes it again. It
-              // used to be a one-way door — the only ways out were ✕ CLOSE,
-              // Escape or moving the pointer off the whole dock, none of which
-              // is where a touch player's thumb already is.
-              const activate = () => {
-                clearHoverIntent();
-                if (isFocused && previewPinned) {
-                  closePreview();
-                  return;
-                }
-                setPreview(c.iid);
-                setPreviewPinned(true);
-              };
               return (
-                <div
+                <HandSlot
                   key={c.iid}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${c.def.name} — preview and invoke`}
-                  className={cn('relative shrink-0 outline-none', handStrip && 'snap-start')}
-                  style={{
-                    width: CARD_SIZES.compact.w,
-                    height: CARD_SIZES.compact.h,
-                    marginLeft: handStrip || i === 0 ? 0 : -fanOverlap,
-                    zIndex: isFocused ? 50 : i,
+                  card={c}
+                  index={i}
+                  count={handView.length}
+                  layout={handLayout}
+                  overlap={fanOverlap}
+                  selected={isSelected}
+                  focused={isFocused}
+                  dimmed={!!why}
+                  highlight={
+                    isSelected ||
+                    isFocused ||
+                    ((inMyReaction || reactionStep || inMyResponse) && !why)
+                  }
+                  doubleClickPlays={!coarsePointer}
+                  onSelect={() => {
+                    clearHoverIntent();
+                    // Tapping the selected card again lets go of it. (It used
+                    // to be a one-way door — the only ways out were ✕ CLOSE,
+                    // Escape or moving the pointer off the dock, none of which
+                    // is where a touch player's thumb already is.)
+                    if (isSelected) {
+                      setSelectedIid(null);
+                      closePreview();
+                      return;
+                    }
+                    setSelectedIid(c.iid);
+                    // A full-size preview already pinned follows the selection.
+                    if (previewPinned) setPreview(c.iid);
                   }}
-                  onMouseEnter={() => previewIntent(c.iid)}
-                  onFocus={() => {
+                  onHoverIntent={() => previewIntent(c.iid)}
+                  onFocusCard={() => {
                     clearHoverIntent();
                     setPreview(c.iid);
                   }}
-                  onClick={activate}
-                  // v26 — double-click plays it. Every card in the game costs
-                  // three interactions to cast on a desktop (click the card,
-                  // read the preview, click INVOKE), and the preview is a
-                  // reference the player rarely needs for the fifth copy of a
-                  // Wellspring or a card they picked out of their own deck.
-                  // Refusals still go through `tryInvoke`, so a double-click on
-                  // an unaffordable card explains itself in the banner exactly
-                  // as the button does rather than doing nothing.
-                  onDoubleClick={(e) => {
-                    if (e.target !== e.currentTarget) return;
-                    e.preventDefault();
+                  onLongPress={() => {
+                    clearHoverIntent();
+                    setSelectedIid(c.iid);
+                    setPreview(c.iid);
+                    setPreviewPinned(true);
+                  }}
+                  onPlay={() => {
                     closePreview();
                     tryInvoke(c.iid);
                   }}
-                  onKeyDown={(e) => {
-                    // Nested cost/keyword chips inside the card handle their
-                    // own Enter/Space — don't pin the preview on their behalf.
-                    if (e.target !== e.currentTarget) return;
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      activate();
-                    }
-                  }}
-                >
-                  <div
-                    className="pointer-events-none transition-transform duration-150 ease-out"
-                    style={{
-                      transformOrigin: 'bottom center',
-                      // Strip: no fan geometry at all — the card sits flat at
-                      // the top of the dock so its masthead is legible, and
-                      // the focused one only lifts by the 2px the dock has.
-                      transform: handStrip
-                        ? isFocused
-                          ? 'translateY(-2px) scale(1.02)'
-                          : 'translateY(0)'
-                        : isFocused
-                          ? `translateY(-84px) rotate(0deg) scale(1.04)`
-                          : `translateY(${70 + arcDrop}px) rotate(${angle}deg)`,
-                    }}
-                  >
-                    <CardFace
-                      def={c.def}
-                      size="compact"
-                      dimmed={!!why}
-                      // During the clash reaction window, playable Quick /
-                      // Ambush cards light up so the window is discoverable.
-                      highlight={
-                        preview === c.iid ||
-                        ((inMyReaction || reactionStep || inMyResponse) && !why)
-                      }
-                      introduceKeywords
-                    />
-                  </div>
-                </div>
+                />
               );
             })}
           </div>
@@ -5558,7 +6207,7 @@ export function GameV4({
                   // replaced it outright, so voice control could not act on
                   // the word a player actually sees.
                   aria-label="Suggest — auto-select cards to shed"
-                  className="btn-pop text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-1.5 ink-border-sm"
+                  className="tap-44 btn-pop fs-xs bg-[var(--c-yellow)] text-[var(--c-ink)] px-2 py-1 ink-border-sm"
                 >
                   ✦ SUGGEST
                 </button>
@@ -5566,7 +6215,7 @@ export function GameV4({
                   <button
                     onClick={() => setShedPick(null)}
                     aria-label="Back — cancel shedding"
-                    className="btn-pop text-[10px] bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
+                    className="tap-44 btn-pop fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-2 py-1 ink-border-sm"
                   >
                     ✕ BACK
                   </button>
@@ -5691,16 +6340,16 @@ export function GameV4({
             return (
               <>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="heading-font text-[10px] text-[var(--c-yellow)]">{label}</span>
+                  <span className="heading-font fs-xs text-[var(--c-yellow)]">{label}</span>
                   <button
                     onClick={() => setShowAsh(false)}
                     aria-label="Close ash-pile"
-                    className="btn-pop text-[10px] bg-[var(--c-red)] text-white px-1.5 ink-border-sm"
+                    className="tap-44 btn-pop fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-1.5 ink-border-sm"
                   >
                     ✕
                   </button>
                 </div>
-                <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
+                <div className="fs-xs text-[var(--c-paper)]/60 font-bold mb-1">
                   Shattered units, resolved Events and shed cards end up here.
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -5714,15 +6363,15 @@ export function GameV4({
                     />
                   ))}
                   {owner.ashPile.length === 0 && (
-                    <span className="text-[9px] text-[var(--c-paper)]/30 font-bold">empty</span>
+                    <span className="fs-xs text-[var(--c-paper)]/30 font-bold">empty</span>
                   )}
                 </div>
                 {owner.voidPile.length > 0 && (
                   <>
-                    <div className="heading-font text-[10px] text-[var(--c-yellow)] mt-2 mb-1">
+                    <div className="heading-font fs-xs text-[var(--c-yellow)] mt-2 mb-1">
                       THE VOID
                     </div>
-                    <div className="text-[8px] text-[var(--c-paper)]/60 font-bold mb-1">
+                    <div className="fs-xs text-[var(--c-paper)]/60 font-bold mb-1">
                       Banished cards — removed from the game.
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -5758,23 +6407,46 @@ export function GameV4({
             aria-label="Confirm"
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-4 max-w-xs w-full text-center outline-none"
           >
-            <div className="text-[12px] font-bold mb-3">{confirmDialog.text}</div>
+            <div className="fs-sm font-bold mb-3">{confirmDialog.text}</div>
+            {confirmDialog.remember && (
+              <label className="flex items-center justify-center gap-2 fs-xs font-bold mb-3 cursor-pointer min-h-[24px]">
+                <input
+                  type="checkbox"
+                  checked={confirmRemember}
+                  onChange={(e) => setConfirmRemember(e.target.checked)}
+                  className="w-4 h-4 accent-[var(--c-ink)]"
+                />
+                {confirmDialog.remember}
+              </label>
+            )}
             <div className="flex gap-2 justify-center">
               <button
                 onClick={() => {
                   const { onConfirm } = confirmDialog;
+                  const remember = confirmRemember;
                   setConfirmDialog(null);
-                  onConfirm();
+                  setConfirmRemember(false);
+                  onConfirm(remember);
                 }}
-                className="btn-pop text-[10px] font-bold bg-[var(--c-red)] text-white px-3 py-1 ink-border-sm"
+                className={cn(
+                  'btn-pop heading-font fs-xs px-4 py-2 min-h-[36px] ink-border-sm',
+                  // Red is for the destructive confirm (concede); a plain
+                  // "yes, go on" is the primary action and is yellow.
+                  confirmDialog.danger
+                    ? 'bg-[var(--c-red)] text-white'
+                    : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+                )}
               >
-                CONFIRM
+                {confirmDialog.confirmLabel ?? 'CONFIRM'}
               </button>
               <button
-                onClick={() => setConfirmDialog(null)}
-                className="btn-pop text-[10px] font-bold bg-[var(--c-steel)] text-[var(--c-paper)] px-3 py-1 ink-border-sm"
+                onClick={() => {
+                  setConfirmDialog(null);
+                  setConfirmRemember(false);
+                }}
+                className="btn-pop heading-font fs-xs bg-[var(--c-steel)] text-[var(--c-paper)] px-4 py-2 min-h-[36px] ink-border-sm"
               >
-                CANCEL
+                {confirmDialog.cancelLabel ?? 'CANCEL'}
               </button>
             </div>
           </div>
@@ -5798,15 +6470,16 @@ export function GameV4({
           >
             {/* This overlay covers the top bar (and its CONCEDE) — without an
                 exit here a mis-queued match had to be kept and played out. */}
-            <div className="flex justify-end -mb-6 sm:-mb-8">
+            <div className="flex justify-end mb-1">
               <button
                 onClick={() =>
                   setConfirmDialog({
                     text: 'Concede this match? This will count as a loss.',
                     onConfirm: concede,
+                    danger: true,
                   })
                 }
-                className="tap-44 btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-1 ink-border-sm"
+                className="tap-44 btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-red)] px-2 py-1 ink-border-sm"
                 aria-label="Concede match"
               >
                 ✕ CONCEDE
@@ -5864,7 +6537,7 @@ export function GameV4({
               {me.hand.length > 1 && (
                 <button
                   onClick={doMulligan}
-                  className="btn-pop heading-font text-base bg-[var(--c-red)] text-white px-8 py-3 ink-border-md shadow-hard-black-xs"
+                  className="btn-pop heading-font text-base bg-[var(--c-steel)] text-[var(--c-paper)] px-8 py-3 ink-border-md shadow-hard-black-xs"
                 >
                   ↻ MULLIGAN — draw {me.hand.length - 1}
                   {me.hand.length <= 4 ? ' (risky!)' : ''}
@@ -5887,8 +6560,13 @@ export function GameV4({
             className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-md p-6 text-center outline-none"
           >
             <div className="heading-font text-3xl mb-2">
-              {g.winner === HUMAN ? '🏆 VICTORY' : '☠ DEFEAT'}
+              {outcome === 'win' ? '🏆 VICTORY' : outcome === 'draw' ? '🤝 DRAW' : '☠ DEFEAT'}
             </div>
+            {outcome === 'draw' && (
+              <div className="fs-sm font-bold text-[var(--c-steel)] mb-2">
+                Both Leaders fell at the same moment — nobody wins this one.
+              </div>
+            )}
             <div className="text-[11px] font-bold text-[var(--c-steel)] mb-2">
               {g.log
                 .slice(-2)
@@ -5898,7 +6576,7 @@ export function GameV4({
             {/* Finding 1.5: the seed this match ran on. A player who hits a bug
                 in a real match now has something reproducible to quote. */}
             {g.seed !== undefined && (
-              <div className="text-[10px] font-mono text-[var(--c-steel)] mb-4 select-all">
+              <div className="fs-xs font-mono text-[var(--c-steel)] mb-4 select-all">
                 MATCH SEED {g.seed} · TURN {g.turn}
               </div>
             )}
@@ -5909,7 +6587,7 @@ export function GameV4({
                   {reward.bp_xp_gained} PASS XP
                 </div>
                 {reward.leveled_up && (
-                  <div className="bg-[var(--c-red)] text-[var(--c-paper)] heading-font text-[11px] px-3 py-1 ink-border-sm shadow-hard-black-xs animate-pulse">
+                  <div className="bg-[var(--c-ink)] text-[var(--c-yellow)] heading-font fs-xs px-3 py-1 ink-border-sm shadow-hard-black-xs gv4-pulse">
                     LEVEL UP! NOW LV {reward.level} · +{fmtCredits(reward.level_credits_bonus)}{' '}
                     CREDITS
                     {reward.level_vouchers_bonus > 0
@@ -5920,12 +6598,12 @@ export function GameV4({
               </div>
             )}
             {reward == null && rewardError && (
-              <div className="bg-[var(--c-red)] text-white heading-font text-[10px] px-3 py-1.5 ink-border-sm mb-4 max-w-[280px]">
+              <div className="bg-[var(--c-red)] text-white heading-font fs-xs px-3 py-1.5 ink-border-sm mb-4 max-w-[280px]">
                 {rewardError}
               </div>
             )}
             {reward == null && !rewardError && rewardPending && (
-              <div className="text-[10px] font-bold text-[var(--c-steel)] mb-4 animate-pulse">
+              <div className="fs-xs font-bold text-[var(--c-steel)] mb-4 gv4-pulse">
                 Calculating rewards…
               </div>
             )}
@@ -5942,7 +6620,7 @@ export function GameV4({
                 <button
                   onClick={onRematch}
                   disabled={rewardPending}
-                  className="btn-pop heading-font text-sm bg-[var(--c-red)] text-[var(--c-paper)] px-6 py-2 ink-border-sm shadow-hard-black-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-pop heading-font text-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-6 py-2 ink-border-sm shadow-hard-black-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   title={rewardPending ? 'Saving this match first…' : 'Play another match'}
                 >
                   ↻ REMATCH
@@ -5950,7 +6628,14 @@ export function GameV4({
               )}
               <button
                 onClick={onExit}
-                className="btn-pop heading-font text-sm bg-[var(--c-yellow)] px-6 py-2 ink-border-sm shadow-hard-black-xs"
+                className={cn(
+                  'btn-pop heading-font text-sm px-6 py-2 ink-border-sm shadow-hard-black-xs',
+                  // REMATCH is the primary when it is offered; leaving is then
+                  // the secondary choice.
+                  onRematch
+                    ? 'bg-[var(--c-steel)] text-[var(--c-paper)]'
+                    : 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
+                )}
               >
                 BACK TO MENU
               </button>

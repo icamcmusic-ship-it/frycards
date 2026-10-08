@@ -18,9 +18,16 @@ import {
   FX_UNMOUNT_SLACK_MS,
   fxPaceFor,
   fxUnmountMs,
+  handLayoutFor,
   leaderAbilityWhy,
+  matchOutcome,
+  ownDawnGains,
   pendingChoices,
+  recommendWellspring,
+  shouldConfirmEndTurn,
+  summarizeCpuTurn,
 } from './GameV4';
+import { CARD_SIZES } from './CardFaceV4';
 import { CPU_SPEEDS } from '../meta/matchPrefs';
 import { CardDef } from '../game/v3/cards';
 import { DeckDef, GameState, createGame, mulberry32, summonUnit } from '../game/v3/engine';
@@ -221,5 +228,175 @@ describe('pendingChoices', () => {
         toolTargetIid: 'gone',
       }),
     ).toEqual(['Bond: Vanilla', 'Weaken: Target left the field']);
+  });
+});
+
+/**
+ * E5 — the recap credits the player's own Dawn to the opponent's turn.
+ *
+ * The player's Dawn runs inside the `endPhase` that ends the opponent's turn,
+ * so its Deal and heals are already in the state the recap measures. These pin
+ * that they are taken back out.
+ */
+describe('turn recap (E5)', () => {
+  const snap = { vitality: 20, fieldIids: ['u1', 'u2'], hand: 5, logAt: 2 };
+  const now = (over: Partial<Parameters<typeof summarizeCpuTurn>[1]> = {}) => ({
+    vitality: 20,
+    fieldIids: ['u1', 'u2'],
+    hand: 5,
+    log: ['x', 'y'],
+    ...over,
+  });
+
+  test('the Dawn Deal is not "+1 card to you"', () => {
+    // The opponent did nothing; the player's Dawn dealt one card.
+    const recap = summarizeCpuTurn(snap, now({ hand: 6 }), { ran: true, lines: [] });
+    expect(recap.cardsDrawnByMe).toBe(0);
+    expect(recap.noAction).toBe(true);
+  });
+
+  test('a card the opponent made you draw still counts on top of the Deal', () => {
+    const recap = summarizeCpuTurn(snap, now({ hand: 7 }), { ran: true, lines: [] });
+    expect(recap.cardsDrawnByMe).toBe(1);
+  });
+
+  test('Dawn heals are not subtracted from the damage the opponent dealt', () => {
+    // Took 5 during the opponent's turn, then Radiant/Sacred healed 2 at Dawn.
+    const dawn = ['P1 recovers 2 Vitality at Dawn.'];
+    const recap = summarizeCpuTurn(
+      snap,
+      now({ vitality: 17, log: ['x', 'y', 'P2 attacks with Bear.', ...dawn] }),
+      { ran: true, lines: dawn },
+    );
+    expect(recap.vitalityLost).toBe(5);
+    expect(recap.attacked).toBe(true);
+  });
+
+  test("the Dawn lines are not counted as the opponent's log lines", () => {
+    const dawn = ['P1 recovers 1 Vitality at Dawn.', "P1's Archivist deals 2 extra card(s)."];
+    const recap = summarizeCpuTurn(
+      snap,
+      now({ hand: 8, log: ['x', 'y', 'P2 plays Wall.', ...dawn] }),
+      { ran: true, lines: dawn },
+    );
+    expect(recap.lines).toBe(1);
+    expect(recap.cardsPlayed).toBe(1);
+    // 8 in hand = 5 + Deal 1 + Archivist 2.
+    expect(recap.cardsDrawnByMe).toBe(0);
+  });
+
+  test("a recovery that never reached the player's Dawn subtracts nothing", () => {
+    const recap = summarizeCpuTurn(snap, now({ hand: 6 }), { ran: false, lines: [] });
+    expect(recap.cardsDrawnByMe).toBe(1);
+  });
+
+  test('ownDawnGains reads the exact-amount lines', () => {
+    expect(ownDawnGains([], { dealt: true })).toEqual({ cards: 1, vitality: 0 });
+    expect(
+      ownDawnGains(
+        [
+          'P1 recovers 3 Vitality at Dawn.',
+          "P1's Leader restores 1 Vitality (Beacon).",
+          "P1's Archivist deals 2 extra card(s).",
+          "Mind Well's trigger deals 1 card to P1.",
+          "Mind Well's trigger deals 1 card to P2.",
+        ],
+        { dealt: true },
+      ),
+    ).toEqual({ cards: 4, vitality: 4 });
+  });
+});
+
+describe('recommendWellspring (the turn-1 primary)', () => {
+  const costs = [
+    { generic: 1, pips: { Tide: 2 } },
+    { generic: 0, pips: { Tide: 1, Void: 1 } },
+  ];
+
+  test('prefers the colour that unlocks the most cards', () => {
+    expect(recommendWellspring(['Tide', 'Void'], { Void: 2, Tide: 1 }, costs)).toBe('Void');
+  });
+
+  test('falls back to the colour the hand asks for most', () => {
+    expect(recommendWellspring(['Void', 'Tide'], {}, costs)).toBe('Tide');
+  });
+
+  test('then to the first colour the Leader may play, and to nothing if there is none', () => {
+    expect(recommendWellspring(['Void', 'Tide'], {}, [])).toBe('Void');
+    expect(recommendWellspring([], {}, costs)).toBeNull();
+  });
+});
+
+describe('shouldConfirmEndTurn', () => {
+  test('asks only when a playable card AND spendable essence remain', () => {
+    expect(shouldConfirmEndTurn({ playable: 2, spendableEssence: 3, suppressed: false })).toBe(
+      true,
+    );
+    expect(shouldConfirmEndTurn({ playable: 0, spendableEssence: 3, suppressed: false })).toBe(
+      false,
+    );
+    expect(shouldConfirmEndTurn({ playable: 2, spendableEssence: 0, suppressed: false })).toBe(
+      false,
+    );
+  });
+
+  test('"don\'t ask again" silences it', () => {
+    expect(shouldConfirmEndTurn({ playable: 2, spendableEssence: 3, suppressed: true })).toBe(
+      false,
+    );
+  });
+});
+
+describe('matchOutcome', () => {
+  test('maps the engine winner to a seat-relative result, draws included', () => {
+    expect(matchOutcome('P1')).toBe('win');
+    expect(matchOutcome('P2')).toBe('loss');
+    expect(matchOutcome('draw')).toBe('draw');
+    expect(matchOutcome(null)).toBeNull();
+  });
+});
+
+describe('hand layout', () => {
+  const GAP = 6;
+  const PAD = 16;
+
+  test('a 390x844 phone shows WHOLE cards edge to edge, in a dock at least 160px tall', () => {
+    const l = handLayoutFor(390, 844);
+    expect(l.strip).toBe(true);
+    expect(l.dockH).toBeGreaterThanOrEqual(160);
+    // The row is exactly N whole cards plus gaps and padding — never N and a half.
+    const cardPx = CARD_SIZES.compact.w * l.scale;
+    const n = Math.round((390 - PAD + GAP) / (cardPx + GAP));
+    expect(n * cardPx + (n - 1) * GAP + PAD).toBeCloseTo(390, 5);
+    expect(n).toBeGreaterThanOrEqual(3);
+    // And the card is shown in full, not the top 60% of it.
+    expect(l.cardH).toBeLessThanOrEqual(l.dockH);
+  });
+
+  test('desktop keeps full-size fanned cards with the dock around 22vh', () => {
+    const l = handLayoutFor(1440, 900);
+    expect(l.strip).toBe(false);
+    expect(l.scale).toBe(1);
+    expect(l.dockH).toBeGreaterThanOrEqual(160);
+    expect(l.dockH).toBeLessThanOrEqual(Math.round(900 * 0.22));
+    // The arc's outer cards swing below the middle ones, so the fan sits a
+    // little above the dock's floor and every card stays whole.
+    expect(l.fanLift).toBeGreaterThan(0);
+    expect(l.fanLift + l.cardH).toBeLessThanOrEqual(l.dockH);
+  });
+
+  test('a phone in landscape shrinks the hand to keep the board on one screen', () => {
+    const l = handLayoutFor(844, 390);
+    expect(l.scale).toBeLessThan(1);
+    expect(l.dockH).toBeLessThan(160);
+    expect(l.cardH).toBeLessThanOrEqual(l.dockH);
+  });
+
+  test('narrow phones never drop below three whole cards', () => {
+    for (const w of [320, 360, 375, 414]) {
+      const l = handLayoutFor(w, 800);
+      const cardPx = CARD_SIZES.compact.w * l.scale;
+      expect(3 * cardPx + 2 * GAP + PAD).toBeLessThanOrEqual(w + 0.01);
+    }
   });
 });

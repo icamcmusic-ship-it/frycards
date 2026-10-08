@@ -409,13 +409,13 @@ const READ_BOARD = `(() => {
         blue: c.indexOf('ring-[#29B6F6]') >= 0,
       };
     });
-  var turn = txt(document.querySelector('[aria-label="Concede match"]') ? document.querySelector('[aria-label="Concede match"]').nextElementSibling : null);
+  var turn = txt(document.querySelector('[data-turn-label]'));
   var body = String(document.body.innerText || '').replace(/\\s+/g, ' ').trim();
   // Read off the rendered counter rather than a DOM hook: the narration bubble
   // prints "4/11 · click ▸▸", which is the same string a player reads. Matched
   // case-INSENSITIVELY: innerText reflects CSS text-transform, and the bubble
   // is uppercased, so the literal on screen is "· CLICK ▸▸".
-  var m = /(\\d+\\/\\d+) · click/i.exec(body);
+  var m = /(\\d+\\/\\d+) · click ▸▸/i.exec(body);
   // Captured in the SAME read as the overflow number it explains. A second
   // round trip is a different frame: the first version of this asked the page
   // "what is too wide?" one evaluate after noticing that something was, and on
@@ -483,7 +483,7 @@ const READ_BOARD = `(() => {
     buttons: buttons,
     rings: rings,
     offenders: offenders,
-    handCards: document.querySelectorAll('[aria-label$="— preview and invoke"]').length,
+    handCards: document.querySelectorAll('[data-hand-card]').length,
     // innerText, not textContent: the match screen carries its keyframes in
     // an inline <style>, and textContent returns all of that CSS ahead of any
     // real board text — every substring probe below was reading stylesheet.
@@ -605,6 +605,24 @@ async function press(page: Page, expr: string): Promise<boolean> {
  * design (it probes for controls that may not be there). An in-page click is
  * a single round trip that returns false immediately.
  */
+/** Press a button INSIDE the open confirm dialog, by its exact label. */
+async function clickDialogButton(page: Page, label: string): Promise<boolean> {
+  return press(
+    page,
+    `(() => {
+      ${CENSUS_KEY}
+      var d = document.querySelector('[role="dialog"][aria-label="Confirm"]');
+      if (!d) return '';
+      var els = Array.prototype.slice.call(d.querySelectorAll('button'));
+      for (var i = 0; i < els.length; i++) {
+        var t = (els[i].textContent || '').replace(/\\s+/g, ' ').trim();
+        if (t === ${JSON.stringify(label)} && !els[i].disabled) { var k = __censusKey(els[i]); els[i].click(); return k; }
+      }
+      return '';
+    })()`,
+  );
+}
+
 async function clickText(page: Page, needle: string): Promise<boolean> {
   return press(
     page,
@@ -759,7 +777,7 @@ async function clickRing(page: Page, which: 'red' | 'yellow' | 'blue', idx = 0):
 async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boolean> {
   const count = await evalSafe<number>(
     page,
-    `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+    `document.querySelectorAll('[data-hand-card]').length`,
     0,
   );
   if (count === 0) return false;
@@ -777,7 +795,7 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
         page,
         `(() => {
           ${CENSUS_KEY}
-          var cards = document.querySelectorAll('[aria-label$="— preview and invoke"]');
+          var cards = document.querySelectorAll('[data-hand-card]');
           var el = cards[${at}];
           if (!el) return '';
           var k = __censusKey(el);
@@ -792,7 +810,7 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
         await page.waitForTimeout(120);
         const after = await evalSafe<number>(
           page,
-          `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+          `document.querySelectorAll('[data-hand-card]').length`,
           count,
         );
         const picking = await evalSafe(
@@ -809,7 +827,7 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
     const opened = await evalSafe(
       page,
       `(() => {
-        var cards = document.querySelectorAll('[aria-label$="— preview and invoke"]');
+        var cards = document.querySelectorAll('[data-hand-card]');
         if (!cards[${at}]) return false;
         cards[${at}].click();
         return true;
@@ -841,7 +859,7 @@ async function tryInvokeHand(page: Page, idx: number, scan = false): Promise<boo
       await page.waitForTimeout(120);
       const after = await evalSafe<number>(
         page,
-        `document.querySelectorAll('[aria-label$="— preview and invoke"]').length`,
+        `document.querySelectorAll('[data-hand-card]').length`,
         count,
       );
       // Either the card left the hand, or a target pick is open on top of it.
@@ -984,6 +1002,11 @@ const KEYBOARD_TAG = `(() => {
     if (st.visibility === 'hidden' || st.display === 'none') continue;
     if (el.getAttribute('aria-disabled') === 'true') continue;
     if (el.closest('[aria-hidden="true"], [inert]')) continue;
+    // A tablist is ONE tab stop (WAI-ARIA roving tabindex): the selected tab
+    // takes Tab, its siblings take the arrow keys. The shared <Tabs> (the Battle
+    // Log's RECENT / FULL) is built that way, so an unselected tab being
+    // \`tabindex="-1"\` is the pattern working, not a control Tab cannot reach.
+    if (el.getAttribute('role') === 'tab' && el.tabIndex === -1 && el.closest('[role="tablist"]')) continue;
     var name = (el.getAttribute('aria-label') || el.textContent || el.tagName)
       .replace(/\\s+/g, ' ').trim().slice(0, 34);
     // Keyed by SHAPE, not by a tag written onto the node: this board
@@ -1630,12 +1653,36 @@ async function driveMatch(
       }
       continue;
     }
+    // 4a. v31 — the end-turn confirm: raised only when a castable card and the
+    //     essence for it are left. Answered inside the dialog (the divider's
+    //     own END TURN button is behind it and shares the text), mostly by
+    //     ending the turn, sometimes by going back, and now and then with the
+    //     "don't ask again" box ticked so the silenced path is driven too.
+    if (has(B, 'KEEP PLAYING') && b.bodyText.includes('You can still play')) {
+      const roll = rand();
+      if (roll < 0.2) {
+        await clickDialogButton(page, 'KEEP PLAYING');
+      } else {
+        if (roll > 0.85) await clickSelector(page, '[role="dialog"] input[type="checkbox"]');
+        await clickDialogButton(page, 'END TURN');
+      }
+      continue;
+    }
+    // 4a2. v31 — the ⋯ menu was opened by something that is not resigning:
+    //      close it, so a stray open menu never stands between the player (or
+    //      the SPACE shortcut, which stands down while it is open) and the board.
+    if (has(B, 'CONCEDE MATCH') && !(concedes && step >= CONCEDE_AFTER)) {
+      await page.keyboard.press('Escape');
+      continue;
+    }
     // 4b. v29 — resign. Deliberately AFTER the dialog branch above (so the
     //     confirm it raises is answered on the next pass) and before every
     //     branch that would take an ordinary action, so the resignation is
     //     not perpetually deferred by a board that always has something to do.
     if (concedes && !conceded && step >= CONCEDE_AFTER && !narrating) {
-      if (await clickSelector(page, '[aria-label="Concede match"]')) continue;
+      // v31 — behind the ⋯ menu: open it, and the next pass presses the item.
+      if (await clickText(page, 'CONCEDE MATCH')) continue;
+      if (await clickSelector(page, '[data-match-menu="1"]')) continue;
     }
     // 5. A targeting pick is open — take a legal target, or cancel it.
     // Case-INSENSITIVE, and the same fix v19 made for the beat counter: the
@@ -1780,6 +1827,12 @@ async function driveMatch(
         }
         // study === 'stepping'
         const before = beatNum(b.beat);
+        // A ▸ STEP press can be one of the double presses `press` issues every
+        // DOUBLE_EVERY-th time (two clicks, back to back, on purpose): two
+        // clicks are two steps. Count the clicks that landed rather than
+        // assuming one, or whichever press the counter happens to put a double
+        // on reports "advanced 1 → 3" for a board that did exactly what it was told.
+        const landedBefore = doubleRun.landed;
         if (!(await clickText(page, '▸ STEP'))) {
           if (!studyReported) {
             findings.push({
@@ -1799,13 +1852,14 @@ async function driveMatch(
         const after = await readBoard(page);
         // An empty counter means the run ended on that step, which is a legal
         // outcome of stepping off the last beat.
-        if (after.beat !== '' && beatNum(after.beat) !== before + 1 && !studyReported) {
+        const clicks = 1 + (doubleRun.landed - landedBefore);
+        if (after.beat !== '' && beatNum(after.beat) !== before + clicks && !studyReported) {
           findings.push({
             match,
             seed,
             width,
             kind: 'narration',
-            detail: `▸ STEP advanced ${before} → ${beatNum(after.beat)} (expected ${before + 1}) at step ${step}`,
+            detail: `▸ STEP advanced ${before} → ${beatNum(after.beat)} (expected ${before + clicks}) at step ${step}`,
           });
           studyReported = true;
         }
@@ -1891,7 +1945,7 @@ async function driveMatch(
     //     only ever pressed what blocked it never met either one.
     if (b.buttons.some((x) => x.key === 'DISMISS THE TURN RECAP')) {
       const roll = rand();
-      if (roll < 0.3 && act('recap:log', await clickText(page, '▴ FULL LOG'))) continue;
+      if (roll < 0.3 && act('recap:log', await clickText(page, '▴ LOG'))) continue;
       if (
         roll < 0.6 &&
         act('recap:dismiss', await clickSelector(page, '[aria-label="Dismiss the turn recap"]'))
@@ -2029,7 +2083,17 @@ async function driveMatch(
       // v29 — `ASH N` (the OPPONENT's pile, top-left) against `ASH-PILE N`
       // (the player's own, bottom-right): two drawers, and the census found
       // the driver had opened one of them 3,940 times and the other never.
-      const chrome = ['ASH-PILE', 'ASH ', '▴ LOG', '▾ LOG'][Math.floor(rand() * 4)];
+      // v31 — the Battle Log is one drawer with a RECENT / FULL toggle, and
+      // the hand's sticky bar carries READ.
+      const chrome = ['ASH-PILE', 'ASH ', '▴ LOG', '▾ LOG', 'RECENT', 'FULL', 'READ'][
+        Math.floor(rand() * 7)
+      ];
+      // v31 — the ⋯ menu itself, opened and dismissed (resigning goes through
+      // the dedicated branch above).
+      if (rand() < 0.1 && (await clickSelector(page, '[data-match-menu="1"]'))) {
+        await page.keyboard.press('Escape');
+        continue;
+      }
       // v30 — the two Vitality plates. Both are `role="button"` (they are the
       // bond/Charm target outside a pick, and a Tip inside one), both are on
       // screen on every single read, and the census had them at 1,675 offers

@@ -94,3 +94,41 @@ describe('.tap-target', () => {
     expect(base.slice(0, base.indexOf('}'))).toMatch(/position:\s*relative/);
   });
 });
+
+/**
+ * The text floor (§2.1 #6): nothing the player has to read goes below 11px.
+ *
+ * The match board and the coach had ~270 arbitrary `text-[5..10px]` classes
+ * between them. They now use the `.fs-*` tokens in index.css, so the sizes in
+ * those two files are pinned at zero. The card face is the deliberate
+ * exception: it prints miniature faces (micro/compact/standard tiers) whose
+ * lettering is part of a card's thumbnail, and the same card is read at size
+ * through the hover preview, the inspector and CardReadingPanel. Those
+ * literals may not grow — a new one means a decision, not a drive-by.
+ */
+describe('text size floor', () => {
+  const sub11 = (file: string) => {
+    const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+    return [...src.matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)]
+      .map((m) => Number(m[1]))
+      .filter((px) => px < 11);
+  };
+
+  it('keeps the match board on the type tokens', () => {
+    expect(sub11('./GameV4.tsx')).toEqual([]);
+  });
+
+  it('keeps the coach callout on the type tokens', () => {
+    expect(sub11('./CoachOverlay.tsx')).toEqual([]);
+  });
+
+  it('does not add to the card face’s miniature-tier exceptions', () => {
+    expect(sub11('./CardFaceV4.tsx').length).toBeLessThanOrEqual(28);
+  });
+
+  it('defines the tokens the board relies on', () => {
+    const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/--fs-xs:\s*0\.6875rem/); // 11px
+    expect(css).toMatch(/\.fs-xs\s*\{/);
+  });
+});
