@@ -37,6 +37,13 @@ import { GradedCard, GRADING_SERVICE_BY_ID, GRADE_WORDS, fmtGrade } from './grad
 
 export type SlabSize = 'compact' | 'standard' | 'full';
 
+/** Text the player has to read (service stamp, card name, SEALED) never prints
+ * below the app's 11px floor, even on the compact/standard plates. The grade
+ * word, rarity line and cert number stay at plate scale: they are the tiny
+ * printed detail of the slab as an object, repeated in full in the detail
+ * sheet. */
+const READABLE_PX = 11;
+
 /** Card-face size per slab size, plus the label metrics that go with it. */
 const SLAB_TIER: Record<
   SlabSize,
@@ -395,7 +402,7 @@ export function GradedSlab({
         <div className="relative flex-1 min-w-0 px-1.5 py-1">
           <div
             className="heading-font leading-none truncate"
-            style={{ fontSize: tier.label, letterSpacing: '0.04em' }}
+            style={{ fontSize: Math.max(READABLE_PX, tier.label), letterSpacing: '0.04em' }}
           >
             {size === 'full'
               ? svc.slab.stamp
@@ -403,7 +410,7 @@ export function GradedSlab({
           </div>
           <div
             className="font-black leading-tight truncate"
-            style={{ fontSize: tier.label + 1 }}
+            style={{ fontSize: Math.max(READABLE_PX, tier.label + 1) }}
             title={def.name}
           >
             {def.name}
@@ -515,7 +522,7 @@ export function GradedSlab({
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <span
               className="heading-font bg-[var(--c-ink)]/80 text-[var(--c-paper)] px-2 py-1 ink-border-sm"
-              style={{ fontSize: tier.label }}
+              style={{ fontSize: Math.max(READABLE_PX, tier.label) }}
             >
               SEALED
             </span>

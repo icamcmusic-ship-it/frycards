@@ -43,7 +43,8 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { PopButton } from './ui';
+import { PopButton, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
 import { CardFace, CARD_SIZES } from '../components/CardFaceV4';
@@ -97,6 +98,8 @@ function slabBox(): { w: number; h: number } {
   return { w: face.w + SLAB_PAD_FULL * 2, h: face.h + SLAB_PAD_FULL * 2 + 74 };
 }
 
+type ShowroomSource = 'mine' | 'all' | 'slabs';
+
 export function ShowroomScreen({
   onBack,
   initial,
@@ -114,9 +117,21 @@ export function ShowroomScreen({
   const [pose, setPose] = useState<Pose>(DEFAULT_POSE);
   const [spinIdx, setSpinIdx] = useState(0);
   const [search, setSearch] = useState('');
-  const [source, setSource] = useState<'mine' | 'all' | 'slabs'>(
-    initial?.kind === 'slab' ? 'slabs' : session ? 'mine' : 'all',
+  // The tab is remembered between visits. A deep link to a slab opens the
+  // slabs tab regardless, and someone without an account can only browse.
+  const [storedSource, setStoredSource] = usePersistedState<ShowroomSource>(
+    'showroom.source',
+    'mine',
+    (v): v is ShowroomSource => v === 'mine' || v === 'all' || v === 'slabs',
   );
+  const [sourceOverride, setSourceOverride] = useState<ShowroomSource | null>(
+    initial?.kind === 'slab' ? 'slabs' : null,
+  );
+  const source: ShowroomSource = !session || guest ? 'all' : (sourceOverride ?? storedSource);
+  const setSource = (s: ShowroomSource) => {
+    setSourceOverride(null);
+    setStoredSource(s);
+  };
   const [slabs, setSlabs] = useState<GradedCard[]>([]);
   const [slabsLoading, setSlabsLoading] = useState(false);
   const stageWrapRef = useRef<HTMLDivElement>(null);
@@ -283,7 +298,7 @@ export function ShowroomScreen({
         <h1 className="heading-font text-xl text-[var(--c-yellow)] flex items-center gap-2">
           <Box className="w-5 h-5" aria-hidden /> 3D SHOWROOM
         </h1>
-        <span className="text-[10px] font-bold text-[var(--c-paper)]/60 hidden sm:inline">
+        <span className="fs-xs font-bold text-[var(--c-paper)]/60 hidden sm:inline">
           Drag to turn · wheel or pinch to zoom · arrows tilt · F flips · R resets · SPACE spins
         </span>
       </div>
@@ -330,13 +345,13 @@ export function ShowroomScreen({
                 {room.label}
                 {room.premium && <span className="text-[var(--c-paper)]/70"> · SUPER-RARE+</span>}
               </div>
-              <div className="font-mono text-[10px] text-[var(--c-paper)]/80 mt-0.5">
+              <div className="font-mono fs-xs text-[var(--c-paper)]/80 mt-0.5">
                 YAW {displayYaw(pose.yaw)}° · TILT {Math.round(pose.pitch)}° ·{' '}
                 {pose.zoom.toFixed(2)}×
               </div>
             </div>
             <div
-              className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font text-[10px] px-2 py-0.5 self-start"
+              className="bg-[var(--c-yellow)] text-[var(--c-ink)] heading-font fs-xs px-2 py-0.5 self-start"
               role="status"
               aria-live="polite"
             >
@@ -372,7 +387,7 @@ export function ShowroomScreen({
             <ZoomIn className="w-4 h-4" aria-hidden />
           </HudButton>
           <HudButton onClick={flip} label="Flip to the other side" wide>
-            FLIP (F)
+            FLIP<span className="pointer-coarse:hidden"> (F)</span>
           </HudButton>
           <HudButton
             onClick={() => setSpinIdx((i) => (i + 1) % SPIN_STEPS.length)}
@@ -393,7 +408,7 @@ export function ShowroomScreen({
             <span className="ml-1">{reduced ? 'SPIN OFF' : `SPIN ${spin.label}`}</span>
           </HudButton>
           <HudButton onClick={reset} label="Reset the camera" wide>
-            RESET (R)
+            RESET<span className="pointer-coarse:hidden"> (R)</span>
           </HudButton>
           <HudButton onClick={fullscreen} label="Fullscreen">
             <Maximize2 className="w-4 h-4" aria-hidden />
@@ -405,28 +420,20 @@ export function ShowroomScreen({
       <div className="flex-1 bg-[var(--c-paper)] text-[var(--c-ink)] p-4">
         <div className="max-w-6xl mx-auto flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {(
-              [
-                { k: 'mine', label: 'MY CARDS' },
-                { k: 'slabs', label: `MY SLABS${slabs.length ? ` (${slabs.length})` : ''}` },
-                { k: 'all', label: 'EVERY CARD' },
-              ] as const
-            ).map((t) => (
-              <button
-                key={t.k}
-                onClick={() => setSource(t.k)}
-                aria-pressed={source === t.k}
-                disabled={guest && t.k !== 'all'}
-                className={cn(
-                  'btn-pop heading-font text-[11px] px-3 py-1.5 ink-border-sm shadow-hard-black-xs disabled:opacity-40',
-                  source === t.k
-                    ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
-                    : 'bg-[var(--c-paper)] text-[var(--c-ink)]',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+            <Tabs
+              ariaLabel="Showroom source"
+              value={source}
+              onChange={setSource}
+              tabs={[
+                { id: 'mine', label: 'MY CARDS', disabled: guest },
+                {
+                  id: 'slabs',
+                  label: `MY SLABS${slabs.length ? ` (${slabs.length})` : ''}`,
+                  disabled: guest,
+                },
+                { id: 'all', label: 'EVERY CARD' },
+              ]}
+            />
             {/* min-w-0 / max-w-full, on the box AND on the field inside it:
                 `w-40` is 10rem, so the field is 320px the moment a player
                 doubles their browser font size, and with the icon and the box
@@ -450,11 +457,18 @@ export function ShowroomScreen({
 
           {source === 'slabs' ? (
             slabPicks.length === 0 ? (
-              <p className="text-[11px] font-bold text-[var(--c-steel)] py-6">
-                {slabsLoading
-                  ? 'Loading your slabs…'
-                  : 'No graded slabs to show. The Grading Lab turns a spare copy into one.'}
-              </p>
+              <div className="flex flex-col items-start gap-2 py-6">
+                <p className="text-[11px] font-bold text-[var(--c-steel)]">
+                  {slabsLoading
+                    ? 'Loading your slabs…'
+                    : 'No graded slabs to show. The Grading Lab turns a spare copy into one.'}
+                </p>
+                {!slabsLoading && (
+                  <PopButton color="yellow" onClick={() => setSource('all')}>
+                    BROWSE EVERY CARD →
+                  </PopButton>
+                )}
+              </div>
             ) : (
               <div className="flex flex-wrap gap-3">
                 {slabPicks.map((g) => (
@@ -475,7 +489,7 @@ export function ShowroomScreen({
                     <div className="heading-font text-[11px] truncate">
                       {POOL_BY_ID[g.card_id]?.name ?? g.card_id}
                     </div>
-                    <div className="text-[10px] font-bold text-[var(--c-paper)]/70">
+                    <div className="fs-xs font-bold text-[var(--c-paper)]/70">
                       {GRADING_SERVICE_BY_ID[g.service].short} · {fmtGrade(g.grade!)}
                     </div>
                   </button>
@@ -483,11 +497,24 @@ export function ShowroomScreen({
               </div>
             )
           ) : picks.length === 0 ? (
-            <p className="text-[11px] font-bold text-[var(--c-steel)] py-6">
-              {source === 'mine'
-                ? 'No cards here yet — crack a pack in the Store and they will stand in this room.'
-                : 'No cards match that search.'}
-            </p>
+            <div className="flex flex-col items-start gap-2 py-6">
+              <p className="text-[11px] font-bold text-[var(--c-steel)]">
+                {source === 'mine' && !search
+                  ? 'No cards here yet — crack a pack in the Store and they will stand in this room.'
+                  : 'No cards match that search.'}
+              </p>
+              {search ? (
+                <PopButton color="yellow" onClick={() => setSearch('')}>
+                  CLEAR SEARCH
+                </PopButton>
+              ) : (
+                source === 'mine' && (
+                  <PopButton color="yellow" onClick={() => setSource('all')}>
+                    BROWSE EVERY CARD →
+                  </PopButton>
+                )
+              )}
+            </div>
           ) : (
             <div className="flex flex-wrap gap-2 max-h-[38vh] overflow-y-auto pr-1">
               {picks.slice(0, 200).map((p) => {
@@ -529,7 +556,7 @@ export function ShowroomScreen({
                 );
               })}
               {picks.length > 200 && (
-                <p className="w-full text-[10px] font-bold text-[var(--c-steel)] pt-2">
+                <p className="w-full fs-xs font-bold text-[var(--c-steel)] pt-2">
                   Showing the 200 rarest matches of {picks.length}. Narrow it with the search box.
                 </p>
               )}
@@ -587,7 +614,7 @@ function HudButton({
       aria-label={label}
       disabled={disabled}
       className={cn(
-        'btn-pop heading-font text-[10px] flex items-center justify-center ink-border-sm shadow-hard-black-xs min-h-9 disabled:opacity-40 disabled:cursor-not-allowed',
+        'btn-pop heading-font fs-xs whitespace-nowrap shrink-0 flex items-center justify-center ink-border-sm shadow-hard-black-xs min-h-9 disabled:opacity-40 disabled:cursor-not-allowed',
         wide ? 'px-2.5' : 'w-9',
         active
           ? 'bg-[var(--c-yellow)] text-[var(--c-ink)]'
