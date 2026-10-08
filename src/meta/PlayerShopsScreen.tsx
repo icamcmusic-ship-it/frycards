@@ -20,7 +20,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useMeta } from './MetaContext';
-import { MetaHeader, PopButton, Notice, Credits } from './ui';
+import { MetaHeader, PopButton, Notice, Credits, Tabs } from './ui';
+import { usePersistedState } from './usePersistedState';
 import { cn, visibleInterval } from '../lib/utils';
 import { POOL_BY_ID, POOL_V4 } from '../game/v3/cardpool';
 import { CardDef } from '../game/v3/cards';
@@ -139,18 +140,28 @@ function shopAge(createdAt: string | null | undefined): string {
   return `${Math.floor(days / 30)} months old`;
 }
 
+/**
+ * Star rating text on a 0-5 scale. The shop system is specified as a 5-star
+ * composite (CHANGELOG, shop discovery & rating), so `composite_score` is meant
+ * to arrive as 0-5. Anything above 5 can only be a 0-100 value (the old harness
+ * fixture sent 88), so it is rescaled instead of printing "88.0 / 5".
+ */
+export function formatShopRating(score: number): string {
+  const stars = score > 5 ? score / 20 : score;
+  return Math.min(5, Math.max(0, stars)).toFixed(1);
+}
+
 function RatingBadge({ shop }: { shop: ShopPublic | BrowseShopEntry }) {
   if (!shop.rating_unlocked || shop.composite_score == null) {
     return (
-      <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
+      <span className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
         NEW SELLER
       </span>
     );
   }
-  const score = shop.composite_score;
   return (
-    <span className="flex items-center gap-1 text-[10px] font-black px-1.5 py-0.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
-      <Star className="w-3 h-3 fill-current" /> {score.toFixed(1)} / 5
+    <span className="flex items-center gap-1 fs-xs font-black px-1.5 py-0.5 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm">
+      <Star className="w-3 h-3 fill-current" /> {formatShopRating(shop.composite_score)} / 5
     </span>
   );
 }
@@ -169,7 +180,7 @@ function RarityPill({
   return (
     <span
       title={title}
-      className="text-[9px] font-black px-1.5 py-0.5 ink-border-sm whitespace-nowrap"
+      className="fs-xs font-black px-1.5 py-0.5 ink-border-sm whitespace-nowrap"
       style={{
         backgroundColor: RARITY_HEX[rarity] || RARITY_HEX.Common,
         // Match RARITY_CHIP's contrast choices: light backgrounds (Common,
@@ -249,7 +260,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
             <div className="heading-font text-sm truncate">
               {pool?.template_name || 'MYSTERY PACK'} — FULL POOL
             </div>
-            <div className="text-[10px] font-bold text-[var(--c-steel)] mt-0.5">
+            <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5">
               Every card this seller put into the pool. Odds below are computed from what is
               actually left.
             </div>
@@ -271,13 +282,13 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
           ) : error || !pool ? (
             <div className="text-center py-12">
               <p className="font-bold text-[var(--c-steel)] mb-3">{error || 'Pool unavailable.'}</p>
-              <PopButton color="red" onClick={load}>
+              <PopButton color="yellow" onClick={load}>
                 RETRY
               </PopButton>
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap gap-2 mb-3 text-[10px] font-bold">
+              <div className="flex flex-wrap gap-2 mb-3 fs-xs font-bold">
                 <span className="bg-[var(--c-ink)] text-[var(--c-paper)] px-2 py-1 ink-border-sm">
                   {pool.pack_size} cards per pack
                 </span>
@@ -294,7 +305,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
 
               {pool.guarantees.length > 0 && (
                 <div className="ink-border-sm p-2 mb-3 bg-[var(--c-yellow)]/15">
-                  <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
+                  <div className="heading-font fs-xs mb-1 flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5" /> GUARANTEED IN EVERY PACK
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -309,7 +320,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
 
               {pool.rarities.length > 0 && (
                 <div className="mb-3">
-                  <div className="heading-font text-[10px] mb-1">PULL ODDS BY RARITY</div>
+                  <div className="heading-font fs-xs mb-1">PULL ODDS BY RARITY</div>
                   <div className="flex flex-col gap-1">
                     {pool.rarities.map((r) => (
                       <div key={r.rarity} className="flex items-center gap-2">
@@ -323,7 +334,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
                             }}
                           />
                         </div>
-                        <span className="text-[10px] font-bold w-28 text-right">
+                        <span className="fs-xs font-bold w-28 text-right">
                           {r.pull_chance_pct != null ? `${r.pull_chance_pct}%` : '—'} ·{' '}
                           {r.remaining}/{r.submitted}
                         </span>
@@ -334,10 +345,10 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
               )}
 
               <div className="flex items-center justify-between mb-1">
-                <div className="heading-font text-[10px]">
+                <div className="heading-font fs-xs">
                   POOL CONTENTS ({visibleCards.length} entries)
                 </div>
-                <label className="flex items-center gap-1 text-[10px] font-bold">
+                <label className="flex items-center gap-1 fs-xs font-bold">
                   <input
                     type="checkbox"
                     checked={showSpent}
@@ -370,7 +381,7 @@ function MysteryPoolModal({ listingId, onClose }: { listingId: string; onClose: 
                         {c.name}
                         {c.foil ? ' ✦' : ''}
                       </div>
-                      <div className="text-[9px] font-bold text-[var(--c-steel)]">
+                      <div className="fs-xs font-bold text-[var(--c-steel)]">
                         {c.rarity} · {c.remaining}/{c.submitted} left
                       </div>
                     </div>
@@ -546,11 +557,11 @@ function QuickAddBar({
   };
 
   if (error) {
-    return <div className="text-[10px] font-bold text-[var(--c-red)] mb-2">{error}</div>;
+    return <div className="fs-xs font-bold text-[var(--c-red)] mb-2">{error}</div>;
   }
   if (!inv) {
     return (
-      <div className="text-[10px] font-bold text-[var(--c-steel)] mb-2 animate-pulse">
+      <div className="fs-xs font-bold text-[var(--c-steel)] mb-2 animate-pulse">
         Loading your listable cards…
       </div>
     );
@@ -558,7 +569,7 @@ function QuickAddBar({
 
   return (
     <div className="ink-border-sm p-2 mb-2 bg-[var(--c-yellow)]/10">
-      <div className="heading-font text-[10px] mb-1.5 flex items-center gap-1">
+      <div className="heading-font fs-xs mb-1.5 flex items-center gap-1">
         <Wand2 className="w-3.5 h-3.5" /> QUICK ADD
       </div>
       <div className="flex flex-wrap gap-1.5 items-center mb-1.5">
@@ -566,7 +577,7 @@ function QuickAddBar({
           <button
             key={r}
             onClick={() => addRarity(r)}
-            className="text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm btn-pop"
+            className="fs-xs font-black px-1.5 py-0.5 min-h-10 ink-border-sm btn-pop"
             style={{
               backgroundColor: RARITY_HEX[r],
               // Same contrast choices as RARITY_CHIP (see RarityPill).
@@ -579,13 +590,13 @@ function QuickAddBar({
           </button>
         ))}
         {byRarity.size === 0 && (
-          <span className="text-[10px] font-bold text-[var(--c-steel)]">
+          <span className="fs-xs font-bold text-[var(--c-steel)]">
             No spare copies left to add.
           </span>
         )}
       </div>
       <div className="flex flex-wrap gap-2 items-center">
-        <label className="flex items-center gap-1 text-[10px] font-bold">
+        <label className="flex items-center gap-1 fs-xs font-bold">
           <input
             type="checkbox"
             checked={includeFoils}
@@ -595,7 +606,7 @@ function QuickAddBar({
         </label>
         {packSize != null && (
           <>
-            <label className="flex items-center gap-1 text-[10px] font-bold">
+            <label className="flex items-center gap-1 fs-xs font-bold">
               Fill to
               <input
                 type="number"
@@ -777,7 +788,7 @@ function CardStackPicker({
             }}
             className={cn(
               // min-h keeps these dense chips tappable on a phone.
-              'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
+              'fs-xs font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
               RARITY_CHIP[c.def.rarity || 'Common'] || RARITY_CHIP.Common,
               cardId === c.card_id && 'outline outline-2 outline-[var(--c-red)]',
             )}
@@ -787,7 +798,7 @@ function CardStackPicker({
           </button>
         ))}
         {sellable.length === 0 && (
-          <span className="text-[10px] font-bold text-[var(--c-steel)]">
+          <span className="fs-xs font-bold text-[var(--c-steel)]">
             No spare cards available (deck-locked copies can't be listed).
           </span>
         )}
@@ -795,7 +806,7 @@ function CardStackPicker({
       {selected && (
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           {selected.foil_quantity > 0 && (
-            <label className="flex items-center gap-1 text-[10px] font-bold">
+            <label className="flex items-center gap-1 fs-xs font-bold">
               <input
                 type="checkbox"
                 checked={foil}
@@ -816,14 +827,14 @@ function CardStackPicker({
             onChange={(e) => setQty(Math.max(1, Math.min(maxQty, Number(e.target.value) || 1)))}
             className="w-16 px-2 py-1 ink-border-sm text-xs"
           />
-          <span className="text-[9px] text-[var(--c-steel)]">of {maxQty} spare</span>
+          <span className="fs-xs text-[var(--c-steel)]">of {maxQty} spare</span>
           <PopButton color="steel" onClick={add} disabled={qty < 1 || qty > maxQty}>
             + ADD
           </PopButton>
         </div>
       )}
       {items.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap mb-1 text-[10px] font-black">
+        <div className="flex items-center gap-2 flex-wrap mb-1 fs-xs font-black">
           <span className="bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
             {items.reduce((s, i) => s + i.quantity, 0)} CARDS · {items.length} ENTRIES
           </span>
@@ -846,7 +857,7 @@ function CardStackPicker({
             return (
               <div
                 key={`${it.card_id}-${it.foil}-${i}`}
-                className="flex items-center justify-between text-[10px] font-bold bg-[var(--c-paper)] ink-border-sm px-2 py-1"
+                className="flex items-center justify-between fs-xs font-bold bg-[var(--c-paper)] ink-border-sm px-2 py-1"
               >
                 <span>
                   {def?.name || it.card_id}
@@ -901,7 +912,7 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
                 setSearch('');
               }}
               className={cn(
-                'text-[9px] font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
+                'fs-xs font-black px-1.5 py-0.5 min-h-10 ink-border-sm',
                 RARITY_CHIP[c.rarity || 'Common'],
               )}
             >
@@ -917,8 +928,16 @@ function CardSearchPick({ value, onChange }: { value: string; onChange: (id: str
 // ---------------------------------------------------------------------------
 // Directory tab — Featured / Trending / New / Top Rated
 // ---------------------------------------------------------------------------
+type DirectorySort = 'featured' | 'trending' | 'new' | 'top_rated';
+const isDirectorySort = (v: unknown): v is DirectorySort =>
+  v === 'featured' || v === 'trending' || v === 'new' || v === 'top_rated';
+
 function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
-  const [sort, setSort] = useState<'featured' | 'trending' | 'new' | 'top_rated'>('featured');
+  const [sort, setSort] = usePersistedState<DirectorySort>(
+    'shops.sort',
+    'featured',
+    isDirectorySort,
+  );
   const [shops, setShops] = useState<BrowseShopEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -970,19 +989,20 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {tabs.map((t) => (
-          <PopButton
-            key={t.key}
-            color={sort === t.key ? 'black' : 'yellow'}
-            onClick={() => setSort(t.key)}
-          >
+      <Tabs<DirectorySort>
+        ariaLabel="Sort shops"
+        className="mb-4"
+        value={sort}
+        onChange={setSort}
+        tabs={tabs.map((t) => ({
+          id: t.key,
+          label: (
             <span className="flex items-center gap-1">
               {t.icon} {t.label}
             </span>
-          </PopButton>
-        ))}
-      </div>
+          ),
+        }))}
+      />
       {loading ? (
         <div className="text-center font-bold text-[var(--c-steel)] py-16 animate-pulse">
           LOADING SHOPS…
@@ -990,7 +1010,7 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
       ) : error ? (
         <div className="text-center py-16">
           <p className="font-bold text-[var(--c-steel)] mb-3">{error}</p>
-          <PopButton color="red" onClick={() => setAttempt((n) => n + 1)}>
+          <PopButton color="yellow" onClick={() => setAttempt((n) => n + 1)}>
             RETRY
           </PopButton>
         </div>
@@ -1032,7 +1052,7 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                     <div className="heading-font text-sm text-[var(--c-paper)] truncate drop-shadow">
                       {s.name}
                     </div>
-                    <div className="text-[9px] font-bold text-[var(--c-paper)]/75 truncate">
+                    <div className="fs-xs font-bold text-[var(--c-paper)]/75 truncate">
                       by {s.owner_username || '…'}
                     </div>
                   </div>
@@ -1045,7 +1065,7 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                     “{s.tagline}”
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 flex-wrap text-[9px] font-black">
+                <div className="flex items-center gap-1.5 flex-wrap fs-xs font-black">
                   <span className="bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
                     {s.active_listings ?? 0} LISTING{(s.active_listings ?? 0) === 1 ? '' : 'S'}
                   </span>
@@ -1071,7 +1091,7 @@ function DirectoryTab({ onView }: { onView: (owner: string) => void }) {
                     </span>
                   )}
                 </div>
-                <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1.5">
+                <div className="fs-xs font-bold text-[var(--c-steel)] mt-1.5">
                   {s.sales_count ?? 0} sale{(s.sales_count ?? 0) === 1 ? '' : 's'} ·{' '}
                   {shopAge(s.created_at)}
                 </div>
@@ -1154,7 +1174,7 @@ function ReportModal({
             CANCEL
           </PopButton>
           <PopButton
-            color="red"
+            color="yellow"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -1262,11 +1282,11 @@ function MysteryListingCard({
         <div className="w-20 h-28 shrink-0 bg-[var(--c-ink)] ink-border-sm flex flex-col items-center justify-center text-[var(--c-yellow)] relative overflow-hidden">
           <div className="absolute inset-0 opacity-20 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,var(--c-yellow)_6px,var(--c-yellow)_8px)]" />
           <Package className="w-8 h-8 relative" />
-          <span className="text-[9px] font-black mt-1 relative">{listing.pack_size} CARDS</span>
+          <span className="fs-xs font-black mt-1 relative">{listing.pack_size} CARDS</span>
         </div>
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="heading-font text-sm">MYSTERY PACK</div>
-          <div className="text-[9px] font-bold text-[var(--c-steel)] mt-0.5 inline-flex items-center flex-wrap gap-x-1">
+          <div className="fs-xs font-bold text-[var(--c-steel)] mt-0.5 inline-flex items-center flex-wrap gap-x-1">
             {remaining} of {listing.total_packs ?? remaining} left
             {live?.live_ev_per_pack != null && (
               <>
@@ -1286,7 +1306,7 @@ function MysteryListingCard({
               <Coins className="w-3.5 h-3.5" /> {fmtCredits(listing.price)}
             </span>
             {soldOut && (
-              <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
+              <span className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                 {/* soldOut is derived from live stock (remaining <= 0), which
                     can go true a beat before the row reloads off 'active' —
                     so a still-'active' status here means "sold out, not yet
@@ -1312,7 +1332,7 @@ function MysteryListingCard({
         </PopButton>
         {!isOwn && !soldOut && shopActive && (
           <>
-            <PopButton color="red" disabled={busy || credits < listing.price} onClick={onBuy}>
+            <PopButton color="yellow" disabled={busy || credits < listing.price} onClick={onBuy}>
               BUY PACK ▸
             </PopButton>
             <button
@@ -1506,7 +1526,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
         <div className="shrink-0 flex flex-col gap-1 items-center">
           <CardFace def={headline} size="compact" foil={cards[0]?.foil} />
           {cards.length > 1 && (
-            <span className="text-[9px] font-black text-center bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
+            <span className="fs-xs font-black text-center bg-[var(--c-ink)] text-[var(--c-paper)] px-1.5 py-0.5 ink-border-sm">
               +{cards.length - 1} MORE
             </span>
           )}
@@ -1527,7 +1547,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
             <RarityPill rarity={topRarity}>{topRarity}</RarityPill>
           </div>
           {l.listing_type === 'bundle' && (
-            <div className="text-[9px] font-bold text-[var(--c-steel)] mt-1 flex flex-wrap gap-1">
+            <div className="fs-xs font-bold text-[var(--c-steel)] mt-1 flex flex-wrap gap-1">
               {cards.map((c, i) => (
                 <span
                   key={i}
@@ -1552,17 +1572,17 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                 contents at — showing the gap turns a bare number into a deal
                 a buyer can judge. */}
             {discount != null && discount >= 5 && (
-              <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#22C55E] text-[#052E12] ink-border-sm">
+              <span className="fs-xs font-black px-1.5 py-0.5 bg-[#22C55E] text-[#052E12] ink-border-sm">
                 {discount}% UNDER REFERENCE
               </span>
             )}
             {discount != null && discount <= -25 && (
-              <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-red)] text-[var(--c-paper)] ink-border-sm">
+              <span className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-red)] text-[var(--c-paper)] ink-border-sm">
                 {-discount}% OVER REFERENCE
               </span>
             )}
             {l.status !== 'active' && (
-              <span className="text-[9px] font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
+              <span className="fs-xs font-black px-1.5 py-0.5 bg-[var(--c-steel)] text-[var(--c-paper)] ink-border-sm">
                 {(l.status || 'UNAVAILABLE').replace(/_/g, ' ').toUpperCase()}
               </span>
             )}
@@ -1570,7 +1590,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           {!isOwn && l.status === 'active' && shop?.status === 'active' && (
             <div className="flex gap-2 mt-2">
               <PopButton
-                color="red"
+                color="yellow"
                 disabled={busy || (profile?.credits || 0) < l.price}
                 onClick={async () => {
                   if (!(await askConfirm(`Buy this listing for ${fmtCredits(l.price)} credits?`)))
@@ -1612,7 +1632,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
           <p className="font-bold text-[var(--c-steel)] mb-3">
             {loadError || "This shop couldn't be found."}
           </p>
-          <PopButton color="red" onClick={() => reload()}>
+          <PopButton color="yellow" onClick={() => reload()}>
             RETRY
           </PopButton>
         </div>
@@ -1648,7 +1668,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
                     “{shop.tagline}”
                   </div>
                 )}
-                <div className="text-[10px] font-bold text-[var(--c-paper)]/75 mt-1">
+                <div className="fs-xs font-bold text-[var(--c-paper)]/75 mt-1">
                   Sold by{' '}
                   {seller ? (
                     <PlayerLink
@@ -1665,7 +1685,7 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
               </div>
               <RatingBadge shop={shop} />
             </div>
-            <div className="relative px-4 pb-3 flex flex-wrap gap-1.5 text-[9px] font-black">
+            <div className="relative px-4 pb-3 flex flex-wrap gap-1.5 fs-xs font-black">
               <span className="bg-[var(--c-paper)] text-[var(--c-ink)] px-1.5 py-0.5 ink-border-sm">
                 {shop.sales_count ?? 0} SALE{(shop.sales_count ?? 0) === 1 ? '' : 'S'}
               </span>
@@ -1704,17 +1724,16 @@ function StorefrontView({ owner, onBack }: { owner: string; onBack: () => void }
             </div>
           )}
 
-          <div className="flex gap-2 mb-4 flex-wrap">
-            {(['all', 'individual', 'bundle', 'mystery'] as const).map((f) => (
-              <PopButton
-                key={f}
-                color={filter === f ? 'black' : 'yellow'}
-                onClick={() => setFilter(f)}
-              >
-                {f.toUpperCase()}
-              </PopButton>
-            ))}
-          </div>
+          <Tabs<typeof filter>
+            ariaLabel="Listing type"
+            className="mb-4"
+            value={filter}
+            onChange={setFilter}
+            tabs={(['all', 'individual', 'bundle', 'mystery'] as const).map((f) => ({
+              id: f,
+              label: f.toUpperCase(),
+            }))}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {visible.map(renderListing)}
@@ -1900,7 +1919,7 @@ function MyShopTab() {
     return (
       <div className="text-center py-16">
         <p className="font-bold text-[var(--c-steel)] mb-3">{loadError}</p>
-        <PopButton color="red" onClick={() => reload()}>
+        <PopButton color="yellow" onClick={() => reload()}>
           RETRY
         </PopButton>
       </div>
@@ -1909,7 +1928,7 @@ function MyShopTab() {
   const staleBanner = loadError ? (
     <div className="mb-3 flex items-center gap-3">
       <Notice text={`${loadError} Showing what was loaded last.`} />
-      <PopButton color="red" onClick={() => reload()}>
+      <PopButton color="yellow" onClick={() => reload()}>
         RETRY
       </PopButton>
     </div>
@@ -1965,7 +1984,7 @@ function MyShopTab() {
             is free.
           </div>
           <PopButton
-            color="red"
+            color="yellow"
             disabled={busy}
             onClick={() => run(() => reopenShop(), 'Shop reopened!', true)}
           >
@@ -2016,13 +2035,13 @@ function MyShopTab() {
               “{shop.tagline}”
             </div>
           )}
-          <div className="text-[10px] font-bold text-[var(--c-paper)]/70 mt-1">
+          <div className="fs-xs font-bold text-[var(--c-paper)]/70 mt-1">
             {shopAge(shop.created_at)} · {slots.filter((s) => s.status === 'occupied').length}/
             {slots.length} slots filled
           </div>
         </div>
         <PopButton
-          color="steel"
+          color="red"
           className="relative"
           disabled={busy}
           onClick={async () => {
@@ -2070,7 +2089,7 @@ function MyShopTab() {
           <div
             key={s.id}
             className={cn(
-              'w-16 h-16 ink-border-sm flex flex-col items-center justify-center text-[9px] font-black',
+              'w-16 h-16 ink-border-sm flex flex-col items-center justify-center fs-xs font-black',
               s.status === 'occupied' && 'bg-[var(--c-yellow)] text-[var(--c-ink)]',
               s.status === 'empty' && 'bg-[var(--c-paper)] text-[var(--c-steel)]',
               s.status === 'burned' && 'bg-[var(--c-red)] text-[var(--c-paper)] opacity-60',
@@ -2130,7 +2149,7 @@ function MyShopTab() {
           </span>
         </PopButton>
         {emptySlots.length === 0 && (
-          <span className="text-[10px] font-bold text-[var(--c-steel)] self-center">
+          <span className="fs-xs font-bold text-[var(--c-steel)] self-center">
             No empty slots — buy one above first.
           </span>
         )}
@@ -2184,7 +2203,7 @@ function MyShopTab() {
             key={l.id}
             className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
           >
-            <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
+            <div className="fs-xs font-bold inline-flex items-center flex-wrap gap-x-1">
               <span className="heading-font text-xs mr-1">
                 {(l.listing_type || 'LISTING').toUpperCase()}
               </span>
@@ -2235,7 +2254,7 @@ function MyShopTab() {
               key={p.id}
               className="bg-[var(--c-paper)] ink-border-sm shadow-hard-black-xs p-2 flex items-center justify-between gap-2 flex-wrap"
             >
-              <div className="text-[10px] font-bold inline-flex items-center flex-wrap gap-x-1">
+              <div className="fs-xs font-bold inline-flex items-center flex-wrap gap-x-1">
                 {p.listing_type === 'mystery'
                   ? 'Mystery pack'
                   : (p.cards ?? [])
@@ -2276,13 +2295,11 @@ function MyShopTab() {
                   ))}
                 </div>
               ) : existing ? (
-                <span className="text-[9px] font-bold text-[var(--c-steel)]">
+                <span className="fs-xs font-bold text-[var(--c-steel)]">
                   Rated {existing.rating}/5
                 </span>
               ) : (
-                <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                  Rating window closed
-                </span>
+                <span className="fs-xs font-bold text-[var(--c-steel)]">Rating window closed</span>
               )}
             </div>
           );
@@ -2357,7 +2374,7 @@ function ShopHeaderPreview({
         </div>
         <div className="min-w-0">
           <div className="heading-font text-sm truncate">{display}</div>
-          <div className="text-[10px] font-bold italic text-[var(--c-paper)]/80 truncate">
+          <div className="fs-xs font-bold italic text-[var(--c-paper)]/80 truncate">
             {tagline.trim() ? `“${tagline}”` : 'Add a tagline to introduce your shop.'}
           </div>
         </div>
@@ -2421,7 +2438,7 @@ function ShopCustomizePanel({
           <label className="block text-xs font-bold mb-1">Accent</label>
           <AccentPicker value={accent} onChange={setAccent} />
           <PopButton
-            color="red"
+            color="yellow"
             disabled={busy || !name.trim()}
             onClick={() =>
               onSave(name.trim(), banner.trim() || null, tagline.trim() || null, accent)
@@ -2498,7 +2515,7 @@ function OpenShopPanel({
         <label className="block text-xs font-bold mb-1">Accent</label>
         <AccentPicker value={accent} onChange={setAccent} />
         <PopButton
-          color="red"
+          color="yellow"
           disabled={busy || !name.trim() || short > 0}
           onClick={() => onOpen(name.trim(), banner.trim() || null, tagline.trim() || null, accent)}
         >
@@ -2574,7 +2591,7 @@ function NewCardListingForm({
         maxItems={type === 'individual' ? 1 : undefined}
       />
       {reference > 0 && (
-        <div className="text-[9px] font-bold text-[var(--c-steel)] mb-2 inline-flex items-center flex-wrap gap-x-1">
+        <div className="fs-xs font-bold text-[var(--c-steel)] mb-2 inline-flex items-center flex-wrap gap-x-1">
           Blended reference: <Credits amount={reference} /> · typical band{' '}
           <Credits amount={Math.round(reference * 1.1)} />–
           <Credits amount={Math.round(reference * 1.25)} /> (soft cap, not enforced)
@@ -2606,7 +2623,7 @@ function NewCardListingForm({
           />
         </label>
         <PopButton
-          color="red"
+          color="yellow"
           disabled={!valid || busy}
           onClick={() => onSubmit(slotId, items, price)}
         >
@@ -2702,16 +2719,13 @@ function PoolRequirements({
 
   return (
     <div className="ink-border-sm p-2 mb-2 bg-[var(--c-paper)]">
-      <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
+      <div className="heading-font fs-xs mb-1 flex items-center gap-1">
         <Layers className="w-3.5 h-3.5" /> POOL REQUIREMENTS — {poolSize} cards ={' '}
         {poolSize === 0 ? 0 : numPacks} pack{numPacks === 1 ? '' : 's'}
       </div>
       <div className="flex flex-col gap-0.5">
         <div
-          className={cn(
-            'text-[10px] font-bold',
-            multipleOk ? 'text-[#16A34A]' : 'text-[var(--c-red)]',
-          )}
+          className={cn('fs-xs font-bold', multipleOk ? 'text-[#16A34A]' : 'text-[var(--c-red)]')}
         >
           {multipleOk ? '✓' : '✕'} Pool size must be an exact multiple of {packSize}
           {!multipleOk && poolSize > 0 && (
@@ -2727,7 +2741,7 @@ function PoolRequirements({
             <div
               key={i}
               className={cn(
-                'text-[10px] font-bold flex items-center gap-1.5',
+                'fs-xs font-bold flex items-center gap-1.5',
                 ok ? 'text-[#16A34A]' : 'text-[var(--c-red)]',
               )}
             >
@@ -2899,24 +2913,21 @@ function MysteryBuilderPanel({
                 className="w-14 px-2 py-1 ink-border-sm"
               />
             </label>
-            <PopButton
-              color={tMode === 'simple' ? 'black' : 'yellow'}
-              onClick={() => setTMode('simple')}
-            >
-              SIMPLE
-            </PopButton>
-            <PopButton
-              color={tMode === 'advanced' ? 'black' : 'yellow'}
-              onClick={() => setTMode('advanced')}
-            >
-              ADVANCED
-            </PopButton>
+            <Tabs<MysteryMode>
+              ariaLabel="Pack odds mode"
+              value={tMode}
+              onChange={setTMode}
+              tabs={[
+                { id: 'simple', label: 'SIMPLE' },
+                { id: 'advanced', label: 'ADVANCED' },
+              ]}
+            />
           </div>
 
           {tMode === 'simple' ? (
             <div className="flex flex-wrap gap-2 mb-2">
               {RARITIES.map((r) => (
-                <label key={r} className="flex items-center gap-1 text-[10px] font-bold">
+                <label key={r} className="flex items-center gap-1 fs-xs font-bold">
                   {r}
                   <input
                     type="number"
@@ -2935,10 +2946,10 @@ function MysteryBuilderPanel({
             <div className="flex flex-col gap-2 mb-2">
               {slotSpecs.map((spec, i) => (
                 <div key={i} className="flex items-center gap-2 flex-wrap ink-border-sm p-1.5">
-                  <span className="text-[9px] font-black w-14">SLOT {i + 1}</span>
+                  <span className="fs-xs font-black w-14">SLOT {i + 1}</span>
                   <select
                     aria-label={`Slot ${i + 1} mode`}
-                    className="px-1 py-1 ink-border-sm text-[10px] font-bold"
+                    className="px-1 py-1 ink-border-sm fs-xs font-bold"
                     value={spec.mode}
                     onChange={(e) => {
                       const next = [...slotSpecs];
@@ -2953,7 +2964,7 @@ function MysteryBuilderPanel({
                   {spec.mode === 'minimum' && (
                     <select
                       aria-label={`Slot ${i + 1} minimum rarity`}
-                      className="px-1 py-1 ink-border-sm text-[10px] font-bold"
+                      className="px-1 py-1 ink-border-sm fs-xs font-bold"
                       value={spec.rarity || 'Common'}
                       onChange={(e) => {
                         const next = [...slotSpecs];
@@ -2991,10 +3002,10 @@ function MysteryBuilderPanel({
               slots to express the same floor. */}
           {tMode === 'simple' && (
             <div className="ink-border-sm p-2 mb-2 bg-[var(--c-yellow)]/10">
-              <div className="heading-font text-[10px] mb-1 flex items-center gap-1">
+              <div className="heading-font fs-xs mb-1 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" /> GUARANTEED PER PACK
               </div>
-              <div className="text-[9px] font-bold text-[var(--c-steel)] mb-1.5">
+              <div className="fs-xs font-bold text-[var(--c-steel)] mb-1.5">
                 Every pack will contain at least this many cards of each rarity (or better). Totals
                 can't exceed the pack size ({guaranteedTotal}/{tSize} used).
               </div>
@@ -3003,7 +3014,7 @@ function MysteryBuilderPanel({
                   <div key={i} className="flex items-center gap-2 flex-wrap">
                     <select
                       aria-label={`Guarantee ${i + 1} rarity`}
-                      className="px-1 py-1 ink-border-sm text-[10px] font-bold"
+                      className="px-1 py-1 ink-border-sm fs-xs font-bold"
                       value={g.rarity}
                       onChange={(e) => {
                         const next = [...guarantees];
@@ -3031,7 +3042,7 @@ function MysteryBuilderPanel({
                         };
                         setGuarantees(next);
                       }}
-                      className="w-14 px-1 py-0.5 ink-border-sm text-[10px] font-bold"
+                      className="w-14 px-1 py-0.5 ink-border-sm fs-xs font-bold"
                     />
                     <button
                       onClick={() => setGuarantees(guarantees.filter((_, idx) => idx !== i))}
@@ -3053,7 +3064,7 @@ function MysteryBuilderPanel({
             </div>
           )}
           <PopButton
-            color="red"
+            color="yellow"
             disabled={
               busy ||
               !tName.trim() ||
@@ -3161,12 +3172,12 @@ function MysteryBuilderPanel({
             </PopButton>
           </div>
           {checkError && (
-            <div className="ink-border-sm p-2 mb-2 text-[10px] font-bold text-[var(--c-red)]">
+            <div className="ink-border-sm p-2 mb-2 fs-xs font-bold text-[var(--c-red)]">
               ✕ {checkError}
             </div>
           )}
           {validation && (
-            <div className="ink-border-sm p-2 mb-2 text-[10px] font-bold">
+            <div className="ink-border-sm p-2 mb-2 fs-xs font-bold">
               {validation.ok ? (
                 <span className="inline-flex items-center flex-wrap gap-x-1">
                   <span className="text-[#22C55E]">✓ Valid pool</span> — {validation.num_packs}{' '}
@@ -3184,7 +3195,7 @@ function MysteryBuilderPanel({
             </div>
           )}
           <PopButton
-            color="red"
+            color="yellow"
             disabled={busy || !validation?.ok || !slotId}
             onClick={() => onSubmitPool(templateId, slotId, pool, price)}
           >
@@ -3197,8 +3208,11 @@ function MysteryBuilderPanel({
 }
 
 // ---------------------------------------------------------------------------
+type ShopsTab = 'directory' | 'myshop';
+const isShopsTab = (v: unknown): v is ShopsTab => v === 'directory' || v === 'myshop';
+
 export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
-  const [tab, setTab] = useState<'directory' | 'myshop'>('directory');
+  const [tab, setTab] = usePersistedState<ShopsTab>('shops.tab', 'directory', isShopsTab);
   // Customers waiting on the Shop Floor — badged on the MY SHOP tab, since
   // arrivals otherwise only show once that tab is open. Non-owners get an
   // empty list back.
@@ -3222,32 +3236,29 @@ export function PlayerShopsScreen({ onBack }: { onBack: () => void }) {
           <StorefrontView owner={viewingOwner} onBack={() => setViewingOwner(null)} />
         ) : (
           <>
-            <div className="flex gap-2 flex-wrap mb-4">
-              <PopButton
-                color={tab === 'directory' ? 'black' : 'yellow'}
-                onClick={() => setTab('directory')}
-              >
-                <span className="flex items-center gap-1">
-                  <Store className="w-3.5 h-3.5" /> DIRECTORY
-                </span>
-              </PopButton>
-              <PopButton
-                color={tab === 'myshop' ? 'black' : 'yellow'}
-                onClick={() => setTab('myshop')}
-              >
-                <span className="flex items-center gap-1">
-                  MY SHOP
-                  {waiting > 0 && tab !== 'myshop' && (
-                    <span
-                      className="text-[9px] px-1 bg-[var(--c-red)] text-white"
-                      aria-label={`${waiting} customer${waiting === 1 ? '' : 's'} waiting`}
-                    >
-                      {waiting} WAITING
+            <Tabs<ShopsTab>
+              ariaLabel="Player shops"
+              className="mb-4"
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                {
+                  id: 'directory',
+                  label: (
+                    <span className="flex items-center gap-1">
+                      <Store className="w-3.5 h-3.5" /> DIRECTORY
                     </span>
-                  )}
-                </span>
-              </PopButton>
-            </div>
+                  ),
+                },
+                {
+                  id: 'myshop',
+                  label: 'MY SHOP',
+                  // Customers waiting on the Shop Floor; hidden once the tab is
+                  // open (the floor itself then shows them).
+                  badge: tab !== 'myshop' ? waiting : undefined,
+                },
+              ]}
+            />
             {tab === 'directory' ? <DirectoryTab onView={setViewingOwner} /> : <MyShopTab />}
           </>
         )}
@@ -3370,7 +3381,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <span className="heading-font text-sm">SHOP FLOOR · CPU CUSTOMERS</span>
         {state && (
-          <span className="text-[10px] font-bold text-[var(--c-steel)]">
+          <span className="fs-xs font-bold text-[var(--c-steel)]">
             {state.served_24h}/{SHOP_FLOOR_DAILY_CAP} visitors in the last 24h
             {state.customers.length < 3 && state.served_24h < SHOP_FLOOR_DAILY_CAP && state.next_at
               ? ` · next in ${untilText(state.next_at)}`
@@ -3378,7 +3389,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
           </span>
         )}
       </div>
-      <p className="text-[10px] font-bold text-[var(--c-steel)] mb-2">
+      <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
         Customers drop by about every 90 minutes and make offers on your individual and bundle
         listings — around the cards’ quicksell value, never above your asking price. Haggle once:
         push too hard and they may walk.
@@ -3427,11 +3438,11 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
               <div className="flex-1 min-w-[180px]">
                 <div className="heading-font text-xs">
                   {c.persona}{' '}
-                  <span className="text-[9px] text-[var(--c-steel)]">
+                  <span className="fs-xs text-[var(--c-steel)]">
                     · leaves in {untilText(c.expires_at)}
                   </span>
                 </div>
-                <div className="text-[10px] italic font-bold">{MOOD_LINE[c.mood] ?? ''}</div>
+                <div className="fs-xs italic font-bold">{MOOD_LINE[c.mood] ?? ''}</div>
                 <div className="text-[11px] font-bold mt-1">
                   Wants:{' '}
                   {c.listing_type === 'bundle'
@@ -3452,18 +3463,18 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                 {c.kind === 'buy' ? (
                   <div className="text-[12px] font-black mt-0.5">
                     Offers <Credits amount={c.offer_credits ?? 0} />{' '}
-                    <span className="text-[9px] text-[var(--c-steel)]">
+                    <span className="fs-xs text-[var(--c-steel)]">
                       ({pctOfAsk}% of asking ·{' '}
                       {wantValue ? (((c.offer_credits ?? 0) / wantValue) * 100).toFixed(0) : '—'}%
                       of quicksell)
                     </span>
-                    {c.haggled && <span className="text-[9px] ml-1">(FINAL)</span>}
+                    {c.haggled && <span className="fs-xs ml-1">(FINAL)</span>}
                   </div>
                 ) : (
                   <div className="text-[12px] font-black mt-0.5">
                     Offers in trade: {offerDef?.name ?? c.offer_card_id}
                     {c.offer_foil ? ' ✦ FOIL' : ''}{' '}
-                    <span className="text-[9px] text-[var(--c-steel)]">
+                    <span className="fs-xs text-[var(--c-steel)]">
                       ({offerDef?.rarity} · quicksell {fmtCredits(offerValue)} vs your{' '}
                       {fmtCredits(wantValue)})
                     </span>
@@ -3495,7 +3506,7 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
                           key={label}
                           type="button"
                           onClick={() => setCounter((m) => ({ ...m, [c.id]: String(v) }))}
-                          className="heading-font text-[9px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-paper)]"
+                          className="heading-font fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-paper)]"
                           title={`Counter at ${fmtCredits(v)}`}
                         >
                           {label}
@@ -3526,8 +3537,8 @@ function ShopFloorPanel({ onSold }: { onSold: () => Promise<void> }) {
       </div>
       {state && state.recent.length > 0 && (
         <details className="mt-2" open>
-          <summary className="text-[10px] font-bold cursor-pointer">Recent visitors</summary>
-          <ul className="text-[10px] font-bold mt-1">
+          <summary className="fs-xs font-bold cursor-pointer">Recent visitors</summary>
+          <ul className="fs-xs font-bold mt-1">
             {state.recent.map((r, i) => (
               <li key={i}>
                 {personaEmoji(r.persona)} {r.persona} —{' '}
