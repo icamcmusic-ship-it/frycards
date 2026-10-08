@@ -840,7 +840,7 @@ function StatChip({
     tier === 'full'
       ? 'text-[12px] px-1.5 py-0.5'
       : tier === 'standard'
-        ? 'text-[10px] px-1.5 py-0.5'
+        ? 'fs-xs px-1.5 py-0.5'
         : tier === 'compact'
           ? 'text-[8px] px-1'
           : 'text-[5.5px] px-0.5';
@@ -887,8 +887,8 @@ function StatChip({
   );
 }
 
-const POPOVER_WIDTH = 180;
-const POPOVER_EST_HEIGHT = 90;
+const POPOVER_WIDTH = 200;
+const POPOVER_EST_HEIGHT = 110;
 
 /**
  * v4.3: a keyword pill that opens a small popover with its rules text on
@@ -918,20 +918,117 @@ function markKeywordSeen(kw: string): void {
   }
 }
 
+function unmarkKeywordSeen(kw: string): void {
+  try {
+    const seen = JSON.parse(localStorage.getItem(SEEN_KEYWORDS_KEY) || '[]');
+    if (Array.isArray(seen))
+      localStorage.setItem(SEEN_KEYWORDS_KEY, JSON.stringify(seen.filter((k) => k !== kw)));
+  } catch {
+    // localStorage unavailable — nothing was persisted to undo.
+  }
+}
+
 const AUTO_INTRO_GAP_MS = 3500;
 const AUTO_INTRO_VISIBLE_MS = 6000;
-/** Module-level, shared by every KeywordChip on the page: when several
- * never-seen keywords mount at once, this staggers their auto-introduce
- * popovers instead of firing them all on top of each other. */
-let nextAutoIntroSlot = 0;
-/** Keywords with an auto-introduce popover currently scheduled but not yet
- * shown. Marking a keyword "seen" is deferred until its popover actually opens
- * (a chip can unmount during the stagger delay before its slot fires, and a
- * keyword marked seen without ever showing is lost forever). This set keeps the
- * dedup the synchronous mark used to provide, so two chips for the same keyword
- * don't both introduce it; an entry is cleared when the popover fires or when
- * the chip unmounts first, letting a later mount retry the intro. */
-const autoIntroInFlight = new Set<string>();
+
+/**
+ * The teaching channel: one first-sight keyword popover on screen at a time,
+ * and none while something else is already teaching.
+ *
+ * Every never-seen keyword on a freshly mounted board used to schedule its own
+ * popover at mount, so turn 1 stacked 2-3 of them on top of the coach callout,
+ * the turn recap and even the mulligan dialog. Intros now wait in this queue
+ * and are shown strictly one at a time; anything that is itself teaching or
+ * deciding (the coach, the recap strip, the mulligan) takes a hold with
+ * `holdKeywordIntros()` and the queue simply waits for it to be released.
+ *
+ * Queue entries are per chip INSTANCE (not per keyword): a chip that unmounts
+ * while waiting just drops out, and the same keyword on a chip that is still
+ * mounted (the hand dock behind the mulligan, say) carries the intro instead.
+ * A keyword is marked seen only when its popover actually opens, so at show
+ * time any entry whose keyword has been seen by then is skipped.
+ */
+interface IntroEntry {
+  kw: string;
+  /** Opens the popover; false when the chip is no longer measurable. */
+  show: () => boolean;
+  /** Closes it again without the player having read it (a hold began). */
+  hide: () => void;
+}
+const introQueue: IntroEntry[] = [];
+let introCurrent: IntroEntry | null = null;
+let introHolds = 0;
+let introTimer: number | null = null;
+
+function pumpIntros(): void {
+  if (introCurrent || introHolds > 0 || introTimer !== null) return;
+  while (introQueue.length > 0) {
+    const entry = introQueue.shift()!;
+    if (hasSeenKeyword(entry.kw)) continue;
+    if (entry.show()) {
+      introCurrent = entry;
+      return;
+    }
+  }
+}
+
+let introKick: number | null = null;
+/** Deferred a tick so a burst of chips mounting together (a whole hand) all
+ * queue before the first one is picked, and so the layout they are measured
+ * against has settled. */
+function kickIntros(): void {
+  if (introKick !== null) return;
+  introKick = window.setTimeout(() => {
+    introKick = null;
+    pumpIntros();
+  }, 0);
+}
+
+/** The current intro has been read, or closed by the player: breathe, then
+ * move on to the next one. */
+function finishIntro(entry: IntroEntry): void {
+  if (introCurrent !== entry) return;
+  introCurrent = null;
+  introTimer = window.setTimeout(() => {
+    introTimer = null;
+    pumpIntros();
+  }, AUTO_INTRO_GAP_MS);
+}
+
+/**
+ * Pause first-sight keyword popovers until the returned release is called.
+ * Holds nest (the coach and the recap can overlap). A popover already open
+ * when a hold begins is taken down and goes back to the front of the queue to
+ * be shown, unspent, once the channel clears.
+ */
+export function holdKeywordIntros(): () => void {
+  introHolds += 1;
+  if (introCurrent) {
+    const cur = introCurrent;
+    introCurrent = null;
+    cur.hide();
+    unmarkKeywordSeen(cur.kw);
+    introQueue.unshift(cur);
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    introHolds = Math.max(0, introHolds - 1);
+    kickIntros();
+  };
+}
+
+/** Test seam: forget every queued/held intro. */
+export function resetKeywordIntros(): void {
+  introQueue.length = 0;
+  introCurrent = null;
+  introHolds = 0;
+  if (introTimer !== null) window.clearTimeout(introTimer);
+  introTimer = null;
+  if (introKick !== null) window.clearTimeout(introKick);
+  introKick = null;
+}
 
 /** Shared popover behavior for any clickable keyword mention. */
 function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: string) {
@@ -941,23 +1038,13 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
   // hook only ever measures this node and contains-tests it.
   const btnRef = useRef<HTMLElement>(null);
   const autoCloseRef = useRef<number | null>(null);
-  const autoOpenRef = useRef<number | null>(null);
+  const entryRef = useRef<IntroEntry | null>(null);
   const text = textOverride ?? KEYWORD_GLOSSARY[kw];
 
   const clearAutoClose = () => {
     if (autoCloseRef.current !== null) {
       window.clearTimeout(autoCloseRef.current);
       autoCloseRef.current = null;
-    }
-  };
-
-  /** Cancels the staggered auto-introduce open, if it hasn't fired yet — a
-   * player who manually opens/closes the popover before its slot comes up
-   * shouldn't have it pop back open on its own afterwards. */
-  const clearAutoOpen = () => {
-    if (autoOpenRef.current !== null) {
-      window.clearTimeout(autoOpenRef.current);
-      autoOpenRef.current = null;
     }
   };
 
@@ -980,50 +1067,65 @@ function useKeywordPopover(kw: string, autoIntroduce?: boolean, textOverride?: s
     return { top, left };
   };
 
+  /** Close the popover and, when it was the channel's current intro, let the
+   * queue move on. */
+  const close = () => {
+    clearAutoClose();
+    setPos(null);
+    if (entryRef.current) finishIntro(entryRef.current);
+  };
+
   const open = (e: React.MouseEvent) => {
     e.stopPropagation();
-    clearAutoClose();
-    clearAutoOpen();
     if (pos) {
-      setPos(null);
+      close();
       return;
+    }
+    clearAutoClose();
+    // A player who opens the glossary themselves shouldn't have the same
+    // popover pop back open on its own afterwards.
+    if (entryRef.current) {
+      const i = introQueue.indexOf(entryRef.current);
+      if (i >= 0) introQueue.splice(i, 1);
     }
     setPos(computePos());
   };
 
-  const close = () => {
-    clearAutoClose();
-    clearAutoOpen();
-    setPos(null);
-  };
-
   useEffect(() => {
-    if (!autoIntroduce || !text || hasSeenKeyword(kw) || autoIntroInFlight.has(kw)) return;
-    autoIntroInFlight.add(kw);
-    const now = Date.now();
-    const showAt = Math.max(now, nextAutoIntroSlot);
-    nextAutoIntroSlot = showAt + AUTO_INTRO_GAP_MS;
-    autoOpenRef.current = window.setTimeout(() => {
-      autoOpenRef.current = null;
-      const next = computePos();
-      autoIntroInFlight.delete(kw);
-      if (!next) return;
-      // Only mark seen once the popover actually opens — deferring it here is
-      // the whole point: a chip that unmounts before this fires leaves the
-      // keyword un-seen so the intro still gets its one chance later.
-      markKeywordSeen(kw);
-      setPos(next);
-      autoCloseRef.current = window.setTimeout(() => {
-        autoCloseRef.current = null;
+    if (!autoIntroduce || !text || hasSeenKeyword(kw)) return;
+    const entry: IntroEntry = {
+      kw,
+      show: () => {
+        const next = computePos();
+        if (!next) return false;
+        // Only mark seen once the popover actually opens — deferring it here is
+        // the whole point: a chip that unmounts before its turn comes leaves
+        // the keyword un-seen so the intro still gets its one chance later.
+        markKeywordSeen(kw);
+        setPos(next);
+        autoCloseRef.current = window.setTimeout(() => {
+          autoCloseRef.current = null;
+          setPos(null);
+          finishIntro(entry);
+        }, AUTO_INTRO_VISIBLE_MS);
+        return true;
+      },
+      hide: () => {
+        clearAutoClose();
         setPos(null);
-      }, AUTO_INTRO_VISIBLE_MS);
-    }, showAt - now);
+      },
+    };
+    entryRef.current = entry;
+    introQueue.push(entry);
+    kickIntros();
     return () => {
-      // Unmounted before the slot fired: release the in-flight claim (the timer
-      // never marked it seen) so a future mount can reintroduce it.
-      if (autoOpenRef.current !== null) autoIntroInFlight.delete(kw);
-      clearAutoOpen();
+      const i = introQueue.indexOf(entry);
+      if (i >= 0) introQueue.splice(i, 1);
       clearAutoClose();
+      if (introCurrent === entry) {
+        introCurrent = null;
+        kickIntros();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1076,10 +1178,10 @@ function KeywordPopover({
     <div
       ref={popoverRef}
       style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
-      className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] text-[9px] leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
+      className="fixed z-[9999] bg-[var(--c-ink)] text-[var(--c-paper)] fs-xs leading-snug font-bold p-2 ink-border-sm shadow-hard-black-xs text-left normal-case"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="heading-font text-[10px] text-[var(--c-yellow)] mb-1">{kw}</div>
+      <div className="heading-font fs-xs text-[var(--c-yellow)] mb-1">{kw}</div>
       {text}
     </div>,
     document.body,
@@ -1117,7 +1219,14 @@ export function KeywordChip({
   const { pos, btnRef, text: popText, open, close } = useKeywordPopover(kw, autoIntroduce, text);
   const pill = cn(
     'inline-flex items-center gap-0.5 max-w-full rounded-full border font-bold leading-tight text-left',
-    small ? 'text-[6.5px] px-1 py-[1px]' : 'text-[8.5px] px-1.5 py-[2px]',
+    // Painted chips on a miniature card stay at the card's own scale; the
+    // interactive ones (full tier, the reading panel) are real text a player
+    // reads and presses, so they sit on the 11px floor.
+    small
+      ? 'text-[6.5px] px-1 py-[1px]'
+      : inert
+        ? 'text-[8.5px] px-1.5 py-[2px]'
+        : 'fs-xs px-1.5 py-[2px]',
     inert ? 'pointer-events-none' : 'cursor-help tap-target',
   );
   const tint = {
@@ -1394,8 +1503,8 @@ function CardArtBase({
   if (!def.image || broken) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--c-steel)] text-[var(--c-paper)]">
-        <span className="text-[9px] font-black uppercase tracking-wide opacity-70">{def.type}</span>
-        <span className="heading-font text-[10px] opacity-50 px-2 text-center leading-tight">
+        <span className="fs-xs font-black uppercase tracking-wide opacity-80">{def.type}</span>
+        <span className="heading-font fs-xs opacity-60 px-2 text-center leading-tight">
           NO IMAGE
         </span>
       </div>
@@ -1599,10 +1708,10 @@ const TIER: Record<
     nameFont: { base: 13, min: 8.5, soft: 15 },
     artBorder: 'border-[3px]',
     artRing: true,
-    rarityChip: 'text-[9px] px-1.5 py-0.5',
-    artBadge: 'text-[9px]',
-    foilBadge: 'text-[9px] px-1.5 py-0.5',
-    typeLine: 'mt-1 text-[10px]',
+    rarityChip: 'fs-xs px-1.5 py-0.5',
+    artBadge: 'fs-xs',
+    foilBadge: 'fs-xs px-1.5 py-0.5',
+    typeLine: 'mt-1 fs-xs',
     showSetSuffix: true,
     textBoxPad: 'p-1.5',
     keywordMax: 10,
@@ -1813,7 +1922,11 @@ function FittedChips({
         <span
           className={cn(
             'inline-flex items-center rounded-full border border-[var(--c-ink)]/30 font-bold opacity-70',
-            cfg.keywordSmall ? 'text-[6.5px] px-1' : 'text-[8.5px] px-1.5',
+            cfg.keywordSmall
+              ? 'text-[6.5px] px-1'
+              : cfg.chipsInteractive
+                ? 'fs-xs px-1.5'
+                : 'text-[8.5px] px-1.5',
           )}
           title="More abilities — expand the card to see everything"
         >
