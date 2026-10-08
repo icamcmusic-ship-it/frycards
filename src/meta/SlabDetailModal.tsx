@@ -150,7 +150,7 @@ export function SlabDetailModal({
               <span className="heading-font text-sm">
                 {GRADE_WORDS[String(g.grade)] ?? 'GRADED'}
                 {prem && (
-                  <span className="ml-2 text-[10px] px-1.5 py-0.5 ink-border-sm bg-[var(--c-yellow)]">
+                  <span className="ml-2 fs-xs px-1.5 py-0.5 ink-border-sm bg-[var(--c-yellow)]">
                     {prem === 'gem' ? 'GEM CASE' : prem === 'mintplus' ? 'PRISM CASE' : 'HOLO CASE'}
                   </span>
                 )}
@@ -280,7 +280,7 @@ export function SlabDetailModal({
             <button
               type="button"
               onClick={onGrading}
-              className="self-start text-[10px] font-bold underline flex items-center gap-1"
+              className="self-start fs-xs font-bold underline flex items-center gap-1"
             >
               <FlaskConical className="w-3 h-3" aria-hidden /> Open the Grading Lab
             </button>
@@ -371,7 +371,7 @@ export function ShowcaseSlabsRow({
                     onClick={() => void fn()}
                     aria-label={`${label}: ${POOL_BY_ID[g.card_id]?.name ?? 'slab'}`}
                     title={label}
-                    className="heading-font text-[10px] w-7 h-7 ink-border-sm bg-[var(--c-paper)] disabled:opacity-30"
+                    className="heading-font fs-xs w-7 h-7 ink-border-sm bg-[var(--c-paper)] disabled:opacity-30"
                   >
                     {glyph}
                   </button>

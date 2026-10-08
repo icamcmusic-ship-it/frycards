@@ -155,12 +155,25 @@ export function Card3DInspector({
     <div
       ref={dialogRef}
       tabIndex={-1}
-      className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4 overflow-y-auto outline-none"
+      className="fixed inset-0 z-50 bg-[var(--c-ink)]/85 flex items-center justify-center p-4 pt-16 md:pt-4 overflow-y-auto outline-none"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`Inspecting ${def.name}`}
     >
+      {/* A thumb-sized close in the corner: on a touch screen there is no Esc,
+          and the bottom CLOSE button can be a scroll away. */}
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        className="btn-pop fixed top-[max(0.5rem,env(safe-area-inset-top))] right-[max(0.5rem,env(safe-area-inset-right))] z-10 w-11 h-11 flex items-center justify-center heading-font text-xl leading-none bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs"
+      >
+        <span aria-hidden>✕</span>
+      </button>
       {/* v29 — `max-w-full` and `min-w-0`, on the row and on both columns.
           The backdrop is `fixed inset-0 … p-4 overflow-y-auto`: it scrolls
           VERTICALLY, so anything wider than it simply escapes sideways with
@@ -330,7 +343,7 @@ export function Card3DInspector({
             {!reducedMotion && (
               <button
                 onClick={() => setFlipped((f) => !f)}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-paper)] text-[var(--c-ink)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font fs-sm bg-[var(--c-paper)] text-[var(--c-ink)] px-4 py-2 min-h-[44px] pointer-fine:min-h-[36px] ink-border-sm shadow-hard-black-xs"
               >
                 {flipped ? '↺ SHOW FRONT' : '↻ SHOW BACK'}
               </button>
@@ -342,14 +355,15 @@ export function Card3DInspector({
                   setShowFoil(next);
                   onFoilToggle?.(next);
                 }}
-                className="btn-pop heading-font text-[10px] bg-[var(--c-yellow)] text-[var(--c-ink)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
+                className="btn-pop heading-font fs-sm bg-[var(--c-yellow)] text-[var(--c-ink)] px-4 py-2 min-h-[44px] pointer-fine:min-h-[36px] ink-border-sm shadow-hard-black-xs"
               >
                 {showFoil ? 'VIEW NORMAL' : '✦ VIEW FOIL'}
               </button>
             )}
+            {/* Keyboard hint and button only for a mouse: touch has the corner X. */}
             <button
               onClick={onClose}
-              className="btn-pop heading-font text-[10px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-3 py-1.5 min-h-10 sm:min-h-0 ink-border-sm shadow-hard-black-xs"
+              className="pointer-coarse:hidden btn-pop heading-font fs-sm bg-[var(--c-ink)] text-[var(--c-yellow)] px-4 py-2 min-h-[36px] ink-border-sm shadow-hard-black-xs"
             >
               CLOSE (ESC)
             </button>
@@ -357,9 +371,9 @@ export function Card3DInspector({
         </div>
 
         {/* Metadata + actions column */}
-        <div className="flex min-w-0 flex-col gap-3 max-w-full pb-4 md:pb-0">
+        <div className="flex min-w-0 flex-col gap-3 w-full max-w-[28rem] md:w-auto md:max-w-full pb-4 md:pb-0">
           {meta && meta.length > 0 && (
-            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] max-w-full">
+            <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-full md:w-[240px] max-w-full">
               <div className="heading-font text-xs mb-2">
                 {(def.name || def.id || 'CARD').toUpperCase()}
               </div>
@@ -367,7 +381,7 @@ export function Card3DInspector({
                 {meta.map((m) => (
                   <div
                     key={m.label}
-                    className="flex items-center justify-between text-[10px] font-bold"
+                    className="flex items-center justify-between text-[length:var(--fs-sm)] md:text-[length:var(--fs-xs)] font-bold"
                   >
                     <span className="text-[var(--c-steel)] uppercase">{m.label}</span>
                     <span>{m.value}</span>
@@ -376,8 +390,17 @@ export function Card3DInspector({
               </div>
             </div>
           )}
-          <CardReadingPanel def={def} />
-          {actions}
+          {/* On a phone the rules and action panels span the modal (the reading
+              panel is a fixed 300px box of its own, hence the child selector);
+              touch screens get 44px action buttons. */}
+          <div className="max-md:[&>section]:w-full">
+            <CardReadingPanel def={def} />
+          </div>
+          {actions && (
+            <div className="flex flex-col gap-3 max-md:[&>*]:w-full! pointer-coarse:[&_button]:min-h-[44px]">
+              {actions}
+            </div>
+          )}
         </div>
       </div>
     </div>

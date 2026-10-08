@@ -1043,7 +1043,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
       {/* Editor header: one row on a phone (BACK, name, undo, menu, SAVE); the
           rarely-used commands live in the overflow menu there and sit inline
           from `sm` up. */}
-      <div className="flex items-center gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-[var(--c-ink)] px-2 sm:px-4 py-2 sm:py-2.5 shrink-0">
         <PopButton onClick={handleBack} color="yellow" className="shrink-0">
           &lt; BACK
         </PopButton>
@@ -1052,7 +1052,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
           onChange={(e) => setName(e.target.value)}
           maxLength={40}
           aria-label="Deck name"
-          className="px-2 py-1.5 min-h-[36px] bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm min-w-0 flex-1 sm:flex-none sm:w-48"
+          className="px-2 py-1.5 min-h-[36px] bg-[var(--c-paper)] ink-border-sm font-black heading-font text-sm min-w-0 flex-[1_1_6rem] sm:flex-none sm:w-48"
         />
         <span className="hidden md:block heading-font text-sm text-[var(--c-paper)] truncate min-w-0">
           {leader.name}
@@ -1193,10 +1193,13 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
             {offColour > 0 && (
               <button
                 type="button"
+                aria-label="Remove off-colour cards"
+                title="Take every card outside the Leader's colours out of the deck"
                 onClick={removeOffColour}
                 className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 min-h-[28px] ink-border-sm shrink-0"
               >
-                REMOVE OFF-COLOUR CARDS
+                <span className="sm:hidden">FIX</span>
+                <span className="hidden sm:inline">REMOVE OFF-COLOUR CARDS</span>
               </button>
             )}
             {summary.hasDetails && (

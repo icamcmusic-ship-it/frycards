@@ -1171,14 +1171,31 @@ export function CollectionScreen({
           )}
 
           {/* Bulk quicksell — clear out common/uncommon clutter in one click
-              instead of opening each card individually. The confirm and the
-              panel both say what the spares are worth. */}
+              instead of opening each card individually. Folded away like the
+              other panels (it is a destructive tool, not something to scroll
+              past every visit); the confirm and the panel both say what the
+              spares are worth. Results stay outside the fold. */}
+          {(bulkError || bulkNotice) && (
+            <div className="mb-3">
+              {bulkError && <Notice text={bulkError} />}
+              {bulkNotice && <Notice text={bulkNotice} kind="success" />}
+            </div>
+          )}
           {bulkRarities.length > 0 && (
-            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-3 flex flex-col gap-2">
+            <CollapsiblePanel
+              id="bulk"
+              title="BULK QUICKSELL"
+              summary={
+                <>
+                  ≈
+                  {fmtCredits(
+                    bulkRarities.reduce((n, r) => n + (spareValues.get(r)?.credits ?? 0), 0),
+                  )}{' '}
+                  credits
+                </>
+              }
+            >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="heading-font text-xs mr-1">BULK QUICKSELL</span>
-                {bulkError && <Notice text={bulkError} />}
-                {bulkNotice && <Notice text={bulkNotice} kind="success" />}
                 {bulkRarities.map((r) => (
                   <PopButton
                     key={r}
@@ -1197,14 +1214,14 @@ export function CollectionScreen({
                   </PopButton>
                 ))}
               </div>
-              <p className="fs-xs font-bold text-[var(--c-steel)]">
+              <p className="fs-xs font-bold text-[var(--c-steel)] mt-2">
                 Spare copies are worth about:{' '}
                 {RARITIES.filter((r) => spareCount(r) > 0)
                   .map((r) => `${r} ${fmtCredits(spareValues.get(r)?.credits)}`)
                   .join(' · ')}{' '}
                 credits. Cards in a saved deck, serialized prints and graded slabs are never sold.
               </p>
-            </div>
+            </CollapsiblePanel>
           )}
 
           <Tabs
@@ -1346,7 +1363,9 @@ export function CollectionScreen({
                   {isPremiumRarity(inspect.def.rarity) ? ' ✦' : ''}
                 </PopButton>
               )}
-              <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
+              <div className="max-md:[&>*]:w-full!">
+                <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
+              </div>
               <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-full md:w-[240px] flex flex-col gap-2">
                 <PopButton
                   color={wishlist.has(inspect.def.id) ? 'steel' : 'yellow'}

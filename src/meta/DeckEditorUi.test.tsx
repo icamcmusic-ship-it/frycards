@@ -158,15 +158,15 @@ describe('deck editor', () => {
       exact: false,
     });
     expect(banner).toBeTruthy();
-    const fix = screen.getByRole('button', { name: 'REMOVE OFF-COLOUR CARDS' });
+    const fix = screen.getByRole('button', { name: /remove off-colour cards/i });
     await user.click(fix);
 
     // The colour problem is gone (the 60-card minimum still shows).
-    expect(screen.queryByRole('button', { name: 'REMOVE OFF-COLOUR CARDS' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /remove off-colour cards/i })).toBeNull();
     expect(screen.queryByText(/outside .*'s colours/)).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Undo last deck edit' }));
-    expect(screen.getByRole('button', { name: 'REMOVE OFF-COLOUR CARDS' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /remove off-colour cards/i })).toBeTruthy();
     // Nothing left to undo.
     expect(
       (screen.getByRole('button', { name: 'Undo last deck edit' }) as HTMLButtonElement).disabled,
