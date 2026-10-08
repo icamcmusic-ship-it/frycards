@@ -159,6 +159,8 @@ export function useHashRouter({
 
   const back = useCallback<RouterApi['back']>(
     (fallback = 'menu') => {
+      // A deliberate exit (e.g. leaving a finished match), not a stray back press.
+      lockRef.current = null;
       if (idxOf() > 0) window.history.back();
       else navigate(fallback, [], { replace: true });
     },

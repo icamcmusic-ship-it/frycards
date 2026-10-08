@@ -29,7 +29,7 @@ import {
   subscribeTable,
   OwnedSerializedCard,
 } from '../lib/supabase';
-import { createStaleGuard } from './staleGuard';
+import { createStaleGuard, StaleGuard } from './staleGuard';
 
 /** Unlike `withTimeout` (which resolves to a fallback value so callers can
  * treat "timed out" and "succeeded with this value" identically), a timeout
@@ -58,6 +58,25 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /** How long cached shop items and pack types are reused before a re-fetch. */
 const STORE_TTL_MS = 30 * 60 * 1000;
+
+/** Runs a per-user refresh and applies it only if it is still the newest
+ * response for its slice AND the active account has not changed meanwhile. A
+ * failed fetch keeps whatever is already on screen. */
+async function refreshIfFresh<T>(
+  guard: StaleGuard,
+  userId: string,
+  activeUserId: { current: string | undefined },
+  fetcher: (uid: string) => Promise<T>,
+  apply: (value: T) => void,
+): Promise<void> {
+  const ticket = guard.begin();
+  try {
+    const value = await fetcher(userId);
+    if (activeUserId.current === userId && guard.accept(ticket)) apply(value);
+  } catch {
+    /* keep what is already on screen */
+  }
+}
 
 export interface MetaState {
   session: Session | null;
@@ -249,52 +268,49 @@ export function MetaProvider({ children }: { children: React.ReactNode }) {
   // failing must keep whatever is already on screen, not blank the wallet or
   // wipe the collection, and must not surface as an unhandled rejection at a
   // call site that never expected one. So each catches and keeps prior state.
-  /** Runs a per-user refresh and applies it only if it is still the newest
-   * response for its slice AND the account has not changed meanwhile. */
-  const refreshSlice = useCallback(
-    async <T,>(
-      guard: ReturnType<typeof createStaleGuard>,
-      fetcher: (uid: string) => Promise<T>,
-      apply: (value: T) => void,
-    ) => {
-      if (!userId) return;
-      const ticket = guard.begin();
-      try {
-        const value = await fetcher(userId);
-        if (userIdRef.current === userId && guard.accept(ticket)) apply(value);
-      } catch {
-        /* keep what is already on screen */
-      }
-    },
-    [userId],
-  );
   const refreshProfile = useCallback(
-    () => refreshSlice(guards.profile, fetchProfile, setProfile),
-    [refreshSlice, guards],
+    () =>
+      userId
+        ? refreshIfFresh(guards.profile, userId, userIdRef, fetchProfile, setProfile)
+        : Promise.resolve(),
+    [userId, guards],
   );
   const refreshCollection = useCallback(
     () =>
-      refreshSlice(
-        guards.collection,
-        (uid) => Promise.all([fetchCollection(uid), fetchMySerializedCards(uid)]),
-        ([coll, serial]) => {
-          setCollection(coll);
-          setSerializedCards(serial);
-        },
-      ),
-    [refreshSlice, guards],
+      userId
+        ? refreshIfFresh(
+            guards.collection,
+            userId,
+            userIdRef,
+            (uid) => Promise.all([fetchCollection(uid), fetchMySerializedCards(uid)]),
+            ([coll, serial]) => {
+              setCollection(coll);
+              setSerializedCards(serial);
+            },
+          )
+        : Promise.resolve(),
+    [userId, guards],
   );
   const refreshCosmetics = useCallback(
-    () => refreshSlice(guards.cosmetics, fetchCosmetics, setCosmetics),
-    [refreshSlice, guards],
+    () =>
+      userId
+        ? refreshIfFresh(guards.cosmetics, userId, userIdRef, fetchCosmetics, setCosmetics)
+        : Promise.resolve(),
+    [userId, guards],
   );
   const refreshDecks = useCallback(
-    () => refreshSlice(guards.decks, fetchDecks, setDecks),
-    [refreshSlice, guards],
+    () =>
+      userId
+        ? refreshIfFresh(guards.decks, userId, userIdRef, fetchDecks, setDecks)
+        : Promise.resolve(),
+    [userId, guards],
   );
   const refreshInventory = useCallback(
-    () => refreshSlice(guards.inventory, fetchInventory, setInventory),
-    [refreshSlice, guards],
+    () =>
+      userId
+        ? refreshIfFresh(guards.inventory, userId, userIdRef, fetchInventory, setInventory)
+        : Promise.resolve(),
+    [userId, guards],
   );
   const refreshShopItems = useCallback(async () => {
     const ticket = guards.shopItems.begin();

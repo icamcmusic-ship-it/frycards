@@ -6,7 +6,7 @@
  * in-flight data could land after an account switch. The backend is fully
  * mocked — nothing here touches Supabase.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 
@@ -57,7 +57,10 @@ const prof = (id: string, credits: number) => ({ id, credits });
 
 let meta!: MetaState;
 function Probe() {
-  meta = useMeta();
+  const latest = useMeta();
+  useEffect(() => {
+    meta = latest;
+  });
   return null;
 }
 

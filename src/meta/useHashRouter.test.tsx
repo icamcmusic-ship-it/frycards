@@ -140,10 +140,11 @@ describe('useRouteTab', () => {
     localStorage.clear();
     localStorage.setItem('frycards:ui:tab:store', JSON.stringify('mine'));
     window.history.replaceState(null, '', '/#/store/cosmetics');
-    const wrapper = ({ children }: { children: React.ReactNode }) => {
+    function Wrapper({ children }: { children: React.ReactNode }) {
       const router = useHashRouter({ resolve: open, initial: MENU });
       return <RouterProvider value={router}>{children}</RouterProvider>;
-    };
+    }
+    const wrapper = Wrapper;
     const { result } = renderHook(() => useRouteTab('store', TABS, 'packs'), { wrapper });
     expect(result.current[0]).toBe('cosmetics');
     act(() => result.current[1]('packs'));
