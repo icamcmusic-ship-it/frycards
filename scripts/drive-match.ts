@@ -1868,7 +1868,18 @@ async function driveMatch(
       // ladder has been "exercised" since v20 by a click that has been landing
       // on SKIP the whole time; the census caught it at 948 offers and 0
       // presses across eight matches.
-      if (rand() < 0.25) act('speed', await clickSelector(page, '[aria-label^="Narration speed"]'));
+      // The ⏱ control is a <select> since 2026-10 (audit §2.21): a click
+      // opens it but changes nothing, so pick a rung instead.
+      if (rand() < 0.25)
+        act(
+          'speed',
+          await page
+            .locator('select[aria-label="Narration speed"]')
+            .first()
+            .selectOption({ index: Math.floor(rand() * 4) })
+            .then(() => true)
+            .catch(() => false),
+        );
       await clickText(page, 'SKIP ▸▸');
       continue;
     }

@@ -1094,7 +1094,7 @@ function mapEvent(c: CardTemplate): CardDef {
   // v24: the 76-100 remainder of this roll prints nothing TODAY — the v24
   // Event generation (Kindle/Tailwind/Luminous, see UNPRINTED_KEYWORDS) was
   // trialled on a temporary 76-92 band (upward-only, zero re-rolls, measured
-  // in docs/BALANCE_SIM_FINDINGS_v24.md §2) and reverted. A future print
+  // in BALANCE_SIM_FINDINGS_v24.md §2, now in git history) and reverted. A future print
   // rebuilds that band rather than touching the two live ones below.
   const kwRoll = roll(seed, 'ev-kw', 100);
   const evFresh =
@@ -1501,7 +1501,12 @@ const LEADER_MINUS_RESOLVE_OVERRIDE: Record<string, number> = {
   // worst deck >= 54.8%), and the doc named this exact lever. Resolve 5
   // against -3 buys one removal with change; the +1 builder buys a second
   // every three turns instead of every other turn.
-  crimson_vector_commander: -3,
+  //
+  // 2026-10 (AUDIT-2026-10-06 §3.3): -3 -> -2, walking back the v17 bump the
+  // same way v17 walked Avatar back. v17 was measured on the one-recipe
+  // pinned suite; on the nine-recipe suite (v20+) Sentinel sits LAST in both
+  // arms on two deck seeds (pinned 40.3 / 35.0, random 40.3 / 36.4).
+  crimson_vector_commander: -2,
   void_mother: -4,
 };
 

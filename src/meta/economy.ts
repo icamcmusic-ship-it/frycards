@@ -24,14 +24,16 @@ export function fmtVouchers(n: number | null | undefined): string {
 import { Rarity } from '../types';
 
 export const QUICKSELL_PRICES: Record<Rarity, number> = {
-  Common: 10,
-  Uncommon: 25,
-  Rare: 100,
-  'Super-Rare': 300,
-  'Ultra-Rare': 800,
-  'Full-Art': 1000,
-  'Alt-Art': 1800,
-  Mythic: 3000,
+  // 2026-10-06 rescale: at the old table (10/25/100/300/800/1000/1800/3000)
+  // a 599cr Booster Pack quicksold for ~845cr and a 3799cr Box for ~6700cr.
+  Common: 4,
+  Uncommon: 10,
+  Rare: 40,
+  'Super-Rare': 120,
+  'Ultra-Rare': 300,
+  'Full-Art': 500,
+  'Alt-Art': 900,
+  Mythic: 1500,
 };
 
 export const FOIL_QUICKSELL_MULTIPLIER = 2.5;
@@ -47,7 +49,7 @@ export function quicksellPrice(rarity: string | undefined, foil: boolean): numbe
  * shop_maintenance_fee_per_slot, shop_min_pool_size). Used only to render
  * costs before the player confirms; the server always recomputes.
  */
-export const SHOP_UNLOCK_LEVEL = 50;
+export const SHOP_UNLOCK_LEVEL = 20;
 export const SHOP_SETUP_FEE = 5000;
 export const SHOP_BASE_SLOTS = 4;
 export const SHOP_MAX_SLOTS = 30;

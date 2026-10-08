@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { askConfirm } from './confirm';
 import { AlertTriangle, Ban, Check, RefreshCw, Sliders, Upload, X } from 'lucide-react';
 import { useMeta } from './MetaContext';
 import { MetaHeader, PopButton, Notice } from './ui';
@@ -433,7 +434,8 @@ function MySubmissions({
 
   const withdraw = async (id: string) => {
     if (busyId) return;
-    if (!confirm('Withdraw this submission? It frees the slot but cannot be undone.')) return;
+    if (!(await askConfirm('Withdraw this submission? It frees the slot but cannot be undone.')))
+      return;
     setBusyId(id);
     setError('');
     try {
@@ -931,9 +933,9 @@ function ReviewCard({
     }
     if (
       action === 'deny_ban' &&
-      !confirm(
+      !(await askConfirm(
         `Ban ${sub.submitter_username || 'this player'} from the Showcase and deny every pending submission they have?`,
-      )
+      ))
     ) {
       return;
     }
@@ -1271,10 +1273,10 @@ export function BulkAddPanel() {
   const send = async () => {
     if (!canSend) return;
     if (
-      !confirm(
+      !(await askConfirm(
         `Add ${parsed.rows.length} card${parsed.rows.length === 1 ? '' : 's'} to "${setName.trim()}"?` +
           (overwrite ? ' Existing ids will be OVERWRITTEN.' : ''),
-      )
+      ))
     )
       return;
     setBusy(true);

@@ -330,25 +330,44 @@ const PREMIUM_CSS = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fc-art-ghost,
-  .fc-art-sweep,
-  .fc-my-scan,
-  .fc-my-spark { animation: none; }
-  .ur-filigree .ur-trace,
-  .ur-filigree .ur-trace2,
-  .ur-aurora,
-  .my-void,
-  .my-crest,
-  .my-stars,
-  .my-corona,
-  .aa-corona { animation: none; }
-  .premium-card:hover .ur-aurora,
-  .premium-boost .ur-aurora,
-  .premium-card:hover .my-corona,
-  .premium-boost .my-corona,
-  .premium-card:hover .aa-corona,
-  .premium-boost .aa-corona { opacity: 0.25; }
+  html:not([data-motion='full']) .fc-art-ghost,
+  html:not([data-motion='full']) .fc-art-sweep,
+  html:not([data-motion='full']) .fc-my-scan,
+  html:not([data-motion='full']) .fc-my-spark { animation: none; }
+  html:not([data-motion='full']) .ur-filigree .ur-trace,
+  html:not([data-motion='full']) .ur-filigree .ur-trace2,
+  html:not([data-motion='full']) .ur-aurora,
+  html:not([data-motion='full']) .my-void,
+  html:not([data-motion='full']) .my-crest,
+  html:not([data-motion='full']) .my-stars,
+  html:not([data-motion='full']) .my-corona,
+  html:not([data-motion='full']) .aa-corona { animation: none; }
+  html:not([data-motion='full']) .premium-card:hover .ur-aurora,
+  html:not([data-motion='full']) .premium-boost .ur-aurora,
+  html:not([data-motion='full']) .premium-card:hover .my-corona,
+  html:not([data-motion='full']) .premium-boost .my-corona,
+  html:not([data-motion='full']) .premium-card:hover .aa-corona,
+  html:not([data-motion='full']) .premium-boost .aa-corona { opacity: 0.25; }
 }
+/* The in-app Motion setting: <html data-motion="reduced"> (useMotionMode). */
+html[data-motion='reduced'] .fc-art-ghost,
+html[data-motion='reduced'] .fc-art-sweep,
+html[data-motion='reduced'] .fc-my-scan,
+html[data-motion='reduced'] .fc-my-spark { animation: none; }
+html[data-motion='reduced'] .ur-filigree .ur-trace,
+html[data-motion='reduced'] .ur-filigree .ur-trace2,
+html[data-motion='reduced'] .ur-aurora,
+html[data-motion='reduced'] .my-void,
+html[data-motion='reduced'] .my-crest,
+html[data-motion='reduced'] .my-stars,
+html[data-motion='reduced'] .my-corona,
+html[data-motion='reduced'] .aa-corona { animation: none; }
+html[data-motion='reduced'] .premium-card:hover .ur-aurora,
+html[data-motion='reduced'] .premium-boost .ur-aurora,
+html[data-motion='reduced'] .premium-card:hover .my-corona,
+html[data-motion='reduced'] .premium-boost .my-corona,
+html[data-motion='reduced'] .premium-card:hover .aa-corona,
+html[data-motion='reduced'] .premium-boost .aa-corona { opacity: 0.25; }
 `;
 
 function ensurePremiumStyles(): void {
