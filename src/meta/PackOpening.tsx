@@ -504,6 +504,7 @@ function RevealStage({
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [burstKey, setBurstKey] = useState(0);
+  const wishUid = useMeta().profile?.id;
 
   const current = pulls[index];
   const currentShown = revealed.has(index);
@@ -614,7 +615,7 @@ function RevealStage({
                     : undefined
                 }
               />
-              {currentShown && isWishlisted(current.card_id) && <WishlistHit />}
+              {currentShown && isWishlisted(current.card_id, wishUid) && <WishlistHit />}
               {/* foil sheen sweep */}
               {currentShown && current.foil && !reducedMotion && (
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -768,7 +769,7 @@ function SummaryStage({
 
   // Quicksell straight from the haul — mostly for the common/uncommon
   // clutter a big box tends to dump, without a separate trip to Collection.
-  const { refreshCollection, refreshProfile } = useMeta();
+  const { refreshCollection, refreshProfile, profile } = useMeta();
   const [sold, setSold] = useState<Set<number>>(new Set());
   const [sellBusy, setSellBusy] = useState(false);
   const [sellError, setSellError] = useState('');
@@ -1001,7 +1002,7 @@ function SummaryStage({
                       : undefined
                   }
                 />
-                {isWishlisted(grp.pull.card_id) && <WishlistHit small />}
+                {isWishlisted(grp.pull.card_id, profile?.id) && <WishlistHit small />}
                 {spent && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="heading-font text-[9px] bg-[var(--c-ink)] text-[#67E8F9] px-1.5 py-0.5 ink-border-sm">
@@ -1092,8 +1093,8 @@ function StatTile({
 
 /** A card the player hearted in the Collection's wishlist. Read per call:
  * localStorage is cheap and the list can change between packs. */
-function isWishlisted(cardId: string | undefined): boolean {
-  return !!cardId && loadWishlist().has(cardId);
+function isWishlisted(cardId: string | undefined, userId: string | undefined): boolean {
+  return !!cardId && loadWishlist(userId).has(cardId);
 }
 
 function WishlistHit({ small }: { small?: boolean }) {

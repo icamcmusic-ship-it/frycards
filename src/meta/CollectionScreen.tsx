@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { askConfirm } from './confirm';
 import { useMeta } from './MetaContext';
 import {
@@ -9,7 +9,32 @@ import {
   CardMarketValuePanel,
   Credits,
   UnavailableShowcaseTile,
+  Tabs,
 } from './ui';
+import { FilterSelect } from './FilterSelect';
+import { usePersistedState } from './usePersistedState';
+import { useReducedMotion } from './useMotionMode';
+import {
+  COLOR_FILTERS,
+  DEFAULT_FILTERS,
+  MAX_PRESET_NAME,
+  RARITY_FILTERS,
+  SORTS,
+  TYPES,
+  activeFilterCount,
+  deletePreset,
+  isFilters,
+  isPresetList,
+  quicksellConfirmText,
+  sanitizeFilters,
+  savePreset,
+  spareValueByRarity,
+  suggestPresetName,
+  type CollectionFilters,
+  type CollectionView,
+  type FilterPreset,
+  type SortKey,
+} from './collectionFilters';
 import { cn } from '../lib/utils';
 import { useIsNarrow } from '../lib/useIsNarrow';
 import { CARD_SIZES, CardFace } from '../components/CardFaceV4';
@@ -33,13 +58,8 @@ import { AnimatePresence } from 'motion/react';
 import type { ShowroomSubject } from './ShowroomScreen';
 import { isPremiumRarity } from '../components/Card3DShowroom';
 import { fmtCredits, quicksellPrice } from './economy';
-import { cardColors, Color, COLORS, LEADER_COLORS } from '../game/v3/colors';
+import { cardColors, Color, LEADER_COLORS } from '../game/v3/colors';
 
-const TYPES = ['All', 'Leader', 'Unit', 'Item', 'Event', 'Location'];
-const RARITY_FILTERS = ['All', ...RARITIES];
-const COLOR_FILTERS = ['All', ...COLORS, 'Colorless'];
-const SORTS = ['Name', 'Rarity', 'Type', 'Cost'] as const;
-type SortKey = (typeof SORTS)[number];
 const MAX_SHOWCASE = 6;
 
 /** Spare (unlocked) normal/foil split for one card, modeling decks as
@@ -159,6 +179,48 @@ const CollectionTile = React.memo(function CollectionTile({
   );
 });
 
+/** A titled section that folds away. The open/closed choice is remembered per
+ * viewer. `peek` stays visible when folded (a progress bar, a one-line
+ * summary), so a closed panel still says something. */
+function CollapsiblePanel({
+  id,
+  title,
+  summary,
+  peek,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: React.ReactNode;
+  peek?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = usePersistedState(`collection.panel.${id}`, false);
+  const bodyId = `collection-panel-${id}`;
+  return (
+    <section className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm px-3 mb-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-2 min-h-[44px] sm:min-h-[36px] text-left"
+      >
+        <span className="heading-font text-sm">{title}</span>
+        <span className="fs-xs font-black text-right">
+          {summary} {open ? '▴' : '▾'}
+        </span>
+      </button>
+      {peek && <div className="pb-2.5 -mt-1">{peek}</div>}
+      {open && (
+        <div id={bodyId} className="pb-3">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function CollectionScreen({
   onBack,
   onGrading,
@@ -176,6 +238,7 @@ export function CollectionScreen({
   // a 119,000px-tall page — the collection was effectively unbrowsable on a
   // phone. `standard` fits two per row inside the same padding.
   const narrow = useIsNarrow();
+  const reducedMotion = useReducedMotion();
   const {
     profile,
     collection,
@@ -185,28 +248,61 @@ export function CollectionScreen({
     dataLoading,
     serializedCards,
   } = useMeta();
-  const [type, setType] = useState('All');
-  const [rarity, setRarity] = useState('All');
-  const [color, setColor] = useState('All');
-  const [keyword, setKeyword] = useState('All');
-  // Set filter. Derived from the live pool rather than a constant so the
-  // Player Showcase set (and any later volume) shows up the moment its first
-  // card is printed — the browser was single-set until v12 and had no way to
-  // tell community cards from Volume #1 ones.
-  const [setName, setSetName] = useState('All');
-  const [ownedOnly, setOwnedOnly] = useState(true);
-  // Only cards with a copy nothing else needs: not locked in a deck, not a
-  // serialized reserve. The set to quicksell, list or trade from.
-  const [spareOnly, setSpareOnly] = useState(false);
-  const [wishOnly, setWishOnly] = useState(false);
-  const [wishlist, setWishlist] = useState(loadWishlist);
-  // Pull the account's server-side wishlist (merging this browser's in).
+
+  // The sticky search/filter bar sits just under the (sticky) header, whose
+  // height changes when its chips wrap on a phone — measure it rather than
+  // hard-coding a number.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const header = root?.firstElementChild as HTMLElement | null | undefined;
+    if (!root || !header || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() =>
+      root.style.setProperty('--hdr', `${header.offsetHeight}px`),
+    );
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, []);
+
+  // Filters, sort and view are remembered between visits (per viewer) and can
+  // be saved as named presets. The search text is not: it is a one-off lookup.
+  const [storedFilters, setStoredFilters] = usePersistedState(
+    'collection.filters',
+    DEFAULT_FILTERS,
+    isFilters,
+  );
+  const filters = useMemo(() => sanitizeFilters(storedFilters), [storedFilters]);
+  const { view, type, rarity, color, sort } = filters;
+  const setFilter = <K extends keyof CollectionFilters>(k: K, v: CollectionFilters[K]) =>
+    setStoredFilters({ ...filters, [k]: v });
+  const [presets, setPresets] = usePersistedState<FilterPreset[]>(
+    'collection.presets',
+    [],
+    isPresetList,
+  );
+  const [presetName, setPresetName] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pinHint, setPinHint] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // The wishlist cache is per account (and per guest); the server list is
+  // pulled in on top of it. Keyed by uid so switching accounts on one browser
+  // can never show, or upload, the previous account's entries.
   const wishUserId = profile?.id;
+  const [wishState, setWishState] = useState(() => ({
+    uid: wishUserId,
+    ids: loadWishlist(wishUserId),
+  }));
+  const wishlist = useMemo(
+    () => (wishState.uid === wishUserId ? wishState.ids : loadWishlist(wishUserId)),
+    [wishState, wishUserId],
+  );
   useEffect(() => {
     if (!wishUserId) return;
     let cancelled = false;
-    void syncWishlist(wishUserId).then((merged) => {
-      if (!cancelled) setWishlist(merged);
+    void syncWishlist(wishUserId).then((synced) => {
+      if (!cancelled) setWishState({ uid: wishUserId, ids: synced });
     });
     return () => {
       cancelled = true;
@@ -214,16 +310,13 @@ export function CollectionScreen({
   }, [wishUserId]);
   const toggleWish = useCallback(
     (cardId: string) => {
-      setWishlist((w) => {
-        const next = toggleWishlisted(w, cardId);
-        saveWishlist(next);
-        if (wishUserId) pushWishlistToggle(wishUserId, cardId, next.has(cardId));
-        return next;
-      });
+      const next = toggleWishlisted(wishlist, cardId);
+      saveWishlist(next, wishUserId);
+      if (wishUserId) void pushWishlistToggle(wishUserId, cardId, next.has(cardId));
+      setWishState({ uid: wishUserId, ids: next });
     },
-    [wishUserId],
+    [wishlist, wishUserId],
   );
-  const [search, setSearch] = useState('');
   // Graded slabs live in their own table (graded_cards) — encased copies are
   // out of player_cards entirely, so the shelf fetches them directly.
   const [gradedCards, setGradedCards] = useState<GradedCard[]>([]);
@@ -241,8 +334,10 @@ export function CollectionScreen({
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The slab whose detail sheet is open (graded_cards.id).
   const [slabOpen, setSlabOpen] = useState<string | null>(null);
-  const [slabSort, setSlabSort] = useState<'pinned' | 'grade' | 'value' | 'service' | 'newest'>(
-    'pinned',
+  const [slabSort, setSlabSort] = usePersistedState<
+    'pinned' | 'grade' | 'value' | 'service' | 'newest'
+  >('collection.slabSort', 'pinned', (v): v is 'pinned' =>
+    ['pinned', 'grade', 'value', 'service', 'newest'].includes(v as string),
   );
   const reloadGraded = useCallback(async () => {
     if (!profile) return;
@@ -252,7 +347,6 @@ export function CollectionScreen({
       /* keep what is shown */
     }
   }, [profile]);
-  const [sort, setSort] = useState<SortKey>('Name');
   // Which standalone tile in the grid is open in the inspector — normal,
   // foil, and each serialized print are now separate tiles (see `entries`
   // below), so this tracks which variant was actually clicked in addition
@@ -269,6 +363,7 @@ export function CollectionScreen({
     (def: CardDef, foil: boolean, serial?: { number: number; cap: number }) => {
       setInspect({ def, foil, serial });
       setSellError('');
+      setPinHint(false);
     },
     [],
   );
@@ -283,11 +378,19 @@ export function CollectionScreen({
     return ['All', ...[...kws].sort()];
   }, []);
 
+  // Set filter. Derived from the live pool rather than a constant so the
+  // Player Showcase set (and any later volume) shows up the moment its first
+  // card is printed — the browser was single-set until v12 and had no way to
+  // tell community cards from Volume #1 ones.
   const setFilters = useMemo(() => {
     const names = new Set<string>();
     for (const c of POOL_V4) if (c.set) names.add(c.set);
     return ['All', ...[...names].sort()];
   }, []);
+  // A remembered keyword/set that the pool no longer has must not silently
+  // empty the grid with no control showing why.
+  const keyword = keywordOptions.includes(filters.keyword) ? filters.keyword : 'All';
+  const setName = setFilters.includes(filters.set) ? filters.set : 'All';
 
   const showcase = profile?.showcase_cards || [];
 
@@ -363,44 +466,31 @@ export function CollectionScreen({
     return m;
   }, [decks]);
 
-  // Spare (unlocked) copy count per rarity, across the whole collection —
-  // Leaders excluded (they're never bulk-fodder). Backs the "QUICKSELL ALL
-  // <rarity>" bulk actions below.
-  const spareByRarity = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const c of POOL_V4) {
-      if (c.type === 'Leader') continue;
-      const o = owned.get(c.id);
-      if (!o) continue;
-      const reserved = serializedByCard.get(c.id)?.length || 0;
-      // Same arithmetic as runBulkQuicksell above (spareSplit, then reserves
-      // out of the normal split only) — a flat q+f−locked−reserved diverges
-      // when a deck lock spills into foil copies on a card with serialized
-      // reserves, and the progress bar's total disagrees with what the loop
-      // actually sells ("SELLING 3/2").
-      const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
-      const spare = Math.max(0, normal - reserved) + foil;
-      if (spare <= 0) continue;
-      const r = c.rarity || 'Common';
-      m.set(r, (m.get(r) || 0) + spare);
-    }
-    return m;
-  }, [owned, lockedByDecks, serializedByCard]);
-  // Spare copies per card, with the same arithmetic as spareByRarity, for the
-  // SPARES filter.
-  const spareByCard = useMemo(() => {
-    const m = new Map<string, number>();
+  // Spare (unlocked) copies across the whole collection — Leaders excluded
+  // (they're never bulk-fodder) — per card (the SPARES view) and per rarity
+  // with what they would sell for (the "QUICKSELL ALL <rarity>" bulk actions).
+  // Same arithmetic as runBulkQuicksell above (spareSplit, then reserves out
+  // of the normal split only) — a flat q+f−locked−reserved diverges when a
+  // deck lock spills into foil copies on a card with serialized reserves, and
+  // the progress bar's total disagrees with what the loop actually sells
+  // ("SELLING 3/2").
+  const { spareByCard, spareValues } = useMemo(() => {
+    const byCard = new Map<string, number>();
+    const rows: { rarity: string; normal: number; foil: number }[] = [];
     for (const c of POOL_V4) {
       if (c.type === 'Leader') continue;
       const o = owned.get(c.id);
       if (!o) continue;
       const reserved = serializedByCard.get(c.id)?.length || 0;
       const { normal, foil } = spareSplit(o, lockedByDecks.get(c.id) || 0);
-      const spare = Math.max(0, normal - reserved) + foil;
-      if (spare > 0) m.set(c.id, spare);
+      const spareNormal = Math.max(0, normal - reserved);
+      if (spareNormal + foil <= 0) continue;
+      byCard.set(c.id, spareNormal + foil);
+      rows.push({ rarity: c.rarity || 'Common', normal: spareNormal, foil });
     }
-    return m;
+    return { spareByCard: byCard, spareValues: spareValueByRarity(rows) };
   }, [owned, lockedByDecks, serializedByCard]);
+  const spareCount = (r: string) => spareValues.get(r)?.cards ?? 0;
   // Which rarity's bulk sell is running (null = idle) — keyed so the OTHER
   // rarity's button doesn't also read "SELLING…" while one runs.
   const [bulkBusy, setBulkBusy] = useState<string | null>(null);
@@ -415,7 +505,7 @@ export function CollectionScreen({
     setBulkBusy(targetRarity);
     setBulkError('');
     setBulkNotice('');
-    setBulkProgress({ done: 0, total: spareByRarity.get(targetRarity) || 0 });
+    setBulkProgress({ done: 0, total: spareCount(targetRarity) });
     try {
       const { credits, cards, error } = await runBulkQuicksell(
         targetRarity,
@@ -460,9 +550,9 @@ export function CollectionScreen({
   const filtered = POOL_V4.filter((c) => {
     const o = owned.get(c.id);
     const total = (o?.q || 0) + (o?.f || 0);
-    if (wishOnly && !wishlist.has(c.id)) return false;
-    if (ownedOnly && !wishOnly && total === 0) return false;
-    if (spareOnly && !spareByCard.has(c.id)) return false;
+    if (view === 'wishlist' && !wishlist.has(c.id)) return false;
+    if (view === 'owned' && total === 0) return false;
+    if (view === 'spares' && !spareByCard.has(c.id)) return false;
     if (type !== 'All' && c.type !== type) return false;
     if (rarity !== 'All' && (c.rarity || 'Common') !== rarity) return false;
     if (setName !== 'All' && (c.set || '') !== setName) return false;
@@ -522,6 +612,7 @@ export function CollectionScreen({
 
   const totalOwned = collection.reduce((s, c) => s + c.quantity + c.foil_quantity, 0);
   const uniqueOwned = collection.filter((c) => c.quantity + c.foil_quantity > 0).length;
+  const pctOwned = POOL_V4.length > 0 ? Math.round((uniqueOwned / POOL_V4.length) * 100) : 0;
 
   // Per-rarity completion for the progress panel.
   const rarityProgress = useMemo(() => {
@@ -541,7 +632,11 @@ export function CollectionScreen({
   }, [owned]);
   // Per-set and per-colour completion, same rule as rarityProgress (any copy
   // counts). Multi-colour cards count toward each of their colours.
-  const [progressBy, setProgressBy] = useState<'rarity' | 'set' | 'colour'>('rarity');
+  const [progressBy, setProgressBy] = usePersistedState<'rarity' | 'set' | 'colour'>(
+    'collection.progressBy',
+    'rarity',
+    (v): v is 'rarity' => ['rarity', 'set', 'colour'].includes(v as string),
+  );
   const groupProgress = useMemo(() => {
     const totals = new Map<string, { total: number; owned: number }>();
     const bump = (k: string, has: boolean) => {
@@ -563,7 +658,6 @@ export function CollectionScreen({
       .map(([label, e]) => ({ label, ...e }))
       .sort((a, b) => b.total - a.total);
   }, [owned, progressBy]);
-  const [showProgress, setShowProgress] = useState(true);
 
   // "New since your last visit": the owned-id set is snapshotted to
   // localStorage, and anything owned now but missing from the snapshot is
@@ -586,7 +680,33 @@ export function CollectionScreen({
     );
   }, [collection, dataLoading]);
 
-  const select = 'px-2 py-1.5 bg-[var(--c-paper)] ink-border-sm font-bold text-xs';
+  const activeFilters = activeFilterCount({ ...filters, keyword, set: setName });
+  const filtersDirty = activeFilters > 0 || view !== 'owned' || search !== '';
+  const clearFilters = () => {
+    // Color was missing from this reset once — a color-filtered empty grid
+    // stayed empty after "clearing" filters. Set had the same hole the moment
+    // a second set existed. Everything but the sort goes back to default.
+    setStoredFilters({ ...DEFAULT_FILTERS, sort });
+    setSearch('');
+  };
+  const savePresetNow = () => {
+    if (presetName === null) return;
+    setPresets(savePreset(presets, presetName, filters));
+    setPresetName(null);
+  };
+  // Showcase empty state: take the player to their cards, unfiltered, with a
+  // hint about the one thing to do there.
+  const startPinning = () => {
+    clearFilters();
+    setPinHint(true);
+    setFiltersOpen(false);
+    requestAnimationFrame(() =>
+      gridRef.current?.scrollIntoView({
+        behavior: reducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      }),
+    );
+  };
 
   const inspectOwned = inspect ? owned.get(inspect.def.id) : undefined;
   const inspectLocked = inspect
@@ -640,56 +760,233 @@ export function CollectionScreen({
     }
   };
 
+  const viewTabs: { id: CollectionView; label: string }[] = [
+    { id: 'owned', label: 'OWNED' },
+    { id: 'all', label: 'FULL SET' },
+    { id: 'spares', label: `SPARES (${spareByCard.size})` },
+    { id: 'wishlist', label: `♥ WISHLIST (${wishlist.size})` },
+  ];
+
+  const bulkRarities = (['Common', 'Uncommon'] as const).filter((r) => spareCount(r) > 0);
+
   return (
-    <div className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
+    <div ref={rootRef} className="w-full min-h-screen bg-[var(--c-paper)] text-[var(--c-ink)]">
       <MetaHeader title="COLLECTION" onBack={onBack} />
-      <div className="p-5 max-w-6xl mx-auto">
-        {/* Collection progress */}
-        <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
-          <button
-            // v28 tap targets: full-width but 20px tall.
-            className="w-full flex items-center justify-between gap-2 py-1.5"
-            aria-expanded={showProgress}
-            onClick={() => setShowProgress((s) => !s)}
+      <div className="p-3 sm:p-5 max-w-[1500px] mx-auto lg:grid lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-5 lg:items-start">
+        {/* Search + filters. A sticky bar under the header on phones (the
+            fields open under it); a sticky sidebar from `lg` up. */}
+        <aside
+          aria-label="Search and filters"
+          className="sticky top-[var(--hdr,56px)] z-20 -mx-3 px-3 sm:-mx-5 sm:px-5 py-2 mb-3 bg-[var(--c-paper)] border-b-2 border-[var(--c-ink)]/20 lg:mx-0 lg:px-0 lg:py-0 lg:mb-0 lg:border-b-0 lg:top-[calc(var(--hdr,56px)+1rem)] lg:max-h-[calc(100dvh-var(--hdr,56px)-2rem)] lg:overflow-y-auto"
+        >
+          <div className="flex items-center gap-2">
+            <input
+              className="px-2 py-1.5 min-h-[40px] lg:min-h-[36px] flex-1 min-w-0 bg-[var(--c-paper)] ink-border-sm font-bold text-xs placeholder:text-[var(--c-steel)]/60"
+              placeholder="Search cards…"
+              aria-label="Search cards"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-controls="collection-filters"
+              onClick={() => setFiltersOpen((o) => !o)}
+              className="lg:hidden btn-pop heading-font fs-sm ink-border-sm shadow-hard-black-xs px-3 min-h-[40px] shrink-0 bg-[var(--c-steel)] text-[var(--c-paper)]"
+            >
+              FILTERS{activeFilters > 0 ? ` (${activeFilters})` : ''} {filtersOpen ? '▴' : '▾'}
+            </button>
+          </div>
+          <div
+            id="collection-filters"
+            className={cn(
+              'flex-col gap-3 pt-3 max-h-[60dvh] overflow-y-auto lg:max-h-none lg:overflow-visible lg:flex',
+              filtersOpen ? 'flex' : 'hidden',
+            )}
           >
-            <span className="heading-font text-sm">COLLECTION PROGRESS</span>
-            <span className="text-[10px] font-black">
-              {uniqueOwned}/{POOL_V4.length} (
-              {POOL_V4.length > 0 ? Math.round((uniqueOwned / POOL_V4.length) * 100) : 0}%){' '}
-              {showProgress ? '▴' : '▾'}
-            </span>
-          </button>
-          <ProgressBar
-            value={uniqueOwned}
-            max={POOL_V4.length}
-            className="mt-2"
-            ariaLabel="Collection progress"
-          />
-          {showProgress && (
-            <div className="flex gap-1 mt-3" role="group" aria-label="Completion by">
-              {(['rarity', 'set', 'colour'] as const).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={progressBy === k}
-                  onClick={() => setProgressBy(k)}
-                  className={cn(
-                    'heading-font text-[9px] px-2 py-0.5 ink-border-sm min-h-[24px]',
-                    progressBy === k
-                      ? 'bg-[var(--c-ink)] text-[var(--c-yellow)]'
-                      : 'bg-[var(--c-paper)]',
-                  )}
-                >
-                  BY {k.toUpperCase()}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              <FilterSelect
+                label="Type"
+                value={type}
+                onChange={(v) => setFilter('type', v)}
+                options={TYPES.map((t) => ({ value: t, label: t }))}
+              />
+              <FilterSelect
+                label="Rarity"
+                value={rarity}
+                onChange={(v) => setFilter('rarity', v)}
+                options={RARITY_FILTERS.map((r) => ({ value: r, label: r }))}
+              />
+              <FilterSelect
+                label="Colour"
+                value={color}
+                onChange={(v) => setFilter('color', v)}
+                options={COLOR_FILTERS.map((c) => ({ value: c, label: c }))}
+              />
+              <FilterSelect
+                label="Keyword"
+                value={keyword}
+                onChange={(v) => setFilter('keyword', v)}
+                options={keywordOptions.map((k) => ({
+                  value: k,
+                  label: k === 'All' ? 'Any' : k,
+                }))}
+              />
+              {setFilters.length > 2 && (
+                <FilterSelect
+                  label="Set"
+                  value={setName}
+                  onChange={(v) => setFilter('set', v)}
+                  options={setFilters.map((s) => ({
+                    value: s,
+                    label: s === 'All' ? 'All sets' : s,
+                  }))}
+                />
+              )}
+              <FilterSelect
+                label="Sort by"
+                value={sort}
+                onChange={(v) => setFilter('sort', v as SortKey)}
+                options={SORTS.map((s) => ({ value: s, label: s }))}
+              />
             </div>
-          )}
-          {showProgress && progressBy !== 'rarity' && (
+
+            <div className="flex flex-col gap-1.5" aria-label="Saved filters">
+              <div className="fs-xs font-black uppercase tracking-wide text-[var(--c-steel)]">
+                Saved filters
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map((p) => (
+                  <span
+                    key={p.name}
+                    className="inline-flex items-stretch ink-border-sm bg-[var(--c-paper)]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setStoredFilters(sanitizeFilters(p.filters))}
+                      className="px-2 min-h-[32px] fs-xs font-bold hover:bg-[var(--c-yellow)]"
+                    >
+                      {p.name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete saved filter ${p.name}`}
+                      onClick={() => setPresets(deletePreset(presets, p.name))}
+                      className="px-2 min-h-[32px] min-w-[32px] fs-sm font-black border-l-2 border-[var(--c-ink)]/20 hover:bg-[var(--c-red)] hover:text-[var(--c-paper)]"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {presets.length === 0 && presetName === null && (
+                  <span className="fs-xs font-bold text-[var(--c-steel)]">
+                    None yet — set some filters, then save them here.
+                  </span>
+                )}
+              </div>
+              {presetName === null ? (
+                <PopButton
+                  color="steel"
+                  disabled={activeFilters === 0 && view === 'owned'}
+                  onClick={() => setPresetName(suggestPresetName(filters, presets))}
+                >
+                  + SAVE CURRENT FILTERS
+                </PopButton>
+              ) : (
+                <div className="flex gap-1.5">
+                  <input
+                    autoFocus
+                    value={presetName}
+                    maxLength={MAX_PRESET_NAME}
+                    aria-label="Name for this saved filter"
+                    onChange={(e) => setPresetName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') savePresetNow();
+                      if (e.key === 'Escape') setPresetName(null);
+                    }}
+                    className="px-2 py-1.5 min-h-[36px] min-w-0 flex-1 bg-[var(--c-paper)] ink-border-sm font-bold text-xs"
+                  />
+                  <PopButton color="yellow" onClick={savePresetNow}>
+                    SAVE
+                  </PopButton>
+                  <PopButton color="steel" onClick={() => setPresetName(null)} ariaLabel="Cancel">
+                    ×
+                  </PopButton>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {filtersDirty && (
+                <PopButton color="steel" onClick={clearFilters}>
+                  CLEAR FILTERS
+                </PopButton>
+              )}
+              <PopButton
+                color="steel"
+                onClick={() => {
+                  const rows = POOL_V4.flatMap((c) => {
+                    const o = owned.get(c.id);
+                    if (!o || o.q + o.f === 0) return [];
+                    const serialized = serializedByCard.get(c.id)?.length || 0;
+                    return [
+                      {
+                        id: c.id,
+                        name: c.name,
+                        type: c.type,
+                        rarity: c.rarity || 'Common',
+                        set: c.set || '',
+                        quantity: Math.max(0, o.q - serialized),
+                        foil: o.f,
+                        serialized,
+                      },
+                    ];
+                  });
+                  downloadText('frycards-collection.csv', collectionCsv(rows));
+                }}
+                title="Download your collection as a spreadsheet (CSV)"
+              >
+                EXPORT CSV
+              </PopButton>
+            </div>
+          </div>
+        </aside>
+
+        <main className="min-w-0">
+          {/* Collection progress */}
+          <CollapsiblePanel
+            id="progress"
+            title="COLLECTION PROGRESS"
+            summary={
+              <>
+                {uniqueOwned}/{POOL_V4.length} ({pctOwned}%)
+              </>
+            }
+            peek={
+              <ProgressBar
+                value={uniqueOwned}
+                max={POOL_V4.length}
+                ariaLabel="Collection progress"
+              />
+            }
+          >
+            <Tabs
+              ariaLabel="Completion by"
+              value={progressBy}
+              onChange={setProgressBy}
+              tabs={[
+                { id: 'rarity', label: 'BY RARITY' },
+                { id: 'set', label: 'BY SET' },
+                { id: 'colour', label: 'BY COLOUR' },
+              ]}
+            />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
-              {groupProgress.map((e) => (
+              {(progressBy === 'rarity'
+                ? rarityProgress.map((e) => ({ label: e.rarity, owned: e.owned, total: e.total }))
+                : groupProgress
+              ).map((e) => (
                 <div key={e.label}>
-                  <div className="flex justify-between text-[9px] font-black mb-0.5">
+                  <div className="flex justify-between fs-xs font-black mb-0.5">
                     <span className="truncate pr-1">{e.label.toUpperCase()}</span>
                     <span className="font-mono">
                       {e.owned}/{e.total}
@@ -704,370 +1001,301 @@ export function CollectionScreen({
                 </div>
               ))}
             </div>
-          )}
-          {showProgress && progressBy === 'rarity' && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 mt-3">
-              {rarityProgress.map((e) => (
-                <div key={e.rarity}>
-                  <div className="flex justify-between text-[9px] font-black mb-0.5">
-                    <span>{e.rarity.toUpperCase()}</span>
-                    <span className="font-mono">
-                      {e.owned}/{e.total}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={e.owned}
-                    max={e.total}
-                    className="h-1.5"
-                    ariaLabel={`${e.rarity} cards collected`}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          </CollapsiblePanel>
 
-        {/* Showcase strip */}
-        <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="heading-font text-sm">
-              MY SHOWCASE ({showcase.length}/{MAX_SHOWCASE})
-            </span>
-            <span className="text-[9px] font-bold text-[var(--c-steel)]">
-              Tap ★ on an owned card below to pin/unpin it
-            </span>
-          </div>
-          {showcaseError && (
-            <div className="mb-2">
-              <Notice text={showcaseError} />
-            </div>
-          )}
-          {showcase.length === 0 ? (
-            <p className="text-[11px] font-bold text-[var(--c-steel)] py-2">
-              No showcase cards yet — pin your favorites so friends can see them on your profile.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {showcase.map((id) => {
-                const def = POOL_BY_ID[id];
-                // This is the player's own showcase, so the placeholder is
-                // the recovery path: tapping it unpins the dead slot.
-                if (!def)
-                  return (
-                    <UnavailableShowcaseTile
-                      key={id}
-                      cardId={id}
-                      size="compact"
-                      onUnpin={() => toggleShowcase(id)}
-                    />
-                  );
+          {/* Showcase strip */}
+          <CollapsiblePanel
+            id="showcase"
+            title="MY SHOWCASE"
+            summary={
+              <>
+                {showcase.length}/{MAX_SHOWCASE}
+              </>
+            }
+          >
+            {showcaseError && (
+              <div className="mb-2">
+                <Notice text={showcaseError} />
+              </div>
+            )}
+            {showcase.length === 0 ? (
+              <div className="flex flex-col items-start gap-2 py-1">
+                <p className="fs-sm font-bold text-[var(--c-steel)]">
+                  No showcase cards yet — pin your favorites so friends can see them on your
+                  profile.
+                </p>
+                <PopButton color="yellow" onClick={startPinning}>
+                  PIN CARDS →
+                </PopButton>
+              </div>
+            ) : (
+              <>
+                <p className="fs-xs font-bold text-[var(--c-steel)] mb-2">
+                  Tap a pinned card to unpin it. To pin more, open an owned card and choose ☆ ADD TO
+                  SHOWCASE.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {showcase.map((id) => {
+                    const def = POOL_BY_ID[id];
+                    // This is the player's own showcase, so the placeholder is
+                    // the recovery path: tapping it unpins the dead slot.
+                    if (!def)
+                      return (
+                        <UnavailableShowcaseTile
+                          key={id}
+                          cardId={id}
+                          size="compact"
+                          onUnpin={() => toggleShowcase(id)}
+                        />
+                      );
+                    return (
+                      <CardFace
+                        key={id}
+                        def={def}
+                        size="compact"
+                        onClick={() => toggleShowcase(id)}
+                        badge="★ UNPIN"
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </CollapsiblePanel>
+
+          {/* Graded shelf — encased slabs, each in its service's case style.
+              Slabs are display/sale pieces (not deck-legal); selling and
+              case-cracking live in the Grading Lab, so the shelf deep-links. */}
+          <AnimatePresence>
+            {slabOpen &&
+              (() => {
+                const g = gradedCards.find((x) => x.id === slabOpen);
+                if (!g) return null;
                 return (
-                  <CardFace
-                    key={id}
-                    def={def}
-                    size="compact"
-                    onClick={() => toggleShowcase(id)}
-                    badge="★ UNPIN"
+                  <SlabDetailModal
+                    key={g.id}
+                    g={g}
+                    pinned={profile?.showcase_slabs ?? []}
+                    onClose={() => setSlabOpen(null)}
+                    onChanged={async (gone) => {
+                      await Promise.all([
+                        refreshProfile(),
+                        gone ? refreshCollection() : Promise.resolve(),
+                        reloadGraded(),
+                      ]);
+                    }}
+                    onShowroom={
+                      onShowroom && g.grade != null
+                        ? () => onShowroom({ kind: 'slab', gradedId: g.id })
+                        : undefined
+                    }
+                    onGrading={onGrading}
                   />
                 );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Graded shelf — encased slabs, each in its service's case style.
-            Slabs are display/sale pieces (not deck-legal); selling and
-            case-cracking live in the Grading Lab, so the shelf deep-links. */}
-        <AnimatePresence>
-          {slabOpen &&
-            (() => {
-              const g = gradedCards.find((x) => x.id === slabOpen);
-              if (!g) return null;
-              return (
-                <SlabDetailModal
-                  key={g.id}
-                  g={g}
-                  pinned={profile?.showcase_slabs ?? []}
-                  onClose={() => setSlabOpen(null)}
-                  onChanged={async (gone) => {
-                    await Promise.all([
-                      refreshProfile(),
-                      gone ? refreshCollection() : Promise.resolve(),
-                      reloadGraded(),
-                    ]);
-                  }}
-                  onShowroom={
-                    onShowroom && g.grade != null
-                      ? () => onShowroom({ kind: 'slab', gradedId: g.id })
-                      : undefined
-                  }
-                  onGrading={onGrading}
-                />
-              );
-            })()}
-        </AnimatePresence>
-        {gradedCards.length > 0 && (
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-5">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="flex items-center gap-2">
-                <span className="heading-font text-sm">GRADED CARDS ({gradedCards.length})</span>
-                <select
-                  className="ink-border-sm text-[10px] font-bold px-1 py-0.5 min-h-[24px] bg-[var(--c-paper)]"
-                  aria-label="Sort graded cards"
-                  value={slabSort}
-                  onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
-                >
-                  <option value="pinned">Pinned first</option>
-                  <option value="grade">Grade</option>
-                  <option value="value">Value</option>
-                  <option value="service">Service</option>
-                  <option value="newest">Newest</option>
-                </select>
-              </span>
-              <span className="text-[9px] font-bold text-[var(--c-steel)]">
-                Click a slab for details, showcasing, selling or cracking
-                {(profile?.showcase_slabs?.length ?? 0) > 0 &&
-                  ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
-              </span>
-            </div>
-            {/* The slab's own keyframes travel with it — a top-grade case
-                shines on this shelf as well as in the Lab. */}
-            <div className="flex flex-wrap gap-2">
-              {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
-                <div key={g.id} className="flex flex-col gap-1 w-fit">
-                  <div className="relative">
-                    <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
-                    {profile?.showcase_slabs?.includes(g.id) && (
-                      <span className="absolute -top-2 -right-2 heading-font text-[9px] bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
-                        ★ PINNED
-                      </span>
-                    )}
-                  </div>
-                  {/* Only a GRADED slab can be stood up in the room: a pending
-                      one has a frosted window and no grade to print, so the
-                      3D view would be a blurred card in an empty case. */}
-                  {onShowroom && g.grade != null && (
-                    <button
-                      onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
-                      aria-label={`View ${POOL_BY_ID[g.card_id]?.name ?? 'this slab'} in the 3D Showroom`}
-                      className="btn-pop heading-font text-[9px] bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 ink-border-sm shadow-hard-black-xs"
-                    >
-                      ⬛ VIEW IN 3D
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <input
-            className={cn(select, 'w-44 max-w-full placeholder:text-[var(--c-steel)]/50')}
-            placeholder="Search cards…"
-            aria-label="Search cards"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className={select}
-            aria-label="Filter by card type"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          >
-            {TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-          <select
-            className={select}
-            aria-label="Filter by rarity"
-            value={rarity}
-            onChange={(e) => setRarity(e.target.value)}
-          >
-            {RARITY_FILTERS.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-          {setFilters.length > 2 && (
-            <select
-              className={select}
-              aria-label="Filter by set"
-              value={setName}
-              onChange={(e) => setSetName(e.target.value)}
+              })()}
+          </AnimatePresence>
+          {(gradedCards.length > 0 || (onGrading && !dataLoading)) && (
+            <CollapsiblePanel
+              id="graded"
+              title="GRADED CARDS"
+              summary={
+                <>
+                  {gradedCards.length}
+                  {(profile?.showcase_slabs?.length ?? 0) > 0 &&
+                    ` · ${profile!.showcase_slabs!.length}/3 on your profile`}
+                </>
+              }
             >
-              {setFilters.map((s) => (
-                <option key={s} value={s}>
-                  {s === 'All' ? 'All sets' : s}
-                </option>
-              ))}
-            </select>
+              {gradedCards.length === 0 ? (
+                <div className="flex flex-col items-start gap-2 py-1">
+                  <p className="fs-sm font-bold text-[var(--c-steel)]">
+                    Nothing graded yet. The Grading Lab seals a spare copy in a slab you can display
+                    and sell.
+                  </p>
+                  <PopButton color="yellow" onClick={onGrading}>
+                    OPEN THE GRADING LAB →
+                  </PopButton>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <label className="flex items-center gap-2 fs-xs font-black uppercase text-[var(--c-steel)]">
+                      Sort
+                      <select
+                        className="ink-border-sm fs-xs font-bold px-1 py-0.5 min-h-[28px] bg-[var(--c-paper)] text-[var(--c-ink)] normal-case"
+                        value={slabSort}
+                        onChange={(e) => setSlabSort(e.target.value as typeof slabSort)}
+                      >
+                        <option value="pinned">Pinned first</option>
+                        <option value="grade">Grade</option>
+                        <option value="value">Value</option>
+                        <option value="service">Service</option>
+                        <option value="newest">Newest</option>
+                      </select>
+                    </label>
+                    <span className="fs-xs font-bold text-[var(--c-steel)]">
+                      Tap a slab for details, showcasing, selling or cracking
+                    </span>
+                  </div>
+                  {/* The slab's own keyframes travel with it — a top-grade case
+                      shines on this shelf as well as in the Lab. */}
+                  <div className="flex flex-wrap gap-2">
+                    {sortSlabs(gradedCards, slabSort, profile?.showcase_slabs ?? []).map((g) => (
+                      <div key={g.id} className="flex flex-col gap-1 w-fit">
+                        <div className="relative">
+                          <GradedSlab g={g} onClick={() => setSlabOpen(g.id)} />
+                          {profile?.showcase_slabs?.includes(g.id) && (
+                            <span className="absolute -top-2 -right-2 heading-font fs-xs bg-[var(--c-yellow)] px-1.5 py-0.5 ink-border-sm z-20">
+                              ★ PINNED
+                            </span>
+                          )}
+                        </div>
+                        {/* Only a GRADED slab can be stood up in the room: a pending
+                            one has a frosted window and no grade to print, so the
+                            3D view would be a blurred card in an empty case. */}
+                        {onShowroom && g.grade != null && (
+                          <button
+                            onClick={() => onShowroom({ kind: 'slab', gradedId: g.id })}
+                            aria-label={`View ${POOL_BY_ID[g.card_id]?.name ?? 'this slab'} in the 3D Showroom`}
+                            className="btn-pop heading-font fs-xs bg-[var(--c-ink)] text-[var(--c-yellow)] px-2 py-1 min-h-[28px] ink-border-sm shadow-hard-black-xs"
+                          >
+                            ⬛ VIEW IN 3D
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </CollapsiblePanel>
           )}
-          <select
-            className={select}
-            aria-label="Filter by color"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          >
-            {COLOR_FILTERS.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <select
-            className={select}
-            aria-label="Filter by keyword"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          >
-            {keywordOptions.map((k) => (
-              <option key={k} value={k}>
-                {k === 'All' ? 'All keywords' : k}
-              </option>
-            ))}
-          </select>
-          <select
-            className={select}
-            aria-label="Sort cards"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-          >
-            {SORTS.map((s) => (
-              <option key={s} value={s}>
-                Sort: {s}
-              </option>
-            ))}
-          </select>
-          <PopButton
-            color={ownedOnly ? 'black' : 'yellow'}
-            ariaPressed={ownedOnly}
-            onClick={() => setOwnedOnly(!ownedOnly)}
-          >
-            {ownedOnly ? 'OWNED ONLY' : 'FULL SET'}
-          </PopButton>
-          <PopButton
-            color={spareOnly ? 'black' : 'yellow'}
-            ariaPressed={spareOnly}
-            onClick={() => setSpareOnly(!spareOnly)}
-          >
-            SPARES ({spareByCard.size})
-          </PopButton>
-          <PopButton
-            color={wishOnly ? 'black' : 'yellow'}
-            ariaPressed={wishOnly}
-            onClick={() => setWishOnly(!wishOnly)}
-          >
-            ♥ WISHLIST ({wishlist.size})
-          </PopButton>
-          <PopButton
-            color="yellow"
-            onClick={() => {
-              const rows = POOL_V4.flatMap((c) => {
-                const o = owned.get(c.id);
-                if (!o || o.q + o.f === 0) return [];
-                const serialized = serializedByCard.get(c.id)?.length || 0;
-                return [
-                  {
-                    id: c.id,
-                    name: c.name,
-                    type: c.type,
-                    rarity: c.rarity || 'Common',
-                    set: c.set || '',
-                    quantity: Math.max(0, o.q - serialized),
-                    foil: o.f,
-                    serialized,
-                  },
-                ];
-              });
-              downloadText('frycards-collection.csv', collectionCsv(rows));
-            }}
-            title="Download your collection as a spreadsheet (CSV)"
-          >
-            EXPORT CSV
-          </PopButton>
-          <div className="ml-auto text-[11px] font-bold text-[var(--c-steel)]">
-            {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL CARDS
-          </div>
-        </div>
-        <p className="text-[10px] font-bold text-[var(--c-steel)] mb-3">
-          Tap any card to inspect it — quicksell spare copies for credits.
-        </p>
 
-        {/* Bulk quicksell — clear out common/uncommon clutter in one click
-            instead of opening each card individually. */}
-        {(spareByRarity.get('Common') || 0) + (spareByRarity.get('Uncommon') || 0) > 0 && (
-          <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-4 flex flex-wrap items-center gap-2">
-            <span className="heading-font text-xs mr-1">BULK QUICKSELL</span>
-            {bulkError && <Notice text={bulkError} />}
-            {bulkNotice && <Notice text={bulkNotice} kind="success" />}
-            {(['Common', 'Uncommon'] as const).map(
-              (r) =>
-                (spareByRarity.get(r) || 0) > 0 && (
+          {/* Bulk quicksell — clear out common/uncommon clutter in one click
+              instead of opening each card individually. The confirm and the
+              panel both say what the spares are worth. */}
+          {bulkRarities.length > 0 && (
+            <div className="bg-[var(--c-paper)] ink-border-md shadow-hard-black-sm p-3 mb-3 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="heading-font text-xs mr-1">BULK QUICKSELL</span>
+                {bulkError && <Notice text={bulkError} />}
+                {bulkNotice && <Notice text={bulkNotice} kind="success" />}
+                {bulkRarities.map((r) => (
                   <PopButton
                     key={r}
-                    color="yellow"
+                    color="red"
                     disabled={!!bulkBusy}
                     onClick={async () => {
-                      const n = spareByRarity.get(r) || 0;
-                      if (await askConfirm(`Quicksell all ${n} spare ${r} cards?`))
-                        bulkQuicksell(r);
+                      const v = spareValues.get(r);
+                      if (v && (await askConfirm(quicksellConfirmText(r, v)))) bulkQuicksell(r);
                     }}
                   >
                     {bulkBusy === r
                       ? bulkProgress
                         ? `SELLING ${bulkProgress.done}/${bulkProgress.total}…`
                         : 'SELLING…'
-                      : `QUICKSELL ALL ${r.toUpperCase()} (${spareByRarity.get(r)})`}
+                      : `QUICKSELL ALL ${r.toUpperCase()} (${spareCount(r)}) · ≈${fmtCredits(spareValues.get(r)?.credits)}`}
                   </PopButton>
-                ),
+                ))}
+              </div>
+              <p className="fs-xs font-bold text-[var(--c-steel)]">
+                Spare copies are worth about:{' '}
+                {RARITIES.filter((r) => spareCount(r) > 0)
+                  .map((r) => `${r} ${fmtCredits(spareValues.get(r)?.credits)}`)
+                  .join(' · ')}{' '}
+                credits. Cards in a saved deck, serialized prints and graded slabs are never sold.
+              </p>
+            </div>
+          )}
+
+          <Tabs
+            ariaLabel="Collection view"
+            value={view}
+            onChange={(v) => setFilter('view', v)}
+            tabs={viewTabs}
+            className="mb-2"
+          />
+          <div
+            ref={gridRef}
+            className="scroll-mt-[calc(var(--hdr,56px)+4.5rem)] flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 fs-xs font-bold text-[var(--c-steel)]"
+          >
+            <span aria-live="polite">
+              {entries.length} SHOWN · {uniqueOwned}/{POOL_V4.length} UNIQUE · {totalOwned} TOTAL
+              CARDS
+            </span>
+            {filtersDirty && (
+              <button type="button" onClick={clearFilters} className="underline min-h-[24px]">
+                clear filters
+              </button>
+            )}
+            <span>Tap any card to inspect it — quicksell spare copies for credits.</span>
+          </div>
+          {pinHint && (
+            <div
+              role="status"
+              className="mb-3 flex items-center justify-between gap-2 bg-[var(--c-yellow)] text-[var(--c-ink)] ink-border-sm px-3 py-2 fs-sm font-bold"
+            >
+              <span>Pick a card you own, then tap ☆ ADD TO SHOWCASE.</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setPinHint(false)}
+                className="min-h-[32px] min-w-[32px] heading-font"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            {entries.map((e) => (
+              <CollectionTile
+                key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
+                def={e.def}
+                kind={e.kind}
+                count={e.count}
+                serialNumber={e.serial?.number}
+                serialCap={e.serial?.cap}
+                narrow={narrow}
+                wished={wishlist.has(e.def.id)}
+                isNew={e.kind !== 'serialized' && newIds.has(e.def.id)}
+                onInspect={openInspector}
+              />
+            ))}
+            {dataLoading && (
+              <div className="w-full text-center font-bold text-[var(--c-steel)] py-14 animate-pulse">
+                Loading your collection…
+              </div>
+            )}
+            {!dataLoading && filtered.length === 0 && (
+              <div className="w-full flex flex-col items-center gap-3 text-center font-bold text-[var(--c-steel)] py-14">
+                {totalOwned === 0 ? (
+                  <div>Your collection is empty. Crack some packs in the Store!</div>
+                ) : view === 'wishlist' && wishlist.size === 0 ? (
+                  <div>
+                    Nothing on your wishlist yet. Open any card and tap ♡ ADD TO WISHLIST — you'll
+                    get a badge when one turns up in a pack.
+                  </div>
+                ) : view === 'spares' && filtersDirty === false ? (
+                  <div>
+                    No spare copies — everything you own is in a deck or a serialized print.
+                  </div>
+                ) : (
+                  <div>No cards match these filters.</div>
+                )}
+                {filtersDirty && (
+                  <PopButton color="yellow" onClick={clearFilters}>
+                    CLEAR FILTERS
+                  </PopButton>
+                )}
+                {view === 'owned' && totalOwned > 0 && (
+                  <PopButton color="steel" onClick={() => setFilter('view', 'all')}>
+                    BROWSE THE FULL SET
+                  </PopButton>
+                )}
+              </div>
             )}
           </div>
-        )}
-
-        <div className="flex flex-wrap gap-3">
-          {entries.map((e) => (
-            <CollectionTile
-              key={`${e.def.id}-${e.kind}-${e.serial?.number ?? ''}`}
-              def={e.def}
-              kind={e.kind}
-              count={e.count}
-              serialNumber={e.serial?.number}
-              serialCap={e.serial?.cap}
-              narrow={narrow}
-              wished={wishlist.has(e.def.id)}
-              isNew={e.kind !== 'serialized' && newIds.has(e.def.id)}
-              onInspect={openInspector}
-            />
-          ))}
-          {dataLoading && (
-            <div className="w-full text-center font-bold text-[var(--c-steel)] py-14 animate-pulse">
-              Loading your collection…
-            </div>
-          )}
-          {!dataLoading && filtered.length === 0 && (
-            <div className="w-full flex flex-col items-center gap-3 text-center font-bold text-[var(--c-steel)] py-14">
-              <div>No cards match these filters. Crack some packs in the Store!</div>
-              <PopButton
-                color="yellow"
-                onClick={() => {
-                  setType('All');
-                  setRarity('All');
-                  // Color was missing from this reset — a color-filtered
-                  // empty grid stayed empty after "clearing" filters. Set had
-                  // the same hole the moment a second set existed.
-                  setColor('All');
-                  setKeyword('All');
-                  setSetName('All');
-                  setSearch('');
-                  setOwnedOnly(true);
-                  setSpareOnly(false);
-                  setWishOnly(false);
-                }}
-              >
-                CLEAR FILTERS
-              </PopButton>
-            </div>
-          )}
-        </div>
+        </main>
       </div>
 
       {inspect && (
@@ -1107,7 +1335,7 @@ export function CollectionScreen({
                   the reason to take the trip. */}
               {onShowroom && (
                 <PopButton
-                  color="black"
+                  color="steel"
                   className="w-full"
                   ariaLabel={`View ${inspect.def.name} in the 3D Showroom`}
                   onClick={() =>
@@ -1119,9 +1347,9 @@ export function CollectionScreen({
                 </PopButton>
               )}
               <CardMarketValuePanel cardId={inspect.def.id} foil={inspect.foil} />
-              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-[240px] flex flex-col gap-2">
+              <div className="bg-[var(--c-paper)] text-[var(--c-ink)] ink-border-sm shadow-hard-black-xs p-3 w-full md:w-[240px] flex flex-col gap-2">
                 <PopButton
-                  color={wishlist.has(inspect.def.id) ? 'red' : 'yellow'}
+                  color={wishlist.has(inspect.def.id) ? 'steel' : 'yellow'}
                   className="w-full"
                   ariaPressed={wishlist.has(inspect.def.id)}
                   onClick={() => toggleWish(inspect.def.id)}
@@ -1132,7 +1360,7 @@ export function CollectionScreen({
                   <>
                     {showcaseError && <Notice text={showcaseError} />}
                     <PopButton
-                      color={inspectShowcased ? 'red' : 'yellow'}
+                      color={inspectShowcased ? 'steel' : 'yellow'}
                       className="w-full"
                       disabled={
                         showcaseBusy || (!inspectShowcased && showcase.length >= MAX_SHOWCASE)
@@ -1159,31 +1387,31 @@ export function CollectionScreen({
                   <>
                     <div className="heading-font text-xs text-center mt-1">QUICKSELL</div>
                     {inspect.def.type === 'Leader' && (
-                      <div className="text-[9px] font-bold text-[var(--c-steel)] text-center">
+                      <div className="fs-xs font-bold text-[var(--c-steel)] text-center">
                         Leaders can be sold like any other card — one copy stays reserved while a
                         saved deck still uses it.
                       </div>
                     )}
                     {inspectLocked > 0 && (
-                      <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                      <div className="fs-xs font-bold text-[var(--c-red)] text-center">
                         {inspect.def.type === 'Leader'
                           ? `In use by ${inspectLocked} saved deck${inspectLocked === 1 ? '' : 's'} — ${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} reserved`
                           : `${inspectLocked} cop${inspectLocked === 1 ? 'y' : 'ies'} locked in your decks`}
                       </div>
                     )}
                     {inspectSerializedReserved > 0 && (
-                      <div className="text-[9px] font-bold text-[var(--c-red)] text-center">
+                      <div className="fs-xs font-bold text-[var(--c-red)] text-center">
                         {inspectSerializedReserved} Serialized cop
                         {inspectSerializedReserved === 1 ? 'y' : 'ies'} — never quick-sellable
                       </div>
                     )}
                     {sellError && <Notice text={sellError} />}
-                    <div className="flex items-center justify-between text-[10px] font-bold">
+                    <div className="flex items-center justify-between fs-xs font-bold">
                       <span>Normal ×{inspectNormalQty}</span>
                       <Credits amount={quicksellPrice(inspect.def.rarity, false)} />
                     </div>
                     <PopButton
-                      color="yellow"
+                      color="red"
                       className="w-full"
                       disabled={selling || normalSellable <= 0}
                       ariaLabel={`Quicksell 1 normal copy of ${inspect.def.name}`}
@@ -1193,7 +1421,7 @@ export function CollectionScreen({
                     </PopButton>
                     {inspectNormalQty > 1 && (
                       <PopButton
-                        color="black"
+                        color="red"
                         className="w-full"
                         disabled={selling || normalSellable <= 0}
                         ariaLabel={`Quicksell all normal spare copies of ${inspect.def.name}`}
@@ -1212,7 +1440,7 @@ export function CollectionScreen({
                     )}
                     {(inspectOwned?.f || 0) > 0 && (
                       <>
-                        <div className="flex items-center justify-between text-[10px] font-bold mt-1">
+                        <div className="flex items-center justify-between fs-xs font-bold mt-1">
                           <span>Foil ✦ ×{inspectOwned?.f || 0}</span>
                           <Credits amount={quicksellPrice(inspect.def.rarity, true)} />
                         </div>
@@ -1227,7 +1455,7 @@ export function CollectionScreen({
                         </PopButton>
                         {(inspectOwned?.f || 0) > 1 && (
                           <PopButton
-                            color="black"
+                            color="red"
                             className="w-full"
                             disabled={selling || foilSellable <= 0}
                             ariaLabel={`Quicksell all foil spare copies of ${inspect.def.name}`}

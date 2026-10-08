@@ -19,6 +19,7 @@ import { saveDeck, deleteDeck, DeckRow, PlayerCard } from '../lib/supabase';
 import { SafeImage } from './SafeImage';
 import { MetaHeader, PopButton, CardMarketValuePanel, Tabs } from './ui';
 import { ActionMenu } from './ActionMenu';
+import { FilterSelect } from './FilterSelect';
 import { usePersistedState } from './usePersistedState';
 import {
   curveBarHeight,
@@ -1238,6 +1239,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
               />
               <div className="flex gap-2 w-full sm:w-auto">
                 <FilterSelect
+                  className="flex-1 sm:flex-none sm:min-w-[96px]"
                   label="Type"
                   value={typeFilter}
                   onChange={setTypeFilter}
@@ -1245,6 +1247,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                 />
                 {colorIdentity && colorIdentity.length > 1 && (
                   <FilterSelect
+                    className="flex-1 sm:flex-none sm:min-w-[96px]"
                     label="Colour"
                     value={colorFilter}
                     onChange={setColorFilter}
@@ -1252,6 +1255,7 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
                   />
                 )}
                 <FilterSelect
+                  className="flex-1 sm:flex-none sm:min-w-[96px]"
                   label="Cost"
                   value={costFilter}
                   onChange={setCostFilter}
@@ -1388,39 +1392,6 @@ function DeckEditor({ deck, onDone }: { deck: DeckRow | null; onDone: () => void
         />
       )}
     </div>
-  );
-}
-
-/** A filter dropdown with its name printed above it, so three selects that
- * all open on "All" are still told apart without opening them. */
-function FilterSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <label className="flex flex-col gap-0.5 min-w-0 flex-1 sm:flex-none sm:min-w-[96px]">
-      <span className="fs-xs font-black uppercase tracking-wide text-[var(--c-steel)]">
-        {label}
-      </span>
-      <select
-        className="px-2 py-1.5 min-h-[36px] w-full bg-[var(--c-paper)] ink-border-sm font-bold text-xs"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
